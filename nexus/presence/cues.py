@@ -7,7 +7,12 @@ import logging
 import re
 from typing import Any
 
-from nexus.presence.roster import PresenceRoster, RosterEntry, character_identity_index
+from nexus.presence.roster import (
+    PresenceRoster,
+    RosterEntry,
+    RosterKey,
+    character_identity_index,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +70,21 @@ REMOTE_CUES = (
 )
 
 
-def has_scene_cue(prose: str, name: str) -> bool:
+def has_scene_cue(prose: str, name: str, *, catalog_names: Sequence[str] = ()) -> bool:
     """Recognize named action clauses or explicit dialogue attribution."""
-    escaped = re.escape(name)
+    # Match all catalog names together so a longer identity owns an overlapping
+    # span (including a surname or alias nested inside a full name).
+    names = sorted({name, *catalog_names}, key=lambda value: (-len(value), value))
+    owned_spans = {
+        match.span()
+        for match in re.finditer(
+            r"(?<!\w)(?:" + "|".join(re.escape(value) for value in names) + r")(?!\w)",
+            prose,
+            re.IGNORECASE,
+        )
+        if match.group().casefold() == name.casefold()
+    }
+    escaped = rf"(?P<identity>(?<!\w){re.escape(name)}(?!\w))"
     verbs = "|".join((*DIALOGUE_VERBS, *STAGE_ACTION_VERBS))
     speech = "|".join(DIALOGUE_VERBS)
     patterns = (
@@ -76,11 +93,18 @@ def has_scene_cue(prose: str, name: str) -> bool:
         rf'["”]\s*,?\s*(?:{speech})\s+{escaped}\b',
         rf'(?:^|\n)\s*{escaped}:\s*["“]',
     )
-    for sentence in re.split(r"(?<=[.!?])\s+|\n", prose):
+    for sentence_match in re.finditer(r".+?(?:(?<=[.!?])(?=\s)|$)", prose):
+        sentence = sentence_match.group()
         if any(cue in sentence.casefold() for cue in REMOTE_CUES):
             continue
-        if any(re.search(pattern, sentence, re.IGNORECASE) for pattern in patterns):
-            return True
+        for pattern in patterns:
+            for match in re.finditer(pattern, sentence, re.IGNORECASE):
+                start, end = match.span("identity")
+                if (
+                    start + sentence_match.start(),
+                    end + sentence_match.start(),
+                ) in owned_spans:
+                    return True
     return False
 
 
@@ -92,9 +116,11 @@ def promote_in_scene_characters(
     character_rows: Sequence[Mapping[str, Any]],
     alias_rows: Sequence[Mapping[str, Any]],
     parent: PresenceRoster | None,
+    explicit_exits: set[RosterKey] | None = None,
 ) -> PresenceRoster:
     """Promote deterministic in-scene identities without undoing authored exits.
 
+    Explicit exits also protect characters absent from the parent roster.
     A parent-present character absent from the end roster has an authored exit
     or reset; speech earlier in that turn must not put them back in the room.
     Only accepted public prose is considered, never unselected choices.
@@ -108,6 +134,7 @@ def promote_in_scene_characters(
         for declaration in declarations
         if declaration.get("kind") == "character"
     }
+    catalog_names = [name for kind, name in index.by_name if kind == "character"]
     for (kind, name), keys in index.by_name.items():
         if kind != "character":
             continue
@@ -118,9 +145,14 @@ def promote_in_scene_characters(
             )
             for placement in DECLARATION_PLACEMENTS
         )
-        if not has_scene_cue(prose, name) and not declaration_cue:
+        if (
+            not has_scene_cue(prose, name, catalog_names=catalog_names)
+            and not declaration_cue
+        ):
             continue
         entry = index.resolve(RosterEntry(kind="character", name=name))
+        if entry.key in (explicit_exits or set()):
+            continue
         if entry.key in result.present or (
             parent is not None and entry.key in parent.present
         ):

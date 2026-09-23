@@ -100,56 +100,43 @@ def apply_delta(
     resolve: Callable[[RosterEntry], RosterEntry] | None = None,
 ) -> PresenceRoster:
     """Apply sparse wire changes; an exit from outside the roster is an error."""
-    candidates = list(roster.all_references.values())
-    if delta is not None:
-        candidates.extend(
-            _entry(ref)
-            for ref in [*delta.enter, *delta.exit, *delta.mentions, *delta.transit]
-        )
-        if delta.scene_reset is not None:
-            candidates.extend(_entry(ref) for ref in delta.scene_reset.present)
-            candidates.append(_entry(delta.scene_reset.place))
-    known: dict[tuple[str, str], dict[int, RosterEntry]] = {}
-    for candidate in candidates:
-        if resolve is not None:
-            candidate = resolve(candidate)
-        if candidate.id is not None:
-            known.setdefault((candidate.kind, candidate.name.casefold()), {})[
-                candidate.id
-            ] = candidate
 
     def canonical(reference: Any) -> RosterEntry:
         entry = _entry(reference)
-        if resolve is not None:
-            entry = resolve(entry)
-        if entry.id is not None:
-            return entry
-        matches = known.get((entry.kind, entry.name.casefold()), {})
-        if len(matches) > 1:
-            raise ValueError(
-                f"Ambiguous {entry.kind} name {entry.name!r}: {sorted(matches)}"
-            )
-        return next(iter(matches.values())) if matches else entry
+        return resolve(entry) if resolve is not None else entry
 
     def keyed(references: Iterable[Any]) -> dict[RosterKey, RosterEntry]:
         return {entry.key: entry for entry in map(canonical, references)}
 
     present = keyed(roster.present.values())
     setting = keyed(roster.setting.values())
+    transitioning = keyed(delta.transit if delta is not None else [])
+    referenced = keyed(delta.mentions if delta is not None else [])
+    crossings: dict[RosterKey, RosterEntry] = {}
     if delta is not None:
+        enters = keyed(delta.enter)
+        exits = keyed(delta.exit)
+        # Only catalog-resolved identities may cancel. Never infer an exit ID
+        # from the other entries on the wire: those are not the catalog.
+        for entry in exits.values():
+            required_id(entry)
+        crossings = {key: entry for key, entry in enters.items() if key in exits}
         if delta.scene_reset is not None:
             present = keyed(delta.scene_reset.present)
             setting = keyed([delta.scene_reset.place])
         else:
-            present.update(keyed(delta.enter))
-            for key, entry in keyed(delta.exit).items():
+            present.update(
+                {key: entry for key, entry in enters.items() if key not in crossings}
+            )
+            for key, entry in exits.items():
+                if key in crossings:
+                    continue
                 if key not in present:
                     raise ValueError(
                         f"Cannot exit non-present {entry.kind} {entry.name!r} (id={entry.id})"
                     )
                 del present[key]
-    transitioning = keyed(delta.transit if delta is not None else [])
-    referenced = keyed(delta.mentions if delta is not None else [])
+    referenced = {**crossings, **referenced}
     for key in present | setting:
         transitioning.pop(key, None)
     for key in present | setting | transitioning:
@@ -441,10 +428,3 @@ async def write_roster_async(conn: Any, chunk_id: int, roster: PresenceRoster) -
             r"(?<![\w:]):(\w+)", lambda match: f"${keys.index(match[1]) + 1}", query
         )
         await conn.execute(query, *(params[key] for key in keys))
-
-
-def identity_keys(references: Iterable[PresenceRef]) -> list[RosterKey]:
-    """Key wire references by ID, resolving idless names only when unambiguous."""
-    entries = [_entry(ref) for ref in references]
-    index = IdentityIndex(entry for entry in entries if entry.id is not None)
-    return [index.resolve(entry).key for entry in entries]

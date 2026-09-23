@@ -609,6 +609,12 @@ def commit_incubator_to_database_sync(
                 character_rows=roster_rows.characters,
                 alias_rows=roster_rows.aliases,
                 parent=parent_roster,
+                explicit_exits={
+                    ("character", ref["character_id"])
+                    for ref in resolve_character_references_sync(
+                        ref_entities.departures, conn
+                    )
+                },
             )
             write_roster(conn, chunk_id, roster)
 

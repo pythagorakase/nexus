@@ -372,6 +372,10 @@ def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:
         if ref_data:
             reference_updates["factions"].append(ref_data)
 
+    if refs.departures:
+        reference_updates["departures"] = [
+            _model_to_json_dict(ref) for ref in refs.departures
+        ]
     return reference_updates
 
 

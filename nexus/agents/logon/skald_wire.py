@@ -7,10 +7,9 @@ per-chunk mentions, never members of the carried scene roster.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.agents.logon.apex_enums import (
     EmotionalValence,
@@ -43,10 +42,6 @@ from nexus.api.native_structured_output import (
     openai_response_text_format,
     strict_json_schema,
 )
-from nexus.util.log_safety import quote_log_value
-
-
-logger = logging.getLogger("nexus.logon.skald_wire")
 
 
 class SceneDelta(BaseModel):
@@ -133,82 +128,12 @@ class PresenceDelta(BaseModel):
         description="Fresh roster and setting after relocation.",
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_out_and_back(cls, data: Any) -> Any:
-        """Collapse same-turn character crossings to one mention."""
-
-        if not isinstance(data, dict) or data.get("scene_reset") is not None:
-            return data
-
-        enter_data = data.get("enter", [])
-        exit_data = data.get("exit", [])
-        mentions_data = data.get("mentions", [])
-        if not all(
-            isinstance(references, list)
-            for references in (enter_data, exit_data, mentions_data)
-        ):
-            return data
-
-        try:
-            enter = [CharacterRef.model_validate(reference) for reference in enter_data]
-            exit_references = [
-                CharacterRef.model_validate(reference) for reference in exit_data
-            ]
-            mentions = [
-                PresenceRef.model_validate(reference) for reference in mentions_data
-            ]
-        except ValidationError:
-            return data
-
-        from nexus.presence.roster import identity_keys
-
-        keys = identity_keys([*enter, *exit_references, *mentions])
-        enter_keys = keys[: len(enter)]
-        exit_keys = keys[len(enter) : len(enter) + len(exit_references)]
-        mention_keys = set(keys[len(enter) + len(exit_references) :])
-        overlap = set(enter_keys) & set(exit_keys)
-        if not overlap:
-            return data
-        normalized = dict(data)
-        normalized["enter"] = [
-            ref for ref, key in zip(enter_data, enter_keys) if key not in overlap
-        ]
-        normalized["exit"] = [
-            ref for ref, key in zip(exit_data, exit_keys) if key not in overlap
-        ]
-        normalized_mentions = list(mentions_data)
-        for key in dict.fromkeys(enter_keys):
-            if key not in overlap:
-                continue
-            ref = enter[enter_keys.index(key)]
-            if key not in mention_keys:
-                normalized_mentions.append(
-                    {
-                        "kind": "character",
-                        "name": ref.name,
-                        "id": key[1] if isinstance(key[1], int) else None,
-                    }
-                )
-                mention_keys.add(key)
-            logger.warning(
-                "presence out-and-back normalized to mention: name=%s",
-                quote_log_value(ref.name),
-            )
-        normalized["mentions"] = normalized_mentions
-        return normalized
-
     @model_validator(mode="after")
     def validate_presence_consistency(self) -> "PresenceDelta":
         """Reject contradictory roster changes."""
 
         if self.scene_reset is not None and (self.enter or self.exit):
             raise ValueError("scene_reset cannot be combined with enter or exit")
-        from nexus.presence.roster import identity_keys
-
-        keys = identity_keys([*self.enter, *self.exit])
-        if set(keys[: len(self.enter)]) & set(keys[len(self.enter) :]):
-            raise ValueError("presence cannot enter and exit the same character")
         return self
 
     model_config = ConfigDict(extra="forbid")
@@ -664,6 +589,14 @@ def _hydrate_references(
         characters=characters,
         places=places,
         factions=factions,
+        departures=[
+            CharacterReference(
+                character_id=ref.id,
+                character_name=ref.name,
+                reference_type=ReferenceType.MENTIONED,
+            )
+            for ref in (presence.exit if presence is not None else [])
+        ],
     )
 
 

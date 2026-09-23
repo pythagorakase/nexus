@@ -21,6 +21,10 @@ from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
 from nexus.agents.orrery.resolver import _present_actor_ids_at_anchor
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
+from nexus.api.presence_reconciliation import (
+    read_character_roster_from_connection,
+    reconcile_prose_mentions,
+)
 from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.config import load_settings
 from nexus.memory.manager import empty_pass2_baseline
@@ -64,6 +68,12 @@ def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:
     baseline = (
         read_presence_baseline(dbname, parent_id) if parent_id else PresenceBaseline()
     )
+    with connect(dbname) as conn:
+        reconcile_prose_mentions(
+            wire,
+            presence_baseline=baseline,
+            roster_rows=read_character_roster_from_connection(conn),
+        )
     response = hydrate_skald_turn(wire, presence_baseline=baseline)
     session_id = str(uuid4())
     data = response_to_incubator(
@@ -325,3 +335,132 @@ def test_roster_real_alias_resolution_and_ambiguity(roster_database) -> None:
             )
         with pytest.raises(ValueError, match="Ambiguous character"):
             resolve_reference(conn, kind="character", id=None, name="Fox")
+
+
+@pytest.mark.parametrize("alias_collision", [False, True])
+def test_roster_ambiguous_crossing_rejected_before_hydration(
+    roster_database, alias_collision
+) -> None:
+    dbname, ids, _ = roster_database
+    first_id, second_id = ids["Test Protagonist"], ids["Remote Friend"]
+    with connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE characters SET name = 'Alex' WHERE id = %s", (first_id,)
+            )
+            cur.execute(
+                "UPDATE characters SET name = %s WHERE id = %s",
+                ("Fox" if alias_collision else "ALEX", second_id),
+            )
+            if alias_collision:
+                cur.execute(
+                    "INSERT INTO character_aliases (character_id, alias) VALUES (%s, 'Fox')",
+                    (first_id,),
+                )
+    first = commit_wire(
+        dbname,
+        0,
+        wire(
+            "The room is quiet.",
+            presence=PresenceDelta(
+                enter=[
+                    CharacterRef(
+                        kind="character",
+                        id=second_id,
+                        name="Fox" if alias_collision else "Alex",
+                    )
+                ]
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="Ambiguous character name"):
+        commit_wire(
+            dbname,
+            first,
+            wire(
+                "Someone crosses the doorway.",
+                presence=PresenceDelta(
+                    enter=[CharacterRef(kind="character", id=first_id, name="Alex")],
+                    exit=[
+                        CharacterRef(
+                            kind="character", name="Fox" if alias_collision else "Alex"
+                        )
+                    ],
+                ),
+            ),
+        )
+    with connect(dbname) as conn:
+        assert second_id in read_roster(conn, first).present_character_ids
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM narrative_chunks")
+            assert cur.fetchone()[0] == 1
+
+
+def test_roster_same_turn_departure_survives_commit_reconciliation(
+    roster_database,
+) -> None:
+    dbname, ids, _ = roster_database
+    guest = ids["Remote Friend"]
+    first = commit_wire(dbname, 0, wire("The room is quiet."))
+    second = commit_wire(
+        dbname,
+        first,
+        wire(
+            "Remote Friend says goodbye. Remote Friend walks away.",
+            presence=PresenceDelta(
+                enter=[CharacterRef(kind="character", id=guest, name="Remote Friend")],
+                exit=[CharacterRef(kind="character", name="Remote Friend")],
+            ),
+        ),
+    )
+    with connect(dbname) as conn:
+        roster = read_roster(conn, second)
+        assert guest not in roster.present_character_ids
+        assert ("character", guest) in roster.referenced
+
+
+def test_roster_operator_provenance_includes_historical_presence(
+    roster_database,
+) -> None:
+    from nexus.agents.orrery.resolver import compose_actor_bindings
+    from scripts.orrery_sample import fetch_actor_sources
+    from nexus.agents.orrery.substrate import Slot
+
+    dbname, ids, _ = roster_database
+    guest = ids["Remote Friend"]
+    first = commit_wire(
+        dbname,
+        0,
+        wire(
+            "The room is quiet.",
+            presence=PresenceDelta(
+                enter=[CharacterRef(kind="character", id=guest, name="Remote Friend")]
+            ),
+        ),
+    )
+    second = commit_wire(
+        dbname,
+        first,
+        wire(
+            "The room is empty.",
+            presence=PresenceDelta(
+                exit=[CharacterRef(kind="character", id=guest, name="Remote Friend")]
+            ),
+        ),
+    )
+    engine = create_engine(sqlalchemy_url(dbname))
+    try:
+        with Session(engine) as session:
+            entity_id = session.execute(
+                text("SELECT entity_id FROM characters WHERE id = :id"), {"id": guest}
+            ).scalar_one()
+            bindings = compose_actor_bindings(
+                session, anchor_chunk_id=second, window_chunks=2
+            )
+            assert any(binding[Slot.ACTOR] == entity_id for binding in bindings)
+            sources = fetch_actor_sources(
+                session, anchor_chunk_id=second, window_chunks=2, actor_ids={entity_id}
+            )
+            assert "chunk-ref" in sources[entity_id]
+    finally:
+        engine.dispose()

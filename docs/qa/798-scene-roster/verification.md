@@ -160,4 +160,169 @@ Production staging always supplies a `StateUpdates` object (empty allowed); that
 
 No blocking questions remain. Alias generation (#799), fleet migration, and provider evaluation remain outside this work order.
 
+## PR 900 Review Fixes
+
+Merged `origin/main` at `6648fef4`, including PR #897's connection contract.
+The reachability baseline retains main's five removed `ir_eval` production
+entries and this branch's three `nexus/presence/*` entries. New PostgreSQL tests
+open connections only through `tests.pg_fixtures`.
+
+The wire now preserves all authored presence entries. Production's
+`reconcile_prose_mentions` resolves the complete character catalog plus stored
+aliases before the owner applies crossing algebra; a wire entry cannot supply
+the identity for another idless entry. Only resolved IDs cancel. The ambiguous
+Alex/Alex and alias/given-name Fox cases raise. PostgreSQL's case-sensitive
+unique name constraint precludes byte-identical duplicate names, so the database
+regression uses Alex/ALEX; the pure owner regression covers Alex/Alex exactly.
+
+Dialogue and action cues use whole-name boundaries and longest-name ownership
+of overlapping spans. Ann Marie does not promote Ann, and Ann Smith does not
+trigger a shared Smith alias. A bare ambiguous Smith still raises. Authored
+exits survive hydration and the incubator JSON as internal `departures`, hidden
+from provider JSON schemas with `SkipJsonSchema`; commit resolves those IDs and
+protects them from prose promotion even when absent from the parent. No migration
+or provider-facing wire field was added. The real commit regression verifies
+enter + exit + goodbye/action prose leaves a mentioned-only character.
+
+The prompt bullet now uses the coordinator's exact wording. The evidence file
+moved here from `docs/scene_roster_798_verification.md`.
+
+### Predicate Inventory
+
+The reviewer found runtime consumers routed correctly, one registered operator
+with a surviving predicate, and legacy script survivors. This table records the
+result after the requested repairs; it does not assert that dead code was migrated.
+
+| Consumer | Shared View or Remaining Predicate | Status |
+| --- | --- | --- |
+| Writer baseline and prompt; scene pressures | `present`, `setting` | Shared owner |
+| Retrieval anchor and MEMNON presence boost | `present_character_ids` | Shared owner |
+| Entity dossier labels | Anchor `present`; window `all_references` for recency | Shared owner |
+| Orrery actor pool and actor exclusion | Window `all_references`; anchor `present_entity_ids` | Shared owner |
+| WORLD KNOWLEDGE and disclosure audience | `present_entity_ids` | Shared owner; mentioned-only identities excluded |
+| Bleed proximity anchors | `present_entity_ids` | Shared owner |
+| Experience duration | `present_entity_ids` streak | Shared owner |
+| Presence audit | Current `all_references`; parent `present_character_ids` | Shared owner |
+| Reconciliation and commit | Catalog identity index, `apply_delta`, `write_roster` | Shared owner; exits retained through staging |
+| Retrieval coverage and maturation | `all_references` | Shared owner |
+| Reader ledger | `present`, `referenced`, `setting`, `transitioning` | Shared owner |
+| `scripts/orrery_sample.py::fetch_actor_sources` | Window `all_references`, active character identities | Fixed this round; includes historical present rows |
+| `scripts/measure_presence_boost.py::load_measurement_corpus` | `present_character_ids` | Fixed this round as directed |
+| `scripts/creative_character_expansion.py:396` | Local `reference = 'present'` | Known independent predicate in baseline-unreachable dead code; left untouched |
+| `scripts/generate_character_summaries_experimental.py:381` | Local `reference = 'present'` | Known independent predicate in baseline-unreachable dead code; left untouched |
+| `scripts/relationship_analyst.py:835–836` | Both characters' local `reference = 'present'` | Known independent predicate in baseline-unreachable dead code; left untouched |
+
+### Read-Only Render from Save 04
+
+Executed from the worktree with the required connection setting:
+
+```sh
+PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python - <<'PY'
+from tests.pg_fixtures import connect
+from nexus.presence.roster import read_roster, render_roster
+with connect('save_04') as conn:
+    with conn.cursor() as cur:
+        cur.execute('SHOW default_transaction_read_only')
+        print('default_transaction_read_only:', cur.fetchone()[0])
+        cur.execute('SELECT max(id) FROM narrative_chunks')
+        chunk_id=cur.fetchone()[0]
+        cur.execute('SELECT user_character FROM global_variables WHERE id = true')
+        player_id=cur.fetchone()[0]
+    print('save_04 chunk:', chunk_id)
+    print(render_roster(read_roster(conn, chunk_id), player_character_id=player_id))
+PY
+```
+
+```text
+default_transaction_read_only: on
+save_04 chunk: 49
+PRESENT: Mara Vey (player), Kessa Brin · SETTING: Wickglass Dispatch House
+```
+
+### Review-Round Validation
+All commands below ran from this worktree after merging main. Offline opt-in
+skips are reported separately from the PostgreSQL gate; the latter actually ran.
+The single PostgreSQL skip is the paid-provider `test_live_cycle.py` opt-in,
+which this order does not authorize. The three failures/errors below are exactly
+the coordinator's #885 exemptions; no additional failure appeared.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+```
+
+```text
+2627 passed, 768 skipped, 11 warnings in 90.00s (0:01:29)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_commit_choice_presence_pg.py tests/test_presence_reconciliation.py tests/test_presence_audit.py tests/test_orrery tests/test_presence_roster_pg.py tests/test_wizard_opening_presence_pg.py tests/test_presence_boost_pg.py -k 'presence or roster or bleed or disclosure or audience or knowledge'
+```
+
+```text
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_replay.py::test_post_target_replace_reapplication_is_presence_remainder
+ERROR tests/test_orrery/test_composition_sources_live.py::test_live_roster_source_respects_reach_roster_liveness_and_opt_in
+ERROR tests/test_orrery/test_polymorphic_patron_live.py::test_roster_start_to_status_completion_closes_institutional_circle
+1 failed, 132 passed, 1 skipped, 1456 deselected, 11 warnings, 2 errors in 39.17s
+```
+
+Focused tests run while developing the fixes:
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_presence_roster.py tests/test_skald_wire.py tests/test_presence_reconciliation.py
+```
+
+```text
+141 passed, 3 skipped, 5 warnings in 0.87s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_presence_roster_pg.py
+```
+
+```text
+7 passed, 5 warnings in 8.06s
+```
+
+Earlier development iterations exposed the expected obsolete parse-time
+normalization assertions, one accidental overbroad edit to `_hydrate_updates`
+(repaired), and two errors in the new PostgreSQL tests (the unique-name
+constraint and a dict binding accessed as an attribute). Those were fixed
+before the successful full gates above; none is deferred.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/check_reachability.py
+```
+
+```text
+  "existing_unreachable": 85,
+  "newly_unreachable": [],
+  "lost_production_reachability": [],
+  "baseline_add_production_paths": [],
+  "baseline_remove_orphan_exemptions": [],
+  "baseline_remove_deleted_production_paths": [],
+  "forbidden_dependencies": [],
+  "tombstone_violations": [],
+  "unresolved_internal_imports": [],
+  "unregistered_dynamic_import_sites": [],
+  "route_reachability": "not_proven"
+}
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/logon/apex_schema.py nexus/agents/logon/skald_wire.py nexus/api/commit_handler_sync.py nexus/api/lore_adapter.py nexus/presence/cues.py nexus/presence/roster.py scripts/measure_presence_boost.py scripts/orrery_sample.py tests/test_presence_roster.py tests/test_presence_roster_pg.py tests/test_skald_wire.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+11 files would be left unchanged.
+```
+
+Black covers all Python files edited this round; Markdown and JSON are not
+Black inputs. `git diff --check` also exited zero. No gateway or paid provider
+was used. The existing last-20-chunk clone reconstruction above is retained;
+this round adds the current, transaction-read-only render from the actual save.
+There are no open coordinator questions and no newly deferred review findings.
+The branch is for PR #900; it must not be merged by this worker.
+
 Codex — GPT-6 Astra

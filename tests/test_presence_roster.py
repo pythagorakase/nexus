@@ -164,3 +164,62 @@ def test_roster_render_identifies_canonical_player() -> None:
         render_roster(baseline(), player_character_id=1)
         == "PRESENT: Mara Vey (player), Len Aster · SETTING: Hall"
     )
+
+
+@pytest.mark.parametrize("short,long", [("Ann", "Ann Marie"), ("Ann", "Annabelle")])
+def test_roster_longest_name_owns_dialogue_attribution(short: str, long: str) -> None:
+    result = promote_in_scene_characters(
+        PresenceRoster(),
+        prose=f'"Wait," says {long}.',
+        declarations=[],
+        character_rows=[{"id": 1, "name": short}, {"id": 2, "name": long}],
+        alias_rows=[],
+        parent=None,
+    )
+    assert result.present_character_ids == {2}
+
+
+def test_roster_shared_surname_does_not_steal_full_name_attribution() -> None:
+    rows = [{"id": 1, "name": "Ann Smith"}, {"id": 2, "name": "Beth Smith"}]
+    aliases = [
+        {"character_id": 1, "alias": "Smith"},
+        {"character_id": 2, "alias": "Smith"},
+    ]
+    result = promote_in_scene_characters(
+        PresenceRoster(),
+        prose='"Wait," says Ann Smith.',
+        declarations=[],
+        character_rows=rows,
+        alias_rows=aliases,
+        parent=None,
+    )
+    assert result.present_character_ids == {1}
+    with pytest.raises(ValueError, match="Ambiguous character name"):
+        promote_in_scene_characters(
+            PresenceRoster(),
+            prose='"Wait," says Smith.',
+            declarations=[],
+            character_rows=rows,
+            alias_rows=aliases,
+            parent=None,
+        )
+
+
+@pytest.mark.parametrize("alias_collision", [False, True])
+def test_roster_resolves_every_crossing_before_algebra(alias_collision: bool) -> None:
+    first = RosterEntry(kind="character", id=1, name="Alex")
+    second = RosterEntry(
+        kind="character", id=2, name="Fox" if alias_collision else "Alex"
+    )
+    index = IdentityIndex(
+        [first, second],
+        [{"character_id": 1, "alias": "Fox"}] if alias_collision else [],
+    )
+    delta = PresenceDelta(
+        enter=[CharacterRef(kind="character", id=1, name="Alex")],
+        exit=[CharacterRef(kind="character", name=second.name)],
+    )
+    with pytest.raises(ValueError, match="Ambiguous character name"):
+        apply_delta(
+            PresenceRoster(present={second.key: second}), delta, resolve=index.resolve
+        )
