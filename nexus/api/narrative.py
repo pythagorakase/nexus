@@ -2,6 +2,8 @@
 FastAPI endpoints for live narrative turns with incubator support
 """
 
+from nexus.database import connection_kwargs
+
 import asyncio
 import frontmatter
 import json
@@ -247,12 +249,7 @@ def get_db_connection(slot: Optional[int] = None):
     dbname = require_slot_dbname(slot=slot)
 
     # Respect environment variables for connection settings (like db_pool.py)
-    return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return psycopg2.connect(**connection_kwargs(dbname))
 
 
 def load_settings():
@@ -1635,12 +1632,7 @@ async def get_user_character(slot: Optional[int] = None):
         raise HTTPException(status_code=400, detail=str(e))
 
     try:
-        conn = psycopg2.connect(
-            host=os.environ.get("PGHOST", "localhost"),
-            database=dbname,
-            user=os.environ.get("PGUSER", "pythagor"),
-            port=os.environ.get("PGPORT", "5432"),
-        )
+        conn = psycopg2.connect(**connection_kwargs(dbname))
         with conn:
             with conn.cursor() as cur:
                 cur.execute(

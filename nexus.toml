@@ -188,6 +188,12 @@ max_tokens = 4096
 # =============================================================================
 
 [api.database]
+# Explicit call arguments > these values > PG* environment > libpq/OS defaults.
+# Leave host/user/password_secret empty and port absent to use those defaults.
+host = ""
+user = ""
+password_secret = ""
+session_timezone = "UTC"
 # Postgres connect_timeout (seconds) for API connection pools and worker
 # connections. Bounds how long an unreachable database can stall a caller;
 # import-time code must never connect at all (issue #369).
@@ -809,11 +815,8 @@ high = { min = 0.44, max = 0.68 }
 debug = true
 
 [memnon.database]
-# NOTE: This URL is deprecated for gameplay. Database is now determined by
-# NEXUS_SLOT environment variable (1-5), which maps to save_01 through save_05.
-# This URL is only used as a fallback for development/testing or when slot_utils
-# is not available.
-url = "postgresql://pythagor@localhost/NEXUS"
+# Legacy URL field stays empty: all clients resolve [api.database] and a slot.
+url = ""
 create_tables = true
 drop_existing = true
 

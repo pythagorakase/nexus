@@ -75,6 +75,10 @@ Examples:
     python freestyle_api_query.py --input query.json
 """
 
+from nexus.database import resolved_database_url
+
+from nexus.database import database_url
+
 import os
 import sys
 import re
@@ -99,7 +103,7 @@ logger = logging.getLogger("nexus.freestyle")
 
 class EpisodeSlugParser:
     """Parse and validate episode slugs like 's01e05'."""
-    
+
     @staticmethod
     def parse(slug: str) -> Tuple[int, int]:
         """
@@ -116,15 +120,15 @@ class EpisodeSlugParser:
         """
         pattern = r'^s(\d{1,2})e(\d{1,2})$'
         match = re.match(pattern, slug.lower())
-        
+
         if not match:
             raise ValueError(f"Invalid episode slug format: {slug}. Expected format: s01e05")
-            
+
         season = int(match.group(1))
         episode = int(match.group(2))
-        
+
         return season, episode
-    
+
     @staticmethod
     def format(season: int, episode: int) -> str:
         """
@@ -138,7 +142,7 @@ class EpisodeSlugParser:
             Formatted slug like 's01e05'
         """
         return f"s{season:02d}e{episode:02d}"
-    
+
     @staticmethod
     def validate_range(start_slug: str, end_slug: str) -> bool:
         """
@@ -153,28 +157,20 @@ class EpisodeSlugParser:
         """
         start_season, start_episode = EpisodeSlugParser.parse(start_slug)
         end_season, end_episode = EpisodeSlugParser.parse(end_slug)
-        
+
         if start_season > end_season:
             return False
-        
+
         if start_season == end_season and start_episode > end_episode:
             return False
-            
+
         return True
 
-def get_db_connection_string():
-    """Get the database connection string from environment variables or defaults."""
-    DB_USER = os.environ.get("DB_USER", "pythagor")
-    DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-    DB_HOST = os.environ.get("DB_HOST", "localhost")
-    DB_PORT = os.environ.get("DB_PORT", "5432")
-    DB_NAME = os.environ.get("DB_NAME", "NEXUS")
-    
-    # Build connection string (with password if provided)
-    if DB_PASSWORD:
-        return f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    else:
-        return f"postgresql://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+def get_db_connection_string() -> str:
+    """Resolve the database through the runtime connection contract."""
+    return database_url()
+
 
 def connect_to_database(db_url: Optional[str] = None) -> sa.engine.Engine:
     """
@@ -189,10 +185,10 @@ def connect_to_database(db_url: Optional[str] = None) -> sa.engine.Engine:
     # Get connection string
     if not db_url:
         db_url = get_db_connection_string()
-    
+
     # Create engine
-    engine = create_engine(db_url)
-    
+    engine = create_engine(resolved_database_url(db_url))
+
     # Test connection
     try:
         with engine.connect() as conn:
@@ -497,7 +493,7 @@ def prepare_place_context(place: Dict[str, Any]) -> str:
                 context += f"#### {key}:\n{value}\n\n"
     
     return context
-        
+
 def prepare_summaries_context(season_summaries: List[Dict[str, Any]], episode_summaries: List[Dict[str, Any]]) -> str:
     """
     Prepare the context from season and episode summaries.
@@ -610,7 +606,7 @@ def save_api_package(system_prompt: str, user_prompt: str, content: str, filenam
     except Exception as e:
         logger.error(f"Failed to save API query package: {e}")
         print(f"Failed to save API query package: {e}")
-        
+
 def load_api_package(filename: str) -> Tuple[str, str, str, str, float, str]:
     """
     Load the API query package from a JSON file.

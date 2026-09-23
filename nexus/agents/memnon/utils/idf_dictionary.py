@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from nexus.database import url_connection_kwargs
+
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 import math
@@ -63,7 +65,9 @@ class IDFDictionary:
     def _cursor(self, connection: Any = None) -> Iterator[Any]:
         try:
             if connection is None:
-                with closing(psycopg2.connect(self.db_url)) as conn:
+                with closing(
+                    psycopg2.connect(**url_connection_kwargs(self.db_url))
+                ) as conn:
                     conn.set_session(readonly=True, isolation_level="REPEATABLE READ")
                     with conn, conn.cursor() as cursor:
                         yield cursor

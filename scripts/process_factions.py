@@ -20,6 +20,8 @@ Usage Examples:
     python process_factions.py --start 1 --end 100 --effort high
 """
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import logging
@@ -75,12 +77,7 @@ class ChunkFactionAnalysis(BaseModel):
 def get_db_connection():
     """Connect to the PostgreSQL database"""
     try:
-        conn = psycopg2.connect(
-            dbname="NEXUS",
-            user="pythagor",
-            host="localhost",
-            port=5432
-        )
+        conn = psycopg2.connect(**connection_kwargs())
         return conn
     except Exception as e:
         logger.error(f"Database connection error: {e}")

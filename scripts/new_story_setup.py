@@ -9,6 +9,10 @@ Actions:
 
 from __future__ import annotations
 
+from nexus.database import subprocess_env
+
+from nexus.database import connection_kwargs
+
 import argparse
 import logging
 import os
@@ -61,10 +65,7 @@ def _connect(dbname: Optional[str] = None):
                 "No database specified. Set PGDATABASE environment variable "
                 "or pass dbname explicitly. Valid slot databases: save_01 through save_05."
             )
-        user = os.environ.get("PGUSER", "pythagor")
-        host = os.environ.get("PGHOST", "localhost")
-        port = os.environ.get("PGPORT", "5432")
-        return psycopg2.connect(dbname=resolved_dbname, user=user, host=host, port=port)
+        return psycopg2.connect(**connection_kwargs(resolved_dbname))
 
 
 def create_assets_tables(dbname: Optional[str] = None) -> None:
@@ -185,12 +186,7 @@ def initialize_slot_database(
     if force:
         # Terminate active connections before dropping
         # Use raw psycopg2 for postgres admin DB (not in slot pool)
-        admin_conn = psycopg2.connect(
-            dbname="postgres",
-            user=os.environ.get("PGUSER", "pythagor"),
-            host=os.environ.get("PGHOST", "localhost"),
-            port=os.environ.get("PGPORT", "5432"),
-        )
+        admin_conn = psycopg2.connect(**connection_kwargs("postgres"))
         try:
             admin_conn.autocommit = True  # Required for pg_terminate_backend
             with admin_conn.cursor() as cur:
@@ -200,17 +196,21 @@ def initialize_slot_database(
                 )
         finally:
             admin_conn.close()
-        subprocess.run([tools["dropdb"], "--if-exists", target_db], check=True)
+        subprocess.run(
+            [tools["dropdb"], "--if-exists", target_db],
+            check=True,
+            env=subprocess_env(),
+        )
         LOG.warning("Dropped database %s if it existed", target_db)
 
-    subprocess.run([tools["createdb"], target_db], check=True)
+    subprocess.run([tools["createdb"], target_db], check=True, env=subprocess_env())
     LOG.info("Created database %s", target_db)
 
     # Dump both public and assets schemas from template
     dump_cmd = [tools["pg_dump"], "-s", "-n", "public", "-n", "assets", source_db]
     LOG.info("Dumping schema (public + assets) from %s", source_db)
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
-        subprocess.run(dump_cmd, check=True, stdout=tmp)
+        subprocess.run(dump_cmd, check=True, stdout=tmp, env=subprocess_env())
         tmp_path = tmp.name
 
     try:
@@ -218,10 +218,12 @@ def initialize_slot_database(
         subprocess.run(
             [tools["psql"], target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
             check=True,
+            env=subprocess_env(),
         )
         subprocess.run(
             [tools["psql"], target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
             check=True,
+            env=subprocess_env(),
         )
 
         # Strip CREATE/ALTER SCHEMA lines to avoid noisy errors
@@ -243,6 +245,7 @@ def initialize_slot_database(
         subprocess.run(
             [tools["psql"], "-v", "ON_ERROR_STOP=1", target_db, "-f", tmp_path],
             check=True,
+            env=subprocess_env(),
         )
     finally:
         try:
@@ -331,16 +334,13 @@ def _copy_template_data(source_db: str, target_db: str, tools: dict[str, str]) -
     for table in TEMPLATE_SEED_TABLES:
         dump_cmd.extend(["-t", table])
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
-        subprocess.run(
-            dump_cmd,
-            check=True,
-            stdout=tmp,
-        )
+        subprocess.run(dump_cmd, check=True, stdout=tmp, env=subprocess_env())
         tmp_path = tmp.name
     try:
         subprocess.run(
             [tools["psql"], "-v", "ON_ERROR_STOP=1", target_db, "-f", tmp_path],
             check=True,
+            env=subprocess_env(),
         )
     finally:
         try:
@@ -378,7 +378,9 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
     target_db = f"save_{slot:02d}"
 
     if force:
-        subprocess.run(["dropdb", "--if-exists", target_db], check=False)
+        subprocess.run(
+            ["dropdb", "--if-exists", target_db], check=False, env=subprocess_env()
+        )
         LOG.warning("Dropped database %s if it existed", target_db)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".sql") as tmp:
@@ -400,17 +402,20 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
                 "assets",
             ],
             check=True,
+            env=subprocess_env(),
         )
-        subprocess.run(["createdb", target_db], check=True)
+        subprocess.run(["createdb", target_db], check=True, env=subprocess_env())
 
         # Ensure extensions before replaying functions/tables
         subprocess.run(
             ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
             check=True,
+            env=subprocess_env(),
         )
         subprocess.run(
             ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
             check=True,
+            env=subprocess_env(),
         )
 
         # Strip CREATE/ALTER SCHEMA public lines to avoid conflicts
@@ -424,7 +429,9 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
         with open(dump_path, "w", encoding="utf-8") as f:
             f.writelines(filtered)
 
-        subprocess.run(["psql", target_db, "-f", dump_path], check=True)
+        subprocess.run(
+            ["psql", target_db, "-f", dump_path], check=True, env=subprocess_env()
+        )
         _post_clone_cleanup(target_db)
         LOG.info("Cloned %s into %s (with data)", source_db, target_db)
     finally:

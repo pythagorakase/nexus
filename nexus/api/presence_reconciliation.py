@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import asyncio
 from dataclasses import dataclass
 import logging
@@ -161,12 +163,7 @@ def read_character_roster_from_connection(conn: Any) -> CharacterRosterRows:
 def read_character_roster(dbname: str) -> CharacterRosterRows:
     """Read the known-character roster and aliases for one turn."""
 
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = psycopg2.connect(**connection_kwargs(dbname))
     try:
         conn.set_session(readonly=True, autocommit=True)
         return read_character_roster_from_connection(conn)

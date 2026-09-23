@@ -10,6 +10,8 @@ This script:
 4. Populates the chunk_character_references table
 """
 
+from nexus.database import url_connection_kwargs
+
 import json
 import psycopg2
 from psycopg2.extras import execute_batch
@@ -32,8 +34,8 @@ db_url = settings['Agent Settings']['MEMNON']['database']['url']
 
 def get_db_connection():
     """Create and return a database connection."""
-    # Parse the connection URL: postgresql://pythagor@localhost/NEXUS
-    return psycopg2.connect(db_url)
+    # Parse the connection URL: [api.database] and the active slot
+    return psycopg2.connect(**url_connection_kwargs(db_url))
 
 def build_character_lookup(conn) -> Dict[str, int]:
     """

@@ -4,6 +4,8 @@ Script to extract scene numbers from narrative chunk slugs and update the databa
 This provides a Python alternative to the SQL script for more complex processing.
 """
 
+from nexus.database import connection_kwargs
+
 import os
 import re
 import sys
@@ -26,60 +28,22 @@ logger = logging.getLogger(__name__)
 
 # Load database configuration
 def load_db_config() -> Dict[str, Any]:
-    """Load database configuration from config file"""
-    try:
-        from nexus.config import load_settings_as_dict
-        settings = load_settings_as_dict()
-        # Extract from MEMNON agent settings
-        if "Agent Settings" in settings and "MEMNON" in settings["Agent Settings"]:
-            db_url = settings["Agent Settings"]["MEMNON"]["database"].get("url")
-            if db_url:
-                # Parse PostgreSQL URL
-                # Format: postgresql://username:password@host:port/database
-                # Remove postgresql:// prefix
-                db_url = db_url.replace("postgresql://", "")
-                # Split by @ to separate credentials and host/database
-                if "@" in db_url:
-                    creds, host_db = db_url.split("@", 1)
-                    # Split credentials by : to get username and password
-                    if ":" in creds:
-                        username, password = creds.split(":", 1)
-                    else:
-                        username, password = creds, ""
-                    # Split host/db by / to get host and database
-                    if "/" in host_db:
-                        host_part, database = host_db.split("/", 1)
-                        # Check if port is specified
-                        if ":" in host_part:
-                            host, port = host_part.split(":", 1)
-                            port = int(port)
-                        else:
-                            host, port = host_part, 5432
-
-                        return {
-                            "host": host,
-                            "port": port,
-                            "database": database,
-                            "user": username,
-                            "password": password
-                        }
-                logger.warning(f"Failed to parse database URL: {db_url}")
-
-        logger.warning("Database configuration not found in MEMNON agent settings, using empty config")
-        return {}
-    except Exception as e:
-        logger.error(f"Error loading database configuration: {e}")
-        return {}
+    """Return the configured PostgreSQL target."""
+    params = connection_kwargs()
+    params["database"] = params.pop("dbname")
+    return params
 
 def connect_to_db(db_config: Dict[str, Any]) -> Optional[psycopg2.extensions.connection]:
     """Connect to PostgreSQL database using the provided configuration"""
     try:
         conn = psycopg2.connect(
-            host=db_config.get("host", "localhost"),
-            port=db_config.get("port", 5432),
-            database=db_config.get("database", "nexus"),
-            user=db_config.get("user", "postgres"),
-            password=db_config.get("password", "")
+            **connection_kwargs(
+                db_config.get("database"),
+                host=db_config.get("host"),
+                port=db_config.get("port"),
+                user=db_config.get("user"),
+                password=db_config.get("password"),
+            )
         )
         logger.info("Successfully connected to the database")
         return conn

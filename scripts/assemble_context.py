@@ -6,6 +6,8 @@ Interactive tool for assembling context packages from different database compone
 Maintains a hierarchical structure and tracks token count while building context.
 """
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import os
@@ -60,12 +62,12 @@ class ContextAssembler:
         }
         self.conn = self._connect_to_db()
         self.encoder = tiktoken.get_encoding("cl100k_base")  # Default for GPT models
-        
+
         if not new and os.path.exists(filename):
             self._load_file()
         else:
             self._save_file()
-            
+
         self.token_size = self._calculate_tokens()
         logger.info(f"Starting token size: {self.token_size:,}")
 
@@ -73,12 +75,7 @@ class ContextAssembler:
         """Connect to the PostgreSQL database."""
         try:
             # Connection details from CLAUDE.md
-            conn = psycopg2.connect(
-                dbname="NEXUS",
-                user="pythagor",
-                host="localhost",
-                port=5432
-            )
+            conn = psycopg2.connect(**connection_kwargs())
             return conn
         except Exception as e:
             logger.error(f"Database connection error: {e}")
@@ -104,7 +101,7 @@ class ContextAssembler:
             if "episodes" in self.data and self.data["episodes"]:
                 sorted_episodes = dict(sorted(self.data["episodes"].items()))
                 self.data["episodes"] = sorted_episodes
-            
+
             # Sort characters by numeric ID before saving
             if "characters" in self.data and self.data["characters"]:
                 # Define the column order from the database
@@ -113,7 +110,7 @@ class ContextAssembler:
                     "emotional_state", "current_activity", "current_location",
                     "extra_data", "created_at", "updated_at", "entity_type"
                 ]
-                
+
                 sorted_characters = {}
                 for char_id, char_data in sorted(self.data["characters"].items(), key=lambda x: int(x[0])):
                     # Create ordered character data
@@ -126,11 +123,11 @@ class ContextAssembler:
                     for field, value in char_data.items():
                         if field not in ordered_char_data:
                             ordered_char_data[field] = value
-                    
+
                     sorted_characters[char_id] = ordered_char_data
-                
+
                 self.data["characters"] = sorted_characters
-            
+
             with open(self.filename, 'w') as f:
                 json.dump(self.data, f, indent=4, ensure_ascii=False, sort_keys=False, cls=DecimalEncoder)
             logger.info(f"Saved context to {self.filename}")
@@ -149,7 +146,7 @@ class ContextAssembler:
         self.token_size = self._calculate_tokens()
         self._save_file()
         logger.info(f"new token size: {self.token_size:,}")
-        
+
         # Calculate difference
         diff = self.token_size - old_size
         sign = "+" if diff > 0 else ""
@@ -173,28 +170,28 @@ class ContextAssembler:
                 )
                 episodes = [f"s{row['season']:02d}e{row['episode']:02d}" for row in cur.fetchall()]
             return episodes
-            
+
         if "," in range_str:
             # Handle comma-separated list
             return [item.strip() for item in range_str.split(",")]
-            
+
         if "-" in range_str:
             # Handle range
             start, end = range_str.split("-")
-            
+
             # Extract season and episode numbers
             start_match = re.match(r"s(\d+)e(\d+)", start.lower())
             end_match = re.match(r"s(\d+)e(\d+)", end.lower())
-            
+
             if not (start_match and end_match):
                 logger.error(f"Invalid episode range format: {range_str}")
                 return []
-                
+
             start_season = int(start_match.group(1))
             start_episode = int(start_match.group(2))
             end_season = int(end_match.group(1))
             end_episode = int(end_match.group(2))
-            
+
             # Query the database for all episodes in this range
             with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
@@ -211,7 +208,7 @@ class ContextAssembler:
                 )
                 episodes = [f"s{row['season']:02d}e{row['episode']:02d}" for row in cur.fetchall()]
             return episodes
-        
+
         # Single episode
         return [range_str]
 
@@ -224,7 +221,7 @@ class ContextAssembler:
             field: Field to add (e.g., 'summary', 'background')
         """
         logger.info(f"Adding character {character_id} {field}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the character exists
             cur.execute(
@@ -232,11 +229,11 @@ class ContextAssembler:
                 (character_id,)
             )
             char_data = cur.fetchone()
-            
+
             if not char_data:
                 logger.error(f"Character with ID {character_id} not found")
                 return
-            
+
             # Check if the requested field exists
             cur.execute(
                 f"""
@@ -246,32 +243,32 @@ class ContextAssembler:
                 """,
                 (field,)
             )
-            
+
             if not cur.fetchone():
                 logger.error(f"Field '{field}' not found in characters table")
                 return
-            
+
             # Get the field value
             cur.execute(
                 f"SELECT {field} FROM characters WHERE id = %s",
                 (character_id,)
             )
             result = cur.fetchone()
-            
+
             if not result or result[field] is None:
                 logger.error(f"No data found for character {character_id} {field}")
                 return
-            
+
             # Create the character entry if it doesn't exist
             if str(character_id) not in self.data["characters"]:
                 # Get the character name
                 self.data["characters"][str(character_id)] = {
                     "name": char_data["name"]
                 }
-            
+
             # Add the field
             self.data["characters"][str(character_id)][field] = result[field]
-            
+
             self._update_and_save()
 
     def remove_character_field(self, character_id: int, field: str):
@@ -283,24 +280,24 @@ class ContextAssembler:
             field: Field to remove
         """
         char_id_str = str(character_id)
-        
+
         if char_id_str not in self.data["characters"]:
             logger.error(f"Character {character_id} not found in context")
             return
-            
+
         if field not in self.data["characters"][char_id_str]:
             logger.error(f"Field '{field}' not found for character {character_id}")
             return
-            
+
         logger.info(f"Removing character {character_id} {field}...")
-        
+
         # Remove the field
         del self.data["characters"][char_id_str][field]
-        
+
         # Remove empty character entry
         if len(self.data["characters"][char_id_str]) <= 1:  # Only name remains
             del self.data["characters"][char_id_str]
-            
+
         self._update_and_save()
 
     def add_place_field(self, place_id: int, field: str):
@@ -312,7 +309,7 @@ class ContextAssembler:
             field: Field to add
         """
         logger.info(f"Adding place {place_id} {field}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the place exists
             cur.execute(
@@ -320,11 +317,11 @@ class ContextAssembler:
                 (place_id,)
             )
             place_data = cur.fetchone()
-            
+
             if not place_data:
                 logger.error(f"Place with ID {place_id} not found")
                 return
-            
+
             # Check if the requested field exists
             cur.execute(
                 f"""
@@ -334,29 +331,29 @@ class ContextAssembler:
                 """,
                 (field,)
             )
-            
+
             if not cur.fetchone():
                 logger.error(f"Field '{field}' not found in places table")
                 return
-            
+
             # Get the field value
             cur.execute(
                 f"SELECT {field} FROM places WHERE id = %s",
                 (place_id,)
             )
             result = cur.fetchone()
-            
+
             if not result or result[field] is None:
                 logger.error(f"No data found for place {place_id} {field}")
                 return
-            
+
             # Create the place entry if it doesn't exist
             if str(place_id) not in self.data["places"]:
                 self.data["places"][str(place_id)] = {
                     "name": place_data["name"],
                     "type": place_data["type"]
                 }
-            
+
             # Add the field (special handling for geographic types)
             if field == "coordinates":
                 # Query the coordinates as text representation (lat, lon)
@@ -371,7 +368,7 @@ class ContextAssembler:
                         (place_id,)
                     )
                     coord_result = coord_cur.fetchone()
-                    
+
                     if coord_result:
                         self.data["places"][str(place_id)][field] = {
                             "latitude": coord_result["latitude"],
@@ -382,7 +379,7 @@ class ContextAssembler:
                         self.data["places"][str(place_id)][field] = result[field]
             else:
                 self.data["places"][str(place_id)][field] = result[field]
-            
+
             self._update_and_save()
 
     def remove_place_field(self, place_id: int, field: str):
@@ -394,24 +391,24 @@ class ContextAssembler:
             field: Field to remove
         """
         place_id_str = str(place_id)
-        
+
         if place_id_str not in self.data["places"]:
             logger.error(f"Place {place_id} not found in context")
             return
-            
+
         if field not in self.data["places"][place_id_str]:
             logger.error(f"Field '{field}' not found for place {place_id}")
             return
-            
+
         logger.info(f"Removing place {place_id} {field}...")
-        
+
         # Remove the field
         del self.data["places"][place_id_str][field]
-        
+
         # Remove empty place entry
         if len(self.data["places"][place_id_str]) <= 2:  # Only name and type remain
             del self.data["places"][place_id_str]
-            
+
         self._update_and_save()
 
     def add_season_field(self, season_id: int, field: str):
@@ -423,18 +420,18 @@ class ContextAssembler:
             field: Field to add
         """
         logger.info(f"Adding season {season_id} {field}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the season exists
             cur.execute(
                 "SELECT id FROM seasons WHERE id = %s",
                 (season_id,)
             )
-            
+
             if not cur.fetchone():
                 logger.error(f"Season with ID {season_id} not found")
                 return
-            
+
             # Check if the requested field exists
             cur.execute(
                 f"""
@@ -444,29 +441,29 @@ class ContextAssembler:
                 """,
                 (field,)
             )
-            
+
             if not cur.fetchone():
                 logger.error(f"Field '{field}' not found in seasons table")
                 return
-            
+
             # Get the field value
             cur.execute(
                 f"SELECT {field} FROM seasons WHERE id = %s",
                 (season_id,)
             )
             result = cur.fetchone()
-            
+
             if not result or result[field] is None:
                 logger.error(f"No data found for season {season_id} {field}")
                 return
-            
+
             # Create the season entry if it doesn't exist
             if str(season_id) not in self.data["seasons"]:
                 self.data["seasons"][str(season_id)] = {}
-            
+
             # Add the field
             self.data["seasons"][str(season_id)][field] = result[field]
-            
+
             self._update_and_save()
 
     def remove_season_field(self, season_id: int, field: str):
@@ -478,24 +475,24 @@ class ContextAssembler:
             field: Field to remove
         """
         season_id_str = str(season_id)
-        
+
         if season_id_str not in self.data["seasons"]:
             logger.error(f"Season {season_id} not found in context")
             return
-            
+
         if field not in self.data["seasons"][season_id_str]:
             logger.error(f"Field '{field}' not found for season {season_id}")
             return
-            
+
         logger.info(f"Removing season {season_id} {field}...")
-        
+
         # Remove the field
         del self.data["seasons"][season_id_str][field]
-        
+
         # Remove empty season entry
         if not self.data["seasons"][season_id_str]:
             del self.data["seasons"][season_id_str]
-            
+
         self._update_and_save()
 
     def add_faction_field(self, faction_id: int, field: str):
@@ -507,7 +504,7 @@ class ContextAssembler:
             field: Field to add
         """
         logger.info(f"Adding faction {faction_id} {field}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the faction exists
             cur.execute(
@@ -515,11 +512,11 @@ class ContextAssembler:
                 (faction_id,)
             )
             faction_data = cur.fetchone()
-            
+
             if not faction_data:
                 logger.error(f"Faction with ID {faction_id} not found")
                 return
-            
+
             # Check if the requested field exists
             cur.execute(
                 f"""
@@ -529,35 +526,35 @@ class ContextAssembler:
                 """,
                 (field,)
             )
-            
+
             if not cur.fetchone():
                 logger.error(f"Field '{field}' not found in factions table")
                 return
-            
+
             # Get the field value
             cur.execute(
                 f"SELECT {field} FROM factions WHERE id = %s",
                 (faction_id,)
             )
             result = cur.fetchone()
-            
+
             if not result or result[field] is None:
                 logger.error(f"No data found for faction {faction_id} {field}")
                 return
-            
+
             # Create factions key if it doesn't exist
             if "factions" not in self.data:
                 self.data["factions"] = {}
-            
+
             # Create the faction entry if it doesn't exist
             if str(faction_id) not in self.data["factions"]:
                 self.data["factions"][str(faction_id)] = {
                     "name": faction_data["name"]
                 }
-            
+
             # Add the field
             self.data["factions"][str(faction_id)][field] = result[field]
-            
+
             self._update_and_save()
 
     def remove_faction_field(self, faction_id: int, field: str):
@@ -569,29 +566,29 @@ class ContextAssembler:
             field: Field to remove
         """
         faction_id_str = str(faction_id)
-        
+
         # Check if factions key exists
         if "factions" not in self.data:
             logger.error(f"No factions in context")
             return
-        
+
         if faction_id_str not in self.data["factions"]:
             logger.error(f"Faction {faction_id} not found in context")
             return
-            
+
         if field not in self.data["factions"][faction_id_str]:
             logger.error(f"Field '{field}' not found for faction {faction_id}")
             return
-            
+
         logger.info(f"Removing faction {faction_id} {field}...")
-        
+
         # Remove the field
         del self.data["factions"][faction_id_str][field]
-        
+
         # Remove empty faction entry
         if len(self.data["factions"][faction_id_str]) <= 1:  # Only name remains
             del self.data["factions"][faction_id_str]
-            
+
         self._update_and_save()
 
     def add_episode_summary(self, episode_identifiers: Union[str, List[str]]):
@@ -603,20 +600,20 @@ class ContextAssembler:
         """
         if isinstance(episode_identifiers, str):
             episode_identifiers = self._parse_episode_range(episode_identifiers)
-            
+
         logger.info(f"Adding episode summaries for {len(episode_identifiers)} episodes...")
-        
+
         for episode_id in episode_identifiers:
             # Parse season and episode numbers
             match = re.match(r"s(\d+)e(\d+)", episode_id.lower())
-            
+
             if not match:
                 logger.error(f"Invalid episode identifier format: {episode_id}")
                 continue
-                
+
             season = int(match.group(1))
             episode = int(match.group(2))
-            
+
             with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Check if the episode exists
                 cur.execute(
@@ -624,18 +621,18 @@ class ContextAssembler:
                     (season, episode)
                 )
                 result = cur.fetchone()
-                
+
                 if not result or result["summary"] is None:
                     logger.error(f"No summary found for episode {episode_id}")
                     continue
-                
+
                 # Create the episode entry if it doesn't exist
                 if episode_id not in self.data["episodes"]:
                     self.data["episodes"][episode_id] = {}
-                
+
                 # Add the summary
                 self.data["episodes"][episode_id]["summary"] = result["summary"]
-        
+
         self._update_and_save()
 
     def add_episode_raw(self, episode_identifiers: Union[str, List[str]]):
@@ -647,22 +644,22 @@ class ContextAssembler:
         """
         if isinstance(episode_identifiers, str):
             episode_identifiers = self._parse_episode_range(episode_identifiers)
-            
+
         logger.info(f"Adding raw content for {len(episode_identifiers)} episodes...")
-        
+
         for episode_id in episode_identifiers:
             # Parse season and episode numbers
             match = re.match(r"s(\d+)e(\d+)", episode_id.lower())
-            
+
             if not match:
                 logger.error(f"Invalid episode identifier format: {episode_id}")
                 continue
-                
+
             season = int(match.group(1))
             episode = int(match.group(2))
-            
+
             # No need to replace summary - we'll keep both summary and raw_text
-            
+
             with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Get the chunk span for this episode
                 cur.execute(
@@ -673,11 +670,11 @@ class ContextAssembler:
                     (season, episode)
                 )
                 result = cur.fetchone()
-                
+
                 if not result or not result["chunk_span"]:
                     logger.error(f"No chunk span found for episode {episode_id}")
                     continue
-                
+
                 # Parse the chunk span - PostgreSQL range type [lower,upper)
                 try:
                     # Extract the lower and upper bounds from the range string
@@ -698,7 +695,7 @@ class ContextAssembler:
                 except Exception as e:
                     logger.error(f"Error parsing chunk span for episode {episode_id}: {result['chunk_span']} - {str(e)}")
                     continue
-                
+
                 # Get the raw text for all chunks in this span
                 cur.execute(
                     """
@@ -709,11 +706,11 @@ class ContextAssembler:
                     (start_chunk, end_chunk)
                 )
                 chunks = cur.fetchall()
-                
+
                 if not chunks:
                     logger.error(f"No chunks found for episode {episode_id}")
                     continue
-                
+
                 # Create the episode entry if it doesn't exist
                 if episode_id not in self.data["episodes"]:
                     self.data["episodes"][episode_id] = {}
@@ -726,7 +723,7 @@ class ContextAssembler:
                 for chunk in chunks:
                     chunk_id = str(chunk["id"])
                     self.data["episodes"][episode_id]["raw_text"][chunk_id] = chunk["raw_text"]
-        
+
         self._update_and_save()
 
     def _parse_chunk_slug(self, chunk_slug: str) -> Optional[int]:
@@ -774,7 +771,7 @@ class ContextAssembler:
             character_id: ID of the character
         """
         logger.info(f"Finding all chunks referencing character {character_id}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get all chunk IDs that reference this character
             cur.execute(
@@ -786,16 +783,16 @@ class ContextAssembler:
                 """,
                 (character_id,)
             )
-            
+
             chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
-            
+
             if not chunk_ids:
                 logger.error(f"No chunks found referencing character {character_id}")
                 return
-                
+
             logger.info(f"Found {len(chunk_ids)} chunks referencing character {character_id}")
             self.add_chunks(chunk_ids)
-    
+
     def add_chunks_auto_faction(self, faction_id: int):
         """
         Automatically add all chunks that reference a specific faction.
@@ -804,7 +801,7 @@ class ContextAssembler:
             faction_id: ID of the faction
         """
         logger.info(f"Finding all chunks referencing faction {faction_id}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get all chunk IDs that reference this faction
             cur.execute(
@@ -816,16 +813,16 @@ class ContextAssembler:
                 """,
                 (faction_id,)
             )
-            
+
             chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
-            
+
             if not chunk_ids:
                 logger.error(f"No chunks found referencing faction {faction_id}")
                 return
-                
+
             logger.info(f"Found {len(chunk_ids)} chunks referencing faction {faction_id}")
             self.add_chunks(chunk_ids)
-    
+
     def add_episodes_auto_character(self, character_id: int, content_type: str = "raw"):
         """
         Automatically add all episodes that contain chunks referencing a specific character.
@@ -835,7 +832,7 @@ class ContextAssembler:
             content_type: Type of content to add ("raw" or "summary")
         """
         logger.info(f"Finding all episodes containing references to character {character_id}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get all chunk IDs that reference this character
             cur.execute(
@@ -846,13 +843,13 @@ class ContextAssembler:
                 """,
                 (character_id,)
             )
-            
+
             chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
-            
+
             if not chunk_ids:
                 logger.error(f"No chunks found referencing character {character_id}")
                 return
-            
+
             # Find all episodes that contain these chunks
             # We'll use the chunk_span range to find which episodes contain these chunks
             cur.execute(
@@ -863,7 +860,7 @@ class ContextAssembler:
                 ORDER BY season, episode
                 """
             )
-            
+
             matching_episodes = []
             for row in cur.fetchall():
                 chunk_span_str = str(row['chunk_span'])
@@ -871,7 +868,7 @@ class ContextAssembler:
                 if chunk_span_str.startswith('[') and chunk_span_str.endswith(')'):
                     range_part = chunk_span_str[1:-1]
                     start_chunk, end_chunk = map(int, range_part.split(','))
-                    
+
                     # Check if any of our chunk_ids fall within this range
                     for chunk_id in chunk_ids:
                         if start_chunk <= chunk_id < end_chunk:
@@ -879,11 +876,11 @@ class ContextAssembler:
                             if episode_id not in matching_episodes:
                                 matching_episodes.append(episode_id)
                             break
-            
+
             if not matching_episodes:
                 logger.error(f"No episodes found containing references to character {character_id}")
                 return
-                
+
             logger.info(f"Found {len(matching_episodes)} episodes containing references to character {character_id}")
             # Add content for all matching episodes
             for episode_id in matching_episodes:
@@ -891,7 +888,7 @@ class ContextAssembler:
                     self.add_episode_raw(episode_id)
                 elif content_type == "summary":
                     self.add_episode_summary(episode_id)
-    
+
     def add_episodes_auto_faction(self, faction_id: int, content_type: str = "raw"):
         """
         Automatically add all episodes that contain chunks referencing a specific faction.
@@ -901,7 +898,7 @@ class ContextAssembler:
             content_type: Type of content to add ("raw" or "summary")
         """
         logger.info(f"Finding all episodes containing references to faction {faction_id}...")
-        
+
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get all chunk IDs that reference this faction
             cur.execute(
@@ -912,13 +909,13 @@ class ContextAssembler:
                 """,
                 (faction_id,)
             )
-            
+
             chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
-            
+
             if not chunk_ids:
                 logger.error(f"No chunks found referencing faction {faction_id}")
                 return
-            
+
             # Find all episodes that contain these chunks
             cur.execute(
                 """
@@ -928,7 +925,7 @@ class ContextAssembler:
                 ORDER BY season, episode
                 """
             )
-            
+
             matching_episodes = []
             for row in cur.fetchall():
                 chunk_span_str = str(row['chunk_span'])
@@ -936,7 +933,7 @@ class ContextAssembler:
                 if chunk_span_str.startswith('[') and chunk_span_str.endswith(')'):
                     range_part = chunk_span_str[1:-1]
                     start_chunk, end_chunk = map(int, range_part.split(','))
-                    
+
                     # Check if any of our chunk_ids fall within this range
                     for chunk_id in chunk_ids:
                         if start_chunk <= chunk_id < end_chunk:
@@ -944,11 +941,11 @@ class ContextAssembler:
                             if episode_id not in matching_episodes:
                                 matching_episodes.append(episode_id)
                             break
-            
+
             if not matching_episodes:
                 logger.error(f"No episodes found containing references to faction {faction_id}")
                 return
-                
+
             logger.info(f"Found {len(matching_episodes)} episodes containing references to faction {faction_id}")
             # Add content for all matching episodes
             for episode_id in matching_episodes:
@@ -979,15 +976,15 @@ class ContextAssembler:
                 parts = chunk_ids.split("-")
                 if len(parts) == 2:
                     start_part, end_part = parts
-                    
+
                     # Check if first part is a slug
                     start_match = re.match(r"s(\d+)e(\d+)c(\d+)", start_part.lower())
-                    
+
                     if start_match:
                         # First part is a slug (shorthand range like "s01e03c24-27")
                         season = int(start_match.group(1))
                         episode = int(start_match.group(2))
-                        
+
                         try:
                             # Second part should be just a chunk number
                             end_chunk_num = int(end_part)
@@ -995,7 +992,7 @@ class ContextAssembler:
                             full_end_slug = f"s{season:02d}e{episode:02d}c{end_chunk_num}"
                             start_id = self._parse_chunk_slug(start_part)
                             end_id = self._parse_chunk_slug(full_end_slug)
-                            
+
                             if start_id and end_id:
                                 if start_id <= end_id:
                                     chunk_id_list = list(range(start_id, end_id + 1))
@@ -1121,15 +1118,15 @@ class ContextAssembler:
                 parts = chunk_ids.split("-")
                 if len(parts) == 2:
                     start_part, end_part = parts
-                    
+
                     # Check if first part is a slug
                     start_match = re.match(r"s(\d+)e(\d+)c(\d+)", start_part.lower())
-                    
+
                     if start_match:
                         # First part is a slug (shorthand range like "s01e03c24-27")
                         season = int(start_match.group(1))
                         episode = int(start_match.group(2))
-                        
+
                         try:
                             # Second part should be just a chunk number
                             end_chunk_num = int(end_part)
@@ -1137,7 +1134,7 @@ class ContextAssembler:
                             full_end_slug = f"s{season:02d}e{episode:02d}c{end_chunk_num}"
                             start_id = self._parse_chunk_slug(start_part)
                             end_id = self._parse_chunk_slug(full_end_slug)
-                            
+
                             if start_id and end_id:
                                 if start_id <= end_id:
                                     chunk_id_list = list(range(start_id, end_id + 1))
@@ -1222,14 +1219,14 @@ class ContextAssembler:
         if command.lower() in ["exit", "quit"]:
             logger.info("Exiting...")
             sys.exit(0)
-            
+
         parts = command.split()
-        
+
         if not parts:
             return
-            
+
         action = parts[0].lower()
-        
+
         if action == "add":
             if len(parts) < 2:
                 logger.error("Invalid add command. Format: add <type> [<id>] [<field>]")
@@ -1242,17 +1239,17 @@ class ContextAssembler:
                 if len(parts) < 3:
                     logger.error("Invalid add chunk command. Format: add chunk <id/range> or add chunk auto <character/faction> <id>")
                     return
-                
+
                 # Check if this is an auto command
                 if parts[2].lower() == "auto":
                     if len(parts) < 5:
                         logger.error("Invalid add chunk auto command. Format: add chunk auto <character/faction> <id>")
                         return
-                    
+
                     entity_type = parts[3].lower()
                     try:
                         entity_id = int(parts[4])
-                        
+
                         if entity_type == "character":
                             self.add_chunks_auto_character(entity_id)
                         elif entity_type == "faction":
@@ -1274,7 +1271,7 @@ class ContextAssembler:
 
             obj_ids_str = parts[2]
             fields_str = parts[3]
-            
+
             # Parse comma-separated IDs
             obj_ids = []
             for id_str in obj_ids_str.split(','):
@@ -1287,20 +1284,20 @@ class ContextAssembler:
                         return
                 else:
                     obj_ids.append(id_str)
-            
+
             # Parse comma-separated fields
             fields = [f.strip() for f in fields_str.split(',')]
-            
+
             if obj_type == "character":
                 for char_id in obj_ids:
                     for field in fields:
                         self.add_character_field(char_id, field)
-                    
+
             elif obj_type == "place":
                 for place_id in obj_ids:
                     for field in fields:
                         self.add_place_field(place_id, field)
-                    
+
             elif obj_type == "season":
                 # Check if this is "add season summary all"
                 if len(obj_ids) == 1 and obj_ids_str.lower() == "summary" and fields_str.lower() == "all":
@@ -1308,11 +1305,11 @@ class ContextAssembler:
                     with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
                         cur.execute("SELECT id FROM seasons ORDER BY id")
                         seasons = cur.fetchall()
-                    
+
                     if not seasons:
                         logger.error("No seasons found in database")
                         return
-                    
+
                     logger.info(f"Adding summaries for {len(seasons)} seasons...")
                     for season in seasons:
                         self.add_season_field(season['id'], 'summary')
@@ -1320,12 +1317,12 @@ class ContextAssembler:
                     for season_id in obj_ids:
                         for field in fields:
                             self.add_season_field(season_id, field)
-                    
+
             elif obj_type == "faction":
                 for faction_id in obj_ids:
                     for field in fields:
                         self.add_faction_field(faction_id, field)
-                    
+
             elif obj_type == "episode":
                 if len(parts) < 3:
                     logger.error("Invalid add episode command. Format: add episode <summary/raw> <id>")
@@ -1339,11 +1336,11 @@ class ContextAssembler:
                         if len(parts) < 6:
                             logger.error("Invalid add episode summary auto command. Format: add episode summary auto <character/faction> <id>")
                             return
-                        
+
                         entity_type = parts[4].lower()
                         try:
                             entity_id = int(parts[5])
-                            
+
                             if entity_type == "character":
                                 self.add_episodes_auto_character(entity_id, "summary")
                             elif entity_type == "faction":
@@ -1365,11 +1362,11 @@ class ContextAssembler:
                         if len(parts) < 6:
                             logger.error("Invalid add episode raw auto command. Format: add episode raw auto <character/faction> <id>")
                             return
-                        
+
                         entity_type = parts[4].lower()
                         try:
                             entity_id = int(parts[5])
-                            
+
                             if entity_type == "character":
                                 self.add_episodes_auto_character(entity_id, "raw")
                             elif entity_type == "faction":
@@ -1387,10 +1384,10 @@ class ContextAssembler:
                             logger.error("Missing episode identifier. Format: add episode raw <id/range/all>")
                 else:
                     logger.error(f"Invalid episode field: {field}. Use 'summary' or 'raw'.")
-                    
+
             else:
                 logger.error(f"Unknown object type: {obj_type}")
-                
+
         elif action == "rm" or action == "remove":
             if len(parts) < 2:
                 logger.error("Invalid remove command. Format: rm <type> <id> [<field>]")
@@ -1415,7 +1412,7 @@ class ContextAssembler:
 
             obj_ids_str = parts[2]
             fields_str = parts[3]
-            
+
             # Parse comma-separated IDs
             obj_ids = []
             for id_str in obj_ids_str.split(','):
@@ -1428,30 +1425,30 @@ class ContextAssembler:
                         return
                 else:
                     obj_ids.append(id_str)
-            
+
             # Parse comma-separated fields
             fields = [f.strip() for f in fields_str.split(',')]
-            
+
             if obj_type == "character":
                 for char_id in obj_ids:
                     for field in fields:
                         self.remove_character_field(char_id, field)
-                    
+
             elif obj_type == "place":
                 for place_id in obj_ids:
                     for field in fields:
                         self.remove_place_field(place_id, field)
-                    
+
             elif obj_type == "season":
                 for season_id in obj_ids:
                     for field in fields:
                         self.remove_season_field(season_id, field)
-                    
+
             elif obj_type == "faction":
                 for faction_id in obj_ids:
                     for field in fields:
                         self.remove_faction_field(faction_id, field)
-                    
+
             elif obj_type == "episode":
                 if len(parts) < 4:
                     logger.error("Invalid remove episode command. Format: rm episode <summary/raw> <id>")
@@ -1500,18 +1497,18 @@ class ContextAssembler:
 
                 else:
                     logger.error(f"Invalid episode content type: {content_type}. Use 'summary' or 'raw'.")
-                
+
             else:
                 logger.error(f"Unknown object type: {obj_type}")
-                
+
         elif action == "tokens":
             # Display current token count
             tokens = self._calculate_tokens()
             logger.info(f"Current token count: {tokens:,}")
-            
+
         elif action == "help":
             print_help()
-            
+
         else:
             logger.error(f"Unknown command: {action}")
 

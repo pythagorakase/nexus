@@ -10,6 +10,8 @@ predates durable LORE baselines. It never infers a historical retrieval set.
 
 from __future__ import annotations
 
+from nexus.database import url_connection_kwargs
+
 import argparse
 from contextlib import closing
 import json
@@ -57,7 +59,7 @@ def stamp_slot_tail(
     connection = (
         get_connection(dbname)
         if dbname is not None
-        else psycopg2.connect(get_slot_db_url(slot=slot))
+        else psycopg2.connect(**url_connection_kwargs(get_slot_db_url(slot=slot)))
     )
     with closing(connection), connection as conn:
         with conn.cursor() as cur:

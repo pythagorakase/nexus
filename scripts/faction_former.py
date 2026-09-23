@@ -6,6 +6,8 @@ Takes manually curated faction context packages and uses OpenAI's o3 model
 to expand them into detailed faction entries for the NEXUS database.
 """
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import logging
@@ -185,26 +187,21 @@ def load_system_prompt() -> dict:
 def get_faction_info(faction_id: int) -> tuple:
     """Get faction ID and name from the database"""
     try:
-        conn = psycopg2.connect(
-            dbname="NEXUS",
-            user="pythagor",
-            host="localhost",
-            port=5432
-        )
+        conn = psycopg2.connect(**connection_kwargs())
         cur = conn.cursor()
-        
+
         cur.execute("SELECT id, name FROM factions WHERE id = %s", (faction_id,))
         result = cur.fetchone()
-        
+
         cur.close()
         conn.close()
-        
+
         if result:
             return result[0], result[1]
         else:
             logger.error(f"Faction with ID {faction_id} not found in database")
             return None, None
-            
+
     except Exception as e:
         logger.error(f"Database error: {e}")
         return None, None
@@ -353,14 +350,9 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
     """Insert or update faction data in the PostgreSQL database"""
     try:
         # Connect to database
-        conn = psycopg2.connect(
-            dbname="NEXUS",
-            user="pythagor",
-            host="localhost",
-            port=5432
-        )
+        conn = psycopg2.connect(**connection_kwargs())
         cur = conn.cursor()
-        
+
         # Check if faction already exists
         cur.execute("""
             SELECT id, summary, ideology, history, current_activity, 
@@ -369,7 +361,7 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
             WHERE name = %s
         """, (faction_name,))
         existing = cur.fetchone()
-        
+
         if existing:
             faction_id = existing[0]
             # Check if any important fields have data
@@ -383,7 +375,7 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
                 existing[8],  # resources
                 existing[9]   # extra_data
             ])
-            
+
             if has_data:
                 # Prompt for confirmation
                 logger.warning(f"Faction '{faction_name}' already has data in the database.")
@@ -393,7 +385,7 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
                     cur.close()
                     conn.close()
                     return
-            
+
             # Update existing faction
             update_query = """
                 UPDATE factions SET
@@ -409,7 +401,7 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
             """
-            
+
             cur.execute(update_query, (
                 faction_data.summary,
                 faction_data.ideology,
@@ -422,14 +414,14 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
                 Json(faction_data.extra_data.model_dump()),
                 faction_id
             ))
-            
+
             conn.commit()
             logger.info(f"Successfully updated faction '{faction_name}' (ID: {faction_id})")
         else:
             # Get the next available faction ID for new faction
             cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM factions")
             faction_id = cur.fetchone()[0]
-            
+
             # Insert new faction
             insert_query = """
                 INSERT INTO factions (
@@ -440,7 +432,7 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """
-            
+
             cur.execute(insert_query, (
                 faction_id,
                 faction_name,
@@ -455,16 +447,16 @@ def insert_faction_to_db(faction_name: str, faction_data: FactionExpansion):
                 faction_data.resources,
                 Json(faction_data.extra_data.model_dump())
             ))
-            
+
             conn.commit()
             logger.info(f"Successfully inserted faction '{faction_name}' with ID {faction_id}")
-        
+
         if faction_data.suggested_primary_location:
             logger.info(f"Suggested primary location: {faction_data.suggested_primary_location}")
-        
+
         cur.close()
         conn.close()
-        
+
     except Exception as e:
         logger.error(f"Database error: {e}")
         if conn:

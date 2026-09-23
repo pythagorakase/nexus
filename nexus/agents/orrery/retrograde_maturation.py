@@ -27,6 +27,8 @@ embedding step instead of re-running generation.
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import json
 import logging
 import os
@@ -1629,12 +1631,7 @@ def _connect_for_slot(slot: Optional[int]) -> Any:
     from nexus.api.slot_utils import require_slot_dbname
 
     dbname = require_slot_dbname(slot=slot)
-    return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return psycopg2.connect(**connection_kwargs(dbname))
 
 
 def _slot_label(slot: Optional[int]) -> str:

@@ -4,6 +4,8 @@ Simplified test script for live narrative turns
 Tests writing to incubator table with mock data
 """
 
+from nexus.database import connection_kwargs
+
 import json
 import logging
 import sys
@@ -49,11 +51,7 @@ class SimpleNarrativeTester:
         self.test_mode = narrative_settings.get("test_mode", False)
 
         # Set up database connection
-        self.conn = psycopg2.connect(
-            host="localhost",
-            database="NEXUS",
-            user="pythagor"
-        )
+        self.conn = psycopg2.connect(**connection_kwargs())
         self.conn.autocommit = False
 
         logger.info(f"Initialized SimpleNarrativeTester (test_mode={self.test_mode}, dry_run={self.dry_run})")

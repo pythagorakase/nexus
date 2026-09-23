@@ -52,6 +52,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from pydantic import BaseModel, Field
 
+from nexus.database import resolved_database_url
+
 # Import from api_openai.py
 try:
     from api_openai import OpenAIProvider, get_db_connection_string
@@ -294,7 +296,7 @@ def connect_to_database(db_url: Optional[str] = None) -> Engine:
         db_url = get_db_connection_string()
     
     try:
-        engine = create_engine(db_url)
+        engine = create_engine(resolved_database_url(db_url))
         # Test connection
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version()"))

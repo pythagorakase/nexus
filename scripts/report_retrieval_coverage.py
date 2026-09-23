@@ -6,6 +6,8 @@ Usage:
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 import os
 from collections import Counter, defaultdict
@@ -136,12 +138,7 @@ def format_retrieval_coverage_report(
 def _load_rows(slot: int) -> List[Mapping[str, Any]]:
     # Honor the standard libpq env vars (the pattern the live-test helpers
     # use); bare defaults match the documented single-machine setup.
-    connection = psycopg2.connect(
-        dbname=slot_dbname(slot),
-        host=os.environ.get("PGHOST", "localhost"),
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    connection = psycopg2.connect(**connection_kwargs(slot_dbname(slot)))
     connection.set_session(readonly=True)
     try:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:

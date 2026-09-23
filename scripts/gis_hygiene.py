@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from nexus.database import url_connection_kwargs
+
 import argparse
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
@@ -124,7 +126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     reports = []
     finding_count = 0
     for slot in slots:
-        conn = psycopg2.connect(get_slot_db_url(slot=slot))
+        conn = psycopg2.connect(**url_connection_kwargs(get_slot_db_url(slot=slot)))
         try:
             categories = audit_slot(conn)
         finally:

@@ -122,18 +122,9 @@ def _run_summary_generation(
         if db_manager_factory:
             db_manager = db_manager_factory()
         else:
-            db_url = None
-            if slot:
-                dbname = slot_dbname(slot)
-                user = os.environ.get("DB_USER", "pythagor")
-                password = os.environ.get("DB_PASSWORD", "")
-                host = os.environ.get("DB_HOST", "localhost")
-                port = os.environ.get("DB_PORT", "5432")
+            from nexus.api.slot_utils import get_slot_db_url
 
-                if password:
-                    db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
-                else:
-                    db_url = f"postgresql://{user}@{host}:{port}/{dbname}"
+            db_url = get_slot_db_url(slot=slot)
 
             db_manager = DatabaseManager(db_url=db_url)
     except Exception as exc:  # pragma: no cover - defensive logging

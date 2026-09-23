@@ -44,11 +44,11 @@ def main():
     parser.add_argument("--terms", nargs="+", help="Terms to check IDF values for")
     parser.add_argument("--query", help="Test query to generate weighted format")
     args = parser.parse_args()
-    
+
     # Load settings
     settings = load_settings()
     memnon_settings = settings.get("Agent Settings", {}).get("MEMNON", {})
-    
+
     # Get database URL
     db_url = args.db_url or memnon_settings.get("database", {}).get("url")
     if not db_url:
@@ -57,16 +57,16 @@ def main():
 
     try:
         # Initialize and build IDF dictionary
-        logger.info(f"Initializing IDF dictionary with DB URL: {db_url}")
+        logger.info("Initializing IDF dictionary with the configured database")
         idf_dict = IDFDictionary(db_url)
-        
+
         # Build or load
         idf_dict.build_dictionary(force_rebuild=args.rebuild)
         logger.info(f"IDF dictionary contains {len(idf_dict.idf_dict)} terms")
-        
+
         # Print some stats
         logger.info(f"Total document count: {idf_dict.total_docs}")
-        
+
         # Calculate some statistics
         all_idf_values = list(idf_dict.idf_dict.values())
         if all_idf_values:
@@ -76,7 +76,7 @@ def main():
             logger.info(f"IDF statistics: avg={avg_idf:.4f}, min={min_idf:.4f}, max={max_idf:.4f}")
         else:
             logger.warning("No IDF values available for statistics")
-        
+
         # Check specific terms
         if args.terms:
             logger.info("--- Term IDF values ---")
@@ -84,21 +84,21 @@ def main():
                 idf_value = idf_dict.get_idf(term)
                 weight_class = idf_dict.get_weight_class(term)
                 logger.info(f"Term '{term}': IDF={idf_value:.4f}, Weight Class={weight_class}")
-        
+
         # Test query weighting
         if args.query:
             weighted_query = idf_dict.generate_weighted_query(args.query)
             logger.info(f"Original query: '{args.query}'")
             logger.info(f"Weighted query: '{weighted_query}'")
-            
+
             # Show weights for each term
             for term in args.query.lower().split():
                 idf = idf_dict.get_idf(term)
                 weight = idf_dict.get_weight_class(term)
                 logger.info(f"  - '{term}': IDF={idf:.4f}, Weight={weight}")
-            
+
         return 0
-    
+
     except Exception as e:
         logger.error(f"Error in IDF test: {e}")
         import traceback
@@ -106,4 +106,4 @@ def main():
         return 1
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())

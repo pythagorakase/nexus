@@ -5,6 +5,8 @@ Simple Query Utility for NEXUS
 Provides a simple way to search for narrative chunks by keyword.
 """
 
+from nexus.database import resolved_database_url
+
 import sys
 import argparse
 import sqlalchemy as sa
@@ -14,10 +16,10 @@ def main():
     parser.add_argument("query", help="Text to search for")
     parser.add_argument("--limit", type=int, default=5, help="Maximum number of results")
     args = parser.parse_args()
-    
+
     # Connect to the database
-    engine = sa.create_engine("postgresql://pythagor@localhost/NEXUS")
-    
+    engine = sa.create_engine(resolved_database_url(None))
+
     try:
         # Simple text search using ILIKE
         with engine.connect() as conn:
@@ -39,23 +41,23 @@ def main():
                     m.season, m.episode, (m.narrative_vector->>'scene_number')::int
                 LIMIT :limit
             """)
-            
+
             result = conn.execute(query, {"search": f"%{args.query}%", "limit": args.limit})
             rows = result.fetchall()
-            
+
             if not rows:
                 print(f"No matches found for '{args.query}'")
                 return
-            
+
             print(f"Found {len(rows)} matches for '{args.query}':\n")
-            
+
             for i, row in enumerate(rows, 1):
                 print(f"Result {i}:")
                 print(f"  Season {row.season}, Episode {row.episode}, Scene {row.scene_number}")
                 print(f"  World Layer: {row.world_layer}")
                 print(f"  Preview: {row.text_preview}...")
                 print()
-    
+
     except Exception as e:
         print(f"Error querying database: {e}")
         sys.exit(1)

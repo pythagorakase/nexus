@@ -89,6 +89,8 @@ Examples:
     python generate_character_summaries_experimental.py --character 1-5 --dry-run
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import json
@@ -193,10 +195,10 @@ def connect_to_database(db_url: Optional[str] = None) -> sa.engine.Engine:
     # Get connection string
     if not db_url:
         db_url = get_db_connection_string()
-    
+
     # Create engine
-    engine = create_engine(db_url)
-    
+    engine = create_engine(resolved_database_url(db_url))
+
     # Test connection
     try:
         with engine.connect() as conn:

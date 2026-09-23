@@ -3,6 +3,8 @@
 Import the setting backstory document into global_variables.setting
 """
 
+from nexus.database import connection_kwargs
+
 import json
 import psycopg2
 from pathlib import Path
@@ -28,11 +30,7 @@ def main():
     }
 
     # Connect to database
-    conn = psycopg2.connect(
-        host="localhost",
-        database="NEXUS",
-        user="pythagor"
-    )
+    conn = psycopg2.connect(**connection_kwargs())
 
     try:
         with conn.cursor() as cur:

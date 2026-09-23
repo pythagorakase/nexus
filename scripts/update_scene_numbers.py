@@ -3,6 +3,8 @@
 Script to extract scene numbers from narrative chunk raw_text and update the scene column.
 """
 
+from nexus.database import url_connection_kwargs
+
 import re
 import sys
 import psycopg2
@@ -22,12 +24,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Database connection string from the settings
-DB_CONNECTION = "postgresql://pythagor@localhost/NEXUS"
+DB_CONNECTION = None
 
 def connect_to_db() -> Optional[psycopg2.extensions.connection]:
     """Connect to PostgreSQL database"""
     try:
-        conn = psycopg2.connect(DB_CONNECTION)
+        conn = psycopg2.connect(**url_connection_kwargs(DB_CONNECTION))
         logger.info("Successfully connected to the database")
         return conn
     except psycopg2.Error as e:

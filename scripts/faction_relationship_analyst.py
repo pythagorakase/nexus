@@ -17,6 +17,8 @@ Usage Examples:
     python faction_relationship_analyst.py context_file.json --faction 2,3 --test
 """
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import logging
@@ -210,12 +212,7 @@ class FactionCharacterRelationship(BaseModel):
 def get_db_connection():
     """Get database connection"""
     try:
-        conn = psycopg2.connect(
-            dbname="NEXUS",
-            user="pythagor",
-            host="localhost",
-            port=5432
-        )
+        conn = psycopg2.connect(**connection_kwargs())
         return conn
     except Exception as e:
         logger.error(f"Database connection error: {e}")

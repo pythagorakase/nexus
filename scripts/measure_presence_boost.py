@@ -11,6 +11,8 @@ Usage:
 
 from __future__ import annotations
 
+from nexus.database import url_connection_kwargs
+
 import argparse
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -73,12 +75,9 @@ def database_url(database: str) -> str:
 
     if not database or "/" in database or "\x00" in database:
         raise ValueError(f"Invalid PostgreSQL database name: {database!r}")
-    user = quote(os.environ.get("PGUSER", "pythagor"), safe="")
-    password = os.environ.get("PGPASSWORD")
-    credentials = user if password is None else f"{user}:{quote(password, safe='')}"
-    host = os.environ.get("PGHOST", "localhost")
-    port = int(os.environ.get("PGPORT", "5432"))
-    return f"postgresql://{credentials}@{host}:{port}/{quote(database, safe='')}"
+    from nexus.database import database_url as resolve_database_url
+
+    return resolve_database_url(database)
 
 
 def load_measurement_corpus(
@@ -314,7 +313,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--top-k", type=int, default=15)
     args = parser.parse_args(argv)
     db_url = database_url(args.database)
-    with psycopg2.connect(db_url) as connection:
+    with psycopg2.connect(**url_connection_kwargs(db_url)) as connection:
         chunks, character_names = load_measurement_corpus(connection)
     search_manager = build_search_manager(db_url, top_k=args.top_k)
     report = measure_presence_boost(

@@ -7,19 +7,16 @@ import json
 from typing import List, Optional
 
 from nexus.config import load_settings_as_dict
+from nexus.database import database_url
 
 from ir_eval.engine import ComparisonEngine, EvaluationStore, RunExecutor
 from ir_eval.engine.judge import JudgmentEngine
 from ir_eval.models import EvalModelConfig, EvalRunConfig
 
 
-def default_db_url() -> str:
-    """Resolve default DB URL from MEMNON settings."""
-    settings = load_settings_as_dict()
-    db_url = settings["Agent Settings"]["MEMNON"]["database"]["url"]
-    if not db_url:
-        raise ValueError("MEMNON database.url is not configured")
-    return db_url
+def default_db_url(dbname: str | None = None) -> str:
+    """Resolve the explicitly selected database or active slot through the contract."""
+    return database_url(dbname)
 
 
 def parse_csv_ints(value: Optional[str]) -> Optional[List[int]]:
@@ -100,9 +97,7 @@ def _build_judgment_engine() -> JudgmentEngine:
     settings = load_settings_as_dict()
     judgment_cfg = (settings.get("ir_eval") or {}).get("judgment") or {}
     if not judgment_cfg.get("model"):
-        raise ValueError(
-            "ir_eval.judgment.model is not configured in nexus.toml"
-        )
+        raise ValueError("ir_eval.judgment.model is not configured in nexus.toml")
     return JudgmentEngine(
         model=judgment_cfg["model"],
         reasoning_effort=judgment_cfg.get("reasoning_effort", "high"),
@@ -143,7 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--db-url",
         default=None,
-        help="PostgreSQL URL (default: from MEMNON settings)",
+        help="PostgreSQL URL (default: configured server and active slot)",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)

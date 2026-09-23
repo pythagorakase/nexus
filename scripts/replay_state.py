@@ -16,6 +16,8 @@ proves the ledgers were sufficient across every checkpointed window.
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 from pathlib import Path
@@ -39,7 +41,7 @@ from nexus.api.slot_utils import slot_dbname  # noqa: E402
 
 
 def _connect(slot: int) -> Any:
-    conn = psycopg2.connect(dbname=slot_dbname(slot), host="localhost")
+    conn = psycopg2.connect(**connection_kwargs(slot_dbname(slot)))
     conn.set_session(readonly=True)
     return conn
 

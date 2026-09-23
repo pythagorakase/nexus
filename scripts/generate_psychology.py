@@ -25,6 +25,8 @@ Usage:
     python generate_psychology.py --character 1 --chunk all  # Explicitly analyze all chunks (default behavior)
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import json
@@ -568,18 +570,18 @@ def main():
     """Main entry point for the script."""
     # Parse command line arguments
     args = parse_arguments()
-    
+
     # Set up abort handler
     setup_abort_handler()
-    
+
     # Connect to database
     db_url = args.db_url or get_db_connection_string()
-    engine = create_engine(db_url)
-    
+    engine = create_engine(resolved_database_url(db_url))
+
     try:
         # Create tables if they don't exist
         character_psychology_table = create_database_tables(engine)
-        
+
         # We're in psychology profile generation mode
         # Check if profile exists and how to handle it
         if check_existing_profile(engine, args.character):
@@ -589,50 +591,50 @@ def main():
             else:
                 logger.error(f"Profile already exists for character ID {args.character}. Use --overwrite to replace it.")
                 return 1
-        
+
         # If importing from file, skip the generation process
         if args.import_file:
             with open(args.import_file, "r") as f:
                 profile = json.load(f)
-                
+
             # Fetch character info for validation
             character_info = fetch_character_info(engine, args.character)
             if not character_info:
                 logger.error(f"Character with ID {args.character} not found.")
                 return 1
-                
+
             # Validate the profile against the template
             script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             prompt_path = os.path.join(script_dir, "prompts", "generate_psychology.json")
             if os.path.exists(prompt_path):
                 with open(prompt_path, "r") as f:
                     prompt_template = json.load(f)
-                    
+
                 if not validate_profile(profile, prompt_template):
                     logger.error("Imported profile is invalid. Please check the structure.")
                     return 1
-            
+
             # Save to database if not a dry run
             if not args.dry_run:
                 save_profile_to_database(engine, args.character, profile)
                 logger.info(f"Imported profile saved for character ID {args.character}")
             else:
                 logger.info("Dry run - profile not saved to database.")
-                
+
             return 0
-        
+
         # Fetch character information
         character_info = fetch_character_info(engine, args.character)
         if not character_info:
             logger.error(f"Character with ID {args.character} not found.")
             return 1
-        
+
         logger.info(f"Generating psychological profile for character: {character_info['name']} (ID: {args.character})")
-        
+
         # Fetch data for context
         logger.info("Fetching character roster...")
         character_roster = fetch_character_roster(engine)
-        
+
         logger.info("Fetching narrative corpus...")
         if args.chunk:
             logger.info(f"Using chunk filter: {args.chunk}")
@@ -640,9 +642,9 @@ def main():
         else:
             logger.info("No chunk filter specified, using all chunks")
             narrative_corpus = fetch_narrative_corpus(engine)
-        
+
         logger.info(f"Retrieved {len(narrative_corpus)} narrative chunks for analysis.")
-        
+
         # Prepare the prompt
         logger.info("Preparing prompt with context...")
         full_prompt, prompt_template = prepare_prompt(
@@ -650,11 +652,11 @@ def main():
             character_roster, 
             narrative_corpus
         )
-        
+
         # Count tokens
         prompt_tokens = get_token_count(full_prompt, args.model)
         logger.info(f"Prompt prepared with {prompt_tokens} tokens.")
-        
+
         # Initialize the OpenAI provider
         provider = OpenAIProvider(
             api_key=args.api_key,
@@ -664,44 +666,44 @@ def main():
             system_prompt=None,  # System prompt is included in our full prompt
             reasoning_effort=args.effort if args.model.startswith("o") else None
         )
-        
+
         # Check if prompt exceeds token limits from settings.json
         provider_name = "openai"
         max_input_tokens = TPM_LIMITS.get(provider_name, 128000)  # Use the limit from settings.json
-        
+
         if prompt_tokens > max_input_tokens:
             logger.error(f"Prompt exceeds model's token limit ({prompt_tokens} tokens > {max_input_tokens}).")
             logger.error("Consider reducing context or using a different approach for very large narratives.")
             return 1
-            
+
         # Create a sample of the full prompt for display in dry run mode
         # The code path is the same, we're just printing a sample
         if args.dry_run:
             # Split the prompt into lines
             prompt_lines = full_prompt.split('\n')
             total_lines = len(prompt_lines)
-            
+
             # Find the start and end of the narrative chunk section
             narrative_start_idx = -1
             narrative_end_idx = -1
-            
+
             for i, line in enumerate(prompt_lines):
                 if "# FULL NARRATIVE" in line:
                     narrative_start_idx = i
                 elif narrative_start_idx > 0 and "=" * 20 in line and i > narrative_start_idx + 10:  # Some separator after narrative section
                     narrative_end_idx = i
                     break
-            
+
             # Create a sampled version for display
             if narrative_start_idx >= 0 and narrative_end_idx >= 0:
                 # Show beginning (before narrative chunks)
                 beginning = prompt_lines[:narrative_start_idx + 1]
-                
+
                 # Identify and show both first and last chunks
                 chunk_count = 0
                 chunk_start_indices = []
                 chunk_end_indices = []
-                
+
                 # First identify all chunk boundaries
                 for i in range(narrative_start_idx + 1, narrative_end_idx):
                     line = prompt_lines[i]
@@ -715,7 +717,7 @@ def main():
                                 if not prompt_lines[j].strip():
                                     chunk_end_indices.append(j)
                                     break
-                
+
                 # Mark the end of the last chunk
                 if chunk_count > 0 and len(chunk_end_indices) < len(chunk_start_indices):
                     for j in range(narrative_end_idx-1, chunk_start_indices[-1], -1):
@@ -724,38 +726,38 @@ def main():
                             break
                     if len(chunk_end_indices) < len(chunk_start_indices):
                         chunk_end_indices.append(narrative_end_idx-1)  # Use section end if no blank line found
-                
+
                 # Extract first chunk
                 first_chunk_lines = []
                 if chunk_count > 0:
                     first_start = chunk_start_indices[0]
                     first_end = chunk_end_indices[0] if chunk_count > 1 else narrative_end_idx
                     first_chunk_lines = prompt_lines[first_start:first_end+1]
-                
+
                 # Extract last chunk
                 last_chunk_lines = []
                 if chunk_count > 1:
                     last_start = chunk_start_indices[-1]
                     last_end = chunk_end_indices[-1] if len(chunk_end_indices) == len(chunk_start_indices) else narrative_end_idx
                     last_chunk_lines = prompt_lines[last_start:last_end+1]
-                
+
                 # Create a sample showing first chunk, omitted count, and last chunk
                 omitted_count = max(0, chunk_count - 2)
                 chunk_sample = first_chunk_lines + [f"\n[...{omitted_count} chunks omitted from preview...]\n"] + (last_chunk_lines if chunk_count > 1 else [])
-                
+
                 # Show ending (after narrative chunks)
                 ending = prompt_lines[narrative_end_idx:]
-                
+
                 # Combine for preview
                 sampled_prompt = beginning + chunk_sample + ending
-                
+
                 # Join back into text
                 preview_text = '\n'.join(sampled_prompt)
             else:
                 # Fallback if we can't find narrative section
                 # Show first 20 and last 20 lines
                 preview_text = "\n".join(prompt_lines[:20]) + "\n\n[...]\n\n" + "\n".join(prompt_lines[-20:])
-            
+
             # Print the preview
             logger.info(f"DRY RUN - Would send prompt for {character_info['name']} ({prompt_tokens} tokens):")
             print("\n" + "=" * 80)
@@ -763,48 +765,48 @@ def main():
             print("=" * 80)
             print(preview_text)
             print("=" * 80 + "\n")
-            
+
             logger.info("Dry run - no API call made, no profile saved to database.")
             return 0
-            
+
         # Make the API call using structured output
         logger.info(f"Calling OpenAI API with model {args.model} using structured output...")
         start_time = time.time()
         try:
             # Use the structured completion method with our Pydantic model
             profile_structured, response = provider.get_structured_completion(full_prompt, PsychologyProfile)
-            
+
             logger.info(f"API call completed in {time.time() - start_time:.2f} seconds.")
             logger.info(f"Response tokens: {response.input_tokens} input, {response.output_tokens} output")
-            
+
             # Convert the Pydantic model to a dictionary for database storage
             profile = profile_structured.dict()
-            
+
             # Log success with structured output
             logger.info("Successfully received and parsed structured output response")
-            
+
             # No need to validate the profile structure as the Pydantic model enforces it
             # The API will fail with a clear error if the response doesn't match our schema
-            
+
             # Output to file if requested
             if args.output:
                 with open(args.output, "w") as f:
                     json.dump(profile, f, indent=2)
                 logger.info(f"Profile saved to {args.output}")
-            
+
             # Save to database
             save_profile_to_database(engine, args.character, profile)
             logger.info(f"Psychological profile saved for character ID {args.character}")
-            
+
         except Exception as e:
             logger.error(f"Error during API call: {str(e)}")
             return 1
-        
+
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         return 1
-    
+
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())

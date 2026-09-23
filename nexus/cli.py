@@ -3126,6 +3126,11 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
     ]
     for row in [header] + rows:
         print("  ".join(str(cell).ljust(widths[i]) for i, cell in enumerate(row)))
+    for client, target in database.get("targets", {}).items():
+        host = target["host"] or "(default Unix socket)"
+        print(
+            f"database {client}: {target['user']}@{host}:{target['port']}/{target['dbname']}"
+        )
     if runtime.get("error"):
         print(f"runtime endpoint: {runtime['error']}")
     else:

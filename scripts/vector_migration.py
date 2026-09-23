@@ -9,6 +9,8 @@ Usage:
     python vector_migration.py
 """
 
+from nexus.database import connection_kwargs
+
 import os
 import sys
 import logging
@@ -33,11 +35,7 @@ logger = logging.getLogger("nexus.vector_migration")
 
 def get_db_connection():
     """Get a database connection with pgvector extension."""
-    conn = psycopg2.connect(
-        dbname="NEXUS",
-        user="pythagor",
-        host="localhost"
-    )
+    conn = psycopg2.connect(**connection_kwargs())
     # Register the vector extension
     register_vector(conn)
     return conn
