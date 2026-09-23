@@ -37,7 +37,7 @@ export interface NarrativeEngine {
   elapsedMs: number;
   generationError: string | null;
   isGenerating: boolean;
-  /** Increments each time a generation completes; keys the typewriter reveal. */
+  /** Increments on completion to restore frontier scrolling and input focus. */
   completedGenerations: number;
   submitTurn: (params: { choice?: number; userText?: string }) => Promise<void>;
 }

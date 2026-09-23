@@ -3487,15 +3487,6 @@ class UISettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    typewriter_ms_per_char: int = Field(
-        default=35,
-        ge=1,
-        le=500,
-        description=(
-            "Typewriter reveal speed for incoming narrative chunks in "
-            "milliseconds per character (design system: 30-50 ms/char)"
-        ),
-    )
     theme: Literal["veil", "gilded", "vector"] = Field(
         default="veil",
         description="Active NEXUS IRIS theme, persisted across sessions",

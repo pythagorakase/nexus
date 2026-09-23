@@ -35,7 +35,6 @@ import { DecoDivider } from "@/components/deco";
 import { Textarea } from "@/components/ui/textarea";
 import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
-import { TypewriterText } from "./TypewriterText";
 import {
   getChunk,
   getChunkContext,
@@ -60,7 +59,6 @@ import {
 interface NarrativePaneProps {
   slot: number;
   engine: NarrativeEngine;
-  typewriterMsPerChar: number;
   /** null = live frontier; a chunk id = historical reading. */
   readingChunkId: number | null;
   /** Navigate the reading position (null returns to the live frontier). */
@@ -148,7 +146,6 @@ function ReaderNavRow({
 export function NarrativePane({
   slot,
   engine,
-  typewriterMsPerChar,
   readingChunkId,
   onNavigate,
 }: NarrativePaneProps) {
@@ -354,7 +351,7 @@ export function NarrativePane({
   // Keep the frontier in view when new content lands or generation starts.
   useEffect(() => {
     if (isHistorical) return;
-    tailRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    tailRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
   }, [pendingText, isGenerating, completedGenerations, isHistorical]);
 
   // Historical reading starts each chunk from its top.
@@ -523,13 +520,7 @@ export function NarrativePane({
                 <div className="prose-block">
                   {pendingDivider && <hr className="voice-divider" />}
                   <div className="md-part st">
-                    <TypewriterText
-                      key={completedGenerations}
-                      text={pendingText}
-                      msPerChar={typewriterMsPerChar}
-                      animate={completedGenerations > 0}
-                      markdown
-                    />
+                    <ProseMarkdown text={pendingText} />
                   </div>
                 </div>
               </div>
