@@ -14,7 +14,7 @@ Commands ran from this worktree using `PY=/Users/pythagor/nexus/.venv/bin/python
 
 TEST supplied only model responses. Every database operation, CLI command, HTTP request, turn-cycle step, retrieval, and background-job operation used production code and real PostgreSQL. The test fixture restores read-only schema/vocabulary exports from NEXUS_template into its own temporary clusters. No owner save or template was modified; no fleet migration or paid provider was called.
 
-The lifecycle fixture creates save_04 and mock only inside its two disposable clusters. These are fixture-owned databases, not the owner's slots. It uses gateway port 8014 and a free port for its own TEST server. `nexus down`, provider termination, pool closure, `pg_ctl stop`, and cluster-directory removal run during teardown.
+The lifecycle fixture creates save_04 and mock only inside its two disposable clusters. These are fixture-owned databases, not the owner's slots. It now binds separate ephemeral ports for the gateway and its TEST server; the original proof below used the then-assigned 8014 lane. `nexus down`, provider termination, pool closure, `pg_ctl stop`, and cluster-directory removal run during teardown.
 
 ### Two-Cluster Evidence
 
@@ -222,3 +222,130 @@ REVIEW marks nonmechanical behavior or validation work. Other entries are resolv
 
 - `config/reachability_baseline.json` — Register the new production connection module in the reachability inventory.
 - `docs/qa/880-connection-contract.md` — Record final verification, proof boundaries, and the grouped file manifest.
+
+
+## PR #897 Review Corrections
+
+This round addresses all six findings against frozen commit `5bfc608a`.
+
+### Resolver, Session Options, and Schema Guard
+
+- `nexus/database.py` — **REVIEW:** reject `hostaddr` in URL queries and session options and reject the `PGHOSTADDR` environment variable before constructing a target. Errors direct callers to `host`. Preserve explicit options (including an explicitly empty string), otherwise `PGOPTIONS`; parse `-c name=value`, `-cname=value`, and `--name=value` with PostgreSQL backslash escaping; reject unsupported tokens. Replace every existing timezone directive with one runtime timezone directive. Adapt all settings to asyncpg rather than interpreting the whole string as a timezone. Repeated URL wrapping preserves settings and integer `connect_timeout`.
+
+### Scripts
+
+- `scripts/install_pgvector.sh` — **REVIEW:** resolve and export an absolute runtime config before changing directories, including explicitly supplied relative config paths. The helper-only subprocess proof loads configuration after changing to a foreign directory; it does not execute the installer or modify PostgreSQL extensions.
+
+### IR Evaluation Clients
+
+- `ir_eval/runner.py` — **REVIEW:** `default_db_url(dbname=None)` selects the explicit database or active slot through `database_url`; `--db-url` retains precedence. Remove the dependency on the cleared legacy MEMNON URL.
+- `ir_eval/engine/run_executor.py` — **REVIEW:** resolve an explicit URL or the active-slot contract instead of reading the retired MEMNON URL. This additional consumer was found in the same audit.
+- `ir_eval/engine/storage.py` — mechanical direct-connection redirect through `url_connection_kwargs`.
+- `ir_eval/pg_db.py` — **REVIEW:** replace legacy NEXUS/owner/localhost defaults with optional database/user/host arguments and an optional port; resolve all through `connection_kwargs` before connecting.
+- `ir_eval/import_golden_queries.py` — **REVIEW:** replace legacy target defaults with optional database/user/host/port arguments through the shared resolver.
+- `ir_eval/improve_query_classifier.py` — mechanical connection redirect; remove literal connection dictionary.
+- `ir_eval/evaluate_query_classifier.py` — mechanical connection redirect; remove literal connection dictionary.
+- `ir_eval/scripts/golden_queries_module.py` — **REVIEW:** remove the literal legacy URL fallback and select the active database through `database_url` (which raises on invalid configuration).
+
+All touched Python files pass whole-file Black. Several legacy IR files had not previously been Black-formatted; their formatting accounts for most added/removed lines in this fix. No classifier, evaluation, or schema logic was intentionally changed.
+
+### Tests
+
+- `tests/test_database_contract.py` — **REVIEW:** add hostaddr rejection, ambient/explicit options, repeated URL wrapping, mixed asyncpg settings, malformed-option rejection, foreign-directory installer-helper checks, IR default/explicit URL selection, and real IR connections on the disposable private cluster. Live asyncpg checks inspect both timeout settings and UTC. The legacy IR client registers process-global list/JSON adapters and UUID typecasters; the test restores those registries on exit so it cannot change subsequent lifecycle behavior.
+- `tests/test_connection_lifecycle.py` — **REVIEW:** bind an ephemeral gateway port and derive both CLI/HTTP URLs from it. No committed 8014 lane remains.
+
+The first combined test attempts exposed incomplete cleanup of the legacy IR client's global adapters/typecasters in the new test: array adaptation failed, then UUID conversion caused a narration lease comparison to fail. The test now restores all three psycopg2 registries; the final combined run completes the background job. Runtime adapter behavior is outside this connection-only fix.
+
+### Executable IR Audit
+
+```sh
+rg -n --glob '*.py' 'localhost|5432|pythagor' ir_eval
+```
+
+No matches (exit 1). Historical Markdown and model-artifact paths in JSON are not executable PostgreSQL defaults.
+
+```sh
+rg -n --glob '*.py' 'psycopg2\.connect|asyncpg\.connect|create_engine' ir_eval
+```
+
+```text
+ir_eval/engine/storage.py:28:        conn = psycopg2.connect(**url_connection_kwargs(self.db_url))
+ir_eval/improve_query_classifier.py:37:        conn = psycopg2.connect(**connection_kwargs())
+ir_eval/pg_db.py:53:            self.conn = psycopg2.connect(**self.connection_params)
+ir_eval/import_golden_queries.py:44:    return psycopg2.connect(
+ir_eval/evaluate_query_classifier.py:136:        conn = psycopg2.connect(**connection_kwargs())
+```
+
+`IRDatabasePG.connection_params` comes from `connection_kwargs` at `ir_eval/pg_db.py:43`; the multiline importer passes `connection_kwargs` at `ir_eval/import_golden_queries.py:45`. There are no other executable driver/engine connection sites in `ir_eval/`.
+
+### Reachability Inventory
+
+- `config/reachability_baseline.json` — **REVIEW:** remove five stale unreachable exemptions after the new real-path tests made the IR runner, importer, legacy database client, and two transitive script modules reachable. The first offline gate reported only these two inventory tests failing (2596 passed); the final offline rerun below includes the corrected ratchet.
+
+### Review-Round Commands and Verbatim Tails
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q > temp/qa880_review/offline-final.log 2>&1
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2598 passed, 758 skipped, 11 warnings in 87.86s (0:01:27)
+```
+
+All commands ran in this worktree with the shared interpreter and the verified worktree import path recorded above. The #885 exemption is the same single-test deselection used in the previous round. No paid calls, fleet migrations, template writes, or owner-save writes were made.
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_database_contract.py tests/test_connection_lifecycle.py --basetemp=temp/qa880_review/proof > temp/qa880_review/proof.log 2>&1
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+24 passed, 5 warnings in 21.38s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_lore tests/test_memnon_db_access.py tests/test_runtime -k 'connection or url or pool or override or status' --deselect=tests/test_api/test_orrery_dev_endpoints.py::test_what_if_need_override_reaches_stacks_and_pressures > temp/qa880_review/postgres-exempt.log 2>&1
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+45 passed, 615 deselected, 11 warnings in 27.43s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check nexus/database.py ir_eval/runner.py ir_eval/engine/storage.py ir_eval/engine/run_executor.py ir_eval/pg_db.py ir_eval/import_golden_queries.py ir_eval/improve_query_classifier.py ir_eval/evaluate_query_classifier.py ir_eval/scripts/golden_queries_module.py tests/test_database_contract.py tests/test_connection_lifecycle.py > temp/qa880_review/black.log 2>&1
+```
+```text
+All done! ✨ 🍰 ✨
+11 files would be left unchanged.
+```
+
+```sh
+PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python - <<'PY' > temp/qa880_review/readonly.log 2>&1
+import psycopg2
+from nexus.database import connection_kwargs
+conn = psycopg2.connect(**connection_kwargs('save_04'))
+try:
+    with conn.cursor() as cur:
+        for setting in ('default_transaction_read_only', 'TimeZone'):
+            cur.execute(f'SHOW {setting}')
+            print(f'{setting}={cur.fetchone()[0]}')
+finally:
+    conn.close()
+PY
+```
+```text
+default_transaction_read_only=on
+TimeZone=UTC
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m compileall -q nexus/database.py ir_eval tests/test_database_contract.py tests/test_connection_lifecycle.py
+bash -n scripts/install_pgvector.sh
+git diff --check
+```
+
+Each exited 0 with no output. The helper's foreign-directory execution is also covered by both cases of `test_postgres_installer_helper_from_foreign_directory` in the contract gate.
+
+The final lifecycle evidence again records 415 unchanged catalog entries, zero other clients, zero new connections, and zero schema statements on the non-target cluster. The background worker reports `promoted=1`, `narrated=1`, and every failure count zero. The ephemeral gateway used port 53331 and TEST used 53330 in this run; both ports refused connections after teardown, the gateway PID file was removed, and no disposable cluster data directory remained.
+
+Coordinator questions: none. The previous #885 exemption, local-model conversation routing deferral, and TEST inference-quality boundary remain unchanged.
