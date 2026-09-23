@@ -4,7 +4,7 @@ import { NarrativePane } from "nexus-ui";
 // the `engine` prop (a plain object we mock here); the committed-chunk list
 // comes from a headless fetch that returns empty, so each cell shows the
 // scene head + the live frontier — the pending storyteller prose rendered
-// through TypewriterText/ProseMarkdown and the choice block beneath it.
+// instantly through ProseMarkdown and the choice block beneath it.
 
 const noop = () => {};
 const noAsync = async () => {};
@@ -57,7 +57,6 @@ export const Frontier = () => (
     <NarrativePane
       slot={2}
       engine={makeEngine()}
-      typewriterMsPerChar={35}
       readingChunkId={null}
       onNavigate={noop}
     />
@@ -79,7 +78,6 @@ export const Generating = () => (
         skaldStatus: "GENERATING",
         elapsedMs: 4200,
       })}
-      typewriterMsPerChar={35}
       readingChunkId={null}
       onNavigate={noop}
     />

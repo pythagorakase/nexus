@@ -275,7 +275,6 @@
     "RightLedger": "client/src/components/nexus/RightLedger.tsx",
     "SettingsPane": "client/src/components/nexus/SettingsPane.tsx",
     "TopBar": "client/src/components/nexus/TopBar.tsx",
-    "TypewriterText": "client/src/components/nexus/TypewriterText.tsx",
     "Accordion": "client/src/components/ui/accordion.tsx",
     "AlertDialog": "client/src/components/ui/alert-dialog.tsx",
     "Alert": "client/src/components/ui/alert.tsx",
