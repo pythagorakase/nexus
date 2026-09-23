@@ -1,5 +1,5 @@
 /**
- * Shapes for the GET/PATCH /api/settings surface (FastAPI, proxied by
+ * Shapes for the read-only GET /api/settings surface (FastAPI, proxied by
  * Express). GET serves concrete model selections plus legacy "Agent Settings" aliases
  * and a derived `settings_meta` block. Single source of truth for the
  * client - extend here, not locally.

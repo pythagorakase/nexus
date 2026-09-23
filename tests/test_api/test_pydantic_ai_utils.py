@@ -1,6 +1,5 @@
 """Pydantic-AI wiring regressions."""
 
-
 import pytest
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
@@ -30,7 +29,7 @@ def test_build_pydantic_ai_model_requires_base_url_for_non_native(monkeypatch):
     )
 
     with pytest.raises(ValueError, match="No base_url registry entry"):
-        pydantic_ai_utils.build_pydantic_ai_model("LOCAL")
+        pydantic_ai_utils.build_pydantic_ai_model(registry_model("local"))
 
 
 def test_build_anthropic_model_applies_native_structured_output_override(monkeypatch):
@@ -74,7 +73,7 @@ def test_build_anthropic_model_without_override_omits_profile(monkeypatch):
     )
     monkeypatch.setattr(pydantic_ai_utils, "AnthropicModel", RecordingAnthropicModel)
 
-    pydantic_ai_utils.build_pydantic_ai_model("registry-anthropic-model")
+    pydantic_ai_utils.build_pydantic_ai_model(registry_model("anthropic"))
 
     assert set(captured) == {"model_name", "provider"}
 

@@ -78,8 +78,7 @@ def resolve_wizard_model(
     """Resolve the effective wizard model for a turn.
 
     Precedence: explicit request override -> the slot's stamped model
-    (locked at setup start) -> the configured wizard default from
-    nexus.toml. The mock TEST model is never introduced here; it can only
+    (locked at setup start) -> player wizard preference -> nexus.toml default. The mock TEST model is never introduced here; it can only
     arrive as an explicit request override or a deliberate slot stamp.
     """
     from nexus.config.story_model import StorySettings, resolve_story_model

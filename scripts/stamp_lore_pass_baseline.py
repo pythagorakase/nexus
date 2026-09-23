@@ -47,7 +47,12 @@ def stamp_slot_tail(
     if dbname is not None:
         evaluation_dbname(dbname)
     target = dbname if dbname is not None else f"slot {slot}"
-    settings = load_settings_as_dict()
+    from nexus.api.slot_utils import slot_dbname
+    from nexus.config.story_model import read_story_settings, story_context_settings
+
+    settings = story_context_settings(
+        load_settings_as_dict(), read_story_settings(dbname or slot_dbname(slot))
+    )
     staged = empty_pass2_baseline(settings)
     connection = (
         get_connection(dbname)

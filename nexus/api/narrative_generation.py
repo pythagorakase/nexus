@@ -29,6 +29,7 @@ from nexus.api.presence_reconciliation import (
     read_character_roster_async,
     reconcile_public_prose_mentions,
 )
+from nexus.config.story_model import StorySettings
 from nexus.memory.context_state import validate_staged_pass2_baseline
 from nexus.memory.manager import empty_pass2_baseline
 from nexus.telemetry.usage import usage_context
@@ -112,6 +113,7 @@ async def generate_narrative_async(
     load_settings: Callable[[], Dict[str, Any]],
     manager: ProgressManager,
     note: Optional[str] = None,
+    model_override: Optional[str] = None,
     expected_incubator_session: Optional[str] = None,
     manage_generation_lease: bool = True,
 ) -> None:
@@ -190,7 +192,12 @@ async def generate_narrative_async(
 
             try:
                 incubator_data = await generate_bootstrap_narrative(
-                    conn, session_id, user_text, slot=slot, load_settings=load_settings
+                    conn,
+                    session_id,
+                    user_text,
+                    slot=slot,
+                    load_settings=load_settings,
+                    model_override=model_override,
                 )
                 logger.info(f"Bootstrap narrative generated for session {session_id}")
             except Exception as e:
@@ -204,7 +211,9 @@ async def generate_narrative_async(
             logger.info("Initializing LORE for narrative generation")
 
             # Initialize LORE with LOGON enabled for API calls
-            lore = LORE(enable_logon=True, debug=True, slot=slot)
+            lore = LORE(
+                enable_logon=True, debug=True, slot=slot, model_override=model_override
+            )
             logger.info(
                 "LORE narrative generation is using effective config path %s",
                 lore.settings_path,
@@ -538,7 +547,14 @@ async def write_to_incubator(
 
 
 async def generate_bootstrap_narrative(
-    conn, session_id: str, user_text: str, slot: Optional[int] = None, *, load_settings
+    conn,
+    session_id: str,
+    user_text: str,
+    slot: Optional[int] = None,
+    *,
+    load_settings,
+    story_settings: StorySettings | None = None,
+    model_override: str | None = None,
 ) -> Dict[str, Any]:
     """
     Generate the opening narrative for a new story.
@@ -697,8 +713,17 @@ async def generate_bootstrap_narrative(
     dbname = require_slot_dbname(slot=slot)
     from nexus.config.story_model import read_story_settings, story_context_settings
 
-    settings = story_context_settings(settings, read_story_settings(dbname))
-    logon = LogonUtility(settings, dbname=dbname, bootstrap_mode=True)
+    story = (
+        story_settings if story_settings is not None else read_story_settings(dbname)
+    )
+    settings = story_context_settings(settings, story)
+    logon = LogonUtility(
+        settings,
+        dbname=dbname,
+        bootstrap_mode=True,
+        story_settings=story,
+        model_override=model_override,
+    )
     story_response = await logon.generate_narrative_async(bootstrap_context)
 
     # Reconcile after the wizard and Retrograde identities are durable, but

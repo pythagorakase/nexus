@@ -74,6 +74,7 @@ from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
     OrreryRetrogradeMaturationSettings,
 )
+from nexus.config.story_model import StorySettings, read_story_settings
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
 from nexus.memory.correspondence import (  # noqa: E402
     CorrespondenceDigestWire,
@@ -352,6 +353,7 @@ class LogonUtility:
         model_override: Optional[str] = None,
         bootstrap_mode: bool = False,
         settings_path: Optional[Union[str, Path]] = None,
+        story_settings: StorySettings | None = None,
     ):
         """
         Initialize LOGON utility with configured provider.
@@ -363,10 +365,13 @@ class LogonUtility:
             model_override: Optional model to use instead of settings/slot config.
                            If None, will check slot's configured model first.
             bootstrap_mode: Whether this LOGON instance is generating chunk #1.
+            story_settings: Optional explicit story snapshot for already-resolved callers.
+                When omitted, model resolution reads the live slot.
             settings_path: Effective configuration path that owns this LOGON
                 stack. Registry lookups remain bound to it when provided.
         """
         self.settings = settings
+        self.story_settings = story_settings
         self.dbname = dbname
         self.model_override = model_override
         self.bootstrap_mode = bootstrap_mode
@@ -607,16 +612,17 @@ class LogonUtility:
 
         return "\n".join(lines)
 
-    def _get_slot_model(self) -> Optional[str]:
-        """Get the model configured for the current slot from global_variables."""
-        from nexus.api.db_pool import get_connection
+    def _read_story_settings(self) -> StorySettings:
+        """Use an explicit snapshot, or read the live slot through the shared pool."""
         from nexus.api.slot_utils import require_slot_dbname
 
-        db = require_slot_dbname(dbname=self.dbname)
-        with get_connection(db) as conn, conn.cursor() as cur:
-            cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
-            row = cur.fetchone()
-        return row[0] if row else None
+        if self.story_settings is not None:
+            return self.story_settings
+        return read_story_settings(require_slot_dbname(dbname=self.dbname))
+
+    def _get_slot_model(self) -> Optional[str]:
+        """Return the current story's Skald pin without swallowing read errors."""
+        return self._read_story_settings().skald_model
 
     @staticmethod
     def _resolve_generation_model(
@@ -637,7 +643,11 @@ class LogonUtility:
         model = resolve_story_model(
             "skald",
             settings=load_settings(self.settings_path),
-            story=StorySettings(skald_model=self._get_slot_model()),
+            story=(
+                StorySettings(skald_model=self._get_slot_model())
+                if self.model_override is None
+                else None
+            ),
             override=self.model_override,
         )
         provider_type = get_provider_for_model(model, self.settings_path)
@@ -1218,7 +1228,7 @@ class LogonUtility:
         from nexus.config import load_settings
         from nexus.config.story_model import read_story_settings, resolve_story_model
 
-        story = read_story_settings(require_slot_dbname(dbname=self.dbname))
+        story = self._read_story_settings()
         # A null pin follows the actual writer, including a request override.
         gaia_model = resolve_story_model(
             "gaia",
@@ -1322,10 +1332,11 @@ class LogonUtility:
         enforced against the GAIA provider's window, not the writer's — a
         32K local writer with a 75K frontier gaia must not false-raise.
         """
+        from nexus.config.story_model import story_context_settings
+
         _model, provider_type, _endpoint, gaia_wire = gaia_route
-        return resolve_storyteller_context_window(
-            self.settings, gaia_wire, provider_type
-        )
+        settings = story_context_settings(self.settings, self._read_story_settings())
+        return resolve_storyteller_context_window(settings, gaia_wire, provider_type)
 
     def _resolve_anthropic_two_pass_gaia_transport(
         self,

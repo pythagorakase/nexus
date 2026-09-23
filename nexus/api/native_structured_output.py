@@ -220,6 +220,9 @@ def build_native_structured_provider(
     from scripts.api_anthropic import AnthropicProvider
     from scripts.api_openai import OpenAIProvider
 
+    from nexus.config.story_model import resolve_story_model
+
+    model = resolve_story_model(seat or "structured", override=model)
     endpoint = get_openai_compatible_endpoint(model)
     provider_type = get_provider_for_model(model)
     if provider_type == "anthropic" and endpoint is None:

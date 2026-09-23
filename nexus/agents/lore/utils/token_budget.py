@@ -64,7 +64,7 @@ class TokenBudgetManager:
         # Check if we're using a reasoning model
         if not apex_model:
             apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-            configured_model = apex_settings.get("model", "gpt-4o")
+            configured_model = apex_settings.get("model")
             if not isinstance(configured_model, str) or not configured_model.strip():
                 raise RuntimeError(
                     "Storyteller model must be configured before calculating its "

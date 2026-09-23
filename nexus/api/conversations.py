@@ -47,6 +47,9 @@ class ConversationsClient:
             model: Model name (a concrete ID from the api_models registry).
                 Use "TEST" for in-memory mode without API calls.
         """
+        from nexus.config.story_model import resolve_story_model
+
+        model = resolve_story_model("wizard", override=model)
         self.model = model
         self._store_mode = "openai"
         self._file_store: Optional[_FileConversationStore] = None

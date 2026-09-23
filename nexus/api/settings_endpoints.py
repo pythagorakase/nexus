@@ -1,6 +1,7 @@
 """Read-only repository defaults and registry metadata for the settings card."""
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict
@@ -30,9 +31,10 @@ NEXUS_TOML = Path("nexus.toml")
 
 def _read_raw_settings() -> Dict[str, Any]:
     """Load the persisted roster and settings as a plain dict."""
-    if not NEXUS_TOML.exists():
-        raise FileNotFoundError(f"Configuration file not found: {NEXUS_TOML}")
-    with open(NEXUS_TOML, "rb") as f:
+    path = Path(os.environ.get("NEXUS_RUNTIME_CONFIG", NEXUS_TOML))
+    if not path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {path}")
+    with open(path, "rb") as f:
         return tomllib.load(f)
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,7 +39,7 @@ def read_story_settings(dbname: str) -> StorySettings:
 
 
 def resolve_story_model(
-    seat: Literal["skald", "gaia", "wizard"],
+    seat: str,
     *,
     settings: Settings | None = None,
     story: StorySettings | None = None,
@@ -52,6 +52,12 @@ def resolve_story_model(
     Every selected ID is validated before a provider can be constructed.
     """
     settings = settings or load_settings()
+    if seat not in {"skald", "gaia", "wizard"} and (
+        story is not None or override is None
+    ):
+        raise ValueError(
+            f"Developer seat {seat!r} requires an explicit configured model"
+        )
     model = override
     if model is None and story is not None:
         model = story.gaia_model if seat == "gaia" else story.skald_model
@@ -88,4 +94,6 @@ def story_context_settings(
     ):
         if lore is not None:
             lore["token_budget"]["apex_context_window"] = window
+            # An explicit story window outranks repository resource defaults.
+            lore["token_budget"]["provider_overrides"] = {}
     return resolved

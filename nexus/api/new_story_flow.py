@@ -302,7 +302,14 @@ def perform_transition_with_retrograde(
     settings = load_settings()
     orrery_settings = settings.orrery
 
-    effective_model = model or get_slot_model(slot_number, dbname=dbname)
+    from nexus.config.story_model import StorySettings, resolve_story_model
+
+    effective_model = resolve_story_model(
+        "wizard",
+        settings=settings,
+        story=StorySettings(skald_model=get_slot_model(slot_number, dbname=dbname)),
+        override=model,
+    )
 
     # Derive typed trait-compiler inputs before any world writes so the
     # compiler can create stub entities and relationship rows (M9). Runs for

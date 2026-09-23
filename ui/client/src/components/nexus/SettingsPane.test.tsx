@@ -164,6 +164,12 @@ describe("SettingsPane model card local provider", () => {
         apex_allowed_providers: ["local", "openai"],
       },
     } satisfies SettingsPayload);
+    queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
+      theme: "veil", fonts: KEEPERS, wizard_model: "TEST",
+    });
+    queryClient.setQueryData(["/api/slot/4/settings"], {
+      skald_model: null, gaia_model: null, apex_context_window: null,
+    });
     queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
     queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], LOCAL_STATUS);
     queryClient.setQueryData([...LOCAL_MODELS_DOWNLOAD_KEY], { state: "idle" });
