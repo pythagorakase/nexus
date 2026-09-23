@@ -50,9 +50,17 @@ const Textarea = React.forwardRef<
       }
     })
     observer.observe(textarea)
+    // Theme and font preferences change root classes/CSS variables. Switching
+    // to a cached font need not change width or emit a font-loading event.
+    const typographyObserver = new MutationObserver(resize)
+    typographyObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    })
     document.fonts?.addEventListener("loadingdone", resize)
     return () => {
       observer.disconnect()
+      typographyObserver.disconnect()
       document.fonts?.removeEventListener("loadingdone", resize)
     }
   }, [autoSize, resize])
