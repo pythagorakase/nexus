@@ -26,7 +26,7 @@ const DEFAULT_THEME: Theme = 'veil';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   // localStorage seeds the first paint only; the persisted source of truth
-  // is ui.theme in nexus.toml (GET/PATCH /api/settings).
+  // is preferences.toml (GET/PATCH /api/preferences).
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     // Handle migration from old 'cyberpunk' to 'vector'

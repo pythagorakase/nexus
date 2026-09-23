@@ -109,6 +109,7 @@ class LORE:
         enable_logon: bool = True,
         dbname: Optional[str] = None,
         slot: Optional[int] = None,
+        model_override: Optional[str] = None,
     ):
         """
         Initialize LORE agent.
@@ -125,6 +126,7 @@ class LORE:
         self.debug = debug
         self.dbname = dbname
         self.slot = slot
+        self.model_override = model_override
         self.settings = self._load_settings(settings_path)
 
         # Configure logging
@@ -266,10 +268,13 @@ class LORE:
             )
 
         # Memory manager orchestrates Pass 1/Pass 2 state
+        from nexus.api.slot_utils import require_slot_dbname
+
         self.memory_manager = ContextMemoryManager(
             self.settings,
             memnon=self.memnon,
             token_manager=self.token_manager,
+            dbname=require_slot_dbname(dbname=self.dbname, slot=self.slot),
         )
 
         logger.info("Component initialization complete")
@@ -329,6 +334,7 @@ class LORE:
                 self.settings,
                 dbname=db,
                 settings_path=self.settings_path,
+                model_override=self.model_override,
             )
             self._logon_initialized = True
             logger.info("LOGON utility initialized on first use")

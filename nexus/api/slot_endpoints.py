@@ -12,13 +12,15 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
+from psycopg2 import sql
+
+from nexus.config import load_settings
+from nexus.config.story_model import StorySettings, read_story_settings
 
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_schemas import (
     SlotStateResponse,
     SlotUndoResponse,
-    SlotModelRequest,
-    SlotModelResponse,
     SlotLockResponse,
     TraitMenuItemResponse,
 )
@@ -264,80 +266,49 @@ async def slot_undo_endpoint(slot: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{slot}/model", response_model=SlotModelResponse)
-async def get_slot_model_endpoint(slot: int):
-    """Get current model for a slot."""
-    from nexus.config import load_settings_as_dict
-
+@router.get("/{slot}/settings", response_model=StorySettings)
+def get_slot_settings_endpoint(slot: int) -> StorySettings:
+    """Return the story pins, including retired IDs so they can be cleared."""
     if slot < 1 or slot > 5:
         raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
-
-    try:
-        dbname = slot_dbname(slot)
-
-        # Get current model from global_variables
-        with get_connection(dbname, dict_cursor=True) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
-                row = cur.fetchone()
-                current_model = row.get("model") if row else None
-
-        # Get available models from config
-        from nexus.config import get_available_api_models
-
-        available = get_available_api_models()
-
-        return SlotModelResponse(
-            slot=slot,
-            model=current_model,
-            available_models=available,
-        )
-
-    except Exception as e:
-        logger.error(f"Error getting slot model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return read_story_settings(slot_dbname(slot))
 
 
-@router.post("/{slot}/model", response_model=SlotModelResponse)
-async def set_slot_model_endpoint(slot: int, request: SlotModelRequest):
-    """Set model for a slot."""
+@router.patch("/{slot}/settings", response_model=StorySettings)
+def patch_slot_settings_endpoint(slot: int, patch: StorySettings) -> StorySettings:
+    """Validate registry selections and persist only explicitly supplied pins."""
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
     require_writable_slot(slot)
-    from nexus.config import get_available_api_models
-
-    if slot < 1 or slot > 5:
-        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
-
-    try:
-        dbname = slot_dbname(slot)
-
-        # Validate model against available models
-        available = get_available_api_models()
-
-        if request.model not in available:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid model '{request.model}'. Available: {', '.join(available)}",
-            )
-
-        # Update model in global_variables
-        with get_connection(dbname) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE global_variables SET model = %s WHERE id = TRUE",
-                    (request.model,),
-                )
-
-        return SlotModelResponse(
-            slot=slot,
-            model=request.model,
-            available_models=available,
+    updates = patch.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No story settings provided")
+    settings = load_settings()
+    for key in ("skald_model", "gaia_model"):
+        if updates.get(key) is not None:
+            try:
+                settings.resolve_model_ref(updates[key])
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+    columns = {
+        "skald_model": "model",
+        "gaia_model": "gaia_model",
+        "apex_context_window": "apex_context_window",
+    }
+    assignments = sql.SQL(", ").join(
+        sql.SQL("{} = %s").format(sql.Identifier(columns[key])) for key in updates
+    )
+    dbname = slot_dbname(slot)
+    with get_connection(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("UPDATE global_variables SET {} WHERE id = TRUE").format(
+                assignments
+            ),
+            tuple(updates.values()),
         )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error setting slot model: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        if cur.rowcount != 1:
+            raise HTTPException(status_code=409, detail="Story settings row is missing")
+    return read_story_settings(dbname)
 
 
 @router.post("/{slot}/lock", response_model=SlotLockResponse)

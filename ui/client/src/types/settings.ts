@@ -1,5 +1,5 @@
 /**
- * Shapes for the GET/PATCH /api/settings surface (FastAPI, proxied by
+ * Shapes for the read-only GET /api/settings surface (FastAPI, proxied by
  * Express). GET serves concrete model selections plus legacy "Agent Settings" aliases
  * and a derived `settings_meta` block. Single source of truth for the
  * client - extend here, not locally.
@@ -90,14 +90,22 @@ export interface SettingsPayload {
   settings_meta?: SettingsMeta;
 }
 
-/** The safe-to-edit subset accepted by PATCH /api/settings. */
+/** Player settings written only to the runtime preferences file. */
+export interface Preferences {
+  theme: ThemeId;
+  fonts: FontMatrix;
+  wizard_model: string;
+}
+
 export interface SettingsPatch {
   theme?: ThemeId;
   fonts?: Partial<Record<ThemeId, Partial<FontSlots>>>;
-  test_mode?: boolean;
-  apex_model_id?: string;
-  /** Null clears the independent assignment so Gaia follows the active Skald. */
-  gaia_model_id?: string | null;
-  wizard_model_id?: string;
-  apex_context_window?: number;
+  wizard_model?: string;
+}
+
+/** Null pins inherit defaults; null Gaia follows this story's Skald. */
+export interface StorySettings {
+  skald_model: string | null;
+  gaia_model: string | null;
+  apex_context_window: number | null;
 }

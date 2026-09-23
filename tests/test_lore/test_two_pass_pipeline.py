@@ -40,6 +40,9 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.config import load_settings
+from nexus.config.story_model import StorySettings
+
 from nexus.memory.correspondence import CorrespondenceDigestWire
 from nexus.api.native_structured_output import (
     anthropic_output_config,
@@ -49,6 +52,13 @@ from nexus.api.native_structured_output import (
 )
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from nexus.api.slot_utils import require_slot_dbname
+
+
+PINNED_GAIA_MODEL = next(
+    model.id
+    for model in load_settings().global_.model.api_models["openai"].models
+    if model.id != load_settings().apex.model
+)
 
 
 @pytest.fixture(autouse=True)
@@ -161,7 +171,7 @@ class _RecordingProvider:
         output_validator: Any = None,
         structured_output_retries: int = 3,
     ) -> None:
-        self.model = "two-pass-test-model"
+        self.model = load_settings().apex.model
         self.system_prompt = "Core storyteller prompt"
         self.output_validator = output_validator
         self.structured_transport = structured_transport
@@ -345,7 +355,9 @@ def _utility(
         output_validator=output_validator,
         structured_output_retries=structured_output_retries,
     )
-    utility = LogonUtility(settings, model_override=provider.model)
+    utility = LogonUtility(
+        settings, model_override=provider.model, story_settings=StorySettings()
+    )
     if not bootstrap:
         provider.output_validator = utility._build_letter_output_validator(
             delegate=output_validator
@@ -1082,7 +1094,7 @@ def _pinned_gaia_utility(
         outputs,
         anthropic_transport=anthropic_transport,
     )
-    utility.settings["API Settings"]["apex"]["gaia_model"] = "pinned-gaia-model"
+    utility.story_settings.gaia_model = PINNED_GAIA_MODEL
     utility.settings["Agent Settings"] = {
         "LORE": {
             "token_budget": {
@@ -1095,12 +1107,12 @@ def _pinned_gaia_utility(
 
 
 def _patch_gaia_registry(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Register the fake pinned gaia id as a native OpenAI model."""
+    """Route the registered pinned Gaia model through the existing provider recorder."""
 
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.get_provider_for_model",
         lambda model_id, path=None: (
-            "openai" if model_id == "pinned-gaia-model" else None
+            "openai" if model_id == PINNED_GAIA_MODEL else None
         ),
     )
     monkeypatch.setattr(
@@ -1194,7 +1206,7 @@ def test_sync_pinned_gaia_runs_fresh_openai_seat(
         "text_format": skald_gaia_strict_text_format(),
         "prompt_cache_key": f"nexus:{require_slot_dbname()}:gaia",
     }
-    assert captured["route"][0] == "pinned-gaia-model"
+    assert captured["route"][0] == PINNED_GAIA_MODEL
     assert captured["route"][3] == "openai"
     assert captured["anthropic_transport"] is None
     assert "## Gaia" in captured["system_prompt"]
@@ -1250,16 +1262,16 @@ def test_gaia_route_guards_fall_back_to_the_clone_path(
     assert unset_utility._resolve_gaia_route() is None
 
     test_utility, _provider = _utility("openai", [])
-    test_utility.settings["API Settings"]["apex"]["gaia_model"] = "pinned-gaia-model"
+    test_utility.story_settings.gaia_model = PINNED_GAIA_MODEL
     test_utility._provider_type_name = "test"
     assert test_utility._resolve_gaia_route() is None
 
     same_utility, same_provider = _utility("openai", [])
-    same_utility.settings["API Settings"]["apex"]["gaia_model"] = same_provider.model
+    same_utility.story_settings.gaia_model = same_provider.model
     assert same_utility._resolve_gaia_route() is None
 
     junk_utility, _provider = _utility("openai", [])
-    junk_utility.settings["API Settings"]["apex"]["gaia_model"] = "pinned-gaia-model"
+    junk_utility.story_settings.gaia_model = PINNED_GAIA_MODEL
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.get_provider_for_model",
         lambda _model_id, _path=None: None,

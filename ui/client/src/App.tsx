@@ -55,7 +55,7 @@ function Router() {
 
 function App() {
   // QueryClientProvider wraps the theme/font contexts so they can hydrate
-  // from (and persist through) the GET/PATCH /api/settings query.
+  // from (and persist through) the GET/PATCH /api/preferences query.
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>

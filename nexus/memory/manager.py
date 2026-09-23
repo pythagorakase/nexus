@@ -310,8 +310,11 @@ class ContextMemoryManager:
         token_manager: Optional[object] = None,
         provider_wire_type: Optional[str] = None,
         provider_name: Optional[str] = None,
+        dbname: Optional[str] = None,
     ) -> None:
         self.settings = settings
+        self._base_settings = settings
+        self.dbname = dbname
         self.memnon = memnon  # Store reference for entity detector
         memory_settings = settings.get("memory", {})
 
@@ -386,6 +389,7 @@ class ContextMemoryManager:
         self, provider_wire_type: str, provider_name: str
     ) -> int:
         """Apply the active provider's resource profile to payload budgets."""
+        self._refresh_story_settings()
         apex_context_window = resolve_storyteller_context_window(
             self.settings, provider_wire_type, provider_name
         )
@@ -397,12 +401,25 @@ class ContextMemoryManager:
 
     def configure_base_storyteller_budget(self) -> int:
         """Use the base window for a turn where LOGON is explicitly disabled."""
+        self._refresh_story_settings()
         apex_context_window = resolve_base_storyteller_context_window(self.settings)
         self.provider_wire_type = None
         self.provider_name = None
         self._storyteller_budget_configured = True
         self._configure_phase2_budget(apex_context_window)
         return apex_context_window
+
+    def _refresh_story_settings(self) -> None:
+        """Resolve this story's budget without mutating another slot's defaults."""
+        if self.dbname is not None:
+            from nexus.config.story_model import (
+                read_story_settings,
+                story_context_settings,
+            )
+
+            self.settings = story_context_settings(
+                self._base_settings, read_story_settings(self.dbname)
+            )
 
     def _configure_phase2_budget(self, apex_context_window: int) -> None:
         """Apply one resolved context window to the Phase 2 reserve."""
@@ -548,6 +565,7 @@ class ContextMemoryManager:
                 "Pass-2 baseline restoration requires MEMNON database access"
             )
 
+        self._refresh_story_settings()
         with engine.connect() as conn:
             row = (
                 conn.execute(

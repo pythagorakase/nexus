@@ -81,6 +81,7 @@ from nexus.api.reader_endpoints import router as reader_router
 from nexus.api.local_models_endpoints import router as local_models_router
 from nexus.api.secrets_endpoints import router as secrets_router
 from nexus.api.settings_endpoints import router as settings_router
+from nexus.api.preferences_endpoints import router as preferences_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
 from nexus.api.runtime_status import register_runtime_status
@@ -135,6 +136,7 @@ async def _validation_error_without_echoed_input(
 
 # Include modular routers
 app.include_router(settings_router)
+app.include_router(preferences_router)
 app.include_router(secrets_router)
 app.include_router(slot_router)
 app.include_router(setup_router)
@@ -829,6 +831,14 @@ async def continue_narrative(
             status_code=400,
             detail="Cannot provide both choice and accept_fate",
         )
+    if request.model is not None:
+        from nexus.config.story_model import resolve_story_model
+
+        try:
+            resolve_story_model("skald", override=request.model)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     if request.model and request.slot is None:
         raise HTTPException(
             status_code=400,
@@ -926,16 +936,6 @@ async def continue_narrative(
                 require_response=False,
             )
 
-        if request.model:
-            from nexus.api.save_slots import upsert_slot
-
-            upsert_slot(
-                request.slot,
-                model=request.model,
-                dbname=slot_dbname(request.slot),
-            )
-            logger.info("Persisted model %s to slot %s", request.model, request.slot)
-
         parent_chunk_id = request.chunk_id if request.chunk_id else 0
         is_bootstrap = parent_chunk_id == 0
         embedding_claimed = _bind_generation_owner(
@@ -973,6 +973,7 @@ async def continue_narrative(
             load_settings=load_settings,
             manager=manager,
             manage_generation_lease=True,
+            model_override=request.model,
         )
         if embedding_claimed:
             background_tasks.add_task(

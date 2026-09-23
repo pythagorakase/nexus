@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Configuration
 
-`nexus.toml` is the sole runtime configuration file, validated by the Pydantic models in `nexus/config/settings_models.py`. The legacy top-level `settings.json` was retired in June 2026 after every runtime reader (loader fallback chain, LORE, MEMNON, memory manager) had migrated to nexus.toml; its overlapping keys (embedding model registry with `is_active` flags, `memory.divergence_threshold`, retired GAIA/NEMESIS/PSYCHE agent settings) were already dead copies. Explicitly passed `.json` paths to `load_settings()` remain supported only for legacy ir_eval V1 tooling.
+`nexus.toml` contains read-only runtime defaults and developer tunables, validated by the Pydantic models in `nexus/config/settings_models.py`. Player theme, fonts, and next-story model live in `[runtime].state_dir/preferences.toml`; per-story Skald, World State, and context-window pins live in the slot database. See `docs/settings_scopes.md` for precedence and recovery. The legacy top-level `settings.json` was retired in June 2026 after every runtime reader (loader fallback chain, LORE, MEMNON, memory manager) had migrated to nexus.toml; its overlapping keys (embedding model registry with `is_active` flags, `memory.divergence_threshold`, retired GAIA/NEMESIS/PSYCHE agent settings) were already dead copies. Explicitly passed `.json` paths to `load_settings()` remain supported only for legacy ir_eval V1 tooling.
 
 ## Pre-commit hooks
 

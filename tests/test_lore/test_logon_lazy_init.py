@@ -20,6 +20,7 @@ from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+from nexus.config import load_settings
 from nexus.memory import ContextMemoryManager
 from nexus.api.slot_utils import VALID_DBNAMES
 from tests.pg_fixtures import disposable_slot_database, seed_protagonist
@@ -229,7 +230,7 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
         },
         "orrery": {"retrograde": {"maturation": {"enabled": False}}},
     }
-    utility = LogonUtility(settings, model_override="claude-sonnet-4-5")
+    utility = LogonUtility(settings, model_override=load_settings().apex.model)
 
     utility._initialize_provider(is_bootstrap)
 
@@ -273,10 +274,11 @@ def test_storyteller_route_resolves_without_constructing_provider(
         "nexus.config.get_openai_compatible_endpoint",
         lambda _model, _path=None: {"base_url": base_url} if base_url else None,
     )
-    logon = LogonUtility({}, model_override="storyteller-model")
+    model = load_settings().apex.model
+    logon = LogonUtility({}, model_override=model)
 
     assert logon.resolve_storyteller_route() == (
-        "storyteller-model",
+        model,
         expected_wire_type,
         provider_type,
     )

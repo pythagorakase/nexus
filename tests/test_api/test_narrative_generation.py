@@ -14,6 +14,8 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseMinimal,
 )
+from nexus.config import load_settings
+from nexus.config.story_model import StorySettings
 from nexus.api import narrative, narrative_generation
 from nexus.api.lore_adapter import split_staged_orrery_payload
 from nexus.api.narrative_schemas import (
@@ -343,6 +345,7 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
         "Begin.",
         slot=5,
         load_settings=lambda: {},
+        story_settings=StorySettings(),
     )
 
     assert payload["generation_model"] == "resolved-bootstrap-model"
@@ -402,7 +405,9 @@ async def test_continue_route_threads_parent_into_generation_task(
     )
     background_tasks = BackgroundTasks()
     await narrative.continue_narrative(
-        ContinueNarrativeRequest(slot=5, chunk_id=17, user_text=""),
+        ContinueNarrativeRequest(
+            slot=5, chunk_id=17, user_text="", model=load_settings().apex.model
+        ),
         background_tasks,
     )
 
@@ -410,6 +415,7 @@ async def test_continue_route_threads_parent_into_generation_task(
     task = background_tasks.tasks[0]
     assert task.func is narrative_generation.generate_narrative_async
     assert task.args[1] == 17
+    assert task.kwargs["model_override"] == load_settings().apex.model
 
 
 @pytest.mark.asyncio

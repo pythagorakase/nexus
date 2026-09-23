@@ -167,7 +167,10 @@ def test_locked_slot_rejects_http_side_effects_and_database_writes(
             files={"images": ("portrait.png", b"not-written", "image/png")},
         )
         assert response.status_code == 423
-    assert client.post("/api/slot/5/model", json={"model": "unused"}).status_code == 423
+    assert (
+        client.patch("/api/slot/5/settings", json={"skald_model": "unused"}).status_code
+        == 423
+    )
     conn = narrative.get_db_connection(5)
     try:
         with conn.cursor() as cur:

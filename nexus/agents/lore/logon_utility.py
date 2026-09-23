@@ -74,6 +74,7 @@ from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
     OrreryRetrogradeMaturationSettings,
 )
+from nexus.config.story_model import StorySettings, read_story_settings
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
 from nexus.memory.correspondence import (  # noqa: E402
     CorrespondenceDigestWire,
@@ -352,6 +353,7 @@ class LogonUtility:
         model_override: Optional[str] = None,
         bootstrap_mode: bool = False,
         settings_path: Optional[Union[str, Path]] = None,
+        story_settings: StorySettings | None = None,
     ):
         """
         Initialize LOGON utility with configured provider.
@@ -363,10 +365,13 @@ class LogonUtility:
             model_override: Optional model to use instead of settings/slot config.
                            If None, will check slot's configured model first.
             bootstrap_mode: Whether this LOGON instance is generating chunk #1.
+            story_settings: Optional explicit story snapshot for already-resolved callers.
+                When omitted, model resolution reads the live slot.
             settings_path: Effective configuration path that owns this LOGON
                 stack. Registry lookups remain bound to it when provided.
         """
         self.settings = settings
+        self.story_settings = story_settings
         self.dbname = dbname
         self.model_override = model_override
         self.bootstrap_mode = bootstrap_mode
@@ -488,39 +493,26 @@ class LogonUtility:
 
     def _fetch_setting_context(self) -> Optional[str]:
         """Perform the actual SettingCard read behind the snapshot cache."""
-        from nexus.api.slot_utils import require_slot_dbname
+        from nexus.api.db_pool import get_connection
 
-        try:
-            db = require_slot_dbname(dbname=self.dbname)
-            conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
-            with conn.cursor() as cur:
-                cur.execute("SELECT setting FROM global_variables WHERE id = true")
-                result = cur.fetchone()
+        with get_connection(dbname=self.dbname) as conn, conn.cursor() as cur:
+            cur.execute("SELECT setting FROM global_variables WHERE id = true")
+            result = cur.fetchone()
 
-                if result and result[0]:
-                    setting_content = self._format_setting_context(result[0])
-                    if not setting_content:
-                        logger.warning(
-                            "Setting data found in global_variables but no "
-                            "promptable fields were present"
-                        )
-                        return None
-                    logger.info(
-                        "Loaded setting context (%s chars)", len(setting_content)
-                    )
-                    return setting_content
+        if result and result[0]:
+            setting_content = self._format_setting_context(result[0])
+            if not setting_content:
                 logger.warning(
-                    "No setting data found in global_variables, using core "
-                    "prompt only"
+                    "Setting data found in global_variables but no "
+                    "promptable fields were present"
                 )
                 return None
-
-        except Exception as e:
-            logger.error(f"Failed to load setting from database: {e}")
-            return None
-        finally:
-            if "conn" in locals():
-                conn.close()
+            logger.info("Loaded setting context (%s chars)", len(setting_content))
+            return setting_content
+        logger.warning(
+            "No setting data found in global_variables, using core prompt only"
+        )
+        return None
 
     @staticmethod
     def _load_gaia_system_prompt(max_letter_tokens: int) -> str:
@@ -607,23 +599,17 @@ class LogonUtility:
 
         return "\n".join(lines)
 
-    def _get_slot_model(self) -> Optional[str]:
-        """Get the model configured for the current slot from global_variables."""
+    def _read_story_settings(self) -> StorySettings:
+        """Use an explicit snapshot, or read the live slot through the shared pool."""
         from nexus.api.slot_utils import require_slot_dbname
 
-        try:
-            db = require_slot_dbname(dbname=self.dbname)
-            conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
-                    result = cur.fetchone()
-                    return result[0] if result else None
-            finally:
-                conn.close()
-        except Exception as e:
-            logger.warning(f"Failed to get slot model: {e}")
-            return None
+        if self.story_settings is not None:
+            return self.story_settings
+        return read_story_settings(require_slot_dbname(dbname=self.dbname))
+
+    def _get_slot_model(self) -> Optional[str]:
+        """Return the current story's Skald pin without swallowing read errors."""
+        return self._read_story_settings().skald_model
 
     @staticmethod
     def _resolve_generation_model(
@@ -638,19 +624,22 @@ class LogonUtility:
         """Resolve the active model, endpoint, and storyteller wire class."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
 
-        # Model priority: override > slot config > settings
-        model = self.model_override
-        if not model:
-            model = self._get_slot_model()
-        if not model:
-            model = apex_settings.get("model", "gpt-4o")
-        if not isinstance(model, str) or not model.strip():
-            raise RuntimeError("LOGON could not resolve a storyteller model id")
-        model = self._resolve_generation_model(model, self.settings_path)
+        from nexus.config import load_settings
+        from nexus.config.story_model import StorySettings, resolve_story_model
 
-        provider_type = get_provider_for_model(
-            model, self.settings_path
-        ) or apex_settings.get("provider", "openai")
+        model = resolve_story_model(
+            "skald",
+            settings=load_settings(self.settings_path),
+            story=(
+                StorySettings(skald_model=self._get_slot_model())
+                if self.model_override is None
+                else None
+            ),
+            override=self.model_override,
+        )
+        provider_type = get_provider_for_model(model, self.settings_path)
+        if provider_type is None:
+            raise ValueError(f"Model {model!r} is absent from the registry")
 
         # OpenAI-compatible base_url routing (mock TEST server, local servers):
         # the endpoint lives in [global.model.api_models] (#401).
@@ -1222,10 +1211,22 @@ class LogonUtility:
         slots stay self-contained and offline); or the pinned model IS the
         slot model (a fresh provider would be an identical twin).
         """
-        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-        gaia_model = apex_settings.get("gaia_model")
-        if not gaia_model:
-            return None
+        from nexus.api.slot_utils import require_slot_dbname
+        from nexus.config import load_settings
+        from nexus.config.story_model import read_story_settings, resolve_story_model
+
+        story = self._read_story_settings()
+        # A null pin follows the actual writer, including a request override.
+        gaia_model = resolve_story_model(
+            "gaia",
+            settings=load_settings(self.settings_path),
+            story=story,
+            override=(
+                getattr(self.provider, "model", None)
+                if story.gaia_model is None
+                else None
+            ),
+        )
         if self._provider_type_name is None:
             raise RuntimeError("Gaia route resolution requires an initialized provider")
         if self._provider_type_name == "test":
@@ -1318,10 +1319,11 @@ class LogonUtility:
         enforced against the GAIA provider's window, not the writer's — a
         32K local writer with a 75K frontier gaia must not false-raise.
         """
+        from nexus.config.story_model import story_context_settings
+
         _model, provider_type, _endpoint, gaia_wire = gaia_route
-        return resolve_storyteller_context_window(
-            self.settings, gaia_wire, provider_type
-        )
+        settings = story_context_settings(self.settings, self._read_story_settings())
+        return resolve_storyteller_context_window(settings, gaia_wire, provider_type)
 
     def _resolve_anthropic_two_pass_gaia_transport(
         self,

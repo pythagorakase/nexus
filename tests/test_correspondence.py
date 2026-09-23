@@ -531,9 +531,13 @@ def test_correspondence_settings_are_mandatory_bounded_and_use_roster_selection(
     from nexus.config.settings_models import Settings
 
     resolved = Settings(**raw)
-    assert (
-        resolved.storyteller.correspondence.compaction_model == resolved.apex.gaia_model
+    compaction_model = next(
+        entry.id
+        for provider in resolved.global_.model.api_models.values()
+        for entry in provider.models
+        if "storyteller.correspondence.compaction_model" in entry.uses
     )
+    assert resolved.storyteller.correspondence.compaction_model == compaction_model
     digest_hard_cap_tokens = calculate_digest_hard_cap_tokens(
         max_digest_tokens=configured["max_digest_tokens"],
         digest_hard_cap_multiplier=configured["digest_hard_cap_multiplier"],

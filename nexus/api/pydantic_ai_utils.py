@@ -42,6 +42,9 @@ def get_base_url_for_model(model: str) -> Optional[str]:
 def build_pydantic_ai_model_with_provider(model: str) -> tuple[Model, str]:
     """Create a Pydantic AI model and return its registry provider name."""
 
+    from nexus.config.story_model import resolve_story_model
+
+    model = resolve_story_model("wizard", override=model)
     provider = get_provider_for_model(model)
     if provider is None:
         raise ValueError(f"Unknown provider for model {model!r}")

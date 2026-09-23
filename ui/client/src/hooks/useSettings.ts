@@ -1,141 +1,84 @@
-/**
- * Server-backed settings: GET /api/settings query + PATCH mutation with
- * optimistic cache updates, rollback on error, and server confirmation
- * (the PATCH response is the fresh payload and replaces the cache).
- *
- * All settings writes in the client flow through useSettingsMutation -
- * there is no local draft state anywhere in the settings surface.
- */
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import type {
-  FontMatrix,
-  FontSlots,
-  SettingsPatch,
-  SettingsPayload,
-  ThemeId,
-} from "@/types/settings";
+/** Repository defaults plus separately persisted player preferences. */
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import type { Preferences, SettingsPatch, SettingsPayload, StorySettings } from "@/types/settings";
 
 export const SETTINGS_QUERY_KEY = ["/api/settings"] as const;
+export const PREFERENCES_QUERY_KEY = ["/api/preferences"] as const;
 
 export function useSettingsQuery() {
-  return useQuery<SettingsPayload>({ queryKey: [...SETTINGS_QUERY_KEY] });
+  const defaults = useQuery<SettingsPayload>({ queryKey: [...SETTINGS_QUERY_KEY] });
+  const preferences = useQuery<Preferences>({ queryKey: [...PREFERENCES_QUERY_KEY] });
+  return {
+    ...defaults,
+    error: defaults.error ?? preferences.error,
+    data: defaults.data && preferences.data
+      ? applySettingsPatch(defaults.data, preferences.data)
+      : defaults.data,
+  };
 }
 
-/** Pure optimistic projection of a patch onto the cached payload. */
-export function applySettingsPatch(
-  payload: SettingsPayload,
-  patch: SettingsPatch,
-): SettingsPayload {
-  const next: SettingsPayload = {
+/** Project player preferences onto the read-only display of defaults. */
+export function applySettingsPatch(payload: SettingsPayload, patch: SettingsPatch): SettingsPayload {
+  const fonts = { ...payload.ui?.fonts };
+  for (const [theme, slots] of Object.entries(patch.fonts ?? {})) {
+    const key = theme as keyof typeof fonts;
+    fonts[key] = { ...fonts[key], ...slots } as NonNullable<typeof fonts[typeof key]>;
+  }
+  return {
     ...payload,
-    ui: { ...payload.ui },
+    ui: {
+      ...payload.ui,
+      ...(patch.theme === undefined ? {} : { theme: patch.theme }),
+      ...(patch.fonts === undefined ? {} : { fonts: fonts as Preferences["fonts"] }),
+    },
+    wizard: {
+      ...payload.wizard,
+      ...(patch.wizard_model === undefined ? {} : { default_model: patch.wizard_model }),
+    },
   };
-
-  if (patch.theme !== undefined) {
-    next.ui = { ...next.ui, theme: patch.theme };
-  }
-  if (patch.fonts !== undefined) {
-    // Merge even when the cached payload predates ui.fonts (cold cache or a
-    // pre-U5 server) so the optimistic projection never silently drops a
-    // font change; the server response remains the authoritative matrix.
-    const fonts = { ...(payload.ui?.fonts ?? {}) } as Record<
-      ThemeId,
-      Partial<FontSlots>
-    >;
-    for (const [themeId, slots] of Object.entries(patch.fonts) as Array<
-      [ThemeId, Partial<FontSlots>]
-    >) {
-      fonts[themeId] = { ...fonts[themeId], ...slots };
-    }
-    next.ui = { ...next.ui, fonts: fonts as FontMatrix };
-  }
-  if (patch.test_mode !== undefined) {
-    next.global = {
-      ...payload.global,
-      narrative: { ...payload.global?.narrative, test_mode: patch.test_mode },
-    };
-    next["Agent Settings"] = {
-      ...payload["Agent Settings"],
-      global: {
-        ...payload["Agent Settings"]?.global,
-        narrative: {
-          ...payload["Agent Settings"]?.global?.narrative,
-          test_mode: patch.test_mode,
-        },
-      },
-    };
-  }
-  if (patch.apex_model_id !== undefined) {
-    const registered = payload.settings_meta?.models.find(
-      (model) => model.id === patch.apex_model_id,
-    );
-    if (!registered) throw new Error(`Unknown model: ${patch.apex_model_id}`);
-    const provider =
-      registered.provider === "openai" || registered.provider === "anthropic"
-        ? registered.provider
-        : "local";
-    next.apex = { ...payload.apex, model: patch.apex_model_id, provider };
-  }
-  if (patch.gaia_model_id !== undefined) {
-    if (
-      patch.gaia_model_id !== null &&
-      !payload.settings_meta?.models.some(
-        (model) => model.id === patch.gaia_model_id,
-      )
-    ) {
-      throw new Error(`Unknown model: ${patch.gaia_model_id}`);
-    }
-    next.apex = { ...next.apex, gaia_model: patch.gaia_model_id };
-  }
-  if (patch.wizard_model_id !== undefined) {
-    next.wizard = { ...payload.wizard, default_model: patch.wizard_model_id };
-  }
-  if (patch.apex_context_window !== undefined) {
-    next.lore = {
-      ...payload.lore,
-      token_budget: {
-        ...payload.lore?.token_budget,
-        apex_context_window: patch.apex_context_window,
-      },
-    };
-  }
-  return next;
 }
 
 export function useSettingsMutation() {
-  return useMutation<
-    SettingsPayload,
-    Error,
-    SettingsPatch,
-    { previous: SettingsPayload | undefined }
-  >({
-    mutationFn: async (patch: SettingsPatch) => {
-      const res = await apiRequest("PATCH", "/api/settings", patch);
-      return (await res.json()) as SettingsPayload;
-    },
+  const client = useQueryClient();
+  return useMutation<Preferences, Error, SettingsPatch, { previous: Preferences | undefined }>({
+    mutationFn: async (patch) => (await (await apiRequest("PATCH", "/api/preferences", patch)).json()),
     onMutate: async (patch) => {
-      await queryClient.cancelQueries({ queryKey: [...SETTINGS_QUERY_KEY] });
-      const previous = queryClient.getQueryData<SettingsPayload>([
-        ...SETTINGS_QUERY_KEY,
-      ]);
+      await client.cancelQueries({ queryKey: [...PREFERENCES_QUERY_KEY] });
+      const previous = client.getQueryData<Preferences>(PREFERENCES_QUERY_KEY);
       if (previous) {
-        queryClient.setQueryData(
-          [...SETTINGS_QUERY_KEY],
-          applySettingsPatch(previous, patch),
-        );
+        const projected = applySettingsPatch({ ui: previous }, patch);
+        client.setQueryData(PREFERENCES_QUERY_KEY, {
+          ...previous, ...projected.ui,
+          wizard_model: patch.wizard_model ?? previous.wizard_model,
+        });
       }
       return { previous };
     },
-    onError: (error, _patch, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData([...SETTINGS_QUERY_KEY], context.previous);
-      }
-      console.error("Settings update failed:", error);
+    onError: (_error, _patch, context) => {
+      if (context?.previous) client.setQueryData(PREFERENCES_QUERY_KEY, context.previous);
     },
-    onSuccess: (serverPayload) => {
-      // Server confirmation: the PATCH response is the authoritative state.
-      queryClient.setQueryData([...SETTINGS_QUERY_KEY], serverPayload);
+    onSuccess: (preferences) => client.setQueryData(PREFERENCES_QUERY_KEY, preferences),
+  });
+}
+
+export function useStorySettings(slot: number | null) {
+  return useQuery<StorySettings>({
+    queryKey: [`/api/slot/${slot}/settings`],
+    enabled: slot !== null,
+  });
+}
+
+export function useStorySettingsMutation(slot: number | null) {
+  const client = useQueryClient();
+  return useMutation<StorySettings, Error, Partial<StorySettings>>({
+    mutationFn: async (patch) => {
+      if (slot === null) throw new Error("No active slot");
+      return (await (await apiRequest("PATCH", `/api/slot/${slot}/settings`, patch)).json());
+    },
+    onSuccess: (settings) => {
+      client.setQueryData([`/api/slot/${slot}/settings`], settings);
+      void client.invalidateQueries({ queryKey: [`/api/slot/${slot}/state`] });
     },
   });
 }

@@ -274,7 +274,7 @@ def test_wizard_mode_rejection_precedes_model_override(
     assert model_writes == []
 
 
-def test_choice_free_empty_continue_persists_override_and_starts_generation(
+def test_choice_free_empty_continue_passes_override_without_repinning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Choice-free chunks retain deliberate empty-input continuation."""
@@ -300,16 +300,11 @@ def test_choice_free_empty_continue_persists_override_and_starts_generation(
     )
 
     assert response.status_code == 200
-    assert model_writes == [
-        {
-            "slot": 3,
-            "model": _valid_override(),
-            "dbname": "save_03",
-        }
-    ]
+    assert model_writes == []
     assert len(generation_calls) == 1
-    generation_args, _generation_kwargs = generation_calls[0]
+    generation_args, generation_kwargs = generation_calls[0]
     assert generation_args[1:4] == (17, "", 3)
+    assert generation_kwargs["model_override"] == _valid_override()
 
 
 def test_explicit_chunk_with_unresolved_choices_requires_input(

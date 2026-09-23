@@ -206,13 +206,15 @@ def test_shipped_turn_pipeline_is_two_pass() -> None:
     assert settings.apex.turn_pipeline == "two_pass"
 
 
-def test_shipped_gaia_model_resolves_to_openai_gaia_registry_id() -> None:
-    """Committed Gaia seat resolves through its roster assignment (#592)."""
-    settings = Settings(**_nexus_toml_dict())
+def test_shipped_gaia_model_resolves_or_follows_skald() -> None:
+    """The shipped Gaia selection may be a registry ID or follow Skald."""
+    from nexus.config.story_model import resolve_story_model
 
-    openai_gaia = load_settings().apex.gaia_model
-    assert settings.apex.gaia_model == openai_gaia
-    assert not settings.apex.gaia_model.startswith("@")
+    settings = Settings(**_nexus_toml_dict())
+    assert settings.apex.gaia_model == load_settings().apex.gaia_model
+    assert resolve_story_model("gaia", settings=settings) == (
+        settings.apex.gaia_model or settings.apex.model
+    )
 
 
 def test_absent_gaia_model_stays_none() -> None:
