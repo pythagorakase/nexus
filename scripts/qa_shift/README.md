@@ -152,3 +152,75 @@ forbids touching the normal port-8002 runtime, changing tracked source, or
 filing anything weaker than a reproduced and deduplicated issue. A pre-shift
 database dump is retained because the final QA state is intentionally left
 available for diagnosis.
+
+## Reference Corpora and Prose Metrics
+
+[reference_corpora.toml](reference_corpora.toml) distinguishes `human_play`
+(`save_01`, taste calibration), `codex_bakeoff` (the locked July regression
+artifact), and `codex_qa` (`save_04`, historically contaminated adversarial QA).
+Live-slot entries record an observation, not a permanent snapshot; their source
+artifact SHA and restore date are explicitly not applicable. Each JSON baseline
+also hashes the actual SELECT result, records current migration stamps, and
+embeds its config and manifest entry. The dump itself is not committed.
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/prose_metrics.py --slot 1 --output human.json
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/prose_metrics.py --dbname ref_codex_bakeoff_2026_07 --output july.json
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/prose_metrics.py --slot 4 --from-chunk 20 --to-chunk 40
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/prose_metrics.py --compare human.json july.json
+```
+
+`$PY` is the environment's Python interpreter. JSON goes to stdout unless
+`--output` is supplied; the readable table goes to stderr. Comparison prints
+B minus A and rejects differing configs/schema versions. The tool accepts
+`save_NN`, `qa640_*`, and `ref_*`, opens a repeatable-read transaction with
+`default_transaction_read_only=on`, and issues SELECT statements only. It uses
+the same synthetic-prologue exclusion as player-facing readers and orders by
+chunk ID, preserving gaps. Bounds are inclusive chunk IDs. No slot is migrated.
+
+All lexical lists, thresholds, and text-analysis patterns live in
+`qa_shift.toml` under `[prose_metrics]`, validated by `ProseMetricsSettings`.
+The [2026-09-23 baselines](baselines/2026-09-23/) use these definitions:
+
+- Closers use the last nonempty narrative line after Markdown decoration is
+  removed; question rate ends literally in `?`. The narrower rate matches
+  `What do you ... ?`. Quotation marks after a question remain significant.
+- Contraction ratio measures **negative** contractions (`n't`/`n’t`) divided by
+  contractions plus configured expanded negations. It does not measure all
+  apostrophes or confuse possessive `'s` with a contraction. Formal counts and
+  `It is not X.` occurrences are also retained.
+- Words are Unicode alphabetic tokens with internal apostrophes. Paragraphs
+  split at blank lines; sentence segmentation is punctuation-based, so labels,
+  fragments, abbreviations, and dialogue are not linguistic ground truth.
+  Word-count SD is population SD. Motifs are case-folded 3–5-grams counted once
+  per chunk, with every motif reaching K chunks reported (no hidden top-N cap).
+- Modern choices come from `choice_object.presented`; `choice_text` is the
+  selected player turn and is counted separately. First-verb mix is the first
+  lexical token as a proxy for imperative verbs, not a part-of-speech model.
+  Speech-act and place/time/company change shares are keyword heuristics, not
+  claims about what the choice actually caused.
+- `save_01` uses read-only `## Storyteller` / `## You` extraction. Observed
+  storyteller-only, player-only, and trailing-space headings are supported;
+  unknown or duplicate sections fail. Player-only chunks 686 and 1383 are
+  reported explicitly and excluded from prose denominators. The final
+  sequential decimal/keycap list is a **legacy menu heuristic**, with coverage
+  reported separately; prose may itself contain numbered lists. Only option
+  lines are recovered. Chunks without such a list have N/A menu statistics,
+  never a fabricated zero-choice menu. Narrative measurements retain the full
+  Storyteller section, including embedded lists/headings, unlike modern prose
+  stored separately from choices. Cross-tier comparisons carry that limitation.
+- Exactly one `setting` link identifies a primary place. Missing or multiple
+  setting links break the streak and are counted, rather than picking an
+  arbitrary place or carrying one forward. World-minute deltas use adjacent
+  playable chunks with both timestamps present; missing pairs and negative
+  deltas remain explicit.
+
+To reconstruct the locked July reference, verify the manifest SHA against the
+sidecar, `createdb ref_codex_bakeoff_2026_07`, restore with
+`pg_restore --exit-on-error --no-owner --no-privileges`, then use
+`scripts/migrate.py --dbname ref_codex_bakeoff_2026_07` and
+`scripts/stamp_lore_pass_baseline.py --dbname ref_codex_bakeoff_2026_07` before
+`ALTER DATABASE ref_codex_bakeoff_2026_07 SET default_transaction_read_only = on`.
+Both mutation tools restrict `--dbname` to `qa640_*` or `ref_*`; this is separate
+from their existing slot flags. Do not point replay-test write fixtures at the
+locked reference. The September restoration reached 112 stamps through 114.

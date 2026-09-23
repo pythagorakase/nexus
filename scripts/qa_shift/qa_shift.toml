@@ -25,3 +25,23 @@ archive_root = "temp"
 # casually cross the allowance before its post-command check.
 daily_token_limit = 10000000
 reserve_tokens = 1000000
+
+[prose_metrics]
+# Negative contractions / (negative contractions + expanded negative forms).
+contraction_pattern = '''\b\w+n[’']t\b'''
+formal_negations = ['does not', 'do not', 'is not', 'are not', 'was not', 'were not', 'did not', 'have not', 'has not', 'had not', 'will not', 'would not', 'can not', 'cannot', 'could not', 'should not', 'must not', 'need not', 'am not']
+it_is_not_pattern = '\bit\s+is\s+not\s+[^.!?]+\.'
+closer_pattern = '\bwhat\s+do\s+you\b[^?]*\?$'
+word_pattern = '''[^\W\d_]+(?:[’'][^\W\d_]+)*'''
+sentence_boundary_pattern = '''[.!?]+(?:["”’']*)(?:\s+|$)'''
+short_sentence_max_words = 4
+motif_ngram_sizes = [3, 4, 5]
+motif_min_chunks = 20
+speech_act_verbs = ['ask', 'tell', 'say', 'demand', 'press', 'question', 'answer', 'explain', 'convince', 'persuade', 'request', 'warn', 'challenge', 'confront', 'call']
+# Keyword matches are proxies for offered change, not adjudicated outcomes.
+change_keywords = ['leave', 'go', 'follow', 'depart', 'walk', 'return', 'cross', 'move', 'wait', 'sleep', 'rest', 'later', 'tomorrow', 'alone', 'join', 'dismiss', 'invite', 'disengage', 'break from']
+setting_reference_type = 'setting'
+legacy_section_pattern = '^##[ \t]+(Storyteller|You)[ \t]*$'
+# Numbered Markdown and Unicode keycap menus observed in save_01.
+legacy_choice_pattern = '^\s*(?:#{1,6}\s+)?(?:\*\*)?(?P<number>[1-9][0-9]*)(?:[.)]|\uFE0F?\u20E3)\s*(?P<text>.+)$'
+legacy_menu_min_choices = 2
