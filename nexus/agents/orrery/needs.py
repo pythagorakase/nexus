@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from functools import lru_cache
+from math import isfinite
 from typing import Any, Iterable, Mapping, Optional
 
 
@@ -158,6 +159,7 @@ class NeedTuning:
     """Configurable Sunhelm need tuning loaded from ``nexus.toml``."""
 
     accrual_rates: Mapping[str, float]
+    accrual_debt_caps: Mapping[str, float]
     severity_thresholds: Mapping[str, Mapping[str, float]]
     priorities: Mapping[str, int]
     pressure: NeedPressureTuning
@@ -168,6 +170,10 @@ class NeedTuning:
 
         return cls(
             accrual_rates=dict(DEFAULT_NEED_ACCRUAL_RATES),
+            accrual_debt_caps={
+                need: thresholds["critical"]
+                for need, thresholds in DEFAULT_NEED_SEVERITY_THRESHOLDS.items()
+            },
             severity_thresholds={
                 need_type: dict(thresholds)
                 for need_type, thresholds in DEFAULT_NEED_SEVERITY_THRESHOLDS.items()
@@ -205,6 +211,11 @@ class NeedTuning:
 
         return cls(
             accrual_rates=accrual_rates,
+            accrual_debt_caps=_coerce_need_mapping(
+                raw.get("accrual_debt_caps"),
+                defaults=cls.default().accrual_debt_caps,
+                cast=float,
+            ),
             severity_thresholds=severity_thresholds,
             priorities=priorities,
             pressure=NeedPressureTuning.from_mapping(raw.get("pressure")),
@@ -279,10 +290,19 @@ def effective_debt_score(
     current_world_time: Optional[datetime],
     tuning: Optional[NeedTuning] = None,
 ) -> float:
-    """Return debt accrued from elapsed world time without mutating state."""
+    """Accrue world-time debt up to saturation without erasing stored debt.
+
+    Absence is not fulfillment: needs still reach critical pressure, but an
+    unobserved interval cannot create an unlimited backlog of missed routines.
+    Resolver, sync/async fulfillment, and replay share this authority.
+    """
 
     tuning = tuning or load_need_tuning()
     normalized = normalize_need_type(need_type)
+    stored_debt = float(debt_score)
+    # Do not let saturation hide corrupt state from the persistence guard.
+    if not isfinite(stored_debt):
+        return stored_debt
 
     elapsed_hours = 0.0
     if last_evaluated_at is not None and current_world_time is not None:
@@ -291,9 +311,12 @@ def effective_debt_score(
             elapsed_hours = elapsed_seconds / 3600.0
 
     if elapsed_hours <= 0:
-        return max(0.0, float(debt_score))
+        return max(0.0, stored_debt)
     accrued = elapsed_hours * tuning.accrual_rates[normalized]
-    return max(0.0, float(debt_score) + accrued)
+    if not isfinite(accrued):
+        return accrued
+    ceiling = max(stored_debt, tuning.accrual_debt_caps[normalized])
+    return max(0.0, min(ceiling, stored_debt + accrued))
 
 
 def severity_for_debt(
