@@ -8,6 +8,7 @@ from inspect import signature
 import pytest
 
 from nexus.agents.orrery.needs import NeedTuning, effective_debt_score
+from nexus.config.settings_models import OrrerySunhelmSettings
 
 BASE = datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
 
@@ -76,3 +77,38 @@ def test_need_debt_remains_nonnegative_without_elapsed_world_time() -> None:
     )
 
     assert debt == 0.0
+
+
+def test_saturation_preserves_stored_debt_and_partial_fulfillment() -> None:
+    """Long absences saturate new accrual; existing debt is never forgiven."""
+    tuning = NeedTuning.from_mapping({"accrual_debt_caps": {"sleep": 96.0}})
+    for stored, expected in [(0.0, 96.0), (92.0, 96.0), (120.0, 120.0), (1e6, 1e6)]:
+        assert (
+            effective_debt_score(
+                "sleep",
+                stored,
+                last_evaluated_at=BASE,
+                current_world_time=BASE + timedelta(days=365),
+                tuning=tuning,
+            )
+            == expected
+        )
+    assert (
+        effective_debt_score(
+            "sleep",
+            92.0,
+            last_evaluated_at=BASE,
+            current_world_time=BASE + timedelta(hours=1),
+            tuning=tuning,
+        )
+        == 93.0
+    )
+
+
+@pytest.mark.parametrize("cap", [0, 71, 1_000_000, float("inf"), float("nan")])
+def test_accrual_cap_configuration_rejects_unsafe_limits(cap: float) -> None:
+    """Caps preserve the critical tier and cannot overflow the storage domain."""
+    settings = OrrerySunhelmSettings().model_dump()
+    settings["accrual_debt_caps"]["sleep"] = cap
+    with pytest.raises(ValueError, match="accrual_debt_caps.sleep"):
+        OrrerySunhelmSettings.model_validate(settings)

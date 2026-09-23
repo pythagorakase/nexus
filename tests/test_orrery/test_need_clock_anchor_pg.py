@@ -516,7 +516,9 @@ def test_migration_reconciles_poisoned_rows_and_guards_fulfillment_domain(
                     fulfillment={
                         "type": "thirst",
                         "quality": "routine",
-                        "discharge_debt": 0,
+                        # Elapsed time now saturates. A malformed effect must
+                        # still fail the unchanged numeric-domain guard.
+                        "discharge_debt": -1_000_000,
                     },
                     template_id="issue_640_domain_guard",
                     source_chunk_id=chunk_id,
