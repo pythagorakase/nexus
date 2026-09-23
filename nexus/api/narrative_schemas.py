@@ -8,7 +8,14 @@ serialization of API requests and responses.
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    Field,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 # Re-export ChoiceSelection from shared module for backward compatibility
 from nexus.api.choice_handling import ChoiceSelection
@@ -225,6 +232,13 @@ class TraitMenuItemResponse(BaseModel):
     rationale: Optional[str] = None
 
 
+class FrontierClock(BaseModel):
+    """The latest accepted playable chunk's story instant and shared clock face."""
+
+    instant: AwareDatetime
+    face: str
+
+
 class SlotStateResponse(BaseModel):
     """Response model for slot state endpoint."""
 
@@ -236,6 +250,7 @@ class SlotStateResponse(BaseModel):
     thread_id: Optional[str] = None  # Wizard thread ID
     current_chunk_id: Optional[int] = None  # Narrative chunk ID
     has_pending: bool = False  # True if incubator has pending content
+    frontier_clock: Optional[FrontierClock] = None
     storyteller_text: Optional[str] = None
     choices: List[str] = []
     session_id: Optional[str] = (

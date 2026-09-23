@@ -32,13 +32,16 @@ from nexus.agents.orrery.player_identity import (
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.choice_handling import extract_presented_choices, resolve_input_text
 from nexus.api.db_pool import get_connection
+from nexus.api.narrative_schemas import FrontierClock
 from nexus.api.slot_utils import slot_dbname
+from nexus.util.clock_face import clock_face
 
 logger = logging.getLogger("nexus.api.slot_state")
 
 _LATEST_PLAYABLE_CHUNK_SQL = f"""
-    SELECT nc.id, nc.raw_text, nc.choice_object
+    SELECT nc.id, nc.raw_text, nc.choice_object, cm.world_time
     FROM narrative_chunks nc
+    LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
     WHERE {playable_narrative_predicate()}
     ORDER BY nc.id DESC
     LIMIT 1
@@ -67,6 +70,7 @@ class NarrativeState:
     storyteller_text: Optional[str]
     choices: List[str]  # Available choices from choice_object.presented
     session_id: Optional[str]  # Incubator session ID if pending
+    frontier_clock: Optional[FrontierClock] = None
 
 
 @dataclass
@@ -267,9 +271,14 @@ def _get_narrative_state(cur) -> NarrativeState:
     """
     Get narrative state from incubator and narrative_chunks.
 
-    Checks incubator first for pending content, then falls back
-    to the latest committed chunk.
+    Resolves the accepted clock independently, then prefers pending content
+    over committed content for the continuation state.
     """
+    # The accepted frontier is independent of any pending draft. Retrograde's
+    # synthetic prologue is not a playable frontier (including at bootstrap).
+    cur.execute(_LATEST_PLAYABLE_CHUNK_SQL)
+    committed_state = _narrative_state_from_committed_chunk(cur.fetchone())
+
     # Check for pending content in incubator
     cur.execute(
         """
@@ -290,16 +299,10 @@ def _get_narrative_state(cur) -> NarrativeState:
             storyteller_text=incubator_row.get("storyteller_text"),
             choices=choices,
             session_id=incubator_row.get("session_id"),
+            frontier_clock=committed_state.frontier_clock,
         )
 
-    # No pending content - get latest committed playable chunk. Retrograde's
-    # synthetic prologue remains a world-event FK anchor, not a continuation
-    # parent. A freshly transitioned slot therefore still resolves chunk 0
-    # and follows the ordinary narrative bootstrap path.
-    cur.execute(_LATEST_PLAYABLE_CHUNK_SQL)
-    chunk_row = cur.fetchone()
-
-    return _narrative_state_from_committed_chunk(chunk_row)
+    return committed_state
 
 
 def _narrative_state_from_committed_chunk(
@@ -309,12 +312,18 @@ def _narrative_state_from_committed_chunk(
 
     if chunk_row:
         choices = extract_presented_choices(chunk_row.get("choice_object"))
+        world_time = chunk_row.get("world_time")
         return NarrativeState(
             current_chunk_id=chunk_row.get("id"),
             has_pending=False,
             storyteller_text=chunk_row.get("raw_text"),
             choices=choices,
             session_id=None,
+            frontier_clock=(
+                FrontierClock(instant=world_time, face=clock_face(world_time))
+                if world_time is not None
+                else None
+            ),
         )
 
     # No narrative content at all (bootstrap hasn't happened yet)

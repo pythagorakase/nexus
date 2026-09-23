@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
 import type { LocalModelsStatus } from "@/types/localModels";
+import type { SlotState } from "@/types/narrative";
 import { TopBar } from "./TopBar";
 
 const MODELS_DIR = "/models";
@@ -36,7 +37,10 @@ const BASE: LocalModelsStatus = {
   active: null,
 };
 
-function renderTopBar(status: LocalModelsStatus) {
+function renderTopBar(
+  status: LocalModelsStatus,
+  frontierClock: SlotState["frontier_clock"] = null,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -44,12 +48,64 @@ function renderTopBar(status: LocalModelsStatus) {
   // /api/settings intentionally unseeded: the meter must render from knob
   // defaults while settings are in flight.
 
-  render(
-    <QueryClientProvider client={queryClient}>
-      <TopBar slot={1} characterName={null} skaldStatus="READY" />
-    </QueryClientProvider>,
+  return render(
+    <TopBar
+      slot={1}
+      characterName={null}
+      skaldStatus="READY"
+      frontierClock={frontierClock}
+    />,
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    },
   );
 }
+
+describe("TopBar frontier clock", () => {
+  it("renders the payload face unchanged and follows accepted frontier updates", () => {
+    const frontier_clock = {
+      instant: "2189-10-17T22:37:00Z",
+      face: "17 Oct 2189 · 22:37",
+    };
+    const { rerender } = renderTopBar(BASE, frontier_clock);
+    const clock = screen.getByTestId("frontier-clock");
+    expect(clock).toHaveTextContent(frontier_clock.face);
+    expect(clock).toHaveAttribute("datetime", frontier_clock.instant);
+    expect(clock).not.toHaveAttribute("title");
+
+    rerender(
+      <TopBar
+        slot={1}
+        characterName={null}
+        skaldStatus="GENERATING"
+        frontierClock={{
+          instant: "2189-10-17T22:42:00Z",
+          face: "17 Oct 2189 · 22:42",
+        }}
+      />,
+    );
+    expect(screen.getByTestId("frontier-clock")).toHaveTextContent(
+      "17 Oct 2189 · 22:42",
+    );
+
+    rerender(
+      <TopBar
+        slot={2}
+        characterName={null}
+        skaldStatus="READY"
+        frontierClock={null}
+      />,
+    );
+    expect(screen.queryByTestId("frontier-clock")).not.toBeInTheDocument();
+  });
+
+  it("has no clock element when there is no frontier", () => {
+    renderTopBar(BASE);
+    expect(screen.queryByTestId("frontier-clock")).not.toBeInTheDocument();
+  });
+});
 
 describe("TopBar memory meter", () => {
   it("does not exist while no local model is active (hidden at rest)", () => {

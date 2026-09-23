@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 
@@ -50,7 +51,7 @@ def test_get_chunk_by_id_uses_place_references_for_header() -> None:
         season=1,
         episode=1,
         scene=1,
-        world_time="Night",
+        world_time=datetime(2189, 10, 17, 15, 12, tzinfo=timezone(timedelta(hours=-4))),
         place_names="Halcyon Row, Metro Entrance",
     )
     session = CapturingSession(row=row)
@@ -61,6 +62,9 @@ def test_get_chunk_by_id_uses_place_references_for_header() -> None:
     assert chunk is not None
     assert chunk["id"] == 1
     assert "Halcyon Row, Metro Entrance" in chunk["header"]
+    # The header shares the story clock face: UTC, never the session offset.
+    assert "17 Oct 2189 · 19:12" in chunk["header"]
+    assert "15:12" not in chunk["header"]
     assert "place_chunk_references pcr" in session.query_text
     assert "LEFT JOIN places p ON pcr.place_id = p.id" in session.query_text
     assert "cm.place" not in session.query_text

@@ -2,8 +2,9 @@
  * TopBar - the 52px operator strip across the top of the NexusLayout.
  *
  * Left: NEXUS wordmark (the single marquee-font element on this surface)
- * plus the slot label. Right: nothing at rest. Per the visual minimalism
- * doctrine the old persistent `SKALD <status>` field is gone - it carried
+ * plus the slot label. Right: one frontier story clock at rest. Decision 8,
+ * Option A (#857, #771) reverses "nothing at rest" for this element alone.
+ * Per visual minimalism the persistent `SKALD <status>` is gone - it carried
  * an internal module name, sat on screen while idle, and during generation
  * restated the in-reader status line and the ledger telemetry. The one
  * state with no other surface is backend unreachability, which renders as
@@ -24,12 +25,13 @@ import {
 } from "@/hooks/useLocalModels";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type { SettingsPayload } from "@/types/settings";
-import type { SkaldStatus } from "@/types/narrative";
+import type { FrontierClock, SkaldStatus } from "@/types/narrative";
 
 interface TopBarProps {
   slot: number | null;
   characterName: string | null;
   skaldStatus: SkaldStatus;
+  frontierClock: FrontierClock | null;
 }
 
 function MemoryMeter() {
@@ -97,7 +99,12 @@ function MemoryMeter() {
   );
 }
 
-export function TopBar({ slot, characterName, skaldStatus }: TopBarProps) {
+export function TopBar({
+  slot,
+  characterName,
+  skaldStatus,
+  frontierClock,
+}: TopBarProps) {
   return (
     <header className="topbar" data-testid="nexus-topbar">
       <div className="topbar-left">
@@ -115,6 +122,15 @@ export function TopBar({ slot, characterName, skaldStatus }: TopBarProps) {
       </div>
 
       <div className="topbar-right">
+        {frontierClock && (
+          <time
+            className="frontier-clock"
+            dateTime={frontierClock.instant}
+            data-testid="frontier-clock"
+          >
+            {frontierClock.face}
+          </time>
+        )}
         <MemoryMeter />
         {skaldStatus === "OFFLINE" && (
           <span className="field">

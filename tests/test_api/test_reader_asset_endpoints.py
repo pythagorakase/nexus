@@ -83,6 +83,7 @@ class TestNarrativeReads:
             "scene",
             "worldLayer",
             "worldTime",
+            "worldTimeFace",
             "timeDelta",
             "generationDate",
             "slug",

@@ -239,3 +239,19 @@ sidecar, `createdb ref_codex_bakeoff_2026_07`, restore with
 Both mutation tools restrict `--dbname` to `qa640_*` or `ref_*`; this is separate
 from their existing slot flags. Do not point replay-test write fixtures at the
 locked reference. The September restoration reached 112 stamps through 114.
+
+## World Clock
+
+The read-only `world_clock` family reports each slot's total joined chunks,
+view/column disagreements (including NULL differences), and the UTC face of
+`global_variables.base_timestamp`. Run all five slots or repeat `--slot`:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/world_clock.py
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/world_clock.py --slot 4 --slot 5
+```
+
+Reads use a repeatable-read, read-only transaction. Exit 1 means at least one
+clock disagreement; after migration 118 the expected count is zero. A missing
+seed is reported as JSON null. Database and formatting errors surface loudly.
+This family never migrates or repairs a slot.

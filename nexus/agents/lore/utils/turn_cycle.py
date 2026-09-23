@@ -7,7 +7,7 @@ Handles the execution of individual turn cycle phases.
 import json
 import logging
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
@@ -922,7 +922,9 @@ class TurnCycleManager:
             "episode": row["episode"],
             "scene": row["scene"],
             "world_layer": row["world_layer"],
-            "world_time": world_time.isoformat() if world_time else None,
+            "world_time": (
+                world_time.astimezone(timezone.utc).isoformat() if world_time else None
+            ),
             "location_name": row["location_name"],
             "location_geom": row["location_geom"],
         }
