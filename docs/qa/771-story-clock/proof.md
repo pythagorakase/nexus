@@ -11,7 +11,9 @@ Gateway ran with `PGOPTIONS='-c default_transaction_read_only=on'`. Startup used
 The first startup rolled back because an unmanaged mock service occupied 5102. A local proof-only copy of nexus.toml set runtime.services.mock_openai.enabled to never; tracked nexus.toml is unchanged.
 
 ```sh
-PYTHONPATH=$PWD PGOPTIONS='-c default_transaction_read_only=on' NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 $PY -m nexus.cli up --slot 1 --config docs/qa/771-story-clock/proof.nexus.toml
+# PROOF_TOML: a scratch copy of nexus.toml whose only change is the TEST-provider
+# service set to enabled = "auto" (the repository keeps it "never").
+PYTHONPATH=$PWD PGOPTIONS='-c default_transaction_read_only=on' NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 $PY -m nexus.cli up --slot 1 --config "$PROOF_TOML"
 ```
 
 started gateway (pid 51065) on http://127.0.0.1:8015
@@ -92,7 +94,7 @@ The full PostgreSQL gate was not rerun, per the third amendment. The earlier int
 ## Shutdown
 
 ```sh
-PYTHONPATH=$PWD NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 $PY -m nexus.cli down --config docs/qa/771-story-clock/proof.nexus.toml
+PYTHONPATH=$PWD NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 $PY -m nexus.cli down --config "$PROOF_TOML"
 ```
 
 ```text
