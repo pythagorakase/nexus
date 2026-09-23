@@ -195,12 +195,14 @@ def emit_relationship_milestones_sync(
         ""
         if recovery_age_seconds is None
         else (
-            "AND version.created_at <= clock_timestamp() - (%s * interval '1 second')"
+            "AND version.created_at <= clock_timestamp() - (%s * interval '1 second') "
+            "AND (version.source_chunk_id IS NOT NULL OR %s = "
+            "(SELECT max(chunk_id) FROM chunk_metadata WHERE world_layer = 'primary'))"
         )
     )
     params = (tick_chunk_id, tick_chunk_id)
     if recovery_age_seconds is not None:
-        params += (recovery_age_seconds,)
+        params += (recovery_age_seconds, tick_chunk_id)
     params += (tick_chunk_id,)
     cur.execute(_PENDING_SQL.format(tick="%s", recovery_filter=recovery_filter), params)
     rows = cur.fetchall()

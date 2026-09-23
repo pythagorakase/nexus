@@ -942,7 +942,7 @@ def _mock_orrery_adjudications(prompt: str) -> List[Dict[str, Any]]:
                     "proposal_id": proposal_id,
                     "action": "replace",
                     "note": "[TEST MODE] Replaced with a story-truer activity.",
-                    "replacement_event_type": "mock_replacement",
+                    "replacement_event_type": "work_performed",
                     "replacement_state_delta": {
                         "character_current_activity": (
                             "following the mock-server replacement beat"

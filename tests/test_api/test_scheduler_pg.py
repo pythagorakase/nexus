@@ -181,3 +181,89 @@ def test_maturation_completion_rejects_stale_nonce(offline_gate_db):
                     "current": True,
                 },
             )
+
+
+def test_scheduler_milestone_recovery_preserves_anchor_age_and_idempotency(
+    offline_gate_db,
+):
+    """Recover old crossings once, keeping unanchored ones on the latest head."""
+    from nexus.agents.orrery.relationship_provenance import relationship_producer
+    from tests.test_orrery.test_narration_job_fencing_pg import _insert_chunk
+
+    first, _ = seed_protagonist(offline_gate_db)
+    second, _ = seed_protagonist(offline_gate_db, name="Second Player")
+    with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+        older = _insert_chunk(cur, "Older accepted turn")
+        head = _insert_chunk(cur, "Current accepted turn")
+        with relationship_producer(cur, "manual"):
+            cur.execute(
+                "INSERT INTO character_relationships (character1_id,character2_id,relationship_type,valence_current,dynamic,recent_events,history) VALUES (%s,%s,'friend',0,'Fixture','Fixture','Fixture'),(%s,%s,'friend',0,'Fixture','Fixture','Fixture')",
+                (first, second, second, first),
+            )
+        with relationship_producer(cur, "manual", source_chunk_id=older):
+            cur.execute(
+                "UPDATE character_relationships SET valence_current=0.5 WHERE character1_id=%s",
+                (first,),
+            )
+        with relationship_producer(cur, "manual"):
+            cur.execute(
+                "UPDATE character_relationships SET valence_current=0.5 WHERE character1_id=%s",
+                (second,),
+            )
+        cur.execute(
+            "UPDATE relationship_versions SET created_at=clock_timestamp()-interval '2 minutes'"
+        )
+        with relationship_producer(cur, "manual", source_chunk_id=head):
+            cur.execute(
+                "UPDATE character_relationships SET valence_current=-0.5 WHERE character1_id=%s",
+                (first,),
+            )
+    scheduler = SlotScheduler(4, dbname=offline_gate_db)
+    result = scheduler.run_pass()
+    assert result["relationship_milestone_queue"] == 2
+    assert scheduler.run_pass()["relationship_milestone_queue"] == 0
+    with closing(connect(offline_gate_db)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT v.source_chunk_id,e.tick_chunk_id FROM relationship_milestone_queue q JOIN relationship_versions v ON v.id=q.version_id JOIN world_events e ON e.id=q.event_id ORDER BY v.id"
+        )
+        assert cur.fetchall() == [(older, older), (None, head)]
+        assert load_job_queues_sync(conn)["queues"]["relationship_milestone"][
+            "counts"
+        ] == {"pending": 1}
+
+
+def test_scheduler_gateway_restart_recovers_leased_job(
+    offline_gate_db, monkeypatch, tmp_path, mock_openai_server
+):
+    """The actual gateway lifespan releases its lease and recovers at next start."""
+    from tests.scheduler_helpers import gateway_lane, route_slot, test_provider_config
+
+    test_provider_config(tmp_path, mock_openai_server, monkeypatch)
+    route_slot(monkeypatch, offline_gate_db)
+    seed_narration(offline_gate_db)
+    session = str(uuid4())
+    with closing(connect(offline_gate_db)) as conn:
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn, session_id=session, operation="continue", stale_timeout_seconds=60
+            )
+            is None
+        )
+    with gateway_lane(monkeypatch) as first:
+        assert job_state(offline_gate_db) == [("queued", 0)]
+        with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE orrery_narration_jobs SET state='leased', attempts=1, locked_by='interrupted', lease_nonce=%s, lease_until=clock_timestamp()-interval '1 second'",
+                (str(uuid4()),),
+            )
+    with closing(connect(offline_gate_db)) as conn:
+        assert not load_job_queues_sync(conn)["scheduler"]["active"]
+        narrative_lease.finish_generation(conn, session_id=session, status="complete")
+    with gateway_lane(monkeypatch) as successor:
+        assert first.owner != successor.owner
+        wait_until(lambda: job_state(offline_gate_db) == [("succeeded", 2)])
+    with closing(connect(offline_gate_db)) as conn:
+        assert not load_job_queues_sync(conn)["scheduler"]["active"]
+
+
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: E402,F401
