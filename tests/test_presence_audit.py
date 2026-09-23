@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import logging
 import os
 
@@ -13,6 +14,7 @@ from nexus.api.presence_audit import (
     presence_audit_enabled,
 )
 from nexus.memory.entity_detector import HighSpecificityEntityDetector
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 
 RUN_POSTGRES = os.environ.get("NEXUS_RUN_POSTGRES") == "1"
 
@@ -105,15 +107,31 @@ def test_presence_audit_enabled_reads_shipped_default() -> None:
     assert presence_audit_enabled() is True
 
 
-@pytest.mark.skipif(not RUN_POSTGRES, reason="requires live slot database")
-def test_live_audit_runs_read_only_on_a_real_chunk() -> None:
-    """The sync orchestrator runs against a real slot without mutating state."""
-    import psycopg2
+@pytest.fixture
+def audit_database() -> Iterator[str]:
+    """Seed a real chunk in a fixture-owned database, independent of NEXUS_SLOT."""
+    with disposable_slot_database("qa640_presence_audit") as dbname:
+        character_id, _ = seed_protagonist(dbname, name="Kosi")
+        with connect(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+                    "VALUES ('Kosi waits.', 'Kosi waits.') RETURNING id"
+                )
+                chunk_id = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO chunk_character_references "
+                    "(chunk_id, character_id, reference) VALUES (%s, %s, 'present')",
+                    (chunk_id, character_id),
+                )
+        yield dbname
 
-    from nexus.api.slot_utils import require_slot_dbname
 
-    dbname = require_slot_dbname()
-    conn = psycopg2.connect(host="localhost", database=dbname, user="pythagor")
+@pytest.mark.skipif(not RUN_POSTGRES, reason="requires live PostgreSQL")
+def test_live_audit_runs_read_only_on_a_real_chunk(audit_database: str) -> None:
+    """The sync orchestrator reads a seeded real chunk without mutating state."""
+    conn = connect(audit_database)
+    conn.set_session(readonly=True)
     try:
         with conn.cursor() as cur:
             cur.execute(
