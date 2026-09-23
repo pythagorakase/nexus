@@ -11,8 +11,6 @@ Usage:
 
 from __future__ import annotations
 
-from nexus.database import url_connection_kwargs
-
 import argparse
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -29,6 +27,9 @@ from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary
 from nexus.agents.memnon.utils.search import SearchManager
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.config import load_settings_as_dict
+
+from nexus.database import url_connection_kwargs
+from nexus.presence.roster import read_rosters
 
 
 @dataclass(frozen=True)
@@ -91,21 +92,16 @@ def load_measurement_corpus(
             f"""
             SELECT
                 nc.id AS chunk_id,
-                nc.raw_text,
-                COALESCE(
-                    array_agg(DISTINCT ccr.character_id ORDER BY ccr.character_id)
-                        FILTER (WHERE ccr.reference::text = 'present'),
-                    ARRAY[]::bigint[]
-                ) AS present_character_ids
+                nc.raw_text
             FROM narrative_chunks AS nc
-            LEFT JOIN chunk_character_references AS ccr ON ccr.chunk_id = nc.id
             WHERE {playable_narrative_predicate()}
-            GROUP BY nc.id, nc.raw_text
             ORDER BY nc.id
             """
         )
+        rows = cursor.fetchall()
+        rosters = read_rosters(connection, [int(row["chunk_id"]) for row in rows])
         chunks = []
-        for row in cursor.fetchall():
+        for row in rows:
             chunk_id = int(row["chunk_id"])
             raw_text = str(row["raw_text"] or "")
             if not raw_text.strip():
@@ -117,8 +113,7 @@ def load_measurement_corpus(
                     chunk_id=chunk_id,
                     raw_text=raw_text,
                     present_character_ids=tuple(
-                        int(character_id)
-                        for character_id in row["present_character_ids"]
+                        sorted(rosters[chunk_id].present_character_ids)
                     ),
                 )
             )

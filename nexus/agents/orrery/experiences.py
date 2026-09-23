@@ -21,6 +21,7 @@ from nexus.agents.orrery.epistemics import (
 )
 from nexus.agents.orrery.player_identity import canonical_player_entity_id
 from nexus.config.settings_models import OrreryExperienceSettings
+from nexus.presence.roster import read_rosters
 from nexus.telemetry.usage import usage_context
 
 
@@ -391,30 +392,15 @@ def _presence_duration(
     cap: int,
 ) -> int:
     cur.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-            FROM chunk_character_references ccr
-            JOIN characters c ON c.id = ccr.character_id
-            WHERE ccr.chunk_id = recent.chunk_id
-              AND ccr.reference::text = 'present'
-              AND c.entity_id = %s
-        ) AS present
-        FROM (
-            SELECT cm.chunk_id
-            FROM chunk_metadata cm
-            WHERE cm.chunk_id <= %s
-              AND cm.world_layer::text = %s
-            ORDER BY cm.chunk_id DESC
-            LIMIT %s
-        ) AS recent
-        ORDER BY recent.chunk_id DESC
-        """,
-        (character_entity_id, anchor_chunk_id, world_layer, cap),
+        "SELECT chunk_id FROM chunk_metadata WHERE chunk_id <= %s "
+        "AND world_layer::text = %s ORDER BY chunk_id DESC LIMIT %s",
+        (anchor_chunk_id, world_layer, cap),
     )
+    ids = [int(_row_value(row, "chunk_id", 0)) for row in cur.fetchall()]
+    rosters = read_rosters(cur, ids)
     duration = 0
-    for row in cur.fetchall():
-        if not bool(_row_value(row, "present", 0)):
+    for chunk_id in ids:
+        if character_entity_id not in rosters[chunk_id].present_entity_ids:
             break
         duration += 1
     return duration

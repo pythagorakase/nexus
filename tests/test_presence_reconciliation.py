@@ -138,8 +138,10 @@ def test_end_of_turn_roster_accounts_for_detected_character() -> None:
 
 
 @pytest.mark.parametrize("wire_name", ["kosi adebayo", "the Boatman"])
-def test_idless_noncanonical_roster_ref_does_not_account(wire_name: str) -> None:
-    """Sloppy-cased and alias names cannot suppress a resolvable mention."""
+def test_idless_alias_or_case_variant_resolves_before_accounting(
+    wire_name: str,
+) -> None:
+    """Canonical casing and stored aliases resolve before roster membership."""
 
     wire = _wire(
         "Kosi Adebayo takes the wheel.",
@@ -153,8 +155,9 @@ def test_idless_noncanonical_roster_ref_does_not_account(wire_name: str) -> None
     )
 
     assert wire.presence is not None
-    assert wire.presence.mentions == [
-        PresenceRef(kind="character", name="Kosi Adebayo", id=7)
+    assert wire.presence.mentions == []
+    assert wire.presence.enter == [
+        CharacterRef(kind="character", name="Kosi Adebayo", id=7)
     ]
 
 
@@ -334,10 +337,10 @@ def test_warning_marker_emits_once_per_character_and_is_silent_when_clean(
     ]
 
 
-def test_ambiguous_identity_is_not_reconciled_but_clean_identity_is(
+def test_ambiguous_identity_raises_before_reconciliation(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Casefold collisions warn and fail open without choosing the wrong id."""
+    """Casefold collisions raise instead of choosing an identity."""
 
     roster = CharacterRosterRows(
         characters=[
@@ -349,31 +352,13 @@ def test_ambiguous_identity_is_not_reconciled_but_clean_identity_is(
     )
     wire = _wire("Mara speaks with Nneka Daramola beside the river.")
 
-    with caplog.at_level(
-        logging.WARNING,
-        logger="nexus.api.presence_reconciliation",
-    ):
+    with pytest.raises(ValueError, match="Ambiguous character name"):
         reconcile_prose_mentions(
-            wire,
-            presence_baseline=EMPTY_BASELINE,
-            roster_rows=roster,
+            wire, presence_baseline=EMPTY_BASELINE, roster_rows=roster
         )
 
-    assert wire.presence is not None
-    assert wire.presence.mentions == [
-        PresenceRef(kind="character", name="Nneka Daramola", id=23)
-    ]
-    ambiguous_messages = [
-        record.getMessage()
-        for record in caplog.records
-        if "presence prose mention ambiguous:" in record.getMessage()
-    ]
-    assert ambiguous_messages == [
-        "presence prose mention ambiguous: mara candidate_ids=[21, 22]"
-    ]
 
-
-def test_alias_collision_participates_in_ambiguity_filter(
+def test_alias_collision_raises_before_reconciliation(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Aliases and canonical names share one collision namespace."""
@@ -387,22 +372,10 @@ def test_alias_collision_participates_in_ambiguity_filter(
     )
     wire = _wire("The Harbor Master waits beside the launch.")
 
-    with caplog.at_level(
-        logging.WARNING,
-        logger="nexus.api.presence_reconciliation",
-    ):
+    with pytest.raises(ValueError, match="Ambiguous character name"):
         reconcile_prose_mentions(
-            wire,
-            presence_baseline=EMPTY_BASELINE,
-            roster_rows=roster,
+            wire, presence_baseline=EMPTY_BASELINE, roster_rows=roster
         )
-
-    assert wire.presence is None
-    assert [
-        record.getMessage()
-        for record in caplog.records
-        if "presence prose mention ambiguous:" in record.getMessage()
-    ] == ["presence prose mention ambiguous: harbor master candidate_ids=[31, 32]"]
 
 
 def test_longer_canonical_name_suppresses_contained_shorter_name() -> None:

@@ -270,6 +270,10 @@ class ReferencedEntities(BaseModel):
         default_factory=list,
         description="Existing factions present or mentioned",
     )
+    departures: SkipJsonSchema[List[CharacterReference]] = Field(
+        default_factory=list,
+        description="Authored exits retained internally through staging for reconciliation",
+    )
     # Note: items and threats tables exist but are empty
     # events table doesn't exist
 

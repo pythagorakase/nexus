@@ -14,10 +14,10 @@ from nexus.api.commit_handler import (
     commit_incubator_to_database,
     insert_chunk_metadata,
 )
-import nexus.api.commit_handler as commit_handler
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from nexus.memory.manager import empty_pass2_baseline
+import nexus.api.commit_handler as commit_handler
 
 
 TEST_BASELINE = empty_pass2_baseline({})
@@ -115,6 +115,19 @@ class AsyncCommitConnection:
 
     async def fetch(self, sql, *args):
         normalized = " ".join(sql.split())
+        if "SELECT item.id, item.name, item.entity_id FROM" in normalized:
+            table = normalized.split(" FROM ")[1].split()[0]
+            return [
+                {"id": id, "name": name, "entity_id": id + 1000}
+                for name, id in getattr(self, table).items()
+                if (
+                    id == args[0]
+                    if "item.id =" in normalized
+                    else name.casefold() == str(args[0]).casefold()
+                )
+            ]
+        if "/* presence:roster */" in normalized:
+            return [{"chunk_id": chunk_id, "kind": None} for chunk_id in args[0]]
         if "FROM relationship_milestone_queue" in normalized:
             return []
         if "/* orrery:bleed_uptake_candidates */" in normalized:
@@ -177,7 +190,7 @@ class AsyncCommitConnection:
         elif "INSERT INTO chunk_character_references" in normalized:
             self.character_junctions.append(args)
         elif "INSERT INTO place_chunk_references" in normalized:
-            self.place_junctions.append(args)
+            self.place_junctions.append((args[1], args[0], *args[2:]))
         return "OK"
 
 

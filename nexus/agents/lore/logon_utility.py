@@ -17,13 +17,6 @@ from typing import Any, Dict, Literal, Mapping, Optional, Union, cast
 
 import psycopg2
 
-from nexus.util.clock_face import clock_face
-
-# Add scripts directory to path for API imports
-sys.path.append(str(Path(__file__).parent.parent.parent.parent))
-
-from scripts.api_openai import OpenAIProvider  # noqa: E402
-from scripts.api_anthropic import AnthropicProvider  # noqa: E402
 from nexus.agents.logon.apex_schema import (  # noqa: E402
     StoryTurnResponse,
     StorytellerResponseBootstrap,
@@ -91,6 +84,13 @@ from nexus.memory.manager import (  # noqa: E402
     resolve_storyteller_context_window,
 )
 from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
+from nexus.util.clock_face import clock_face
+
+# Add scripts directory to path for API imports
+sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+
+from scripts.api_openai import OpenAIProvider  # noqa: E402
+from scripts.api_anthropic import AnthropicProvider  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
 
@@ -207,49 +207,29 @@ def read_presence_baseline(
     conn = psycopg2.connect(**connection_kwargs(dbname))
     try:
         conn.set_session(readonly=True, autocommit=True)
+        from nexus.presence.roster import read_roster
+
+        roster = read_roster(conn, parent_chunk_id)
+        from nexus.agents.orrery.player_identity import canonical_player_character_id
+
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT c.id, c.name
-                FROM chunk_character_references AS ccr
-                JOIN characters AS c ON c.id = ccr.character_id
-                WHERE ccr.chunk_id = %s
-                  AND ccr.reference::text = 'present'
-                ORDER BY c.id
-                """,
-                (parent_chunk_id,),
-            )
-            present = [
-                CharacterRef(kind="character", id=row[0], name=row[1])
-                for row in cur.fetchall()
-            ]
-            cur.execute(
-                """
-                SELECT p.id, p.name
-                FROM place_chunk_references AS pcr
-                JOIN places AS p ON p.id = pcr.place_id
-                WHERE pcr.chunk_id = %s
-                  AND pcr.reference_type::text = 'setting'
-                ORDER BY p.id
-                """,
-                (parent_chunk_id,),
-            )
-            setting_rows = cur.fetchall()
+            player_id = canonical_player_character_id(cur)
+        return PresenceBaseline(
+            player_character_id=player_id,
+            present=[
+                CharacterRef(kind="character", id=entry.id, name=entry.name)
+                for entry in roster.present.values()
+            ],
+            setting=next(
+                (
+                    PlaceRef(kind="place", id=entry.id, name=entry.name)
+                    for entry in roster.setting.values()
+                ),
+                None,
+            ),
+        )
     finally:
         conn.close()
-
-    if len(setting_rows) > 1:
-        raise ValueError(f"Parent chunk {parent_chunk_id} has multiple setting places")
-    setting = (
-        PlaceRef(
-            kind="place",
-            id=setting_rows[0][0],
-            name=setting_rows[0][1],
-        )
-        if setting_rows
-        else None
-    )
-    return PresenceBaseline(present=present, setting=setting)
 
 
 def read_user_character_id(dbname: str) -> int:
@@ -936,6 +916,7 @@ class LogonUtility:
                     context_payload,
                     presence_baseline=presence_baseline,
                     include_ambient_scene_seeds=False,
+                    seat="gaia",
                 )
                 self._gaia_window_blocks = list(self._last_rendered_blocks)
                 response = self._generate_narrative_two_pass(
@@ -1025,6 +1006,7 @@ class LogonUtility:
                     context_payload,
                     presence_baseline=presence_baseline,
                     include_ambient_scene_seeds=False,
+                    seat="gaia",
                 )
                 self._gaia_window_blocks = list(self._last_rendered_blocks)
                 response = await self._generate_narrative_two_pass_async(
@@ -2181,6 +2163,7 @@ class LogonUtility:
         presence_baseline: Optional[PresenceBaseline] = None,
         include_ambient_scene_seeds: bool = True,
         rendered_blocks: Optional[list[tuple[str, str]]] = None,
+        seat: Literal["writer", "gaia"] = "writer",
     ) -> str:
         """Format context payload into a prompt for the Apex AI"""
         from nexus.telemetry.prompt_window import RenderedSections
@@ -2260,6 +2243,18 @@ class LogonUtility:
         )
         if bootstrap_sections:
             sections.extend(bootstrap_sections)
+
+        sections.kind = "scene roster"
+        # The writer authors sparse changes against this exact parent roster.
+        if seat == "writer" and presence_baseline is not None:
+            from nexus.presence.roster import render_roster, roster_from_baseline
+
+            sections.append(
+                render_roster(
+                    roster_from_baseline(presence_baseline),
+                    player_character_id=presence_baseline.player_character_id,
+                )
+            )
 
         sections.kind = "user input"
         # Add user input
