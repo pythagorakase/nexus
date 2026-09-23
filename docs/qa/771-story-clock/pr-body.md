@@ -1,10 +1,19 @@
-# Story Clock Proof — Issue 771
+## Goal
 
-Owner Decision 8, Option A (#857). Implementation: `55c85fe0`.
+Closes #771. Implements owner Decision 8, Option A (#857): one compact date and time at rest in the top bar, tied only to the active story's accepted frontier.
+
+## Changes
+
+- Extend the already-polled slot-state payload with validated `frontier_clock: {instant, face}` using the existing shared formatter.
+- Keep the clock independent of pending drafts, hide it without a known accepted instant, and refresh immediately after acceptance.
+- Render one unanimated time element with tabular numerals and a reduced-emphasis theme token; record the single-element doctrine reversal.
+- Add real disposable PostgreSQL route coverage and TopBar rendering/absence coverage.
+
+No formatter, intertitle, schema, or tracked nexus.toml changes. Historical following remains deferred to C029 (#768).
 
 ## Browser Evidence
 
-Chrome at `http://127.0.0.1:8015/nexus`, slot 4. The pending draft was present; Previous scene opened the latest accepted chunk (49 / S01E02_045). Both the top bar and its intertitle show `17 Oct 2189 · 22:37`. See [screenshot](frontier-clock.png) and [route payloads](clock-evidence.json). The ISO strings have different offsets but identify the same instant.
+Chrome at `http://127.0.0.1:8015/nexus`, slot 4. The pending draft was present; Previous scene opened the latest accepted chunk (49 / S01E02_045). Both the top bar and its intertitle show `17 Oct 2189 · 22:37`. See [screenshot](https://github.com/pythagorakase/nexus/blob/claude/771-story-clock-chrome/artifacts/771/frontier-clock.png) and [route payloads](https://github.com/pythagorakase/nexus/blob/claude/771-story-clock-chrome/artifacts/771/clock-evidence.json). The ISO strings have different offsets but identify the same instant.
 
 Gateway ran with `PGOPTIONS='-c default_transaction_read_only=on'`. Startup used locked slot 1 (verified locked), then the browser selected slot 4. No story writes or provider calls. Slot routing has no database override, so this used the authorized live read-only view.
 
@@ -102,5 +111,10 @@ stopped gateway (pid 51065)
 `lsof -nP -iTCP:8015 -sTCP:LISTEN` returned no listener.
 
 Historical-scene following is deferred to C029 (#768). No schema, formatter, intertitle, or tracked configuration changes. No open coordinator questions.
+
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_01MVWTBAHigBCpFgYfPNA2qw
 
 Codex — GPT-6 Astra
