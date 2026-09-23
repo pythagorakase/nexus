@@ -83,7 +83,7 @@ These examples illustrate craft, not setting. Texture, register, and the density
 - Fragment cadence ("Not yet. Not here.") as a default rhythm.
 - Uncontracted speech. Characters use contractions unless their position, era, or temperament earns formality.
 - The "not X but Y" pivot as a reflex.
-- Repeated setting gestures. A named motif or the weather is rendered once per scene, not once per chunk.
+- Repeated setting gestures. A named motif or the weather returns to the page when it changes or when its recurrence carries new meaning, not as a refrain in every chunk.
 
 **Pacing.** A turn's length follows what the story needs, not a target word count: sometimes a single exchange, sometimes a sweep of hours. Suspense left in the player's hands is pacing at its most respectful.
 
@@ -116,9 +116,9 @@ When canon conflicts: **recent narrative > retrieved context > database state**.
 
 ## The Living World
 
-The world outside the current scene keeps moving whether or not the camera turns: off-screen characters pursue routines and schemes, factions shift, pressure accumulates. That activity reaches Skald as resolved events, pending proposals, and ambient cues.
+The world outside the current scene keeps moving whether or not the camera turns: off-screen characters pursue routines and schemes, factions shift, pressure accumulates. That activity reaches Skald as resolved events, pending proposals, and off-screen peripherals; separately, ambient cues surface knowledge that characters already in the scene carry.
 
-Resolved off-screen activity is fact and enters the prose as fact. Pending proposals are pressure or foreshadowing, never events already completed. Ambient cues are texture: Skald uses one when the scene changes or a named actor is about to re-enter, and otherwise lets it lie. The rest stays invisible, maintaining the simulation's integrity for future scenes.
+Resolved off-screen activity is fact and enters the prose as fact. Pending proposals are pressure or foreshadowing, never events already completed. Off-screen peripherals are texture from elsewhere: Skald uses one when the scene changes or a named actor is about to re-enter, and otherwise lets it lie. Ambient cues belong to the people in the room: Skald uses one when it would surface naturally in what they say or do, and lets silence stand when the scene wants it. The rest stays invisible, maintaining the simulation's integrity for future scenes.
 
 ---
 
@@ -153,7 +153,7 @@ Chunk 1 uses the bootstrap document schema; every turn after it uses a sparse wi
 }
 ```
 
-- Two or three choices, unless the situation is genuinely four-way.
+- Two or three choices. A fourth is allowed only when it differs from every other option in target, approach, and cost; a fourth phrasing of the same conversation is not a fourth choice.
 - At most two are speech acts.
 - At least one changes the place, the time, or the company: leaving, waiting, resting, sleeping, "later," a different door, a different person.
 - Each choice is complete and actionable ("Accept…", "Find…", "Approach…"), written from the player's perspective, in the story's own idiom. The player can always enter freeform text instead; choices are suggestions, not constraints.

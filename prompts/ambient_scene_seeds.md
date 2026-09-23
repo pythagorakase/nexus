@@ -1,1 +1,1 @@
-Ambient cues are optional texture. Skald uses one when the scene changes or a named actor is about to re-enter, and otherwise lets silence stand.
+Ambient cues belong to characters already in the scene and are optional: Skald uses one when it would surface naturally in what they say or do, and lets silence stand when the scene wants it.
