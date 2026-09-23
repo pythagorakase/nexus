@@ -1,6 +1,7 @@
 """Tests for configuration schema validation."""
 
 import tomllib
+from pathlib import Path
 
 import pytest
 import tomlkit
@@ -30,6 +31,25 @@ def _nexus_toml_dict() -> dict:
         for entry in provider["models"]:
             entry.pop("uses", None)
     return raw
+
+
+def test_removed_typewriter_setting_is_rejected(tmp_path: Path) -> None:
+    """A stale reveal setting fails through the real TOML loading path."""
+    config = tmp_path / "nexus.toml"
+    config.write_text(
+        Path("nexus.toml")
+        .read_text()
+        .replace("[ui]", "[ui]\ntypewriter_ms_per_char = 35")
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        load_settings(config)
+
+    assert any(
+        error["loc"] == ("ui", "typewriter_ms_per_char")
+        and error["type"] == "extra_forbidden"
+        for error in exc.value.errors()
+    )
 
 
 @pytest.mark.parametrize(

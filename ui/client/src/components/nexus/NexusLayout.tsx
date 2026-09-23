@@ -31,10 +31,6 @@ import { BackstageDrawer } from "./BackstageDrawer";
 import "./nexus-layout.css";
 
 const TABS: NexusTab[] = ["narrative", "map", "characters", "settings"];
-// Fallback used only until GET /api/settings resolves. Must stay in sync
-// with `[ui] typewriter_ms_per_char` in nexus.toml (UISettings default).
-const DEFAULT_TYPEWRITER_MS = 35;
-
 function initialTab(): NexusTab {
   const requested = new URLSearchParams(window.location.search).get("tab");
   return TABS.includes(requested as NexusTab)
@@ -64,8 +60,6 @@ export function NexusLayout() {
   const { data: settings } = useQuery<SettingsPayload>({
     queryKey: ["/api/settings"],
   });
-  const typewriterMsPerChar =
-    settings?.ui?.typewriter_ms_per_char ?? DEFAULT_TYPEWRITER_MS;
   const backstagePollBusyMs =
     settings?.orrery?.dashboard?.backstage_poll_busy_ms ?? 2000;
   const backstagePollIdleMs =
@@ -138,7 +132,6 @@ export function NexusLayout() {
               <NarrativePane
                 slot={slot}
                 engine={engine}
-                typewriterMsPerChar={typewriterMsPerChar}
                 readingChunkId={readingChunkId}
                 onNavigate={setReadingChunkId}
               />

@@ -1,8 +1,8 @@
 /**
  * SettingsPane - the operator's settings console (NEXUS IRIS, U5).
  *
- * Eight sections: Theme, Typography, Test Mode, Model, API Keys, Context
- * Length, Typewriter, App Icon. Settings dials write back to PATCH /api/settings
+ * Seven sections: Theme, Typography, Test Mode, Model, API Keys, Context
+ * Length, App Icon. Settings dials write back to PATCH /api/settings
  * (FastAPI -> nexus.config.loader.save_settings -> nexus.toml) with
  * optimistic cache updates and server confirmation. API key plaintext stays
  * only in local draft state until its direct secret-store write completes.
@@ -52,7 +52,6 @@ const SECTION_INDEX = [
   { id: "model", label: "Model" },
   { id: "keys", label: "API Keys" },
   { id: "lore", label: "Context Length" },
-  { id: "reveal", label: "Typewriter" },
   { id: "pwa", label: "App Icon" },
   { id: "advanced", label: "Advanced" },
 ] as const;
@@ -655,82 +654,7 @@ function ContextLengthSection({
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 7. Typewriter
-// ──────────────────────────────────────────────────────────────────────────
-
-function TypewriterSection({
-  settings,
-  onCommit,
-}: {
-  settings: SettingsPayload;
-  onCommit: (value: number) => void;
-}) {
-  const saved = settings.ui?.typewriter_ms_per_char ?? 0;
-  const bounds = settings.settings_meta?.typewriter;
-  const [draft, setDraft] = useState<number | null>(null);
-  const value = draft ?? saved;
-  const dirty = draft !== null && draft !== saved;
-
-  // Same staleness rule as ContextLengthSection: server movement invalidates
-  // the draft.
-  useEffect(() => {
-    setDraft(null);
-  }, [saved]);
-
-  if (!bounds) return null;
-
-  return (
-    <SettingsCard
-      id="reveal"
-      label="TYPEWRITER"
-      footer={
-        <>
-          <span className={`caption ${dirty ? "warning" : "dim"}`}>
-            {dirty ? "● UNSAVED" : ""}
-          </span>
-          <button
-            className="btn-primary"
-            disabled={!dirty}
-            onClick={() => {
-              onCommit(value);
-              setDraft(null);
-            }}
-            data-testid="typewriter-commit"
-          >
-            <Save size={12} /> COMMIT
-          </button>
-        </>
-      }
-    >
-      <div className="lore-readout">
-        <div className="lore-value">
-          {value}
-          <span className="lore-unit">ms/char</span>
-        </div>
-      </div>
-      <div className="lore-slider-row">
-        <input
-          type="range"
-          min={bounds.min}
-          max={bounds.max}
-          step={1}
-          value={value}
-          onChange={(e) => setDraft(parseInt(e.target.value, 10))}
-          className="lore-slider"
-          data-testid="typewriter-slider"
-        />
-        <div className="lore-slider-axis">
-          <span>{bounds.min}</span>
-          <span>{Math.round((bounds.min + bounds.max) / 2)}</span>
-          <span>{bounds.max}</span>
-        </div>
-      </div>
-    </SettingsCard>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// 8. App Icon (Per-Theme, Locked)
+// 7. App Icon (Per-Theme, Locked)
 // ──────────────────────────────────────────────────────────────────────────
 
 function PwaSection() {
@@ -883,10 +807,6 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
         <ContextLengthSection
           settings={settings}
           onCommit={(value) => mutation.mutate({ apex_context_window: value })}
-        />
-        <TypewriterSection
-          settings={settings}
-          onCommit={(value) => mutation.mutate({ typewriter_ms_per_char: value })}
         />
         <PwaSection />
         {gateOpen && <AdvancedSection />}

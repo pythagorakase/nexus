@@ -1,41 +1,35 @@
 """Request-boundary validation for wizard chat turns."""
 
+from contextlib import closing
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nexus.api.slot_state import SlotState, WizardState
+from nexus.api.new_story_cache import init_cache
 from nexus.api.wizard_chat import router
+from tests.pg_fixtures import connect
 
 
 def _client_with_wizard_state(
-    monkeypatch: pytest.MonkeyPatch,
+    dbname: str,
     *,
-    phase: str,
-    has_concept: bool,
-    has_traits: bool,
-    has_wildcard: bool,
+    setting_genre: str | None,
+    character_name: str | None,
+    traits_confirmed: bool,
 ) -> TestClient:
-    """Mount the real endpoint with a deterministic persisted-state boundary."""
-    from nexus.api import slot_state
-
-    state = SlotState(
-        slot=4,
-        is_empty=False,
-        is_wizard_mode=True,
-        wizard_state=WizardState(
-            phase=phase,
-            thread_id="thread-test",
-            choices=[],
-            has_concept=has_concept,
-            has_traits=has_traits,
-            has_wildcard=has_wildcard,
-        ),
-        narrative_state=None,
-        model="TEST",
-    )
-    monkeypatch.setattr(slot_state, "get_slot_state", lambda _slot: state)
-
+    """Mount the endpoint with phase/trait state persisted in the real cache."""
+    init_cache(dbname, thread_id="thread-test", target_slot=4)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE assets.new_story_creator
+            SET setting_genre = %s, character_name = %s, traits_confirmed = %s
+            WHERE id = TRUE
+            """,
+            (setting_genre, character_name, traits_confirmed),
+        )
+        cur.execute("UPDATE assets.traits SET rationale = NULL WHERE id = 11")
     app = FastAPI()
     app.include_router(router)
     return TestClient(app)
@@ -73,16 +67,16 @@ def test_wizard_chat_allows_blank_accept_fate_action() -> None:
     assert request.accept_fate is True
 
 
+@pytest.mark.requires_postgres
 def test_repeated_trait_confirmation_reports_wildcard_state(
-    monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
 ) -> None:
     """A confirmation repeated after trait commit must never reach inference."""
     client = _client_with_wizard_state(
-        monkeypatch,
-        phase="character",
-        has_concept=True,
-        has_traits=True,
-        has_wildcard=False,
+        offline_gate_db,
+        setting_genre="fantasy",
+        character_name="Fixture Player",
+        traits_confirmed=True,
     )
 
     response = client.post(
@@ -95,16 +89,16 @@ def test_repeated_trait_confirmation_reports_wildcard_state(
     assert "non-empty message" in response.json()["detail"]
 
 
+@pytest.mark.requires_postgres
 def test_trait_choice_outside_character_reports_current_state(
-    monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
 ) -> None:
     """A trait action during another phase must fail before provider setup."""
     client = _client_with_wizard_state(
-        monkeypatch,
-        phase="setting",
-        has_concept=False,
-        has_traits=False,
-        has_wildcard=False,
+        offline_gate_db,
+        setting_genre=None,
+        character_name=None,
+        traits_confirmed=False,
     )
 
     response = client.post(

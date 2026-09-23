@@ -114,7 +114,6 @@ function renderPane(
         <NarrativePane
           slot={SLOT}
           engine={makeEngine(slotState)}
-          typewriterMsPerChar={0}
           readingChunkId={readingChunkId}
           onNavigate={vi.fn()}
         />
