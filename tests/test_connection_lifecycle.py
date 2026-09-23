@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -206,8 +207,11 @@ def lifecycle_runtime(
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         mock_port = sock.getsockname()[1]
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        gateway_port = sock.getsockname()[1]
     doc["runtime"]["state_dir"] = str(tmp_path / "runtime")
-    doc["runtime"]["services"]["gateway"]["port"] = 8014
+    doc["runtime"]["services"]["gateway"]["port"] = gateway_port
     doc["runtime"]["services"]["mock_openai"]["port"] = mock_port
     doc["runtime"]["services"]["mock_openai"]["enabled"] = "never"
     providers = doc["global"]["model"]["api_models"]
@@ -226,8 +230,8 @@ def lifecycle_runtime(
     for key in ("PGPASSWORD", "PGSERVICE", "PGSERVICEFILE"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8014")
-    monkeypatch.setenv("NEXUS_API_URL", "http://127.0.0.1:8014")
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(gateway_port))
+    monkeypatch.setenv("NEXUS_API_URL", f"http://127.0.0.1:{gateway_port}")
     monkeypatch.setenv("NEXUS_SLOT", "4")
     monkeypatch.setenv("PYTHONPATH", str(ROOT))
     for key, value in _cluster_params(other).items():
@@ -328,7 +332,7 @@ def test_connection_two_clusters_story_lifecycle(
         steps.append(result)
         (tmp_path / "steps.json").write_text(json.dumps(steps, indent=2))
         state = requests.get(
-            "http://127.0.0.1:8014/api/slot/4/state", timeout=30
+            f"{os.environ['NEXUS_API_URL']}/api/slot/4/state", timeout=30
         ).json()
         if not state["is_wizard_mode"] and state.get("storyteller_text"):
             break

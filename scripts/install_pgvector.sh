@@ -6,6 +6,9 @@ set -e
 
 # Keep connection resolution in the selected worktree even after changing cwd.
 NEXUS_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export NEXUS_RUNTIME_CONFIG="${NEXUS_RUNTIME_CONFIG:-$NEXUS_SCRIPT_ROOT/nexus.toml}"
+# Resolve an explicitly supplied relative config before the download-directory cd.
+NEXUS_RUNTIME_CONFIG="$(cd "$(dirname "$NEXUS_RUNTIME_CONFIG")" && pwd)/$(basename "$NEXUS_RUNTIME_CONFIG")"
 postgres_tool() {
     PYTHONPATH="$NEXUS_SCRIPT_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
         "${PYTHON:-python}" -m nexus.database "$@"

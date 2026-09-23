@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from nexus.config import load_settings_as_dict
+from nexus.database import resolved_database_url
 from nexus.agents.memnon.utils.cross_encoder import rerank_results
 from nexus.agents.memnon.utils.embedding_manager import EmbeddingManager
 from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary
@@ -47,10 +48,7 @@ class RunExecutor:
             self.settings_dict["Agent Settings"]["MEMNON"]
         )
 
-        configured_db_url = self.base_memnon_settings.get("database", {}).get("url")
-        self.db_url = db_url or configured_db_url
-        if not self.db_url:
-            raise ValueError("MEMNON database.url is not configured")
+        self.db_url = resolved_database_url(db_url)
 
         self.judgment_engine = judgment_engine
 
@@ -221,9 +219,7 @@ class RunExecutor:
         if self.judgment_engine is None:
             return
 
-        existing_judgments = self.store.fetch_judgments(
-            [query.id for query in queries]
-        )
+        existing_judgments = self.store.fetch_judgments([query.id for query in queries])
         queries_by_id = {query.id: query for query in queries}
 
         unjudged_pairs: List[Tuple[int, int]] = []

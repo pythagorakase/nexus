@@ -33,6 +33,8 @@ def connection_kwargs(
     from nexus.api.slot_utils import require_slot_dbname
     from nexus.config.settings_models import APIDatabaseSettings
 
+    if "PGHOSTADDR" in os.environ:
+        raise ValueError("PGHOSTADDR is unsupported; use host to select the server")
     settings = load_settings()
     if settings.api is None:
         raise RuntimeError("nexus.toml requires [api.database]")
@@ -75,15 +77,44 @@ def connection_kwargs(
     return params
 
 
+def _option_settings(options: str) -> list[tuple[str, str]]:
+    """Parse PostgreSQL -c/-- settings, honoring backslash-escaped whitespace."""
+    if re.search(r"(?<!\\)(?:\\\\)*\\$", options):
+        raise ValueError("PostgreSQL options end with an incomplete escape")
+    tokens = iter(re.findall(r"(?:\\.|[^\s\\])+", options))
+    settings = []
+    for token in tokens:
+        if token == "-c":
+            assignment = next(tokens, "")
+        elif token.startswith("-c"):
+            assignment = token[2:]
+        elif token.startswith("--"):
+            assignment = token[2:]
+        else:
+            raise ValueError("Unsupported PostgreSQL option; use -c name=value")
+        assignment = re.sub(r"\\(.)", r"\1", assignment)
+        name, separator, value = assignment.partition("=")
+        if name.lower() == "hostaddr":
+            raise ValueError("hostaddr is unsupported; use host to select the server")
+        if not separator or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", name):
+            raise ValueError("Unsupported PostgreSQL option; use -c name=value")
+        settings.append((name, value))
+    return settings
+
+
 def _session_options(options: str | None, timezone: str) -> str:
-    """Replace existing timezone options so repeated normalization is stable."""
-    remaining = re.sub(
-        r"(?:^|\s)(?:-c\s*timezone=|--timezone=)\S+",
-        "",
-        options or "",
-        flags=re.IGNORECASE,
-    ).strip()
-    return f"{remaining} -c TimeZone={timezone}".lstrip()
+    """Preserve explicit or ambient settings and install the timezone once."""
+    base = options if options is not None else os.environ.get("PGOPTIONS", "")
+    settings = [
+        (name, value)
+        for name, value in _option_settings(base)
+        if name.lower() != "timezone"
+    ]
+    settings.append(("TimeZone", timezone))
+    return " ".join(
+        "-c " + re.sub(r"([\s\\])", r"\\\1", f"{name}={value}")
+        for name, value in settings
+    )
 
 
 def database_url(dbname: str | None = None, **overrides: Any) -> str:
@@ -115,6 +146,8 @@ def url_connection_kwargs(db_url: str | URL | None) -> dict[str, Any]:
     url = make_url(db_url)
     if url.get_backend_name() != "postgresql":
         raise ValueError("A PostgreSQL database URL is required")
+    if any(key.lower() == "hostaddr" for key in url.query):
+        raise ValueError("hostaddr is unsupported; use host to select the server")
     params = connection_kwargs(
         url.query.get("dbname", url.database),
         host=url.query.get("host", url.host),
@@ -135,7 +168,7 @@ def asyncpg_kwargs(dbname: str | None = None, **overrides: Any) -> dict[str, Any
     params = connection_kwargs(dbname, **overrides)
     params["database"] = params.pop("dbname")
     params["timeout"] = params.pop("connect_timeout")
-    params["server_settings"] = {"TimeZone": params.pop("options").split("=", 1)[1]}
+    params["server_settings"] = dict(_option_settings(params.pop("options")))
     if not params["host"]:
         params.pop("host")
     return params

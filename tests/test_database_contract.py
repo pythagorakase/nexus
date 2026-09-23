@@ -9,6 +9,7 @@ from pathlib import Path
 import socket
 import shutil
 import subprocess
+import sys
 from typing import Iterator
 
 import asyncpg
@@ -35,7 +36,15 @@ from nexus.database import (
 @pytest.fixture
 def contract_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Use a real isolated TOML file and remove ambient connection overrides."""
-    for key in ("PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGCONNECT_TIMEOUT"):
+    for key in (
+        "PGHOST",
+        "PGHOSTADDR",
+        "PGPORT",
+        "PGUSER",
+        "PGPASSWORD",
+        "PGCONNECT_TIMEOUT",
+        "PGOPTIONS",
+    ):
         monkeypatch.delenv(key, raising=False)
     path = tmp_path / "nexus.toml"
     path.write_text(Path("nexus.toml").read_text())
@@ -132,6 +141,128 @@ def test_connection_guard_rejects_foreign_target_before_connect(contract_config)
         DatabaseManager(foreign)
     with pytest.raises(ValueError, match="target mismatch"):
         verify_database_url(database_url("save_04"), dbname="save_05")
+
+
+def test_connection_preserves_pgoptions_and_normalizes_once(
+    contract_config, monkeypatch
+):
+    monkeypatch.setenv(
+        "PGOPTIONS",
+        "-c default_transaction_read_only=on --statement_timeout=1234 --timezone=Europe/London",
+    )
+    expected = (
+        "-c default_transaction_read_only=on -c statement_timeout=1234 -c TimeZone=UTC"
+    )
+    assert connection_kwargs("save_04")["options"] == expected
+    assert subprocess_env()["PGOPTIONS"] == expected
+    url = database_url("save_04")
+    for _ in range(3):
+        url = resolved_database_url(url)
+        assert url_connection_kwargs(url)["options"] == expected
+        assert isinstance(url_connection_kwargs(url)["connect_timeout"], int)
+    assert connection_kwargs("save_04", options="")["options"] == "-c TimeZone=UTC"
+    assert (
+        connection_kwargs("save_04", options="-c statement_timeout=8")["options"]
+        == "-c statement_timeout=8 -c TimeZone=UTC"
+    )
+
+
+@pytest.mark.parametrize("source", ["query", "options", "environment", "pgoptions"])
+def test_connection_guard_rejects_hostaddr(contract_config, monkeypatch, source):
+    url = make_url(database_url("save_04"))
+    if source == "query":
+        url = url.update_query_dict({"hostaddr": "127.0.0.2"})
+    elif source == "options":
+        url = url.update_query_dict({"options": "-c hostaddr=127.0.0.2"})
+    elif source == "environment":
+        monkeypatch.setenv("PGHOSTADDR", "127.0.0.2")
+    else:
+        monkeypatch.setenv("PGOPTIONS", "--hostaddr=127.0.0.2")
+        url = url.set(query={})
+    with pytest.raises(ValueError, match="hostaddr.*host|PGHOSTADDR.*host"):
+        verify_database_url(url.render_as_string(hide_password=False))
+
+
+def test_connection_asyncpg_preserves_mixed_options(contract_config):
+    options = r"-c statement_timeout=1000 --lock_timeout=2000 -capplication_name=contract\ proof --timezone=Europe/London"
+    expected = {
+        "statement_timeout": "1000",
+        "lock_timeout": "2000",
+        "application_name": "contract proof",
+        "TimeZone": "UTC",
+    }
+    assert asyncpg_kwargs("save_04", options=options)["server_settings"] == expected
+    normalized = connection_kwargs("save_04", options=options)["options"]
+    assert asyncpg_kwargs("save_04", options=normalized)["server_settings"] == expected
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        "-c",
+        "-c missing_value",
+        "--bad",
+        "-d 2",
+        "stray=value",
+        "-c name=value" + chr(92),
+    ],
+)
+def test_connection_rejects_unrecognized_options(contract_config, options):
+    with pytest.raises(ValueError, match="PostgreSQL option"):
+        asyncpg_kwargs("save_04", options=options)
+
+
+@pytest.mark.parametrize("explicit_config", [False, True])
+def test_postgres_installer_helper_from_foreign_directory(
+    contract_config, tmp_path, explicit_config
+):
+    root = Path.cwd()
+    installer = root / "scripts/install_pgvector.sh"
+    # Source the actual helper prelude, without executing the installer body.
+    prelude = installer.read_text().split('echo "===== Installing')[0]
+    helper = tmp_path / "scripts/helper.sh"
+    helper.parent.mkdir()
+    helper.write_text(prelude)
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    env = os.environ.copy()
+    if explicit_config:
+        env["NEXUS_RUNTIME_CONFIG"] = os.path.relpath(contract_config, root)
+    else:
+        env.pop("NEXUS_RUNTIME_CONFIG", None)
+    env["PYTHON"] = sys.executable
+    script = """
+source "$1"
+cd "$2"
+postgres_tool "$PYTHON" -c 'from nexus.config import load_settings; print(load_settings().api.database.session_timezone)'
+"""
+    result = subprocess.run(
+        ["bash", "-c", script, "helper-proof", str(helper), str(foreign)],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "UTC"
+
+
+def test_ir_eval_default_database_contract(contract_config, monkeypatch):
+    from ir_eval.runner import build_parser, default_db_url
+    from ir_eval.engine.storage import EvaluationStore
+    from ir_eval.engine.run_executor import RunExecutor
+
+    monkeypatch.setenv("NEXUS_SLOT", "4")
+    monkeypatch.setenv("PGHOST", "configured.example")
+    assert default_db_url() == database_url("save_04")
+    assert default_db_url("qa640_ir_eval") == database_url("qa640_ir_eval")
+    explicit = database_url(
+        "qa640_ir_eval", host="explicit.example", port=55440, user="explicit_role"
+    )
+    args = build_parser().parse_args(["--db-url", explicit, "list-runs"])
+    store = EvaluationStore(args.db_url)
+    assert RunExecutor(store, db_url=args.db_url).db_url == explicit
+    assert RunExecutor(store).db_url == database_url("save_04")
 
 
 @pytest.fixture
@@ -271,9 +402,15 @@ def test_connection_two_clusters_pool_url_async_timezone_and_guard(
                 engine.dispose()
 
         async def check_async():
-            conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
+            conn = await asyncpg.connect(
+                **asyncpg_kwargs(
+                    dbname, options="-c statement_timeout=1000 --lock_timeout=2000"
+                )
+            )
             try:
                 assert await conn.fetchval("SHOW TimeZone") == "UTC"
+                assert await conn.fetchval("SHOW statement_timeout") == "1s"
+                assert await conn.fetchval("SHOW lock_timeout") == "2s"
                 assert (
                     await conn.fetchval("SELECT inet_server_port()") == private["port"]
                 )
@@ -281,6 +418,48 @@ def test_connection_two_clusters_pool_url_async_timezone_and_guard(
                 await conn.close()
 
         asyncio.run(check_async())
+        from ir_eval.engine.storage import EvaluationStore
+        from ir_eval.import_golden_queries import get_db_connection
+        from ir_eval.pg_db import IRDatabasePG
+
+        # Exercise real IR clients with explicit arguments overriding the environment.
+        registries = (
+            psycopg2.extensions.adapters,
+            psycopg2.extensions.string_types,
+            psycopg2.extensions.binary_types,
+        )
+        snapshots = [registry.copy() for registry in registries]
+        try:
+            legacy = IRDatabasePG(
+                dbname, **{k: private[k] for k in ("host", "port", "user")}
+            )
+            try:
+                with legacy.conn.cursor() as cur:
+                    cur.execute("SHOW TimeZone")
+                    assert cur.fetchone() == ("UTC",)
+            finally:
+                legacy.close()
+        finally:
+            # The legacy client registers global UUID typecasters and JSON/list
+            # adapters. Restore all registries before subsequent production paths.
+            for registry, snapshot in zip(registries, snapshots):
+                registry.clear()
+                registry.update(snapshot)
+        importer = get_db_connection(
+            dbname, **{k: private[k] for k in ("host", "port", "user")}
+        )
+        try:
+            with importer.cursor() as cur:
+                cur.execute("SELECT inet_server_port()")
+                assert cur.fetchone() == (private["port"],)
+        finally:
+            importer.close()
+        with (
+            EvaluationStore(database_url(dbname))._connect() as conn,
+            conn.cursor() as cur,
+        ):
+            cur.execute("SELECT inet_server_port(), current_setting('TimeZone')")
+            assert cur.fetchone() == (private["port"], "UTC")
         from nexus.agents.memnon.utils.db_access import setup_database_indexes
 
         with pytest.raises(ValueError, match="target mismatch"):
