@@ -119,7 +119,7 @@ export interface ChunkContext {
 
 /** GET /api/narrative/incubator (FastAPI incubator_view). */
 export interface IncubatorPayload {
-  chunk_id: number;
+  chunk_id: number | null;
   parent_chunk_id: number;
   parent_chunk_text?: string | null;
   user_text?: string | null;

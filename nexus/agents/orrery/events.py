@@ -726,14 +726,9 @@ def commit_orrery_tick_sync(
         effective_epistemics_settings = coerced.epistemics_settings
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
+    adjudication_map = validate_proposal_adjudications(coerced, adjudications)
     if has_resolutions:
-        assert coerced is not None
-        adjudication_map = coerce_adjudications(adjudications)
         need_tuning = coerce_need_tuning(sunhelm_settings)
-        _validate_proposal(coerced)
-        _validate_adjudications(coerced, adjudication_map)
-    else:
-        adjudication_map = {}
 
     with conn.cursor() as cur:
         expired_tag_count = _sweep_expired_entity_tags_sync(
@@ -1007,14 +1002,9 @@ async def commit_orrery_tick_async(
         effective_epistemics_settings = coerced.epistemics_settings
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
+    adjudication_map = validate_proposal_adjudications(coerced, adjudications)
     if has_resolutions:
-        assert coerced is not None
-        adjudication_map = coerce_adjudications(adjudications)
         need_tuning = coerce_need_tuning(sunhelm_settings)
-        _validate_proposal(coerced)
-        _validate_adjudications(coerced, adjudication_map)
-    else:
-        adjudication_map = {}
 
     expired_tag_count = await _sweep_expired_entity_tags_async(
         conn,
@@ -1258,6 +1248,20 @@ def _validate_proposal(proposal: OrreryTickProposal) -> None:
                 "Unsupported Orrery state_delta keys for "
                 f"{draft.template_id}: {', '.join(sorted(unsupported))}"
             )
+
+
+def validate_proposal_adjudications(
+    proposal: Optional[OrreryTickProposal], adjudications: Any
+) -> dict[str, OrreryAdjudicationDecision]:
+    """Validate deterministic proposal decisions before staging or commit writes."""
+    decisions = coerce_adjudications(adjudications)
+    if proposal is None:
+        if decisions:
+            raise ValueError("Orrery adjudications require a proposal")
+    else:
+        _validate_proposal(proposal)
+        _validate_adjudications(proposal, decisions)
+    return decisions
 
 
 def _validate_adjudications(

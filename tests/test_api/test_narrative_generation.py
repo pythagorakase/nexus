@@ -425,7 +425,7 @@ async def test_regenerate_route_threads_incubator_parent_into_generation_task(
         def __exit__(self, *_args: Any) -> None:
             return None
 
-        def execute(self, _sql: str) -> None:
+        def execute(self, _sql: str, _params: Any = None) -> None:
             return None
 
         def fetchone(self) -> dict[str, Any]:

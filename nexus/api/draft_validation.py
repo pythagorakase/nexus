@@ -11,6 +11,7 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
 )
+from nexus.agents.orrery.events import coerce_proposal, validate_proposal_adjudications
 from nexus.agents.orrery.tag_writer import _row_value, validate_tag_bestowal
 from nexus.api.commit_handler_sync import (
     _require_state_update_id_sync,
@@ -20,7 +21,7 @@ from nexus.api.commit_handler_sync import (
     resolve_state_update_ids_sync,
 )
 from nexus.api.db_converters import chronology_to_db_values
-from nexus.api.lore_adapter import validate_incubator_data
+from nexus.api.lore_adapter import split_staged_orrery_payload, validate_incubator_data
 from nexus.config import load_settings
 
 
@@ -32,6 +33,10 @@ def validate_commit_draft_sync(conn: Any, data: Mapping[str, Any]) -> None:
     creation. Explicit numeric identities always refer to existing entities.
     """
     validate_incubator_data(dict(data))
+    proposal, _ = split_staged_orrery_payload(data.get("orrery_proposal"))
+    validate_proposal_adjudications(
+        coerce_proposal(proposal), data.get("orrery_adjudications")
+    )
     parent = data["parent_chunk_id"]
     season, episode = 1, 1
     if parent:

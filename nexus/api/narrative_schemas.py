@@ -26,6 +26,9 @@ class ContinueNarrativeRequest(BaseModel):
         default=None,
         description="Parent chunk ID to continue from. None or 0 for bootstrap (first chunk).",
     )
+    session_id: Optional[str] = Field(
+        default=None, description="Pending draft to accept"
+    )
     user_text: str = Field(default="", description="User's completion text")
     choice: Optional[int] = Field(
         default=None, description="Structured choice number (1-indexed)"
@@ -83,6 +86,9 @@ class RegenerateNarrativeRequest(BaseModel):
     """Request to regenerate the storyteller turn currently in the incubator."""
 
     slot: StrictInt = Field(ge=1, le=5, description="Explicit target save slot")
+    session_id: Optional[str] = Field(
+        default=None, description="Pending draft to regenerate"
+    )
     note: Optional[str] = Field(
         default=None,
         max_length=500,
@@ -128,16 +134,27 @@ class NarrativeStatus(BaseModel):
 class SelectChoiceRequest(BaseModel):
     """Request to record user's choice selection for a chunk"""
 
-    chunk_id: int = Field(description="The narrative chunk ID")
+    chunk_id: Optional[int] = Field(default=None, description="Historical chunk ID")
+    session_id: Optional[str] = Field(
+        default=None, description="Pending draft session ID"
+    )
     selection: ChoiceSelection = Field(description="The user's choice selection")
     slot: StrictInt = Field(ge=1, le=5, description="Explicit target save slot")
+
+    @model_validator(mode="after")
+    def validate_target(self) -> "SelectChoiceRequest":
+        """Require exactly one historical chunk or pending attempt identity."""
+        if (self.chunk_id is None) == (self.session_id is None):
+            raise ValueError("Provide exactly one of chunk_id or session_id")
+        return self
 
 
 class SelectChoiceResponse(BaseModel):
     """Response after recording choice selection"""
 
     status: str = Field(description="Status of the operation")
-    chunk_id: int = Field(description="The updated chunk ID")
+    chunk_id: Optional[int] = Field(description="Accepted chunk ID; null while pending")
+    session_id: Optional[str] = None
     raw_text: str = Field(description="The finalized raw_text for embeddings")
 
 

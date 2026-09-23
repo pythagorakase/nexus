@@ -463,3 +463,221 @@ async def test_staging_resolves_same_turn_declarations_only_on_acceptance(
                 (child,),
             )
             assert cur.fetchone() == ("watching the door", "present")
+
+
+def test_recovery_respects_live_lease_without_incubator(acceptance_slot) -> None:
+    """A generating owner preserves its input until the lease actually expires."""
+    dbname, parent, _ = acceptance_slot
+    with closing(connect(dbname)) as conn:
+        own_draft(conn, parent)
+        before = parent_choice(conn, parent)
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM incubator")
+            assert cur.fetchone() == (0,)
+        assert recover_orphaned_choice(conn) is None
+        assert parent_choice(conn, parent) == before
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE narrative_generation_lease "
+                "SET expires_at = clock_timestamp() - interval '1 second'"
+            )
+        conn.commit()
+        assert recover_orphaned_choice(conn) == parent
+        choice, raw, storyteller, menu = parent_choice(conn, parent)
+        assert choice is None and raw == storyteller
+        assert menu["selected"] is None
+        assert recover_orphaned_choice(conn) is None
+
+
+@pytest.mark.parametrize("violation", ["embedded", "null_menu"])
+def test_recovery_refuses_ironman_and_lifecycle_violations(
+    acceptance_slot, violation: str
+) -> None:
+    """Recovery raises and preserves every source field on an invalid parent."""
+    dbname, parent, _ = acceptance_slot
+    with closing(connect(dbname)) as conn:
+        with conn.cursor() as cur:
+            if violation == "embedded":
+                cur.execute(
+                    "UPDATE narrative_chunks SET embedding_generated_at = NOW() WHERE id = %s",
+                    (parent,),
+                )
+                message = "already embedded.*ironman"
+            else:
+                cur.execute(
+                    "UPDATE narrative_chunks SET choice_object = NULL WHERE id = %s",
+                    (parent,),
+                )
+                message = "NULL choice_object.*lifecycle violation"
+        conn.commit()
+        before = parent_choice(conn, parent)
+        with pytest.raises(ValueError, match=message):
+            recover_orphaned_choice(conn)
+        assert parent_choice(conn, parent) == before
+
+
+@pytest.mark.parametrize("managed", [True, False])
+def test_up_refuses_running_gateway_before_recovery(
+    acceptance_slot, tmp_path, monkeypatch: pytest.MonkeyPatch, managed: bool
+) -> None:
+    """Real PID/port refusals cannot clear an orphan before refusing startup."""
+    import os
+    from pathlib import Path
+    import socket
+
+    import tomlkit
+
+    from nexus.runtime import RuntimeError_, Supervisor
+
+    dbname, parent, _ = acceptance_slot
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8014")
+    document = tomlkit.parse(Path("nexus.toml").read_text())
+    document["runtime"]["state_dir"] = str(tmp_path / "state")
+    config = tmp_path / "runtime.toml"
+    config.write_text(tomlkit.dumps(document))
+    supervisor = Supervisor.from_config(config)
+    supervisor.state_dir.mkdir(parents=True)
+    with closing(connect(dbname)) as conn, socket.socket() as listener:
+        before = parent_choice(conn, parent)
+        if managed:
+            supervisor._write_pidfile("gateway", {"pid": os.getpid()})
+            message = "already running"
+        else:
+            listener.bind(("127.0.0.1", 8014))
+            listener.listen()
+            message = "already in use"
+        with pytest.raises(RuntimeError_, match=message):
+            supervisor.up(slot=5, echo=False)
+        assert parent_choice(conn, parent) == before
+
+
+@pytest.mark.asyncio
+async def test_incubator_select_by_session_and_approve_via_http(
+    acceptance_slot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A NULL-id draft is selectable by attempt and gets its id only on approval."""
+    import threading
+
+    dbname, parent, resolution = acceptance_slot
+    monkeypatch.setenv("NEXUS_SLOT", "5")
+    with closing(connect(dbname)) as conn:
+        session = own_draft(conn, parent)
+        data = draft(parent, resolution, session)
+        data["choice_object"] = {"presented": ["Wait.", "Go."], "selected": None}
+        await write_to_incubator(conn, data)
+        finish_generation(conn, session_id=session, status="complete")
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_value, is_called FROM narrative_chunks_id_seq")
+            sequence = cur.fetchone()
+        with TestClient(narrative.app) as client:
+            pending = client.get(
+                "/api/narrative/incubator", params={"slot": 5, "session_id": session}
+            )
+            assert pending.status_code == 200, pending.text
+            assert pending.json()["chunk_id"] is None
+            selection = {"label": 2, "text": "Go.", "edited": False}
+            selected = client.post(
+                "/api/narrative/select-choice",
+                json={"slot": 5, "session_id": session, "selection": selection},
+            )
+            assert selected.status_code == 200, selected.text
+            assert selected.json()["chunk_id"] is None
+            assert selected.json()["session_id"] == session
+            assert selected.json()["status"] == "pending"
+            assert selected.json()["raw_text"].endswith("Go.")
+            stale = str(uuid4())
+            for path, body in (
+                ("select-choice", {"selection": selection}),
+                ("approve", {"commit": True}),
+                ("regenerate", {}),
+                ("continue", {"choice": 1}),
+            ):
+                refused = client.post(
+                    f"/api/narrative/{path}",
+                    json={"slot": 5, "session_id": stale, **body},
+                )
+                assert refused.status_code in (404, 409), refused.text
+            refused = client.delete(
+                "/api/narrative/incubator", params={"slot": 5, "session_id": stale}
+            )
+            assert refused.status_code == 404, refused.text
+            with conn.cursor() as cur:
+                cur.execute("SELECT last_value, is_called FROM narrative_chunks_id_seq")
+                assert cur.fetchone() == sequence
+                cur.execute("SELECT chunk_id, choice_text FROM incubator")
+                assert cur.fetchone() == (None, "Go.")
+            conn.commit()
+            approved = client.post(
+                "/api/narrative/approve", json={"slot": 5, "session_id": session}
+            )
+            assert approved.status_code == 200, approved.text
+            accepted = approved.json()["chunk_id"]
+            assert isinstance(accepted, int) and accepted > parent
+            status = client.get(f"/api/narrative/status/{session}?slot=5")
+            assert status.status_code == 200, status.text
+            assert status.json()["chunk_id"] == accepted
+            assert status.json()["status"] == "complete"
+        # Empty real outbox drains finish before the fixture releases its routing.
+        for prefix in ("orrery-post-commit-", "retrograde-maturation-"):
+            for thread in threading.enumerate():
+                if thread.name.startswith(prefix):
+                    thread.join(timeout=10)
+                    assert not thread.is_alive()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT choice_text FROM narrative_chunks WHERE id = %s", (accepted,)
+            )
+            assert cur.fetchone() == ("Go.",)
+            cur.execute("SELECT count(*) FROM incubator")
+            assert cur.fetchone() == (0,)
+
+
+@pytest.mark.asyncio
+async def test_staging_rejects_duplicate_defer_without_allocating_id(
+    acceptance_slot,
+) -> None:
+    """Individually valid decisions still must form a valid adjudication set."""
+    from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
+
+    dbname, parent, resolution = acceptance_slot
+    with closing(connect(dbname)) as conn:
+        session = own_draft(conn, parent)
+        data = draft(parent, resolution, session)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT actor_entity_id FROM orrery_resolutions WHERE id = %s",
+                (resolution,),
+            )
+            actor = cur.fetchone()[0]
+        proposal = OrreryResolutionDraft(
+            template_id="sleep",
+            priority=25,
+            binding_hash="qa640_duplicate_defer",
+            bindings={"actor": actor},
+            branch_label="deferred",
+            narrative_stub="{actor} rests.",
+            magnitude=0.2,
+        )
+        data["orrery_proposal"] = OrreryTickProposal(
+            anchor_chunk_id=parent, actor_count=1, resolutions=(proposal,)
+        ).to_dict()
+        decision = {"proposal_id": proposal.proposal_id, "action": "defer"}
+        data["orrery_adjudications"] = [decision, dict(decision)]
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_value, is_called FROM narrative_chunks_id_seq")
+            sequence = cur.fetchone()
+        with pytest.raises(ValueError, match="Duplicate Orrery adjudication"):
+            await write_to_incubator(conn, data)
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM incubator")
+            assert cur.fetchone() == (0,)
+            cur.execute("SELECT last_value, is_called FROM narrative_chunks_id_seq")
+            assert cur.fetchone() == sequence
+        # A single defer is valid under that same validator.
+        data["orrery_adjudications"] = [decision]
+        await write_to_incubator(conn, data)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT chunk_id FROM incubator WHERE session_id = %s", (session,)
+            )
+            assert cur.fetchone() == (None,)

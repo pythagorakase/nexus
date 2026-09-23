@@ -242,7 +242,16 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
       startClock();
 
       try {
-        const result = await continueNarrative({ slot, ...params });
+        if (slotState?.has_pending && !slotState.session_id) {
+          throw new Error("Pending turn is missing its session ID");
+        }
+        const result = await continueNarrative({
+          slot,
+          ...params,
+          sessionId: slotState?.has_pending
+            ? slotState.session_id ?? undefined
+            : undefined,
+        });
         sessionRef.current = result.session_id;
       } catch (error) {
         stopClock();
@@ -260,7 +269,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         });
       }
     },
-    [slot, startClock, stopClock, invalidateNarrativeQueries],
+    [slot, slotState, startClock, stopClock, invalidateNarrativeQueries],
   );
 
   let skaldStatus: SkaldStatus = "READY";
