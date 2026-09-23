@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import closing
 import json
 import os
 from typing import Any, Iterator
@@ -11,7 +13,8 @@ import psycopg2
 import pytest
 
 import nexus.config as config_module
-from nexus.api import commit_handler, commit_handler_sync
+from nexus.api import commit_handler, commit_handler_sync, narrative_lease
+from nexus.api.narrative_generation import write_to_incubator
 from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
@@ -45,10 +48,10 @@ def qa654_db() -> Iterator[str]:
         yield dbname
 
 
-def _seed_commit(dbname: str, session_id: str) -> int:
+async def _seed_commit(dbname: str, session_id: str) -> int:
     """Seed one parent and proposal-free incubator turn; return the parent id."""
 
-    with _connect(dbname) as conn:
+    with closing(_connect(dbname)) as conn:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE incubator, narrative_chunks RESTART IDENTITY CASCADE")
             cur.execute(
@@ -67,22 +70,39 @@ def _seed_commit(dbname: str, session_id: str) -> int:
                 """,
                 (parent_chunk_id,),
             )
-            cur.execute(
-                """
-                INSERT INTO incubator (
-                    id, chunk_id, parent_chunk_id, user_text, storyteller_text,
-                    generation_model, metadata_updates, entity_updates,
-                    reference_updates, orrery_proposal, orrery_adjudications,
-                    new_entities, lore_pass_baseline, session_id,
-                    llm_response_id, status
-                ) VALUES (
-                    TRUE, 2, %s, 'continue', 'Accepted scene.', 'TEST',
-                    '{}'::jsonb, NULL, '{}'::jsonb, NULL, '[]'::jsonb,
-                    '[]'::jsonb, %s::jsonb, %s, 'qa654-response', 'provisional'
-                )
-                """,
-                (parent_chunk_id, json.dumps(TEST_BASELINE_PAYLOAD), session_id),
+        conn.commit()
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=session_id,
+                operation="continue",
+                stale_timeout_seconds=60,
             )
+            is None
+        )
+        narrative_lease.bind_generation_parent(
+            conn, session_id=session_id, parent_chunk_id=parent_chunk_id
+        )
+        await write_to_incubator(
+            conn,
+            {
+                "chunk_id": None,
+                "parent_chunk_id": parent_chunk_id,
+                "user_text": "continue",
+                "storyteller_text": "Accepted scene.",
+                "generation_model": "TEST",
+                "metadata_updates": {},
+                "entity_updates": {},
+                "reference_updates": {},
+                "lore_pass_baseline": TEST_BASELINE_PAYLOAD,
+                "session_id": session_id,
+                "llm_response_id": "qa654-response",
+                "status": "provisional",
+            },
+        )
+        narrative_lease.finish_generation(
+            conn, session_id=session_id, status="complete"
+        )
     return parent_chunk_id
 
 
@@ -102,7 +122,7 @@ def test_sync_commit_loads_application_config_once(
     """The genuine sync commit reuses one Orrery settings mapping."""
 
     session_id = "00000000-0000-0000-0000-000000000654"
-    parent_chunk_id = _seed_commit(qa654_db, session_id)
+    parent_chunk_id = asyncio.run(_seed_commit(qa654_db, session_id))
     _disable_presence_audit(monkeypatch)
 
     original_loader = config_module.load_settings_as_dict
@@ -151,7 +171,7 @@ def test_sync_commit_loads_application_config_once(
             "slot": None,
             "world_layer": "primary",
             "adjudications": [],
-            "storyteller_state_updates": None,
+            "storyteller_state_updates": {},
             "prompt_settings": orrery.get("prompt"),
             "ecology_settings": orrery.get("ecology"),
             "project_settings": orrery.get("projects"),
@@ -173,7 +193,7 @@ async def test_async_commit_loads_application_config_once(
     """The genuine async commit reuses one Orrery settings mapping."""
 
     session_id = "00000000-0000-0000-0000-000000006540"
-    parent_chunk_id = _seed_commit(qa654_db, session_id)
+    parent_chunk_id = await _seed_commit(qa654_db, session_id)
     _disable_presence_audit(monkeypatch)
 
     original_loader = config_module.load_settings_as_dict
@@ -234,7 +254,7 @@ async def test_async_commit_loads_application_config_once(
             "slot": None,
             "world_layer": "primary",
             "adjudications": [],
-            "storyteller_state_updates": None,
+            "storyteller_state_updates": {},
             "prompt_settings": orrery.get("prompt"),
             "ecology_settings": orrery.get("ecology"),
             "project_settings": orrery.get("projects"),
