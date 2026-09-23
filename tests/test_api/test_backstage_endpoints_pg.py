@@ -518,7 +518,8 @@ def test_payload_assembles_every_committed_stream(
         and row["operation"] == "set"
         and row["field"] == "valence"
     ]
-    assert sorted(row["held"] for row in relationship_writes) == [False, True]
+    # #888 removed passive co-presence drift; only the authored valence changes.
+    assert [row["held"] for row in relationship_writes] == [False]
     changed_relationship_fields = {
         row["field"]
         for row in writes

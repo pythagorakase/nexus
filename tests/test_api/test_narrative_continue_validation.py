@@ -20,6 +20,7 @@ from psycopg2.extras import Json, RealDictCursor
 from nexus.agents.logon.apex_schema import StorytellerResponseMinimal
 from nexus.api import (
     chunk_workflow,
+    commit_handler_sync,
     narrative,
     narrative_generation,
     narrative_lease,
@@ -500,9 +501,11 @@ class ImmediateLore:
 
 
 @pytest.mark.requires_postgres
+@pytest.mark.parametrize("accept_draft", [False, True])
 def test_concurrent_continues_have_one_owner_and_truthful_result(
     monkeypatch: pytest.MonkeyPatch,
     disposable_narrative_db: str,
+    accept_draft: bool,
 ) -> None:
     """Concurrent calls serialize and notification failure cannot corrupt success."""
     dbname = disposable_narrative_db
@@ -603,7 +606,7 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
             assert incubator == {
                 "session_id": owner_session_id,
                 "parent_chunk_id": parent_chunk_id,
-                "chunk_id": parent_chunk_id + 1,
+                "chunk_id": None,
             }
             cur.execute("SELECT COUNT(*) AS count FROM narrative_generation_lease")
             assert cur.fetchone()["count"] == 0
@@ -620,7 +623,7 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
                     "session_id": owner_session_id,
                     "status": "complete",
                     "parent_chunk_id": parent_chunk_id,
-                    "chunk_id": parent_chunk_id + 1,
+                    "chunk_id": None,
                 }
             ]
             cur.execute(
@@ -650,6 +653,27 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
             f"/api/narrative/status/{owner_session_id}",
             params={"slot": 3},
         )
+        assert status.status_code == 200
+        assert status.json()["session_id"] == owner_session_id
+        assert status.json()["status"] == "complete"
+        assert status.json()["chunk_id"] is None
+
+        if accept_draft:
+            with _clone_connection(dbname) as conn:
+                accepted_id = commit_handler_sync.commit_incubator_to_database_sync(
+                    conn, owner_session_id
+                )
+            accepted_status = client.get(
+                f"/api/narrative/status/{owner_session_id}",
+                params={"slot": 3},
+            )
+            assert accepted_id > parent_chunk_id
+            assert accepted_status.status_code == 200
+            assert accepted_status.json()["session_id"] == owner_session_id
+            assert accepted_status.json()["status"] == "complete"
+            assert accepted_status.json()["chunk_id"] == accepted_id
+            return
+
         cleared = client.delete(
             "/api/narrative/incubator",
             params={"slot": 3},
@@ -658,9 +682,6 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
             f"/api/narrative/status/{owner_session_id}",
             params={"slot": 3},
         )
-    assert status.status_code == 200
-    assert status.json()["status"] == "complete"
-    assert status.json()["chunk_id"] == parent_chunk_id + 1
     assert cleared.status_code == 200
     assert unloaded_status.status_code == 200
     assert unloaded_status.json()["status"] == "error"

@@ -17,10 +17,10 @@ from typing import Any
 
 import pytest
 from fastapi import BackgroundTasks
-from psycopg2.extras import Json
 
 from nexus.agents.orrery import retrograde_maturation
-from nexus.api import commit_handler_sync, narrative
+from nexus.api import commit_handler_sync, narrative, narrative_lease
+from nexus.api.narrative_generation import write_to_incubator
 from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import connect, seed_protagonist
 
@@ -319,23 +319,42 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
     dbname = offline_gate_db
     seed_protagonist(dbname)
     pending_session = str(uuid.uuid4())
-    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO incubator (
-                id, chunk_id, parent_chunk_id, user_text, storyteller_text,
-                generation_model, choice_object, metadata_updates,
-                reference_updates, lore_pass_baseline, session_id, status
-            ) VALUES (
-                TRUE, 1, 0, 'Begin.', 'The stair awaits.', 'TEST',
-                %s, '{}'::jsonb, '{}'::jsonb, %s, %s, 'provisional'
+    with closing(connect(dbname)) as conn:
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=pending_session,
+                operation="continue",
+                stale_timeout_seconds=60,
             )
-            """,
-            (
-                Json({"presented": ["Take the left stair."], "selected": None}),
-                Json(empty_pass2_baseline({}).model_dump(mode="json")),
-                pending_session,
-            ),
+            is None
+        )
+        narrative_lease.bind_generation_parent(
+            conn, session_id=pending_session, parent_chunk_id=0
+        )
+        await write_to_incubator(
+            conn,
+            {
+                "chunk_id": None,
+                "parent_chunk_id": 0,
+                "user_text": "Begin.",
+                "storyteller_text": "The stair awaits.",
+                "generation_model": "TEST",
+                "choice_object": {
+                    "presented": ["Take the left stair."],
+                    "selected": None,
+                },
+                "metadata_updates": {},
+                "entity_updates": {},
+                "reference_updates": {},
+                "lore_pass_baseline": empty_pass2_baseline({}).model_dump(mode="json"),
+                "session_id": pending_session,
+                "llm_response_id": None,
+                "status": "provisional",
+            },
+        )
+        narrative_lease.finish_generation(
+            conn, session_id=pending_session, status="complete"
         )
 
     commit_started = threading.Event()

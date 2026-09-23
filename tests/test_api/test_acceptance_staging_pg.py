@@ -530,22 +530,26 @@ def test_up_refuses_running_gateway_before_recovery(
     from nexus.runtime import RuntimeError_, Supervisor
 
     dbname, parent, _ = acceptance_slot
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8014")
     document = tomlkit.parse(Path("nexus.toml").read_text())
     document["runtime"]["state_dir"] = str(tmp_path / "state")
+    # Isolate the refusal from other managed services and machine-local listeners.
+    for name, service in document["runtime"]["services"].items():
+        service["enabled"] = "always" if name == "gateway" else "never"
     config = tmp_path / "runtime.toml"
     config.write_text(tomlkit.dumps(document))
-    supervisor = Supervisor.from_config(config)
-    supervisor.state_dir.mkdir(parents=True)
     with closing(connect(dbname)) as conn, socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(port))
+        supervisor = Supervisor.from_config(config)
+        supervisor.state_dir.mkdir(parents=True)
         before = parent_choice(conn, parent)
         if managed:
             supervisor._write_pidfile("gateway", {"pid": os.getpid()})
             message = "already running"
         else:
-            listener.bind(("127.0.0.1", 8014))
-            listener.listen()
-            message = "already in use"
+            message = f"Port {port} is already in use"
         with pytest.raises(RuntimeError_, match=message):
             supervisor.up(slot=5, echo=False)
         assert parent_choice(conn, parent) == before
