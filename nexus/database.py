@@ -7,6 +7,7 @@ import os
 import re
 import socket
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy.engine import URL, make_url
 
@@ -117,8 +118,24 @@ def _session_options(options: str | None, timezone: str) -> str:
     )
 
 
+def _render_libpq_url(url: URL) -> str:
+    """Preserve SQLAlchemy component escaping with libpq-safe query encoding."""
+    base = url.set(query={}).render_as_string(hide_password=False)
+    query = "&".join(
+        f"{quote(key, safe='')}={quote(value, safe='')}"
+        for key, values in sorted(url.normalized_query.items())
+        for value in values
+    )
+    return f"{base}?{query}" if query else base
+
+
 def database_url(dbname: str | None = None, **overrides: Any) -> str:
-    """Build an escaped SQLAlchemy/libpq URL including the session policy."""
+    """Build a URL consumed raw by libpq, psycopg2, and SQLAlchemy.
+
+    The URL also round-trips through url_connection_kwargs(). Asyncpg consumers
+    must use asyncpg_kwargs(): its DSN parser cannot express the empty-host
+    default with a single port.
+    """
     params = connection_kwargs(dbname, **overrides)
     host = params["host"]
     query = {
@@ -128,7 +145,7 @@ def database_url(dbname: str | None = None, **overrides: Any) -> str:
     if host.startswith("/"):
         query["host"] = host
         host = None
-    return URL.create(
+    url = URL.create(
         "postgresql",
         username=params["user"],
         password=params.get("password"),
@@ -136,7 +153,8 @@ def database_url(dbname: str | None = None, **overrides: Any) -> str:
         port=params["port"] if host else None,
         database=params["dbname"],
         query={**query, **({"port": str(params["port"])} if not host else {})},
-    ).render_as_string(hide_password=False)
+    )
+    return _render_libpq_url(url)
 
 
 def url_connection_kwargs(db_url: str | URL | None) -> dict[str, Any]:
@@ -230,7 +248,7 @@ def resolved_database_url(db_url: str | URL | None = None) -> str:
     query = {**make_url(db_url).query, **normalized.query}
     query["connect_timeout"] = str(params["connect_timeout"])
     query["options"] = params["options"]
-    return normalized.set(query=query).render_as_string(hide_password=False)
+    return _render_libpq_url(normalized.set(query=query))
 
 
 def main() -> None:
