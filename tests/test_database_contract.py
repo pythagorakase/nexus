@@ -59,6 +59,8 @@ def test_connection_environment_and_url_escaping(contract_config, monkeypatch):
     monkeypatch.setenv("PGPASSWORD", "p@ss:/?#% word")
     params = db_pool._get_connection_params("save_04")
     url = slot_utils.get_slot_db_url(slot=4)
+    assert "+" not in url.partition("?")[2]
+    assert "options=-c%20TimeZone%3DUTC" in url
     assert url_connection_kwargs(url) == params
     parsed = make_url(url)
     assert parsed.username == "role@:/% space"
@@ -119,7 +121,9 @@ def test_connection_libpq_defaults_and_socket_url(contract_config):
     params = connection_kwargs("save_04")
     assert params["user"] == getpass.getuser()
     assert params["host"] == ""
+    assert make_url(database_url("save_04")).host is None
     url = database_url("save_04", host="/tmp/private postgres", port=55441)
+    assert "+" not in url.partition("?")[2]
     assert url_connection_kwargs(url)["host"] == "/tmp/private postgres"
     assert url_connection_kwargs(url)["port"] == 55441
 
@@ -342,6 +346,58 @@ def two_clusters(tmp_path: Path) -> Iterator[list[dict]]:
                 text=True,
             )
             shutil.rmtree(cluster["data"].parent)
+
+
+@pytest.mark.requires_postgres
+def test_connection_raw_url_and_asyncpg_session_policy(two_clusters, contract_config):
+    """Connect unchanged URLs over TCP, sockets, and the empty-host default."""
+    private = two_clusters[0]
+    dbname = "qa640_raw_url_contract"
+    target = {key: private[key] for key in ("host", "port", "user")}
+    admin = psycopg2.connect(dbname="postgres", **target)
+    try:
+        admin.autocommit = True
+        with admin.cursor() as cur:
+            cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
+    finally:
+        admin.close()
+
+    for host in (private["host"], "/tmp", ""):
+        overrides = {**target, "host": host}
+        url = database_url(dbname, **overrides)
+        assert "+" not in url.partition("?")[2]
+        assert "options=-c%20TimeZone%3DUTC" in url
+        assert url_connection_kwargs(url) == connection_kwargs(dbname, **overrides)
+        conn = psycopg2.connect(url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SHOW TimeZone")
+                assert cur.fetchone() == ("UTC",)
+                cur.execute("SELECT current_database(), current_setting('port')::int")
+                assert cur.fetchone() == (dbname, private["port"])
+        finally:
+            conn.close()
+
+        engine = create_engine(url)
+        try:
+            with engine.connect() as conn:
+                assert conn.execute(text("SHOW TimeZone")).scalar() == "UTC"
+                assert (
+                    conn.execute(text("SELECT current_database()")).scalar() == dbname
+                )
+        finally:
+            engine.dispose()
+
+        async def check_async():
+            conn = await asyncpg.connect(**asyncpg_kwargs(dbname, **overrides))
+            try:
+                assert await conn.fetchval("SHOW TimeZone") == "UTC"
+                assert await conn.fetchval("SELECT current_database()") == dbname
+                assert int(await conn.fetchval("SHOW port")) == private["port"]
+            finally:
+                await conn.close()
+
+        asyncio.run(check_async())
 
 
 @pytest.mark.requires_postgres

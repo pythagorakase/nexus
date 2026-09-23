@@ -5644,9 +5644,9 @@ async def _need_applies_to_entity_async(
         JOIN entity_tags et ON et.id = etc.entity_tag_id
         WHERE etc.entity_id = $1
           AND (
-              $2 IS NULL
+              $2::timestamptz IS NULL
               OR et.expires_at_world_time IS NULL
-              OR et.expires_at_world_time > $2
+              OR et.expires_at_world_time > $2::timestamptz
           )
         """,
         actor_entity_id,
@@ -7037,9 +7037,9 @@ async def _routine_zone_destination_async(
              SELECT 1 FROM entity_tags et
              WHERE et.id = etc.entity_tag_id
                AND (
-                   $2 IS NULL
+                   $2::timestamptz IS NULL
                    OR et.expires_at_world_time IS NULL
-                   OR et.expires_at_world_time > $2
+                   OR et.expires_at_world_time > $2::timestamptz
                )
          )
         WHERE p.zone = $3
@@ -7073,9 +7073,9 @@ async def _location_class_destination_async(
              SELECT 1 FROM entity_tags et
              WHERE et.id = etc.entity_tag_id
                AND (
-                   $4 IS NULL
+                   $4::timestamptz IS NULL
                    OR et.expires_at_world_time IS NULL
-                   OR et.expires_at_world_time > $4
+                   OR et.expires_at_world_time > $4::timestamptz
                )
          )
         WHERE p.id <> $1

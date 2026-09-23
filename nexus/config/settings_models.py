@@ -2028,6 +2028,13 @@ class OrrerySunhelmSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     accrual_rates: Dict[str, float] = Field(default_factory=_default_need_accrual_rates)
+    accrual_debt_caps: Dict[str, float] = Field(
+        default_factory=lambda: {
+            need: thresholds.critical
+            for need, thresholds in _default_need_severity_thresholds().items()
+        },
+        description="Saturation limits for new world-time debt; existing debt is preserved.",
+    )
     severity_thresholds: Dict[str, OrreryNeedThresholdSettings] = Field(
         default_factory=_default_need_severity_thresholds
     )
@@ -2041,6 +2048,7 @@ class OrrerySunhelmSettings(BaseModel):
         required = {"sleep", "hunger", "thirst", "socialize", "intimacy"}
         for field_name, mapping in (
             ("accrual_rates", self.accrual_rates),
+            ("accrual_debt_caps", self.accrual_debt_caps),
             ("severity_thresholds", self.severity_thresholds),
             ("priorities", self.priorities),
         ):
@@ -2049,6 +2057,12 @@ class OrrerySunhelmSettings(BaseModel):
                 raise ValueError(
                     f"orrery.sunhelm.{field_name} must define exactly "
                     f"{sorted(required)}; got {sorted(keys)}"
+                )
+        for need, cap in self.accrual_debt_caps.items():
+            if not self.severity_thresholds[need].critical <= cap <= 999999.99:
+                raise ValueError(
+                    f"orrery.sunhelm.accrual_debt_caps.{need} must be at least "
+                    "the critical threshold and at most 999999.99"
                 )
         return self
 

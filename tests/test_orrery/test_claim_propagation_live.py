@@ -34,8 +34,9 @@ from nexus.agents.orrery.replay import (
     verify_checkpoints_sync,
 )
 from nexus.agents.orrery.resolver import _load_recent_events, compose_actor_bindings
-from nexus.api.slot_utils import get_slot_db_url
+from nexus.api.slot_utils import get_slot_db_url, slot_dbname
 from nexus.config.settings_models import OrreryContagionSettings
+from nexus.database import asyncpg_kwargs
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_async,
     install_claim_accounts_shadow_sync,
@@ -1177,7 +1178,7 @@ def test_old_checkpoint_without_awareness_section_is_skipped(
 async def test_async_drain_matches_sync_single_hop() -> None:
     """The async accepted-chunk twin mints the same scheduled ledger pair."""
 
-    conn = await asyncpg.connect(get_slot_db_url(slot=LIVE_SLOT))
+    conn = await asyncpg.connect(**asyncpg_kwargs(slot_dbname(LIVE_SLOT)))
     transaction = conn.transaction()
     await transaction.start()
     try:
