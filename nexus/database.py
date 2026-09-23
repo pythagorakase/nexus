@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import re
 import socket
 from typing import Any
 
@@ -61,7 +62,7 @@ def connection_kwargs(
         "connect_timeout": int(
             os.environ.get("PGCONNECT_TIMEOUT") or config.connect_timeout_seconds
         ),
-        "options": ((options + " ") if options else "") + f"-c TimeZone={timezone}",
+        "options": _session_options(options, timezone),
     }
     if password is None:
         password = (
@@ -72,6 +73,17 @@ def connection_kwargs(
     if password is not None:
         params["password"] = password
     return params
+
+
+def _session_options(options: str | None, timezone: str) -> str:
+    """Replace existing timezone options so repeated normalization is stable."""
+    remaining = re.sub(
+        r"(?:^|\s)(?:-c\s*timezone=|--timezone=)\S+",
+        "",
+        options or "",
+        flags=re.IGNORECASE,
+    ).strip()
+    return f"{remaining} -c TimeZone={timezone}".lstrip()
 
 
 def database_url(dbname: str | None = None, **overrides: Any) -> str:
@@ -114,7 +126,7 @@ def url_connection_kwargs(db_url: str | URL | None) -> dict[str, Any]:
     # Preserve TLS and other libpq transport options from explicit URLs.
     for key, value in url.query.items():
         if key not in {"host", "port", "user", "password", "dbname", "options"}:
-            params[key] = value
+            params[key] = int(value) if key == "connect_timeout" else value
     return params
 
 

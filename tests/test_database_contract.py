@@ -25,6 +25,7 @@ from nexus.database import (
     connection_kwargs,
     connection_target,
     database_url,
+    resolved_database_url,
     subprocess_env,
     url_connection_kwargs,
     verify_database_url,
@@ -56,6 +57,15 @@ def test_connection_environment_and_url_escaping(contract_config, monkeypatch):
     assert params["host"] == "127.0.0.2"
     assert params["port"] == 55437
     assert params["options"] == "-c TimeZone=UTC"
+    assert resolved_database_url(resolved_database_url(url)) == url
+    assert (
+        connection_kwargs(
+            "save_04", options="-c statement_timeout=1000 -c TimeZone=Europe/London"
+        )["options"]
+        == "-c statement_timeout=1000 -c TimeZone=UTC"
+    )
+    timed_url = str(make_url(url).set(query={"connect_timeout": "7"}))
+    assert url_connection_kwargs(timed_url)["connect_timeout"] == 7
     assert "password" not in connection_target(params)
 
 
