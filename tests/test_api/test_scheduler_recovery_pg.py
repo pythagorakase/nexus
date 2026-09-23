@@ -84,7 +84,7 @@ def test_scheduler_recovers_terminated_heartbeat_backend(
                 flush=True,
             )
             status = requests.get(
-                "http://127.0.0.1:8017/runtime/status", timeout=10
+                "http://127.0.0.1:8018/runtime/status", timeout=10
             ).json()
             assert status["jobs"]["scheduler"]["state"] == "recovering"
             assert status["jobs"]["scheduler"]["last_error"] == scheduler.last_error
@@ -106,7 +106,7 @@ def test_scheduler_recovers_terminated_heartbeat_backend(
         assert scheduler._thread.is_alive()
         assert "recovering" in caplog.text
         run_cli(monkeypatch, "status")
-        status = requests.get("http://127.0.0.1:8017/runtime/status", timeout=10).json()
+        status = requests.get("http://127.0.0.1:8018/runtime/status", timeout=10).json()
         assert status["jobs"]["scheduler"]["state"] == "owner"
         assert status["jobs"]["scheduler"]["last_error"]
         print(
@@ -420,7 +420,6 @@ def test_scheduler_gateway_sigkill_resumes_inflight_experience(
     )
     from tests.pg_fixtures import disposable_slot_database
     from tests.scheduler_helpers import test_provider_config
-    from tests.test_logon_mock_integration import _bound_listener
 
     # Configure before spawning TEST so its process inherits the same file.
     path = test_provider_config(
@@ -457,7 +456,19 @@ def test_scheduler_gateway_sigkill_resumes_inflight_experience(
                 FOR EACH ROW WHEN (OLD.state <> 'succeeded' AND NEW.state = 'succeeded')
                 EXECUTE FUNCTION scheduler_record_completion();"""
             )
-        with _bound_listener() as listener:
+        import socket
+
+        check = subprocess.run(
+            ["lsof", "-nP", "-iTCP:8018", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+        )
+        assert check.returncode == 1, check.stdout + check.stderr
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(("127.0.0.1", 8018))
+            listener.listen(128)
+            listener.set_inheritable(True)
             port = listener.getsockname()[1]
             check = subprocess.run(
                 ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],

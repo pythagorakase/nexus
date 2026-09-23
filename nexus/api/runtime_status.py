@@ -150,6 +150,11 @@ def register_runtime_status(app: FastAPI) -> None:
             jobs["scheduler"] = {
                 **lease,
                 "state": scheduler.state,
-                "last_error": scheduler.last_error or lease.get("last_error"),
+                "reason": scheduler.reason,
+                "last_error": (
+                    None
+                    if scheduler.reason == "slot locked"
+                    else scheduler.last_error or lease.get("last_error")
+                ),
             }
         return status
