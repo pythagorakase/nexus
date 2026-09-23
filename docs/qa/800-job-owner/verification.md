@@ -1,6 +1,152 @@
 # Work Order 800 Verification
 
-## Fourth-Amendment Follow-up: Stopped by Postgres.app Authorization
+## Fifth-Amendment Final Verification
+
+Validated implementation commit `50376f7d` from this worktree. The offline gate and all ten standalone recovery proofs pass. The required PostgreSQL selection has 216 passes and 21 empty-save_05 baseline failures/errors, named below. No Postgres.app authentication rejection occurred in either PostgreSQL invocation; the conditional socket/process-group hardening was therefore not needed and no test or production code changed in this resume. No additional paid calls were made.
+
+### Files Changed in This Resume
+
+- `docs/qa/800-job-owner/verification.md` — Record the final gates, live recovery evidence, exact remainder, and clean-main reproduction of the eleven newly exposed empty-slot causes. The review implementation files in `50376f7d` remain listed in the historical review section below.
+
+### Commands and Verbatim Tails
+
+All commands ran from the order worktree unless noted. `$PY` below is `/Users/pythagor/nexus/.venv/bin/python`; actual invocations used that absolute interpreter path.
+
+```sh
+PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
+```
+
+```text
+/Users/pythagor/nexus/.claude/worktrees/800-job-owner/nexus/__init__.py
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+2624 passed, 792 skipped, 9 warnings in 105.20s (0:01:45)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery tests/test_qa_shift.py -k 'job or drain or worker or lease or scheduler or maturation or experience or compaction or status'
+```
+
+```text
+15 failed, 216 passed, 1 skipped, 1711 deselected, 11 warnings, 6 errors in 180.94s (0:03:00)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/test_api/test_scheduler_recovery_pg.py
+```
+
+```text
+10 passed, 7 warnings in 42.63s
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m black --check nexus/jobs nexus/agents/orrery/{job_queues,experiences,retrograde_maturation}.py nexus/api/{mock_openai,narrative_lease,runtime_status}.py nexus/cli.py nexus/config/settings_models.py tests/test_api/test_scheduler_recovery_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+13 files would be left unchanged.
+```
+
+```sh
+PYTHONPATH=$PWD $PY -c 'from nexus.config import load_settings; s=load_settings(); print("nexus.toml: valid"); print(s.runtime.scheduler); print(s.api.test_provider)'
+```
+
+```text
+nexus.toml: valid
+lease_duration_seconds=60.0 heartbeat_interval_seconds=10.0 poll_interval_seconds=5.0 generation_wait_seconds=1.0 error_backoff_seconds=5.0 milestone_recovery_age_seconds=60.0 promotion_limit=20 compaction_max_jobs_per_drain=1 compaction_max_attempts=3 compaction_retry_delay_seconds=300.0 compaction_lease_duration_seconds=300.0
+experience_response_delay_seconds=0.0
+```
+
+### PostgreSQL Remainder by ID
+
+These are the exact aggregate results, not a zero-failure PostgreSQL gate:
+
+```text
+FAILED tests/test_orrery/test_claim_consumption_live.py::test_template_gate_flips_on_drain_with_production_explain_parity
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_large_skip_drains_chained_hops_at_staggered_times
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_depth_cap_is_recovered_across_separate_drains
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_late_drain_lands_hop_scheduled_inside_age_horizon
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_non_primary_commit_skips_propagation_drain
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_idempotent_redrain_and_disabled_config_are_noops
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_resolution_free_commit_still_drains
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_async_drain_matches_sync_single_hop
+FAILED tests/test_orrery/test_replay.py::test_runtime_maturation_death_replays_without_drift
+FAILED tests/test_orrery/test_reveal_live.py::test_commit_reveals_promotes_grants_once_and_redrain_is_noop
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_retrograde_institutional_standing_persists_status_edge
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_retrograde_status_skips_existing_live_standing_with_dry_run_parity
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_wizard_time_retrograde_status_keeps_source_chunk_null
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_declaration_status_hint_applies_and_hydrates_for_predicate
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_declaration_status_hint_resolves_same_batch_faction
+ERROR tests/test_orrery/test_communication_graph_live.py::test_channel_directionality_and_status_minimum
+ERROR tests/test_orrery/test_communication_graph_live.py::test_faction_subject_status_yields_parent_to_member_faction_edge
+ERROR tests/test_orrery/test_polymorphic_patron_live.py::test_roster_start_to_status_completion_closes_institutional_circle
+ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_writes_exclusive_pair_tag_with_provenance
+ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_and_raw_status_fail_loudly
+ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_floor_prevents_demotion_and_set_replaces_both_ways
+```
+
+Ten IDs are already individually covered by #885 and amendment four: claim consumption (one), replay (one), stage2a status (five), communication graph (two), and polymorphic patron (one).
+
+**Finding:** #904 fixed connection establishment for the other eleven IDs, exposing their next fixture dependency on empty save_05. They no longer fail with URL/host parsing errors. Their current causes, reproduced on clean `origin/main` (`2069dcd0`), are:
+
+| IDs | Current Cause | Clean Main | Order-Owned Files |
+|---|---|---|---|
+| All seven `test_claim_propagation_live.py` IDs listed above | Character fixture insertion fails `need-clock anchor unavailable: no canonical world time or base_timestamp`. | Same seven failures | No |
+| `test_reveal_live.py::test_commit_reveals_promotes_grants_once_and_redrain_is_noop` | `SELECT id FROM places ORDER BY id LIMIT 1` returns no row; subscripting `None` fails. | Same failure | No |
+| All three `test_status_bestow_delta_live.py` IDs listed above | Character fixture query returns no row; unpacking `None` fails. | Same three errors | No |
+
+The broader #885 empty-slot class applies by cause; the coordinator should add these eleven explicit IDs to its list. They are reported as a newly exposed baseline finding, not silently treated as passing. No order-owned test failed.
+
+The authorized throwaway worktree used no dependency installation:
+
+```sh
+git worktree add --detach temp/800-main-fifth origin/main
+PYTHONPATH=$PWD/temp/800-main-fifth $PY -c 'import os; os.chdir("temp/800-main-fifth"); import nexus; print(nexus.__file__)'
+# From temp/800-main-fifth:
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_orrery/test_claim_propagation_live.py tests/test_orrery/test_reveal_live.py tests/test_orrery/test_status_bestow_delta_live.py -k 'job or drain or worker or lease or scheduler or maturation or experience or compaction or status'
+# Back in the order worktree:
+git worktree remove temp/800-main-fifth
+```
+
+```text
+/Users/pythagor/nexus/.claude/worktrees/800-job-owner/temp/800-main-fifth/nexus/__init__.py
+8 failed, 21 deselected, 3 errors in 0.73s
+```
+
+### Fresh Recovery and Status Evidence
+
+`tests/test_api/test_scheduler_recovery_pg.py:26` terminates the actual heartbeat backend and checks `/runtime/status` on 8017 through recovery and reacquisition. `:272` holds generation beyond the configured job lease and verifies renewal or refund with no premature provider call. `:405` kills an actual gateway during TEST HTTP, restarts it, verifies exactly one successful job transition, and rejects the dead nonce. The same complete file also runs both row-lock-expiry fences and both concurrent-completion snapshot cases. Fresh verbatim evidence:
+
+```text
+Terminated heartbeat backend: 46121
+Recovery state: recovering; last_error=connection already closed
+Recovering runtime scheduler: {"active": true, "current_job": null, "expires_at": "2026-09-23 23:48:49.823927+00", "heartbeat_at": "2026-09-23 23:48:46.823927+00", "last_error": "connection already closed", "lease_nonce": "6706d0b9-e291-40f4-bb2c-eac02a162ba0", "owner_id": "gateway:46042:99f9f6f6-1555-4885-9fe8-013175137865", "state": "recovering"}
+scheduler: state=owner owner=gateway:46042:99f9f6f6-1555-4885-9fe8-013175137865 active=True heartbeat=2026-09-23 23:48:50.228631+00 job=orrery_narration_jobs error=connection already closed
+Recovered runtime scheduler: {"active": true, "current_job": "orrery_maturation_jobs", "expires_at": "2026-09-23 23:48:53.355335+00", "heartbeat_at": "2026-09-23 23:48:50.355335+00", "last_error": "connection already closed", "lease_nonce": "342c8991-027d-446a-a792-4cb7edec4b6f", "owner_id": "gateway:46042:99f9f6f6-1555-4885-9fe8-013175137865", "state": "owner"}
+Reacquired: 6706d0b9-e291-40f4-bb2c-eac02a162ba0 -> 342c8991-027d-446a-a792-4cb7edec4b6f; narration=[('succeeded', 1)]
+character_experience_jobs: held beyond 1s TTL; outcome=('succeeded', 1); lost=False
+correspondence_compaction_jobs: held beyond 1s TTL; outcome=('succeeded', 1); lost=False
+character_experience_jobs: held beyond 1s TTL; outcome=('queued', 0); lost=True
+correspondence_compaction_jobs: held beyond 1s TTL; outcome=('queued', 0); lost=True
+SIGKILL gateway pid=47297; job=3; nonce=d8306e83-5b43-431c-a5a6-70f075242bbe
+Restarted gateway pid=47335; job=(succeeded,2); successful transitions=1; dead nonce rejected
+SIGKILL runtime scheduler: {"active": true, "current_job": "orrery_maturation_jobs", "expires_at": "2026-09-23 23:49:29.458237+00", "heartbeat_at": "2026-09-23 23:49:26.458237+00", "last_error": null, "lease_nonce": "7db51a6f-655f-47fe-86f0-89a834952e52", "owner_id": "gateway:47335:a89a5ded-6671-428f-a3ee-6c161098662c", "state": "owner"}
+nexus down (56262): nothing running
+```
+
+The lane fixture ran `nexus down` after stopping its owned server; final `lsof -nP -iTCP:8017 -sTCP:LISTEN` returned 1 with no output. The throwaway clean-main checkout was removed. No owner save queue was drained. Logs remain under gitignored `temp/800-validation/*-final-fifth.log` and `main-fifth.log`.
+
+### Coordinator Handoff
+
+No implementation question remains. Record the eleven newly exposed empty-slot IDs on #885. Apply migration 120 and drain live save_04 only through the coordinator's production rollout. Per-chunk embedding, durable summary plans, downloads, and the protected modules remain deferred as originally ordered. PR #902 receives `50376f7d` and this verification update; do not merge as part of this run.
+
+## Historical Fourth-Amendment Stop (Superseded by the Fifth-Amendment Results)
 
 The review fixes are implemented locally on `claude/800-job-owner`. Publication stopped when inspection of the completed PostgreSQL gate revealed the permission refusal below. This invokes the work order's explicit Postgres.app stop rule. **The required PostgreSQL gate is not passed; PR #902 has not received these fixes.** No authentication setting, connection route, or password was changed to bypass the refusal.
 
