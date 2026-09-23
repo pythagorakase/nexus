@@ -71,6 +71,7 @@ interface SceneGrounding {
   scene: number;
   worldLayer: string | null;
   worldTime: string | null;
+  worldTimeFace: string | null;
 }
 
 function sceneGrounding(chunk: ChunkWithMetadata): SceneGrounding | null {
@@ -88,6 +89,7 @@ function sceneGrounding(chunk: ChunkWithMetadata): SceneGrounding | null {
     scene: metadata.scene,
     worldLayer: metadata.worldLayer,
     worldTime: metadata.worldTime,
+    worldTimeFace: metadata.worldTimeFace,
   };
 }
 

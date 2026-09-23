@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 import pytest
@@ -35,11 +35,12 @@ def _row(**overrides: Any) -> Dict[str, Any]:
 
 def test_chunk_payload_serializes_world_time() -> None:
     """A populated world clock is emitted as an ISO 8601 string."""
-    world_time = datetime(2087, 11, 3, 22, 47, tzinfo=timezone.utc)
+    world_time = datetime(2087, 11, 3, 18, 47, tzinfo=timezone(timedelta(hours=-4)))
 
     payload = _chunk_payload(_row(world_time=world_time))
 
     assert payload["metadata"]["worldTime"] == "2087-11-03T22:47:00+00:00"
+    assert payload["metadata"]["worldTimeFace"] == "3 Nov 2087 · 22:47"
 
 
 def test_chunk_payload_preserves_null_world_time() -> None:
@@ -47,6 +48,7 @@ def test_chunk_payload_preserves_null_world_time() -> None:
     payload = _chunk_payload(_row(world_time=None))
 
     assert payload["metadata"]["worldTime"] is None
+    assert payload["metadata"]["worldTimeFace"] is None
 
 
 @pytest.mark.parametrize(

@@ -6,36 +6,7 @@ interface IntertitleProps {
   scene: number;
   worldLayer: string | null;
   worldTime: string | null;
-}
-
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-
-export function formatWorldTime(worldTime: string): string {
-  const match = worldTime.match(
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/,
-  );
-  if (!match) {
-    throw new Error(`Invalid worldTime ISO timestamp: ${worldTime}`);
-  }
-  const [, year, month, day, hour, minute] = match;
-  const monthName = MONTHS[Number(month) - 1];
-  if (!monthName) {
-    throw new Error(`Invalid worldTime month: ${worldTime}`);
-  }
-  return `${Number(day)} ${monthName} ${year} · ${hour}:${minute}`;
+  worldTimeFace: string | null;
 }
 
 /** Quiet scene grounding shown only at committed scene boundaries. */
@@ -45,6 +16,7 @@ export function Intertitle({
   scene,
   worldLayer,
   worldTime,
+  worldTimeFace,
 }: IntertitleProps) {
   const layerSuffix =
     worldLayer && worldLayer !== "primary" ? ` · ${worldLayer} layer` : "";
@@ -57,7 +29,11 @@ export function Intertitle({
       <DecoDivider variant="line" className="intertitle-divider" />
       <div className="intertitle-copy">
         <div>{slugLine}</div>
-        {worldTime && <div>{formatWorldTime(worldTime)}</div>}
+        {worldTimeFace && (
+          <div>
+            <time dateTime={worldTime ?? undefined}>{worldTimeFace}</time>
+          </div>
+        )}
       </div>
     </aside>
   );

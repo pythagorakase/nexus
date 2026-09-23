@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -28,6 +29,7 @@ from fastapi import APIRouter, HTTPException
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.db_pool import get_connection
 from nexus.api.slot_utils import require_slot_dbname
+from nexus.util.clock_face import clock_face
 
 logger = logging.getLogger("nexus.api.reader_endpoints")
 
@@ -106,7 +108,12 @@ def _chunk_payload(row: Dict[str, Any]) -> Dict[str, Any]:
             "scene": row["scene"],
             "worldLayer": row["world_layer"],
             "worldTime": (
-                row["world_time"].isoformat() if row["world_time"] is not None else None
+                row["world_time"].astimezone(timezone.utc).isoformat()
+                if row["world_time"] is not None
+                else None
+            ),
+            "worldTimeFace": (
+                clock_face(row["world_time"]) if row["world_time"] is not None else None
             ),
             "timeDelta": row["time_delta"],
             "generationDate": row["generation_date"],
