@@ -11,8 +11,8 @@ Gateway ran with `PGOPTIONS='-c default_transaction_read_only=on'`. Startup used
 The first startup rolled back because an unmanaged mock service occupied 5102. A local proof-only copy of nexus.toml set runtime.services.mock_openai.enabled to never; tracked nexus.toml is unchanged.
 
 ```sh
-# PROOF_TOML: a scratch copy of nexus.toml whose only change is the TEST-provider
-# service set to enabled = "auto" (the repository keeps it "never").
+# PROOF_TOML: a scratch copy of nexus.toml whose only change is the mock_openai
+# service set to enabled = "never" (the repository keeps it "auto").
 PYTHONPATH=$PWD PGOPTIONS='-c default_transaction_read_only=on' NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 $PY -m nexus.cli up --slot 1 --config "$PROOF_TOML"
 ```
 
