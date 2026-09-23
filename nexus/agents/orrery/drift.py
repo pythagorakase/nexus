@@ -1,40 +1,25 @@
-"""Deterministic world-clock relationship-valence drift.
-
-The planner applies producers in a fixed order: project milestones, hostile
-events by event id, cooperative events by event id, then co-presence pairs by
-their ordered entity ids.  Every calculation uses :class:`~decimal.Decimal`,
-and the appliers write the final numeric value once per existing directed edge.
-
-Co-presence is intentionally sampled only when this drain runs.  It compares
-the current locations at the accepted tick with the preceding primary-layer
-world time; it does not reconstruct arrivals, departures, or dwell intervals
-inside that span.  The configured cap bounds the resulting sampling error on
-large world-time jumps.
-"""
+"""Deterministic relationship deltas from authored events and project milestones."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 import json
 from typing import Any, Mapping, Optional, Sequence
 
 from nexus.agents.orrery.db_rows import row_get as _row_get
-from nexus.agents.orrery.epistemics import (
-    ClaimParticipant,
-    mechanical_claim_summary,
-    mint_claim_for_event,
-    mint_claim_for_event_async,
+from nexus.agents.orrery.relationship_provenance import (
+    emit_relationship_milestones_sync,
+    emit_relationship_milestones_async,
+    relationship_producer,
+    relationship_producer_async,
 )
 from nexus.config.settings_models import OrreryDriftSettings
 
 
 RELATIONSHIP_DRIFT_EVENT_TYPE = "relationship_drift_milestone"
-RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE = "relationship_drift_drained"
-RELATIONSHIP_DRIFT_EVENT_TYPES = frozenset(
-    {RELATIONSHIP_DRIFT_EVENT_TYPE, RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE}
-)
+RELATIONSHIP_DRIFT_EVENT_TYPES = frozenset({RELATIONSHIP_DRIFT_EVENT_TYPE})
 TWO_PARTY_PROJECT_TYPES = frozenset(
     {"recruit_ally", "pursue_romance", "court_patron", "seek_redemption"}
 )
@@ -65,22 +50,6 @@ class DriftEvent:
     event_type: str
     actor_entity_id: int
     target_entity_id: int
-
-
-@dataclass(frozen=True, slots=True)
-class CopresencePair:
-    """One unordered pair of distinct, co-located, non-travelling characters."""
-
-    first_entity_id: int
-    second_entity_id: int
-
-    def ordered(self) -> EdgeKey:
-        """Return the canonical entity-id order for deterministic planning."""
-
-        return (
-            min(self.first_entity_id, self.second_entity_id),
-            max(self.first_entity_id, self.second_entity_id),
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,8 +142,6 @@ def plan_relationship_drift(
     relationships: Mapping[EdgeKey, Decimal],
     project_milestones: Sequence[ProjectMilestone],
     events: Sequence[DriftEvent],
-    copresence_pairs: Sequence[CopresencePair],
-    elapsed_hours: Decimal,
     settings: OrreryDriftSettings,
 ) -> RelationshipDriftPlan:
     """Plan all edge-local drift without database access or side effects."""
@@ -222,19 +189,6 @@ def plan_relationship_drift(
             for edge in _directed_edges(event.actor_entity_id, event.target_entity_id):
                 apply(edge, delta, label)
 
-        capped_hours = min(
-            max(elapsed_hours, ZERO), settings.copresence_max_hours_per_tick
-        )
-        for pair in sorted(copresence_pairs, key=lambda item: item.ordered()):
-            first, second = pair.ordered()
-            for edge in ((first, second), (second, first)):
-                current = values.get(edge)
-                if current is None or current == ZERO or capped_hours == ZERO:
-                    continue
-                direction = ONE if current > ZERO else -ONE
-                delta = direction * settings.copresence_rate_per_hour * capped_hours
-                apply(edge, delta, "copresence")
-
         write_values = {
             edge: _quantize_valence(value) for edge, value in values.items()
         }
@@ -263,22 +217,29 @@ def drain_relationship_drift_sync(
 
     config = _enabled_config(settings)
     if config is None:
-        return RelationshipDriftDrainResult()
-    _require_migration_089_sync(cur)
+        if settings is None:
+            return RelationshipDriftDrainResult()
+        event_ids, claim_ids = emit_relationship_milestones_sync(
+            cur,
+            tick_chunk_id=tick_chunk_id,
+            epistemics_settings=epistemics_settings,
+        )
+        return RelationshipDriftDrainResult((), event_ids, claim_ids)
+    _require_migration_115_sync(cur)
     if _drain_recorded_sync(cur, tick_chunk_id):
-        return RelationshipDriftDrainResult()
+        event_ids, claim_ids = emit_relationship_milestones_sync(
+            cur,
+            tick_chunk_id=tick_chunk_id,
+            epistemics_settings=epistemics_settings,
+        )
+        return RelationshipDriftDrainResult((), event_ids, claim_ids)
     world_time, world_layer = _commit_clock_sync(cur, tick_chunk_id)
     if world_layer != "primary" or world_time is None:
         return RelationshipDriftDrainResult()
-    previous_world_time = _previous_primary_world_time_sync(
-        cur, tick_chunk_id=tick_chunk_id
-    )
     plan = plan_relationship_drift(
         relationships=_relationships_sync(cur),
         project_milestones=_project_milestones_sync(cur, tick_chunk_id),
         events=_drift_events_sync(cur, tick_chunk_id, config),
-        copresence_pairs=_copresence_pairs_sync(cur),
-        elapsed_hours=_elapsed_hours(previous_world_time, world_time),
         settings=config,
     )
     result = _apply_plan_sync(
@@ -308,22 +269,29 @@ async def drain_relationship_drift_async(
 
     config = _enabled_config(settings)
     if config is None:
-        return RelationshipDriftDrainResult()
-    await _require_migration_089_async(conn)
+        if settings is None:
+            return RelationshipDriftDrainResult()
+        event_ids, claim_ids = await emit_relationship_milestones_async(
+            conn,
+            tick_chunk_id=tick_chunk_id,
+            epistemics_settings=epistemics_settings,
+        )
+        return RelationshipDriftDrainResult((), event_ids, claim_ids)
+    await _require_migration_115_async(conn)
     if await _drain_recorded_async(conn, tick_chunk_id):
-        return RelationshipDriftDrainResult()
+        event_ids, claim_ids = await emit_relationship_milestones_async(
+            conn,
+            tick_chunk_id=tick_chunk_id,
+            epistemics_settings=epistemics_settings,
+        )
+        return RelationshipDriftDrainResult((), event_ids, claim_ids)
     world_time, world_layer = await _commit_clock_async(conn, tick_chunk_id)
     if world_layer != "primary" or world_time is None:
         return RelationshipDriftDrainResult()
-    previous_world_time = await _previous_primary_world_time_async(
-        conn, tick_chunk_id=tick_chunk_id
-    )
     plan = plan_relationship_drift(
         relationships=await _relationships_async(conn),
         project_milestones=await _project_milestones_async(conn, tick_chunk_id),
         events=await _drift_events_async(conn, tick_chunk_id, config),
-        copresence_pairs=await _copresence_pairs_async(conn),
-        elapsed_hours=_elapsed_hours(previous_world_time, world_time),
         settings=config,
     )
     result = await _apply_plan_async(
@@ -356,39 +324,37 @@ def _enabled_config(settings: Any) -> Optional[OrreryDriftSettings]:
     return config if config.enabled else None
 
 
-_MIGRATION_089_ERROR = (
-    "Relationship drift requires migration 089; apply migration 089 before "
+_MIGRATION_115_ERROR = (
+    "Relationship drift requires migration 115; apply migration 115 before "
     "enabling [orrery.drift]."
 )
 
 
-def _require_migration_089_sync(cur: Any) -> None:
+def _require_migration_115_sync(cur: Any) -> None:
     cur.execute(
         """
-        SELECT count(*) AS registered_count
+        SELECT count(*) + (to_regclass('orrery_drift_drains') IS NOT NULL)::integer AS registered_count
         FROM event_types
         WHERE type = ANY(%s)
         """,
         (sorted(RELATIONSHIP_DRIFT_EVENT_TYPES),),
     )
     row = cur.fetchone()
-    if row is None or int(_row_get(row, "registered_count", 0)) != len(
-        RELATIONSHIP_DRIFT_EVENT_TYPES
-    ):
-        raise RuntimeError(_MIGRATION_089_ERROR)
+    if row is None or int(_row_get(row, "registered_count", 0)) != 2:
+        raise RuntimeError(_MIGRATION_115_ERROR)
 
 
-async def _require_migration_089_async(conn: Any) -> None:
+async def _require_migration_115_async(conn: Any) -> None:
     registered_count = await conn.fetchval(
         """
-        SELECT count(*)
+        SELECT count(*) + (to_regclass('orrery_drift_drains') IS NOT NULL)::integer
         FROM event_types
         WHERE type = ANY($1::text[])
         """,
         sorted(RELATIONSHIP_DRIFT_EVENT_TYPES),
     )
-    if int(registered_count or 0) != len(RELATIONSHIP_DRIFT_EVENT_TYPES):
-        raise RuntimeError(_MIGRATION_089_ERROR)
+    if int(registered_count or 0) != 2:
+        raise RuntimeError(_MIGRATION_115_ERROR)
 
 
 def _drain_recorded_sync(cur: Any, tick_chunk_id: int) -> bool:
@@ -396,12 +362,11 @@ def _drain_recorded_sync(cur: Any, tick_chunk_id: int) -> bool:
         """
         SELECT EXISTS (
             SELECT 1
-            FROM world_events
+            FROM orrery_drift_drains
             WHERE tick_chunk_id = %s
-              AND event_type = %s
         ) AS recorded
         """,
-        (tick_chunk_id, RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE),
+        (tick_chunk_id,),
     )
     row = cur.fetchone()
     return row is not None and bool(_row_get(row, "recorded", 0))
@@ -413,13 +378,11 @@ async def _drain_recorded_async(conn: Any, tick_chunk_id: int) -> bool:
             """
             SELECT EXISTS (
                 SELECT 1
-                FROM world_events
+                FROM orrery_drift_drains
                 WHERE tick_chunk_id = $1
-                  AND event_type = $2
             )
             """,
             tick_chunk_id,
-            RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE,
         )
     )
 
@@ -451,55 +414,6 @@ async def _commit_clock_async(conn: Any, tick_chunk_id: int) -> tuple[Any, Any]:
     if row is None:
         raise ValueError(f"Relationship-drift chunk {tick_chunk_id} has no metadata")
     return row["world_time"], row["world_layer"]
-
-
-def _previous_primary_world_time_sync(cur: Any, *, tick_chunk_id: int) -> Any:
-    cur.execute(
-        """
-        SELECT world_time
-        FROM chunk_metadata
-        WHERE chunk_id < %s
-          AND world_layer = 'primary'
-          AND world_time IS NOT NULL
-        ORDER BY chunk_id DESC
-        LIMIT 1
-        """,
-        (tick_chunk_id,),
-    )
-    row = cur.fetchone()
-    return _row_get(row, "world_time", 0) if row is not None else None
-
-
-async def _previous_primary_world_time_async(conn: Any, *, tick_chunk_id: int) -> Any:
-    return await conn.fetchval(
-        """
-        SELECT world_time
-        FROM chunk_metadata
-        WHERE chunk_id < $1
-          AND world_layer = 'primary'
-          AND world_time IS NOT NULL
-        ORDER BY chunk_id DESC
-        LIMIT 1
-        """,
-        tick_chunk_id,
-    )
-
-
-def _elapsed_hours(previous: Optional[datetime], current: datetime) -> Decimal:
-    if previous is None:
-        return ZERO
-    elapsed = current - previous
-    with localcontext() as context:
-        context.prec = PLANNER_PRECISION
-        return _timedelta_seconds(elapsed) / Decimal("3600")
-
-
-def _timedelta_seconds(value: timedelta) -> Decimal:
-    return (
-        Decimal(value.days) * Decimal("86400")
-        + Decimal(value.seconds)
-        + Decimal(value.microseconds) / Decimal("1000000")
-    )
 
 
 def _relationships_sync(cur: Any) -> dict[EdgeKey, Decimal]:
@@ -666,49 +580,6 @@ def _coerce_drift_events(rows: Sequence[Any]) -> tuple[DriftEvent, ...]:
     )
 
 
-_COPRESENCE_SQL = """
-    SELECT first.entity_id AS first_entity_id,
-           second.entity_id AS second_entity_id
-    FROM characters first
-    JOIN characters second
-      ON second.current_location = first.current_location
-     AND second.entity_id > first.entity_id
-    WHERE first.current_location IS NOT NULL
-      AND NOT EXISTS (
-          SELECT 1
-          FROM character_travel_states travel
-          WHERE travel.character_entity_id = first.entity_id
-            AND travel.status = 'in_transit'
-      )
-      AND NOT EXISTS (
-          SELECT 1
-          FROM character_travel_states travel
-          WHERE travel.character_entity_id = second.entity_id
-            AND travel.status = 'in_transit'
-      )
-    ORDER BY first.entity_id, second.entity_id
-"""
-
-
-def _copresence_pairs_sync(cur: Any) -> tuple[CopresencePair, ...]:
-    cur.execute(_COPRESENCE_SQL)
-    return tuple(
-        CopresencePair(
-            int(_row_get(row, "first_entity_id", 0)),
-            int(_row_get(row, "second_entity_id", 1)),
-        )
-        for row in cur.fetchall()
-    )
-
-
-async def _copresence_pairs_async(conn: Any) -> tuple[CopresencePair, ...]:
-    rows = await conn.fetch(_COPRESENCE_SQL)
-    return tuple(
-        CopresencePair(int(row["first_entity_id"]), int(row["second_entity_id"]))
-        for row in rows
-    )
-
-
 def _apply_plan_sync(
     cur: Any,
     *,
@@ -718,44 +589,43 @@ def _apply_plan_sync(
     epistemics_settings: Any,
 ) -> RelationshipDriftDrainResult:
     updated_edges = []
-    event_ids = []
-    claim_ids = []
     for edge in plan.edges:
-        cur.execute(
-            """
-            UPDATE character_relationships relation
-            SET valence_current = %s
-            FROM characters source, characters target
-            WHERE relation.character1_id = source.id
-              AND relation.character2_id = target.id
-              AND source.entity_id = %s
-              AND target.entity_id = %s
-            """,
-            (edge.new_valence, edge.source_entity_id, edge.target_entity_id),
-        )
-        if cur.rowcount != 1:
-            raise RuntimeError(
-                "Relationship edge disappeared during drift application: "
-                f"{edge.source_entity_id}->{edge.target_entity_id}"
-            )
-        updated_edges.append((edge.source_entity_id, edge.target_entity_id))
-        if not edge.is_milestone:
-            continue
-        event_id, claim_id = _emit_milestone_sync(
-            cur,
-            edge=edge,
-            tick_chunk_id=tick_chunk_id,
-            world_time=world_time,
-            epistemics_settings=epistemics_settings,
-        )
-        event_ids.append(event_id)
-        if claim_id is not None:
-            claim_ids.append(claim_id)
-    return RelationshipDriftDrainResult(
-        updated_edges=tuple(updated_edges),
-        milestone_event_ids=tuple(event_ids),
-        claim_ids=tuple(claim_ids),
+        exact = edge.old_valence
+        stored = edge.old_valence
+        with localcontext() as context:
+            context.prec = PLANNER_PRECISION
+            for label, delta in edge.producer_deltas:
+                exact += delta
+                value = _quantize_valence(exact)
+                if value == stored:
+                    continue
+                producer = (
+                    "project_milestone"
+                    if label.startswith("project_milestone:")
+                    else "drift_event"
+                )
+                with relationship_producer(
+                    cur, producer, source_chunk_id=tick_chunk_id
+                ):
+                    cur.execute(
+                        """UPDATE character_relationships relation SET valence_current = %s
+                    FROM characters source, characters target
+                    WHERE relation.character1_id = source.id AND relation.character2_id = target.id
+                      AND source.entity_id = %s AND target.entity_id = %s""",
+                        (value, edge.source_entity_id, edge.target_entity_id),
+                    )
+                    if cur.rowcount != 1:
+                        raise RuntimeError(
+                            "Relationship edge disappeared during drift application"
+                        )
+                stored = value
+                updated_edges.append((edge.source_entity_id, edge.target_entity_id))
+    event_ids, claim_ids = emit_relationship_milestones_sync(
+        cur,
+        tick_chunk_id=tick_chunk_id,
+        epistemics_settings=epistemics_settings,
     )
+    return RelationshipDriftDrainResult(tuple(updated_edges), event_ids, claim_ids)
 
 
 async def _apply_plan_async(
@@ -767,46 +637,45 @@ async def _apply_plan_async(
     epistemics_settings: Any,
 ) -> RelationshipDriftDrainResult:
     updated_edges = []
-    event_ids = []
-    claim_ids = []
     for edge in plan.edges:
-        status = await conn.execute(
-            """
-            UPDATE character_relationships relation
-            SET valence_current = $1
-            FROM characters source, characters target
-            WHERE relation.character1_id = source.id
-              AND relation.character2_id = target.id
-              AND source.entity_id = $2
-              AND target.entity_id = $3
-            """,
-            edge.new_valence,
-            edge.source_entity_id,
-            edge.target_entity_id,
-        )
-        if status != "UPDATE 1":
-            raise RuntimeError(
-                "Relationship edge disappeared during drift application: "
-                f"{edge.source_entity_id}->{edge.target_entity_id}"
-            )
-        updated_edges.append((edge.source_entity_id, edge.target_entity_id))
-        if not edge.is_milestone:
-            continue
-        event_id, claim_id = await _emit_milestone_async(
-            conn,
-            edge=edge,
-            tick_chunk_id=tick_chunk_id,
-            world_time=world_time,
-            epistemics_settings=epistemics_settings,
-        )
-        event_ids.append(event_id)
-        if claim_id is not None:
-            claim_ids.append(claim_id)
-    return RelationshipDriftDrainResult(
-        updated_edges=tuple(updated_edges),
-        milestone_event_ids=tuple(event_ids),
-        claim_ids=tuple(claim_ids),
+        exact = edge.old_valence
+        stored = edge.old_valence
+        with localcontext() as context:
+            context.prec = PLANNER_PRECISION
+            for label, delta in edge.producer_deltas:
+                exact += delta
+                value = _quantize_valence(exact)
+                if value == stored:
+                    continue
+                producer = (
+                    "project_milestone"
+                    if label.startswith("project_milestone:")
+                    else "drift_event"
+                )
+                async with relationship_producer_async(
+                    conn, producer, source_chunk_id=tick_chunk_id
+                ):
+                    status = await conn.execute(
+                        """UPDATE character_relationships relation SET valence_current = $1
+                    FROM characters source, characters target
+                    WHERE relation.character1_id = source.id AND relation.character2_id = target.id
+                      AND source.entity_id = $2 AND target.entity_id = $3""",
+                        value,
+                        edge.source_entity_id,
+                        edge.target_entity_id,
+                    )
+                    if status != "UPDATE 1":
+                        raise RuntimeError(
+                            "Relationship edge disappeared during drift application"
+                        )
+                stored = value
+                updated_edges.append((edge.source_entity_id, edge.target_entity_id))
+    event_ids, claim_ids = await emit_relationship_milestones_async(
+        conn,
+        tick_chunk_id=tick_chunk_id,
+        epistemics_settings=epistemics_settings,
     )
+    return RelationshipDriftDrainResult(tuple(updated_edges), event_ids, claim_ids)
 
 
 def _record_drain_sync(
@@ -817,26 +686,8 @@ def _record_drain_sync(
     result: RelationshipDriftDrainResult,
 ) -> None:
     cur.execute(
-        """
-        INSERT INTO world_events (
-            event_type, tick_chunk_id, world_layer, source,
-            changed_fields, payload, world_time
-        ) VALUES (
-            %s, %s, 'primary', 'resolver', ARRAY[]::text[],
-            jsonb_build_object(
-                'edges_touched', %s::integer,
-                'milestone_count', %s::integer
-            ),
-            %s
-        )
-        """,
-        (
-            RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE,
-            tick_chunk_id,
-            len(result.updated_edges),
-            len(result.milestone_event_ids),
-            world_time,
-        ),
+        "INSERT INTO orrery_drift_drains (tick_chunk_id, applied_deltas) VALUES (%s, %s)",
+        (tick_chunk_id, len(result.updated_edges)),
     )
 
 
@@ -848,235 +699,10 @@ async def _record_drain_async(
     result: RelationshipDriftDrainResult,
 ) -> None:
     await conn.execute(
-        """
-        INSERT INTO world_events (
-            event_type, tick_chunk_id, world_layer, source,
-            changed_fields, payload, world_time
-        ) VALUES (
-            $1, $2, 'primary', 'resolver', ARRAY[]::text[],
-            jsonb_build_object(
-                'edges_touched', $3::integer,
-                'milestone_count', $4::integer
-            ),
-            $5
-        )
-        """,
-        RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE,
+        "INSERT INTO orrery_drift_drains (tick_chunk_id, applied_deltas) VALUES ($1, $2)",
         tick_chunk_id,
         len(result.updated_edges),
-        len(result.milestone_event_ids),
-        world_time,
     )
-
-
-_MILESTONE_PAYLOAD_SYNC = """
-    jsonb_build_object(
-        'old_rung', %s::integer,
-        'new_rung', %s::integer,
-        'old_valence', %s::numeric,
-        'new_valence', %s::numeric,
-        'producer_deltas', (
-            SELECT COALESCE(jsonb_object_agg(label, delta), '{}'::jsonb)
-            FROM unnest(%s::text[], %s::numeric[]) AS item(label, delta)
-        )
-    )
-"""
-
-_MILESTONE_PAYLOAD_ASYNC = """
-    jsonb_build_object(
-        'old_rung', $5::integer,
-        'new_rung', $6::integer,
-        'old_valence', $7::numeric,
-        'new_valence', $8::numeric,
-        'producer_deltas', (
-            SELECT COALESCE(jsonb_object_agg(label, delta), '{}'::jsonb)
-            FROM unnest($9::text[], $10::numeric[]) AS item(label, delta)
-        )
-    )
-"""
-
-
-def _emit_milestone_sync(
-    cur: Any,
-    *,
-    edge: PlannedEdgeDrift,
-    tick_chunk_id: int,
-    world_time: datetime,
-    epistemics_settings: Any,
-) -> tuple[int, Optional[int]]:
-    labels = [label for label, _delta in edge.producer_deltas]
-    deltas = [delta for _label, delta in edge.producer_deltas]
-    cur.execute(
-        f"""
-        INSERT INTO world_events (
-            event_type, tick_chunk_id, actor_entity_id, target_entity_id,
-            world_layer, source, changed_fields, payload, world_time
-        ) VALUES (
-            %s, %s, %s, %s, 'primary', 'resolver',
-            ARRAY['character_relationships.valence_current']::text[],
-            {_MILESTONE_PAYLOAD_SYNC}, %s
-        )
-        RETURNING id
-        """,
-        (
-            RELATIONSHIP_DRIFT_EVENT_TYPE,
-            tick_chunk_id,
-            edge.source_entity_id,
-            edge.target_entity_id,
-            edge.old_rung,
-            edge.new_rung,
-            edge.old_valence,
-            edge.new_valence,
-            labels,
-            deltas,
-            world_time,
-        ),
-    )
-    event_id = int(_row_get(cur.fetchone(), "id", 0))
-    _insert_event_entities_sync(cur, event_id=event_id, edge=edge)
-    participants = _claim_participants_sync(cur, edge)
-    mint_result = mint_claim_for_event(
-        cur,
-        world_event_id=event_id,
-        event_type=RELATIONSHIP_DRIFT_EVENT_TYPE,
-        summary=mechanical_claim_summary(RELATIONSHIP_DRIFT_EVENT_TYPE, participants),
-        participants=participants,
-        source_chunk_id=tick_chunk_id,
-        source_resolution_id=None,
-        settings=epistemics_settings,
-    )
-    return event_id, mint_result.claim_id if mint_result is not None else None
-
-
-async def _emit_milestone_async(
-    conn: Any,
-    *,
-    edge: PlannedEdgeDrift,
-    tick_chunk_id: int,
-    world_time: datetime,
-    epistemics_settings: Any,
-) -> tuple[int, Optional[int]]:
-    labels = [label for label, _delta in edge.producer_deltas]
-    deltas = [delta for _label, delta in edge.producer_deltas]
-    event_id = await conn.fetchval(
-        f"""
-        INSERT INTO world_events (
-            event_type, tick_chunk_id, actor_entity_id, target_entity_id,
-            world_layer, source, changed_fields, payload, world_time
-        ) VALUES (
-            $1, $2, $3, $4, 'primary', 'resolver',
-            ARRAY['character_relationships.valence_current']::text[],
-            {_MILESTONE_PAYLOAD_ASYNC}, $11
-        )
-        RETURNING id
-        """,
-        RELATIONSHIP_DRIFT_EVENT_TYPE,
-        tick_chunk_id,
-        edge.source_entity_id,
-        edge.target_entity_id,
-        edge.old_rung,
-        edge.new_rung,
-        edge.old_valence,
-        edge.new_valence,
-        labels,
-        deltas,
-        world_time,
-    )
-    await _insert_event_entities_async(conn, event_id=int(event_id), edge=edge)
-    participants = await _claim_participants_async(conn, edge)
-    mint_result = await mint_claim_for_event_async(
-        conn,
-        world_event_id=int(event_id),
-        event_type=RELATIONSHIP_DRIFT_EVENT_TYPE,
-        summary=mechanical_claim_summary(RELATIONSHIP_DRIFT_EVENT_TYPE, participants),
-        participants=participants,
-        source_chunk_id=tick_chunk_id,
-        source_resolution_id=None,
-        settings=epistemics_settings,
-    )
-    return int(event_id), mint_result.claim_id if mint_result is not None else None
-
-
-def _insert_event_entities_sync(
-    cur: Any, *, event_id: int, edge: PlannedEdgeDrift
-) -> None:
-    cur.execute(
-        """
-        INSERT INTO world_event_entities (event_id, role, entity_id)
-        VALUES (%s, 'actor', %s), (%s, 'target', %s)
-        ON CONFLICT DO NOTHING
-        """,
-        (event_id, edge.source_entity_id, event_id, edge.target_entity_id),
-    )
-
-
-async def _insert_event_entities_async(
-    conn: Any, *, event_id: int, edge: PlannedEdgeDrift
-) -> None:
-    await conn.execute(
-        """
-        INSERT INTO world_event_entities (event_id, role, entity_id)
-        VALUES ($1, 'actor', $2), ($1, 'target', $3)
-        ON CONFLICT DO NOTHING
-        """,
-        event_id,
-        edge.source_entity_id,
-        edge.target_entity_id,
-    )
-
-
-def _claim_participants_sync(
-    cur: Any, edge: PlannedEdgeDrift
-) -> tuple[ClaimParticipant, ...]:
-    cur.execute(
-        """
-        SELECT names.id, names.name, entities.kind::text AS entity_kind
-        FROM entity_names_v names
-        JOIN entities ON entities.id = names.id
-        WHERE names.id = ANY(%s)
-        """,
-        ([edge.source_entity_id, edge.target_entity_id],),
-    )
-    return _claim_participants_from_rows(cur.fetchall(), edge)
-
-
-async def _claim_participants_async(
-    conn: Any, edge: PlannedEdgeDrift
-) -> tuple[ClaimParticipant, ...]:
-    rows = await conn.fetch(
-        """
-        SELECT names.id, names.name, entities.kind::text AS entity_kind
-        FROM entity_names_v names
-        JOIN entities ON entities.id = names.id
-        WHERE names.id = ANY($1::bigint[])
-        """,
-        [edge.source_entity_id, edge.target_entity_id],
-    )
-    return _claim_participants_from_rows(rows, edge)
-
-
-def _claim_participants_from_rows(
-    rows: Sequence[Any], edge: PlannedEdgeDrift
-) -> tuple[ClaimParticipant, ...]:
-    details = {
-        int(_row_get(row, "id", 0)): (
-            str(_row_get(row, "name", 1)),
-            str(_row_get(row, "entity_kind", 2)),
-        )
-        for row in rows
-    }
-    participants = []
-    for entity_id, role in (
-        (edge.source_entity_id, "actor"),
-        (edge.target_entity_id, "target"),
-    ):
-        if entity_id not in details:
-            raise ValueError(
-                f"Drift milestone cannot mint awareness for unnamed entity {entity_id}"
-            )
-        name, kind = details[entity_id]
-        participants.append(ClaimParticipant(entity_id, role, name, kind))
-    return tuple(participants)
 
 
 def _directed_edges(first: int, second: int) -> tuple[EdgeKey, EdgeKey]:

@@ -70,6 +70,21 @@ Two phases:
 
 ---
 
+## Relationship Provenance and Milestones
+
+Every relationship write declares a transaction-local producer. The versioning
+trigger records canonical valence deltas after derivation and queues rung
+crossings for every producer, including Gaia. The shared milestone consumer
+emits `relationship_drift_milestone` with the producer and the existing actor-only
+claim policy. Gaia consumes its crossings in the state-update transaction;
+other queued crossings are consumed at accepted-tick commit. Crossings without
+a narrative chunk wait for the next accepted tick.
+
+The drift drain applies only project milestones, hostile events, then cooperative
+events in deterministic order. Passive co-presence drift
+is removed. Completion is recorded in `orrery_drift_drains`, including zero-delta
+ticks; `relationship_drift_drained` is retired from the world-event vocabulary.
+
 ## Authority Model: Skald-Adjudicated Commit
 
 > **Orrery proposes; Skald has final authorial authority.**

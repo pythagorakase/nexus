@@ -163,6 +163,11 @@ class TraitCompilerCursor:
         params = params or ()
         normalized = " ".join(sql.strip().upper().split())
 
+        if "CURRENT_SETTING('NEXUS.WRITE_PRODUCER'" in normalized:
+            self._next_row = ("",)
+            return
+        if "NEXUS.WRITE_PRODUCER" in normalized:
+            return
         if normalized.startswith("SAVEPOINT"):
             self._savepoints.append(
                 deepcopy(

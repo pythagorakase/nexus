@@ -15,6 +15,10 @@ import json
 import logging
 from typing import Any, Mapping, Optional
 
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer,
+    relationship_producer_async,
+)
 from nexus.agents.orrery.ambient import AMBIENT_EXPOSURE_TEMPLATE_ID
 from nexus.agents.orrery.db_rows import row_get as _row_get
 from nexus.agents.orrery.drift import (
@@ -3933,71 +3937,72 @@ def _upsert_recruited_ally_relationship_sync(
 ) -> dict[str, Any]:
     """Persist actor->target as the canonical ally relationship."""
 
-    cur.execute(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = %s
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = %s
-        """,
-        (target_entity_id, actor_entity_id),
-    )
-    row = cur.fetchone()
-    if row is None:
-        raise ValueError(
-            "recruit_ally completion requires actor and target character rows"
+    with relationship_producer(cur, "package"):
+        cur.execute(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = %s
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = %s
+            """,
+            (target_entity_id, actor_entity_id),
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("recruit_ally completion cannot recruit the actor")
-    previous = _row_get(row, "previous_relationship_type", 2)
-    previous_type = str(previous) if previous is not None else None
-    metadata = _recruit_ally_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        existing_extra_data=_row_get(row, "extra_data", 3),
-    )
-    cur.execute(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            %s, %s, 'ally', '+3|trusting',
-            'Allies by earned commitment.',
-            'A sustained recruitment concluded in a named alliance.',
-            'Alliance established through the RECRUIT_ALLY project.',
-            %s::jsonb
+        row = cur.fetchone()
+        if row is None:
+            raise ValueError(
+                "recruit_ally completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("recruit_ally completion cannot recruit the actor")
+        previous = _row_get(row, "previous_relationship_type", 2)
+        previous_type = str(previous) if previous is not None else None
+        metadata = _recruit_ally_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            existing_extra_data=_row_get(row, "extra_data", 3),
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type
-        """,
-        (character1_id, character2_id, json.dumps(metadata)),
-    )
-    if cur.fetchone() is None:
-        raise RuntimeError("recruit_ally relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "relationship_type": "ally",
-        "relationship_type_changed": previous_type != "ally",
-    }
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                %s, %s, 'ally', '+3|trusting',
+                'Allies by earned commitment.',
+                'A sustained recruitment concluded in a named alliance.',
+                'Alliance established through the RECRUIT_ALLY project.',
+                %s::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type
+            """,
+            (character1_id, character2_id, json.dumps(metadata)),
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError("recruit_ally relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "relationship_type": "ally",
+            "relationship_type_changed": previous_type != "ally",
+        }
 
 
 async def _upsert_recruited_ally_relationship_async(
@@ -4010,73 +4015,74 @@ async def _upsert_recruited_ally_relationship_async(
 ) -> dict[str, Any]:
     """Async twin of _upsert_recruited_ally_relationship_sync."""
 
-    row = await conn.fetchrow(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = $2
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = $1
-        """,
-        actor_entity_id,
-        target_entity_id,
-    )
-    if row is None:
-        raise ValueError(
-            "recruit_ally completion requires actor and target character rows"
+    async with relationship_producer_async(conn, "package"):
+        row = await conn.fetchrow(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = $2
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = $1
+            """,
+            actor_entity_id,
+            target_entity_id,
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("recruit_ally completion cannot recruit the actor")
-    previous = _row_get(row, "previous_relationship_type", 2)
-    previous_type = str(previous) if previous is not None else None
-    metadata = _recruit_ally_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        existing_extra_data=_row_get(row, "extra_data", 3),
-    )
-    written = await conn.fetchrow(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            $1, $2, 'ally', '+3|trusting',
-            'Allies by earned commitment.',
-            'A sustained recruitment concluded in a named alliance.',
-            'Alliance established through the RECRUIT_ALLY project.',
-            $3::jsonb
+        if row is None:
+            raise ValueError(
+                "recruit_ally completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("recruit_ally completion cannot recruit the actor")
+        previous = _row_get(row, "previous_relationship_type", 2)
+        previous_type = str(previous) if previous is not None else None
+        metadata = _recruit_ally_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            existing_extra_data=_row_get(row, "extra_data", 3),
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type
-        """,
-        character1_id,
-        character2_id,
-        json.dumps(metadata),
-    )
-    if written is None:
-        raise RuntimeError("recruit_ally relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "relationship_type": "ally",
-        "relationship_type_changed": previous_type != "ally",
-    }
+        written = await conn.fetchrow(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                $1, $2, 'ally', '+3|trusting',
+                'Allies by earned commitment.',
+                'A sustained recruitment concluded in a named alliance.',
+                'Alliance established through the RECRUIT_ALLY project.',
+                $3::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type
+            """,
+            character1_id,
+            character2_id,
+            json.dumps(metadata),
+        )
+        if written is None:
+            raise RuntimeError("recruit_ally relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "relationship_type": "ally",
+            "relationship_type_changed": previous_type != "ally",
+        }
 
 
 def _seek_redemption_relationship_metadata(
@@ -4119,82 +4125,85 @@ def _upsert_reconciled_relationship_sync(
 ) -> dict[str, Any]:
     """Persist actor->target as the canonical reconciled relationship."""
 
-    cur.execute(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.emotional_valence AS previous_emotional_valence,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = %s
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = %s
-        """,
-        (target_entity_id, actor_entity_id),
-    )
-    row = cur.fetchone()
-    if row is None:
-        raise ValueError(
-            "seek_redemption completion requires actor and target character rows"
+    with relationship_producer(cur, "package"):
+        cur.execute(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.emotional_valence AS previous_emotional_valence,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = %s
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = %s
+            """,
+            (target_entity_id, actor_entity_id),
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("seek_redemption completion cannot target the actor")
-    previous_type_raw = _row_get(row, "previous_relationship_type", 2)
-    previous_valence_raw = _row_get(row, "previous_emotional_valence", 3)
-    previous_type = str(previous_type_raw) if previous_type_raw is not None else None
-    previous_valence = (
-        str(previous_valence_raw) if previous_valence_raw is not None else None
-    )
-    metadata = _seek_redemption_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        previous_emotional_valence=previous_valence,
-        existing_extra_data=_row_get(row, "extra_data", 4),
-    )
-    cur.execute(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            %s, %s, 'complex', '+1|favorable',
-            'Reconciliation accepted without erasing the past.',
-            'A sustained attempt at amends reached acceptance.',
-            'Reconciliation established through the SEEK_REDEMPTION project.',
-            %s::jsonb
+        row = cur.fetchone()
+        if row is None:
+            raise ValueError(
+                "seek_redemption completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("seek_redemption completion cannot target the actor")
+        previous_type_raw = _row_get(row, "previous_relationship_type", 2)
+        previous_valence_raw = _row_get(row, "previous_emotional_valence", 3)
+        previous_type = (
+            str(previous_type_raw) if previous_type_raw is not None else None
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            emotional_valence = EXCLUDED.emotional_valence,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type,
-                  emotional_valence
-        """,
-        (character1_id, character2_id, json.dumps(metadata)),
-    )
-    if cur.fetchone() is None:
-        raise RuntimeError("seek_redemption relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "previous_emotional_valence": previous_valence,
-        "relationship_type": "complex",
-        "emotional_valence": "+1|favorable",
-        "relationship_type_changed": previous_type != "complex",
-        "emotional_valence_changed": previous_valence != "+1|favorable",
-    }
+        previous_valence = (
+            str(previous_valence_raw) if previous_valence_raw is not None else None
+        )
+        metadata = _seek_redemption_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            previous_emotional_valence=previous_valence,
+            existing_extra_data=_row_get(row, "extra_data", 4),
+        )
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                %s, %s, 'complex', '+1|favorable',
+                'Reconciliation accepted without erasing the past.',
+                'A sustained attempt at amends reached acceptance.',
+                'Reconciliation established through the SEEK_REDEMPTION project.',
+                %s::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                emotional_valence = EXCLUDED.emotional_valence,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type,
+                      emotional_valence
+            """,
+            (character1_id, character2_id, json.dumps(metadata)),
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError("seek_redemption relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "previous_emotional_valence": previous_valence,
+            "relationship_type": "complex",
+            "emotional_valence": "+1|favorable",
+            "relationship_type_changed": previous_type != "complex",
+            "emotional_valence_changed": previous_valence != "+1|favorable",
+        }
 
 
 async def _upsert_reconciled_relationship_async(
@@ -4207,84 +4216,87 @@ async def _upsert_reconciled_relationship_async(
 ) -> dict[str, Any]:
     """Async twin of _upsert_reconciled_relationship_sync."""
 
-    row = await conn.fetchrow(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.emotional_valence AS previous_emotional_valence,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = $2
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = $1
-        """,
-        actor_entity_id,
-        target_entity_id,
-    )
-    if row is None:
-        raise ValueError(
-            "seek_redemption completion requires actor and target character rows"
+    async with relationship_producer_async(conn, "package"):
+        row = await conn.fetchrow(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.emotional_valence AS previous_emotional_valence,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = $2
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = $1
+            """,
+            actor_entity_id,
+            target_entity_id,
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("seek_redemption completion cannot target the actor")
-    previous_type_raw = _row_get(row, "previous_relationship_type", 2)
-    previous_valence_raw = _row_get(row, "previous_emotional_valence", 3)
-    previous_type = str(previous_type_raw) if previous_type_raw is not None else None
-    previous_valence = (
-        str(previous_valence_raw) if previous_valence_raw is not None else None
-    )
-    metadata = _seek_redemption_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        previous_emotional_valence=previous_valence,
-        existing_extra_data=_row_get(row, "extra_data", 4),
-    )
-    written = await conn.fetchrow(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            $1, $2, 'complex', '+1|favorable',
-            'Reconciliation accepted without erasing the past.',
-            'A sustained attempt at amends reached acceptance.',
-            'Reconciliation established through the SEEK_REDEMPTION project.',
-            $3::jsonb
+        if row is None:
+            raise ValueError(
+                "seek_redemption completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("seek_redemption completion cannot target the actor")
+        previous_type_raw = _row_get(row, "previous_relationship_type", 2)
+        previous_valence_raw = _row_get(row, "previous_emotional_valence", 3)
+        previous_type = (
+            str(previous_type_raw) if previous_type_raw is not None else None
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            emotional_valence = EXCLUDED.emotional_valence,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type,
-                  emotional_valence
-        """,
-        character1_id,
-        character2_id,
-        json.dumps(metadata),
-    )
-    if written is None:
-        raise RuntimeError("seek_redemption relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "previous_emotional_valence": previous_valence,
-        "relationship_type": "complex",
-        "emotional_valence": "+1|favorable",
-        "relationship_type_changed": previous_type != "complex",
-        "emotional_valence_changed": previous_valence != "+1|favorable",
-    }
+        previous_valence = (
+            str(previous_valence_raw) if previous_valence_raw is not None else None
+        )
+        metadata = _seek_redemption_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            previous_emotional_valence=previous_valence,
+            existing_extra_data=_row_get(row, "extra_data", 4),
+        )
+        written = await conn.fetchrow(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                $1, $2, 'complex', '+1|favorable',
+                'Reconciliation accepted without erasing the past.',
+                'A sustained attempt at amends reached acceptance.',
+                'Reconciliation established through the SEEK_REDEMPTION project.',
+                $3::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                emotional_valence = EXCLUDED.emotional_valence,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type,
+                      emotional_valence
+            """,
+            character1_id,
+            character2_id,
+            json.dumps(metadata),
+        )
+        if written is None:
+            raise RuntimeError("seek_redemption relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "previous_emotional_valence": previous_valence,
+            "relationship_type": "complex",
+            "emotional_valence": "+1|favorable",
+            "relationship_type_changed": previous_type != "complex",
+            "emotional_valence_changed": previous_valence != "+1|favorable",
+        }
 
 
 def _pursue_romance_relationship_metadata(
@@ -4323,71 +4335,72 @@ def _upsert_pursue_romance_relationship_sync(
 ) -> dict[str, Any]:
     """Persist actor->target as the canonical romantic relationship."""
 
-    cur.execute(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = %s
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = %s
-        """,
-        (target_entity_id, actor_entity_id),
-    )
-    row = cur.fetchone()
-    if row is None:
-        raise ValueError(
-            "pursue_romance completion requires actor and target character rows"
+    with relationship_producer(cur, "package"):
+        cur.execute(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = %s
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = %s
+            """,
+            (target_entity_id, actor_entity_id),
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("pursue_romance completion cannot target the actor")
-    previous = _row_get(row, "previous_relationship_type", 2)
-    previous_type = str(previous) if previous is not None else None
-    metadata = _pursue_romance_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        existing_extra_data=_row_get(row, "extra_data", 3),
-    )
-    cur.execute(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            %s, %s, 'romantic', '+4|admiring',
-            'Romantic partners by mutual courtship.',
-            'A sustained courtship concluded in mutual declared intention.',
-            'Romance established through the PURSUE_ROMANCE project.',
-            %s::jsonb
+        row = cur.fetchone()
+        if row is None:
+            raise ValueError(
+                "pursue_romance completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("pursue_romance completion cannot target the actor")
+        previous = _row_get(row, "previous_relationship_type", 2)
+        previous_type = str(previous) if previous is not None else None
+        metadata = _pursue_romance_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            existing_extra_data=_row_get(row, "extra_data", 3),
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type
-        """,
-        (character1_id, character2_id, json.dumps(metadata)),
-    )
-    if cur.fetchone() is None:
-        raise RuntimeError("pursue_romance relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "relationship_type": "romantic",
-        "relationship_type_changed": previous_type != "romantic",
-    }
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                %s, %s, 'romantic', '+4|admiring',
+                'Romantic partners by mutual courtship.',
+                'A sustained courtship concluded in mutual declared intention.',
+                'Romance established through the PURSUE_ROMANCE project.',
+                %s::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type
+            """,
+            (character1_id, character2_id, json.dumps(metadata)),
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError("pursue_romance relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "relationship_type": "romantic",
+            "relationship_type_changed": previous_type != "romantic",
+        }
 
 
 async def _upsert_pursue_romance_relationship_async(
@@ -4400,73 +4413,74 @@ async def _upsert_pursue_romance_relationship_async(
 ) -> dict[str, Any]:
     """Async twin of _upsert_pursue_romance_relationship_sync."""
 
-    row = await conn.fetchrow(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = $2
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = $1
-        """,
-        actor_entity_id,
-        target_entity_id,
-    )
-    if row is None:
-        raise ValueError(
-            "pursue_romance completion requires actor and target character rows"
+    async with relationship_producer_async(conn, "package"):
+        row = await conn.fetchrow(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = $2
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = $1
+            """,
+            actor_entity_id,
+            target_entity_id,
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("pursue_romance completion cannot target the actor")
-    previous = _row_get(row, "previous_relationship_type", 2)
-    previous_type = str(previous) if previous is not None else None
-    metadata = _pursue_romance_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        existing_extra_data=_row_get(row, "extra_data", 3),
-    )
-    written = await conn.fetchrow(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            $1, $2, 'romantic', '+4|admiring',
-            'Romantic partners by mutual courtship.',
-            'A sustained courtship concluded in mutual declared intention.',
-            'Romance established through the PURSUE_ROMANCE project.',
-            $3::jsonb
+        if row is None:
+            raise ValueError(
+                "pursue_romance completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("pursue_romance completion cannot target the actor")
+        previous = _row_get(row, "previous_relationship_type", 2)
+        previous_type = str(previous) if previous is not None else None
+        metadata = _pursue_romance_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            existing_extra_data=_row_get(row, "extra_data", 3),
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type
-        """,
-        character1_id,
-        character2_id,
-        json.dumps(metadata),
-    )
-    if written is None:
-        raise RuntimeError("pursue_romance relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "relationship_type": "romantic",
-        "relationship_type_changed": previous_type != "romantic",
-    }
+        written = await conn.fetchrow(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                $1, $2, 'romantic', '+4|admiring',
+                'Romantic partners by mutual courtship.',
+                'A sustained courtship concluded in mutual declared intention.',
+                'Romance established through the PURSUE_ROMANCE project.',
+                $3::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type
+            """,
+            character1_id,
+            character2_id,
+            json.dumps(metadata),
+        )
+        if written is None:
+            raise RuntimeError("pursue_romance relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "relationship_type": "romantic",
+            "relationship_type_changed": previous_type != "romantic",
+        }
 
 
 def _court_patron_relationship_metadata(
@@ -4505,71 +4519,72 @@ def _upsert_court_patron_relationship_sync(
 ) -> dict[str, Any]:
     """Persist actor->target using the trait compiler's patron convention."""
 
-    cur.execute(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = %s
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = %s
-        """,
-        (target_entity_id, actor_entity_id),
-    )
-    row = cur.fetchone()
-    if row is None:
-        raise ValueError(
-            "court_patron completion requires actor and target character rows"
+    with relationship_producer(cur, "package"):
+        cur.execute(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = %s
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = %s
+            """,
+            (target_entity_id, actor_entity_id),
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("court_patron completion cannot target the actor")
-    previous = _row_get(row, "previous_relationship_type", 2)
-    previous_type = str(previous) if previous is not None else None
-    metadata = _court_patron_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        existing_extra_data=_row_get(row, "extra_data", 3),
-    )
-    cur.execute(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            %s, %s, 'patron', '+2|friendly',
-            'Patronage secured through demonstrated worth.',
-            'A sustained effort concluded in granted favor and obligation.',
-            'Patronage established through the COURT_PATRON project.',
-            %s::jsonb
+        row = cur.fetchone()
+        if row is None:
+            raise ValueError(
+                "court_patron completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("court_patron completion cannot target the actor")
+        previous = _row_get(row, "previous_relationship_type", 2)
+        previous_type = str(previous) if previous is not None else None
+        metadata = _court_patron_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            existing_extra_data=_row_get(row, "extra_data", 3),
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type
-        """,
-        (character1_id, character2_id, json.dumps(metadata)),
-    )
-    if cur.fetchone() is None:
-        raise RuntimeError("court_patron relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "relationship_type": "patron",
-        "relationship_type_changed": previous_type != "patron",
-    }
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                %s, %s, 'patron', '+2|friendly',
+                'Patronage secured through demonstrated worth.',
+                'A sustained effort concluded in granted favor and obligation.',
+                'Patronage established through the COURT_PATRON project.',
+                %s::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type
+            """,
+            (character1_id, character2_id, json.dumps(metadata)),
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError("court_patron relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "relationship_type": "patron",
+            "relationship_type_changed": previous_type != "patron",
+        }
 
 
 async def _upsert_court_patron_relationship_async(
@@ -4582,73 +4597,74 @@ async def _upsert_court_patron_relationship_async(
 ) -> dict[str, Any]:
     """Async twin of _upsert_court_patron_relationship_sync."""
 
-    row = await conn.fetchrow(
-        """
-        SELECT actor.id AS character1_id,
-               target.id AS character2_id,
-               existing.relationship_type AS previous_relationship_type,
-               existing.extra_data
-        FROM characters actor
-        JOIN characters target ON target.entity_id = $2
-        LEFT JOIN character_relationships existing
-          ON existing.character1_id = actor.id
-         AND existing.character2_id = target.id
-        WHERE actor.entity_id = $1
-        """,
-        actor_entity_id,
-        target_entity_id,
-    )
-    if row is None:
-        raise ValueError(
-            "court_patron completion requires actor and target character rows"
+    async with relationship_producer_async(conn, "package"):
+        row = await conn.fetchrow(
+            """
+            SELECT actor.id AS character1_id,
+                   target.id AS character2_id,
+                   existing.relationship_type AS previous_relationship_type,
+                   existing.extra_data
+            FROM characters actor
+            JOIN characters target ON target.entity_id = $2
+            LEFT JOIN character_relationships existing
+              ON existing.character1_id = actor.id
+             AND existing.character2_id = target.id
+            WHERE actor.entity_id = $1
+            """,
+            actor_entity_id,
+            target_entity_id,
         )
-    character1_id = int(_row_get(row, "character1_id", 0))
-    character2_id = int(_row_get(row, "character2_id", 1))
-    if character1_id == character2_id:
-        raise ValueError("court_patron completion cannot target the actor")
-    previous = _row_get(row, "previous_relationship_type", 2)
-    previous_type = str(previous) if previous is not None else None
-    metadata = _court_patron_relationship_metadata(
-        template_id=template_id,
-        source_chunk_id=source_chunk_id,
-        previous_relationship_type=previous_type,
-        existing_extra_data=_row_get(row, "extra_data", 3),
-    )
-    written = await conn.fetchrow(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history, extra_data
-        ) VALUES (
-            $1, $2, 'patron', '+2|friendly',
-            'Patronage secured through demonstrated worth.',
-            'A sustained effort concluded in granted favor and obligation.',
-            'Patronage established through the COURT_PATRON project.',
-            $3::jsonb
+        if row is None:
+            raise ValueError(
+                "court_patron completion requires actor and target character rows"
+            )
+        character1_id = int(_row_get(row, "character1_id", 0))
+        character2_id = int(_row_get(row, "character2_id", 1))
+        if character1_id == character2_id:
+            raise ValueError("court_patron completion cannot target the actor")
+        previous = _row_get(row, "previous_relationship_type", 2)
+        previous_type = str(previous) if previous is not None else None
+        metadata = _court_patron_relationship_metadata(
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+            previous_relationship_type=previous_type,
+            existing_extra_data=_row_get(row, "extra_data", 3),
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = now()
-        RETURNING character1_id, character2_id, relationship_type
-        """,
-        character1_id,
-        character2_id,
-        json.dumps(metadata),
-    )
-    if written is None:
-        raise RuntimeError("court_patron relationship upsert returned no row")
-    return {
-        "operation": "insert" if previous_type is None else "update",
-        "subject_entity_id": actor_entity_id,
-        "object_entity_id": target_entity_id,
-        "character1_id": character1_id,
-        "character2_id": character2_id,
-        "previous_relationship_type": previous_type,
-        "relationship_type": "patron",
-        "relationship_type_changed": previous_type != "patron",
-    }
+        written = await conn.fetchrow(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (
+                $1, $2, 'patron', '+2|friendly',
+                'Patronage secured through demonstrated worth.',
+                'A sustained effort concluded in granted favor and obligation.',
+                'Patronage established through the COURT_PATRON project.',
+                $3::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = now()
+            RETURNING character1_id, character2_id, relationship_type
+            """,
+            character1_id,
+            character2_id,
+            json.dumps(metadata),
+        )
+        if written is None:
+            raise RuntimeError("court_patron relationship upsert returned no row")
+        return {
+            "operation": "insert" if previous_type is None else "update",
+            "subject_entity_id": actor_entity_id,
+            "object_entity_id": target_entity_id,
+            "character1_id": character1_id,
+            "character2_id": character2_id,
+            "previous_relationship_type": previous_type,
+            "relationship_type": "patron",
+            "relationship_type_changed": previous_type != "patron",
+        }
 
 
 def _apply_project_complete_sync(

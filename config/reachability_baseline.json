@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Record the merged explicit-slot mutation helper and declare the PostgreSQL event-source proof dynamic writer.",
+  "reason": "Register the shared relationship provenance and milestone consumer introduced by issue 790",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -153,6 +153,7 @@
     "nexus/agents/orrery/propagation.py",
     "nexus/agents/orrery/reciprocal.py",
     "nexus/agents/orrery/reconstruction.py",
+    "nexus/agents/orrery/relationship_provenance.py",
     "nexus/agents/orrery/resolver.py",
     "nexus/agents/orrery/retrograde_embedding.py",
     "nexus/agents/orrery/retrograde_expansion.py",

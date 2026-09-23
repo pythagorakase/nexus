@@ -752,7 +752,11 @@ class FakeRetrogradePersistenceCursor:
     def execute(self, sql: str, params: Optional[Any] = None) -> None:
         self.statements.append(sql)
         self.params.append(params)
-        if "orrery:canonical_player_identity" in sql:
+        if "current_setting('nexus.write_producer'" in sql:
+            self._result = [{"producer": ""}]
+        elif "nexus.write_producer" in sql:
+            self._result = []
+        elif "orrery:canonical_player_identity" in sql:
             self._result = [
                 {
                     "user_character": 11,

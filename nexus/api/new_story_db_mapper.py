@@ -621,6 +621,7 @@ class NewStoryDatabaseMapper:
                         DELETE FROM place_chunk_references;
                         DELETE FROM character_aliases;
                         DELETE FROM character_psychology;
+                        SET LOCAL nexus.write_producer = 'manual';
                         DELETE FROM character_relationships;
                         DELETE FROM faction_relationships;
                         DELETE FROM faction_character_relationships;

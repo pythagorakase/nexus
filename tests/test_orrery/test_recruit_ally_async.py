@@ -49,6 +49,8 @@ class AsyncProjectConn:
 
     async def fetchval(self, sql: str, *params: Any) -> Any:
         normalized = " ".join(sql.split())
+        if "current_setting('nexus.write_producer'" in normalized:
+            return ""
         if "SELECT world_time FROM chunk_metadata" in normalized:
             assert params == (SOURCE_CHUNK,)
             return WORLD_TIME
@@ -85,6 +87,8 @@ class AsyncProjectConn:
 
     async def execute(self, sql: str, *params: Any) -> str:
         normalized = " ".join(sql.split())
+        if "nexus.write_producer" in normalized:
+            return "SET"
         if "INSERT INTO character_project_states" in normalized:
             self.project_inserts.append(params)
             (

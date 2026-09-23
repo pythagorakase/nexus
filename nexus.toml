@@ -405,8 +405,6 @@ coverage_distribution_tolerance = 0.05
 
 [orrery.drift]
 enabled = true
-copresence_rate_per_hour = 0.001
-copresence_max_hours_per_tick = 12.0
 project_milestone_delta = 0.03
 
 [orrery.drift.hostile_events]
