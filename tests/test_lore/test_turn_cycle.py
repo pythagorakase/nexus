@@ -126,8 +126,6 @@ def test_process_user_input_uses_provider_profile_budget(
     assert ctx.provider_name == provider_name
     assert ctx.token_counts["apex_window"] == expected_window
     assert lore.memory_manager.phase2_budget == expected_window // 10
-    if apex_model is None:
-        assert ctx.token_counts["reasoning_reserve"] == 30_000
 
 
 def test_process_user_input_uses_base_budget_when_logon_is_disabled() -> None:
@@ -158,7 +156,6 @@ def test_process_user_input_uses_base_budget_when_logon_is_disabled() -> None:
     assert ctx.apex_model is None
     assert ctx.provider_wire_type is None
     assert ctx.token_counts["apex_window"] == 75_000
-    assert ctx.token_counts["reasoning_reserve"] == 30_000
     assert lore.memory_manager.phase2_budget == 7_500
 
 

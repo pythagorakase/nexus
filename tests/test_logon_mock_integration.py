@@ -203,6 +203,9 @@ def test_logon_real_entrypoint_records_registry_provider_and_single_pass_seat(
         "request_timeout_seconds": None,
         "request_params": {},
     }
+    # This SDK/telemetry fixture has no story database or Setting Card.
+    utility._setting_context_loaded = True
+    utility._setting_context = None
     utility._initialize_provider(
         False,
         resolved_route=("registry-test-model", "test", endpoint, "local"),

@@ -1,5 +1,6 @@
 """Tests for LOGON prompt formatting."""
 
+from contextlib import closing
 from pathlib import Path
 import re
 from typing import Any, Literal, cast
@@ -56,8 +57,8 @@ def _patch_setting_row(monkeypatch: pytest.MonkeyPatch, row: Any) -> _FakeConnec
         lambda _dbname: "",
     )
     monkeypatch.setattr(
-        "nexus.agents.lore.logon_utility.psycopg2.connect",
-        lambda **_kwargs: fake_conn,
+        "nexus.api.db_pool.get_connection",
+        lambda **_kwargs: closing(fake_conn),
     )
     return fake_conn
 
@@ -271,8 +272,8 @@ def test_setting_snapshot_is_shared_across_seats(
         lambda _dbname: "",
     )
     monkeypatch.setattr(
-        "nexus.agents.lore.logon_utility.psycopg2.connect",
-        counting_connect,
+        "nexus.api.db_pool.get_connection",
+        lambda **kwargs: closing(counting_connect(**kwargs)),
     )
 
     two_pass = _with_letter_budget(
@@ -612,8 +613,8 @@ def test_system_prompt_excludes_runtime_tag_library(monkeypatch) -> None:
         lambda dbname=None: dbname or "save_05",
     )
     monkeypatch.setattr(
-        "nexus.agents.lore.logon_utility.psycopg2.connect",
-        lambda **_kwargs: _Conn(),
+        "nexus.api.db_pool.get_connection",
+        lambda **_kwargs: closing(_Conn()),
     )
 
     prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
