@@ -232,7 +232,7 @@ def test_local_block_accounting_reuses_counts_and_subtracts_without_rendering():
     misses = count.cache_info().misses
     counts, _ = measure_blocks(request.blocks, request.counter)
     assert count.cache_info().misses == misses
-    request.drop(chunk)
+    request.drop(chunk, "recent narrative")
     assert request.tokens == before - counts["recent narrative"]
     assert count.cache_info().misses == misses
 
@@ -304,3 +304,52 @@ def test_shared_trim_reserves_maximal_writer_response_for_gaia():
         rendered_tokens=exact,
     )
     assert exact <= gaia.budget.input_ceiling
+
+
+def test_exact_ledger_separates_system_text_from_schema_estimates():
+    """The ledger reconciles against measured system text, not estimated schema."""
+    from nexus.telemetry.prompt_window import LocalRequestCounter, local_text_counter
+
+    settings = load_settings()
+    count = local_text_counter(settings.model_entry(settings.apex.model))
+    system = count("System instructions.")
+    blocks = [("user input", "Continue.")]
+    counter = LocalRequestCounter(count, system + 1000, system_tokens=system)
+    exact = system + count("Continue.") + 200
+    counts, total = measure_blocks(blocks, counter, exact_total=exact)
+    assert counts == {
+        "system": system,
+        "user input": count("Continue."),
+        "request framing": 200,
+    }
+    assert total == exact == sum(counts.values())
+
+
+def test_trim_subtracts_only_the_removed_appearance_of_a_shared_chunk():
+    """A passage reused in two sections must retain its other rendered cost."""
+    from nexus.telemetry.prompt_window import (
+        AssemblyRequest,
+        LocalRequestCounter,
+        local_text_counter,
+    )
+
+    settings = load_settings()
+    count = local_text_counter(settings.model_entry(settings.apex.model))
+    chunk = {"chunk_id": 42}
+    budget = resolve_seat_window(
+        settings.model_dump(), settings.apex.model, seat="skald_writer", window=75000
+    )
+    request = AssemblyRequest(
+        budget,
+        [
+            ("recent narrative", " A passage."),
+            ("historical context", " Again: a passage."),
+        ],
+        {0: id(chunk), 1: id(chunk)},
+        LocalRequestCounter(count, 100),
+    )
+    request.drop(chunk, "recent narrative")
+    assert request.removed == {0}
+    assert request.tokens == 100 + count(" Again: a passage.")
+    request.drop(chunk, "historical context")
+    assert request.tokens == 100

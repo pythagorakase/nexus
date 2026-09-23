@@ -1174,9 +1174,9 @@ class TurnCycleManager:
         def over_budget() -> bool:
             return any(request.tokens > request.target for request in requests)
 
-        def drop(chunk: Dict[str, Any]) -> None:
+        def drop(chunk: Dict[str, Any], kind: str) -> None:
             for request in requests:
-                request.drop(chunk)
+                request.drop(chunk, kind)
 
         tokens_after = tokens_before
         warm_chunks_dropped = 0
@@ -1207,14 +1207,14 @@ class TurnCycleManager:
                 break
             chunk = warm_chunks.pop(oldest_index)
             dropped_chunks.append(chunk)
-            drop(chunk)
+            drop(chunk, "recent narrative")
             warm_chunks_dropped += 1
             tokens_after = writer.tokens
 
         while over_budget() and retrieved_passages:
             chunk = retrieved_passages.pop()
             dropped_chunks.append(chunk)
-            drop(chunk)
+            drop(chunk, "historical context")
             retrieved_passages_dropped += 1
             tokens_after = writer.tokens
 

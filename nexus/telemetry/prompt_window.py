@@ -49,9 +49,16 @@ class RenderedSections(list[str]):
 class LocalRequestCounter:
     """Memoized local block counts plus the request's fixed system/schema cost."""
 
-    def __init__(self, text_count: Callable[[str], int], overhead: int) -> None:
+    def __init__(
+        self,
+        text_count: Callable[[str], int],
+        overhead: int,
+        *,
+        system_tokens: int | None = None,
+    ) -> None:
         self.text_count = text_count
         self.overhead = overhead
+        self.system_tokens = overhead if system_tokens is None else system_tokens
 
     def __call__(self, text: str) -> int:
         return self.overhead + self.text_count(text)
@@ -81,7 +88,8 @@ def local_request_counter(
     anthropic_request: dict[str, Any] | None = None,
 ) -> LocalRequestCounter:
     """Estimate fixed request costs locally; only the final guard counts remotely."""
-    overhead = text_count(provider.system_prompt or "")
+    system_tokens = text_count(provider.system_prompt or "")
+    overhead = system_tokens
     if provider.usage_provider_name != "test":
         schema = text_format or {
             key: value
@@ -104,7 +112,7 @@ def local_request_counter(
                     messages, tokenize=True, add_generation_prompt=True
                 )
             )
-    return LocalRequestCounter(text_count, overhead)
+    return LocalRequestCounter(text_count, overhead, system_tokens=system_tokens)
 
 
 @dataclass
@@ -135,11 +143,16 @@ class AssemblyRequest:
         """Reserve the writer response and configured tokenizer safety margin."""
         return self.budget.input_ceiling - self.reserved_output - self.safety_margin
 
-    def drop(self, chunk: dict[str, Any]) -> None:
-        """Subtract only rendered blocks owned by the removed payload object."""
-        self.removed.update(
-            index for index, source in self.sources.items() if source == id(chunk)
-        )
+    def drop(self, chunk: dict[str, Any], kind: str) -> None:
+        """Subtract one appearance in the section being trimmed."""
+        for index, source in self.sources.items():
+            if (
+                source == id(chunk)
+                and self.blocks[index][0] == kind
+                and index not in self.removed
+            ):
+                self.removed.add(index)
+                break
 
 
 class PromptWindowRecord(BaseModel):
@@ -258,7 +271,7 @@ def measure_blocks(
 ) -> tuple[dict[str, int], int]:
     """Count each local block once and reconcile framing to the one full count."""
     counts: dict[str, int] = defaultdict(int)
-    counts["system"] = count.overhead
+    counts["system"] = count.overhead if exact_total is None else count.system_tokens
     for kind, text in blocks:
         counts[kind] += count.text_count(text)
     total = sum(counts.values())
