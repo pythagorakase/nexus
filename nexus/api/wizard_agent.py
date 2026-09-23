@@ -128,7 +128,7 @@ def _load_trait_menu() -> str:
 
 
 def _character_subphase(context: WizardContext) -> str:
-    state = (context.context_data or {}).get("character_state", {})
+    state = (context.context_data or {}).get("character_state") or {}
     if state.get("concept") is None:
         return "concept"
     if state.get("trait_selection") is None:
@@ -171,7 +171,7 @@ def _phase_instruction(context: WizardContext) -> str:
 
         # Surface suggested traits during traits subphase for conversational flow
         if subphase == "traits":
-            char_state = (context.context_data or {}).get("character_state", {})
+            char_state = (context.context_data or {}).get("character_state") or {}
             concept = char_state.get("concept", {})
             suggested = concept.get("suggested_traits", [])
             rationales = concept.get("trait_rationales", {})
@@ -299,7 +299,7 @@ def _ensure_phase(
 def _ensure_character_subphase(
     ctx: RunContext[WizardContext], expected: str, tool_name: str
 ) -> CharacterCreationState:
-    state_data = (ctx.deps.context_data or {}).get("character_state", {})
+    state_data = (ctx.deps.context_data or {}).get("character_state") or {}
     creation_state = CharacterCreationState.model_validate(state_data)
     subphase = creation_state.current_subphase()
     if subphase != expected:
