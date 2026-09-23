@@ -22,7 +22,8 @@ from nexus.agents.orrery.reveal import drain_backstory_reveals_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import verify_checkpoints_sync
 from nexus.agents.orrery.substrate import WorldState
-from nexus.api.slot_utils import get_slot_db_url
+from nexus.api.slot_utils import get_slot_db_url, slot_dbname
+from nexus.database import asyncpg_kwargs
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_async,
 )
@@ -331,7 +332,7 @@ def test_async_authoring_grants_unpossessed_holder() -> None:
     import asyncpg  # type: ignore[import-untyped]
 
     async def run() -> None:
-        conn = await asyncpg.connect(get_slot_db_url(slot=5))
+        conn = await asyncpg.connect(**asyncpg_kwargs(slot_dbname(5)))
         transaction = conn.transaction()
         await transaction.start()
         try:
