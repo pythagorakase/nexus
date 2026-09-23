@@ -437,6 +437,10 @@ class Supervisor:
                 f"Agent/test shells should export {GATEWAY_PORT_ENV} to run on "
                 "a separate port with isolated state."
             )
+        if name == "gateway":
+            from nexus.api.choice_recovery import recover_active_slot_choice
+
+            recover_active_slot_choice(slot)
         pid = self._spawn(name, service, slot, detached=detached)
         self._await_healthy(name, service, pid)
         record = {

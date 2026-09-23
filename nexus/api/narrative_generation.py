@@ -309,7 +309,7 @@ async def generate_narrative_async(
                 session_id,
                 "complete",
                 {
-                    "chunk_id": parent_chunk_id + 1,
+                    "chunk_id": None,
                     "preview": incubator_data["storyteller_text"][:200] + "...",
                 },
             )
@@ -393,6 +393,19 @@ async def write_to_incubator(
     generation_model = data["generation_model"]
     if not isinstance(generation_model, str) or not generation_model.strip():
         raise ValueError("Generated incubator payload is missing its model id")
+    from nexus.api.draft_validation import validate_commit_draft_sync
+
+    # A rolled-back subtransaction proves deterministic checks without retaining
+    # any dry-run work or consuming narrative sequence values.
+    with conn.cursor() as cur:
+        cur.execute("SAVEPOINT incubator_validation")
+    try:
+        validate_commit_draft_sync(conn, data)
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("ROLLBACK TO SAVEPOINT incubator_validation")
+            cur.execute("RELEASE SAVEPOINT incubator_validation")
+    data["chunk_id"] = None
     lore_pass_baseline = validate_staged_pass2_baseline(data["lore_pass_baseline"])
 
     values = (
@@ -709,7 +722,7 @@ async def generate_bootstrap_narrative(
 
     # Build incubator data
     incubator_data = {
-        "chunk_id": 1,  # First chunk
+        "chunk_id": None,  # Assigned only when accepted
         "parent_chunk_id": 0,  # No parent
         "user_text": user_text,
         "storyteller_text": narrative_text,

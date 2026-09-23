@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
@@ -16,11 +15,8 @@ from nexus.api.narrative_lease import (
     acquire_generation_lease,
     bind_generation_parent,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import disposable_slot_database, seed_protagonist, sqlalchemy_url
 from nexus.memory.manager import empty_pass2_baseline
-from tests.test_orrery.claim_accounts_test_support import (
-    install_claim_accounts_shadow_sync,
-)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -50,75 +46,34 @@ class _NonCommittingConnection:
 
 @pytest.fixture()
 def provenance_db() -> Iterator[dict[str, Any]]:
-    """Apply 082 plus a 091 shadow and roll back every slot-5 write."""
-
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
-    connection = engine.connect()
-    transaction = connection.begin()
-    raw_connection = connection.connection.driver_connection
-    migration_sql = (
-        Path(__file__).parents[2] / "migrations" / "082_generation_model_provenance.sql"
-    ).read_text()
-    reveal_migration_sql = (
-        Path(__file__).parents[2] / "migrations" / "091_backstory_secrets.sql"
-    ).read_text()
-    lease_migration_sql = (
-        Path(__file__).parents[2] / "migrations" / "098_narrative_generation_lease.sql"
-    ).read_text()
-    baseline_migration_sql = (
-        Path(__file__).parents[2] / "migrations" / "107_lore_pass_baselines.sql"
-    ).read_text()
-    try:
-        with raw_connection.cursor() as cur:
-            cur.execute(migration_sql)
-            cur.execute(lease_migration_sql)
-            cur.execute(baseline_migration_sql)
-            schema = f"provenance_reveal_{uuid4().hex[:12]}"
-            cur.execute(f'CREATE SCHEMA "{schema}"')
-            cur.execute(f'SET LOCAL search_path = "{schema}", public')
-            cur.execute(reveal_migration_sql)
-            install_claim_accounts_shadow_sync(
-                cur,
-                include_backstory_shadow=False,
-            )
-            cur.execute(
-                """
-                INSERT INTO event_types (type, category, severity, description)
-                VALUES
-                    (
-                        'relationship_drift_milestone', 'emotional', 'minor',
-                        'Rollback-only migration-089 milestone event seed.'
-                    ),
-                    (
-                        'relationship_drift_drained', 'emotional', 'minor',
-                        'Rollback-only migration-089 drain event seed.'
-                    )
-                ON CONFLICT (type) DO NOTHING
-                """
-            )
-            cur.execute(
-                """
-                SELECT max(nc.id)
-                FROM narrative_chunks nc
-                JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-                """
-            )
-            parent_chunk_id = cur.fetchone()[0]
-            cur.execute("DELETE FROM incubator WHERE id = TRUE")
-        if parent_chunk_id is None:
-            pytest.skip("save_05 needs an accepted narrative chunk")
-
-        yield {
-            "connection": connection,
-            "raw_connection": raw_connection,
-            "production_connection": _NonCommittingConnection(raw_connection),
-            "parent_chunk_id": int(parent_chunk_id),
-        }
-    finally:
-        if transaction.is_active:
-            transaction.rollback()
-        connection.close()
-        engine.dispose()
+    """Exercise the current schema on a seeded disposable clone."""
+    with disposable_slot_database("qa640_provenance") as dbname:
+        seed_protagonist(dbname)
+        engine = create_engine(sqlalchemy_url(dbname), future=True)
+        connection = engine.connect()
+        transaction = connection.begin()
+        raw_connection = connection.connection.driver_connection
+        try:
+            with raw_connection.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO narrative_chunks (raw_text, storyteller_text) VALUES ('Rain falls.', 'Rain falls.') RETURNING id"
+                )
+                parent_chunk_id = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO chunk_metadata (chunk_id, season, episode, scene, world_layer) VALUES (%s, 1, 1, 1, 'primary')",
+                    (parent_chunk_id,),
+                )
+            yield {
+                "connection": connection,
+                "raw_connection": raw_connection,
+                "production_connection": _NonCommittingConnection(raw_connection),
+                "parent_chunk_id": int(parent_chunk_id),
+            }
+        finally:
+            if transaction.is_active:
+                transaction.rollback()
+            connection.close()
+            engine.dispose()
 
 
 def _incubator_payload(
@@ -128,7 +83,7 @@ def _incubator_payload(
 
     parent_chunk_id = int(db["parent_chunk_id"])
     return {
-        "chunk_id": parent_chunk_id + 1,
+        "chunk_id": None,
         "parent_chunk_id": parent_chunk_id,
         "user_text": "Continue the rollback-only provenance fixture.",
         "storyteller_text": "Rain stipples the empty platform.",

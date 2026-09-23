@@ -183,8 +183,10 @@ export async function continueNarrative(params: {
   slot: number;
   choice?: number;
   userText?: string;
+  sessionId?: string;
 }): Promise<ContinueNarrativeResponse> {
   const body: Record<string, unknown> = { slot: params.slot };
+  if (params.sessionId !== undefined) body.session_id = params.sessionId;
   if (params.choice !== undefined) body.choice = params.choice;
   if (params.userText !== undefined) body.user_text = params.userText;
 

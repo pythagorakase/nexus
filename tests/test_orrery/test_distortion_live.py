@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import timedelta
 import json
 from typing import Any, Iterator
@@ -20,6 +21,7 @@ from nexus.agents.orrery.propagation import drain_claim_propagation_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import reconstruct_state_at_sync
 from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_async,
     install_claim_accounts_shadow_sync,
@@ -44,38 +46,17 @@ DISTORTION_DISABLED = {"enabled": False}
 
 @pytest.fixture()
 def live_conn() -> Iterator[Any]:
-    """Open one slot-5 transaction with post-092 shadow projections."""
-
-    conn = psycopg2.connect(get_slot_db_url(slot=LIVE_SLOT))
-    try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT EXISTS (
-                           SELECT 1 FROM event_types
-                           WHERE type = 'claim_propagated'
-                       ) AS event_registered,
-                       EXISTS (
-                           SELECT 1
-                           FROM information_schema.columns
-                           WHERE table_schema = ANY(current_schemas(false))
-                             AND table_name = 'world_events'
-                             AND column_name = 'world_time'
-                       ) AS world_time_column
-                """
-            )
-            migration_state = cur.fetchone()
-            if (
-                not migration_state["event_registered"]
-                or not migration_state["world_time_column"]
-            ):
-                pytest.skip("slot 5 must have migration 083 before Stage C tests")
-            install_claim_accounts_shadow_sync(cur)
-            _install_valence_shadow(cur)
-        yield conn
-    finally:
-        conn.rollback()
-        conn.close()
+    """Use a seeded disposable slot so the need clock never depends on save 5."""
+    with disposable_slot_database("qa640_distortion") as dbname:
+        seed_protagonist(dbname)
+        with closing(connect(dbname)) as conn:
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    install_claim_accounts_shadow_sync(cur)
+                    _install_valence_shadow(cur)
+                yield conn
+            finally:
+                conn.rollback()
 
 
 def _mint_variant(

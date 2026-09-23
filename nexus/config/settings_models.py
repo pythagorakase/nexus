@@ -1373,6 +1373,8 @@ class OrreryBleedSettings(BaseModel):
             "Per-anchor deterministic probability of offering Bleed candidates."
         ),
     )
+    max_offers_per_candidate: int = Field(default=3, ge=1)
+    demote_unused_after_offers: int = Field(default=2, ge=1)
     max_candidates: int = Field(default=3, ge=0)
     near_distance_max: int = Field(default=2, ge=0)
     reserved_remote_slots: int = Field(default=1, ge=0)

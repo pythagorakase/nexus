@@ -92,6 +92,17 @@ logger = logging.getLogger("nexus.api.narrative")
 
 app = FastAPI(title="NEXUS Narrative API", version="1.0.0")
 
+
+@app.on_event("startup")
+async def recover_active_choice_on_startup() -> None:
+    """Reconcile the active slot before the gateway accepts requests."""
+    from nexus.api.choice_recovery import recover_active_slot_choice
+    from nexus.api.slot_utils import get_active_slot
+
+    if os.environ.get("NEXUS_SLOT") is not None:
+        await asyncio.to_thread(recover_active_slot_choice, get_active_slot())
+
+
 # Configure credentialed CORS from the validated gateway allowlist.
 app.add_middleware(
     CORSMiddleware,
@@ -292,10 +303,11 @@ def _persist_chunk_response(
     cur,
     *,
     is_incubator: bool,
-    chunk_id: int,
+    chunk_id: Optional[int],
     storyteller_text: str,
     choice_object: Optional[Dict[str, Any]],
     choice_text: str,
+    incubator_session_id: Optional[str] = None,
 ) -> str:
     """Persist resolved player response fields for a chunk."""
     raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
@@ -306,18 +318,18 @@ def _persist_chunk_response(
             UPDATE incubator
             SET choice_object = %s,
                 choice_text = %s
-            WHERE chunk_id = %s
+            WHERE session_id = %s
             """,
             (
                 json.dumps(choice_object) if choice_object else None,
                 choice_text,
-                chunk_id,
+                incubator_session_id,
             ),
         )
         if cur.rowcount != 1:
             raise HTTPException(
                 status_code=409,
-                detail="Incubator chunk_id mismatch; concurrent generation may have replaced it.",
+                detail="Incubator session mismatch; concurrent generation may have replaced it.",
             )
     else:
         cur.execute(
@@ -347,7 +359,7 @@ def _persist_chunk_response(
 def _record_player_response_for_chunk(
     *,
     slot: Optional[int],
-    chunk_id: int,
+    chunk_id: Optional[int],
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
@@ -377,9 +389,11 @@ def _record_player_response_for_chunk(
                 SELECT chunk_id AS id, storyteller_text, choice_object,
                        choice_text, session_id
                 FROM incubator
-                WHERE chunk_id = %s
+                WHERE (%s IS NOT NULL AND id = TRUE)
+                   OR (%s IS NULL AND chunk_id = %s)
+                FOR UPDATE
                 """,
-                (chunk_id,),
+                (incubator_session_id, incubator_session_id, chunk_id),
             )
             chunk = cur.fetchone()
             if (
@@ -396,6 +410,11 @@ def _record_player_response_for_chunk(
                     },
                 )
             is_incubator = chunk is not None
+            if incubator_session_id is not None and not is_incubator:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Pending generation session no longer owns the incubator",
+                )
 
             if not chunk:
                 cur.execute(
@@ -484,6 +503,7 @@ def _record_player_response_for_chunk(
                 storyteller_text=chunk.get("storyteller_text") or "",
                 choice_object=resolved.choice_object,
                 choice_text=resolved.choice_text,
+                incubator_session_id=str(chunk["session_id"]) if is_incubator else None,
             )
 
         if owns_connection:
@@ -512,8 +532,8 @@ def _trigger_locked_chunk_embedding(
 
     Continuing from chunk N creates a provisional successor, leaving chunk N
     undoable while every committed chunk before it is locked and must be
-    embedded ("embedded == ironman"). Chunk ids are NOT contiguous: regens
-    burn ids, and migration 078 deliberately preserves gaps left by retired
+    embedded ("embedded == ironman"). Chunk ids are NOT contiguous: failed commits
+    historically consumed ids, and migration 078 preserves gaps left by retired
     Retrograde summary rows. The old single-id ``parent - 1`` arithmetic
     therefore silently skipped playable chunks across those gaps.
     This catch-up form embeds every unembedded locked chunk except the
@@ -677,7 +697,7 @@ def _resolve_and_approve_pending_sync(
     *,
     slot: Optional[int],
     session_id: str,
-    chunk_id: int,
+    chunk_id: Optional[int],
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
@@ -733,7 +753,7 @@ async def _resolve_and_approve_pending(
     *,
     slot: Optional[int],
     session_id: str,
-    chunk_id: int,
+    chunk_id: Optional[int],
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
@@ -826,6 +846,16 @@ async def continue_narrative(
                 status_code=400,
                 detail="Slot is in wizard mode. Use /api/story/new/chat for wizard.",
             )
+
+    if request.session_id is not None:
+        pending = state.narrative_state if state is not None else None
+        if (
+            request.chunk_id is not None
+            or pending is None
+            or not pending.has_pending
+            or pending.session_id != request.session_id
+        ):
+            raise HTTPException(status_code=409, detail="Pending session changed")
 
     session_id = str(uuid.uuid4())
     _acquire_generation_owner(
@@ -990,11 +1020,13 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
                     gs.session_id,
                     CASE
                         WHEN gs.status = 'complete' AND i.session_id IS NULL
+                             AND accepted.id IS NULL
                             THEN 'error'
                         ELSE gs.status
                     END AS status,
                     CASE
                         WHEN gs.status = 'complete' AND i.session_id IS NULL
+                             AND accepted.id IS NULL
                             THEN NULL
                         ELSE gs.chunk_id
                     END AS chunk_id,
@@ -1002,6 +1034,7 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
                     gs.created_at,
                     CASE
                         WHEN gs.status = 'complete' AND i.session_id IS NULL
+                             AND accepted.id IS NULL
                             THEN (
                                 'Completed result is no longer loadable for '
                                 'this session.'
@@ -1011,8 +1044,9 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
                 FROM narrative_generation_sessions gs
                 LEFT JOIN incubator i
                   ON i.session_id = gs.session_id
-                 AND i.chunk_id = gs.chunk_id
+                 AND i.chunk_id IS NOT DISTINCT FROM gs.chunk_id
                  AND i.parent_chunk_id = gs.parent_chunk_id
+                LEFT JOIN narrative_chunks accepted ON accepted.id = gs.chunk_id
                 WHERE gs.session_id = %s
                 """,
                 (session_id,),
@@ -1065,8 +1099,9 @@ async def regenerate_narrative(
                 """
                 SELECT session_id, chunk_id, parent_chunk_id, user_text
                 FROM incubator
-                WHERE id = TRUE
-                """
+                WHERE id = TRUE AND (%s IS NULL OR session_id = %s)
+                """,
+                (request.session_id, request.session_id),
             )
             row = cur.fetchone()
             if not row:
@@ -1381,33 +1416,43 @@ async def select_choice(request: SelectChoiceRequest):
     is_incubator = False
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # First try narrative_chunks
-            cur.execute(
-                """
-                SELECT id, storyteller_text, choice_object, choice_text
-                FROM narrative_chunks
-                WHERE id = %s
-            """,
-                (request.chunk_id,),
-            )
-            chunk = cur.fetchone()
-
-            # Fall back to incubator if not found in narrative_chunks
-            if not chunk:
+            if request.session_id is not None:
                 cur.execute(
                     """
-                    SELECT chunk_id as id, storyteller_text, choice_object, choice_text
-                    FROM incubator
-                    WHERE chunk_id = %s
-                """,
-                    (request.chunk_id,),
+                    SELECT chunk_id AS id, storyteller_text, choice_object,
+                           choice_text, session_id
+                    FROM incubator WHERE session_id = %s FOR UPDATE
+                    """,
+                    (request.session_id,),
                 )
                 chunk = cur.fetchone()
                 is_incubator = True
+            else:
+                cur.execute(
+                    """
+                    SELECT id, storyteller_text, choice_object, choice_text
+                    FROM narrative_chunks WHERE id = %s FOR UPDATE
+                    """,
+                    (request.chunk_id,),
+                )
+                chunk = cur.fetchone()
+                # Historical incubator rows may still have a reserved integer ID.
+                if not chunk:
+                    cur.execute(
+                        """
+                        SELECT chunk_id AS id, storyteller_text, choice_object,
+                               choice_text, session_id
+                        FROM incubator WHERE chunk_id = %s FOR UPDATE
+                        """,
+                        (request.chunk_id,),
+                    )
+                    chunk = cur.fetchone()
+                    is_incubator = True
 
             if not chunk:
                 raise HTTPException(
-                    status_code=404, detail=f"Chunk {request.chunk_id} not found"
+                    status_code=404,
+                    detail=f"Draft or chunk {request.session_id or request.chunk_id} not found",
                 )
 
             # Validate choice_object exists
@@ -1469,10 +1514,11 @@ async def select_choice(request: SelectChoiceRequest):
             raw_text = _persist_chunk_response(
                 cur,
                 is_incubator=is_incubator,
-                chunk_id=request.chunk_id,
+                chunk_id=chunk["id"],
                 storyteller_text=storyteller_text,
                 choice_object=choice_object,
                 choice_text=choice_text,
+                incubator_session_id=str(chunk["session_id"]) if is_incubator else None,
             )
             if is_incubator:
                 logger.info(
@@ -1485,7 +1531,8 @@ async def select_choice(request: SelectChoiceRequest):
 
         return SelectChoiceResponse(
             status="pending" if is_incubator else "finalized",
-            chunk_id=request.chunk_id,
+            chunk_id=chunk["id"],
+            session_id=str(chunk["session_id"]) if is_incubator else None,
             raw_text=raw_text,
         )
 
@@ -1515,12 +1562,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Utility endpoints
 @app.get("/api/narrative/incubator")
-async def get_incubator_contents(slot: Optional[int] = None):
+async def get_incubator_contents(
+    slot: Optional[int] = None, session_id: Optional[str] = None
+):
     """Get current incubator contents"""
     conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM incubator_view")
+            cur.execute(
+                "SELECT * FROM incubator_view WHERE (%s IS NULL OR session_id = %s)",
+                (session_id, session_id),
+            )
             result = cur.fetchone()
 
         if result:
@@ -1532,13 +1584,21 @@ async def get_incubator_contents(slot: Optional[int] = None):
 
 
 @app.delete("/api/narrative/incubator")
-async def clear_incubator(slot: int = Query(..., ge=1, le=5)):
+async def clear_incubator(
+    slot: int = Query(..., ge=1, le=5), session_id: Optional[str] = None
+):
     """Clear the incubator table"""
     require_writable_slot(slot)
     conn = get_db_connection(slot)
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM incubator WHERE id = TRUE")
+            cur.execute(
+                "DELETE FROM incubator WHERE id = TRUE "
+                "AND (%s IS NULL OR session_id = %s)",
+                (session_id, session_id),
+            )
+            if session_id is not None and cur.rowcount != 1:
+                raise HTTPException(status_code=404, detail="Pending session not found")
         conn.commit()
         return {"message": "Incubator cleared"}
     finally:

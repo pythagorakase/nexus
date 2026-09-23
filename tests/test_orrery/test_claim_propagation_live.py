@@ -27,6 +27,7 @@ from nexus.agents.orrery.propagation import (
     drain_claim_propagation_sync,
 )
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
+from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.agents.orrery.replay import (
     canonicalize,
     reconstruct_state_at_sync,
@@ -215,18 +216,19 @@ def _insert_relationship(
     *,
     valence: str = "+3|trusting",
 ) -> None:
-    cur.execute(
-        """
-        INSERT INTO public.character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, dynamic, recent_events, history
-        ) VALUES (
-            %s, %s, 'associate', %s,
-            'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
+    with relationship_producer(cur, "manual"):
+        cur.execute(
+            """
+            INSERT INTO public.character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history
+            ) VALUES (
+                %s, %s, 'associate', %s,
+                'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
+            )
+            """,
+            (source_character_id, target_character_id, valence),
         )
-        """,
-        (source_character_id, target_character_id, valence),
-    )
     cur.execute(
         """
         INSERT INTO pg_temp.character_relationships (

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from nexus.agents.orrery.ambient import shared_ambient_pacing_allows
+from nexus.config import load_settings
 
 logger = logging.getLogger("nexus.orrery.bleed")
 
@@ -236,6 +237,10 @@ def load_bleed_candidates(
     if not pacing_allowed:
         return []
 
+    settings = load_settings().orrery
+    if settings is None:
+        raise ValueError("Orrery settings are required for Bleed selection")
+    bleed_settings = settings.bleed
     limit_clause = "LIMIT :limit" if limit is not None else ""
     rows = session.execute(
         text(
@@ -273,7 +278,7 @@ def load_bleed_candidates(
                     r.last_offered_chunk_id IS NULL
                  OR r.last_offered_chunk_id <> :anchor_chunk_id
               )
-              AND r.offer_count < 3
+              AND r.offer_count < :max_offers_per_candidate
             ORDER BY r.tick_chunk_id DESC,
                      r.magnitude DESC NULLS LAST,
                      r.priority DESC,
@@ -283,6 +288,7 @@ def load_bleed_candidates(
         ),
         {
             "anchor_chunk_id": anchor_chunk_id,
+            "max_offers_per_candidate": bleed_settings.max_offers_per_candidate,
             **({"limit": limit} if limit is not None else {}),
         },
     ).mappings()
@@ -290,7 +296,8 @@ def load_bleed_candidates(
     bounded_rows = list(rows)
     bounded_rows.sort(
         key=lambda row: bool(
-            int(row.get("offer_count") or 0) >= 2
+            int(row.get("offer_count") or 0)
+            >= bleed_settings.demote_unused_after_offers
             and int(row.get("use_count") or 0) == 0
         )
     )
@@ -386,37 +393,28 @@ def select_bleed_menu(
 
 
 def record_bleed_offers(
-    session: Any,
-    candidates: list[BleedCandidate],
+    conn: Any,
     *,
+    resolution_ids: Iterable[int],
     anchor_chunk_id: int,
 ) -> None:
-    """Update surfacing bookkeeping for candidates offered to the Storyteller."""
+    """Count each accepted-draft offer once within the caller's transaction."""
 
-    resolution_ids = [candidate.resolution_id for candidate in candidates]
-    if not resolution_ids:
+    offered_ids = sorted(set(resolution_ids))
+    if not offered_ids:
         return
-
-    session.execute(
-        text(
+    with conn.cursor() as cur:
+        cur.execute(
             """
             /* orrery:record_bleed_offers */
             UPDATE orrery_resolutions
-            SET first_surfaced_chunk_id = COALESCE(
-                    first_surfaced_chunk_id,
-                    :anchor_chunk_id
-                ),
-                last_offered_chunk_id = :anchor_chunk_id,
+            SET first_surfaced_chunk_id = COALESCE(first_surfaced_chunk_id, %s),
+                last_offered_chunk_id = %s,
                 offer_count = offer_count + 1
-            WHERE id = ANY(:resolution_ids)
-            """
-        ),
-        {
-            "anchor_chunk_id": anchor_chunk_id,
-            "resolution_ids": resolution_ids,
-        },
-    )
-    session.commit()
+            WHERE id = ANY(%s)
+            """,
+            (anchor_chunk_id, anchor_chunk_id, offered_ids),
+        )
 
 
 def four_gram_overlap_ratio(stub_text: str, accepted_text: str) -> float:

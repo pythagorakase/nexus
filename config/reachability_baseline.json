@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register the shared relationship provenance and milestone consumer for issue 790, the evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
+  "reason": "Register shared staging validation and choice recovery for issue 801, shared relationship provenance and milestone consumption for issue 790, the evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -186,12 +186,14 @@
     "nexus/api/backstage_endpoints.py",
     "nexus/api/character_tag_manifest.py",
     "nexus/api/choice_handling.py",
+    "nexus/api/choice_recovery.py",
     "nexus/api/chunk_workflow.py",
     "nexus/api/commit_handler_sync.py",
     "nexus/api/config_utils.py",
     "nexus/api/conversations.py",
     "nexus/api/db_converters.py",
     "nexus/api/db_pool.py",
+    "nexus/api/draft_validation.py",
     "nexus/api/entity_tag_manifest_apply.py",
     "nexus/api/faction_table_audit.py",
     "nexus/api/local_inference.py",

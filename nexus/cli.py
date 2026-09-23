@@ -1216,8 +1216,11 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
                     )
                 message = state.get("storyteller_text")
                 if (
-                    not chunk_id
-                    or state.get("current_chunk_id") != chunk_id
+                    (not state.get("has_pending") and not chunk_id)
+                    or (
+                        chunk_id is not None
+                        and state.get("current_chunk_id") != chunk_id
+                    )
                     or state.get("is_empty")
                     or state.get("is_wizard_mode")
                     or (
