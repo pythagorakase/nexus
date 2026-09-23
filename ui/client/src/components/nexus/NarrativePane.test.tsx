@@ -103,6 +103,7 @@ function renderPane(
     thread_id: null,
     current_chunk_id: latest.id,
     has_pending: readingChunkId === null,
+    frontier_clock: null,
     storyteller_text: readingChunkId === null ? "Pending prose" : null,
     choices: [],
     session_id: null,

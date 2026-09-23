@@ -253,6 +253,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
             : undefined,
         });
         sessionRef.current = result.session_id;
+        // Continue accepts the previous draft before starting generation.
+        // Refresh its frontier clock now, without waiting for the next draft.
+        invalidateNarrativeQueries();
       } catch (error) {
         stopClock();
         setPhase("error");

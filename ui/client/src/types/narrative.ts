@@ -30,6 +30,12 @@ export interface ChoiceSelection {
   edited: boolean;
 }
 
+/** The server-formatted clock of the latest accepted playable chunk. */
+export interface FrontierClock {
+  instant: string;
+  face: string;
+}
+
 /** Response model for GET /api/slot/{slot}/state (SlotStateResponse). */
 export interface SlotState {
   slot: number;
@@ -40,6 +46,7 @@ export interface SlotState {
   thread_id: string | null;
   current_chunk_id: number | null;
   has_pending: boolean;
+  frontier_clock: FrontierClock | null;
   storyteller_text: string | null;
   choices: string[];
   session_id: string | null;

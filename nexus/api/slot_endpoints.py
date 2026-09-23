@@ -110,6 +110,7 @@ async def get_slot_state_endpoint(slot: int):
                 is_wizard_mode=False,
                 current_chunk_id=state.narrative_state.current_chunk_id,
                 has_pending=state.narrative_state.has_pending,
+                frontier_clock=state.narrative_state.frontier_clock,
                 storyteller_text=state.narrative_state.storyteller_text,
                 choices=state.narrative_state.choices,
                 session_id=state.narrative_state.session_id,
