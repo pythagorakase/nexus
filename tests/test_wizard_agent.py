@@ -180,7 +180,10 @@ def sample_seed_submission() -> StorySeedSubmission:
     return StorySeedSubmission(seed=seed, location_sketch=location_sketch)
 
 
-def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(monkeypatch):
+@pytest.mark.parametrize("context_data", [None, {}, {"character_state": None}])
+def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(
+    monkeypatch, context_data
+):
     monkeypatch.setattr(wizard_module, "_load_base_prompt", lambda: "BASE")
     monkeypatch.setattr(wizard_module, "_load_trait_menu", lambda: "TRAIT MENU")
     monkeypatch.setattr(
@@ -189,7 +192,7 @@ def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(monkeypatch):
         lambda _dbname: "TAG LIBRARY",
     )
 
-    context = make_context(phase="character")
+    context = make_context(phase="character", context_data=context_data)
     context.accept_fate = True
 
     prompt = build_wizard_prompt(SimpleNamespace(deps=context))
@@ -199,6 +202,9 @@ def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(monkeypatch):
     assert "Trait Reference" in prompt
     assert "TRAIT MENU" in prompt
     assert ACCEPT_FATE_SIGNAL in prompt
+    assert (
+        wizard_module.get_wizard_agent(context) is wizard_module._concept_accept_agent
+    )
 
 
 @pytest.mark.asyncio
@@ -222,7 +228,8 @@ async def test_submit_world_document_sets_tool_result(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_submit_character_concept_sets_trait_menu(monkeypatch):
+@pytest.mark.parametrize("context_data", [None, {}, {"character_state": None}])
+async def test_submit_character_concept_sets_trait_menu(monkeypatch, context_data):
     monkeypatch.setattr(wizard_module, "record_drafts", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         wizard_module, "write_suggested_traits", lambda *args, **kwargs: None
@@ -239,7 +246,7 @@ async def test_submit_character_concept_sets_trait_menu(monkeypatch):
     monkeypatch.setattr(wizard_module, "get_selected_trait_count", lambda _dbname: 0)
     monkeypatch.setattr(wizard_module, "slot_dbname", lambda _slot: "save_01")
 
-    ctx = DummyRunContext(make_context(phase="character"))
+    ctx = DummyRunContext(make_context(phase="character", context_data=context_data))
     with pytest.raises(CallDeferred):
         await submit_character_concept(ctx, sample_concept_submission())
 

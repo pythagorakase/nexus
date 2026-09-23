@@ -125,6 +125,7 @@ export function InteractiveWizard({
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [initializationError, setInitializationError] = useState<string | null>(null);
+    const [phaseTransitionError, setPhaseTransitionError] = useState<string | null>(null);
     const [initializationAttempt, setInitializationAttempt] = useState(0);
     const [threadId, setThreadId] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<Phase>(initialPhase || "setting");
@@ -177,6 +178,7 @@ export function InteractiveWizard({
                 setMessages([]);
                 setDisplayChoices([]);
                 setPendingArtifact(null);
+                setPhaseTransitionError(null);
                 setShowTraitSelector(false);
                 setSuggestedTraits([]);
                 setSelectedTraits([]);
@@ -273,6 +275,7 @@ export function InteractiveWizard({
 
     // Auto-expand panel when pendingArtifact arrives
     useEffect(() => {
+        setPhaseTransitionError(null);
         if (pendingArtifact) {
             setPanelMode("confirm");
             setPanelExpanded(true);
@@ -784,47 +787,36 @@ export function InteractiveWizard({
             return;
         }
 
-        // Determine next phase or completion
-        if (currentPhase === "setting") {
+        // Keep the artifact confirmable until the next phase actually responds.
+        if (currentPhase === "setting" || currentPhase === "character") {
+            const nextPhase = currentPhase === "setting" ? "character" : "seed";
+            const contextData = { ...wizardData, [currentPhase]: pendingArtifact.data };
+            setPhaseTransitionError(null);
             setIsLoading(true);
+            setDisplayChoices([]);
             try {
-                setWizardData((prev: any) => ({ ...prev, setting: pendingArtifact.data }));
-                onArtifactConfirmed?.("setting", pendingArtifact.data);
-                updatePhase("character");
-                // Await next phase to ensure proper sequencing
-                await triggerNextPhase("character");
+                const data = await triggerNextPhase(nextPhase, contextData);
+                setWizardData(contextData);
+                onArtifactConfirmed?.(currentPhase, pendingArtifact.data);
+                updatePhase(nextPhase);
+                setShowTraitSelector(false);
+                if (data.phase_complete) {
+                    setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
+                } else {
+                    setPendingArtifact(null);
+                    if (data.subphase_complete) {
+                        handleSubphaseCompletion(data.artifact_type, data.data);
+                    } else {
+                        addMessage("assistant", data.message);
+                        setDisplayChoices(normalizeChoices(data.choices));
+                    }
+                }
             } catch (error) {
-                console.error("Error transitioning to character phase:", error);
-                toast({
-                    title: "Transition Error",
-                    description: "Failed to proceed. Please try again.",
-                    variant: "destructive",
-                });
+                console.error("Next phase trigger error:", error);
+                setPhaseTransitionError(
+                    error instanceof Error ? error.message : "Could not start the next phase.",
+                );
             } finally {
-                setPendingArtifact(null);
-                processingRef.current = false;
-                setIsLoading(false);
-            }
-        } else if (currentPhase === "character") {
-            // Issue #6: Close trait selector when leaving character phase
-            setShowTraitSelector(false);
-            // Issue #8: Show loading indicator during transition
-            setIsLoading(true);
-            try {
-                setWizardData((prev: any) => ({ ...prev, character: pendingArtifact.data }));
-                onArtifactConfirmed?.("character", pendingArtifact.data);
-                updatePhase("seed");
-                // Await next phase to keep modal visible with "Processing..." state
-                await triggerNextPhase("seed");
-            } catch (error) {
-                console.error("Error transitioning to seed phase:", error);
-                toast({
-                    title: "Transition Error",
-                    description: "Failed to proceed. Please try again.",
-                    variant: "destructive",
-                });
-            } finally {
-                setPendingArtifact(null);
                 processingRef.current = false;
                 setIsLoading(false);
             }
@@ -840,33 +832,30 @@ export function InteractiveWizard({
         }
     };
 
-    const triggerNextPhase = async (nextPhase: Phase) => {
-        setIsLoading(true);
-        try {
-            const res = await fetch("/api/story/new/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    slot,
-                    thread_id: threadId,
-                    message: `[SYSTEM] Phase ${currentPhase} complete. Proceeding to ${nextPhase}. Please introduce the next phase.`,
-                    current_phase: nextPhase,
-                    context_data: wizardData
-                }),
-            });
-
-            if (!res.ok) throw new Error("Failed to trigger next phase");
-            const data = await res.json();
-            addMessage("assistant", data.message);
-
-            // Set new choices (or clear if none)
-            setDisplayChoices(normalizeChoices(data.choices));
-        } catch (error) {
-            console.error("Next phase trigger error:", error);
-        } finally {
-            processingRef.current = false;
-            setIsLoading(false);
+    const triggerNextPhase = async (nextPhase: Phase, contextData: any) => {
+        const res = await fetch("/api/story/new/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                slot,
+                thread_id: threadId,
+                message: `[SYSTEM] Phase ${currentPhase} complete. Proceeding to ${nextPhase}. Please introduce the next phase.`,
+                current_phase: nextPhase,
+                context_data: contextData,
+            }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+            throw new Error(
+                typeof data?.detail === "string"
+                    ? data.detail
+                    : `Could not start ${PHASE_TITLES[nextPhase]} (${res.status}).`,
+            );
         }
+        if (!data || (!data.phase_complete && !data.subphase_complete && !data.message?.trim())) {
+            throw new Error(`No response received for ${PHASE_TITLES[nextPhase]}.`);
+        }
+        return data;
     };
 
     // Panel group ref for imperative layout control
@@ -973,7 +962,7 @@ export function InteractiveWizard({
                         }
                     }}
                     className="text-amber-500/70 hover:text-amber-400 font-mono text-xs uppercase tracking-wider"
-                    disabled={isLoading || !threadId}
+                    disabled={isLoading || !!pendingArtifact || !threadId}
                 >
                     Accept Fate
                 </Button>
@@ -998,6 +987,16 @@ export function InteractiveWizard({
                                         setInitializationAttempt(attempt => attempt + 1);
                                     }}
                                 >
+                                    Retry
+                                </Button>
+                            </div>
+                        )}
+                        {phaseTransitionError && (
+                            <div role="alert" className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 space-y-3">
+                                <p className="font-serif text-sm text-foreground whitespace-pre-wrap break-words">
+                                    {phaseTransitionError}
+                                </p>
+                                <Button variant="outline" size="sm" disabled={isLoading} onClick={handleArtifactConfirm}>
                                     Retry
                                 </Button>
                             </div>
