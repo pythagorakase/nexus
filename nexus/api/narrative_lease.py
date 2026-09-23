@@ -292,6 +292,10 @@ def _finish_generation(
                 (status, chunk_id, error, session_id),
             )
         conn.commit()
+        if released_lease:
+            from nexus.jobs.scheduler import notify_generation_released
+
+            notify_generation_released(conn.info.dbname)
     except Exception:
         conn.rollback()
         raise

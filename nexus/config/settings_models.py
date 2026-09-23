@@ -668,7 +668,7 @@ class DeferredWorkSettings(BaseModel):
     lease_duration_seconds: float = Field(default=60, gt=0)
     heartbeat_interval_seconds: float = Field(default=10, gt=0)
     poll_interval_seconds: float = Field(default=5, gt=0)
-    generation_wait_seconds: float = Field(default=0.1, gt=0)
+    generation_wait_seconds: float = Field(default=1, gt=0)
     error_backoff_seconds: float = Field(default=5, gt=0)
     milestone_recovery_age_seconds: float = Field(default=60, ge=0)
     promotion_limit: int = Field(default=20, ge=1)
@@ -3354,6 +3354,13 @@ class APIUploadsSettings(BaseModel):
     )
 
 
+class APITestProviderSettings(BaseModel):
+    """Deterministic TEST provider timing for interruption proofs."""
+
+    model_config = ConfigDict(extra="forbid")
+    experience_response_delay_seconds: float = Field(default=0, ge=0)
+
+
 class APISettings(BaseModel):
     """Top-level API settings."""
 
@@ -3364,6 +3371,9 @@ class APISettings(BaseModel):
     )
     database: APIDatabaseSettings = Field(
         ..., description="Slot database connection behavior"
+    )
+    test_provider: APITestProviderSettings = Field(
+        default_factory=APITestProviderSettings
     )
     narrative_generation: APINarrativeGenerationSettings = Field(
         ..., description="Durable narrative generation ownership"

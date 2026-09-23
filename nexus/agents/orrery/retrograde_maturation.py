@@ -631,8 +631,15 @@ def drain_maturation_jobs_sync(
         matured = 0
         failed = 0
         for row in rows:
-            from nexus.jobs.gate import report_leased_job
+            from nexus.jobs.gate import report_leased_job, track_job_lease
 
+            track_job_lease(
+                "orrery_maturation_jobs",
+                row["job_id"],
+                locked_by=row["locked_by"],
+                lease_nonce=row["lease_nonce"],
+                duration=cfg.lease_duration_seconds,
+            )
             report_leased_job("orrery_maturation_jobs", row["job_id"])
             try:
                 with usage_context(
@@ -1524,6 +1531,10 @@ class MaturationLeaseLostError(RuntimeError):
 
 
 def _require_maturation_lease(cur: Any, row: Mapping[str, Any]) -> None:
+    cur.execute(
+        "SELECT id FROM orrery_maturation_jobs WHERE id = %s FOR UPDATE",
+        (row["job_id"],),
+    )
     cur.execute(
         """
         SELECT id FROM orrery_maturation_jobs

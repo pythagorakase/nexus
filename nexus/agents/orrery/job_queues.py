@@ -19,26 +19,31 @@ _SHARED_STATES = ("queued", "leased", "succeeded", "failed", "stale_rejected")
 
 def _queue_status(cur: Any, table: str, queue: str) -> dict[str, Any]:
     cur.execute(
-        sql.SQL("SELECT state::text, count(*) AS count FROM {} GROUP BY state").format(
-            sql.Identifier(table)
-        )
-    )
-    counts = dict.fromkeys(_SHARED_STATES, 0)
-    counts.update({row["state"]: int(row["count"]) for row in cur.fetchall()})
-    cur.execute(
         sql.SQL(
-            "SELECT id, state::text, attempts, available_at::text, lease_until::text, last_error "
-            "FROM {} WHERE state IN ('queued', 'leased') ORDER BY id"
-        ).format(sql.Identifier(table))
+            """
+            SELECT jsonb_build_object(
+                'queued', count(*) FILTER (WHERE state='queued'),
+                'leased', count(*) FILTER (WHERE state='leased'),
+                'succeeded', count(*) FILTER (WHERE state='succeeded'),
+                'failed', count(*) FILTER (WHERE state='failed'),
+                'stale_rejected', count(*) FILTER (WHERE state='stale_rejected')
+            ) AS counts,
+            coalesce(jsonb_agg(jsonb_build_object(
+                'id', id, 'queue', %s, 'state', state::text, 'attempts', attempts,
+                'available_at', available_at, 'lease_until', lease_until,
+                'last_error', last_error
+            ) ORDER BY id) FILTER (WHERE state IN ('queued','leased')), '[]'::jsonb)
+                AS non_terminal_jobs
+            FROM {}
+        """
+        ).format(sql.Identifier(table)),
+        (queue,),
     )
-    return {
-        "counts": counts,
-        "non_terminal_jobs": [{**dict(row), "queue": queue} for row in cur.fetchall()],
-    }
+    return dict(cur.fetchone())
 
 
 def load_job_queues_sync(conn: Any) -> dict[str, Any]:
-    """Read all queues and the ownership lease from a single database snapshot."""
+    """Read each queue atomically so its counts and job list always agree."""
     from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 
     with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -68,7 +73,9 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
         cur.execute(
             """
             SELECT owner_id, lease_nonce::text, heartbeat_at::text, expires_at::text,
-                   expires_at > clock_timestamp() AS active, current_job, last_error
+                   expires_at > clock_timestamp() AS active, current_job, last_error,
+                   CASE WHEN expires_at > clock_timestamp() THEN 'owner'
+                        ELSE 'observer' END AS state
             FROM deferred_work_scheduler WHERE id
             """
         )

@@ -19,6 +19,22 @@ def enqueue_compaction(cur: Any, *, accepting_chunk_id: int, floor_turns: int) -
         )
 
 
+def require_compaction_lease(cur: Any, *, job_id: int, owner: str, nonce: str) -> None:
+    """Lock first, then evaluate the completion fence against the wall clock."""
+    cur.execute(
+        "SELECT id FROM correspondence_compaction_jobs WHERE id=%s FOR UPDATE",
+        (job_id,),
+    )
+    cur.execute(
+        """SELECT id FROM correspondence_compaction_jobs
+        WHERE id=%s AND state='leased' AND locked_by=%s AND lease_nonce=%s
+          AND lease_until > clock_timestamp()""",
+        (job_id, owner, nonce),
+    )
+    if cur.fetchone() is None:
+        raise RuntimeError(f"Compaction job {job_id} lost its lease")
+
+
 def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int:
     """Run one nonce-fenced plan, replanning from the latest accepted exchange."""
     from nexus.api.commit_handler_sync import compact_accepted_correspondence_sync
@@ -49,20 +65,17 @@ def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int
             )
 
     def fence(cur: Any) -> None:
-        cur.execute(
-            """
-            SELECT id FROM correspondence_compaction_jobs
-            WHERE id = %s AND state = 'leased' AND locked_by = %s
-              AND lease_nonce = %s AND lease_until > clock_timestamp()
-            FOR UPDATE
-            """,
-            (job["id"], owner, nonce),
-        )
-        if cur.fetchone() is None:
-            raise RuntimeError(f"Compaction job {job['id']} lost its lease")
+        require_compaction_lease(cur, job_id=job["id"], owner=owner, nonce=nonce)
 
-    from nexus.jobs.gate import report_leased_job
+    from nexus.jobs.gate import report_leased_job, track_job_lease
 
+    track_job_lease(
+        "correspondence_compaction_jobs",
+        job["id"],
+        locked_by=owner,
+        lease_nonce=nonce,
+        duration=cfg.compaction_lease_duration_seconds,
+    )
     report_leased_job("correspondence_compaction_jobs", job["id"])
     error = None
     try:

@@ -202,6 +202,9 @@ connect_timeout_seconds = 5
 # supplement PATH when creating or clearing story databases.
 tool_search_paths = ["/Applications/Postgres.app/Contents/Versions/latest/bin"]
 
+[api.test_provider]
+experience_response_delay_seconds = 0
+
 [api.narrative_generation]
 # A crashed gateway must not brick a slot. This exceeds the longest configured
 # storyteller request budget while still allowing eventual lease reclamation.
@@ -1252,7 +1255,7 @@ cors_allowed_origins = [
 lease_duration_seconds = 60
 heartbeat_interval_seconds = 10
 poll_interval_seconds = 5
-generation_wait_seconds = 0.1
+generation_wait_seconds = 1
 error_backoff_seconds = 5
 milestone_recovery_age_seconds = 60
 promotion_limit = 20

@@ -1,5 +1,223 @@
 # Work Order 800 Verification
 
+## Fourth-Amendment Follow-up: Stopped by Postgres.app Authorization
+
+The review fixes are implemented locally on `claude/800-job-owner`. Publication stopped when inspection of the completed PostgreSQL gate revealed the permission refusal below. This invokes the work order's explicit Postgres.app stop rule. **The required PostgreSQL gate is not passed; PR #902 has not received these fixes.** No authentication setting, connection route, or password was changed to bypass the refusal.
+
+The refusal was first read after the aggregate gate finished. Focused proofs that completed before that inspection are retained as evidence, not as a substitute for the blocked gate. The already-running offline suite finished successfully. `origin/main` was merged at `d5d1ccc6`, incorporating `34f008ed` / #904. Both aggregate runs began before that merge, so a complete final gate on the merged revision remains outstanding. No additional paid call was made; the original one-call proof below remains the entire paid-call budget used.
+
+### Exact Blocking Error
+
+From `tests/test_api/test_scheduler_corpus_pg.py::test_scheduler_drains_starved_corpus`, in `tests/pg_fixtures.py:42`, while its polling predicate connected to its own disposable clone:
+
+```text
+E       psycopg2.OperationalError: connection to server at "localhost" (::1), port 5432 failed: FATAL:  Postgres.app rejected "trust" authentication
+E       DETAIL:  Unknown processes are not allowed to connect without a password. For more information see https://postgresapp.com/l/app-permissions/
+E       HINT:  Change pg_hba.conf to require a password
+```
+
+Diagnosis: Postgres.app denied authorization to a client process. The database was `qa640_800_corpus_a11f12bc3d7d`, not a live save. The independently invoked corpus proof later completed before this aggregate error was inspected; that does not waive the explicit stop rule. No PostgreSQL command was started after the refusal was identified.
+
+### Files Changed in the Review Fixes
+
+- `nexus/jobs/scheduler.py` — Separate shutdown from ownership loss; record recovery errors, back off and reacquire; renew selected domain leases during generation waits and refund attempts that never issued a request.
+- `nexus/jobs/gate.py` — Track the selected job's existing nonce and configured lease duration in the scheduler context.
+- `nexus/jobs/compaction.py` — Register the selected lease and evaluate the completion fence after acquiring its row lock.
+- `nexus/agents/orrery/experiences.py` — Supply the selected experience job's fencing identity to the scheduler.
+- `nexus/agents/orrery/retrograde_maturation.py` — Supply maturation fencing identity and recheck expiry after acquiring the completion lock.
+- `nexus/agents/orrery/job_queues.py` — Read counts and nonterminal rows in one statement per queue; expose ownership state.
+- `nexus/api/narrative_lease.py` — Wake local schedulers after the generation-lease release commits.
+- `nexus/api/runtime_status.py` — Report process-local owner/observer/recovering state and last error, including a failed database probe.
+- `nexus/api/mock_openai.py` — Add a configured delay to the real TEST experience response path.
+- `nexus/cli.py` — Include scheduler state and last error in its compact status line.
+- `nexus/config/settings_models.py` — Validate TEST response delay and default generation polling to one second.
+- `nexus.toml` — Set the one-second fallback and zero-delay TEST default.
+- `tests/test_api/test_scheduler_recovery_pg.py` — Exercise terminated heartbeat recovery, locked completion expiry, concurrent status, preemption lease renewal/refunds, and subprocess SIGKILL/restart on real disposable databases.
+- `docs/qa/800-job-owner/verification.md` — Preserve these review proofs and the stop condition.
+
+The #904 merge also brought `nexus/database.py`, `tests/test_database_contract.py`, `tests/test_orrery/test_claim_propagation_live.py`, and `tests/test_orrery/test_reveal_live.py` from the coordinator's branch; these are not additional order-800 fixes. No protected presence, prompt-budget, or usage source was edited.
+
+### Completed Review Proofs
+
+- `nexus/jobs/scheduler.py:279` records an ERROR and `last_error` without issuing diagnostic SQL to an unreachable database; `:460` keeps reacquiring until shutdown. `tests/test_api/test_scheduler_recovery_pg.py:26` terminates an actual heartbeat backend with `pg_terminate_backend`, observes recovery over HTTP on 8017, then demonstrates a new nonce and successful idle narration in the same gateway process.
+- `nexus/jobs/scheduler.py:145` renews the existing domain nonce while waiting. The parameterized test at `tests/test_api/test_scheduler_recovery_pg.py:272` holds generation beyond a one-second experience or compaction lease: it remains live, an observer cannot drain, and no provider usage is recorded before release. Forced renewal failure requeues with attempts reset to zero and no provider call. Local release notification resumes before the one-second fallback.
+- `nexus/jobs/compaction.py:22` and `nexus/agents/orrery/retrograde_maturation.py:1533` lock before reevaluating expiry. The regression at `tests/test_api/test_scheduler_recovery_pg.py:154` holds an actual row lock through expiration and rejects both completions.
+- `tests/test_api/test_scheduler_recovery_pg.py:222` completes narration/compaction from another connection after the status SELECT executes but before fetching it. Counts and rows describe the same snapshot.
+- `tests/test_api/test_scheduler_recovery_pg.py:405` spawns the real gateway on an inherited ephemeral listener, waits until TEST receives the delayed HTTP request, sends SIGKILL, starts a different process, and verifies one successful transition after lease expiry. Replaying the dead attempt through the real experience completion function rejects its nonce. TEST is the only provider used.
+
+```text
+Terminated heartbeat backend: 28822
+Recovery state: recovering; last_error=connection already closed
+Recovering runtime scheduler: {"active": true, "current_job": null, "expires_at": "2026-09-23 23:40:05.779776+00", "heartbeat_at": "2026-09-23 23:40:02.779776+00", "last_error": "connection already closed", "lease_nonce": "ee9c00e4-ba64-48e8-bf26-3acb8ea13a48", "owner_id": "gateway:28668:64bf206d-3f20-49d4-868a-3ea73a1b9e54", "state": "recovering"}
+scheduler: state=owner owner=gateway:28668:64bf206d-3f20-49d4-868a-3ea73a1b9e54 active=True heartbeat=2026-09-23 23:40:06.169565+00 job=orrery_narration_jobs error=connection already closed
+Recovered runtime scheduler: {"active": true, "current_job": "orrery_maturation_jobs", "expires_at": "2026-09-23 23:40:09.289629+00", "heartbeat_at": "2026-09-23 23:40:06.289629+00", "last_error": "connection already closed", "lease_nonce": "93795cba-5fb2-43da-8b27-7c6fb3761551", "owner_id": "gateway:28668:64bf206d-3f20-49d4-868a-3ea73a1b9e54", "state": "owner"}
+Reacquired: ee9c00e4-ba64-48e8-bf26-3acb8ea13a48 -> 93795cba-5fb2-43da-8b27-7c6fb3761551; narration=[('succeeded', 1)]
+SIGKILL gateway pid=19425; job=3; nonce=4b833488-fcb7-4884-a37d-b9fdb8bc84ee
+Restarted gateway pid=19603; job=(succeeded,2); successful transitions=1; dead nonce rejected
+SIGKILL runtime scheduler: {"active": true, "current_job": "orrery_maturation_jobs", "expires_at": "2026-09-23 23:38:08.194141+00", "heartbeat_at": "2026-09-23 23:38:05.194141+00", "last_error": null, "lease_nonce": "e80653f1-6967-49a9-892d-0a30ab731f98", "owner_id": "gateway:19603:2dc039c9-4a74-4c90-a279-d7f6e2fa0822", "state": "owner"}
+nexus down (49812): nothing running
+```
+
+The 8017 gateway fixture ran `nexus down` with the same lane environment and printed `nothing running` after stopping its owned Uvicorn server. The SIGKILL fixture did the same on its ephemeral lane. A final `lsof -nP -iTCP:8017 -sTCP:LISTEN` returned 1 with no output.
+
+### Commands and Verbatim Tails
+
+All commands used the worktree root and the shared interpreter; import resolution was checked first:
+
+```sh
+PY=/Users/pythagor/nexus/.venv/bin/python
+PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
+```
+
+```text
+/Users/pythagor/nexus/.claude/worktrees/800-job-owner/nexus/__init__.py
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+2624 passed, 791 skipped, 9 warnings in 90.35s (0:01:30)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery tests/test_qa_shift.py -k 'job or drain or worker or lease or scheduler or maturation or experience or compaction or status'
+```
+
+```text
+10 failed, 214 passed, 1 skipped, 1711 deselected, 11 warnings, 13 errors in 156.91s (0:02:36)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_scheduler_pg.py -x
+```
+
+```text
+6 passed, 7 warnings in 9.14s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_scheduler_pg.py
+```
+
+```text
+6 passed, 7 warnings in 9.74s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/test_api/test_scheduler_recovery_pg.py
+```
+
+```text
+2 failed, 7 passed, 7 warnings in 19.48s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/test_api/test_scheduler_recovery_pg.py -k preempted
+```
+
+```text
+4 passed, 6 deselected, 7 warnings in 14.80s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/test_api/test_scheduler_recovery_pg.py -k sigkill
+```
+
+```text
+1 passed, 9 deselected, 5 warnings in 16.17s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/test_api/test_scheduler_recovery_pg.py -k terminated_heartbeat
+```
+
+```text
+1 passed, 9 deselected, 7 warnings in 6.32s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/test_api/test_scheduler_corpus_pg.py -k drains_starved
+```
+
+```text
+1 passed, 2 deselected, 7 warnings in 4.62s
+```
+
+The early combined recovery invocation above exposed a tuple-versus-dictionary fixture cursor mismatch in the two compaction cases; that fixture was corrected and both passed in the subsequent preemption invocation. The first SIGKILL attempt returned `1 failed, 9 deselected, 5 warnings in 18.60s` because INFO request-start logs were not enabled in its child TEST server. Its final fixture enables actual child logging; it does not replace the provider or gateway. The initial offline run returned `1 failed, 2623 passed, 791 skipped, 9 warnings in 93.17s (0:01:33)` due to the runtime-status builder calling contract. Moving the local status overlay after the offloaded builder preserved that contract; its focused regression then passed:
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_runtime_status.py
+```
+
+```text
+2 passed, 5 warnings in 0.06s
+```
+
+```sh
+$PY -m black --check nexus/jobs nexus/agents/orrery/{job_queues,experiences,retrograde_maturation}.py nexus/api/{mock_openai,narrative_lease,runtime_status}.py nexus/cli.py nexus/config/settings_models.py tests/test_api/test_scheduler_recovery_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+13 files would be left unchanged.
+```
+
+```sh
+PYTHONPATH=$PWD $PY -c 'from nexus.config import load_settings; s=load_settings(); print("nexus.toml: valid"); print(s.runtime.scheduler); print(s.api.test_provider)'
+```
+
+```text
+nexus.toml: valid
+lease_duration_seconds=60.0 heartbeat_interval_seconds=10.0 poll_interval_seconds=5.0 generation_wait_seconds=1.0 error_backoff_seconds=5.0 milestone_recovery_age_seconds=60.0 promotion_limit=20 compaction_max_jobs_per_drain=1 compaction_max_attempts=3 compaction_retry_delay_seconds=300.0 compaction_lease_duration_seconds=300.0
+experience_response_delay_seconds=0.0
+```
+
+`git diff --check` returned zero with no output. No UI build was needed.
+
+### Aggregate Gate Remainder and Resume Work
+
+The completed gate began before #904 was merged and before the runtime-status calling-contract correction. Its exact failing IDs are retained here:
+
+```text
+FAILED tests/test_api/test_runtime_status.py::test_runtime_status_endpoint_offloads_sync_builder
+FAILED tests/test_api/test_scheduler_corpus_pg.py::test_scheduler_drains_starved_corpus
+FAILED tests/test_orrery/test_claim_consumption_live.py::test_template_gate_flips_on_drain_with_production_explain_parity
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_async_drain_matches_sync_single_hop
+FAILED tests/test_orrery/test_replay.py::test_runtime_maturation_death_replays_without_drift
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_retrograde_institutional_standing_persists_status_edge
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_retrograde_status_skips_existing_live_standing_with_dry_run_parity
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_wizard_time_retrograde_status_keeps_source_chunk_null
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_declaration_status_hint_applies_and_hydrates_for_predicate
+FAILED tests/test_orrery/test_stage2a_status_live.py::test_declaration_status_hint_resolves_same_batch_faction
+ERROR tests/test_orrery/test_claim_propagation_live.py::test_large_skip_drains_chained_hops_at_staggered_times
+ERROR tests/test_orrery/test_claim_propagation_live.py::test_depth_cap_is_recovered_across_separate_drains
+ERROR tests/test_orrery/test_claim_propagation_live.py::test_late_drain_lands_hop_scheduled_inside_age_horizon
+ERROR tests/test_orrery/test_claim_propagation_live.py::test_non_primary_commit_skips_propagation_drain
+ERROR tests/test_orrery/test_claim_propagation_live.py::test_idempotent_redrain_and_disabled_config_are_noops
+ERROR tests/test_orrery/test_claim_propagation_live.py::test_resolution_free_commit_still_drains
+ERROR tests/test_orrery/test_communication_graph_live.py::test_channel_directionality_and_status_minimum
+ERROR tests/test_orrery/test_communication_graph_live.py::test_faction_subject_status_yields_parent_to_member_faction_edge
+ERROR tests/test_orrery/test_polymorphic_patron_live.py::test_roster_start_to_status_completion_closes_institutional_circle
+ERROR tests/test_orrery/test_reveal_live.py::test_commit_reveals_promotes_grants_once_and_redrain_is_noop
+ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_writes_exclusive_pair_tag_with_provenance
+ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_and_raw_status_fail_loudly
+ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_floor_prevents_demotion_and_set_replaces_both_ways
+```
+
+The runtime-status failure is fixed locally and its focused test passes. The corpus failure is the authorization blocker above. Eleven direct-URL failures are the coordinator's #904 repair, now merged but not rerun in this aggregate gate. The other ten IDs are the empty-slot-5 class covered by #885 and amendment four: claim consumption (one), runtime maturation replay (one), stage2a status (five), communication graph (two), and polymorphic patron (one). Their exact IDs and original clean-main reproduction remain in the historical record below. No fresh clean-main worktree was needed or created during this review follow-up.
+
+Coordinator action: resolve the Postgres.app client authorization refusal and authorize resumption. Then rerun both aggregate gates on the merged revision, confirm only #885 remains in PostgreSQL, update this record, commit any necessary fixes, and push the review commits to PR #902. Do not merge the PR. The original production migration and live-save drain remain coordinator-owned. Per-chunk embedding, summary plans, and downloads remain unchanged.
+
+Codex — GPT-6 Astra
+
+---
+
+## Historical Implementation Verification at a6911888
+
+The following evidence is from the prior implementation turn. It is retained for the bounded paid call, original corpus/turn proofs, and baseline reproduction; the stop status above supersedes its publication-readiness statements.
+
 The implementation resumes commit `93110ff3` and incorporates coordinator repair #901 by merging `origin/main` at `0e5843ff`. The required PostgreSQL gate's 21 failing IDs were reproduced exactly on clean `origin/main`; no branch-only failure appeared. Those baseline defects are outside the order's changed files and are recorded below under the third amendment. The owner’s live queues were not drained. One paid call was made in total.
 
 ## Files Changed

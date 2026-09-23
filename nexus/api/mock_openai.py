@@ -15,6 +15,7 @@ Usage:
 
 from nexus.database import connection_kwargs
 
+import asyncio
 import json
 import logging
 import re
@@ -1134,6 +1135,9 @@ async def responses_create(request: ResponsesRequest):
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
         if output_fields == {"recollections"}:
+            delay = load_settings().api.test_provider.experience_response_delay_seconds
+            logger.info("[MOCK] Experience render received; response delay=%s", delay)
+            await asyncio.sleep(delay)
             records_text = input_text.rsplit("Scene seed records:\n", 1)[1]
             records, _ = json.JSONDecoder().raw_decode(records_text.lstrip())
             return _responses_payload(

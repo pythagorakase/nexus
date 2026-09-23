@@ -3279,8 +3279,14 @@ def _print_jobs(payload: Dict[str, Any]) -> None:
     scheduler = payload.get("scheduler")
     if scheduler:
         print(
-            f"scheduler: owner={scheduler['owner_id']} active={scheduler['active']} "
-            f"heartbeat={scheduler['heartbeat_at']} job={scheduler['current_job'] or '-'}"
+            f"scheduler: state={scheduler.get('state', 'observer')} "
+            f"owner={scheduler.get('owner_id', '-')} active={scheduler.get('active', False)} "
+            f"heartbeat={scheduler.get('heartbeat_at', '-')} job={scheduler.get('current_job') or '-'}"
+            + (
+                f" error={scheduler['last_error']}"
+                if scheduler.get("last_error")
+                else ""
+            )
         )
     else:
         print("scheduler: no owner")

@@ -1960,8 +1960,15 @@ def drain_experience_render_jobs_sync(
                 jobs.append(job)
     rendered_count = 0
     for job in jobs:
-        from nexus.jobs.gate import report_leased_job
+        from nexus.jobs.gate import report_leased_job, track_job_lease
 
+        track_job_lease(
+            "character_experience_jobs",
+            job["job_id"],
+            locked_by=job["locked_by"],
+            lease_nonce=job["lease_nonce"],
+            duration=cfg.lease_duration_seconds,
+        )
         report_leased_job("character_experience_jobs", job["job_id"])
         try:
             with conn:
