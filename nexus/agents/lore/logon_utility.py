@@ -58,6 +58,7 @@ from nexus.agents.lore.utils.scene_order import (  # noqa: E402
     is_recalled,
     recalled_clock_label,
     scene_order,
+    select_scene_memories,
 )
 from nexus.agents.orrery.player_identity import (  # noqa: E402
     canonical_player_character_id,
@@ -2576,19 +2577,18 @@ class LogonUtility:
                     description = threat.get("description", "")
                     sections.append(f"- {name}: {description}")
 
-        recalled = [
-            (chunk, False)
-            for chunk in (context.get("warm_slice") or {}).get("chunks", [])
-            if is_recalled(chunk)
-        ]
-        # Preserve the ranked selection cap before splitting rendering lanes.
+        warm, retrieved = select_scene_memories(
+            (context.get("warm_slice") or {}).get("chunks", []),
+            (context.get("retrieved_passages") or {}).get("results", []),
+            render_limits.historical_passages,
+        )
+        recalled = [(chunk, False) for chunk in warm if is_recalled(chunk)]
+        # The ranked cap follows cross-source deduplication.
         # Add retrieved passages
         sections.kind = "historical context"
         if context.get("retrieved_passages"):
             sections.append("\n=== HISTORICAL CONTEXT ===")
-            for passage in context["retrieved_passages"]["results"][
-                : render_limits.historical_passages
-            ]:
+            for passage in retrieved:
                 if is_recalled(passage):
                     recalled.append((passage, True))
                     continue
@@ -2614,7 +2614,7 @@ class LogonUtility:
         # Add warm slice
         if context.get("warm_slice"):
             sections.append("=== RECENT NARRATIVE ===")
-            for chunk in sorted(context["warm_slice"]["chunks"], key=scene_order):
+            for chunk in sorted(warm, key=scene_order):
                 if not is_recalled(chunk):
                     sections.append_chunk(chunk.get("text", ""), chunk)
 

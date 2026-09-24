@@ -11,7 +11,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
-from nexus.agents.lore.utils.scene_order import hydrate_recalled_clocks, is_recalled
+from nexus.agents.lore.utils.scene_order import (
+    hydrate_recalled_clocks,
+    is_recalled,
+    select_scene_memories,
+)
+from nexus.config.settings_models import RenderLimits
 from nexus.agents.orrery.cards import rendered_selection
 from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.memory.context_state import memory_identity
@@ -981,11 +986,6 @@ class TurnCycleManager:
         world_knowledge = self._build_world_knowledge(turn_context)
         recent_rulings_section = self._build_recent_orrery_rulings_section(turn_context)
 
-        memories = turn_context.warm_slice + turn_context.retrieved_passages
-        if any(is_recalled(memory) for memory in memories):
-            with self.lore.memnon.Session() as session:
-                hydrate_recalled_clocks(session, memories)
-
         # Build the context payload
         turn_context.context_payload = {
             "user_input": turn_context.user_input,
@@ -1004,6 +1004,15 @@ class TurnCycleManager:
             },
             "memory_state": turn_context.memory_state,
         }
+
+        self._select_scene_payload(turn_context.context_payload)
+        memories = (
+            turn_context.context_payload["warm_slice"]["chunks"]
+            + turn_context.context_payload["retrieved_passages"]["results"]
+        )
+        if any(is_recalled(memory) for memory in memories):
+            with self.lore.memnon.Session() as session:
+                hydrate_recalled_clocks(session, memories)
 
         if (
             getattr(self.lore, "enable_logon", True)
@@ -1146,6 +1155,19 @@ class TurnCycleManager:
                 limit=prompt_settings.max_rendered_recent_rulings,
             )
 
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+        limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+        warm, retrieved = select_scene_memories(
+            payload["warm_slice"]["chunks"],
+            payload["retrieved_passages"]["results"],
+            limits.historical_passages,
+        )
+        payload["warm_slice"]["chunks"] = warm
+        payload["retrieved_passages"]["results"] = retrieved
+
     def _enforce_context_payload_budget(
         self, turn_context: TurnContext
     ) -> Dict[str, int]:
@@ -1175,6 +1197,7 @@ class TurnCycleManager:
             }
         logon = self.lore.logon
         window = turn_context.token_counts["apex_window"]
+        self._select_scene_payload(payload)
         requests = logon.measure_turn_requests(payload, window)
         writer = requests[0]
         tokens_before = writer.tokens

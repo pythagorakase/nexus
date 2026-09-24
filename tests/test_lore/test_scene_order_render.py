@@ -1,5 +1,6 @@
 """Chronological rendering through the real shared TEST prompt path."""
 
+import asyncio
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
@@ -11,6 +12,7 @@ from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.memory import ContextMemoryManager
 from nexus.memory.context_state import ContextPackage, PassTransition
+from nexus.memory.context_state import memory_identity
 from tests.test_lore.window_helpers import window_logon
 
 
@@ -82,20 +84,84 @@ def test_render_scene_order_and_recalled_clocks_match_both_seats() -> None:
         assert all(label in "".join(blocks) for label in labels)
 
 
-def test_render_recalled_missing_or_naive_clock_fails_loudly() -> None:
-    """Neither missing time nor a storage timestamp becomes an event clock."""
-    with pytest.raises(KeyError):
+def test_render_recalled_missing_clock_is_undated_but_naive_clock_fails() -> None:
+    """Absent clocks stay undated; malformed clocks are still rejected."""
+    assert (
         recalled_clock_label(
             {"id": 8, "metadata": {"created_at": "2026-01-01T00:00:00Z"}}
         )
+        == "chunk 8"
+    )
     with pytest.raises(ValueError, match="timezone-aware"):
         recalled_clock_label(
             {"id": 8, "metadata": {"world_time": "2189-10-17T19:27:00"}}
         )
-    with pytest.raises(KeyError):
+    assert (
         recalled_clock_label(
             {"id": "retrograde_summary:2", "metadata": {"recorded_at_chunk_id": 46}}
         )
+        == "Retrograde summary 2"
+    )
+
+
+def test_render_deduplicates_all_sources_before_historical_cap() -> None:
+    """Both seats pick one identity in its most specific lane and refill caps."""
+    utility = window_logon()
+    utility.settings["lore"]["render_limits"]["historical_passages"] = 2
+    payload = scene_payload()
+    summary = payload["retrieved_passages"]["results"][1]
+    payload["warm_slice"]["chunks"].append(deepcopy(summary))
+    payload["warm_slice"]["chunks"].append(
+        {"id": 48, "is_recalled": True, "text": "Duplicate warm recall."}
+    )
+    payload["retrieved_passages"]["results"] = [
+        {"id": 49, "text": "Duplicate parent."},
+        {"id": 48, "text": "Duplicate recent."},
+        {"id": "8", "text": "Duplicate recalled."},
+        summary,
+        {"id": 1, "text": "First distinct historical."},
+        {"id": "1", "text": "Duplicate historical."},
+        {"id": 2, "text": "Second distinct historical."},
+        {"id": 3, "text": "Beyond cap."},
+    ]
+    original = deepcopy(payload)
+    for request in utility.measure_turn_requests(payload, 75000):
+        sources = {
+            id(memory): memory_identity(memory)
+            for memory in payload["warm_slice"]["chunks"]
+            + payload["retrieved_passages"]["results"]
+        }
+        lanes = {}
+        for index, source in request.sources.items():
+            lanes.setdefault(request.blocks[index][0], []).append(sources[source])
+        assert lanes == {
+            "historical context": [1, 2],
+            "recalled scenes": [8, "retrograde_summary:2"],
+            "recent narrative": [48, 49],
+        }
+        prompt = "".join(content for _, content in request.blocks)
+        assert prompt.count("Parent scene.") == 1
+        assert prompt.count("Recorded summary.") == 1
+        assert "Duplicate" not in prompt
+        assert "Beyond cap." not in prompt
+    assert payload == original
+
+
+def test_render_recalled_lane_wins_over_earlier_historical_candidate() -> None:
+    """Lane priority precedes rank when a deep result is also a recalled hit."""
+    utility = window_logon()
+    utility.settings["lore"]["render_limits"]["historical_passages"] = 1
+    payload = scene_payload()
+    payload["retrieved_passages"]["results"] = [
+        {"id": 2, "text": "Duplicate historical."},
+        {"id": 2, "text": "Preferred recalled.", "is_recalled": True},
+        {"id": 3, "text": "Beyond cap."},
+    ]
+    for seat in ("writer", "gaia"):
+        prompt = utility._format_context_prompt(payload, seat=seat)
+        assert "Duplicate historical." not in prompt
+        assert "Beyond cap." not in prompt
+        assert "[chunk 2 | Score: 0.00] Preferred recalled." in prompt
 
 
 def test_warm_additions_are_recalled_without_reclassifying_existing_scene() -> None:
@@ -120,6 +186,10 @@ def test_window_trimming_removes_recalled_heading_and_counts_exactly() -> None:
     payload = scene_payload()
     payload["retrieved_passages"]["results"] = []
     payload["warm_slice"]["chunks"][-1]["text"] = " Remembered scene." * 40000
+    # Removing the winning copy must not resurrect a discarded deep duplicate.
+    payload["retrieved_passages"]["results"] = [
+        deepcopy(payload["warm_slice"]["chunks"][-1])
+    ]
     context = TurnContext(
         turn_id="scene-order-trim", user_input="Continue.", start_time=0
     )
@@ -191,15 +261,107 @@ def test_recalled_render_clocks_come_from_narrative_view() -> None:
                     == "Retrograde summary 2 · recorded at chunk 46 · 17 Oct 2189 · 22:23"
                 )
                 assert recalled_clock_label(memories[2]) == "Retrograde summary 3"
-                with pytest.raises(ValueError, match="has no story clock"):
-                    hydrate_recalled_clocks(
-                        session,
-                        [
-                            {
-                                "id": "retrograde_summary:4",
-                                "metadata": {"recorded_at_chunk_id": 999},
-                            }
-                        ],
+                missing = {
+                    "id": "retrograde_summary:4",
+                    "metadata": {"recorded_at_chunk_id": 999},
+                }
+                hydrate_recalled_clocks(session, [missing])
+                assert recalled_clock_label(missing) == "Retrograde summary 4"
+        finally:
+            engine.dispose()
+
+
+@pytest.mark.requires_postgres
+def test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks() -> None:
+    """Real assembly skips a capped NULL anchor and renders selected NULLs undated.
+
+    Uses narrative_chunks, chunk_metadata, and narrative_view in a fixture-owned
+    disposable database. SQL observation proves excluded anchors are not hydrated.
+    """
+    from sqlalchemy import create_engine, event, text
+    from sqlalchemy.orm import sessionmaker
+
+    from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
+
+    with disposable_slot_database("qa640_scene_null_clock") as dbname:
+        engine = create_engine(sqlalchemy_url(dbname))
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO narrative_chunks (id, raw_text) VALUES "
+                        "(8, 'Undated scene'), (46, 'Undated recording anchor')"
                     )
+                )
+                conn.execute(
+                    text(
+                        "INSERT INTO chunk_metadata (chunk_id, season, episode, scene) "
+                        "VALUES (8, 1, 1, 1), (46, 1, 1, 2)"
+                    )
+                )
+                conn.execute(text("UPDATE chunk_metadata SET world_time = NULL"))
+
+            hydrated_ids = []
+
+            @event.listens_for(engine, "before_cursor_execute")
+            def record_clock_query(
+                conn: Any,
+                cursor: Any,
+                statement: str,
+                parameters: Any,
+                context: Any,
+                executemany: bool,
+            ) -> None:
+                if "SELECT id, world_time FROM narrative_view" in statement:
+                    hydrated_ids.append(parameters["ids"])
+
+            utility = window_logon()
+            utility.settings["orrery"]["enabled"] = False
+            cycle = TurnCycleManager(
+                SimpleNamespace(
+                    settings=utility.settings,
+                    enable_logon=False,
+                    memnon=SimpleNamespace(Session=sessionmaker(bind=engine)),
+                )
+            )
+            for limit in (1, 2):
+                utility.settings["lore"]["render_limits"]["historical_passages"] = limit
+                context = TurnContext(
+                    turn_id=f"null-clock-{limit}", user_input="Continue.", start_time=0
+                )
+                context.warm_slice = [
+                    {"id": 49, "text": "Parent scene.", "is_target": True},
+                    {
+                        "id": 8,
+                        "text": "Undated recall.",
+                        "is_recalled": True,
+                        "metadata": {"world_time": "2189-10-17T19:27:00Z"},
+                    },
+                ]
+                summary = {
+                    "id": "retrograde_summary:2",
+                    "text": "Undated summary.",
+                    "metadata": {"recorded_at_chunk_id": 46},
+                }
+                context.retrieved_passages = [
+                    {"id": 49, "text": "Duplicate parent."},
+                    {"id": 1, "text": "Historical passage."},
+                    summary,
+                ]
+                context.token_counts = {"total_available": 71000}
+                asyncio.run(cycle.assemble_context_payload(context))
+                assert hydrated_ids[-1] == ([8] if limit == 1 else [8, 46])
+                for seat in ("writer", "gaia"):
+                    prompt = utility._format_context_prompt(
+                        context.context_payload, seat=seat
+                    )
+                    assert "[chunk 8] Undated recall." in prompt
+                    assert "17 Oct 2189" not in prompt
+                    assert "Duplicate parent." not in prompt
+                    assert ("[Retrograde summary 2 | Score: 0.00]" in prompt) == (
+                        limit == 2
+                    )
+                if limit == 1:
+                    assert "recorded_at_world_time" not in summary["metadata"]
         finally:
             engine.dispose()
