@@ -1,0 +1,92 @@
+
+
+=== ENTITY DOSSIER ===
+
+All Characters (brief status):
+- Davin Sol: at Lantern Quay Memorial Hall, separating himself from Mara's false attribution while watching the hall's fracture
+- Dax Morrow: latent in generated backstory
+- Dr. Sera Vey: tidying their own space
+- Elian Rook: at Lantern Quay Memorial Hall, keeping her returned brass key in her inner coat pocket while holding Mara to the present moment Tags: orrery_concealment:presumed_dead, state:afraid, state:fugitive, state:recently_tended
+- Hale Morrow: pacing the near ground Tags: role.function:functionary
+- Ione Varr: taking a small pleasure
+- Ivo Senn: at Lantern Quay Memorial Hall, remaining at Memorial Hall until he can meet Ressa Morn before dawn Tags: orrery_signal:debt_pulse_active, profession_lite:black_market_operator
+- Kessa Brin: tidying their own space Tags: bodyform.lineage:human, orrery_travel:route_familiar, orrery_travel:travel_ready
+- Len Aster: at Lantern Quay Memorial Hall, taking the night air
+- Mara Vey: at Lantern Quay Memorial Hall, meeting Kessa Brin alone in the Wickglass Dispatch House, weighing a wet-ink admission for the Guild dead-book Tags: bodyform.lineage:human, capacity:educated, capacity:perceptive, disposition:cautious, disposition:compassionate, orrery_signal:debt_pulse_active, role.function:investigator, state:reputation_compromised
+- Nera Voss: None
+- Niko Rell: at Lantern Quay Memorial Hall, watching the world go by
+- Ora Pell: tidying their own space Tags: capacity:resourceful, disposition:cautious
+- Orris Vale: latent in generated backstory
+- Ren Vale: at Lantern Quay Memorial Hall, recording the unauthorized shelter instruction and second false attribution separately from Tam's account Tags: role.function:functionary
+- Ressa Morn: drinking routinely Tags: profession_lite:black_market_operator
+- Sister Calyx: at Lantern Quay Memorial Hall, holding Tam's folder closed while offering Mara a non-punitive boundary around the paper
+- Tam Oris: at Lantern Quay Memorial Hall, remaining beside the memorial table with their shelter decision paused and their need for quiet newly explicit Tags: state:afraid, state:forewarned
+- Tamsin Pire: latent in generated backstory
+- Tarin Quell: latent in generated backstory
+- Tomas Quill: watching the world go by
+- Unknown municipal-gray stranger: pressing Mara's claimed copy-custodians while withholding names and issuer
+- Vela Nash: at Lantern Quay Memorial Hall, tidying their own space
+
+Featured Characters (full details):
+- Vela Nash [recent]: Retrograde-generated character stub for Vela Nash. Created so Skald-selected setup history can resolve to canonical rows.
+  Emotional State: grimly culpable and aware that her safeguard has destroyed the certifiable chain
+- Unknown municipal-gray stranger [recent]: A municipal-accessed, deniable pressure actor who knows of Calyx's third sheet and demands the relay-chamber copy without yet declaring a sponsor or allegiance.
+  Emotional State: controlled and testing whether the bluff can be converted into identification pressure
+- Elian Rook [mentioned]: Retrograde-generated character stub for Elian Rook. Created so Skald-selected setup history can resolve to canonical rows. Tags: orrery_concealment:presumed_dead, state:afraid, state:fugitive, state:recently_tended
+  Emotional State: controlled, hurt, and increasingly unwilling to let Mara use urgency to bypass her boundary
+- Ivo Senn [mentioned]: Trait-compiler character stub for Ivo Senn. Created so wizard trait selections resolve to canonical rows. Tags: orrery_signal:debt_pulse_active, profession_lite:black_market_operator
+  Emotional State: frightened but resolved to give an incomplete, honest accounting rather than invent closure
+- Ren Vale [mentioned]: Retrograde-generated character stub for Ren Vale. Created so Skald-selected setup history can resolve to canonical rows. Tags: role.function:functionary
+  Emotional State: controlled and no longer willing to grant Mara procedural indulgence
+- Sister Calyx [mentioned]: A careful keeper of durable paper testimony who has turned the memorial crowd into witnesses against a sealed civic petition.
+  Emotional State: exact and unwilling to let the hall's quiet be treated as optional
+- Tam Oris [mentioned]: A frightened Records Integrity field contractor who carried an erased retrieval notice to Lantern Quay and has now put its wording into wet ink. Tags: state:afraid, state:forewarned
+  Emotional State: shaken, firm, and less willing to let Mara remain near their account
+- Ressa Morn [recent]: A dock-debt bookkeeper whose restructurings bind freight workers through contracts, favors, and vulnerable guarantors. Tags: profession_lite:black_market_operator
+  Emotional State: angered, alarmed, and newly committed to forcing an account before dawn
+- Niko Rell [recent]: Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.
+  Emotional State: alert and committed to getting Ora clear without taking custody from her
+- Ora Pell [recent]: Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows. Tags: capacity:resourceful, disposition:cautious
+  Emotional State: angry, calculating, and unwilling to let extraction define her as cargo
+- Tomas Quill [recent]: Retrograde-generated character stub for Tomas Quill. Created so Skald-selected setup history can resolve to canonical rows.
+- Nera Voss [mentioned]: A Wickglass courier whose coolant-line death was harmonized after Mara's unverified civic review helped close the surviving spouse's contest.
+- Mara Vey [user_character]: A Disgraced civic memory auditor reassigned to petty disputes Tags: bodyform.lineage:human, capacity:educated, capacity:perceptive, disposition:cautious, disposition:compassionate, orrery_signal:debt_pulse_active, role.function:investigator, state:reputation_compromised
+  Personality: Personality to be revealed through play.
+  Emotional State: confronted by a specific harm her procedural review helped finalize, with the Guild obligation actively pressing
+- Kessa Brin [present]: An adult Wickglass Transit Guild courier who delivered Mara a bronze token for a private, outstanding Guild obligation and left without touching the hall's witness process. Tags: bodyform.lineage:human, orrery_travel:route_familiar, orrery_travel:travel_ready
+  Emotional State: professional, unsparing, and deliberately bounded
+
+All Locations (brief):
+- Cinder Vault: latent in generated backstory
+- Early Continuity Registry: latent in generated backstory
+- Lantern Quay Coolant Lanes: The lane closure continues to count down; the hooded negotiator remains with the dormant tagged pouch after Ressa's hold disrupted one line of leverage.
+- Lantern Quay Memorial Hall: Mara has given Tam's paper the requested distance; Tam's folder remains closed and the shelter decision remains paused with Tam.
+- Pilgrim Stack 9: latent in generated backstory
+- West Conduit Relay: latent in generated backstory
+- Wickglass Dispatch House: latent in generated backstory
+
+Featured Locations (full details):
+- Wickglass Dispatch House [setting]: Retrograde-generated place stub for Wickglass Dispatch House. Created so Skald-selected setup history can resolve to canonical rows.
+- Lantern Quay Memorial Hall [transit]: A converted dockworkers' mutual-aid station beneath the rain-lashed lower-ring transit viaducts. Its narrow public hall is crowded with union plaques, memorial lanterns, analog noticeboards, and mourners smelling of wet wool, machine oil, incense, and bitter tea. A covered loading arcade opens toward freight lifts and canal-like coolant channels, while an aging records annex, service corridors, and a private mourning room provide quieter routes through the building.
+
+All Factions (brief):
+- Cinder Choir: Retrograde-generated faction stub for Cinder Choir. Created so Skald-selected setup history can resolve to canonical rows.
+- Continuity Office: Retrograde-generated faction stub for Continuity Office. Created so Skald-selected setup history can resolve to canonical rows.
+- Office of Civic Continuity: agenda:suppress_dissent
+- Office of Continuity Review: agenda:conceal_exposure, legitimacy:state_recognized, resource_base:bureaucracy
+- Order of Last Lamps: Retrograde-generated faction stub for Order of Last Lamps. Created so Skald-selected setup history can resolve to canonical rows.
+- Quay Witness Circle: Retrograde-generated faction stub for Quay Witness Circle. Created so Skald-selected setup history can resolve to canonical rows.
+- Quiet Ledger: Retrograde-generated faction stub for Quiet Ledger. Created so Skald-selected setup history can resolve to canonical rows.
+- Vespera Civic Apparatus: Retrograde-generated faction stub for Vespera Civic Apparatus. Created so Skald-selected setup history can resolve to canonical rows.
+- Wickglass Transit Guild: resource_base:mobility, resource_base:supply_lines
+
+Featured Factions (full details):
+- Office of Continuity Review: The civic review office invoking emergency preservation authority over Mara's activated anchor-book recording. Tags: agenda:conceal_exposure, legitimacy:state_recognized, resource_base:bureaucracy
+- Wickglass Transit Guild: A transit guild operating freight and courier routes, now calling Mara to a Guild-lit conversation before the last freight rotation. Tags: resource_base:mobility, resource_base:supply_lines
+
+Relationships:
+- Ren Vale → Elian Rook: spouse (valence +0.00)
+- Ivo Senn → Ressa Morn: complex (valence -0.18)
+- Elian Rook → Vela Nash: partner (valence +0.00)
+- Mara Vey → Ivo Senn: obligation (valence +0.37)
+- Mara Vey → Niko Rell: companion (valence +0.55)
