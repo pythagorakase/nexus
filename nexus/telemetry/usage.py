@@ -34,6 +34,39 @@ _slot_context: ContextVar[Optional[int]] = ContextVar("nexus_usage_slot", defaul
 _run_id_context: ContextVar[Optional[str]] = ContextVar(
     "nexus_usage_run_id", default=None
 )
+_validation_record: ContextVar[Optional["PromptWindowRecord"]] = ContextVar(
+    "nexus_validation_record", default=None
+)
+
+
+@contextmanager
+def validation_attempt(record: Optional["PromptWindowRecord"]) -> Iterator[None]:
+    """Retain repairs and terminal rejections on the current provider attempt."""
+    from nexus.api.native_structured_output import WireContractViolation
+
+    token = _validation_record.set(record)
+    try:
+        yield
+    except WireContractViolation as exc:
+        note = {"rejection": "wire-contract-violation", "error": str(exc)}
+        session = record.generation_session if record else current_usage_context()[2]
+        logger.warning("Wire rejection session=%s note=%r", session, note)
+        if record is not None:
+            record.validation_notes.append(note)
+            record_prompt_window(record)
+        raise
+    finally:
+        _validation_record.reset(token)
+
+
+def record_wire_repair(note: dict[str, Any]) -> None:
+    """Log a repair and append a revised snapshot of its attempt ledger row."""
+    record = _validation_record.get()
+    session = record.generation_session if record else current_usage_context()[2]
+    logger.warning("Wire repair session=%s note=%r", session, note)
+    if record is not None:
+        record.validation_notes.append(note)
+        record_prompt_window(record)
 
 
 class UsageWriteError(RuntimeError):
@@ -614,9 +647,9 @@ def read_prompt_windows(run_id: str, day: str) -> list["PromptWindowRecord"]:
     path = _get_recorder_config().usage_dir / f"windows-{day}.jsonl"
     if not path.exists():
         return []
-    records = []
+    records = {}
     for line in path.read_text().splitlines():
         record = PromptWindowRecord.model_validate_json(line)
         if record.generation_session == run_id:
-            records.append(record)
-    return records
+            records[(record.seat, record.attempt)] = record
+    return list(records.values())

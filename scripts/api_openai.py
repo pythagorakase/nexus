@@ -86,6 +86,7 @@ from sqlalchemy import create_engine
 from pydantic import ValidationError
 
 from nexus.api.native_structured_output import (
+    WireContractViolation,
     openai_response_text_format,
     retry_prompt,
     run_output_validator,
@@ -611,6 +612,12 @@ class OpenAIProvider(LLMProvider):
                 )
                 usage_outcome = "accepted"
                 return parsed_output, llm_response
+            except WireContractViolation as exc:
+                usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="responses", attempt=attempt, exc=exc
+                )
+                raise
             except ModelRetry as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"
@@ -735,6 +742,12 @@ class OpenAIProvider(LLMProvider):
                 )
                 usage_outcome = "accepted"
                 return parsed_output, llm_response
+            except WireContractViolation as exc:
+                usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="chat_completions", attempt=attempt, exc=exc
+                )
+                raise
             except ModelRetry as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"

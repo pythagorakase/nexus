@@ -199,6 +199,20 @@ class CommitCursor:
         elif "SELECT id FROM characters WHERE name" in normalized:
             entity_id = self.connection.characters.get(params[0])
             self.result = (entity_id,) if entity_id is not None else None
+        elif "to_regclass('public.place_aliases')" in normalized:
+            self.result = (None,)
+        elif normalized.startswith("SELECT p.id, p.name FROM places p"):
+            self.rows = [
+                (identifier, name)
+                for name, identifier in self.connection.places.items()
+                if name.casefold() == params[0].casefold()
+            ]
+        elif normalized.startswith("SELECT id, name FROM places WHERE id"):
+            self.rows = [
+                (identifier, name)
+                for name, identifier in self.connection.places.items()
+                if identifier == params[0]
+            ]
         elif "SELECT id FROM places WHERE name" in normalized:
             entity_id = self.connection.places.get(params[0])
             self.result = (entity_id,) if entity_id is not None else None
