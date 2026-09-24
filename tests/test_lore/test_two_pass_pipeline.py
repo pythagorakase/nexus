@@ -901,7 +901,7 @@ def test_real_vocabulary_validator_belongs_to_gaia_and_consumes_repair(
     assert provider.calls[0]["output_validator"] is not None
     assert provider.calls[0]["output_validator"] is not provider.output_validator
     assert all(
-        call["output_validator"] is provider.output_validator
+        call["output_validator"]._wire_validation_delegate is provider.output_validator
         for call in provider.calls[1:]
     )
     retry_prompt_text = provider.calls[2]["prompt"]

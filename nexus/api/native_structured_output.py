@@ -32,6 +32,10 @@ ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS = {
 }
 
 
+class WireContractViolation(RuntimeError):
+    """Terminal wire failure that must not consume a provider repair retry."""
+
+
 @dataclass
 class NativeValidationContext:
     """Small context object for validators that were written for Pydantic AI."""

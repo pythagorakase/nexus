@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from nexus.agents.logon.apex_enums import (
     EmotionalValence,
@@ -128,15 +128,43 @@ class PresenceDelta(BaseModel):
         description="Fresh roster and setting after relocation.",
     )
 
+    _reset_repair: Optional[Dict[str, Any]] = PrivateAttr(default=None)
+
     @model_validator(mode="after")
     def validate_presence_consistency(self) -> "PresenceDelta":
-        """Reject contradictory roster changes."""
+        """Fold crossings into a reset before downstream wire validation."""
 
         if self.scene_reset is not None and (self.enter or self.exit):
-            raise ValueError("scene_reset cannot be combined with enter or exit")
+            self._reset_repair = {
+                "repair": "scene-reset-crossings",
+                "moved": [ref.name for ref in self.enter],
+                "dropped": [ref.name for ref in self.exit],
+            }
+            self.scene_reset.present.extend(self.enter)
+            self.enter = []
+            self.exit = []
         return self
 
     model_config = ConfigDict(extra="forbid")
+
+
+def finalize_scene_reset_repair(response: Any, identity_index: Any = None) -> None:
+    """Deduplicate a repaired reset with the canonical roster identity rules."""
+    from nexus.presence.roster import RosterEntry
+    from nexus.telemetry.usage import record_wire_repair
+
+    presence = getattr(response, "presence", None)
+    if presence is None or presence._reset_repair is None:
+        return
+    roster = {}
+    for ref in presence.scene_reset.present:
+        entry = RosterEntry(kind="character", id=ref.id, name=ref.name)
+        if identity_index is not None:
+            entry = identity_index.resolve(entry)
+        roster[entry.key] = CharacterRef(kind="character", id=entry.id, name=entry.name)
+    presence.scene_reset.present = list(roster.values())
+    record_wire_repair(presence._reset_repair)
+    presence._reset_repair = None
 
 
 class PresenceBaseline(BaseModel):
