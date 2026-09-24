@@ -170,7 +170,7 @@ class ContentProcessor:
                 }
 
                 # Parse any additional metadata in the comment
-                # Formatted like: <!-- SCENE BREAK: S01E01_1 PERSPECTIVE:Alex LOCATION:"Night City Alley" -->
+                # Formatted like: <!-- SCENE BREAK: S01E01_1 PERSPECTIVE:Narrator LOCATION:"Night City Alley" -->
                 metadata_text = (
                     line.split("SCENE BREAK:")[1] if "SCENE BREAK:" in line else ""
                 )

@@ -143,7 +143,6 @@ class ContextPackage:
     structured_passages: List[Dict[str, Any]] = field(default_factory=list)
     token_usage: Dict[str, int] = field(default_factory=dict)
     divergence_detected: bool = False
-    divergence_confidence: float = 0.0
     additional_chunks: Set[MemoryIdentity] = field(default_factory=set)
     gap_analysis: Dict[str, str] = field(default_factory=dict)
 
@@ -188,7 +187,6 @@ class ContextStateManager:
         package.additional_chunks.clear()
         package.gap_analysis.clear()
         package.divergence_detected = False
-        package.divergence_confidence = 0.0
 
         self._context = package
         self._transition = transition
@@ -413,11 +411,8 @@ class ContextStateManager:
     # ------------------------------------------------------------------
     # Divergence tracking
     # ------------------------------------------------------------------
-    def update_divergence(
-        self, detected: bool, confidence: float, gaps: Dict[str, str]
-    ) -> None:
+    def update_divergence(self, detected: bool, gaps: Dict[str, str]) -> None:
         if not self._context:
             return
         self._context.divergence_detected = detected
-        self._context.divergence_confidence = confidence
         self._context.gap_analysis = gaps

@@ -15,9 +15,9 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 **2. Test Point: S01E01_017 (Chunk ID: 17)**
 - **Scene Type:** Dialogue (Clarification/World-building)
 - **User Input Style:** Questions and Comments
-- **Continuation Challenge:** The user is breaking the flow to ask meta-questions about game mechanics and character knowledge. LORE needs to retrieve the context of the three potential contacts (Wraith, Juno, No-Name Pete) and provide in-character information that is helpful but also maintains the narrative's established tone and mystery. It tests LORE's ability to switch from storyteller to a more direct Q&A mode.
+- **Continuation Challenge:** The user is breaking the flow to ask meta-questions about game mechanics and character knowledge. LORE needs to retrieve the context of the three potential contacts (Wraith, Juno, No-Name the engineer) and provide in-character information that is helpful but also maintains the narrative's established tone and mystery. It tests LORE's ability to switch from storyteller to a more direct Q&A mode.
 - **Key Context Needed:**
-    - **Characters:** Reza "Wraith" Kader, Juno & The Rustborn, No-Name Pete.
+    - **Characters:** Reza "Wraith" Kader, Juno & The Rustborn, No-Name the engineer.
     - **Past Events:** The player's safehouse has been compromised, and they are fleeing to the Badlands.
     - **Location/Faction:** The Badlands.
 - **Remote References:** None.
@@ -25,10 +25,10 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 **3. Test Point: S01E02_009 (Chunk ID: 41)**
 - **Scene Type:** Dialogue (Revelation/Confrontation)
 - **User Input Style:** Single Character (`1`)
-- **Continuation Challenge:** This is a major plot revelation. The user's simple input ("1") to ask who betrayed Alina requires LORE to retrieve the entire conversational thread with the digital ghost of Alina Voss. It must present the answer ("SATO") with appropriate dramatic weight and immediately connect it to the player's main quest giver, reframing their entire relationship.
+- **Continuation Challenge:** This is a major plot revelation. The user's simple input ("1") to ask who betrayed the navigator requires LORE to retrieve the entire conversational thread with the digital ghost of the navigator Voss. It must present the answer ("SATO") with appropriate dramatic weight and immediately connect it to the player's main quest giver, reframing their entire relationship.
 - **Key Context Needed:**
-    - **Characters:** Player Character, Pete, Digital Ghost of Alina Voss, Victor Sato.
-    - **Past Events:** The discovery of the "BLACKOUT PROTOCOL," the realization it contains a mind, and the confirmation that the mind is Alina Voss.
+    - **Characters:** Player Character, the engineer, Digital Ghost of the navigator Voss, Victor Sato.
+    - **Past Events:** The discovery of the "BLACKOUT PROTOCOL," the realization it contains a mind, and the confirmation that the mind is the navigator Voss.
     - **Thematic Connections:** Betrayal, corporate conspiracy.
 - **Remote References:** S01E01_002 (initial meeting with Sato).
     
@@ -103,7 +103,7 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 - **User Input Style:** Free-form Narrative Paragraph (`I’ll take some mescaline and search for insight via a vision quest...`)
 - **Continuation Challenge:** This is a major tonal and narrative shift. The user wants to transition into a psychedelic state to solve a problem. LORE must handle this abstract request, creating a "vision quest" that synthesizes recent plot points (Sato, the assassins, a third party) and delivers a genuine narrative revelation, all while maintaining a surreal, drug-fueled tone.
 - **Key Context Needed:**
-    - **Characters:** Player Character, Pete, Alina.
+    - **Characters:** Player Character, the engineer, the navigator.
     - **Past Events:** Uncertainty about who is hunting the player—Dynacorp or a third party.
     - **Thematic Connections:** Altered consciousness, seeking insight through non-traditional means.
 - **Remote References:** S01E01_005 (the initial sniper attack), S01E02_009 (Sato's betrayal).
@@ -113,10 +113,10 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 **11. Test Point: S01E02_003 (Chunk ID: 35)**
 - **Scene Type:** Revelation (Plot Twist)
 - **User Input Style:** Single Character (`1`)
-- **Continuation Challenge:** This is the first major twist regarding the "BLACKOUT PROTOCOL." LORE must escalate the stakes from a simple data file to a "self-propagating neuroalgorithmic entity"—a mind in the machine. The challenge is to deliver this reveal with impact through Pete's panicked reaction, changing the entire context of the mission.
+- **Continuation Challenge:** This is the first major twist regarding the "BLACKOUT PROTOCOL." LORE must escalate the stakes from a simple data file to a "self-propagating neuroalgorithmic entity"—a mind in the machine. The challenge is to deliver this reveal with impact through the engineer's panicked reaction, changing the entire context of the mission.
 - **Key Context Needed:**
-    - **Characters:** Player Character, Pete.
-    - **Past Events:** The player brought the "BLACKOUT PROTOCOL" data shard to Pete for decryption.
+    - **Characters:** Player Character, the engineer.
+    - **Past Events:** The player brought the "BLACKOUT PROTOCOL" data shard to the engineer for decryption.
 - **Remote References:** S01E01_011 (discovery of the BLACKOUT PROTOCOL file).
 
 **12. Test Point: S01E03_006 (Chunk ID: 52)**
@@ -124,7 +124,7 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 - **User Input Style:** Single Character (`1. Ask if someone external was involved.`)
 - **Continuation Challenge:** The user is asking a direct question during the vision quest. LORE needs to provide a clear, concise, and impactful answer that expands the conspiracy. The challenge is revealing a new, unknown player (Halcyon Research Group) and connecting them to the central mystery of Blackout Protocol, making the world feel larger and more dangerous.
 - **Key Context Needed:**
-    - **Characters:** Player Character, Alina (in a visionary form).
+    - **Characters:** Player Character, the navigator (in a visionary form).
     - **Past Events:** The player is in a mescaline-induced trance.
     - **Thematic Connections:** Conspiracy, corporate shadow wars.
 - **Remote References:** None.
@@ -134,7 +134,7 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 - **User Input Style:** Single Character (`1`)
 - **Continuation Challenge:** A massive revelation connecting a seemingly external mystery (SIX) directly to the player character. LORE must retrieve the designation "Exec-Delta-17" from the previous scene and cross-reference it with the player's own established background, delivering the twist that a fragment of "Alexander Ward" is inside the artifact. This reframes the entire quest from an external rescue/investigation to an internal, personal one.
 - **Key Context Needed:**
-    - **Characters:** Alex, Pete, Nyati, Alina.
+    - **Characters:** the protagonist, the engineer, the researcher, the navigator.
     - **Past Events:** The team has discovered that the SIX artifact tried to merge with a human source designated "Exec-Delta-17."
     - **Location/Faction:** The Ghost submarine.
 - **Remote References:** The player's original choice of the "Corpo Snake" lifepath, which established their corporate past.
@@ -143,22 +143,22 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 
 **14. Test Point: S01E03_021 (Chunk ID: 67)**
 - **Scene Type:** Emotional (Character Development)
-- **User Input Style:** Free-form Narrative Paragraph (`In the meantime I try to get to know Alina...`)
-- **Continuation Challenge:** The user wants to engage in pure character development with no immediate plot advancement. LORE must retrieve Alina's current state (a digital ghost in a Furby) and develop her personality, fears, and desires. The challenge is to make her feel like a real, evolving person dealing with trauma and transhumanism, not just a plot device.
+- **User Input Style:** Free-form Narrative Paragraph (`In the meantime I try to get to know the navigator...`)
+- **Continuation Challenge:** The user wants to engage in pure character development with no immediate plot advancement. LORE must retrieve the navigator's current state (a digital ghost in a Furby) and develop her personality, fears, and desires. The challenge is to make her feel like a real, evolving person dealing with trauma and transhumanism, not just a plot device.
 - **Key Context Needed:**
-    - **Characters:** Player Character, Alina (in Furby).
-    - **Past Events:** Alina has been stabilized and moved into the cyberpet.
+    - **Characters:** Player Character, the navigator (in Furby).
+    - **Past Events:** the navigator has been stabilized and moved into the cyberpet.
     - **Thematic Connections:** Transhumanism, identity, consciousness.
-- **Remote References:** S01E02_008 (Alina's initial fragmented reveal).
+- **Remote References:** S01E02_008 (the navigator's initial fragmented reveal).
 
 **15. Test Point: S03E01_006 (Chunk ID: 518)**
 - **Scene Type:** Emotional (Relationship Dynamics)
 - **User Input Style:** Single Character (`2`)
-- **Continuation Challenge:** This is a critical turning point in the romantic subplot with Emilia. LORE must handle a delicate, vulnerable moment. The challenge is to write a response for Emilia that is both in-character (measured, controlled) and emotionally resonant, acknowledging the player's vulnerability without rushing or providing a simplistic resolution. It tests LORE's ability to handle nuance in character relationships.
+- **Continuation Challenge:** This is a critical turning point in the romantic subplot with the pilot. LORE must handle a delicate, vulnerable moment. The challenge is to write a response for the pilot that is both in-character (measured, controlled) and emotionally resonant, acknowledging the player's vulnerability without rushing or providing a simplistic resolution. It tests LORE's ability to handle nuance in character relationships.
 - **Key Context Needed:**
-    - **Characters:** Alex, Emilia.
-    - **Past Events:** The team is on shore leave after the events in the abyss. Alex is feeling lonely.
-- **Remote References:** Subtle hints of Emilia's interest throughout previous scenes.
+    - **Characters:** the protagonist, the pilot.
+    - **Past Events:** The team is on shore leave after the events in the abyss. the protagonist is feeling lonely.
+- **Remote References:** Subtle hints of the pilot's interest throughout previous scenes.
     
 
 **16. Test Point: S04E01_023 (Chunk ID: 888)**
@@ -166,26 +166,26 @@ Here are 18 diverse test scenarios identified from the narrative corpus, designe
 - **User Input Style:** Single Character (`2`)
 - **Continuation Challenge:** The "morning after" scene. The challenge is to maintain the established emotional intimacy and character voices. LORE needs to create a quiet, reflective moment that feels earned and significant, focusing on small gestures and unspoken understanding rather than overt plot development. It tests the ability to write subtle, character-driven scenes.
 - **Key Context Needed:**
-    - **Characters:** Alex, Emilia.
-    - **Past Events:** Alex and Emilia spent the night together.
-    - **Location/Faction:** Alex's quarters aboard The Ghost.
+    - **Characters:** the protagonist, the pilot.
+    - **Past Events:** the protagonist and the pilot spent the night together.
+    - **Location/Faction:** the protagonist's quarters aboard The Ghost.
 - **Remote References:** S04E01_022 (the preceding intimate scene).
 
 **17. Test Point: S04E02_019 (Chunk ID: 910)**
 - **Scene Type:** Emotional (Breakdown/Vulnerability)
 - **User Input Style:** User specifies action (`Immediately. She starts to sob and crumple.`)
-- **Continuation Challenge:** The user's character has a complete emotional breakdown. LORE must handle this intense moment of vulnerability. The challenge is to have the other characters react in a way that is supportive and in-character (Emilia providing comfort, the others giving space) and to describe the scene with appropriate emotional weight without being melodramatic.
+- **Continuation Challenge:** The user's character has a complete emotional breakdown. LORE must handle this intense moment of vulnerability. The challenge is to have the other characters react in a way that is supportive and in-character (the pilot providing comfort, the others giving space) and to describe the scene with appropriate emotional weight without being melodramatic.
 - **Key Context Needed:**
-    - **Characters:** Alex, Emilia, Pete, Nyati.
-    - **Past Events:** Alex has just realized that Sam may have lied to her, leading to her irreversible "crossing" on the Bridge.
+    - **Characters:** the protagonist, the pilot, the engineer, the researcher.
+    - **Past Events:** the protagonist has just realized that Sam may have lied to her, leading to her irreversible "crossing" on the Bridge.
     - **Thematic Connections:** Betrayal, loss of control, psychological trauma.
 - **Remote References:** S03E08_013 (the "listening" lesson from Sam).
 
 **18. Test Point: S03E03_010 (Chunk ID: 537)**
 - **Scene Type:** Emotional (Vulnerability/Intimacy)
-- **User Input Style:** Free-form Narrative Paragraph (`Alex says: I…normally wouldn’t be afraid of change like this...`)
-- **Continuation Challenge:** This is a pivotal moment of emotional honesty between Alex and Emilia. LORE needs to understand the context of the upcoming Nexus test and the internal conflict Alex is feeling. The challenge is to write a response for Emilia that is both supportive and challenging, acknowledging Alex's fear while still holding her accountable. It's a test of LORE's ability to navigate complex emotional landscapes and advance a romantic relationship in a meaningful way.
+- **User Input Style:** Free-form Narrative Paragraph (`the protagonist says: I…normally wouldn’t be afraid of change like this...`)
+- **Continuation Challenge:** This is a pivotal moment of emotional honesty between the protagonist and the pilot. LORE needs to understand the context of the upcoming Nexus test and the internal conflict the protagonist is feeling. The challenge is to write a response for the pilot that is both supportive and challenging, acknowledging the protagonist's fear while still holding her accountable. It's a test of LORE's ability to navigate complex emotional landscapes and advance a romantic relationship in a meaningful way.
 - **Key Context Needed:**
-    - **Characters:** Alex, Emilia.
-    - **Past Events:** The team is in the Wastes, taking a break before Alex undergoes the first partial Nexus transfer.
+    - **Characters:** the protagonist, the pilot.
+    - **Past Events:** The team is in the Wastes, taking a break before the protagonist undergoes the first partial Nexus transfer.
 - **Remote References:** The entire arc of their developing relationship.

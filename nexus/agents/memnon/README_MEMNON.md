@@ -68,7 +68,7 @@ Use the `query_memory()` method or send a query message via the `step()` method:
 
 ```python
 # Method call (direct mode example)
-query = "What happened to Alex in the old warehouse?"
+query = "What happened to the protagonist in the old warehouse?"
 results_dict = memnon_agent.query_memory(query=query, k=5)
 print(json.dumps(results_dict, indent=2))
 

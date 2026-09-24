@@ -2333,8 +2333,16 @@ class LogonUtility:
         seat: Literal["writer", "gaia"] = "writer",
     ) -> str:
         """Format context payload into a prompt for the Apex AI"""
+        from nexus.config import load_settings
+        from nexus.config.settings_models import LORERenderLimits
         from nexus.telemetry.prompt_window import RenderedSections
 
+        raw_limits = (self.settings.get("lore") or {}).get("render_limits")
+        render_limits = (
+            LORERenderLimits.model_validate(raw_limits)
+            if raw_limits is not None
+            else load_settings(self.settings_path).lore.render_limits
+        )
         sections = RenderedSections()
 
         # The intertitle anchors Skald's declared time deltas and episode
@@ -2538,16 +2546,19 @@ class LogonUtility:
             relationships = entity_data.get("relationships", [])
             if relationships:
                 sections.append("\nRelationships:")
-                for rel in relationships[:5]:  # Limit to top 5
+                for rel in relationships[: render_limits.relationships]:
                     char1 = rel.get("character1_name", "Unknown")
                     char2 = rel.get("character2_name", "Unknown")
                     rel_type = rel.get("relationship_type", "unknown")
-                    sections.append(f"- {char1} → {char2}: {rel_type}")
+                    valence = rel["valence_current"]
+                    sections.append(
+                        f"- {char1} → {char2}: {rel_type} (valence {valence:+g})"
+                    )
 
             events = entity_data.get("events", [])
             if events:
                 sections.append("\nActive Events:")
-                for event in events[:5]:  # Limit to top 5
+                for event in events[: render_limits.events]:
                     name = event.get("name", "Unknown")
                     summary = event.get("summary", "")
                     sections.append(f"- {name}: {summary}")
@@ -2555,7 +2566,7 @@ class LogonUtility:
             threats = entity_data.get("threats", [])
             if threats:
                 sections.append("\nActive Threats:")
-                for threat in threats[:5]:  # Limit to top 5
+                for threat in threats[: render_limits.threats]:
                     name = threat.get("name", "Unknown")
                     description = threat.get("description", "")
                     sections.append(f"- {name}: {description}")
@@ -2759,7 +2770,7 @@ class LogonUtility:
                 "detected by matching that exact name. Do not "
                 "explain Orrery."
             )
-            for item in bleed_menu[:5]:
+            for item in bleed_menu[: render_limits.bleed_menu]:
                 channel = item.get("channel") or "ambient"
                 summary = item.get("summary") or item.get("template_id")
                 actor = item.get("actor_name")

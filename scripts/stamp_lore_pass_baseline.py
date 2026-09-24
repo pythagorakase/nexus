@@ -1,16 +1,15 @@
-"""Stamp an explicit empty Pass-2 baseline at a save's migration boundary.
+"""Stamp a migration boundary or refresh an existing Pass-2 fingerprint.
 
 Usage:
     python scripts/stamp_lore_pass_baseline.py --slot 2
     python scripts/stamp_lore_pass_baseline.py --dbname ref_corpus
+    python scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --slot 2
 
 Run this once after migration 107 for an existing save whose accepted tail
 predates durable LORE baselines. It never infers a historical retrieval set.
 """
 
 from __future__ import annotations
-
-from nexus.database import url_connection_kwargs
 
 import argparse
 from contextlib import closing
@@ -26,8 +25,15 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from nexus.api.slot_utils import get_slot_db_url  # noqa: E402
 from nexus.config import load_settings_as_dict  # noqa: E402
-from nexus.memory.context_state import bind_pass2_baseline  # noqa: E402
-from nexus.memory.manager import empty_pass2_baseline  # noqa: E402
+from nexus.database import url_connection_kwargs  # noqa: E402
+from nexus.memory.context_state import (
+    Pass2BaselineV1,
+    bind_pass2_baseline,
+)  # noqa: E402
+from nexus.memory.manager import (
+    empty_pass2_baseline,
+    pass2_baseline_config_fingerprint,
+)  # noqa: E402
 from scripts.database_targets import evaluation_dbname  # noqa: E402
 from scripts.migrate import get_connection  # noqa: E402
 
@@ -106,14 +112,81 @@ def stamp_slot_tail(
     return chunk_id, tail_stamped, incubator_stamped
 
 
+def refresh_tail_fingerprint(
+    slot: int | None = None, *, dbname: str | None = None
+) -> tuple[int, str, str]:
+    """Refresh only the accepted tail fingerprint after a compatible config change.
+
+    The operator must establish that Pass-2 semantics are unchanged. This does
+    not reconstruct missing baselines or update historical/provisional payloads.
+    """
+    if (slot is None) == (dbname is None):
+        raise ValueError("Select exactly one slot or evaluation database")
+    if dbname is not None:
+        evaluation_dbname(dbname)
+    from nexus.api.slot_utils import slot_dbname
+    from nexus.config.story_model import read_story_settings, story_context_settings
+
+    target = dbname or slot_dbname(slot)
+    settings = story_context_settings(
+        load_settings_as_dict(), read_story_settings(target)
+    )
+    new_fingerprint = pass2_baseline_config_fingerprint(settings)
+    connection = (
+        get_connection(dbname)
+        if dbname is not None
+        else psycopg2.connect(**url_connection_kwargs(get_slot_db_url(slot=slot)))
+    )
+    with closing(connection), connection as conn, conn.cursor() as cur:
+        cur.execute("SELECT id FROM narrative_chunks ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError(f"{target} has no accepted narrative tail")
+        chunk_id = int(row[0])
+        cur.execute(
+            "SELECT schema_version, payload FROM lore_pass_baselines "
+            "WHERE chunk_id = %s FOR UPDATE",
+            (chunk_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError(
+                f"{target} tail chunk {chunk_id} has no Pass-2 baseline; "
+                "cannot refresh its fingerprint"
+            )
+        baseline = Pass2BaselineV1.model_validate(row[1])
+        if baseline.parent_chunk_id != chunk_id or baseline.schema_version != row[0]:
+            raise RuntimeError(f"{target} tail baseline identity or schema mismatch")
+        old_fingerprint = baseline.config_fingerprint
+        cur.execute(
+            "UPDATE lore_pass_baselines SET payload = "
+            "jsonb_set(payload, '{config_fingerprint}', %s::jsonb, false) "
+            "WHERE chunk_id = %s",
+            (json.dumps(new_fingerprint), chunk_id),
+        )
+    return chunk_id, old_fingerprint, new_fingerprint
+
+
 def main(argv: Any = None) -> int:
-    """Parse CLI arguments and stamp one explicitly selected save slot."""
+    """Parse CLI arguments and update one explicitly selected baseline."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--slot", type=int, choices=range(1, 6))
     target.add_argument("--dbname", type=evaluation_dbname)
+    parser.add_argument(
+        "--refresh-fingerprint",
+        action="store_true",
+        help="Refresh an existing tail fingerprint after a compatible config change",
+    )
     args = parser.parse_args(argv)
+    if args.refresh_fingerprint:
+        chunk_id, old, new = refresh_tail_fingerprint(args.slot, dbname=args.dbname)
+        print(
+            f"Refreshed {args.dbname or f'slot {args.slot}'} tail chunk {chunk_id} "
+            f"Pass-2 fingerprint: {old} -> {new}"
+        )
+        return 0
     chunk_id, tail_stamped, incubator_stamped = stamp_slot_tail(
         args.slot, dbname=args.dbname
     )

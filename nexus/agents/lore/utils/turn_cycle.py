@@ -97,16 +97,6 @@ except ImportError:
         OrreryRecallSettings,
     )
 
-try:
-    from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
-
-    MEMNON_ANALYZER_AVAILABLE = True
-except ImportError:
-    MEMNON_ANALYZER_AVAILABLE = False
-    logger.warning(
-        "MEMNON QueryAnalyzer not available - using fallback query generation"
-    )
-
 STRUCTURED_RESPONSE_TYPES = (
     StorytellerResponseMinimal,
     StorytellerResponseStandard,
@@ -246,12 +236,6 @@ class TurnCycleManager:
         self.lore = lore_agent
         self.settings = lore_agent.settings
 
-        # Initialize MEMNON's QueryAnalyzer if available
-        self.query_analyzer = None
-        if MEMNON_ANALYZER_AVAILABLE:
-            memnon_settings = self.settings.get("Agent Settings", {}).get("MEMNON", {})
-            self.query_analyzer = QueryAnalyzer(memnon_settings)
-
     def _max_deep_queries(self) -> int:
         """Resolve the configured deep-query budget for one turn."""
 
@@ -293,10 +277,11 @@ class TurnCycleManager:
     def _classify_query_type(self, query_text: str) -> str:
         """Classify a MEMNON query for phase-state accounting."""
 
-        if not self.query_analyzer:
+        query_analyzer = getattr(self.lore.memnon, "query_analyzer", None)
+        if query_analyzer is None:
             return "general"
 
-        query_info = self.query_analyzer.analyze_query(query_text)
+        query_info = query_analyzer.analyze_query(query_text)
         query_type = query_info.get("type", "general")
         logger.debug(f"Query '{query_text[:50]}...' classified as '{query_type}'")
         return query_type
