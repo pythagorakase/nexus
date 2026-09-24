@@ -271,3 +271,109 @@ PYTHONPATH=$PWD $PY scripts/check_reachability.py
   "route_reachability": "not_proven"
 }
 ```
+
+
+## PR #929 Review-Amendment Validation
+
+All commands ran from this worktree. `$PY` denotes
+`/Users/pythagor/nexus/.venv/bin/python`; each pytest command below used
+`PYTHONPATH=$PWD`. These are diagnostic runs before the final post-merge gates
+in `verification.md`. Failed diagnostic runs are retained as history, not
+reported as passing gates.
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_character_identity.py
+```
+
+```text
+14 passed, 5 warnings in 0.32s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_presence_roster_pg.py tests/test_orrery/test_character_identity_pg.py -k identity
+```
+
+Successive diagnostic-run tails:
+
+```text
+3 failed, 16 passed, 12 deselected, 5 warnings in 20.24s
+1 failed, 22 passed, 12 deselected, 5 warnings in 25.45s
+3 failed, 23 passed, 12 deselected, 5 warnings in 29.55s
+```
+
+The first caught a missing `scene_location` parameter in the maturation helper;
+the second caught the existing manifest schema-version trigger; the third
+caught missing JSON codecs in the newly added real async-acceptance fixture.
+Each was fixed. The final required PostgreSQL selection includes all these tests.
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+15 failed, 2663 passed, 877 skipped, 9 warnings in 98.94s (0:01:38)
+```
+
+This pre-merge diagnostic run caught SQL-shape and frontier-setting expectations
+in existing recording fixtures, plus the new field description exceeding the
+wire's 70-character budget. Existing fixtures were updated, the description was
+shortened, and the final offline gate was rerun after merge.
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_commit_handler.py tests/test_orrery/test_retrograde_maturation.py
+```
+
+```text
+1 failed, 29 passed, 4 skipped, 5 warnings in 0.76s
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_commit_handler.py tests/test_commit_handler_sync.py tests/test_orrery/test_retrograde_maturation.py tests/test_orrery/test_retrograde_persistence.py
+```
+
+```text
+1 failed, 66 passed, 5 skipped, 5 warnings in 1.22s
+67 passed, 5 skipped, 5 warnings in 1.25s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_orrery/test_character_identity_pg.py::test_identity_maturation_failure_class_is_durable_and_terminal
+```
+
+```text
+1 passed, 5 warnings in 1.51s
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_skald_wire.py tests/test_trait_compiler.py
+```
+
+```text
+129 passed, 2 skipped, 5 warnings in 1.06s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_presence_roster_pg.py -k 'identity_declaration_binds'
+```
+
+```text
+3 failed, 3 passed, 20 deselected, 5 warnings in 7.12s
+6 passed, 20 deselected, 5 warnings in 7.55s
+```
+
+The failed run caught `deepcopy` attempting to pickle `asyncpg.Record`. Batch
+validation now copies only mutable index containers and preserves read-only row
+evidence. All six sync/async exact, alias, and novel/idempotent cases then passed.
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_character_identity.py tests/test_commit_handler.py tests/test_commit_handler_sync.py tests/test_orrery/test_retrograde_maturation.py tests/test_orrery/test_retrograde_persistence.py tests/test_skald_wire.py tests/test_trait_compiler.py
+```
+
+```text
+210 passed, 7 skipped, 5 warnings in 1.71s
+```
+
+Black formatted changed Python files during development. The final check covers
+every Python file changed against `origin/main`; its exact command and output
+are in `verification.md`. Both commit hooks passed on fix commit `85f2fb7f`.
+The clean main merge is `c74eec9c`.
