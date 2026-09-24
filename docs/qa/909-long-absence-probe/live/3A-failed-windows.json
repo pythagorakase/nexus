@@ -1,0 +1,110 @@
+[
+  {
+    "generation_session": "71c52416-673f-4400-93de-4411368c9c5d",
+    "seat": "skald_writer",
+    "attempt": 1,
+    "model": "gpt-5.6-terra",
+    "block_tokens": {
+      "system": 4580,
+      "intertitle": 50,
+      "scene conditions": 17,
+      "private storyteller correspondence": 6755,
+      "recent narrative": 13716,
+      "scene roster": 30,
+      "user input": 55,
+      "entity dossier": 1764,
+      "historical context": 4772,
+      "world knowledge": 544,
+      "orrery tag library": 3743,
+      "recent orrery rulings": 213,
+      "orrery imminent activity": 399,
+      "orrery scene pressure": 203,
+      "instructions": 30,
+      "request framing": 1102
+    },
+    "input_tokens": 37973,
+    "effective_ceiling": 71000,
+    "policy_headroom": 4000,
+    "headroom": 33027,
+    "trimming": {
+      "tokens_before": 38641,
+      "tokens_after": 38641,
+      "tokens_recovered": 0,
+      "dropped_chunk_ids": [],
+      "dropped_blocks": {
+        "recent narrative": 0,
+        "historical context": 0
+      },
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 38641,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 41517,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      }
+    }
+  },
+  {
+    "generation_session": "71c52416-673f-4400-93de-4411368c9c5d",
+    "seat": "gaia",
+    "attempt": 1,
+    "model": "gpt-5.6-terra",
+    "block_tokens": {
+      "system": 1900,
+      "intertitle": 50,
+      "scene conditions": 17,
+      "private storyteller correspondence": 6755,
+      "recent narrative": 13716,
+      "user input": 55,
+      "entity dossier": 1764,
+      "historical context": 4772,
+      "world knowledge": 544,
+      "orrery tag library": 3743,
+      "recent orrery rulings": 213,
+      "orrery imminent activity": 399,
+      "orrery scene pressure": 203,
+      "instructions": 30,
+      "finished writer output": 933,
+      "request framing": 5319
+    },
+    "input_tokens": 40413,
+    "effective_ceiling": 71000,
+    "policy_headroom": 4000,
+    "headroom": 30587,
+    "trimming": {
+      "tokens_before": 38641,
+      "tokens_after": 38641,
+      "tokens_recovered": 0,
+      "dropped_chunk_ids": [],
+      "dropped_blocks": {
+        "recent narrative": 0,
+        "historical context": 0
+      },
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 38641,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 41517,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      }
+    }
+  }
+]

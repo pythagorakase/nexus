@@ -1,0 +1,6 @@
+[{'current_database': 'qa640_909_long_absence', 'count': 46, 'max': 49}]
+warning: ui/dist/public/index.html is missing - the gateway will serve 503 for UI routes. Build it with: npm --prefix ui run build
+Startup recovery cleared orphaned player choice on chunk 49
+started gateway (pid 94636) on http://127.0.0.1:8018
+NEXUS is up: http://127.0.0.1:8018 (slot 4, profile local)
+{"success": true, "profile": "local", "slot": 4, "services": {"gateway": {"pid": 94636, "service": "gateway", "port": 8018, "host": "127.0.0.1", "slot": 4, "started_at": "2026-09-24T16:31:15.122414+00:00", "command": ["/Users/pythagor/nexus/.venv/bin/python", "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/scripts/qa_shift/long_absence_probe.py", "gateway"], "log": "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/.nexus/runtime/gateway-8018/gateway.log"}}}

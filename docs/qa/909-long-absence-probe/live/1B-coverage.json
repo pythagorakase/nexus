@@ -1,0 +1,24 @@
+[
+  {
+    "id": 52,
+    "created_at": "2026-09-24 16:33:05.009727+00:00",
+    "turn_id": "86c3f720-9cfb-4855-ac3f-4ff32c829851",
+    "user_input": "\"At the shutter you told Ora: west conduit, two turns, then the lift cage. Lose the lane cameras in the condensers.\" I keep my voice low. \"Did that route hold? I am asking you, not writing an answer for you.\"",
+    "detected_entities": [],
+    "raw_result_count": 8,
+    "kept_chunk_ids": [
+      50,
+      11,
+      12,
+      30,
+      15,
+      32,
+      13,
+      19
+    ],
+    "kept_tokens": 9126,
+    "available_budget": 7500,
+    "coverage": [],
+    "gap_entities": []
+  }
+]

@@ -1,0 +1,4 @@
+{
+  "database": "qa640_909_long_absence",
+  "sql": "UPDATE narrative_chunks SET choice_text=NULL, choice_object=choice_object - 'selected' - 'selection_type', raw_text=storyteller_text WHERE id=53"
+}

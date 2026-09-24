@@ -1,0 +1,25 @@
+[('qa640_909_long_absence', 46, 49)]
+warning: ui/dist/public/index.html is missing - the gateway will serve 503 for UI routes. Build it with: npm --prefix ui run build
+Traceback (most recent call last):
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/scripts/qa_shift/long_absence_probe.py", line 164, in <module>
+    main()
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/scripts/qa_shift/long_absence_probe.py", line 158, in main
+    print(json.dumps(supervisor.up(slot=4), default=str))
+                     ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/runtime/supervisor.py", line 490, in up
+    record = self._start_service(
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/runtime/supervisor.py", line 443, in _start_service
+    recover_active_slot_choice(slot)
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/api/choice_recovery.py", line 103, in recover_active_slot_choice
+    if is_slot_locked(slot, dbname=dbname):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/api/save_slots.py", line 139, in is_slot_locked
+    conn = _get_admin_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/api/save_slots.py", line 120, in _get_admin_connection
+    return psycopg2.connect(**connection_kwargs("postgres"))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/scripts/qa_shift/long_absence_probe.py", line 36, in guarded_connection
+    raise RuntimeError(f"Probe refused database {params['dbname']!r}")
+RuntimeError: Probe refused database 'postgres'

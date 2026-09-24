@@ -1,0 +1,353 @@
+[
+  {
+    "id": 76,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "Mara owes Ivo Senn a life-debt that can compel her to make difficult choices.",
+      "history": "Blackwake smuggler Ivo Senn once saved Mara's life, leaving her bound to repay him.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "trait": "obligations",
+        "source": "trait_compiler",
+        "trait_compiler_functional_pair_tag": "obligation"
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 1,
+      "character2_id": 2,
+      "recent_events": "Her professional demotion makes the debt especially dangerous when Ivo calls on it.",
+      "valence_current": 0.364388979206,
+      "emotional_valence": "+2|friendly",
+      "relationship_type": "obligation"
+    },
+    "source_chunk_id": 25,
+    "created_at": "2026-07-30 05:27:46.554016+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 77,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "latent in generated backstory",
+      "history": "They served as analog-records companions during Mara Vey's final audit.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "They served as analog-records companions during Mara Vey's final audit.",
+        "object_ref": "Niko Rell",
+        "object_kind": "character",
+        "subject_ref": "Mara Vey",
+        "subject_kind": "character",
+        "source_event_ref": null,
+        "relationship_type": "companion",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 1,
+      "character2_id": 4,
+      "recent_events": "Established by Retrograde setup history.",
+      "valence_current": 0.546060225781,
+      "emotional_valence": "+3|trusting",
+      "relationship_type": "companion"
+    },
+    "source_chunk_id": 25,
+    "created_at": "2026-07-30 05:27:46.554016+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 78,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "Ivo's claimed mercy is inseparable from the abandonment that left Elian exposed after he moved the sealed cradle.",
+      "history": "They served together on the freight-lift-collapse rescue crews.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "They served together on the freight-lift-collapse rescue crews.",
+        "object_ref": "Elian Rook",
+        "object_kind": "character",
+        "subject_ref": "Ivo Senn",
+        "subject_kind": "character",
+        "source_event_ref": null,
+        "relationship_type": "friend",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 2,
+      "character2_id": 3,
+      "recent_events": "Ivo admitted the transfer and acknowledged that leaving Elian alive was not the same as keeping her safe.",
+      "valence_current": -0.545992128004,
+      "emotional_valence": "-3|resentful",
+      "relationship_type": "complex"
+    },
+    "source_chunk_id": 25,
+    "created_at": "2026-07-30 05:27:46.554016+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 79,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "latent in generated backstory",
+      "history": "The stalled disclosure leaves Niko Rell opposed to Mara Vey over the recording's accusation and the withheld copy.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "The stalled disclosure leaves Niko Rell opposed to Mara Vey over the recording's accusation and the withheld copy.",
+        "object_ref": "Mara Vey",
+        "object_kind": "character",
+        "subject_ref": "Niko Rell",
+        "subject_kind": "character",
+        "source_event_ref": null,
+        "relationship_type": "enemy",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 4,
+      "character2_id": 1,
+      "recent_events": "Established by Retrograde setup history.",
+      "valence_current": -0.546060225781,
+      "emotional_valence": "-3|resentful",
+      "relationship_type": "enemy"
+    },
+    "source_chunk_id": 25,
+    "created_at": "2026-07-30 05:27:46.554016+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 203,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "Tam's authorship remains opposed to Mara's attempts to impose outcomes through paperwork or declared finality.",
+      "history": "Mara Vey endangered her audit standing to preserve Tam Oris's testimony.",
+      "created_at": "2026-07-30T01:18:44.020137-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "Mara Vey endangered her audit standing to preserve Tam Oris's testimony.",
+        "object_ref": "Tam Oris",
+        "object_kind": "character",
+        "subject_ref": "Mara Vey",
+        "subject_kind": "character",
+        "source_event_ref": "maturation_job_8_ev_vey_exposed",
+        "relationship_type": "comrade",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T01:18:44.020137-04:00",
+      "character1_id": 1,
+      "character2_id": 12,
+      "recent_events": "Tam refused Mara's claim that unmade shelter decisions could be settled by an invented passage of time.",
+      "valence_current": -0.545598471213,
+      "emotional_valence": "-3|resentful",
+      "relationship_type": "complex"
+    },
+    "source_chunk_id": 48,
+    "created_at": "2026-08-21 04:49:55.030065+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 204,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "Mara owes Ivo Senn a life-debt that can compel her to make difficult choices.",
+      "history": "Blackwake smuggler Ivo Senn once saved Mara's life, leaving her bound to repay him.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "trait": "obligations",
+        "source": "trait_compiler",
+        "trait_compiler_functional_pair_tag": "obligation"
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 1,
+      "character2_id": 2,
+      "recent_events": "Her professional demotion makes the debt especially dangerous when Ivo calls on it.",
+      "valence_current": 0.365595554573,
+      "emotional_valence": "+2|friendly",
+      "relationship_type": "obligation"
+    },
+    "source_chunk_id": 48,
+    "created_at": "2026-08-21 04:49:55.030065+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 205,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "latent in generated backstory",
+      "history": "They served as analog-records companions during Mara Vey's final audit.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "They served as analog-records companions during Mara Vey's final audit.",
+        "object_ref": "Niko Rell",
+        "object_kind": "character",
+        "subject_ref": "Mara Vey",
+        "subject_kind": "character",
+        "source_event_ref": null,
+        "relationship_type": "companion",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 1,
+      "character2_id": 4,
+      "recent_events": "Established by Retrograde setup history.",
+      "valence_current": 0.546921936059,
+      "emotional_valence": "+3|trusting",
+      "relationship_type": "companion"
+    },
+    "source_chunk_id": 48,
+    "created_at": "2026-08-21 04:49:55.030065+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 206,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "Tam's trust has deteriorated into a demand that Mara not make witnesses or choices on Tam's behalf.",
+      "history": "Mara Vey endangered her audit standing to preserve Tam Oris's testimony.",
+      "created_at": "2026-07-30T01:18:44.020137-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "Mara Vey endangered her audit standing to preserve Tam Oris's testimony.",
+        "object_ref": "Tam Oris",
+        "object_kind": "character",
+        "subject_ref": "Mara Vey",
+        "subject_kind": "character",
+        "source_event_ref": "maturation_job_8_ev_vey_exposed",
+        "relationship_type": "comrade",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T01:18:44.020137-04:00",
+      "character1_id": 1,
+      "character2_id": 12,
+      "recent_events": "Mara invoked absent Ora in the hall; Calyx asked whether Mara would give Tam's paper quiet.",
+      "valence_current": -0.545598471213,
+      "emotional_valence": "-3|resentful",
+      "relationship_type": "complex"
+    },
+    "source_chunk_id": 48,
+    "created_at": "2026-08-21 04:49:55.030065+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 207,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "Ivo's claimed mercy is inseparable from the abandonment that left Elian exposed after he moved the sealed cradle.",
+      "history": "They served together on the freight-lift-collapse rescue crews.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "They served together on the freight-lift-collapse rescue crews.",
+        "object_ref": "Elian Rook",
+        "object_kind": "character",
+        "subject_ref": "Ivo Senn",
+        "subject_kind": "character",
+        "source_event_ref": null,
+        "relationship_type": "friend",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 2,
+      "character2_id": 3,
+      "recent_events": "Ivo admitted the transfer and acknowledged that leaving Elian alive was not the same as keeping her safe.",
+      "valence_current": -0.546853967551,
+      "emotional_valence": "-3|resentful",
+      "relationship_type": "complex"
+    },
+    "source_chunk_id": 48,
+    "created_at": "2026-08-21 04:49:55.030065+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 208,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "latent in generated backstory",
+      "history": "Elian Rook directed Tam Oris through the falsified retrieval drills.",
+      "created_at": "2026-07-30T01:18:44.020137-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "Elian Rook directed Tam Oris through the falsified retrieval drills.",
+        "object_ref": "Tam Oris",
+        "object_kind": "character",
+        "subject_ref": "Elian Rook",
+        "subject_kind": "character",
+        "source_event_ref": "maturation_job_8_ev_rook_secret",
+        "relationship_type": "handler",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T01:18:44.020137-04:00",
+      "character1_id": 3,
+      "character2_id": 12,
+      "recent_events": "Established by Retrograde event maturation_job_8_ev_rook_secret.",
+      "valence_current": 0.021697284208,
+      "emotional_valence": "0|neutral",
+      "relationship_type": "handler"
+    },
+    "source_chunk_id": 48,
+    "created_at": "2026-08-21 04:49:55.030065+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  },
+  {
+    "id": 209,
+    "relationship_table": "character_relationships",
+    "operation": "update",
+    "old_row": {
+      "dynamic": "latent in generated backstory",
+      "history": "The stalled disclosure leaves Niko Rell opposed to Mara Vey over the recording's accusation and the withheld copy.",
+      "created_at": "2026-07-30T00:55:20.251348-04:00",
+      "extra_data": {
+        "source": "retrograde",
+        "rationale": "The stalled disclosure leaves Niko Rell opposed to Mara Vey over the recording's accusation and the withheld copy.",
+        "object_ref": "Mara Vey",
+        "object_kind": "character",
+        "subject_ref": "Niko Rell",
+        "subject_kind": "character",
+        "source_event_ref": null,
+        "relationship_type": "enemy",
+        "retrograde_relationship": true
+      },
+      "updated_at": "2026-07-30T00:55:20.251348-04:00",
+      "character1_id": 4,
+      "character2_id": 1,
+      "recent_events": "Established by Retrograde setup history.",
+      "valence_current": -0.546921936059,
+      "emotional_valence": "-3|resentful",
+      "relationship_type": "enemy"
+    },
+    "source_chunk_id": 48,
+    "created_at": "2026-08-21 04:49:55.030065+00:00",
+    "producer": "unattributed_pre_115",
+    "delta": null,
+    "valence_after": null
+  }
+]

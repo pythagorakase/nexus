@@ -1,0 +1,10 @@
+[
+  "/Users/pythagor/nexus/.venv/bin/python",
+  "-m",
+  "nexus.cli",
+  "continue",
+  "--slot",
+  "4",
+  "--user-text",
+  "At the loading arcade I see Ora Pell near the conduit access. I stop short of crowding her and keep my hands in view. \"Ora. If you are willing, I would like a word. Here, on your side of the doorway.\""
+]

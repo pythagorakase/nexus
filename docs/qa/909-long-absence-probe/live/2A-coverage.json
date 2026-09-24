@@ -1,0 +1,40 @@
+[
+  {
+    "id": 53,
+    "created_at": "2026-09-24 16:34:02.927521+00:00",
+    "turn_id": "0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f",
+    "user_input": "At the loading arcade I see Ora Pell near the conduit access. I stop short of crowding her and keep my hands in view. \"Ora. If you are willing, I would like a word. Here, on your side of the doorway.\"",
+    "detected_entities": [
+      {
+        "id": 14,
+        "kind": "character",
+        "name": "Ora Pell"
+      }
+    ],
+    "raw_result_count": 8,
+    "kept_chunk_ids": [
+      51,
+      5,
+      2,
+      17,
+      8,
+      18,
+      9,
+      36
+    ],
+    "kept_tokens": 7677,
+    "available_budget": 7500,
+    "coverage": [
+      {
+        "id": 14,
+        "kind": "character",
+        "name": "Ora Pell",
+        "covered": true,
+        "covering_chunk_ids": [
+          51
+        ]
+      }
+    ],
+    "gap_entities": []
+  }
+]

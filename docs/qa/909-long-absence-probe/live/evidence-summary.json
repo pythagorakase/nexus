@@ -1,0 +1,997 @@
+[
+  {
+    "turn": "1A",
+    "subject": "Niko Rell",
+    "character_id": 4,
+    "last_present": 25,
+    "user_text": "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\"",
+    "run": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+    "chunk": 50,
+    "dossier": [
+      "- Niko Rell: at 1, watching the world go by",
+      "- Niko Rell [recent]: Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.",
+      "  Emotional State: alert and committed to getting Ora clear without taking custody from her"
+    ],
+    "deep": [
+      49,
+      48,
+      36,
+      47,
+      28,
+      37,
+      46,
+      27,
+      35,
+      42,
+      26,
+      21,
+      24,
+      25,
+      22
+    ],
+    "historical": [
+      49,
+      48,
+      36,
+      47,
+      28
+    ],
+    "warm": [
+      49,
+      48,
+      47,
+      46,
+      45,
+      44,
+      43,
+      42,
+      41,
+      40,
+      "5",
+      "6",
+      "7",
+      "20",
+      "22"
+    ],
+    "coverage": [
+      {
+        "id": 51,
+        "created_at": "2026-09-24 16:31:47.000637+00:00",
+        "turn_id": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+        "user_input": "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\"",
+        "detected_entities": [
+          {
+            "id": 4,
+            "kind": "character",
+            "name": "Niko Rell"
+          }
+        ],
+        "raw_result_count": 8,
+        "kept_chunk_ids": [
+          49,
+          5,
+          20,
+          6,
+          22,
+          7,
+          44,
+          45
+        ],
+        "kept_tokens": 8018,
+        "available_budget": 7500,
+        "coverage": [
+          {
+            "id": 4,
+            "kind": "character",
+            "name": "Niko Rell",
+            "covered": true,
+            "covering_chunk_ids": [
+              5,
+              6,
+              7,
+              22,
+              45
+            ]
+          }
+        ],
+        "gap_entities": []
+      }
+    ],
+    "usage": [
+      {
+        "ts": "2026-09-24T16:32:16.740786Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "skald_writer",
+        "slot": 4,
+        "run_id": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_095136f3f3ea0d13006ab55073815487d2a4ab0f20302e506e",
+        "input_tokens": 36337,
+        "output_tokens": 1402,
+        "total_tokens": 37739,
+        "cached_input_tokens": 0,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 516,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      },
+      {
+        "ts": "2026-09-24T16:32:36.761272Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "gaia",
+        "slot": 4,
+        "run_id": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_09937d678c0eeb7b006ab550918e7c87d28d9cac4207606657",
+        "input_tokens": 38733,
+        "output_tokens": 1374,
+        "total_tokens": 40107,
+        "cached_input_tokens": 0,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 639,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      }
+    ],
+    "windows": [
+      {
+        "generation_session": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+        "seat": "skald_writer",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 4580,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 5667,
+          "recent narrative": 13904,
+          "scene roster": 22,
+          "user input": 59,
+          "entity dossier": 1791,
+          "historical context": 4095,
+          "world knowledge": 252,
+          "orrery tag library": 3702,
+          "recent orrery rulings": 210,
+          "orrery imminent activity": 431,
+          "orrery scene pressure": 229,
+          "orrery joint beats": 191,
+          "instructions": 30,
+          "request framing": 1107
+        },
+        "input_tokens": 36337,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 34663,
+        "trimming": {
+          "tokens_before": 37000,
+          "tokens_after": 37000,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 37000,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 39884,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      },
+      {
+        "generation_session": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+        "seat": "gaia",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 1900,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 5667,
+          "recent narrative": 13904,
+          "user input": 59,
+          "entity dossier": 1791,
+          "historical context": 4095,
+          "world knowledge": 252,
+          "orrery tag library": 3702,
+          "recent orrery rulings": 210,
+          "orrery imminent activity": 431,
+          "orrery scene pressure": 229,
+          "orrery joint beats": 191,
+          "instructions": 30,
+          "finished writer output": 881,
+          "request framing": 5324
+        },
+        "input_tokens": 38733,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 32267,
+        "trimming": {
+          "tokens_before": 37000,
+          "tokens_after": 37000,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 37000,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 39884,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      }
+    ],
+    "prose": "Niko sees the lifted hand.\n\nFor a moment he does nothing. Rain stipples the loading arcade between you, turning the freight floor into a wavering reflection of lamps, boots, and descending steel. He has the look of someone who has already decided which questions he will not answer.\n\nThen he comes as far as the dispatch-box threshold and stops beneath its lintel.\n\nKessa does not rise from her chair. \u201cThis is a Guild-lit room,\u201d she says. \u201cNot a holding pen. He may stand there. He does not enter my conversation unless I ask him to.\u201d\n\nNiko gives her a brief nod, more recognition than apology. His gaze finds yours.\n\n\u201cI don\u2019t have Ora with me,\u201d he says. \u201cI won\u2019t tell you where she is, where she was, or what she kept. Don\u2019t ask.\u201d\n\nHe lets that boundary stand before continuing.\n\n\u201cI did see why I thought you ought to know I was here.\u201d He glances over one shoulder into the rain-lit arcade. \u201cA woman in municipal gray spoke to a lift scheduler two bays down. Asked whether an auditor had come out of the memorial hall carrying paper. The scheduler gave her nothing useful. I watched her leave toward the canal stairs.\u201d\n\nThe word *municipal* feels oily in this room. It proves no office, no sponsor, no link to Aster or Sol. It proves only that someone was willing to spend an ordinary question on your outline.\n\n\u201cI\u2019m not asking you to follow her,\u201d Niko says. \u201cAnd I\u2019m not offering you a route to anybody. I\u2019m telling you because people who want a person isolated usually begin by learning which door she used.\u201d\n\nKessa\u2019s cup clicks softly against its saucer. She has not taken her eyes from you.\n\n\u201cThe dead-book waits,\u201d she says. \u201cSo does my receipt. Neither becomes less true because the arcade has developed a shadow.\u201d\n\nNiko\u2019s face closes slightly at that, as if he respects the refusal to let fear turn every obligation into an emergency exit. He places an open palm against the doorframe.\n\n\u201cIf you sign,\u201d he says, \u201ckeep the paper in your own hand until you decide who has earned it. If you don\u2019t, don\u2019t pretend the token has stopped asking.\u201d\n\nOutside, a freight lift begins its slow climb, carrying a cage of sealed containers through the rain-bright shaft. Kessa\u2019s dead-book sheet lies beneath the amber lamp. Beside it, the narrow Wickglass receipt waits blank, a fact not yet bought with the sentence it requires.\n\nNiko remains at the threshold, available for only the kind of conversation he has chosen to permit."
+  },
+  {
+    "turn": "1B",
+    "subject": "Niko Rell",
+    "character_id": 4,
+    "last_present": 25,
+    "user_text": "\"At the shutter you told Ora: west conduit, two turns, then the lift cage. Lose the lane cameras in the condensers.\" I keep my voice low. \"Did that route hold? I am asking you, not writing an answer for you.\"",
+    "run": "86c3f720-9cfb-4855-ac3f-4ff32c829851",
+    "chunk": 51,
+    "dossier": [
+      "- Niko Rell: at 1, pacing the near ground",
+      "- Niko Rell [present]: Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.",
+      "  Emotional State: alert, bounded, and unwilling to turn his warning into a route to Ora"
+    ],
+    "deep": [
+      50,
+      27,
+      25,
+      32,
+      35,
+      31,
+      22,
+      24,
+      33,
+      30,
+      26,
+      37,
+      28,
+      20,
+      46
+    ],
+    "historical": [
+      50,
+      27,
+      25,
+      32,
+      35
+    ],
+    "warm": [
+      50,
+      49,
+      48,
+      47,
+      46,
+      45,
+      44,
+      43,
+      42,
+      41,
+      "32",
+      "11",
+      "12",
+      "13",
+      "15",
+      "19",
+      "30"
+    ],
+    "coverage": [
+      {
+        "id": 52,
+        "created_at": "2026-09-24 16:33:05.009727+00:00",
+        "turn_id": "86c3f720-9cfb-4855-ac3f-4ff32c829851",
+        "user_input": "\"At the shutter you told Ora: west conduit, two turns, then the lift cage. Lose the lane cameras in the condensers.\" I keep my voice low. \"Did that route hold? I am asking you, not writing an answer for you.\"",
+        "detected_entities": [],
+        "raw_result_count": 8,
+        "kept_chunk_ids": [
+          50,
+          11,
+          12,
+          30,
+          15,
+          32,
+          13,
+          19
+        ],
+        "kept_tokens": 9126,
+        "available_budget": 7500,
+        "coverage": [],
+        "gap_entities": []
+      }
+    ],
+    "usage": [
+      {
+        "ts": "2026-09-24T16:33:21.040225Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "skald_writer",
+        "slot": 4,
+        "run_id": "86c3f720-9cfb-4855-ac3f-4ff32c829851",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_01f4b532774005a5006ab550c1340c87d2a1ff9b284a13b9c7",
+        "input_tokens": 38999,
+        "output_tokens": 939,
+        "total_tokens": 39938,
+        "cached_input_tokens": 5762,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 156,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      },
+      {
+        "ts": "2026-09-24T16:33:31.974314Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "gaia",
+        "slot": 4,
+        "run_id": "86c3f720-9cfb-4855-ac3f-4ff32c829851",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_02cca05a239b61ab006ab550d1efdc87d2aa87f254d8cfc37b",
+        "input_tokens": 41296,
+        "output_tokens": 603,
+        "total_tokens": 41899,
+        "cached_input_tokens": 7300,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 254,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      }
+    ],
+    "windows": [
+      {
+        "generation_session": "86c3f720-9cfb-4855-ac3f-4ff32c829851",
+        "seat": "skald_writer",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 4580,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 5952,
+          "recent narrative": 15925,
+          "scene roster": 27,
+          "user input": 58,
+          "entity dossier": 1723,
+          "historical context": 4537,
+          "world knowledge": 258,
+          "orrery tag library": 3727,
+          "recent orrery rulings": 240,
+          "orrery imminent activity": 397,
+          "orrery scene pressure": 192,
+          "orrery joint beats": 181,
+          "instructions": 30,
+          "request framing": 1105
+        },
+        "input_tokens": 38999,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 32001,
+        "trimming": {
+          "tokens_before": 39664,
+          "tokens_after": 39664,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 39664,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 42543,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      },
+      {
+        "generation_session": "86c3f720-9cfb-4855-ac3f-4ff32c829851",
+        "seat": "gaia",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 1900,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 5952,
+          "recent narrative": 15925,
+          "user input": 58,
+          "entity dossier": 1723,
+          "historical context": 4537,
+          "world knowledge": 258,
+          "orrery tag library": 3727,
+          "recent orrery rulings": 240,
+          "orrery imminent activity": 397,
+          "orrery scene pressure": 192,
+          "orrery joint beats": 181,
+          "instructions": 30,
+          "finished writer output": 787,
+          "request framing": 5322
+        },
+        "input_tokens": 41296,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 29704,
+        "trimming": {
+          "tokens_before": 39664,
+          "tokens_after": 39664,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 39664,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 42543,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      }
+    ],
+    "prose": "Niko\u2019s eyes narrow at the precision of the question. Outside, rain combs silver lines through the loading arcade; a lift cage rises behind him, slow enough to make every sealed container look accused.\n\n\u201cI told her that route because it was good for the first part of the night,\u201d he says. \u201cIt held through the west conduit and the condensers. No lane cameras caught us there. I watched Ora take the second turn.\u201d\n\nHe stops. The boundary arrives without performance.\n\n\u201cAfter that, we separated. Deliberately. I don\u2019t know whether she took the lift cage, doubled back, or found another exit. If I knew it, I wouldn\u2019t give it to you in a dispatch box.\u201d\n\nThe answer has less comfort in it than a lie would have. It is also less useful to anyone standing beyond the rain and trying to turn concern into a map.\n\n\u201cYou asked whether the route held,\u201d Niko continues. \u201cIt held as far as I saw it. I saw no public interdiction, no chase, no distress signal. That is not the same as saying Ora is safe. It means I won\u2019t invent an ending because you need one.\u201d\n\nKessa reaches beneath the dead-book sheet for her satchel. A small indicator on its clasp pulses once: an incoming welfare inquiry, ordinary Guild routing, unread. She glances at it, then turns the clasp facedown.\n\n\u201cYour friend has given you an honest limit,\u201d she says. \u201cNow give the dead the same courtesy.\u201d\n\nNiko looks at the sheet bearing Nera Voss\u2019s name. His expression does not soften, but it loses some of its defensive set.\n\n\u201cYou can keep asking me what I saw,\u201d he says. \u201cYou cannot make me carry Ora\u2019s half of the world into this room.\u201d\n\nUnder the amber lamp, the dead-book sentence waits in Mara\u2019s own hand or remains unwritten. Beside it, the Wickglass receipt remains a narrow, conditional piece of truth: an unnamed municipal adjunct asked how to isolate carriers through family obligations; Wickglass refused the question. Beyond the glass, the municipal-gray stranger is still only rain, a scheduler\u2019s recollection, and a direction toward canal stairs.\n\nKessa slides the pen toward you. It rolls once and comes to rest against the bronze token."
+  },
+  {
+    "turn": "2A",
+    "subject": "Ora Pell",
+    "character_id": 14,
+    "last_present": 25,
+    "user_text": "At the loading arcade I see Ora Pell near the conduit access. I stop short of crowding her and keep my hands in view. \"Ora. If you are willing, I would like a word. Here, on your side of the doorway.\"",
+    "run": "0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f",
+    "chunk": 52,
+    "dossier": [
+      "- Ora Pell: at None, taking a small pleasure",
+      "- Ora Pell [mentioned]: Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows.",
+      "  Emotional State: angry, calculating, and unwilling to let extraction define her as cargo"
+    ],
+    "deep": [
+      51,
+      37,
+      35,
+      25,
+      31,
+      30,
+      26,
+      39,
+      22,
+      38,
+      45,
+      28,
+      27,
+      46,
+      20
+    ],
+    "historical": [
+      51,
+      37,
+      35,
+      25,
+      31
+    ],
+    "warm": [
+      51,
+      50,
+      49,
+      48,
+      47,
+      46,
+      45,
+      44,
+      43,
+      42,
+      "2",
+      "36",
+      "5",
+      "8",
+      "9",
+      "17",
+      "18"
+    ],
+    "coverage": [
+      {
+        "id": 53,
+        "created_at": "2026-09-24 16:34:02.927521+00:00",
+        "turn_id": "0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f",
+        "user_input": "At the loading arcade I see Ora Pell near the conduit access. I stop short of crowding her and keep my hands in view. \"Ora. If you are willing, I would like a word. Here, on your side of the doorway.\"",
+        "detected_entities": [
+          {
+            "id": 14,
+            "kind": "character",
+            "name": "Ora Pell"
+          }
+        ],
+        "raw_result_count": 8,
+        "kept_chunk_ids": [
+          51,
+          5,
+          2,
+          17,
+          8,
+          18,
+          9,
+          36
+        ],
+        "kept_tokens": 7677,
+        "available_budget": 7500,
+        "coverage": [
+          {
+            "id": 14,
+            "kind": "character",
+            "name": "Ora Pell",
+            "covered": true,
+            "covering_chunk_ids": [
+              51
+            ]
+          }
+        ],
+        "gap_entities": []
+      }
+    ],
+    "usage": [
+      {
+        "ts": "2026-09-24T16:34:19.497052Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "skald_writer",
+        "slot": 4,
+        "run_id": "0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_02016421e1663e3a006ab550fb285487d2a064dfe47a5f6a36",
+        "input_tokens": 38251,
+        "output_tokens": 926,
+        "total_tokens": 39177,
+        "cached_input_tokens": 5762,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 94,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      },
+      {
+        "ts": "2026-09-24T16:34:26.821563Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "gaia",
+        "slot": 4,
+        "run_id": "0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_0bdfc0aee4df1ce6006ab5510c343087d2a868364e0c997464",
+        "input_tokens": 40595,
+        "output_tokens": 445,
+        "total_tokens": 41040,
+        "cached_input_tokens": 7300,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 204,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      }
+    ],
+    "windows": [
+      {
+        "generation_session": "0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f",
+        "seat": "skald_writer",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 4580,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 6225,
+          "recent narrative": 15227,
+          "scene roster": 27,
+          "user input": 56,
+          "entity dossier": 1818,
+          "historical context": 4299,
+          "world knowledge": 258,
+          "orrery tag library": 3727,
+          "recent orrery rulings": 241,
+          "orrery imminent activity": 402,
+          "orrery scene pressure": 188,
+          "instructions": 30,
+          "request framing": 1106
+        },
+        "input_tokens": 38251,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 32749,
+        "trimming": {
+          "tokens_before": 38915,
+          "tokens_after": 38915,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 38915,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 41794,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      },
+      {
+        "generation_session": "0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f",
+        "seat": "gaia",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 1900,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 6225,
+          "recent narrative": 15227,
+          "user input": 56,
+          "entity dossier": 1818,
+          "historical context": 4299,
+          "world knowledge": 258,
+          "orrery tag library": 3727,
+          "recent orrery rulings": 241,
+          "orrery imminent activity": 402,
+          "orrery scene pressure": 188,
+          "instructions": 30,
+          "finished writer output": 834,
+          "request framing": 5323
+        },
+        "input_tokens": 40595,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 30405,
+        "trimming": {
+          "tokens_before": 38915,
+          "tokens_after": 38915,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 38915,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 41794,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      }
+    ],
+    "prose": "Niko\u2019s attention cuts past you.\n\nAt the far end of the loading arcade, where the conduit access is recessed beneath a yellow maintenance hood, Ora Pell stands with one shoulder against the jamb. She has changed out of whatever rain gear she wore on the west-conduit leg; her coat is too large through the shoulders and dry only in patches. In one hand she holds a paper cup gone white with steam. A small pleasure, purchased somewhere anonymous, and apparently the only thing in the station she is prepared to let remain simple.\n\nShe hears you. Of course she does.\n\nFor several seconds she does not come closer. The rain drapes the space between the dispatch box and the conduit door in wavering strands, and the freight lifts make their slow, indifferent ascent behind the glass.\n\nNiko does not turn toward her. He keeps his place at the threshold, but his voice is pitched for you alone.\n\n\u201cHer being there doesn\u2019t amend anything I said.\u201d\n\n\u201cI know,\u201d Ora says.\n\nHer answer is flat, not cruel. She lifts the cup, takes a careful sip, then pushes herself off the jamb. She crosses only far enough to stand on the arcade side of the doorway, exactly where you asked. Her gaze touches Niko first, a brief confirmation between people who have survived the usefulness of not knowing too much. Then it settles on you.\n\n\u201cYou get one question,\u201d she says. \u201cNot about the receipt. Not about where I\u2019ve been. Not about where I go after this.\u201d\n\nHer eyes flick to Kessa\u2019s table, to the dead-book sheet under its amber lamp, and back.\n\n\u201cAnd you don\u2019t get to turn seeing me into proof that anybody\u2019s safe. I stopped for tea. That\u2019s all you can honestly say.\u201d\n\nKessa leaves the pen where it rests against the bronze token. Her unread Guild indicator pulses once beneath the overturned clasp and goes dark again.\n\n\u201cNera Voss is still dead,\u201d she says. \u201cYour sentence is still yours.\u201d\n\nOra\u2019s mouth tightens at that, perhaps in recognition, perhaps simply because she has spent enough of the night watching people try to make urgency outrank consequence.\n\n\u201cYou wanted a word,\u201d she tells you. \u201cSpend it carefully.\u201d\n\nRain whispers over the conduit door. Niko remains between the dispatch house and the rest of the arcade, offering neither endorsement nor interference. On the table, the dead-book waits beside the conditional Wickglass receipt: one narrow account of a refused inquiry into isolating carriers through family obligations, purchasable only at the price Kessa named.\n\nOra holds her cup in both hands and waits without yielding an inch of the boundary she has drawn."
+  },
+  {
+    "turn": "2B",
+    "subject": "Ora Pell",
+    "character_id": 14,
+    "last_present": 25,
+    "user_text": "\"At the shutter I caught the chained biscuit tin when you let it go. You told me not to let them make your route into a rescue story.\" I leave a little space between us. \"What do you want me to understand about that now?\"",
+    "run": "f246f3ca-052c-4719-a64c-2bbe24410ed3",
+    "chunk": 53,
+    "dossier": [
+      "- Ora Pell: at 1, pacing the near ground",
+      "- Ora Pell [present]: Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows.",
+      "  Emotional State: guarded and self-possessed"
+    ],
+    "deep": [
+      52,
+      22,
+      25,
+      32,
+      37,
+      35,
+      24,
+      30,
+      48,
+      36,
+      31,
+      28,
+      26,
+      45,
+      46
+    ],
+    "historical": [
+      52,
+      22,
+      25,
+      32,
+      37
+    ],
+    "warm": [
+      52,
+      51,
+      50,
+      49,
+      48,
+      47,
+      46,
+      45,
+      44,
+      43,
+      "32",
+      "retrograde_summary:27",
+      "33",
+      "retrograde_summary:26",
+      "34",
+      "retrograde_summary:22",
+      "40",
+      "retrograde_summary:24",
+      "41",
+      "retrograde_summary:23",
+      "retrograde_summary:29",
+      "retrograde_summary:28",
+      "retrograde_summary:25",
+      "retrograde_summary:21"
+    ],
+    "coverage": [
+      {
+        "id": 54,
+        "created_at": "2026-09-24 16:34:53.084288+00:00",
+        "turn_id": "f246f3ca-052c-4719-a64c-2bbe24410ed3",
+        "user_input": "\"At the shutter I caught the chained biscuit tin when you let it go. You told me not to let them make your route into a rescue story.\" I leave a little space between us. \"What do you want me to understand about that now?\"",
+        "detected_entities": [],
+        "raw_result_count": 15,
+        "kept_chunk_ids": [
+          52,
+          40,
+          32,
+          41,
+          33,
+          34
+        ],
+        "kept_tokens": 8503,
+        "available_budget": 7500,
+        "coverage": [],
+        "gap_entities": []
+      }
+    ],
+    "usage": [
+      {
+        "ts": "2026-09-24T16:35:11.865840Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "skald_writer",
+        "slot": 4,
+        "run_id": "f246f3ca-052c-4719-a64c-2bbe24410ed3",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_0128e403af933276006ab5512d583c87d28bc5eae98fb138c1",
+        "input_tokens": 37768,
+        "output_tokens": 910,
+        "total_tokens": 38678,
+        "cached_input_tokens": 5762,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 91,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      },
+      {
+        "ts": "2026-09-24T16:35:33.680116Z",
+        "quota_day": "2026-09-24",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "seat": "gaia",
+        "slot": 4,
+        "run_id": "f246f3ca-052c-4719-a64c-2bbe24410ed3",
+        "attempt": 1,
+        "outcome": "accepted",
+        "transport": "responses",
+        "request_id": "resp_0774f99e1491daa5006ab5514139f487d2be94c91d6a45a85f",
+        "input_tokens": 40092,
+        "output_tokens": 1397,
+        "total_tokens": 41489,
+        "cached_input_tokens": 7300,
+        "cache_creation_tokens": null,
+        "reasoning_tokens": 899,
+        "service_tier": "default",
+        "aggregate": false,
+        "requests": null
+      }
+    ],
+    "windows": [
+      {
+        "generation_session": "f246f3ca-052c-4719-a64c-2bbe24410ed3",
+        "seat": "skald_writer",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 4580,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 6476,
+          "recent narrative": 14096,
+          "scene roster": 30,
+          "user input": 57,
+          "entity dossier": 1685,
+          "historical context": 4531,
+          "world knowledge": 544,
+          "orrery tag library": 3743,
+          "recent orrery rulings": 237,
+          "orrery imminent activity": 403,
+          "orrery scene pressure": 192,
+          "instructions": 30,
+          "request framing": 1097
+        },
+        "input_tokens": 37768,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 33232,
+        "trimming": {
+          "tokens_before": 38441,
+          "tokens_after": 38441,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 38441,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 41317,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      },
+      {
+        "generation_session": "f246f3ca-052c-4719-a64c-2bbe24410ed3",
+        "seat": "gaia",
+        "attempt": 1,
+        "model": "gpt-5.6-terra",
+        "block_tokens": {
+          "system": 1900,
+          "intertitle": 50,
+          "scene conditions": 17,
+          "private storyteller correspondence": 6476,
+          "recent narrative": 14096,
+          "user input": 57,
+          "entity dossier": 1685,
+          "historical context": 4531,
+          "world knowledge": 544,
+          "orrery tag library": 3743,
+          "recent orrery rulings": 237,
+          "orrery imminent activity": 403,
+          "orrery scene pressure": 192,
+          "instructions": 30,
+          "finished writer output": 817,
+          "request framing": 5314
+        },
+        "input_tokens": 40092,
+        "effective_ceiling": 71000,
+        "policy_headroom": 4000,
+        "headroom": 30908,
+        "trimming": {
+          "tokens_before": 38441,
+          "tokens_after": 38441,
+          "tokens_recovered": 0,
+          "dropped_chunk_ids": [],
+          "dropped_blocks": {
+            "recent narrative": 0,
+            "historical context": 0
+          },
+          "seats": {
+            "skald_writer": {
+              "input_tokens": 38441,
+              "input_ceiling": 71000,
+              "trim_target": 71000,
+              "reserved_writer_output": 0,
+              "token_count_safety_margin": 0
+            },
+            "gaia": {
+              "input_tokens": 41317,
+              "input_ceiling": 71000,
+              "trim_target": 46000,
+              "reserved_writer_output": 25000,
+              "token_count_safety_margin": 0
+            }
+          }
+        }
+      }
+    ],
+    "prose": "Ora looks down into her tea. The cup has softened at the seam beneath her fingers; a dark crescent has formed on the concrete below it.\n\n\u201cYou caught the tin,\u201d she says. \u201cYou did what was needed in that second. That wasn\u2019t nothing.\u201d\n\nHer eyes rise to yours, guarded but present.\n\n\u201cBut a rescue story has a shape people like. It gives somebody a rescuer, somebody rescued, and a clean reason to start asking who owes whom afterward. It lets the person who held the door call the next door theirs to choose.\u201d\n\nNiko\u2019s jaw shifts once. He does not dispute her.\n\n\u201cI needed to get out of that bay,\u201d Ora continues. \u201cNiko helped me get out. You caught what I dropped. None of that bought either of you the rest of my night. It doesn\u2019t make my half of the receipt communal property. It doesn\u2019t make me proof that the route was good, or that I\u2019m safe, or that you did enough.\u201d\n\nThe freight lift behind the glass reaches a higher deck with a muffled mechanical thud. Rain veils the cage as it opens somewhere above.\n\n\u201cIf you want to understand it now,\u201d Ora says, \u201cunderstand that I left because I chose to leave, and I stopped here because I chose to stop. Tomorrow, I may choose something else. Don\u2019t turn that into a debt you can collect, or a protection claim you can make over me.\u201d\n\nHer gaze flicks toward Kessa\u2019s table.\n\n\u201cAnd don\u2019t use my being upright to escape what Nera Voss is asking of you. We\u2019ve all watched enough people call their fear urgent so they don\u2019t have to call their harm by its name.\u201d\n\nKessa does not reach for the dead-book. She merely turns the pen a quarter-turn on the tabletop.\n\n\u201cPlainly put,\u201d she says.\n\nNiko steps back from the threshold, granting Ora the little corridor of space her words have made. \u201cYou heard her,\u201d he says. \u201cNo route. No receipt. No custody dressed up as concern.\u201d\n\nOra takes one final sip, then lowers the cup. \u201cThat was your one question.\u201d\n\nFor an instant her expression eases, though it never becomes trust.\n\n\u201cMake the next thing you do yours,\u201d she says. \u201cNot mine.\u201d\n\nAmber light holds on the dead-book sheet and the bronze token. Beyond the dispatch-box glass, rain turns the loading arcade into a hundred blurred exits."
+  }
+]

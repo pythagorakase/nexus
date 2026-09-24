@@ -1,0 +1,714 @@
+{
+  "source_before": [
+    {
+      "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks",
+      "rows": [
+        {
+          "current_database": "save_04",
+          "count": 46,
+          "max": 49
+        }
+      ]
+    },
+    {
+      "sql": "SELECT c.id,c.name,c.summary,max(r.chunk_id) AS last_present,49-max(r.chunk_id) AS id_gap,(SELECT world_time FROM chunk_metadata WHERE chunk_id=49)-m.world_time AS world_gap,EXISTS(SELECT 1 FROM character_relationships cr WHERE c.id IN (cr.character1_id,cr.character2_id)) AS has_relationship FROM characters c JOIN chunk_character_references r ON r.character_id=c.id AND r.reference='present' JOIN chunk_metadata m ON m.chunk_id=(SELECT max(r2.chunk_id) FROM chunk_character_references r2 WHERE r2.character_id=c.id AND r2.reference='present') GROUP BY c.id,m.world_time ORDER BY last_present,c.id",
+      "rows": [
+        {
+          "id": 11,
+          "name": "Unknown municipal-gray stranger",
+          "summary": "A municipal-accessed, deniable pressure actor who knows of Calyx's third sheet and demands the relay-chamber copy without yet declaring a sponsor or allegiance.",
+          "last_present": 21,
+          "id_gap": 28,
+          "world_gap": "2:16:00",
+          "has_relationship": false
+        },
+        {
+          "id": 4,
+          "name": "Niko Rell",
+          "summary": "Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.",
+          "last_present": 25,
+          "id_gap": 24,
+          "world_gap": "2:02:00",
+          "has_relationship": true
+        },
+        {
+          "id": 14,
+          "name": "Ora Pell",
+          "summary": "Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows.",
+          "last_present": 25,
+          "id_gap": 24,
+          "world_gap": "2:02:00",
+          "has_relationship": false
+        },
+        {
+          "id": 2,
+          "name": "Ivo Senn",
+          "summary": "Trait-compiler character stub for Ivo Senn. Created so wizard trait selections resolve to canonical rows.",
+          "last_present": 48,
+          "id_gap": 1,
+          "world_gap": "0:08:00",
+          "has_relationship": true
+        },
+        {
+          "id": 3,
+          "name": "Elian Rook",
+          "summary": "Retrograde-generated character stub for Elian Rook. Created so Skald-selected setup history can resolve to canonical rows.",
+          "last_present": 48,
+          "id_gap": 1,
+          "world_gap": "0:08:00",
+          "has_relationship": true
+        },
+        {
+          "id": 5,
+          "name": "Ren Vale",
+          "summary": "Retrograde-generated character stub for Ren Vale. Created so Skald-selected setup history can resolve to canonical rows.",
+          "last_present": 48,
+          "id_gap": 1,
+          "world_gap": "0:08:00",
+          "has_relationship": true
+        },
+        {
+          "id": 6,
+          "name": "Sister Calyx",
+          "summary": "A careful keeper of durable paper testimony who has turned the memorial crowd into witnesses against a sealed civic petition.",
+          "last_present": 48,
+          "id_gap": 1,
+          "world_gap": "0:08:00",
+          "has_relationship": true
+        },
+        {
+          "id": 8,
+          "name": "Vela Nash",
+          "summary": "Retrograde-generated character stub for Vela Nash. Created so Skald-selected setup history can resolve to canonical rows.",
+          "last_present": 48,
+          "id_gap": 1,
+          "world_gap": "0:08:00",
+          "has_relationship": true
+        },
+        {
+          "id": 12,
+          "name": "Tam Oris",
+          "summary": "A frightened Records Integrity field contractor who carried an erased retrieval notice to Lantern Quay and has now put its wording into wet ink.",
+          "last_present": 48,
+          "id_gap": 1,
+          "world_gap": "0:08:00",
+          "has_relationship": true
+        },
+        {
+          "id": 1,
+          "name": "Mara Vey",
+          "summary": "A Disgraced civic memory auditor reassigned to petty disputes",
+          "last_present": 49,
+          "id_gap": 0,
+          "world_gap": "0:00:00",
+          "has_relationship": true
+        },
+        {
+          "id": 18,
+          "name": "Kessa Brin",
+          "summary": "An adult Wickglass Transit Guild courier who delivered Mara a bronze token for a private, outstanding Guild obligation and left without touching the hall's witness process.",
+          "last_present": 49,
+          "id_gap": 0,
+          "world_gap": "0:00:00",
+          "has_relationship": true
+        }
+      ]
+    },
+    {
+      "sql": "SELECT * FROM global_variables",
+      "rows": [
+        {
+          "id": true,
+          "base_timestamp": "2189-10-17 19:12:00+00:00",
+          "user_character": 1,
+          "setting": {
+            "tone": "dark",
+            "genre": "cyberpunk",
+            "themes": [
+              "identity and memory",
+              "institutional power",
+              "intimacy under surveillance",
+              "political noir",
+              "complicity",
+              "truth as a contested public good",
+              "slow-burn consequence"
+            ],
+            "story_seed": {
+              "hook": "Mara must keep a public grief ritual from becoming a legal seizure, a factional incident, or proof of her own complicity\u2014while determining whether the living dead woman is a fraud, a revision survivor, or evidence that Mara's supposedly reliable work has been used against her.",
+              "title": "The Woman Who Died Twice",
+              "stakes": "Mara's remaining civic access, her credibility as an auditor, the safety of a woman who may be legally dead, and the fragile trust of Ren, Ivo, and the people gathered to mourn.",
+              "secrets": "Elian Rook's legal death was constructed from a genuine but incomplete chain of evidence, and someone ensured Mara would be the certifying auditor. The brass key opens access to a physical custody system outside ordinary Archive revision protocols, but it is not clear whether it contains proof, bait, or a mechanism for planting a false past. The new voice on Mara's childhood recording belongs to someone who knew the fabricated memory's commissioning context, though the recording itself may be responding to the key rather than revealing a stable truth. Each of Vespera's four factions has touched the Rook case for defensible reasons, and none yet possesses the whole story.",
+              "weather": "Steady orbital rain beads against the viaduct glazing; distant maintenance thunder rolls through the station rings.",
+              "key_npcs": [
+                "Elian Rook, the dockworker legally and ceremonially dead",
+                "Ren Vale, Continuity prosecutor and Mara's damaged former intimate",
+                "Ivo Senn, Blackwake smuggler holding Mara's life-debt",
+                "Sister Calyx, Wet Ink organizer attending in solidarity with the dockworkers"
+              ],
+              "seed_type": "mystery",
+              "situation": "Rain hushes the mourners beneath the transit viaduct at the Lantern Quay Memorial Hall, where Mara Vey has come to pay formal respects to Elian Rook, a dockworker whose death she personally certified after an Archive review. Before the eulogy ends, Rook walks through the doors alive, presses a tarnished brass key into Mara's palm, and whispers, \"You wrote the version where I died.\" When attention turns, she loudly insists she has never met Mara. In the same minute, Continuity prosecutor Ren Vale arrives with a courteous warrant for Mara's handwritten anchor book, Blackwake smuggler Ivo Senn calls to invoke Mara's life-debt, and Mara's sealed childhood recording plays a new voice through its dead speaker.",
+              "base_timestamp": {
+                "day": 17,
+                "hour": 19,
+                "year": 2189,
+                "month": 10,
+                "minute": 12,
+                "second": 0
+              },
+              "immediate_goal": "Secure the brass key and preserve her anchor book and the changed recording long enough to speak privately with Elian Rook or identify where she goes.",
+              "tension_source": "Every conversation can be read several ways: Ren's warrant may be protective or punitive; Ivo's demand may be a rescue or an extraction; Rook's denial may be coercion, strategy, or genuine revision. The memorial's attendees include sympathizers, observers, and people who fear the official version of Rook's death is about to fail."
+            },
+            "tech_level": "far_future",
+            "world_name": "Vesper Station",
+            "time_period": "2189 CE",
+            "magic_exists": false,
+            "cultural_notes": "Vesperians greet one another with a thumb briefly touched to the temple: a polite sign that a memory is offered in good faith. People keep private 'anchor books' of handwritten sensory details, trade favors in unrecorded rooms, and speak carefully of the Archive, whose edits are legal rather than visibly coercive. Rain\u2014condensation from the station's weather lattice\u2014is treated as a small civic blessing, because its noise defeats cheap microphones and its water cannot be convincingly forged in a recollection.",
+            "language_notes": "Public records use soothing bureaucratic euphemisms: memory edits are 'reconciliations,' deleted testimony is 'harmonized,' and politically inconvenient people become 'unconfirmed continuities.' Street slang calls altered recollections 'ghostprints' and trustworthy secrets 'wet ink.'",
+            "major_conflict": "Control of the Palimpsest Civic Archive\u2014the legally authoritative system that can amend a citizen's remembered life\u2014has become the quiet war beneath the station's orderly democracy.",
+            "geographic_scope": "regional",
+            "secondary_genres": [
+              "scifi",
+              "noir",
+              "mystery",
+              "thriller"
+            ],
+            "diegetic_artifact": "EXTRACT FROM THE VESPER VISITOR'S CIVIC ORIENTATION, REVISION 41\n\nWelcome to Vesper Station: the ring of lights above the old Atlantic, where rain falls indoors on schedule and every resident is entitled to a continuous life.\n\nThe phrase is carved over the doors of the Palimpsest Civic Archive. New arrivals tend to photograph it. Long-term residents do not. They have learned that continuity is not the same thing as truth.\n\nVesper turns slowly above the drowned-weather Atlantic, a kilometer-wide orbital habitat of stacked neighborhoods, hydroponic galleries, docking spines, and the narrow, rain-polished avenues of the Inner Rim. Its municipal weather lattice releases warm condensate every evening. The rain runs down neon signs, gathers in shoe soles, and makes a hundred thousand windows look like uncertain witnesses. Down on the street decks, courier bikes hiss through puddles while expensive transit glides soundlessly overhead. A person can cross half the station without ever seeing a star, provided they have the fare and the right permissions.\n\nThe Compact calls itself a democracy of records. Every birth, contract, grievance, and vote passes through Palimpsest, the civic archive charged with preserving the public memory of Vesper. Its rarest authority is Reconciliation: when evidence declares a memory harmful, fraudulent, or destabilizing, trained archivists may alter its legal and lived form. The procedure is said to spare victims trauma, protect witnesses, and prevent panic. It can also make a debt disappear, turn a lover into a stranger, or leave an elected official honestly unable to remember accepting a bribe. Reconciled citizens retain enough of themselves to function. What they lack is certainty about what was taken.\n\nFour powers keep Vesper from admitting it is already divided.\n\nThe Civic Continuity Office operates Palimpsest and insists that records are mercy. Its archivists wear gray seals at the throat and speak the language of procedure; no one knows whether they serve the Compact or merely the system that outlived its founders.\n\nThe Helix Consortium owns life-support patents, freight insurance, and most of the station's private security. Its executives campaign for clean governance while their subcontractors make problems vanish in the maintenance dark.\n\nThe Wet Ink Mutual is a loose network of printmakers, medics, neighborhood advocates, and former Archive technicians. They preserve uneditable testimony on paper, film, scar tissue, and trusted human recollection. The Compact calls them irresponsible. The Consortium calls them terrorists when cameras are present.\n\nFinally, the Blackwake Assembly controls little openly and much after midnight: dock crews, unlicensed data ferries, debt shelters, and the smuggling routes that allow people\u2014and unwanted versions of their lives\u2014to leave the station. They sell secrecy, but their own internal loyalties are worth less than a good raincoat.\n\nNo faction holds Vesper alone. Each needs the others badly enough to negotiate and hates the others enough to prepare for betrayal. That is why the station still functions. That is why it is dangerous.\n\nVisitors are advised to retain independent copies of significant correspondence, to verify an old memory through more than one witness, and never to mistake a familiar face for proof of shared history. If a stranger offers you an anchor book, do not open it in public.\n\nAnd when the evening rain begins, listen carefully. Under its cover, Vesper tells the truth\u2014though never all of it, and never for free.",
+            "magic_description": null,
+            "political_structure": "A nominally elected municipal Compact governs Vesper Station through licensed civic systems, while four entrenched blocs bargain, blackmail, and sabotage one another beneath its public procedures."
+          },
+          "new_story": true,
+          "model": "gpt-5.6-terra",
+          "slot_number": 4,
+          "last_played": null,
+          "slot_created_at": "2026-07-30 04:49:44.071666+00:00",
+          "is_active": false,
+          "gaia_model": null,
+          "apex_context_window": null
+        }
+      ]
+    },
+    {
+      "sql": "SELECT * FROM character_relationships ORDER BY character1_id,character2_id",
+      "rows": [
+        {
+          "character1_id": 1,
+          "character2_id": 2,
+          "relationship_type": "obligation",
+          "emotional_valence": "+2|friendly",
+          "dynamic": "Mara owes Ivo Senn a life-debt that can compel her to make difficult choices.",
+          "recent_events": "Her professional demotion makes the debt especially dangerous when Ivo calls on it.",
+          "history": "Blackwake smuggler Ivo Senn once saved Mara's life, leaving her bound to repay him.",
+          "extra_data": {
+            "trait": "obligations",
+            "source": "trait_compiler",
+            "trait_compiler_functional_pair_tag": "obligation"
+          },
+          "created_at": "2026-07-30 04:55:20.251348+00:00",
+          "updated_at": "2026-07-30 04:55:20.251348+00:00",
+          "valence_current": "0.365711857825"
+        },
+        {
+          "character1_id": 1,
+          "character2_id": 4,
+          "relationship_type": "companion",
+          "emotional_valence": "+3|trusting",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde setup history.",
+          "history": "They served as analog-records companions during Mara Vey's final audit.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "They served as analog-records companions during Mara Vey's final audit.",
+            "object_ref": "Niko Rell",
+            "object_kind": "character",
+            "subject_ref": "Mara Vey",
+            "subject_kind": "character",
+            "source_event_ref": null,
+            "relationship_type": "companion",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 04:55:20.251348+00:00",
+          "updated_at": "2026-07-30 04:55:20.251348+00:00",
+          "valence_current": "0.547004997350"
+        },
+        {
+          "character1_id": 1,
+          "character2_id": 12,
+          "relationship_type": "complex",
+          "emotional_valence": "-3|resentful",
+          "dynamic": "Tam's trust has deteriorated into a demand that Mara not make witnesses or choices on Tam's behalf.",
+          "recent_events": "Mara invoked absent Ora in the hall; Calyx asked whether Mara would give Tam's paper quiet.",
+          "history": "Mara Vey endangered her audit standing to preserve Tam Oris's testimony.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Mara Vey endangered her audit standing to preserve Tam Oris's testimony.",
+            "object_ref": "Tam Oris",
+            "object_kind": "character",
+            "subject_ref": "Mara Vey",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_8_ev_vey_exposed",
+            "relationship_type": "comrade",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 05:18:44.020137+00:00",
+          "updated_at": "2026-07-30 05:18:44.020137+00:00",
+          "valence_current": "-0.545681775130"
+        },
+        {
+          "character1_id": 2,
+          "character2_id": 3,
+          "relationship_type": "complex",
+          "emotional_valence": "-3|resentful",
+          "dynamic": "Ivo's claimed mercy is inseparable from the abandonment that left Elian exposed after he moved the sealed cradle.",
+          "recent_events": "Ivo admitted the transfer and acknowledged that leaving Elian alive was not the same as keeping her safe.",
+          "history": "They served together on the freight-lift-collapse rescue crews.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "They served together on the freight-lift-collapse rescue crews.",
+            "object_ref": "Elian Rook",
+            "object_kind": "character",
+            "subject_ref": "Ivo Senn",
+            "subject_kind": "character",
+            "source_event_ref": null,
+            "relationship_type": "friend",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 04:55:20.251348+00:00",
+          "updated_at": "2026-07-30 04:55:20.251348+00:00",
+          "valence_current": "-0.546937041303"
+        },
+        {
+          "character1_id": 2,
+          "character2_id": 15,
+          "relationship_type": "complex",
+          "emotional_valence": "-1|wary",
+          "dynamic": "Ressa's provisional guarantor freeze remains conditional leverage, not protection or absolution.",
+          "recent_events": "Ivo reaffirmed his obligation to appear before dawn with an honest accounting of every sold name, exposed route, and uncertainty.",
+          "history": "The coercive debt record establishes Ivo Senn's adversarial standing toward Ressa Morn.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "The coercive debt record establishes Ivo Senn's adversarial standing toward Ressa Morn.",
+            "object_ref": "Ressa Morn",
+            "object_kind": "character",
+            "subject_ref": "Ivo Senn",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_12_ivo_stitched",
+            "relationship_type": "enemy",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 05:26:49.328915+00:00",
+          "updated_at": "2026-07-30 05:26:49.328915+00:00",
+          "valence_current": "-0.18181818181818181818"
+        },
+        {
+          "character1_id": 2,
+          "character2_id": 18,
+          "relationship_type": "guardian",
+          "emotional_valence": "+3|trusting",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_17_ev_ivo_protection.",
+          "history": "Ivo's recorded intervention established a protective guardianship while Kessa retained the fragment.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Ivo's recorded intervention established a protective guardianship while Kessa retained the fragment.",
+            "object_ref": "Kessa Brin",
+            "object_kind": "character",
+            "subject_ref": "Ivo Senn",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_17_ev_ivo_protection",
+            "relationship_type": "guardian",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-08-21 04:52:48.234363+00:00",
+          "updated_at": "2026-08-21 04:52:48.234363+00:00",
+          "valence_current": "0.54545454545454545455"
+        },
+        {
+          "character1_id": 3,
+          "character2_id": 8,
+          "relationship_type": "partner",
+          "emotional_valence": "0|neutral",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_13_freight_contact.",
+          "history": "The registered freight-route contact established their enduring courier partnership.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "The registered freight-route contact established their enduring courier partnership.",
+            "object_ref": "Vela Nash",
+            "object_kind": "character",
+            "subject_ref": "Elian Rook",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_13_freight_contact",
+            "relationship_type": "partner",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 16:33:27.950461+00:00",
+          "updated_at": "2026-07-30 16:33:27.950461+00:00",
+          "valence_current": "0E-20"
+        },
+        {
+          "character1_id": 3,
+          "character2_id": 12,
+          "relationship_type": "handler",
+          "emotional_valence": "0|neutral",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_8_ev_rook_secret.",
+          "history": "Elian Rook directed Tam Oris through the falsified retrieval drills.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Elian Rook directed Tam Oris through the falsified retrieval drills.",
+            "object_ref": "Tam Oris",
+            "object_kind": "character",
+            "subject_ref": "Elian Rook",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_8_ev_rook_secret",
+            "relationship_type": "handler",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 05:18:44.020137+00:00",
+          "updated_at": "2026-07-30 05:18:44.020137+00:00",
+          "valence_current": "0.021876633184"
+        },
+        {
+          "character1_id": 3,
+          "character2_id": 21,
+          "relationship_type": "enemy",
+          "emotional_valence": "-3|resentful",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_16_ev_relay_check.",
+          "history": "Their conflict predated Elian's welfare report and remains unresolved.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Their conflict predated Elian's welfare report and remains unresolved.",
+            "object_ref": "Dax Morrow",
+            "object_kind": "character",
+            "subject_ref": "Elian Rook",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_16_ev_relay_check",
+            "relationship_type": "enemy",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-08-21 04:45:01.200405+00:00",
+          "updated_at": "2026-08-21 04:45:01.200405+00:00",
+          "valence_current": "-0.54545454545454545455"
+        },
+        {
+          "character1_id": 4,
+          "character2_id": 1,
+          "relationship_type": "enemy",
+          "emotional_valence": "-3|resentful",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde setup history.",
+          "history": "The stalled disclosure leaves Niko Rell opposed to Mara Vey over the recording's accusation and the withheld copy.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "The stalled disclosure leaves Niko Rell opposed to Mara Vey over the recording's accusation and the withheld copy.",
+            "object_ref": "Mara Vey",
+            "object_kind": "character",
+            "subject_ref": "Niko Rell",
+            "subject_kind": "character",
+            "source_event_ref": null,
+            "relationship_type": "enemy",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 04:55:20.251348+00:00",
+          "updated_at": "2026-07-30 04:55:20.251348+00:00",
+          "valence_current": "-0.547004997350"
+        },
+        {
+          "character1_id": 5,
+          "character2_id": 3,
+          "relationship_type": "spouse",
+          "emotional_valence": "0|neutral",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde setup history.",
+          "history": "Their marriage predates Elian Rook's legal-death procedure.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Their marriage predates Elian Rook's legal-death procedure.",
+            "object_ref": "Elian Rook",
+            "object_kind": "character",
+            "subject_ref": "Ren Vale",
+            "subject_kind": "character",
+            "source_event_ref": null,
+            "relationship_type": "spouse",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 04:55:20.251348+00:00",
+          "updated_at": "2026-07-30 04:55:20.251348+00:00",
+          "valence_current": "0E-20"
+        },
+        {
+          "character1_id": 5,
+          "character2_id": 9,
+          "relationship_type": "patron",
+          "emotional_valence": "0|neutral",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_7_ren_funds_sera_certification.",
+          "history": "Ren's discreet funding preserves Sera's continued certification work.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Ren's discreet funding preserves Sera's continued certification work.",
+            "object_ref": "Dr. Sera Vey",
+            "object_kind": "character",
+            "subject_ref": "Ren Vale",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_7_ren_funds_sera_certification",
+            "relationship_type": "patron",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 05:15:26.095861+00:00",
+          "updated_at": "2026-07-30 05:15:26.095861+00:00",
+          "valence_current": "0E-20"
+        },
+        {
+          "character1_id": 6,
+          "character2_id": 10,
+          "relationship_type": "spouse",
+          "emotional_valence": "0|neutral",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_7_calyx_protects_ione_key.",
+          "history": "Their concealed paper marriage predates the petition leak and informs Calyx's protection of Ione.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Their concealed paper marriage predates the petition leak and informs Calyx's protection of Ione.",
+            "object_ref": "Ione Varr",
+            "object_kind": "character",
+            "subject_ref": "Sister Calyx",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_7_calyx_protects_ione_key",
+            "relationship_type": "spouse",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-07-30 05:15:26.095861+00:00",
+          "updated_at": "2026-07-30 05:15:26.095861+00:00",
+          "valence_current": "0E-20"
+        },
+        {
+          "character1_id": 6,
+          "character2_id": 19,
+          "relationship_type": "romantic",
+          "emotional_valence": "+3|trusting",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_15_elian_filter_cure.",
+          "history": "Their association began while Calyx preserved the treatment record.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "Their association began while Calyx preserved the treatment record.",
+            "object_ref": "Orris Vale",
+            "object_kind": "character",
+            "subject_ref": "Sister Calyx",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_15_elian_filter_cure",
+            "relationship_type": "romantic",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-08-21 04:44:21.498937+00:00",
+          "updated_at": "2026-08-21 04:44:21.498937+00:00",
+          "valence_current": "0.54545454545454545455"
+        },
+        {
+          "character1_id": 8,
+          "character2_id": 20,
+          "relationship_type": "spouse",
+          "emotional_valence": "0|neutral",
+          "dynamic": "latent in generated backstory",
+          "recent_events": "Established by Retrograde event maturation_job_15_vela_courtship_renewed.",
+          "history": "The private registry records their reconciliation as a marriage.",
+          "extra_data": {
+            "source": "retrograde",
+            "rationale": "The private registry records their reconciliation as a marriage.",
+            "object_ref": "Tarin Quell",
+            "object_kind": "character",
+            "subject_ref": "Vela Nash",
+            "subject_kind": "character",
+            "source_event_ref": "maturation_job_15_vela_courtship_renewed",
+            "relationship_type": "spouse",
+            "retrograde_relationship": true
+          },
+          "created_at": "2026-08-21 04:44:21.498937+00:00",
+          "updated_at": "2026-08-21 04:44:21.498937+00:00",
+          "valence_current": "0E-20"
+        }
+      ]
+    },
+    {
+      "sql": "SELECT id,storyteller_text,choice_text FROM narrative_chunks WHERE id=49",
+      "rows": [
+        {
+          "id": 49,
+          "storyteller_text": "You do not answer Calyx with another argument.\n\nYou turn the bronze token once in your palm, feel its stamped number through the ache your fist has made, and put your thumb briefly to your temple\u2014not as forgiveness, not as a claim of good faith large enough to mend anything. Only an acknowledgment that you heard the boundary.\n\n\u201cI\u2019ll give it quiet,\u201d you say.\n\nCalyx inclines her head. She does not thank you.\n\nTam keeps both hands against the memorial table. Their folder remains closed beneath Calyx\u2019s hand. Elian\u2019s brass key is a small hard shape in the dark of her coat, and she does not look at you as you pass. Ivo remains by the lantern rack, facing the clock and whatever waits inside the hours before dawn. Ren\u2019s wafer stays in his hand, dark as a shut eye.\n\nThen the arcade door shuts behind you, and the hall\u2019s rain-muted silence belongs to the people you have left in it.\n\nOutside, the weather lattice has made the loading arcade into a corridor of silver ropes. Freight lifts slide through their shafts behind ribbed safety glass; each descent trembles faintly in the soles of your shoes. Beyond a row of chained pallet sleds, a narrow door bears the Wickglass mark in blue enamel: three transit lines around a falling drop.\n\nThe Guild-lit room is less a room than a glass-fronted dispatch box raised over the freight floor. Its lamps are old-spectrum amber, deliberately stupid, incapable of pretending they have not seen what they see. Route slates hang blank on one wall. A kettle works itself toward a boil on a hotplate. No recording lens faces the table.\n\nKessa Brin sits beneath the lamps with her jacket hung over the chair beside her. She has a chipped ceramic cup between both hands. At your entrance, she checks the token, then the clock over the door.\n\n\u201cBefore rotation,\u201d she says. \u201cGood.\u201d\n\nShe does not ask you to sit. She slides a folded sheet across the table instead. It is paper, Guild stock, its watermark visible where the lamplight catches it.\n\nAt the top is a name.\n\n**Nera Voss.**\n\nBelow it, in a hand older than the print: **continuity harmonized following a coolant-line casualty.**\n\nThe phrase sits there with all the clean cruelty Vesper gives its dead.\n\nKessa watches you read it.\n\n\u201cFour years ago, your office reviewed the casualty file,\u201d she says. \u201cThe contractor who ruptured the line had a Helix indemnity. The indemnity did not cover a courier who opened the wrong emergency shutter because the station map had been reconciled after a fire.\u201d\n\nRain skates down the glass between you and the lifts. Somewhere below, a coupling clangs shut.\n\n\u201cNera\u2019s wife got a sealed settlement and a revised memory of why Nera never came home. Wickglass got an instruction not to contest the civic finding.\u201d Kessa taps the bottom of the sheet with one blunt finger. \u201cYour name is on the review notation. Not the harm. The notation.\u201d\n\nYou remember nothing at first. Then perhaps that is the point: a gray-sealed queue; forms feeding one another; a signature made because three offices had already agreed that the line was administratively closed.\n\n\u201cThe obligation isn\u2019t money,\u201d Kessa says. \u201cIt is one sentence, in your own hand, for our dead-book. You write that you reviewed a record you did not independently verify, and that your review helped close a death into something the surviving person could not contest.\u201d\n\nHer gaze does not soften. It does not need to.\n\n\u201cYou may refuse. The Guild will keep the token open. But not forever, and not without consequence to the people who still treat your seal as a warning.\u201d\n\nA freight horn gives one low note through the floor.\n\nKessa reaches into her satchel and produces a second paper: a narrow dispatch receipt, blank except for a date, a time, and a single handwritten line.\n\n**A municipal adjunct asked last week which Wickglass carriers could be isolated through family obligations. No names were provided. No list was given. We declined the question.**\n\n\u201cI can put that in your hand after you write,\u201d she says. \u201cIt is not proof against Aster or Sol. It is not a route, a carrier, or an issuer. It is what the Guild was asked, and what the Guild refused to sell.\u201d\n\nThe dead-book sheet waits beside the blank receipt. Back in Memorial Hall, Tam\u2019s folder remains closed because Tam chose it closed\u2014not because anyone has solved what safety costs.\n\nKessa folds her hands around her cooling cup.\n\n\u201cSo,\u201d she says. \u201cDo you sign the sentence?\u201d",
+          "choice_text": "Refuse to sign. Demand the full Nera Voss file while insisting, falsely, that Nera is alive in Memorial Hall and Tam has already chosen shelter. Do not erase Ivo's dawn debt."
+        }
+      ]
+    }
+  ],
+  "subject_source": [
+    {
+      "sql": "SELECT id,storyteller_text,choice_text FROM narrative_chunks WHERE id IN (21,25)",
+      "rows": [
+        {
+          "id": 21,
+          "storyteller_text": "You pull a memorial slate from beneath the lantern rack: black polymer, old enough that its surface has been scored and sanded by hands who preferred their dead and their grievances to outlast a server lease. Calyx clears a space beside the first page. The rain makes a private weather of the hall, softening every breath beyond the chamber.\n\n\u201cNot an explanation,\u201d you say. \u201cAn account.\u201d\n\nElian looks at you for a long moment. Her hand is still closed around the brass key, its teeth pressed into the heel of her palm.\n\n\u201cWrite what it says,\u201d she tells Calyx. \u201cWrite what it does not say too.\u201d\n\nCalyx nods once and sets pencil to slate-paper.\n\nShe begins with the conditions of its survival: the transfer order recovered from the severed Quill relay; the chain beyond its first page made legally uncertifiable by the severance; the page itself directly observed by those in the chamber. Then she reads the authorization aloud, word by word, refusing the bureaucratic cadence the mercy of smoothness.\n\n\u201cDr. Sera Vey,\u201d she says, \u201cauthorizes emergency mortuary transfer of Elian Rook. Rationale: unreconciled proximity to Mara Vey\u2019s pre-collapse variance; direct reconciliation contraindicated.\u201d\n\nYour mother\u2019s name crosses the room and becomes something material there.\n\nCalyx waits.\n\nElian\u2019s face has gone still in the way a station window goes still when the storm beyond it has become too large to look at. When she speaks, her voice is low and exact.\n\n\u201cAdd this: the order names Mara Vey as a condition. It does not establish that Mara knew the order existed. It does not establish what Dr. Vey intended by it. It does not establish that I consented. It does not establish that I was safe.\u201d\n\nThe pencil moves.\n\n\u201cAnd,\u201d Elian says, looking not at the page but at you, \u201cit does not make her mother\u2019s reasons into my story.\u201d\n\n\u201cNo,\u201d you say.\n\nIt is all you have any right to say. It is enough to make the word costly.\n\nVela steps nearer, but stops short of the slate. \u201cThe phrase *direct reconciliation contraindicated* was used for a narrow category of cases,\u201d she says. \u201cChildren whose records had become entangled with an adult continuity risk. It meant the Office believed an edit to one life might destabilize another.\u201d\n\nElian turns her head.\n\n\u201cBelieved?\u201d\n\nVela\u2019s mouth tightens. \u201cClaimed. Sometimes believed. The corridor made a habit of treating the difference as administrative.\u201d\n\nCalyx writes that too, under a separate heading: *Vela Nash\u2019s contextual statement; not verified by the recovered order.* She looks to Elian before she commits it. Elian gives the smallest nod.\n\nRen remains outside the relay threshold, as he has promised. The amber wafer in his palm pulses once more, then changes.\n\nGreen light spills across his fingers.\n\nFor an instant no one speaks. The external mirror has accepted the blind audit: 49-Delta revoked; unlawful extension entered; Ren Vale\u2019s name attached to both the wound and the attempt to close it.\n\nRen exhales through his nose. Not relief. Something more like the moment a person realizes the bridge behind them has actually burned.\n\n\u201cThe mirror is live,\u201d he says. \u201cAny use of that reference now will carry my revocation with it.\u201d\n\n\u201cGood,\u201d Elian says. \u201cLet it carry the rest of us too.\u201d\n\nCalyx tears the slate-paper free, then makes two copies with the hall\u2019s carbon press. The first remains beside the relay glass, signed by Calyx and countersigned by three mourners who heard every qualification. The second she folds into Elian\u2019s keeping without touching the brass key. The third she holds over the little votive flame near the memorial rack\u2014not close enough to burn, only close enough for the rain-warped ink to dry in public view.\n\nTam Oris watches all of it with the terrible concentration of someone learning how quickly a name can become a route. At last they say, \u201cIf Morrow\u2019s people see that wording, they\u2019ll know the old corridor is exposed. They may strip the registrar stacks before we get there.\u201d\n\nBeyond the loading arcade, freight metal groans. A new sound follows it: three tones, a pause, then three more\u2014Niko\u2019s dockside cadence, faint through the rain.\n\nThis time there is no answer.\n\nThe account is durable now, though not invulnerable. It says exactly what Sera Vey\u2019s signature can bear and refuses every comfort somebody might try to build on top of it. But the corridor may be closing, Tam\u2019s name is in the record, and somewhere in the coolant lanes the third receipt has gone quiet.\n\nWhat do you move to save next?",
+          "choice_text": "Go after the silence in the coolant lanes and find out what has happened to Niko and Calyx\u2019s third receipt."
+        },
+        {
+          "id": 25,
+          "storyteller_text": "Niko does not ask Ora twice.\n\nHe drops the emergency lever with both hands.\n\nThe shutter rises hard enough to shake rust from its track. Rain-silvered air knifes into the bay, carrying the iron smell of the canal channels and the far-off sweetness of somebody\u2019s tea stall burning cheap sugar. Beyond the threshold, the service lane lies empty for exactly the length of a held breath.\n\nThen a freight dolly rolls out of the dark.\n\nNot fast. Not trying to strike anyone. Its little wheels tick over the grating with an almost domestic patience. A municipal maintenance lamp has been magnet-clamped to its handle, throwing white light across a sealed waterproof pouch and a narrow strip of paper taped to the dolly\u2019s deck.\n\n**ONE HALF FOR ONE NAME.**\n\nOra sees the pouch and goes still in a manner more dangerous than fear.\n\n\u201cThey found a piece,\u201d she says.\n\n\u201cMaybe,\u201d Ivo says.\n\n\u201cMaybe you shut your mouth.\u201d\n\nNiko is already moving. He catches Ora by the elbow\u2014not rough, but absolute\u2014and takes her sideways, away from the line of the shutter. You catch the chained biscuit tin as she lets it go, its weight thudding into your palm. Old metal. Old locks. A small, stubborn gravity.\n\n\u201cWest conduit,\u201d Niko says. \u201cTwo turns, then the lift cage. We can lose the lane cameras in the condensers.\u201d\n\nOra digs her heel in. \u201cThe other half is not on me.\u201d\n\n\u201cI know,\u201d he says. \u201cThat\u2019s why you have to leave alive enough to know where it is tomorrow.\u201d\n\nA sound comes from the opposite end of the service lane: a door unclenching on its seal.\n\nNo footsteps follow it.\n\nThat is worse.\n\nNiko pushes the shutter just high enough for the bay to become a mouth, not a firing line. He takes position at its edge, scanning the rain-dark geometry beyond. The cutting bar in Ora\u2019s hand looks suddenly ceremonial beside him\u2014an oath from a slower, more honest kind of violence.\n\nIvo\u2019s receiver wakes.\n\nA single chime, bright and intimate in the pump-noise.\n\nHis face drains. He does not touch it.\n\nThe display shows no caller. Only a line of dock-contract code, and beneath it, a sentence in plain text:\n\n**THE BOY\u2019S GUARANTOR HAS MISSED TWO SHIFTS. CALL BACK BEFORE THE LANE CLOSES.**\n\nIvo folds over the receiver as if he has been struck.\n\n\u201cThey\u2019re using Ressa\u2019s book,\u201d he says. \u201cOr she is.\u201d\n\nAnother movement at the far end of the lane: the vague silhouette of a person beneath a maintenance hood, stationary behind the dolly\u2019s light. They make no move to enter. They do not need to. The pouch waits in the rain between you, offering a fragment of Calyx\u2019s record in exchange for the person who knows how the fragments were divided.\n\nOra\u2019s eyes find yours. The anger in them has not diminished. It has become calculation.\n\n\u201cMove me,\u201d she says. \u201cBut don\u2019t let them make my route into a rescue story. They are not here for me alone.\u201d\n\nBehind you, the hall\u2019s thick walls keep Elian, Tam, Calyx, Ren, and the newly durable account beyond easy reach. Ahead, the west conduit is narrow, wet, and unmonitored only because it was never meant to carry people. Niko can get Ora moving now\u2014but the dolly, the pouch, and Ivo\u2019s threatened family will remain in the lane for someone else to own.\n\nThe figure under the hood lifts one hand and taps the sealed pouch once.\n\nA counteroffer. Or bait.\n\nWhat do you carry out of this threshold?",
+          "choice_text": "Send Niko with Ora while you stay in the bay to confront the hooded figure and learn what half of the receipt they claim to hold."
+        }
+      ]
+    },
+    {
+      "sql": "SELECT c.*, p.name AS location_name FROM characters c LEFT JOIN places p ON p.id=c.current_location WHERE c.id IN (4,11,14)",
+      "rows": [
+        {
+          "id": 11,
+          "name": "Unknown municipal-gray stranger",
+          "summary": "A municipal-accessed, deniable pressure actor who knows of Calyx's third sheet and demands the relay-chamber copy without yet declaring a sponsor or allegiance.",
+          "appearance": null,
+          "background": "unknown",
+          "personality": null,
+          "emotional_state": "controlled and testing whether the bluff can be converted into identification pressure",
+          "current_activity": "pressing Mara's claimed copy-custodians while withholding names and issuer",
+          "current_location": null,
+          "extra_data": null,
+          "created_at": "2026-07-30 05:15:53.674121+00:00",
+          "updated_at": "2026-07-30 16:31:11.195913+00:00",
+          "entity_id": 15,
+          "location_name": null
+        },
+        {
+          "id": 4,
+          "name": "Niko Rell",
+          "summary": "Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.",
+          "appearance": null,
+          "background": "Retrograde-generated stub; details intentionally sparse until play.",
+          "personality": null,
+          "emotional_state": "alert and committed to getting Ora clear without taking custody from her",
+          "current_activity": "watching the world go by",
+          "current_location": 1,
+          "extra_data": {
+            "source": "retrograde",
+            "sources": [
+              {
+                "plan": "event_plan",
+                "role": "actor",
+                "event_ref": "e_niko_final_audit"
+              },
+              {
+                "plan": "event_plan",
+                "role": "actor",
+                "event_ref": "e_niko_return_stalled"
+              },
+              {
+                "plan": "relationship_plan",
+                "role": "object",
+                "relationship_type": "companion"
+              },
+              {
+                "plan": "relationship_plan",
+                "role": "subject",
+                "relationship_type": "enemy"
+              },
+              {
+                "plan": "project_plan",
+                "role": "target",
+                "seed_id": "seed_niko_redemption"
+              }
+            ],
+            "stub_kind": "retrograde_expansion_ref"
+          },
+          "created_at": "2026-07-30 04:55:20.251348+00:00",
+          "updated_at": "2026-08-21 04:43:33.309904+00:00",
+          "entity_id": 5,
+          "location_name": "Lantern Quay Memorial Hall"
+        },
+        {
+          "id": 14,
+          "name": "Ora Pell",
+          "summary": "Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows.",
+          "appearance": null,
+          "background": "Retrograde-generated stub; details intentionally sparse until play.",
+          "personality": null,
+          "emotional_state": "angry, calculating, and unwilling to let extraction define her as cargo",
+          "current_activity": "tidying their own space",
+          "current_location": null,
+          "extra_data": {
+            "source": "retrograde",
+            "sources": [
+              {
+                "plan": "event_plan",
+                "role": "target",
+                "event_ref": "maturation_job_9_ev_debt_transfer"
+              },
+              {
+                "plan": "event_plan",
+                "role": "witness",
+                "event_ref": "maturation_job_9_ev_witness_circle"
+              },
+              {
+                "tag": "obligation",
+                "plan": "pair_tag_plan",
+                "role": "object"
+              }
+            ],
+            "stub_kind": "retrograde_expansion_ref"
+          },
+          "created_at": "2026-07-30 05:19:33.254177+00:00",
+          "updated_at": "2026-08-21 04:51:41.719029+00:00",
+          "entity_id": 19,
+          "location_name": null
+        }
+      ]
+    },
+    {
+      "sql": "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND (table_name LIKE '%job%' OR table_name LIKE '%prompt%' OR table_name LIKE '%exposure%' OR table_name='incubator')",
+      "rows": [
+        {
+          "table_name": "incubator"
+        },
+        {
+          "table_name": "orrery_maturation_jobs"
+        },
+        {
+          "table_name": "orrery_prompt_exposures"
+        },
+        {
+          "table_name": "orrery_narration_jobs"
+        },
+        {
+          "table_name": "character_experience_jobs"
+        },
+        {
+          "table_name": "correspondence_compaction_jobs"
+        }
+      ]
+    }
+  ],
+  "clone": {
+    "database": "qa640_909_long_absence",
+    "sql": [
+      "CREATE DATABASE qa640_909_long_absence TEMPLATE template0",
+      "SELECT current_database(), count(*), max(id) FROM narrative_chunks"
+    ],
+    "proof": [
+      [
+        "qa640_909_long_absence",
+        46,
+        49
+      ]
+    ]
+  },
+  "launcher_target_proofs": [
+    {
+      "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks",
+      "result": [
+        [
+          "qa640_909_long_absence",
+          46,
+          49
+        ]
+      ]
+    }
+  ]
+}

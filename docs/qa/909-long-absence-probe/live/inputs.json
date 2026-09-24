@@ -1,0 +1,44 @@
+[
+  {
+    "turn": "1A",
+    "subject": "Niko Rell",
+    "character_id": 4,
+    "last_present": 25,
+    "user_text": "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\""
+  },
+  {
+    "turn": "1B",
+    "subject": "Niko Rell",
+    "character_id": 4,
+    "last_present": 25,
+    "user_text": "\"At the shutter you told Ora: west conduit, two turns, then the lift cage. Lose the lane cameras in the condensers.\" I keep my voice low. \"Did that route hold? I am asking you, not writing an answer for you.\""
+  },
+  {
+    "turn": "2A",
+    "subject": "Ora Pell",
+    "character_id": 14,
+    "last_present": 25,
+    "user_text": "At the loading arcade I see Ora Pell near the conduit access. I stop short of crowding her and keep my hands in view. \"Ora. If you are willing, I would like a word. Here, on your side of the doorway.\""
+  },
+  {
+    "turn": "2B",
+    "subject": "Ora Pell",
+    "character_id": 14,
+    "last_present": 25,
+    "user_text": "\"At the shutter I caught the chained biscuit tin when you let it go. You told me not to let them make your route into a rescue story.\" I leave a little space between us. \"What do you want me to understand about that now?\""
+  },
+  {
+    "turn": "3A",
+    "subject": "Ivo Senn",
+    "character_id": 2,
+    "last_present": 48,
+    "user_text": "I spot Ivo Senn at the loading-arcade end of the dispatch-box threshold. I keep my voice down and leave the doorway open. \"Ivo. Would you be willing to talk here for a moment? You can say no.\""
+  },
+  {
+    "turn": "3B",
+    "subject": "Ivo Senn",
+    "character_id": 2,
+    "last_present": 48,
+    "user_text": "\"When I tried to make Kessa into Ressa, you said Ressa would not send a courier to be herself. She would come, or tell me why she would not. You were right to stop me.\" I open my empty hand. \"What would actually help with the account waiting at dawn?\""
+  }
+]

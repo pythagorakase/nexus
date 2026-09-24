@@ -1,0 +1,15 @@
+[{'current_database': 'qa640_909_long_absence', 'count': 46, 'max': 49}]
+warning: ui/dist/public/index.html is missing - the gateway will serve 503 for UI routes. Build it with: npm --prefix ui run build
+started gateway (pid 92559) on http://127.0.0.1:8018
+Traceback (most recent call last):
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/scripts/qa_shift/long_absence_probe.py", line 259, in <module>
+    main()
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/scripts/qa_shift/long_absence_probe.py", line 250, in main
+    print(json.dumps(supervisor.up(slot=4), default=str))
+                     ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/runtime/supervisor.py", line 490, in up
+    record = self._start_service(
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/runtime/supervisor.py", line 432, in _start_service
+    raise RuntimeError_(
+nexus.runtime.supervisor.RuntimeError_: Port 5102 is already in use by an unmanaged process; refusing to spawn 'mock_openai'. Adjust [runtime.services.mock_openai] port or stop the other process. Listener: pid=61451 elapsed=16:27:14 /Users/pythagor/nexus/.venv/bin/python -m uvicorn nexus.api.mock_openai:app --host 127.0.0.1 --port 5102. If the listener is a stale NEXUS service from a dead session, kill that pid. Agent/test shells should export NEXUS_GATEWAY_PORT to run on a separate port with isolated state.

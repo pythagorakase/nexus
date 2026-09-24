@@ -1,0 +1,82 @@
+[
+  {
+    "id": 387,
+    "tick_chunk_id": 51,
+    "kind": "resolution",
+    "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+    "template_id": "honor_debt",
+    "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+    "position": 0,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  },
+  {
+    "id": 388,
+    "tick_chunk_id": 51,
+    "kind": "resolution",
+    "proposal_id": "upkeep:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+    "template_id": "upkeep",
+    "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+    "position": 1,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  },
+  {
+    "id": 389,
+    "tick_chunk_id": 51,
+    "kind": "resolution",
+    "proposal_id": "stroll:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+    "template_id": "stroll",
+    "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+    "position": 2,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  },
+  {
+    "id": 390,
+    "tick_chunk_id": 51,
+    "kind": "resolution",
+    "proposal_id": "stroll:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+    "template_id": "stroll",
+    "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+    "position": 3,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  },
+  {
+    "id": 391,
+    "tick_chunk_id": 51,
+    "kind": "resolution",
+    "proposal_id": "stroll:eff5eef1587d5b44cc1d825c922be1f1ba5f9abe675c6996c1b71cdb57707997",
+    "template_id": "stroll",
+    "binding_hash": "eff5eef1587d5b44cc1d825c922be1f1ba5f9abe675c6996c1b71cdb57707997",
+    "position": 4,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  },
+  {
+    "id": 392,
+    "tick_chunk_id": 51,
+    "kind": "scene_pressure",
+    "proposal_id": "surveil:5c8f9b44c7db6d471b98e007d3b1e3a1ea5e9813311970f8e3b36e6940197841",
+    "template_id": "surveil",
+    "binding_hash": "5c8f9b44c7db6d471b98e007d3b1e3a1ea5e9813311970f8e3b36e6940197841",
+    "position": 0,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  },
+  {
+    "id": 393,
+    "tick_chunk_id": 51,
+    "kind": "scene_pressure",
+    "proposal_id": "check_on_dependent:19cf0e8cced5d13a0a1d5cecf4b68ffa82e9c8bcb34f6224366667719d789ee0",
+    "template_id": "check_on_dependent",
+    "binding_hash": "19cf0e8cced5d13a0a1d5cecf4b68ffa82e9c8bcb34f6224366667719d789ee0",
+    "position": 1,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  },
+  {
+    "id": 394,
+    "tick_chunk_id": 51,
+    "kind": "scene_pressure",
+    "proposal_id": "surveil:1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+    "template_id": "surveil",
+    "binding_hash": "1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+    "position": 2,
+    "created_at": "2026-09-24 16:33:33.216510+00:00"
+  }
+]

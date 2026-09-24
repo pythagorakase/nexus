@@ -1,0 +1,92 @@
+[
+  {
+    "table_schema": "public",
+    "table_name": "backstory_secrets",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "character_project_states",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "claim_awareness",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "claims",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "entity_pair_tags",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "entity_tags",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "entity_tags_current",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "relationship_versions",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "state_delta_log",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "tag_clearance_log",
+    "column_name": "source_chunk_id"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "characters",
+    "column_name": "summary"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "claims",
+    "column_name": "summary"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "episodes",
+    "column_name": "summary"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "factions",
+    "column_name": "summary"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "items",
+    "column_name": "summary"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "places",
+    "column_name": "summary"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "seasons",
+    "column_name": "summary"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "zones",
+    "column_name": "summary"
+  }
+]

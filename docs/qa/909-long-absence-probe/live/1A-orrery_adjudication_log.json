@@ -1,0 +1,44 @@
+[
+  {
+    "id": 133,
+    "tick_chunk_id": 50,
+    "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+    "template_id": "honor_debt",
+    "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+    "action": "defer",
+    "adjudication_source": "explicit",
+    "skald_note": "The Wickglass obligation is presently a face-to-face wet-ink choice, not a dead-drop fulfillment; Mara has not signed or refused.",
+    "original_state_delta": {
+      "character.current_activity": "servicing an old debt"
+    },
+    "replacement_state_delta": null,
+    "replacement_event_type": null,
+    "applied_resolution_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "actor_entity_id": 3,
+    "bindings": {
+      "actor": 3
+    }
+  },
+  {
+    "id": 134,
+    "tick_chunk_id": 50,
+    "proposal_id": "upkeep:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+    "template_id": "upkeep",
+    "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+    "action": "void",
+    "adjudication_source": "explicit",
+    "skald_note": "Kessa is actively holding a bounded Guild conversation, not tidying her space this tick.",
+    "original_state_delta": {
+      "character.current_activity": "tidying their own space"
+    },
+    "replacement_state_delta": null,
+    "replacement_event_type": null,
+    "applied_resolution_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "actor_entity_id": 6,
+    "bindings": {
+      "actor": 6
+    }
+  }
+]

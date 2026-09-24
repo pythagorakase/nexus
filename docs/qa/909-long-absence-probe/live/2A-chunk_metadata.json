@@ -1,0 +1,16 @@
+[
+  {
+    "id": 50,
+    "chunk_id": 52,
+    "season": 1,
+    "episode": 2,
+    "scene": 48,
+    "world_layer": "primary",
+    "time_delta": "0:03:00",
+    "generation_date": "2026-09-24 16:34:27.028915",
+    "slug": "S01E02_048",
+    "world_time": "2189-10-17 22:48:00+00:00",
+    "generation_model": "gpt-5.6-terra",
+    "scene_weather": null
+  }
+]

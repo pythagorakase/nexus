@@ -1,0 +1,562 @@
+[
+  {
+    "id": true,
+    "chunk_id": null,
+    "parent_chunk_id": 52,
+    "user_text": "\"At the shutter I caught the chained biscuit tin when you let it go. You told me not to let them make your route into a rescue story.\" I leave a little space between us. \"What do you want me to understand about that now?\"",
+    "storyteller_text": "Ora looks down into her tea. The cup has softened at the seam beneath her fingers; a dark crescent has formed on the concrete below it.\n\n\u201cYou caught the tin,\u201d she says. \u201cYou did what was needed in that second. That wasn\u2019t nothing.\u201d\n\nHer eyes rise to yours, guarded but present.\n\n\u201cBut a rescue story has a shape people like. It gives somebody a rescuer, somebody rescued, and a clean reason to start asking who owes whom afterward. It lets the person who held the door call the next door theirs to choose.\u201d\n\nNiko\u2019s jaw shifts once. He does not dispute her.\n\n\u201cI needed to get out of that bay,\u201d Ora continues. \u201cNiko helped me get out. You caught what I dropped. None of that bought either of you the rest of my night. It doesn\u2019t make my half of the receipt communal property. It doesn\u2019t make me proof that the route was good, or that I\u2019m safe, or that you did enough.\u201d\n\nThe freight lift behind the glass reaches a higher deck with a muffled mechanical thud. Rain veils the cage as it opens somewhere above.\n\n\u201cIf you want to understand it now,\u201d Ora says, \u201cunderstand that I left because I chose to leave, and I stopped here because I chose to stop. Tomorrow, I may choose something else. Don\u2019t turn that into a debt you can collect, or a protection claim you can make over me.\u201d\n\nHer gaze flicks toward Kessa\u2019s table.\n\n\u201cAnd don\u2019t use my being upright to escape what Nera Voss is asking of you. We\u2019ve all watched enough people call their fear urgent so they don\u2019t have to call their harm by its name.\u201d\n\nKessa does not reach for the dead-book. She merely turns the pen a quarter-turn on the tabletop.\n\n\u201cPlainly put,\u201d she says.\n\nNiko steps back from the threshold, granting Ora the little corridor of space her words have made. \u201cYou heard her,\u201d he says. \u201cNo route. No receipt. No custody dressed up as concern.\u201d\n\nOra takes one final sip, then lowers the cup. \u201cThat was your one question.\u201d\n\nFor an instant her expression eases, though it never becomes trust.\n\n\u201cMake the next thing you do yours,\u201d she says. \u201cNot mine.\u201d\n\nAmber light holds on the dead-book sheet and the bronze token. Beyond the dispatch-box glass, rain turns the loading arcade into a hundred blurred exits.",
+    "metadata_updates": {
+      "chronology": {
+        "time_delta_days": null,
+        "time_delta_hours": null,
+        "episode_transition": "continue",
+        "time_delta_minutes": 4,
+        "time_delta_description": null
+      },
+      "world_layer": "primary"
+    },
+    "entity_updates": {
+      "factions": [],
+      "locations": [],
+      "characters": [
+        {
+          "character_name": "Ora Pell",
+          "emotional_state": "guarded, self-possessed, and unwilling to let help become a claim over her",
+          "current_activity": "holding a firm one-question boundary at the Wickglass Dispatch House conduit doorway"
+        },
+        {
+          "character_name": "Mara Vey",
+          "emotional_state": "confronted by Ora\u2019s refusal to let rescue displace accountability",
+          "current_activity": "at Wickglass Dispatch House, left with Nera Voss\u2019s dead-book admission still unwritten"
+        },
+        {
+          "character_name": "Len Aster",
+          "emotional_state": "pressured and increasingly aware that her signature has made her reachable",
+          "current_activity": "considering a private request to revise her signed addendum, delivered with a pointed reference to a family member\u2019s work schedule"
+        }
+      ],
+      "relationships": [
+        {
+          "dynamic": "Ora accepts the narrow help given at the shutter but rejects any rescue-based debt, custody claim, route entitlement, or proof of safety.",
+          "recent_events": "Ora spent her single question to make clear that assistance did not purchase the rest of her night, her receipt half, or her onward choices.",
+          "character1_name": "Mara Vey",
+          "character2_name": "Ora Pell",
+          "emotional_valence": "-1|wary",
+          "relationship_type": "complex"
+        }
+      ]
+    },
+    "reference_updates": {
+      "places": [
+        {
+          "place_id": 7,
+          "place_name": "Wickglass Dispatch House",
+          "reference_type": "setting"
+        }
+      ],
+      "factions": [],
+      "characters": [
+        {
+          "character_id": 1,
+          "character_name": "Mara Vey",
+          "reference_type": "present"
+        },
+        {
+          "character_id": 4,
+          "character_name": "Niko Rell",
+          "reference_type": "present"
+        },
+        {
+          "character_id": 14,
+          "character_name": "Ora Pell",
+          "reference_type": "present"
+        },
+        {
+          "character_id": 18,
+          "character_name": "Kessa Brin",
+          "reference_type": "present"
+        },
+        {
+          "character_id": 23,
+          "character_name": "Nera Voss",
+          "reference_type": "mentioned"
+        }
+      ]
+    },
+    "session_id": "f246f3ca-052c-4719-a64c-2bbe24410ed3",
+    "llm_response_id": null,
+    "status": "provisional",
+    "created_at": "2026-09-24 16:34:32.793437+00:00",
+    "updated_at": "2026-09-24 16:34:32.793437+00:00",
+    "choice_object": {
+      "selected": null,
+      "presented": [
+        "Write the wet-ink admission for Nera Voss in Wickglass\u2019s dead-book and receive Kessa\u2019s limited carrier-pressure receipt.",
+        "Ask Kessa to state precisely what Wickglass will and will not preserve if you sign, without asking Ora for anything further.",
+        "Thank Ora for the answer, let her leave on her own terms, and return alone to Lantern Quay Memorial Hall.",
+        "Leave the Dispatch House before freight rotation and look for the Guild-lit room\u2019s public departure board, keeping clear of Ora and Niko."
+      ]
+    },
+    "choice_text": null,
+    "orrery_proposal": {
+      "actor_count": 18,
+      "joint_beats": [],
+      "resolutions": [
+        {
+          "bindings": {
+            "actor": 3
+          },
+          "priority": 12,
+          "magnitude": 0.08,
+          "event_type": "stroll_taken",
+          "promotable": true,
+          "proposal_id": "stroll:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+          "state_delta": {
+            "character.current_activity": "pacing the near ground"
+          },
+          "template_id": "stroll",
+          "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+          "branch_label": "Pace the near ground",
+          "binding_names": {
+            "actor": "Ivo Senn"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ivo Senn moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 6
+          },
+          "priority": 9,
+          "magnitude": 0.1,
+          "event_type": "recreation_taken",
+          "promotable": true,
+          "proposal_id": "recreate:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+          "state_delta": {
+            "character.current_activity": "watching the world go by"
+          },
+          "template_id": "recreate",
+          "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+          "branch_label": "Watch the world go by",
+          "binding_names": {
+            "actor": "Ren Vale"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ren Vale claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 8
+          },
+          "priority": 11,
+          "magnitude": 0.08,
+          "event_type": "upkeep_done",
+          "promotable": true,
+          "proposal_id": "upkeep:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+          "state_delta": {
+            "character.current_activity": "tidying their own space"
+          },
+          "template_id": "upkeep",
+          "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+          "branch_label": "Tidy what is theirs",
+          "binding_names": {
+            "actor": "Sister Calyx"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Sister Calyx tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 11
+          },
+          "priority": 11,
+          "magnitude": 0.08,
+          "event_type": "upkeep_done",
+          "promotable": true,
+          "proposal_id": "upkeep:9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+          "state_delta": {
+            "character.current_activity": "tidying their own space"
+          },
+          "template_id": "upkeep",
+          "binding_hash": "9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+          "branch_label": "Tidy what is theirs",
+          "binding_names": {
+            "actor": "Vela Nash"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Vela Nash tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 13
+          },
+          "priority": 9,
+          "magnitude": 0.08,
+          "event_type": "recreation_taken",
+          "promotable": true,
+          "proposal_id": "recreate:a6becc935a481afe6c570d3d5d0ab734752ad0cedb7b21baa1d855bdcd16c83a",
+          "state_delta": {
+            "character.current_activity": "taking a small pleasure"
+          },
+          "template_id": "recreate",
+          "binding_hash": "a6becc935a481afe6c570d3d5d0ab734752ad0cedb7b21baa1d855bdcd16c83a",
+          "branch_label": "Take a small private pleasure",
+          "binding_names": {
+            "actor": "Dr. Sera Vey"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Dr. Sera Vey gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 15
+          },
+          "priority": 12,
+          "magnitude": 0.12,
+          "event_type": "stroll_taken",
+          "promotable": true,
+          "proposal_id": "stroll:cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+          "state_delta": {
+            "character.current_activity": "taking the night air"
+          },
+          "template_id": "stroll",
+          "binding_hash": "cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+          "branch_label": "Take the night air",
+          "binding_names": {
+            "actor": "Unknown municipal-gray stranger"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Unknown municipal-gray stranger steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 16
+          },
+          "priority": 9,
+          "magnitude": 0.1,
+          "event_type": "recreation_taken",
+          "promotable": true,
+          "proposal_id": "recreate:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "state_delta": {
+            "character.current_activity": "watching the world go by"
+          },
+          "template_id": "recreate",
+          "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "branch_label": "Watch the world go by",
+          "binding_names": {
+            "actor": "Tam Oris"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Tam Oris claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 17
+          },
+          "priority": 12,
+          "magnitude": 0.12,
+          "event_type": "stroll_taken",
+          "promotable": true,
+          "proposal_id": "stroll:305e6e930250a204eecf64396bde0c2476157ebb2cf96da089fdfc03b55a5183",
+          "state_delta": {
+            "character.current_activity": "taking the night air"
+          },
+          "template_id": "stroll",
+          "binding_hash": "305e6e930250a204eecf64396bde0c2476157ebb2cf96da089fdfc03b55a5183",
+          "branch_label": "Take the night air",
+          "binding_names": {
+            "actor": "Hale Morrow"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Hale Morrow steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 28
+          },
+          "priority": 11,
+          "magnitude": 0.08,
+          "event_type": "upkeep_done",
+          "promotable": true,
+          "proposal_id": "upkeep:37ffcbe134f0397303d53cbc5b4b2410b89154645967c081f69656153ee84d42",
+          "state_delta": {
+            "character.current_activity": "tidying their own space"
+          },
+          "template_id": "upkeep",
+          "binding_hash": "37ffcbe134f0397303d53cbc5b4b2410b89154645967c081f69656153ee84d42",
+          "branch_label": "Tidy what is theirs",
+          "binding_names": {
+            "actor": "Len Aster"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Len Aster tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 29
+          },
+          "priority": 9,
+          "magnitude": 0.1,
+          "event_type": "recreation_taken",
+          "promotable": true,
+          "proposal_id": "recreate:d2cc80d28c2579c304a983bc845f630ebbf1377080cfc9589074a06f60edf255",
+          "state_delta": {
+            "character.current_activity": "watching the world go by"
+          },
+          "template_id": "recreate",
+          "binding_hash": "d2cc80d28c2579c304a983bc845f630ebbf1377080cfc9589074a06f60edf255",
+          "branch_label": "Watch the world go by",
+          "binding_names": {
+            "actor": "Davin Sol"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Davin Sol claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 33
+          },
+          "priority": 9,
+          "magnitude": 0.08,
+          "event_type": "recreation_taken",
+          "promotable": true,
+          "proposal_id": "recreate:2822439ff92aa7a08ad509f0b27c6f2fb76a9943d8eedee11aa33e1c553cc779",
+          "state_delta": {
+            "character.current_activity": "taking a small pleasure"
+          },
+          "template_id": "recreate",
+          "binding_hash": "2822439ff92aa7a08ad509f0b27c6f2fb76a9943d8eedee11aa33e1c553cc779",
+          "branch_label": "Take a small private pleasure",
+          "binding_names": {
+            "actor": "Orris Vale"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Orris Vale gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 34
+          },
+          "priority": 9,
+          "magnitude": 0.1,
+          "event_type": "recreation_taken",
+          "promotable": true,
+          "proposal_id": "recreate:316323d743a437aa53081bcbbd3785a6c54dd649c56bffc095cc2fe0d434b23b",
+          "state_delta": {
+            "character.current_activity": "watching the world go by"
+          },
+          "template_id": "recreate",
+          "binding_hash": "316323d743a437aa53081bcbbd3785a6c54dd649c56bffc095cc2fe0d434b23b",
+          "branch_label": "Watch the world go by",
+          "binding_names": {
+            "actor": "Tarin Quell"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Tarin Quell claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 35
+          },
+          "priority": 11,
+          "magnitude": 0.08,
+          "event_type": "upkeep_done",
+          "promotable": true,
+          "proposal_id": "upkeep:624b47219a92b2dd6434b550622aa7eb672ee59a67834fd3d64f1d5af5406e25",
+          "state_delta": {
+            "character.current_activity": "tidying their own space"
+          },
+          "template_id": "upkeep",
+          "binding_hash": "624b47219a92b2dd6434b550622aa7eb672ee59a67834fd3d64f1d5af5406e25",
+          "branch_label": "Tidy what is theirs",
+          "binding_names": {
+            "actor": "Dax Morrow"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Dax Morrow tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.",
+          "signal_event_type": null
+        }
+      ],
+      "generated_at": "2026-09-24T16:34:51.872455+00:00",
+      "anchor_chunk_id": 52,
+      "scene_pressures": [
+        {
+          "bindings": {
+            "actor": 3,
+            "target": 1
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "prompt_text": "Ivo Senn has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+          "template_id": "surveil",
+          "binding_hash": "5c8f9b44c7db6d471b98e007d3b1e3a1ea5e9813311970f8e3b36e6940197841",
+          "branch_label": "Collect a proxy watcher report",
+          "pressure_stub": "{actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all."
+        },
+        {
+          "bindings": {
+            "actor": 3,
+            "target": 31
+          },
+          "priority": 55,
+          "magnitude": 0.22,
+          "prompt_text": "Ivo Senn has sent Kessa Brin a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for Kessa Brin's decisions.",
+          "template_id": "check_on_dependent",
+          "binding_hash": "19cf0e8cced5d13a0a1d5cecf4b68ffa82e9c8bcb34f6224366667719d789ee0",
+          "branch_label": "Reach out through customary channels",
+          "pressure_stub": "{actor} has sent {target} a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for {target}'s decisions."
+        },
+        {
+          "bindings": {
+            "actor": 16,
+            "target": 1
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "prompt_text": "Tam Oris has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+          "template_id": "surveil",
+          "binding_hash": "1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+          "branch_label": "Collect a proxy watcher report",
+          "pressure_stub": "{actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all."
+        }
+      ],
+      "scene_conditions": {
+        "weather": "rain",
+        "time_of_day": "night"
+      },
+      "ambient_scene_seeds": [],
+      "epistemics_settings": {
+        "enabled": true,
+        "aware_roles": [
+          "actor",
+          "observer",
+          "target",
+          "witness"
+        ],
+        "claim_event_types": [
+          "compliance_alert",
+          "encoded_message",
+          "hunt_called_off",
+          "hunt_declared",
+          "informant_contact",
+          "intel_acquired",
+          "intel_acted_on",
+          "protective_intervention",
+          "pursue_romance_completed",
+          "recruit_ally_completed",
+          "relationship_drift_milestone",
+          "retaliation_attempted",
+          "retaliation_executed",
+          "rival_consulted",
+          "seek_redemption_completed",
+          "surveillance_performed",
+          "threat_issued",
+          "warning_delivered"
+        ]
+      },
+      "_bleed_offer_resolution_ids": []
+    },
+    "authorial_directives": [],
+    "orrery_adjudications": [],
+    "new_entities": [],
+    "generation_model": "gpt-5.6-terra",
+    "correspondence_writer_letter": "Ora\u2019s answer establishes a hard agency boundary: Mara/Niko\u2019s help in the shutter bay creates neither custody, route entitlement, receipt claim, nor proof of Ora\u2019s safety. She refuses Mara\u2019s redemption-through-rescue framing and redirects moral attention to Nera. Keep Ora free to depart without trail or surveillance. Kessa\u2019s dead-book admission remains the immediate cost for the narrow Wickglass fact; its contents stay qualified and cannot identify Aster, Sol, or an issuer. Mara may now choose accountability, limited procedural clarification, or separation from this fragile contact.",
+    "correspondence_gaia_letter": "Taken up: Ora has made the shutter bay legible without making it redeeming. Mara caught the tin; Niko helped her out; neither fact purchases Ora\u2019s route, receipt, safety, or tomorrow. Keep her free to leave without a tail, report, or grateful return.\n\nNera remains the immediate moral clock. The Wickglass receipt is still unearned and, once earned, proves only a refused inquiry about isolating carriers through family obligations.\n\nOff-screen, the pressure on Aster has finally spent something concrete: a private revision request arrived with an accurate reference to a family member\u2019s shift. It names no issuer and compels nothing, but it gives her a costly choice\u2014revise, disclose one real tactic, or preserve the signature and accept the attention.",
+    "lore_pass_baseline": {
+      "producer": "nexus.memory.context_memory_manager",
+      "schema_version": 1,
+      "parent_chunk_id": null,
+      "remaining_budget": 14200,
+      "memory_identities": [
+        22,
+        24,
+        25,
+        26,
+        28,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        40,
+        41,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        "retrograde_summary:21",
+        "retrograde_summary:22",
+        "retrograde_summary:23",
+        "retrograde_summary:24",
+        "retrograde_summary:25",
+        "retrograde_summary:26",
+        "retrograde_summary:27",
+        "retrograde_summary:28",
+        "retrograde_summary:29"
+      ],
+      "config_fingerprint": "434647cf417a9365a6e3af0e762d317915099deea8ea38cd4abb891ecbf36eca",
+      "prior_token_accounting": {
+        "structured": 49700,
+        "user_input": 51,
+        "warm_slice": 3550,
+        "apex_window": 75000,
+        "augmentation": 3550,
+        "system_prompt": 5000,
+        "baseline_tokens": 56800,
+        "total_available": 71000,
+        "response_reserve": 4000,
+        "reasoning_reserve": 0,
+        "reserve_shortfall": 3550,
+        "reserved_for_pass2": 17750,
+        "effective_input_ceiling": 71000
+      }
+    }
+  }
+]
