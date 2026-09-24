@@ -6,8 +6,9 @@ Work order #910 extends the faction dossier's shared tag query to characters.
 The baseline and featured rows retain `characters.id`; their tag join uses
 `characters.entity_id`. The canonical presence roster still decides which
 characters are featured. The shared `entity_tags_current` view owns soft clears,
-deprecated tags, and synonyms. The existing faction world-time expiry rule is
-shared unchanged; wall-clock `applied_at` is not a story clock.
+deprecated tags, and synonyms. World-time start and expiry bounds are shared
+across characters and factions;
+wall-clock `applied_at` is not a story clock.
 
 The renderer appends `Tags: category:tag, category:tag` to character status and
 featured-summary lines, preserving personality and emotional state. The scene tag
@@ -282,3 +283,141 @@ PYTHONPATH=$PWD $PY -m pytest -q
 
 The offline skips are not counted as PostgreSQL proof; the two opted-in gates
 above ran independently. All requested gates pass.
+
+
+## PR #917 Review Fixes
+
+The shared join now requires `applied_at_world_time IS NULL` or a start at/before
+`max(chunk_metadata.world_time)`, independently of the existing expiry bound.
+Parameterized PostgreSQL cases check NULL, past, boundary, and future starts in
+both character and faction tiers, with deliberately future wall-clock timestamps.
+A PostgreSQL-seeded character traverses the query and real TEST LogonUtility
+renderer, asserting exact baseline and featured lines plus personality and emotion.
+
+The first focused run exposed a timezone-dependent fixture timestamp, corrected
+by anchoring starts to the actual frontier. The renderer fixture also initially
+assigned text to bigint `current_location`; it now uses NULL and asserts the
+actual `at None` rendering. These failed attempts are not passing evidence.
+
+Merged `origin/main` at `39b06734` after #916 landed. Resolved the shared settings
+conflicts to one five-field `RenderLimits`, one required `LORESettings.render_limits`,
+one TOML table, and one renderer limits instance outside the character branch.
+The four #908 fields remain required; `character_tags` defaults to eight.
+
+Fresh tag reads on an owned clone of save_04, using the corrected start predicate
+and the frozen frontier-49 payload, produced this real TEST guard accounting:
+
+| Measurement | Before Tags | Uncapped Tags | Capped at Eight |
+|---|---:|---:|---:|
+| Entity dossier | 1,845 | 2,191 | 2,191 |
+| Complete TEST request | 38,932 | 39,286 | 39,286 |
+
+The earlier 1,791 → 2,137 measurement remains above as historical evidence.
+Main's relationship renderer changes shift the baseline; the tag delta remains
++346 dossier tokens and +354 total tokens. The frozen JSON had serialized Decimal
+valences as strings; the reproduction script restores Decimal values before
+rendering. Its first attempt failed loudly on numeric formatting and dropped its
+clone. The successful run is recorded in `review-frontier-proof.json`.
+No paid call or generation occurred, and the owned clone was dropped.
+
+```sh
+PYTHONPATH=$PWD $PY temp/910-proof/review_compare.py
+```
+
+```text
+BEFORE ENTITY_DOSSIER 1845 TOTAL 38932
+UNCAPPED ENTITY_DOSSIER 2191 TOTAL 39286
+CAPPED ENTITY_DOSSIER 2191 TOTAL 39286
+FRONTIER_TAGS_REFRESHED_WITH_START_PREDICATE b720f576-753a-4d82-a456-f2f5b084099d
+OWNED_CLONE_DROPPED qa640_910_compare_76a9181a4b59
+```
+
+## Post-Merge Gates
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+2656 passed, 812 skipped, 9 warnings in 96.89s (0:01:36)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_lore -k 'dossier or entity or tag or render'
+```
+
+```text
+76 passed, 225 deselected, 5 warnings in 12.97s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_presence_roster.py tests/test_presence_roster_pg.py
+```
+
+```text
+33 passed, 5 warnings in 7.65s
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m black --check nexus/agents/lore/utils/entity_queries.py nexus/agents/lore/logon_utility.py nexus/config/settings_models.py tests/test_lore/test_character_dossier_tags_pg.py tests/test_lore/test_character_dossier_render.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+5 files would be left unchanged.
+```
+
+Read-only source verification after the refreshed measurement:
+
+```sql
+SELECT max(chunk_id), max(world_time) FROM chunk_metadata;
+-- 49 | 2189-10-17 18:37:00-04
+SELECT count(*) FROM entity_tags et JOIN entities e ON e.id = et.entity_id
+WHERE e.kind = 'character'
+  AND et.applied_at_world_time > (SELECT max(world_time) FROM chunk_metadata);
+-- 0
+SELECT datname FROM pg_database WHERE datname LIKE 'qa640_910_%';
+-- 0 rows
+```
+
+There are no future-start character rows at this source frontier, explaining why
+fixing the predicate changes the regression fixture but leaves the tag cost delta
+unchanged. The refreshed renderer reproduces the Kessa excerpt above.
+
+
+## Stop-Report: Broader PostgreSQL Gate
+
+The requested offline and focused PostgreSQL gates pass, but the repository's
+full PostgreSQL gate does not. Per the work order's escape hatch, no push or PR
+update was performed. PR #917 remains open with the previously pushed revision;
+the review fixes and main reconciliation are committed locally.
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+142 failed, 3238 passed, 49 skipped, 11 warnings, 39 errors in 624.65s (0:10:24)
+```
+
+All failing IDs are preserved in `review-full-pg-failures.txt`. Exempt examples
+include `tests/test_api/test_orrery_dev_endpoints.py` cases and owner-slot-5
+Orrery fixtures. The gate also contains non-exempt failures. The first is:
+
+```text
+FAILED tests/test_api/test_correspondence_pg.py::test_accept_reject_hysteresis_and_digest_undo
+AttributeError: <module 'nexus.api.narrative' from '/Users/pythagor/nexus/.claude/worktrees/910-character-tags/nexus/api/narrative.py'> has no attribute '_start_post_commit_orrery_work'
+tests/test_api/test_correspondence_pg.py:414: AttributeError
+```
+
+Diagnosis: this disposable-database test patches a removed function, independent
+of character tags. Neither that test nor `nexus/api/narrative.py` differs from
+merged main. No unchanged-main reproduction was attempted because this frozen
+order explicitly requires stopping on an unsatisfied gate. This is not reported
+as proven baseline debt or waived under #885. Other non-exempt IDs include
+scheduler, connection-lifecycle, pass-baseline, runtime-config, and embedding-cache
+checks; they were not repaired under this order. No Postgres.app permission error
+occurred.
+
+Coordinator question: repair or explicitly exempt the broader gate failures,
+then rerun the gate and push the local review-fix commits to PR #917?
