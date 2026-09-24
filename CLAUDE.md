@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Configuration
 
-`nexus.toml` contains read-only runtime defaults and developer tunables, validated by the Pydantic models in `nexus/config/settings_models.py`. Player theme, fonts, and next-story model live in `[runtime].state_dir/preferences.toml`; per-story Skald, World State, and context-window pins live in the slot database. See `docs/settings_scopes.md` for precedence and recovery. The legacy top-level `settings.json` was retired in June 2026 after every runtime reader (loader fallback chain, LORE, MEMNON, memory manager) had migrated to nexus.toml; its overlapping keys (embedding model registry with `is_active` flags, `memory.divergence_threshold`, retired GAIA/NEMESIS/PSYCHE agent settings) were already dead copies. Explicitly passed `.json` paths to `load_settings()` remain supported only for legacy ir_eval V1 tooling.
+`nexus.toml` contains read-only runtime defaults and developer tunables, validated by the Pydantic models in `nexus/config/settings_models.py`. Player theme, fonts, and next-story model live in `[runtime].state_dir/preferences.toml`; per-story Skald, World State, and context-window pins live in the slot database. See `docs/settings_scopes.md` for precedence and recovery. The legacy top-level `settings.json` was retired in June 2026 after every runtime reader (loader fallback chain, LORE, MEMNON, memory manager) had migrated to nexus.toml; its overlapping keys (embedding model registry with `is_active` flags, retired GAIA/NEMESIS/PSYCHE agent settings) were already dead copies. Explicitly passed `.json` paths to `load_settings()` remain supported only for legacy ir_eval V1 tooling.
 
 ## Pre-commit hooks
 
@@ -209,7 +209,7 @@ These skills contain detailed commands, workflows, troubleshooting guides, and b
 
 ## Entity-Based Divergence Detection
 
-The LORE turn loop (`nexus/memory/manager.py`) runs deterministic entity-based divergence detection (`nexus/memory/divergence.py`, `nexus/memory/entity_detector.py`) to identify when user input references known entities absent from the warm slice. Configuration: `divergence_threshold` in nexus.toml's `[memory]` section (default `0.7`). Tests at `tests/test_lore/test_memory_manager.py` and `tests/test_lore/test_pass2_chunk1369.py`.
+The LORE turn loop (`nexus/memory/manager.py`) runs deterministic entity-based divergence detection (`nexus/memory/divergence.py`, `nexus/memory/entity_detector.py`) to identify when user input references known entities absent from the warm slice. Known character names and aliases, places, and factions produce a boolean match and explicit entity gaps; Phase 2 subtracts entities already covered by the warm slice before retrieval. No confidence score or threshold gates this deterministic detector. Tests at `tests/test_lore/test_memory_manager.py` and `tests/test_lore/test_pass2_chunk1369.py`.
 
 This is the **deterministic** entity-based variant. An earlier *LLM-based* divergence detection path was retired per the bake-off in `docs/retrieval_query_bakeoff_2026_05_18.md`; the `analyze-divergence` skill that documented the LLM-based path was removed alongside.
 

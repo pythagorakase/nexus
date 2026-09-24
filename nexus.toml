@@ -224,6 +224,13 @@ max_files_per_request = 10
 debug = true
 agentic_sql = true  # Enable agent to generate SQL queries dynamically
 
+# Per-block item caps; seat-window token budgets still apply.
+[lore.render_limits]
+relationships = 5
+events = 5
+threats = 5
+bleed_menu = 5
+
 [lore.retrieval]
 max_deep_queries = 5
 
@@ -1124,7 +1131,6 @@ phase2_fraction = 0.1            # Fraction of turn cycle for Phase 2 (warm anal
 raw_search_k = 30                # Number of raw results to retrieve before reranking
 skip_simple_choices = true       # Skip divergence detection for simple choices
 pass2_budget_reserve = 0.25      # Reserve 25% of budget for second pass queries
-divergence_threshold = 0.7       # Confidence threshold for divergence detection
 warm_slice_default = true        # Include warm slice by default
 max_sql_iterations = 5           # Max iterations for agentic SQL generation
 

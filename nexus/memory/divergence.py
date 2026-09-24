@@ -11,7 +11,6 @@ class DivergenceResult:
     """Outcome of the active entity-based divergence detector."""
 
     detected: bool
-    confidence: float
     gaps: Dict[str, str]
     unmatched_entities: Set[str]
     references_seen: Set[str]
@@ -21,7 +20,6 @@ class DivergenceResult:
 
         return {
             "detected": self.detected,
-            "confidence": round(self.confidence, 3),
             "gaps": self.gaps,
             "unmatched_entities": sorted(self.unmatched_entities),
             "references_seen": sorted(self.references_seen),

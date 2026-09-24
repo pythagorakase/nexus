@@ -344,9 +344,6 @@ class ContextMemoryManager:
 
         # Legacy settings (kept for compatibility but may be deprecated)
         self.pass2_reserve = float(memory_settings.get("pass2_budget_reserve", 0.25))
-        self.divergence_threshold = float(
-            memory_settings.get("divergence_threshold", 0.7)
-        )
         self.warm_slice_default = bool(memory_settings.get("warm_slice_default", True))
         self.max_sql_iterations = int(memory_settings.get("max_sql_iterations", 5))
 
@@ -362,10 +359,7 @@ class ContextMemoryManager:
             )
 
         self.entity_detector = HighSpecificityEntityDetector(db_connection)
-        logger.info(
-            "Using entity-based divergence detector (threshold=%.2f)",
-            self.divergence_threshold,
-        )
+        logger.info("Using deterministic entity-based divergence detector")
 
         self.incremental = IncrementalRetriever(
             memnon=memnon,
@@ -470,9 +464,6 @@ class ContextMemoryManager:
                 "divergence_detected": (
                     current_package.divergence_detected if current_package else False
                 ),
-                "divergence_confidence": (
-                    current_package.divergence_confidence if current_package else 0.0
-                ),
                 "additional_chunks": (
                     len(current_package.additional_chunks) if current_package else 0
                 ),
@@ -484,7 +475,6 @@ class ContextMemoryManager:
                 "max_iterations": self.query_memory.max_iterations,
             },
             "settings": {
-                "divergence_threshold": self.divergence_threshold,
                 "warm_slice_default": self.warm_slice_default,
             },
         }
@@ -796,7 +786,6 @@ class ContextMemoryManager:
         summary = self.entity_detector.to_divergence_format(entity_match)
         return DivergenceResult(
             bool(summary.get("detected")),
-            float(summary.get("confidence", 0.0)),
             summary.get("gaps", {}),
             set(summary.get("unmatched_entities", set())),
             set(summary.get("references_seen", set())),
@@ -854,14 +843,9 @@ class ContextMemoryManager:
 
         entity_match = self.entity_detector.detect_entities(user_input)
         divergence = self._detect_divergence(user_input, entity_match=entity_match)
-        logger.debug(
-            "Divergence detection: %s (confidence=%.2f)",
-            divergence.detected,
-            divergence.confidence,
-        )
+        logger.debug("Divergence detection: %s", divergence.detected)
         self.context_state.update_divergence(
             divergence.detected,
-            divergence.confidence,
             divergence.gaps,
         )
 

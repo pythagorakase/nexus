@@ -99,7 +99,6 @@ def _settings() -> dict[str, Any]:
             "raw_search_k": 30,
             "skip_simple_choices": False,
             "pass2_budget_reserve": 0.25,
-            "divergence_threshold": 0.7,
             "warm_slice_default": True,
             "max_sql_iterations": 5,
         },

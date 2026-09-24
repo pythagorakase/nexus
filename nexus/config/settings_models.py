@@ -950,6 +950,17 @@ class PresenceAuditSettings(BaseModel):
     )
 
 
+class LORERenderLimits(BaseModel):
+    """Per-block item limits within the existing seat-window budgets."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    relationships: int = Field(..., ge=1)
+    events: int = Field(..., ge=1)
+    threats: int = Field(..., ge=1)
+    bleed_menu: int = Field(..., ge=1)
+
+
 class LORESettings(BaseModel):
     """LORE agent configuration."""
 
@@ -957,6 +968,7 @@ class LORESettings(BaseModel):
 
     debug: bool
     agentic_sql: bool
+    render_limits: LORERenderLimits
     token_budget: TokenBudgetConfig
     payload_percent_budget: PayloadPercentBudget
     entity_inclusion: EntityInclusionConfig
@@ -3018,7 +3030,6 @@ class MemorySettings(BaseModel):
     raw_search_k: int = Field(..., ge=1)
     skip_simple_choices: bool
     pass2_budget_reserve: float = Field(..., ge=0.0, le=1.0)
-    divergence_threshold: float = Field(..., ge=0.0, le=1.0)
     warm_slice_default: bool
     max_sql_iterations: int = Field(..., ge=1)
 
