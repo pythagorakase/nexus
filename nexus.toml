@@ -230,6 +230,8 @@ relationships = 5
 events = 5
 threats = 5
 bleed_menu = 5
+# Caps attributed tags per character line in the dossier.
+character_tags = 8
 
 [lore.retrieval]
 max_deep_queries = 5

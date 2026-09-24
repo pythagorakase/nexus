@@ -950,7 +950,7 @@ class PresenceAuditSettings(BaseModel):
     )
 
 
-class LORERenderLimits(BaseModel):
+class RenderLimits(BaseModel):
     """Per-block item limits within the existing seat-window budgets."""
 
     model_config = ConfigDict(extra="forbid")
@@ -959,6 +959,11 @@ class LORERenderLimits(BaseModel):
     events: int = Field(..., ge=1)
     threats: int = Field(..., ge=1)
     bleed_menu: int = Field(..., ge=1)
+    character_tags: int = Field(
+        default=8,
+        ge=1,
+        description="Cap attributed tags per character line in the dossier",
+    )
 
 
 class LORESettings(BaseModel):
@@ -968,7 +973,7 @@ class LORESettings(BaseModel):
 
     debug: bool
     agentic_sql: bool
-    render_limits: LORERenderLimits
+    render_limits: RenderLimits
     token_budget: TokenBudgetConfig
     payload_percent_budget: PayloadPercentBudget
     entity_inclusion: EntityInclusionConfig

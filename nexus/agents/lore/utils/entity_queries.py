@@ -24,9 +24,53 @@ FACTION_TAG_CONTEXT_CATEGORIES = (
     "power_status",
     "agenda",
 )
-FACTION_TAG_CONTEXT_CATEGORY_SQL = ", ".join(
-    f"'{category}'" for category in FACTION_TAG_CONTEXT_CATEGORIES
-)
+
+
+def _attributed_tag_summary_join(*, table: str, kind: str) -> str:
+    """Share the current-tag view and frontier validity rules across dossiers.
+
+    Table and kind are internal SQL identifiers, never caller-supplied values.
+    The view owns soft clears, deprecated tags, and synonyms; world-time starts
+    and expiry stay separate from wall-clock timestamps.
+    """
+    category_filter = ""
+    if kind == "faction":
+        categories = ", ".join(
+            f"'{category}'" for category in FACTION_TAG_CONTEXT_CATEGORIES
+        )
+        category_filter = f"AND etc.category IN ({categories})"
+    return f"""
+        LEFT JOIN LATERAL (
+            SELECT COALESCE(
+                string_agg(
+                    etc.category || ':' || etc.tag,
+                    ', ' ORDER BY etc.category, etc.tag
+                ),
+                ''
+            ) AS orrery_tag_summary
+            FROM entity_tags_current etc
+            WHERE etc.entity_id = {table}.entity_id
+              AND etc.entity_kind = '{kind}'
+              {category_filter}
+              AND EXISTS (
+                    SELECT 1 FROM entity_tags et
+                    WHERE et.id = etc.entity_tag_id
+                      AND (
+                            et.applied_at_world_time IS NULL
+                            OR et.applied_at_world_time <= (
+                                SELECT max(world_time) FROM chunk_metadata
+                            )
+                          )
+                      AND (
+                            (SELECT max(world_time) FROM chunk_metadata) IS NULL
+                            OR et.expires_at_world_time IS NULL
+                            OR et.expires_at_world_time > (
+                                SELECT max(world_time) FROM chunk_metadata
+                            )
+                          )
+                  )
+        ) AS attributed_tags ON true
+    """
 
 
 def fetch_present_character_ids(session: Session, chunk_id: int) -> List[int]:
@@ -51,16 +95,18 @@ def fetch_all_characters_with_references(
 
     Returns:
         Dict with:
-        - baseline: All characters with activity and location fields
-        - featured: Referenced characters with full details + reference_type
+        - baseline: All characters with activity, location, and current tags
+        - featured: Referenced characters with full details, tags, and reference_type
     """
-    # Get ALL characters with baseline fields
+    # Keep character IDs and the canonical roster independent of entity IDs.
+    tag_join = _attributed_tag_summary_join(table="characters", kind="character")
     baseline_query = text(
-        """
+        f"""
         SELECT
             id, name, summary,
-            current_activity, current_location
+            current_activity, current_location, orrery_tag_summary
         FROM characters
+        {tag_join}
         ORDER BY name
     """
     )
@@ -102,12 +148,13 @@ def fetch_all_characters_with_references(
     featured_rows: Sequence[Any] = []
     if featured_ids:
         featured_query = text(
-            """
+            f"""
             SELECT
                 id, name, summary, appearance, background,
                 personality, emotional_state, current_activity,
-                current_location, extra_data
+                current_location, extra_data, orrery_tag_summary
             FROM characters
+            {tag_join}
             WHERE id = ANY(:ids)
         """
         )
@@ -287,38 +334,12 @@ def fetch_all_factions_with_references(
         - baseline: All factions (id, name, summary, orrery_tag_summary)
         - featured: Referenced factions with details and current Orrery tags
     """
-    # Get ALL factions with baseline fields
+    tag_join = _attributed_tag_summary_join(table="f", kind="faction")
     baseline_query = text(
         f"""
-        SELECT
-            f.id,
-            f.name,
-            f.summary,
-            COALESCE(
-                string_agg(
-                    etc.category || ':' || etc.tag,
-                    ', '
-                    ORDER BY etc.category, etc.tag
-                ) FILTER (WHERE etc.tag IS NOT NULL),
-                ''
-            ) AS orrery_tag_summary
+        SELECT f.id, f.name, f.summary, orrery_tag_summary
         FROM factions f
-        LEFT JOIN entity_tags_current etc
-               ON etc.entity_id = f.entity_id
-              AND etc.entity_kind = 'faction'
-              AND etc.category IN ({FACTION_TAG_CONTEXT_CATEGORY_SQL})
-              AND EXISTS (
-                    SELECT 1 FROM entity_tags et
-                    WHERE et.id = etc.entity_tag_id
-                      AND (
-                            (SELECT max(world_time) FROM chunk_metadata) IS NULL
-                            OR et.expires_at_world_time IS NULL
-                            OR et.expires_at_world_time > (
-                                SELECT max(world_time) FROM chunk_metadata
-                            )
-                          )
-                  )
-        GROUP BY f.id
+        {tag_join}
         ORDER BY f.name
     """
     )
@@ -350,32 +371,10 @@ def fetch_all_factions_with_references(
                 f.summary,
                 f.primary_location,
                 f.extra_data,
-                COALESCE(
-                    string_agg(
-                        etc.category || ':' || etc.tag,
-                        ', '
-                        ORDER BY etc.category, etc.tag
-                    ) FILTER (WHERE etc.tag IS NOT NULL),
-                    ''
-                ) AS orrery_tag_summary
+                orrery_tag_summary
             FROM factions f
-            LEFT JOIN entity_tags_current etc
-                   ON etc.entity_id = f.entity_id
-                  AND etc.entity_kind = 'faction'
-                  AND etc.category IN ({FACTION_TAG_CONTEXT_CATEGORY_SQL})
-                  AND EXISTS (
-                        SELECT 1 FROM entity_tags et
-                        WHERE et.id = etc.entity_tag_id
-                          AND (
-                                (SELECT max(world_time) FROM chunk_metadata) IS NULL
-                                OR et.expires_at_world_time IS NULL
-                                OR et.expires_at_world_time > (
-                                    SELECT max(world_time) FROM chunk_metadata
-                                )
-                              )
-                      )
+            {tag_join}
             WHERE f.id = ANY(:ids)
-            GROUP BY f.id
             ORDER BY f.name
         """
         )

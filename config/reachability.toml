@@ -42,6 +42,12 @@ reason = "Issue 909 isolated continuation measurement operator."
 target = "scripts/qa_shift/world_clock.py:main"
 reason = "Read-only clock identity QA family documented in scripts/qa_shift/README.md; issue 778."
 [[operators]]
+target = "scripts/qa_shift/long_absence_probe.py:main"
+reason = "Clone-only long-absence probe launcher from issue 909; writes only to a qa640_* clone."
+[[operators]]
+target = "scripts/qa_shift/long_absence_turn.py:main"
+reason = "Long-absence probe turn driver from issue 909; CLI generation, acceptance, and evidence capture on the clone."
+[[operators]]
 target = "nexus/agents/orrery/worker.py:main"
 reason = "README.md and docs/orrery_design_plan.md background worker."
 [[operators]]
