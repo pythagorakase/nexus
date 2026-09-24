@@ -68,21 +68,21 @@ sssssssssssssssssss                                                      [100%]
   <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
 
 nexus/api/storyteller.py:307
-  /Users/pythagor/nexus/.claude/worktrees/781-card-identity/nexus/api/storyteller.py:307: DeprecationWarning: 
+  /Users/pythagor/nexus/.claude/worktrees/781-card-identity/nexus/api/storyteller.py:307: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../../../.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
-  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
