@@ -1,11 +1,13 @@
 """Keep model prose file-backed and the registry closed over its live readers.
 
-The AST heuristic checks every string expression regardless of quoting, including
-implicit and explicit concatenation and the literal portions of f-strings. It flags known
-model-addressed phrases and sentence-opening second-person imperatives. Actual
-Python docstrings and Field(description=...) remain outside this mechanical
-slice. Exact (path, literal) allowlist entries document human-facing diagnostics;
-no file or call-site blanket exemptions hide new prose.
+The AST heuristic checks every string expression regardless of quoting,
+including implicit/explicit concatenation and f-string literal parts. It flags
+known model-addressed phrases and sentence-opening second-person imperatives.
+Function documentation uses a narrower model-address heuristic so ordinary
+"Return the parsed result" docstrings are not mistaken for instructions. Known
+model phrases are checked in docstrings too. Field(description=...) remains
+outside this mechanical slice. Exact (path, literal) allowlist entries document
+human-facing diagnostics; no file or call-site blanket exemptions hide new prose.
 """
 
 from __future__ import annotations
@@ -23,6 +25,10 @@ import pytest
 from nexus.prompts.registry import PLACEHOLDER, PROMPTS, PromptId, load
 
 ROOT = Path(__file__).resolve().parents[1]
+MODEL_ADDRESS = re.compile(
+    "\\b(?:you (?:are|must|should|will|may)|respond with|continue the narrative|maintain consistency|return only|ignore freely)\\b",
+    re.IGNORECASE,
+)
 PROSE = re.compile(
     r"\b(?:you (?:are|must|should|will|may)|respond with|continue the narrative|"
     r"maintain consistency|return only|ignore freely)\b"
@@ -35,6 +41,34 @@ PROSE = re.compile(
 
 # Exact reviewed human-facing messages only; the reason explains their audience.
 PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
+    (
+        "nexus/database.py",
+        "Return only non-secret target fields for preflight and diagnostics.",
+    ): "Developer API documentation describing the function or module, not model instructions.",
+    (
+        "nexus/agents/orrery/drift.py",
+        "Return only edges whose Stage-1 derived rung changed.",
+    ): "Developer API documentation describing the function or module, not model instructions.",
+    (
+        "nexus/agents/lore/utils/chunk_operations.py",
+        "\n    Format a chunk with its metadata headers for Apex AI.\n    \n    Uses the same format as narrative_view to maintain consistency.\n    \n    Args:\n        chunk_data: Dictionary with chunk data and metadata\n        include_world_time: Whether to include world time in header\n        \n    Returns:\n        Formatted chunk text with headers\n    ",
+    ): "Developer API documentation describing the function or module, not model instructions.",
+    (
+        "scripts/api_openai.py",
+        '\nNEXUS OpenAI API Library\n\nThis module provides reusable components for OpenAI API access across NEXUS scripts.\nIt centralizes common functionality to maintain consistency and avoid code duplication.\n\nFeatures:\n- Support for both standard and reasoning models (GPT-4/GPT-4o vs o1/o4)\n- Automatic handling of appropriate parameters based on model type\n- Token counting and management\n- Rate limiting protection\n- Error handling and retries\n\nThis file is designed to be imported by other scripts rather than used directly.\n\nCommon Arguments for Scripts Using This Library:\n--------------------------------------------\nLLM Provider Options:\n    --model MODEL           Model name to use (defaults to DEFAULT_MODEL)\n    --api-key KEY           API key (optional, tries environment variables by default)\n    --temperature FLOAT     Model temperature (0.0-1.0, default 0.1)\n    --max-tokens INT        Maximum tokens to generate in response (default: 4000)\n    --system-prompt TEXT    Optional system prompt to use\n    --effort               Reasoning effort for o-prefixed models: "low", "medium", or "high"\n                            (Only applicable for reasoning models like o1, o4)\n\nProcessing Options:\n    --batch-size INT        Number of items to process before prompting to continue (default: 10)\n    --dry-run               Don\'t actually save results to the database\n    --db-url URL            Database connection URL (optional, defaults to environment variables)\n',
+    ): "Developer API documentation describing the function or module, not model instructions.",
+    (
+        "scripts/test_narrative_turn.py",
+        "\n        Continue the narrative from a given chunk\n\n        Args:\n            parent_chunk_id: The chunk to continue from\n            user_text: User's completion text\n\n        Returns:\n            Dict with incubator data and diagnostics\n        ",
+    ): "Developer API documentation describing the function or module, not model instructions.",
+    (
+        "scripts/api_anthropic.py",
+        "\nNEXUS Anthropic API Library\n\nThis module provides reusable components for Anthropic Claude API access\nacross NEXUS scripts.\nIt centralizes common functionality to maintain consistency and avoid code duplication.\n\nFeatures:\n- Support for Claude models (standard, Sonnet, Opus, Haiku, etc.)\n- Token counting and management\n- Rate limiting protection\n- Error handling and retries\n- Support for Claude's reasoning capabilities via system prompts\n\nThis file is designed to be imported by other scripts rather than used directly.\n\nCommon Arguments for Scripts Using This Library:\n--------------------------------------------\nLLM Provider Options:\n    --model MODEL           Model name to use (defaults to DEFAULT_MODEL)\n    --api-key KEY           API key (optional, tries environment variables by default)\n    --temperature FLOAT     Model temperature (0.0-1.0, default: API default)\n    --max-tokens INT        Maximum tokens to generate in response (default: 4000)\n    --system-prompt TEXT    Optional system prompt to use\n    --top-p FLOAT           Top-p sampling parameter (0.0-1.0, default None)\n    --top-k INT             Top-k sampling parameter (default None)\n    --timeout INT           Request timeout in seconds (default: 120)\n\nProcessing Options:\n    --batch-size INT        Number of items processed before confirmation (default: 10)\n    --dry-run               Don't actually save results to the database\n    --db-url URL            Database URL (optional, defaults to environment variables)\n",
+    ): "Developer API documentation describing the function or module, not model instructions.",
+    (
+        "scripts/estimate_time_delta.py",
+        "\n    Get all chunks with missing or zero time_delta values.\n\n    Args:\n        db: Database engine\n        primary_only: If True, return only chunks with world_layer='primary'\n    ",
+    ): "Developer API documentation describing the function or module, not model instructions.",
     (
         "nexus/agents/lore/logon_utility.py",
         "Anthropic two-pass execution cannot use anthropic_storyteller_transport='native': the gaia wire cannot compile under Anthropic native enforcement (probe G2b, issue #566). Choose 'prompted' or 'tool_envelope' for the gaia.",
@@ -375,7 +409,7 @@ def _embedded_prose(source: str, path: str = "") -> list[int]:
     }
     violations = []
     for node in ast.walk(tree):
-        if node in docstrings or _literal_text(node) is None:
+        if _literal_text(node) is None:
             continue
         parent = parents.get(node)
         if isinstance(parent, ast.JoinedStr) or (
@@ -392,7 +426,8 @@ def _embedded_prose(source: str, path: str = "") -> list[int]:
             ):
                 continue
         value = _literal_text(node)
-        if not isinstance(value, str) or not PROSE.search(value):
+        heuristic = MODEL_ADDRESS if node in docstrings else PROSE
+        if not isinstance(value, str) or not heuristic.search(value):
             continue
         if (path, value) not in PROSE_ALLOWLIST:
             violations.append(node.lineno)
@@ -550,6 +585,8 @@ def test_wizard_tools_use_registered_descriptions() -> None:
         'prompt = f"Respond with a scene about {subject}."',
         'prompt = "Respond " + "with a single JSON object."',
         'prompt = "You are the narrator."',
+        '"""You are the narrator."""',
+        'def f():\n    """Respond with a JSON scene."""',
         'prompt = "Return only the requested JSON."',
         'prompt = "Ignore freely, render subtly."',
         'prompt = "Preserve the established voice."',
@@ -557,7 +594,7 @@ def test_wizard_tools_use_registered_descriptions() -> None:
 )
 def test_all_literal_forms_reject_model_instructions(source: str) -> None:
     """Quoting style cannot conceal a model instruction from the AST scan."""
-    assert _embedded_prose(source) == [1]
+    assert _embedded_prose(source) == ([2] if source.startswith("def ") else [1])
 
 
 def test_allowlist_is_exact_and_has_no_stale_entries() -> None:

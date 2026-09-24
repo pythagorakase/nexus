@@ -75,7 +75,9 @@ The 129 `Field(description=...)` expressions in amended modules are unchanged.
 The lint examines string literals independent of quote style, implicit or explicit
 concatenation, and f-string literal parts. Its documented heuristic recognizes
 model-addressed phrases and sentence-opening imperatives. Ordinary Python
-docstrings and `Field(description=...)` remain outside the mechanical slice;
+function documentation uses the narrower model-address heuristic; known model
+phrases in docstrings still fail unless exactly allowlisted as developer docs.
+`Field(description=...)` remains outside the mechanical slice;
 SQL syntax does not match the natural-language imperative patterns. Exact
 (path, literal) exceptions document operator diagnostics, CLI help, deterministic
 player-facing TEST output, and Orrery branch labels or quoted in-world dialogue.
@@ -112,3 +114,39 @@ real-turn TEST-provider proofs above remain the evidence for both turn seats.
 | registry_retry_declarations_False | 1196 | `0aa6d99ed269f24cc9d480240fe710b07a5408e414a89206cf86063e241c4bb2` |
 | registry_retry_declarations_True | 1210 | `901a8ceb9ddcdb6fabcf7878d96a6139b519440527ea614c4031cb83fbf21aa1` |
 | skald_format_guide | 6231 | `5f9e31e2e492f025fc2e23f3800680ac080a7961df75e8b6670fb73aa5a05ee4` |
+
+### Merge and Boundaries
+
+`origin/main` at `12510525654c50ef4afeb1ff4efa4cee924176e8` was merged
+without conflicts in `ec5b1e4f`. Its historical-passage-limit change is upstream
+work; this amendment does not revise its behavior. The original turn hashes
+above describe the original migration before this upstream merge. The ten
+amendment renders were rechecked after the merge and still match the frozen
+amendment baseline.
+
+[Database evidence](amendment-database-proof.json) records the exact final SELECT:
+both source and clone had 46 chunks, maximum chunk ID 49, and 23 characters.
+The source was read only. The clone was dropped and its absence verified in
+`pg_database`. No gateway was started for the amendments, and no paid provider
+was called.
+
+An initial offline run overlapped the merge: its imported pre-merge Settings
+class rejected the newly merged `lore.render_limits.historical_passages` config
+field. It reported 27 failures and is discarded as a mixed-tree run. All final
+gates were rerun in new processes against the fixed merged tree. The trailing
+whitespace reported by `git diff --check` in prompt documents is deliberately
+preserved original prompt whitespace, including the semicolon-space endings
+of the two declaration-policy fragments.
+
+### Coordinator Questions
+
+The separate automated review's wheel-packaging finding remains outside the
+frozen completeness amendments: top-level prompt documents are not included
+in the wheel. The coordinator should assign its packaging fix before treating
+wheel installation as verified. Source-checkout runtime behavior is what this
+work order and its gates exercise. The earlier player-facing TSX scope question
+also remains deferred.
+
+Exact amendment commands and verbatim tails are in [amendment validation](amendment-validation.txt). The [file inventory](amendment-files.md) gives one line per amendment file. `tests/test_skald_wire.py` now pins its format-guide assertion to the Markdown document. No #885 exemption was required.
+
+Final merged-tree gates: **2693 passed, 857 skipped** offline; **66 passed, 343 deselected, no skips** in the PostgreSQL selection; **21 passed** in prompt lint; **39 Python files** Black-clean. Reachability reports no new orphans, lost production paths, forbidden dependencies, tombstone violations, unresolved imports, or unregistered dynamic imports. All 301 `Field(description=...)` expressions in existing Python files changed by the complete PR match merged `origin/main`.

@@ -1,0 +1,66 @@
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2693 passed, 857 skipped, 9 warnings in 108.36s (0:01:48)
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore tests/test_skald_wire.py -k 'prompt or format or placeholder or lint'
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+66 passed, 343 deselected, 5 warnings in 1.42s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_prompt_lint.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+21 passed, 5 warnings in 9.10s
+
+$ git diff --name-only --diff-filter=ACMR origin/main -- '*.py' | xargs /Users/pythagor/nexus/.venv/bin/python -m black --check
+All done! ✨ 🍰 ✨
+39 files would be left unchanged.
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/check_reachability.py
+{
+  "maintained": 352,
+  "reachable_by_kind": {
+    "production": 189,
+    "operator": 174,
+    "migration": 171,
+    "test": 234
+  },
+  "test_only": 34,
+  "existing_unreachable": 75,
+  "newly_unreachable": [],
+  "lost_production_reachability": [],
+  "baseline_add_production_paths": [],
+  "baseline_remove_orphan_exemptions": [],
+  "baseline_remove_deleted_production_paths": [],
+  "forbidden_dependencies": [],
+  "tombstone_violations": [],
+  "unresolved_internal_imports": [],
+  "unregistered_dynamic_import_sites": [],
+  "route_reachability": "not_proven"
+}
+
+$ PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python temp/742-amend/prove_renders.py
+accepted_correspondence 27931 c3326b41dcece24f576e5387f4fa5a51386e79d7d08edfecfad579f142b807b4
+retrograde_packet 31870 d34ed5c0628dc39b79f9bd927f83eb0fd83ff9f665248e5009794a032169ff8f
+retrograde_prompt 85430 3afab2aaa1fb6794b69c413081da82b0f190dbb1a24dc815d5795a0e1845d241
+create_faction_to_faction_messages_system 880 159ec7599928ce7a219036188f989444d31eb234f4584d6d8d436eda12fcfd19
+create_faction_to_faction_messages_user 7319 3f2a61938643818185ee7643f23618156a334d1920124eebf1624c7375035136
+create_faction_to_character_messages_system 882 5adc1c3d28a969915469a0ef647cb53293bd5c181f2766242de25b23f7fe8895
+create_faction_to_character_messages_user 7216 af1c9ba078a81ebf7832caab274bd24edf4714863d6be3673dca6f69c47a731a
+registry_retry_declarations_False 1196 0aa6d99ed269f24cc9d480240fe710b07a5408e414a89206cf86063e241c4bb2
+registry_retry_declarations_True 1210 901a8ceb9ddcdb6fabcf7878d96a6139b519440527ea614c4031cb83fbf21aa1
+skald_format_guide 6231 5f9e31e2e492f025fc2e23f3800680ac080a7961df75e8b6670fb73aa5a05ee4
+10 full renders are byte-identical; no provider calls.
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python temp/742-amend/prove_templates.py
+54 relocated expressions: static fragments and rendered UTF-8 bytes match 8020a550.
+
+Scratch-copy subprocess results (from the lint command above):
+Rejected prompt = "Continue the narrative from this point.": 1 failed (expected)
+Rejected prompt = 'Maintain consistency with the supplied context.': 1 failed (expected)
+Rejected prompt = ("Respond " "with a single JSON object."): 1 failed (expected)
+
+Initial mixed-tree offline run (discarded; superseded by fixed-tree run above):
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+FAILED tests/test_summary_triggers.py::test_summary_generator_uses_registry_native_provider_contract[nousresearch/hermes-4-70b-openai-chat_completions]
+FAILED tests/test_usage_recorder.py::test_relative_usage_dir_anchors_to_repo_root_not_config_dir
+27 failed, 2655 passed, 854 skipped, 9 warnings in 109.82s (0:01:49)
+Reason: the merge changed nexus.toml after the process had imported the pre-merge Settings model. No #885 exemptions were used.

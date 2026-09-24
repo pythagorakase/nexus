@@ -1521,8 +1521,8 @@ def test_skald_wire_prompt_guide_is_deterministic_and_complete() -> None:
 
     assert first == second
     assert first.startswith("=== OUTPUT FORMAT ===\n")
-    assert "Respond with a single JSON object" in first
-    assert "No prose outside the JSON." in first
+    prompt_file = Path(__file__).parents[1] / "prompts/output/format_guide.md"
+    assert prompt_file.read_text(encoding="utf-8") in first
 
     rendered_property_names = []
     for line in first.splitlines():
