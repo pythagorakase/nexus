@@ -13,7 +13,8 @@ def test_character_dossier_tags_preserve_featured_details(seat: str) -> None:
     tagged = {
         "id": 7,
         "name": "Iona",
-        "current_location": "Hall",
+        "current_location": 1,
+        "current_location_name": "Hall",
         "current_activity": "Waiting.",
         "summary": "A patient observer.",
         "personality": "Deliberate.",
@@ -24,7 +25,8 @@ def test_character_dossier_tags_preserve_featured_details(seat: str) -> None:
     untagged = {
         "id": 9,
         "name": "Ren",
-        "current_location": "Garden",
+        "current_location": 2,
+        "current_location_name": "Garden",
         "current_activity": "Reading.",
         "orrery_tag_summary": "",
     }
@@ -90,3 +92,41 @@ def test_character_tag_limit_validation() -> None:
     assert RenderLimits(**limits).character_tags == 8
     with pytest.raises(ValidationError):
         RenderLimits(**limits, character_tags=0)
+
+
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+def test_dossier_omits_unknown_location_and_formats_decimal_valence(seat: str) -> None:
+    """Real TEST rendering omits absent places and rounds database decimals."""
+    from decimal import Decimal
+
+    utility = window_logon()
+    prompt = utility._format_context_prompt(
+        {
+            "entity_data": {
+                "characters": {
+                    "baseline": [
+                        {
+                            "name": "Hale",
+                            "current_location": None,
+                            "current_location_name": None,
+                            "current_activity": "Waiting.",
+                        },
+                    ]
+                },
+                "relationships": [
+                    {
+                        "character1_name": "Hale",
+                        "character2_name": "Iona",
+                        "relationship_type": "complex",
+                        "valence_current": Decimal(value),
+                    }
+                    for value in ("0E-20", "-0.18181818181818181818", "0.125")
+                ],
+            }
+        },
+        seat=seat,
+    )
+    assert "- Hale: Waiting." in prompt
+    assert "at None" not in prompt
+    for value in ("+0.00", "-0.18", "+0.12"):
+        assert f"- Hale → Iona: complex (valence {value})" in prompt

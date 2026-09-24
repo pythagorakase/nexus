@@ -103,11 +103,13 @@ def fetch_all_characters_with_references(
     baseline_query = text(
         f"""
         SELECT
-            id, name, summary,
-            current_activity, current_location, orrery_tag_summary
+            characters.id, characters.name, characters.summary,
+            current_activity, current_location, places.name AS current_location_name,
+            orrery_tag_summary
         FROM characters
+        LEFT JOIN places ON places.id = characters.current_location
         {tag_join}
-        ORDER BY name
+        ORDER BY characters.name
     """
     )
     baseline_rows = session.execute(baseline_query).fetchall()
@@ -386,3 +388,52 @@ def fetch_all_factions_with_references(
         "baseline": [dict(row._mapping) for row in baseline_rows],
         "featured": [dict(row._mapping) for row in featured_rows],
     }
+
+
+def fetch_character_relationships(
+    session: Session, character_ids: List[int]
+) -> List[Dict[str, Any]]:
+    """Resolve canonical endpoints once, excluding and logging defective rows.
+
+    Relationships use the composite (character1_id, character2_id) primary key.
+    Filtering here avoids repeating defect logs for the writer and Gaia seats.
+    """
+    rows = session.execute(
+        text(
+            """
+            SELECT r.*,
+                (SELECT name FROM characters WHERE id = r.character1_id)
+                    AS character1_name,
+                (SELECT name FROM characters WHERE id = r.character2_id)
+                    AS character2_name
+            FROM character_relationships r
+            WHERE (
+                r.character1_id = ANY(:character_ids)
+                AND (
+                    r.character2_id = ANY(:character_ids)
+                    OR NOT EXISTS (
+                        SELECT 1 FROM characters WHERE id = r.character2_id
+                    )
+                )
+            ) OR (
+                r.character2_id = ANY(:character_ids)
+                AND NOT EXISTS (
+                    SELECT 1 FROM characters WHERE id = r.character1_id
+                )
+            )
+            """
+        ),
+        {"character_ids": character_ids},
+    )
+    relationships = []
+    for row in rows:
+        relationship = dict(row._mapping)
+        if not relationship["character1_name"] or not relationship["character2_name"]:
+            logger.error(
+                "Relationship (%s, %s) has a missing canonical endpoint; omitted from dossier",
+                relationship["character1_id"],
+                relationship["character2_id"],
+            )
+            continue
+        relationships.append(relationship)
+    return relationships

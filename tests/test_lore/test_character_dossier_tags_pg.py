@@ -211,7 +211,7 @@ def test_dossier_database_tags_reach_real_renderer(dossier_database) -> None:
             )
             lines = prompt.splitlines()
             assert (
-                "- Iona: at None, Waiting. Tags: capacity:dossier_alpha, "
+                "- Iona: Waiting. Tags: capacity:dossier_alpha, "
                 "capacity:dossier_zeta, state:dossier_live"
             ) in lines
             assert (
@@ -219,5 +219,104 @@ def test_dossier_database_tags_reach_real_renderer(dossier_database) -> None:
                 "capacity:dossier_alpha, capacity:dossier_zeta, state:dossier_live"
             ) in lines
             assert "  Personality: Deliberate.\n  Emotional State: Uneasy." in prompt
+    finally:
+        engine.dispose()
+
+
+def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
+    """Real joins preserve subtype IDs and reject a corrupt endpoint once."""
+    from nexus.agents.lore.utils.entity_queries import fetch_character_relationships
+    from tests.test_lore.window_helpers import window_logon
+
+    dbname, character_id, _ = dossier_database
+    engine = create_engine(sqlalchemy_url(dbname))
+    try:
+        with Session(engine) as session:
+            session.execute(
+                text("SELECT set_config('nexus.write_producer', 'manual', true)")
+            )
+            place_id = session.execute(
+                text(
+                    "INSERT INTO places (name, type) VALUES ('Dossier Hall', 'fixed_location') RETURNING id"
+                )
+            ).scalar_one()
+            session.execute(
+                text("UPDATE characters SET current_location = :place WHERE id = :id"),
+                {"place": place_id, "id": character_id},
+            )
+            other_id = session.execute(
+                text("SELECT id FROM characters WHERE name = 'Untagged Observer'")
+            ).scalar_one()
+            session.execute(
+                text(
+                    """INSERT INTO character_relationships
+                (character1_id, character2_id, relationship_type, valence_current,
+                 dynamic, recent_events, history)
+                VALUES (:first, :second, 'complex', -0.18181818181818181818,
+                        'Fixture', 'Fixture', 'Fixture')"""
+                ),
+                {"first": character_id, "second": other_id},
+            )
+            characters = fetch_all_characters_with_references(
+                session, [1], max_featured_characters=2
+            )
+            baseline = next(
+                c for c in characters["baseline"] if c["id"] == character_id
+            )
+            featured = next(
+                c for c in characters["featured"] if c["id"] == character_id
+            )
+            assert baseline["current_location_name"] == "Dossier Hall"
+            assert featured["current_location"] == place_id
+            relationships = fetch_character_relationships(
+                session, [character_id, other_id]
+            )
+            assert len(relationships) == 1
+            rel = relationships[0]
+            assert rel["character1_name"] == baseline["name"]
+            assert rel["character2_name"] == "Untagged Observer"
+            for seat in ("writer", "gaia"):
+                prompt = window_logon()._format_context_prompt(
+                    {
+                        "entity_data": {
+                            "characters": characters,
+                            "relationships": relationships,
+                        }
+                    },
+                    seat=seat,
+                )
+                assert f"- {baseline['name']}: at Dossier Hall, " in prompt
+                assert (
+                    f"- {baseline['name']} → Untagged Observer: complex (valence -0.18)"
+                    in prompt
+                )
+
+            # Deliberately corrupt only this disposable transaction. The normal
+            # FK prevents absent endpoints; dropping it exercises the defect guard.
+            session.execute(
+                text(
+                    "ALTER TABLE character_relationships DROP CONSTRAINT character_relationships_character2_id_fkey"
+                )
+            )
+            missing_id = 999999
+            session.execute(
+                text("UPDATE character_relationships SET character2_id = :missing"),
+                {"missing": missing_id},
+            )
+            caplog.clear()
+            relationships = fetch_character_relationships(
+                session, [character_id, other_id]
+            )
+            assert relationships == []
+            for seat in ("writer", "gaia"):
+                prompt = window_logon()._format_context_prompt(
+                    {"entity_data": {"relationships": relationships}}, seat=seat
+                )
+                assert "→" not in prompt
+            defects = [
+                r for r in caplog.records if "missing canonical endpoint" in r.message
+            ]
+            assert len(defects) == 1
+            assert f"({character_id}, {missing_id})" in defects[0].message
     finally:
         engine.dispose()

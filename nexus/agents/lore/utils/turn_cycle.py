@@ -31,6 +31,7 @@ try:
         fetch_all_characters_with_references,
         fetch_all_factions_with_references,
         fetch_all_places_with_references,
+        fetch_character_relationships,
         fetch_place_ids_by_names,
         fetch_present_character_ids,
     )
@@ -71,6 +72,7 @@ except ImportError:
         fetch_all_characters_with_references,
         fetch_all_factions_with_references,
         fetch_all_places_with_references,
+        fetch_character_relationships,
         fetch_place_ids_by_names,
         fetch_present_character_ids,
     )
@@ -616,17 +618,7 @@ class TurnCycleManager:
                 ]
                 if char_ids:
                     with self.lore.memnon.Session() as session:
-                        rel_query = text(
-                            """
-                            SELECT *
-                            FROM character_relationships
-                            WHERE character1_id = ANY(:char_ids)
-                              AND character2_id = ANY(:char_ids)
-                        """
-                        )
-                        result = session.execute(rel_query, {"char_ids": char_ids})
-                        for row in result:
-                            relationships.append(dict(row._mapping))
+                        relationships = fetch_character_relationships(session, char_ids)
                     logger.info(
                         f"Found {len(relationships)} relationships between "
                         "featured characters"

@@ -810,8 +810,11 @@ def test_context_prompt_omits_intertitle_when_unknown() -> None:
     assert prompt.startswith("\n=== USER INPUT ===") or prompt.startswith("=== ")
 
 
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
 @pytest.mark.parametrize("limits", [(1, 2, 3, 4), (7, 6, 8, 9)])
-def test_render_limits_and_signed_relationship_valence(limits: tuple[int, ...]) -> None:
+def test_render_limits_and_signed_relationship_valence(
+    limits: tuple[int, ...], seat: str
+) -> None:
     """Each cap changes its own block, including limits beyond the old five."""
     names = ("relationships", "events", "threats", "bleed_menu")
     settings = {"lore": {"render_limits": dict(zip(names, limits))}}
@@ -831,14 +834,14 @@ def test_render_limits_and_signed_relationship_valence(limits: tuple[int, ...]) 
         },
         "orrery_bleed_menu": [{"summary": f"Peripheral{i}"} for i in range(10)],
     }
-    rendered = LogonUtility(settings)._format_context_prompt(context)
+    rendered = LogonUtility(settings)._format_context_prompt(context, seat=seat)
     for label, limit in zip(("Person", "Event", "Threat", "Peripheral"), limits):
         for i in range(10):
             assert (f"{label}{i}" in rendered) is (i < limit)
-    assert "ally (valence -2)" in rendered
+    assert "ally (valence -2.00)" in rendered
     if limits[0] >= 3:
-        assert "ally (valence +0)" in rendered
-        assert "ally (valence +3)" in rendered
+        assert "ally (valence +0.00)" in rendered
+        assert "ally (valence +3.00)" in rendered
 
 
 @pytest.mark.parametrize("key", ["relationships", "events", "threats", "bleed_menu"])

@@ -2506,7 +2506,8 @@ class LogonUtility:
                     sections.append("\nAll Characters (brief status):")
                     for char in baseline_chars:
                         name = char.get("name", "Unknown")
-                        location = char.get("current_location", "unknown location")
+                        location = char.get("current_location_name")
+                        location_detail = f"at {location}, " if location else ""
                         activity = char.get("current_activity", "status unknown")
                         tags = ", ".join(
                             (char.get("orrery_tag_summary") or "").split(", ")[
@@ -2515,7 +2516,7 @@ class LogonUtility:
                         )
                         tag_detail = f" Tags: {tags}" if tags else ""
                         sections.append(
-                            f"- {name}: at {location}, {activity}{tag_detail}"
+                            f"- {name}: {location_detail}{activity}{tag_detail}"
                         )
 
                 # Featured characters (full details)
@@ -2612,12 +2613,12 @@ class LogonUtility:
             if relationships:
                 sections.append("\nRelationships:")
                 for rel in relationships[: render_limits.relationships]:
-                    char1 = rel.get("character1_name", "Unknown")
-                    char2 = rel.get("character2_name", "Unknown")
+                    char1 = rel["character1_name"]
+                    char2 = rel["character2_name"]
                     rel_type = rel.get("relationship_type", "unknown")
                     valence = rel["valence_current"]
                     sections.append(
-                        f"- {char1} → {char2}: {rel_type} (valence {valence:+g})"
+                        f"- {char1} → {char2}: {rel_type} (valence {valence:+.2f})"
                     )
 
             events = entity_data.get("events", [])
