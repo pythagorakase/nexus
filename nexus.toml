@@ -1272,6 +1272,8 @@ cors_allowed_origins = [
 lease_duration_seconds = 60
 heartbeat_interval_seconds = 10
 poll_interval_seconds = 5
+# Omit to follow poll_interval_seconds; set explicitly to extend the unlock hold.
+# unlock_hold_seconds = 5
 generation_wait_seconds = 1
 error_backoff_seconds = 5
 milestone_recovery_age_seconds = 60

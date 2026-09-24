@@ -1,3 +1,5 @@
+import os
+
 """Real interruptions, lock waits, and concurrent reads of deferred ownership."""
 
 from concurrent.futures import ThreadPoolExecutor
@@ -84,7 +86,7 @@ def test_scheduler_recovers_terminated_heartbeat_backend(
                 flush=True,
             )
             status = requests.get(
-                "http://127.0.0.1:8018/runtime/status", timeout=10
+                os.environ["NEXUS_API_URL"] + "/runtime/status", timeout=10
             ).json()
             assert status["jobs"]["scheduler"]["state"] == "recovering"
             assert status["jobs"]["scheduler"]["last_error"] == scheduler.last_error
@@ -106,7 +108,9 @@ def test_scheduler_recovers_terminated_heartbeat_backend(
         assert scheduler._thread.is_alive()
         assert "recovering" in caplog.text
         run_cli(monkeypatch, "status")
-        status = requests.get("http://127.0.0.1:8018/runtime/status", timeout=10).json()
+        status = requests.get(
+            os.environ["NEXUS_API_URL"] + "/runtime/status", timeout=10
+        ).json()
         assert status["jobs"]["scheduler"]["state"] == "owner"
         assert status["jobs"]["scheduler"]["last_error"]
         print(

@@ -18,14 +18,12 @@ from pathlib import Path
 import sys
 from typing import Any
 
-import psycopg2
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from nexus.api.slot_utils import get_slot_db_url  # noqa: E402
 from nexus.config import load_settings_as_dict  # noqa: E402
-from nexus.database import url_connection_kwargs  # noqa: E402
+from nexus.database import maintenance_connection  # noqa: E402
 from nexus.memory.context_state import (
     Pass2BaselineV1,
     bind_pass2_baseline,
@@ -35,11 +33,13 @@ from nexus.memory.manager import (
     pass2_baseline_config_fingerprint,
 )  # noqa: E402
 from scripts.database_targets import evaluation_dbname  # noqa: E402
-from scripts.migrate import get_connection  # noqa: E402
 
 
 def stamp_slot_tail(
-    slot: int | None = None, *, dbname: str | None = None
+    slot: int | None = None,
+    *,
+    dbname: str | None = None,
+    write_locked_slot: bool = False,
 ) -> tuple[int, bool, bool]:
     """Stamp the slot's migration boundary.
 
@@ -62,10 +62,11 @@ def stamp_slot_tail(
         load_settings_as_dict(), read_story_settings(dbname or slot_dbname(slot))
     )
     staged = empty_pass2_baseline(settings)
-    connection = (
-        get_connection(dbname)
-        if dbname is not None
-        else psycopg2.connect(**url_connection_kwargs(get_slot_db_url(slot=slot)))
+    connection = maintenance_connection(
+        dbname,
+        db_url=get_slot_db_url(slot=slot) if dbname is None else None,
+        write_locked_slot=write_locked_slot,
+        operation="stamp Pass-2 baseline",
     )
     with closing(connection), connection as conn:
         with conn.cursor() as cur:
@@ -113,7 +114,10 @@ def stamp_slot_tail(
 
 
 def refresh_tail_fingerprint(
-    slot: int | None = None, *, dbname: str | None = None
+    slot: int | None = None,
+    *,
+    dbname: str | None = None,
+    write_locked_slot: bool = False,
 ) -> tuple[int, str, str]:
     """Refresh only the accepted tail fingerprint after a compatible config change.
 
@@ -132,10 +136,11 @@ def refresh_tail_fingerprint(
         load_settings_as_dict(), read_story_settings(target)
     )
     new_fingerprint = pass2_baseline_config_fingerprint(settings)
-    connection = (
-        get_connection(dbname)
-        if dbname is not None
-        else psycopg2.connect(**url_connection_kwargs(get_slot_db_url(slot=slot)))
+    connection = maintenance_connection(
+        dbname,
+        db_url=get_slot_db_url(slot=slot) if dbname is None else None,
+        write_locked_slot=write_locked_slot,
+        operation="refresh Pass-2 fingerprint",
     )
     with closing(connection), connection as conn, conn.cursor() as cur:
         cur.execute("SELECT id FROM narrative_chunks ORDER BY id DESC LIMIT 1")
@@ -179,16 +184,23 @@ def main(argv: Any = None) -> int:
         action="store_true",
         help="Refresh an existing tail fingerprint after a compatible config change",
     )
+    parser.add_argument(
+        "--write-locked-slot",
+        action="store_true",
+        help="Override read-only policy only for this maintenance session",
+    )
     args = parser.parse_args(argv)
     if args.refresh_fingerprint:
-        chunk_id, old, new = refresh_tail_fingerprint(args.slot, dbname=args.dbname)
+        chunk_id, old, new = refresh_tail_fingerprint(
+            args.slot, dbname=args.dbname, write_locked_slot=args.write_locked_slot
+        )
         print(
             f"Refreshed {args.dbname or f'slot {args.slot}'} tail chunk {chunk_id} "
             f"Pass-2 fingerprint: {old} -> {new}"
         )
         return 0
     chunk_id, tail_stamped, incubator_stamped = stamp_slot_tail(
-        args.slot, dbname=args.dbname
+        args.slot, dbname=args.dbname, write_locked_slot=args.write_locked_slot
     )
     actions = []
     if tail_stamped:
