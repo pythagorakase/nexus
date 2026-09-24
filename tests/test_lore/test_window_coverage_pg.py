@@ -111,3 +111,90 @@ def test_window_coverage_is_written_only_from_post_render_kept_chunks():
             ]
         finally:
             memnon.close()
+
+
+@pytest.mark.parametrize("limit, repeats", [(5, 1), (15, 1), (15, 2500)])
+def test_historical_coverage_matches_rendered_prefix(limit: int, repeats: int) -> None:
+    """The real trim callback logs all and only printed historical passages."""
+    from types import SimpleNamespace
+
+    from nexus.agents.lore.utils.turn_context import TurnContext
+    from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+
+    with disposable_slot_database("qa640_historical_coverage") as dbname:
+        seed_protagonist(
+            dbname, name="Historical Proof Player", summary="Coverage proof."
+        )
+        memnon = MEMNON(interface=None, db_url=database_url(dbname))
+        try:
+            settings = load_settings_as_dict()
+            settings["lore"]["render_limits"]["historical_passages"] = limit
+            manager = ContextMemoryManager(settings, memnon=memnon)
+            passages = [
+                {"chunk_id": i, "text": " Passage." * repeats} for i in range(1, 17)
+            ]
+            with memnon.db_manager.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO narrative_chunks (id, raw_text, storyteller_text) "
+                        "VALUES (:chunk_id, :text, :text)"
+                    ),
+                    passages,
+                )
+            manager._stage_retrieval_coverage(
+                incremental_retriever=manager.incremental,
+                entity_match=EntityMatch(characters=[], places=[], factions=[]),
+                user_input="Recall.",
+                raw_result_count=len(passages),
+                kept_chunks=passages,
+                kept_tokens=1,
+                available_budget=71000,
+                turn_id="historical-coverage",
+            )
+            utility = window_logon(settings)
+            context = TurnContext(
+                turn_id="historical-coverage", user_input="Recall.", start_time=0
+            )
+            context.context_payload = {
+                "user_input": "Recall.",
+                "warm_slice": {"chunks": []},
+                "retrieved_passages": {"results": passages},
+                "entity_data": {},
+            }
+            context.token_counts = {"total_available": 71000, "apex_window": 75000}
+            cycle = TurnCycleManager(
+                SimpleNamespace(
+                    settings=settings, logon=utility, memory_manager=manager
+                )
+            )
+            cycle._enforce_context_payload_budget(context)
+            writer = utility._assembly_window_requests[0]
+            printed = {
+                source
+                for index, source in writer.sources.items()
+                if index not in writer.removed
+            }
+            expected = [p["chunk_id"] for p in passages if id(p) in printed]
+            if repeats == 1:
+                assert expected == list(range(1, limit + 1))
+            else:
+                assert 5 < len(expected) < limit
+                assert expected == list(range(1, len(expected) + 1))
+            utility.record_rendered_coverage()
+            utility.record_rendered_coverage()
+            with memnon.db_manager.engine.connect() as conn:
+                rows = conn.execute(
+                    text(
+                        "SELECT kept_chunk_ids, kept_tokens FROM retrieval_coverage_log "
+                        "WHERE turn_id = 'historical-coverage'"
+                    )
+                ).all()
+            assert len(rows) == 1
+            assert rows[0].kept_chunk_ids == expected
+            assert rows[0].kept_tokens == sum(
+                writer.sizes[index]
+                for index in writer.sources
+                if index not in writer.removed
+            )
+        finally:
+            memnon.close()

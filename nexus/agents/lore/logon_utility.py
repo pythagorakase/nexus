@@ -2692,8 +2692,8 @@ class LogonUtility:
         if context.get("retrieved_passages"):
             sections.append("\n=== HISTORICAL CONTEXT ===")
             for passage in context["retrieved_passages"]["results"][
-                :5
-            ]:  # Limit to top 5
+                : render_limits.historical_passages
+            ]:
                 sections.append_chunk(
                     f"[{_retrieval_source_label(passage)} | "
                     f"Score: {passage.get('score', 0):.2f}] "
