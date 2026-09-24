@@ -1,0 +1,95 @@
+2026-09-24 17:41:28,149 - nexus.migrate - INFO - Migrating qa640_scene_parent_0c6ef34121c9...
+2026-09-24 17:41:28,178 - nexus.migrate - INFO -   No pending migrations
+2026-09-24 17:41:28,189 - nexus.memnon - DEBUG - Debug logging enabled
+2026-09-24 17:41:28,189 - nexus.memnon - INFO - Using the configured database target
+2026-09-24 17:41:28,262 - nexus.memnon.db_access - INFO - pgvector extension found (version 0.8.2)
+2026-09-24 17:41:28,262 - nexus.memnon.db_schema - INFO - Vector extension available
+2026-09-24 17:41:28,303 - nexus.memnon.db_access - INFO - Creating GIN index for text search...
+2026-09-24 17:41:28,305 - nexus.memnon.db_access - INFO - Creating model index on chunk_embeddings_2560d...
+2026-09-24 17:41:28,305 - nexus.memnon.db_access - INFO - Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+2026-09-24 17:41:28,305 - nexus.memnon.db_access - INFO - Database indexes setup completed
+2026-09-24 17:41:28,305 - nexus.memnon.db_schema - INFO - Database indexes setup complete
+2026-09-24 17:41:28,305 - nexus.memnon.db_schema - INFO - Setting up hybrid search capabilities
+2026-09-24 17:41:28,305 - nexus.memnon.db_schema - INFO - Setting up hybrid search capabilities using db_access utility
+2026-09-24 17:41:28,345 - nexus.memnon.db_access - INFO - Creating GIN index for text search...
+2026-09-24 17:41:28,347 - nexus.memnon.db_access - INFO - Creating model index on chunk_embeddings_2560d...
+2026-09-24 17:41:28,347 - nexus.memnon.db_access - INFO - Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+2026-09-24 17:41:28,347 - nexus.memnon.db_access - INFO - Database indexes setup completed
+2026-09-24 17:41:28,347 - nexus.memnon.db_schema - INFO - Hybrid search database setup completed successfully
+2026-09-24 17:41:28,347 - nexus.memnon.db_schema - INFO - Successfully connected to the configured database
+2026-09-24 17:41:28,347 - nexus.memnon.db_schema - INFO - DatabaseManager initialized
+2026-09-24 17:41:28,347 - nexus.memnon - INFO - Initializing embedding models through EmbeddingManager
+2026-09-24 17:41:30,601 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: bge-large
+2026-09-24 17:41:30,601 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: e5-large
+2026-09-24 17:41:30,601 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: bge-small-custom
+2026-09-24 17:41:30,601 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: inf-retriever-v1-1.5b
+2026-09-24 17:41:30,601 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-0.6B
+2026-09-24 17:41:30,601 - nexus.memnon.embedding_manager - INFO - Initializing active model Octen-Embedding-4B...
+2026-09-24 17:41:30,610 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: mps
+2026-09-24 17:41:30,610 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: /Users/pythagor/nexus/models/Octen-Embedding-4B
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:00<00:00,  1.15it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.32it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.29it/s]
+2026-09-24 17:41:33,735 - sentence_transformers.SentenceTransformer - INFO - 2 prompts are loaded, with the keys: ['query', 'document']
+2026-09-24 17:41:33,736 - nexus.memnon.embedding_manager - INFO - Loaded Octen-Embedding-4B from local path: /Users/pythagor/nexus/models/Octen-Embedding-4B
+2026-09-24 17:41:33,736 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-4B-INT8
+2026-09-24 17:41:33,736 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-8B
+2026-09-24 17:41:33,736 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-8B-INT8
+2026-09-24 17:41:33,736 - nexus.memnon.embedding_manager - INFO - EmbeddingManager initialized with 1 active models: Octen-Embedding-4B
+2026-09-24 17:41:33,736 - nexus.memnon - INFO - Initializing IDF dictionary for term weighting...
+2026-09-24 17:41:33,768 - nexus.memnon - INFO - IDF dictionary initialized with 2364 terms
+2026-09-24 17:41:33,768 - nexus.memnon - INFO - Initializing SearchManager...
+2026-09-24 17:41:33,792 - nexus.memnon.query_analysis - INFO - QueryAnalyzer initialized
+2026-09-24 17:41:33,792 - nexus.memnon.search - INFO - SearchManager initialized
+2026-09-24 17:41:33,792 - nexus.memnon - INFO - Initializing ContentProcessor...
+2026-09-24 17:41:33,793 - nexus.memnon.content_processor - INFO - ContentProcessor initialized
+2026-09-24 17:41:33,793 - nexus.memnon - DEBUG - Retrieval settings: {
+  "default_top_k": 50,
+  "max_query_results": 50,
+  "relevance_threshold": 0.7,
+  "entity_boost_factor": 1.2,
+  "recency_boost_factor": 1.1,
+  "db_vector_balance": 0.6,
+  "model_weights": {
+    "bge-large": 0.0,
+    "e5-large": 0.0,
+    "bge-small-custom": 0.0,
+    "inf-retriever-v1-1.5b": 0.0,
+    "Octen-Embedding-0.6B": 0.0,
+    "Octen-Embedding-4B": 1.0,
+    "Octen-Embedding-4B-INT8": 0.0,
+    "Octen-Embedding-8B": 0.0,
+    "Octen-Embedding-8B-INT8": 0.0
+  },
+  "highlight_matches": true
+}
+2026-09-24 17:41:33,793 - nexus.memnon - INFO - MEMNON agent initialized (Headless Mode - No LLM)
+2026-09-24 17:41:33,802 - asyncio - DEBUG - Using selector: KqueueSelector
+2026-09-24 17:41:33,803 - nexus.lore.turn_cycle - DEBUG - Preparing warm context...
+2026-09-24 17:41:33,806 - nexus.lore.turn_cycle - INFO - Anchored warm slice to requested chunk 39
+2026-09-24 17:41:33,808 - nexus.lore.turn_cycle - INFO - Retrieved 10 warm-slice chunks (including anchors)
+2026-09-24 17:41:33,832 - nexus.lore.logon - INFO - Model TEST: routing to base_url http://127.0.0.1:5102/v1
+2026-09-24 17:41:33,832 - nexus.metadata - INFO - Using custom base URL: http://127.0.0.1:5102/v1
+2026-09-24 17:41:33,850 - nexus.metadata - INFO - Using standard model: TEST with temperature: 0.7
+2026-09-24 17:41:33,850 - nexus.lore.logon - INFO - LOGON initialized with test provider using model TEST
+2026-09-24 17:41:33,850 - nexus.lore.logon - INFO - System prompt loaded: 15064 chars
+2026-09-24 17:41:34,030 - asyncio - DEBUG - Using selector: KqueueSelector
+2026-09-24 17:41:34,030 - nexus.lore.turn_cycle - DEBUG - Preparing warm context...
+2026-09-24 17:41:34,031 - nexus.lore.turn_cycle - INFO - Anchored warm slice to requested chunk 49
+2026-09-24 17:41:34,032 - nexus.lore.turn_cycle - INFO - Retrieved 10 warm-slice chunks (including anchors)
+WARM_WINDOW parent=39 count=10 ids=[30, 31, 32, 33, 34, 35, 36, 37, 38, 39]; both seats match
+WARM_WINDOW parent=49 count=10 ids=[40, 41, 42, 43, 44, 45, 46, 47, 48, 49]; both seats match
+.
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 5 warnings in 7.65s

@@ -3,8 +3,119 @@
 Baseline captured on `7b70ee63`; implementation commit `e4a0d454`.
 
 Work order 742-B implements chronological scene rendering and the coordinator's
-recalled-lane amendments. No prompt prose, configuration defaults, fingerprint
-projection, schema, roster wording, or render caps changed.
+recalled-lane amendments. No prompt prose, fingerprint projection, schema, roster wording, or render caps
+changed. The fourth amendment exposes the existing 10-chunk default as a typed
+`lore.chunk_parameters.warm_slice_initial` setting.
+
+## Parent-Bounded Warm Window (Fourth Amendment)
+
+Commit `10f3aca1` applies the parent boundary in MEMNON's SQL before `LIMIT`.
+The existing anchor is retained once, and render order stays ascending. The
+unbounded MEMNON call still returns the frontier. Neither historical nor recalled
+selection is changed.
+
+The old warm-count lookup pointed to an absent legacy key and always fell back
+to 10. `lore.chunk_parameters.warm_slice_initial = 10` now makes that same default
+explicit in `nexus.toml`, validated by `LOREChunkParameters` with a positive count.
+No key under `[memory]` or `lore.token_budget` changed. The initial regression
+failed on that absent key (`parent-focused-initial.txt`); the corrected real-path
+regression passes. The legacy unit fixture now supplies the actual typed settings.
+
+The PostgreSQL regression clones save_04, runs real MEMNON warm analysis, and
+measures both TEST seat renders. Its exact evidence (`parent-focused.txt`):
+
+```text
+WARM_WINDOW parent=39 count=10 ids=[30, 31, 32, 33, 34, 35, 36, 37, 38, 39]; both seats match
+WARM_WINDOW parent=49 count=10 ids=[40, 41, 42, 43, 44, 45, 46, 47, 48, 49]; both seats match
+```
+
+`git fetch origin && git merge origin/main` again reported `Already up to date.`
+The refreshed frontier probe used `qa640_742_scene_10c947c5e820`; current
+`review.json` and `review-payload.json` contain that run. The rendered writer and
+Gaia artifacts are byte-identical to the prior review proof: totals remain 37284
+and 34676, respectively, with all per-block counts, lane identities, recalled
+clock faces, and coverage identities unchanged. The stored baseline restores
+with fingerprint `a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7`.
+`parent-probe.txt` archives the refreshed proof transcript.
+
+`parent-cleanup.json` confirms zero remaining proof or parent-test clones and
+read-only save_05 counts `(0, 0)`. No gateway, paid provider, migration to the
+fleet/template, or save reset was used. Both commit hooks passed.
+
+### Fourth-Amendment Commands and Verbatim Tails
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q > docs/qa/742-scene-order/parent-offline.txt 2>&1
+```
+
+```text
+2714 passed, 895 skipped, 9 warnings in 143.64s (0:02:23)
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore -k 'render or format or window or coverage or warm or recent' > docs/qa/742-scene-order/parent-postgres.txt 2>&1
+```
+
+```text
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_retrieval_coverage_live.py::test_handle_user_input_writes_exact_coverage_and_empty_detection
+1 failed, 109 passed, 212 deselected, 9 warnings in 31.14s
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_lore/test_scene_order_render.py::test_recent_warm_window_ends_at_historical_parent > docs/qa/742-scene-order/parent-focused.txt 2>&1
+```
+
+```text
+1 passed, 5 warnings in 7.65s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_turn_cycle.py::test_warm_analysis_ignores_parent_authorial_directives > docs/qa/742-scene-order/parent-fixture.txt 2>&1
+```
+
+```text
+1 passed, 5 warnings in 0.81s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check . > docs/qa/742-scene-order/parent-black.txt 2>&1
+```
+
+```text
+All done! ✨ 🍰 ✨
+667 files would be left unchanged.
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python docs/qa/742-scene-order/probe.py --phase review > docs/qa/742-scene-order/parent-probe.log 2>&1
+```
+
+```text
+REVIEW_PROOF_PASSED: unique identities; parent only in recent; seat parity; fingerprint unchanged; coverage identities unchanged
+```
+
+The PostgreSQL failure is only the coordinator-exempt #885 slot-5 test: `need-clock anchor unavailable: no canonical world time or base_timestamp`. All 110 selected tests ran. No other failure is exempt. The initial focused run used the same command and failed on the absent `chunk_parameters` key before the setting was exposed.
+
+Formatting commands also run:
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black nexus/agents/memnon/memnon.py nexus/agents/lore/utils/turn_cycle.py tests/test_lore/test_scene_order_render.py tests/test_lore/test_turn_cycle.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+1 file reformatted, 3 files left unchanged.
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black nexus/config/settings_models.py nexus/agents/lore/utils/turn_cycle.py tests/test_lore/test_scene_order_render.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+1 file reformatted, 2 files left unchanged.
+```
 
 ## PR #932 Review Fixes
 
@@ -422,12 +533,7 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python docs/qa/742-scene-order/p
 
 ## Coordinator Questions
 
-The separate bot comment [discussion_r4098645540](https://github.com/pythagorakase/nexus/pull/932#discussion_r4098645540)
-asks for a warm-window query bounded by an older explicit parent, rather than
-filtering the globally newest window. Does the coordinator want that selection
-change in a separate order? It is outside this amendment's two specified fixes;
-this run proves the save_04 frontier, not historical-parent continuation.
-
+The fourth amendment authorizes and resolves [discussion_r4098645540](https://github.com/pythagorakase/nexus/pull/932#discussion_r4098645540). No open implementation question remains.
 The existing #885 slot-5 fixture failure remains exempt. The branch is for
 coordinator review; this run does not merge or wait for review bots.
 

@@ -1,0 +1,175 @@
+2026-09-24 17:40:53,357 - nexus.migrate - INFO - Migrating qa640_scene_parent_4a6523a2405d...
+2026-09-24 17:40:53,381 - nexus.migrate - INFO -   No pending migrations
+2026-09-24 17:40:53,391 - nexus.memnon - DEBUG - Debug logging enabled
+2026-09-24 17:40:53,391 - nexus.memnon - INFO - Using the configured database target
+2026-09-24 17:40:53,461 - nexus.memnon.db_access - INFO - pgvector extension found (version 0.8.2)
+2026-09-24 17:40:53,461 - nexus.memnon.db_schema - INFO - Vector extension available
+2026-09-24 17:40:53,500 - nexus.memnon.db_access - INFO - Creating GIN index for text search...
+2026-09-24 17:40:53,502 - nexus.memnon.db_access - INFO - Creating model index on chunk_embeddings_2560d...
+2026-09-24 17:40:53,502 - nexus.memnon.db_access - INFO - Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+2026-09-24 17:40:53,502 - nexus.memnon.db_access - INFO - Database indexes setup completed
+2026-09-24 17:40:53,502 - nexus.memnon.db_schema - INFO - Database indexes setup complete
+2026-09-24 17:40:53,502 - nexus.memnon.db_schema - INFO - Setting up hybrid search capabilities
+2026-09-24 17:40:53,502 - nexus.memnon.db_schema - INFO - Setting up hybrid search capabilities using db_access utility
+2026-09-24 17:40:53,541 - nexus.memnon.db_access - INFO - Creating GIN index for text search...
+2026-09-24 17:40:53,543 - nexus.memnon.db_access - INFO - Creating model index on chunk_embeddings_2560d...
+2026-09-24 17:40:53,544 - nexus.memnon.db_access - INFO - Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+2026-09-24 17:40:53,544 - nexus.memnon.db_access - INFO - Database indexes setup completed
+2026-09-24 17:40:53,544 - nexus.memnon.db_schema - INFO - Hybrid search database setup completed successfully
+2026-09-24 17:40:53,544 - nexus.memnon.db_schema - INFO - Successfully connected to the configured database
+2026-09-24 17:40:53,544 - nexus.memnon.db_schema - INFO - DatabaseManager initialized
+2026-09-24 17:40:53,544 - nexus.memnon - INFO - Initializing embedding models through EmbeddingManager
+2026-09-24 17:40:55,943 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: bge-large
+2026-09-24 17:40:55,943 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: e5-large
+2026-09-24 17:40:55,943 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: bge-small-custom
+2026-09-24 17:40:55,943 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: inf-retriever-v1-1.5b
+2026-09-24 17:40:55,943 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-0.6B
+2026-09-24 17:40:55,943 - nexus.memnon.embedding_manager - INFO - Initializing active model Octen-Embedding-4B...
+2026-09-24 17:40:55,953 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: mps
+2026-09-24 17:40:55,954 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: /Users/pythagor/nexus/models/Octen-Embedding-4B
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:00<00:00,  1.16it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.40it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.36it/s]
+2026-09-24 17:40:58,727 - sentence_transformers.SentenceTransformer - INFO - 2 prompts are loaded, with the keys: ['query', 'document']
+2026-09-24 17:40:58,727 - nexus.memnon.embedding_manager - INFO - Loaded Octen-Embedding-4B from local path: /Users/pythagor/nexus/models/Octen-Embedding-4B
+2026-09-24 17:40:58,727 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-4B-INT8
+2026-09-24 17:40:58,727 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-8B
+2026-09-24 17:40:58,727 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-8B-INT8
+2026-09-24 17:40:58,728 - nexus.memnon.embedding_manager - INFO - EmbeddingManager initialized with 1 active models: Octen-Embedding-4B
+2026-09-24 17:40:58,728 - nexus.memnon - INFO - Initializing IDF dictionary for term weighting...
+2026-09-24 17:40:58,752 - nexus.memnon - INFO - IDF dictionary initialized with 2364 terms
+2026-09-24 17:40:58,753 - nexus.memnon - INFO - Initializing SearchManager...
+2026-09-24 17:40:58,775 - nexus.memnon.query_analysis - INFO - QueryAnalyzer initialized
+2026-09-24 17:40:58,776 - nexus.memnon.search - INFO - SearchManager initialized
+2026-09-24 17:40:58,776 - nexus.memnon - INFO - Initializing ContentProcessor...
+2026-09-24 17:40:58,776 - nexus.memnon.content_processor - INFO - ContentProcessor initialized
+2026-09-24 17:40:58,776 - nexus.memnon - DEBUG - Retrieval settings: {
+  "default_top_k": 50,
+  "max_query_results": 50,
+  "relevance_threshold": 0.7,
+  "entity_boost_factor": 1.2,
+  "recency_boost_factor": 1.1,
+  "db_vector_balance": 0.6,
+  "model_weights": {
+    "bge-large": 0.0,
+    "e5-large": 0.0,
+    "bge-small-custom": 0.0,
+    "inf-retriever-v1-1.5b": 0.0,
+    "Octen-Embedding-0.6B": 0.0,
+    "Octen-Embedding-4B": 1.0,
+    "Octen-Embedding-4B-INT8": 0.0,
+    "Octen-Embedding-8B": 0.0,
+    "Octen-Embedding-8B-INT8": 0.0
+  },
+  "highlight_matches": true
+}
+2026-09-24 17:40:58,776 - nexus.memnon - INFO - MEMNON agent initialized (Headless Mode - No LLM)
+F
+=================================== FAILURES ===================================
+______________ test_recent_warm_window_ends_at_historical_parent _______________
+
+    @pytest.mark.requires_postgres
+    def test_recent_warm_window_ends_at_historical_parent() -> None:
+        """Read a parent ten scenes behind save_04's frontier on a disposable clone.
+    
+        Uses narrative_chunks and chunk_metadata through the real MEMNON query,
+        warm analysis, and both TEST seat renderers; the source save is read only.
+        """
+        from sqlalchemy import text
+    
+        from nexus.agents.memnon.memnon import MEMNON
+        from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+        from nexus.database import database_url
+        from tests.pg_fixtures import disposable_slot_database
+    
+        with disposable_slot_database(
+            "qa640_scene_parent", source_db="save_04", include_data=True
+        ) as dbname:
+            memnon = MEMNON(interface=None, db_url=database_url(dbname))
+            try:
+                utility = window_logon()
+>               count = utility.settings["Agent Settings"]["LORE"]["chunk_parameters"][
+                    "warm_slice_initial"
+                ]
+E               KeyError: 'chunk_parameters'
+
+tests/test_lore/test_scene_order_render.py:389: KeyError
+------------------------------ Captured log call -------------------------------
+INFO     nexus.migrate:migrate.py:296 Migrating qa640_scene_parent_4a6523a2405d...
+INFO     nexus.migrate:migrate.py:342   No pending migrations
+DEBUG    nexus.memnon:memnon.py:236 Debug logging enabled
+INFO     nexus.memnon:memnon.py:241 Using the configured database target
+INFO     nexus.memnon.db_access:db_access.py:231 pgvector extension found (version 0.8.2)
+INFO     nexus.memnon.db_schema:db_schema.py:134 Vector extension available
+INFO     nexus.memnon.db_access:db_access.py:517 Creating GIN index for text search...
+INFO     nexus.memnon.db_access:db_access.py:528 Creating model index on chunk_embeddings_2560d...
+INFO     nexus.memnon.db_access:db_access.py:548 Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+INFO     nexus.memnon.db_access:db_access.py:612 Database indexes setup completed
+INFO     nexus.memnon.db_schema:db_schema.py:138 Database indexes setup complete
+INFO     nexus.memnon.db_schema:db_schema.py:151 Setting up hybrid search capabilities
+INFO     nexus.memnon.db_schema:db_schema.py:178 Setting up hybrid search capabilities using db_access utility
+INFO     nexus.memnon.db_access:db_access.py:517 Creating GIN index for text search...
+INFO     nexus.memnon.db_access:db_access.py:528 Creating model index on chunk_embeddings_2560d...
+INFO     nexus.memnon.db_access:db_access.py:548 Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+INFO     nexus.memnon.db_access:db_access.py:612 Database indexes setup completed
+INFO     nexus.memnon.db_schema:db_schema.py:180 Hybrid search database setup completed successfully
+INFO     nexus.memnon.db_schema:db_schema.py:159 Successfully connected to the configured database
+INFO     nexus.memnon.db_schema:db_schema.py:110 DatabaseManager initialized
+INFO     nexus.memnon:memnon.py:246 Initializing embedding models through EmbeddingManager
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: bge-large
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: e5-large
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: bge-small-custom
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: inf-retriever-v1-1.5b
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: Octen-Embedding-0.6B
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:102 Initializing active model Octen-Embedding-4B...
+INFO     sentence_transformers.SentenceTransformer:SentenceTransformer.py:210 Use pytorch device_name: mps
+INFO     sentence_transformers.SentenceTransformer:SentenceTransformer.py:218 Load pretrained SentenceTransformer: /Users/pythagor/nexus/models/Octen-Embedding-4B
+INFO     sentence_transformers.SentenceTransformer:SentenceTransformer.py:357 2 prompts are loaded, with the keys: ['query', 'document']
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:116 Loaded Octen-Embedding-4B from local path: /Users/pythagor/nexus/models/Octen-Embedding-4B
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: Octen-Embedding-4B-INT8
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: Octen-Embedding-8B
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:99 Skipping initialization for inactive model: Octen-Embedding-8B-INT8
+INFO     nexus.memnon.embedding_manager:embedding_manager.py:167 EmbeddingManager initialized with 1 active models: Octen-Embedding-4B
+INFO     nexus.memnon:memnon.py:252 Initializing IDF dictionary for term weighting...
+INFO     nexus.memnon:memnon.py:255 IDF dictionary initialized with 2364 terms
+INFO     nexus.memnon:memnon.py:289 Initializing SearchManager...
+INFO     nexus.memnon.query_analysis:query_analysis.py:99 QueryAnalyzer initialized
+INFO     nexus.memnon.search:search.py:71 SearchManager initialized
+INFO     nexus.memnon:memnon.py:304 Initializing ContentProcessor...
+INFO     nexus.memnon.content_processor:content_processor.py:49 ContentProcessor initialized
+DEBUG    nexus.memnon:memnon.py:315 Retrieval settings: {
+  "default_top_k": 50,
+  "max_query_results": 50,
+  "relevance_threshold": 0.7,
+  "entity_boost_factor": 1.2,
+  "recency_boost_factor": 1.1,
+  "db_vector_balance": 0.6,
+  "model_weights": {
+    "bge-large": 0.0,
+    "e5-large": 0.0,
+    "bge-small-custom": 0.0,
+    "inf-retriever-v1-1.5b": 0.0,
+    "Octen-Embedding-0.6B": 0.0,
+    "Octen-Embedding-4B": 1.0,
+    "Octen-Embedding-4B-INT8": 0.0,
+    "Octen-Embedding-8B": 0.0,
+    "Octen-Embedding-8B-INT8": 0.0
+  },
+  "highlight_matches": true
+}
+INFO     nexus.memnon:memnon.py:372 MEMNON agent initialized (Headless Mode - No LLM)
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_scene_order_render.py::test_recent_warm_window_ends_at_historical_parent
+1 failed, 5 warnings in 7.22s
