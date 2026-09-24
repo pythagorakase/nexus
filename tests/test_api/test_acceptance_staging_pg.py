@@ -458,6 +458,18 @@ async def test_staging_resolves_same_turn_declarations_only_on_acceptance(
     """Dry-run identity checks admit declared names without creating stubs early."""
     dbname, parent, resolution = acceptance_slot
     with closing(connect(dbname)) as conn:
+        # A declaration acceptance now checks identity against the frontier place.
+        # This fixture's parent must carry the canonical setting required by #900.
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO places (name, type) VALUES ('Station', 'fixed_location') RETURNING id"
+            )
+            cur.execute(
+                "INSERT INTO place_chunk_references (place_id, chunk_id, reference_type) "
+                "VALUES (%s, %s, 'setting')",
+                (cur.fetchone()[0], parent),
+            )
+        conn.commit()
         session = own_draft(conn, parent)
         data = draft(parent, resolution, session)
         data["storyteller_text"] = "Courier Vale enters the station."
