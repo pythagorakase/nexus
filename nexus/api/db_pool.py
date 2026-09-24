@@ -13,25 +13,34 @@ from __future__ import annotations
 
 import functools
 import logging
-import os
+import threading
+import time
 from contextlib import contextmanager
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Iterator, Optional
 
 import psycopg2
 from psycopg2 import pool
+from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from psycopg2.extras import RealDictCursor
 
 from nexus.api.slot_utils import require_slot_dbname
-from nexus.database import connection_kwargs, database_url
+from nexus.config import load_settings
+from nexus.database import (
+    AmbiguousCommit,
+    commit_transaction,
+    connection_kwargs,
+    database_url,
+    dispose_database_engines,
+)
 
 logger = logging.getLogger("nexus.api.db_pool")
 
 # Global pool instances per database
 _pools: Dict[str, pool.ThreadedConnectionPool] = {}
 
-# Pool configuration
-MIN_CONNECTIONS = 1
-MAX_CONNECTIONS = 10
+# Registry and last-return times are shared by checkout threads.
+_pool_lock = threading.RLock()
+_idle_since: dict[Any, float] = {}
 
 
 @functools.lru_cache(maxsize=None)
@@ -82,28 +91,45 @@ def _get_pool(
     db_key = require_slot_dbname(dbname=dbname)
 
     params = _get_connection_params(dbname, **overrides)
-    existing = _pools.get(db_key)
-    if existing is not None and existing._kwargs != params:
-        raise RuntimeError(
-            "PostgreSQL pool target changed; close the pool before reconfiguration"
-        )
-    if db_key not in _pools:
-        try:
-            _pools[db_key] = pool.ThreadedConnectionPool(
-                MIN_CONNECTIONS, MAX_CONNECTIONS, **params
+    config = load_settings().api.database
+    with _pool_lock:
+        existing = _pools.get(db_key)
+        if existing is not None and existing._kwargs != params:
+            raise RuntimeError(
+                "PostgreSQL pool target changed; close the pool before reconfiguration"
             )
+        if existing is None:
+            existing = pool.ThreadedConnectionPool(
+                config.pool_min_connections, config.pool_max_connections, **params
+            )
+            _pools[db_key] = existing
             logger.info("Created connection pool for database: %s", db_key)
-        except psycopg2.Error as e:
-            logger.error("Failed to create connection pool for %s: %s", db_key, e)
-            raise
+        return existing
 
-    return _pools[db_key]
+
+def _preflight(conn: Any, idle_seconds: float) -> None:
+    """Reject unusable sessions before handing them to transaction code."""
+    if conn.closed:
+        raise psycopg2.InterfaceError("connection is closed")
+    if conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+        raise psycopg2.InterfaceError("connection transaction is not idle")
+    last_return = _idle_since.pop(conn, None)
+    if last_return is None or time.monotonic() - last_return >= idle_seconds:
+        # Autocommit prevents the ping from opening a caller-visible transaction.
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        finally:
+            if not conn.closed:
+                conn.autocommit = False
 
 
 @contextmanager
 def get_connection(
     dbname: Optional[str] = None, dict_cursor: bool = False, **overrides: Any
-):
+) -> Iterator[Any]:
     """
     Get a database connection from the pool.
 
@@ -125,78 +151,92 @@ def get_connection(
                 cur.execute("SELECT * FROM global_variables WHERE id = TRUE")
                 results = cur.fetchall()
     """
-    conn_pool = _get_pool(dbname, **overrides)
-    conn = None
-
+    db_key = require_slot_dbname(dbname=dbname)
+    conn_pool = _get_pool(db_key, **overrides)
+    idle_seconds = load_settings().api.database.preflight_idle_seconds
+    conn = conn_pool.getconn()
     try:
+        _preflight(conn, idle_seconds)
+    except psycopg2.Error as exc:
+        _idle_since.pop(conn, None)
+        conn_pool.putconn(conn, close=True)
+        logger.info("Replacing connection for database %s: %s", db_key, exc)
         conn = conn_pool.getconn()
-        if dict_cursor:
-            # Replace the connection's cursor factory
-            orig_cursor_factory = conn.cursor_factory
-            conn.cursor_factory = RealDictCursor
-
-        yield conn
-
-        # Commit if no exception occurred
-        conn.commit()
-
-    except (psycopg2.Error, psycopg2.Warning) as e:
-        # Rollback on database errors
-        if conn:
-            conn.rollback()
-        logger.error("Database operation failed: %s", e)
-        raise
-    except Exception as e:
-        # Rollback on any other exception
-        if conn:
-            conn.rollback()
-        logger.error("Unexpected error during database operation: %s", e)
-        raise
-
-    finally:
-        # Return connection to pool
-        if conn:
-            if dict_cursor and "orig_cursor_factory" in locals():
-                conn.cursor_factory = orig_cursor_factory
-            conn_pool.putconn(conn)
-
-
-def close_all_pools():
-    """Close all connection pools and reset cached connection config.
-
-    Call this on application shutdown or after a nexus.toml edit: pools
-    rebuilt afterwards re-read the configured connect timeout, because the
-    ``get_connect_timeout_seconds`` cache is cleared here — the two resets
-    are semantically coupled whenever a config reload is the motivation.
-    """
-    for db_key, conn_pool in _pools.items():
         try:
-            conn_pool.closeall()
-            logger.info("Closed connection pool for database: %s", db_key)
-        except Exception as e:
-            logger.error("Error closing pool for %s: %s", db_key, e)
+            _preflight(conn, idle_seconds)
+        except BaseException:
+            _idle_since.pop(conn, None)
+            conn_pool.putconn(conn, close=True)
+            raise
 
-    _pools.clear()
-    get_connect_timeout_seconds.cache_clear()
+    discard = False
+    orig_cursor_factory = conn.cursor_factory
+    if dict_cursor:
+        conn.cursor_factory = RealDictCursor
+    try:
+        try:
+            yield conn
+        except BaseException as exc:
+            discard = isinstance(
+                exc,
+                (AmbiguousCommit, psycopg2.OperationalError, psycopg2.InterfaceError),
+            )
+            try:
+                conn.rollback()
+            except Exception:
+                discard = True
+                logger.exception("Rollback failed for database %s", db_key)
+            raise
+        else:
+            try:
+                commit_transaction(conn)
+            except AmbiguousCommit:
+                discard = True
+                raise
+            except BaseException:
+                try:
+                    conn.rollback()
+                except Exception:
+                    discard = True
+                    logger.exception("Rollback failed for database %s", db_key)
+                raise
+    finally:
+        conn.cursor_factory = orig_cursor_factory
+        with _pool_lock:
+            if conn_pool.closed:
+                conn.close()
+            else:
+                conn_pool.putconn(conn, close=discard)
+                if not discard and not conn.closed:
+                    _idle_since[conn] = time.monotonic()
+
+
+def close_all_pools() -> None:
+    """Close all pools and engines and clear cached connection configuration."""
+    with _pool_lock:
+        for dbname in list(_pools):
+            dispose_database(dbname)
+        dispose_database_engines()
+        _idle_since.clear()
+        get_connect_timeout_seconds.cache_clear()
+
+
+def dispose_database(dbname: str) -> None:
+    """Invalidate this database's pool and registered engines before replacement."""
+    with _pool_lock:
+        conn_pool = _pools.pop(dbname, None)
+        if conn_pool is not None:
+            conn_pool.closeall()
+            logger.info("Closed connection pool for database: %s", dbname)
+        for conn in list(_idle_since):
+            if conn.closed or conn.info.dbname == dbname:
+                _idle_since.pop(conn, None)
+        dispose_database_engines(dbname)
 
 
 def close_pool(dbname: Optional[str] = None) -> None:
-    """
-    Close and remove the connection pool for a specific database.
-
-    Args:
-        dbname: Database name (save_01 through save_05).
-                If not provided, uses NEXUS_SLOT env var.
-    """
-    db_key = require_slot_dbname(dbname=dbname)
-    conn_pool = _pools.pop(db_key, None)
-    if not conn_pool:
-        return
-    try:
-        conn_pool.closeall()
-        logger.info("Closed connection pool for database: %s", db_key)
-    except Exception as e:
-        logger.error("Error closing pool for %s: %s", db_key, e)
+    """Invalidate a validated slot's pooled connections and engines."""
+    dispose_database(require_slot_dbname(dbname=dbname))
 
 
 # Compatibility function for gradual migration

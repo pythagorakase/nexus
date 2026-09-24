@@ -4,14 +4,14 @@ Database Schema for MEMNON Agent
 Defines the database models and schema for MEMNON's PostgreSQL database.
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 from nexus.database import verify_database_url
 
 
 import logging
 from typing import Dict, Any, Optional
 import sqlalchemy as sa
-from sqlalchemy import create_engine, Column, Table, MetaData, text, inspect
+from sqlalchemy import Column, Table, MetaData, text, inspect
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY, JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -118,7 +118,7 @@ class DatabaseManager:
         """
         try:
             self.db_url = verify_database_url(self.db_url)
-            engine = create_engine(resolved_database_url(self.db_url))
+            engine = create_slot_engine(self.db_url)
 
             # Verify connection
             connection = engine.connect()

@@ -17,7 +17,7 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.config import load_settings_as_dict
 from nexus.config.settings_models import DeferredWorkSettings
-from nexus.database import connection_kwargs
+from nexus.database import connection_kwargs, is_connection_failure, transaction
 from nexus.jobs.gate import SchedulerStopped, provider_gate
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ class SlotScheduler:
         # Match save_slots.is_slot_locked, using this scheduler's database.
         conn = self.connect()
         try:
-            with conn, conn.cursor() as cur:
+            with transaction(conn), conn.cursor() as cur:
                 cur.execute(
                     """
                     SELECT setconfig
@@ -131,7 +131,7 @@ class SlotScheduler:
         nonce = str(uuid4())
         conn = self.connect()
         try:
-            with conn, conn.cursor() as cur:
+            with transaction(conn), conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO deferred_work_scheduler
@@ -162,7 +162,7 @@ class SlotScheduler:
         """Renew only this unexpired acquisition."""
         conn = self.connect()
         try:
-            with conn, conn.cursor() as cur:
+            with transaction(conn), conn.cursor() as cur:
                 cur.execute(
                     """
                     UPDATE deferred_work_scheduler
@@ -181,7 +181,7 @@ class SlotScheduler:
         """Expire our acquisition without erasing its diagnostic heartbeat."""
         conn = self.connect()
         try:
-            with conn, conn.cursor() as cur:
+            with transaction(conn), conn.cursor() as cur:
                 cur.execute(
                     """
                     UPDATE deferred_work_scheduler
@@ -210,7 +210,7 @@ class SlotScheduler:
             job = self._job
             conn = self.connect()
             try:
-                with conn, conn.cursor() as cur:
+                with transaction(conn), conn.cursor() as cur:
                     cur.execute(
                         sql.SQL("SELECT id FROM {} WHERE id=%s FOR UPDATE").format(
                             sql.Identifier(job["queue"])
@@ -246,7 +246,7 @@ class SlotScheduler:
             job = self._job
             conn = self.connect()
             try:
-                with conn, conn.cursor() as cur:
+                with transaction(conn), conn.cursor() as cur:
                     cur.execute(
                         sql.SQL(
                             """
@@ -277,7 +277,7 @@ class SlotScheduler:
                 self.wakeup.clear()
                 conn = self.connect()
                 try:
-                    with conn, conn.cursor() as cur:
+                    with transaction(conn), conn.cursor() as cur:
                         cur.execute(
                             """
                             SELECT EXISTS (
@@ -321,7 +321,7 @@ class SlotScheduler:
                 self._job = None
         conn = self.connect()
         try:
-            with conn, conn.cursor() as cur:
+            with transaction(conn), conn.cursor() as cur:
                 cur.execute(
                     """
                     UPDATE deferred_work_scheduler SET current_job = %s, last_error = %s
@@ -333,7 +333,29 @@ class SlotScheduler:
         finally:
             conn.close()
 
-    def _recover(self, exc: BaseException) -> None:
+    def _recover(
+        self, exc: BaseException, *, heartbeat_before_commit: bool = False
+    ) -> None:
+        safe_heartbeat_failure = heartbeat_before_commit and isinstance(
+            exc, (psycopg2.OperationalError, psycopg2.InterfaceError)
+        )
+        if is_connection_failure(exc) and not safe_heartbeat_failure:
+            # Direct worker transactions may still report raw connection errors.
+            # Their commit phase is unknowable here, so never reacquire/replay.
+            self.last_error = str(exc)
+            self.reason = "database outcome requires reconciliation"
+            self.state = "failed"
+            self._lost.set()
+            self.stopping.set()
+            self._heartbeat_stop.set()
+            self.wakeup.set()
+            logger.critical(
+                "Deferred-work owner stopped for %s: %s",
+                self.dbname,
+                exc,
+                exc_info=True,
+            )
+            return
         if isinstance(exc, psycopg2.errors.ReadOnlySqlTransaction):
             self._observe_lock()
             return
@@ -361,7 +383,10 @@ class SlotScheduler:
                     if self._waiting and not self._renew_job():
                         self.wakeup.set()
         except Exception as exc:
-            self._recover(exc)
+            # Both heartbeat writes use transaction(): commit connection loss
+            # is AmbiguousCommit. A raw driver error here therefore occurred
+            # before commit, so the existing lease-recovery path remains safe.
+            self._recover(exc, heartbeat_before_commit=True)
 
     def _start_heartbeat(self) -> None:
         self._heartbeat_stop.clear()
@@ -394,9 +419,13 @@ class SlotScheduler:
                 if self.reason != "slot locked":
                     raise
                 return {"owner": False, "drained": False}
+            except Exception as exc:
+                if is_connection_failure(exc):
+                    self._recover(exc)
+                raise
             finally:
                 self._end_heartbeat()
-                if self.reason != "slot locked":
+                if self.reason != "slot locked" and not self.stopping.is_set():
                     self.release()
         except psycopg2.errors.ReadOnlySqlTransaction as exc:
             self._recover(exc)
@@ -492,7 +521,7 @@ class SlotScheduler:
             emit_relationship_milestones_sync,
         )
 
-        with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        with transaction(conn), conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
                 SELECT DISTINCT coalesce(v.source_chunk_id,

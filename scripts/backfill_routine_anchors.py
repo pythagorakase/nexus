@@ -32,7 +32,7 @@ Usage:
 
 from __future__ import annotations
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import argparse
 import csv
@@ -40,7 +40,7 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from nexus.api.slot_utils import get_slot_db_url
 
@@ -273,7 +273,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    engine = create_engine(resolved_database_url(get_slot_db_url(slot=args.slot)))
+    engine = create_slot_engine(get_slot_db_url(slot=args.slot))
     with engine.begin() as conn:
         if args.apply:
             reviewed = read_reviewed_csv(args.apply)

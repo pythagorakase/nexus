@@ -5,7 +5,7 @@ This should be run after data is loaded to avoid index maintenance overhead
 during high-volume inserts.
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import os
 import sys
@@ -13,7 +13,7 @@ import argparse
 import json
 import time
 import logging
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 # Set up logging
 logging.basicConfig(
@@ -110,7 +110,7 @@ def create_vector_indexes(model_name: str, db_url: str = None):
     logger.info(f"Table: {table_name}")
 
     # Connect to database
-    engine = create_engine(resolved_database_url(db_url))
+    engine = create_slot_engine(db_url)
 
     # First check if table exists and has data
     with engine.connect() as conn:

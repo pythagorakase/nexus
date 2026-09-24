@@ -6,7 +6,7 @@ contain source-linked descriptors; generating unused off-screen prose is retired
 
 from __future__ import annotations
 
-from nexus.database import connection_kwargs
+from nexus.database import connection_kwargs, is_connection_failure
 
 import argparse
 import json
@@ -364,6 +364,8 @@ def drain_narration_outbox_sync(
                     exc,
                 )
             except Exception as exc:
+                if is_connection_failure(exc):
+                    raise
                 failed += 1
                 try:
                     with conn:

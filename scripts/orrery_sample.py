@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.resolver import (
@@ -29,7 +29,7 @@ from nexus.agents.orrery.substrate import PresentTargetPolicy, Slot, evaluate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings_as_dict
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 from nexus.presence.roster import read_rosters
 
 
@@ -670,7 +670,7 @@ def sample_anchor(
     location_overrides: Optional[list[tuple[str, str]]] = None,
 ) -> Path:
     orrery_settings = load_settings_as_dict()["orrery"]
-    engine = create_engine(resolved_database_url(get_slot_db_url(slot=slot)))
+    engine = create_slot_engine(get_slot_db_url(slot=slot))
     with Session(engine) as session:
         actor_only_templates = [
             t for t in BUILTIN_TEMPLATES if t.required_slots == ACTOR_ONLY_SLOTS

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from psycopg2.extras import RealDictCursor
 
+from nexus.database import is_connection_failure
 from nexus.config.settings_models import DeferredWorkSettings
 from nexus.memory.correspondence import read_accepted_correspondence
 
@@ -89,6 +90,8 @@ def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int
                 completion_fence=fence,
             )
     except Exception as exc:
+        if is_connection_failure(exc):
+            raise
         error = str(exc)
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:

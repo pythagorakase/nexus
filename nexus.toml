@@ -188,6 +188,11 @@ max_tokens = 4096
 # =============================================================================
 
 [api.database]
+pool_min_connections = 1
+pool_max_connections = 10
+# Zero validates every checkout; positive values skip pings while recently idle.
+preflight_idle_seconds = 0
+application_name_prefix = "nexus"
 # Explicit call arguments > these values > PG* environment > libpq/OS defaults.
 # Leave host/user/password_secret empty and port absent to use those defaults.
 host = ""

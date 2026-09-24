@@ -13,7 +13,7 @@ Usage:
     python extract_season_episode.py --dry-run
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 from nexus.database import database_url
 
@@ -28,7 +28,6 @@ from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
 
 from sqlalchemy import (
-    create_engine,
     Column,
     String,
     Integer,
@@ -136,7 +135,7 @@ class SeasonEpisodeExtractor:
         self.dry_run = dry_run
 
         # Initialize database connection
-        self.engine = create_engine(resolved_database_url(self.db_url))
+        self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
         # Initialize the database schema if needed

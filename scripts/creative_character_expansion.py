@@ -94,7 +94,7 @@ Examples:
     python creative_character_expansion.py --input creative_character_expansion_id_042.json
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import os
 import sys
@@ -104,7 +104,7 @@ import argparse
 import logging
 from typing import Dict, List, Any, Optional, Tuple, Union
 import sqlalchemy as sa
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
@@ -296,7 +296,7 @@ def connect_to_database(db_url: Optional[str] = None) -> sa.engine.Engine:
         db_url = get_db_connection_string()
 
     # Create engine
-    engine = create_engine(resolved_database_url(db_url))
+    engine = create_slot_engine(db_url)
 
     # Test connection
     try:

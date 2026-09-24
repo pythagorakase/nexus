@@ -12,6 +12,8 @@ import sys
 import threading
 from typing import Any
 
+from nexus.api.db_pool import dispose_database
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -176,6 +178,7 @@ def main() -> None:
     args = parser.parse_args()
     assert Path(__import__("nexus").__file__).is_relative_to(ROOT)
     if args.stage == "clone":
+        dispose_database(DB)
         from nexus.database import connection_kwargs
         from scripts.new_story_setup import _postgres_tools
         from psycopg2.extensions import make_dsn
@@ -229,6 +232,7 @@ def main() -> None:
                 DB, "SELECT current_database(), count(*), max(id) FROM narrative_chunks"
             )
         )
+        dispose_database(DB)
         return
     os.environ["NEXUS_SLOT"] = "4"
     os.environ["NEXUS_GATEWAY_PORT"] = "8018"

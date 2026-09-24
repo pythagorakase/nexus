@@ -3400,6 +3400,18 @@ class APIDatabaseSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    pool_min_connections: int = Field(default=1, ge=1)
+    pool_max_connections: int = Field(default=10, ge=1)
+    preflight_idle_seconds: float = Field(default=0, ge=0)
+    application_name_prefix: str = Field(default="nexus", min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def validate_pool_size(self) -> "APIDatabaseSettings":
+        """Keep both connection pools within the configured bounds."""
+        if self.pool_max_connections < self.pool_min_connections:
+            raise ValueError("pool_max_connections must be >= pool_min_connections")
+        return self
+
     host: str = Field(default="", description="Empty defers to PGHOST/libpq")
     port: Optional[int] = Field(default=None, ge=1, le=65535)
     user: str = Field(default="", description="Empty defers to PGUSER/OS user")

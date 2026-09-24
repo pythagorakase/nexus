@@ -2,7 +2,7 @@
 Retry and error handling utilities for NEXUS API operations.
 
 Provides exponential backoff, rate limit handling, and graceful degradation
-for external API calls and database operations.
+for external API calls. Database connection failures are never replayed.
 """
 
 from __future__ import annotations
@@ -17,8 +17,7 @@ import random
 
 import openai
 from openai import OpenAIError, RateLimitError, APITimeoutError, APIConnectionError
-import psycopg2
-from psycopg2 import OperationalError, InterfaceError
+from nexus.database import is_connection_failure
 
 logger = logging.getLogger("nexus.api.retry_handler")
 
@@ -152,21 +151,6 @@ def retry_with_backoff(
                         delay = calculate_backoff_delay(attempt, config)
                         logger.warning(
                             f"Rate limit or timeout in {func.__name__} "
-                            f"(attempt {attempt + 1}/{config.max_retries + 1}), "
-                            f"retrying in {delay:.1f}s: {e}"
-                        )
-                        if on_retry:
-                            on_retry(e, attempt)
-                        time.sleep(delay)
-                    else:
-                        logger.error(f"Max retries exceeded for {func.__name__}: {e}")
-
-                except (OperationalError, InterfaceError) as e:
-                    last_exception = e
-                    if attempt < config.max_retries:
-                        delay = calculate_backoff_delay(attempt, config)
-                        logger.warning(
-                            f"Database error in {func.__name__} "
                             f"(attempt {attempt + 1}/{config.max_retries + 1}), "
                             f"retrying in {delay:.1f}s: {e}"
                         )
@@ -399,6 +383,8 @@ class FallbackChain:
                 )
                 return strategy(*args, **kwargs)
             except Exception as e:
+                if is_connection_failure(e):
+                    raise
                 errors.append((strategy.__name__, str(e)))
                 logger.warning(f"Strategy {strategy.__name__} failed: {e}")
 
@@ -422,6 +408,8 @@ class FallbackChain:
                 )
                 return await strategy(*args, **kwargs)
             except Exception as e:
+                if is_connection_failure(e):
+                    raise
                 errors.append((strategy.__name__, str(e)))
                 logger.warning(f"Strategy {strategy.__name__} failed: {e}")
 

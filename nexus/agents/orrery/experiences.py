@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from dataclasses import dataclass
 import hashlib
 import json
@@ -14,6 +13,7 @@ from uuid import uuid4
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.database import is_connection_failure
 from nexus.agents.orrery.epistemics import (
     CLAIM_BIRTH_ROLE_POLICY,
     PARTICIPANT_ROLES,
@@ -2095,6 +2095,8 @@ def drain_experience_render_jobs_sync(
                 )
             logger.exception("Rejected stale experience source %s", job["job_id"])
         except Exception as exc:
+            if is_connection_failure(exc):
+                raise
             failed_count += 1
             try:
                 with conn:

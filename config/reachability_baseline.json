@@ -31,7 +31,6 @@
     "nexus/agents/memnon/utils/temporal_search_example.py",
     "nexus/api/models.py",
     "nexus/api/resilient_openai.py",
-    "nexus/api/retry_handler.py",
     "scripts/api_openrouter.py",
     "scripts/assemble_context.py",
     "scripts/backfill_routine_anchors.py",

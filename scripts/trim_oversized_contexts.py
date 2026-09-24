@@ -7,7 +7,7 @@ Target: Get context packages under 110k tokens to leave headroom for API overhea
 
 from __future__ import annotations
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import argparse
 import json
@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 LOGGER = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ def main():
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
     # Initialize database connection
-    engine = create_engine(resolved_database_url(None))
+    engine = create_slot_engine(None)
 
     LOGGER.info(
         f"Trimming {len(args.chunks)} context packages to {args.target_tokens:,} tokens"

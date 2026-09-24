@@ -22,7 +22,7 @@ Database URL:
 """
 
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 from nexus.database import url_connection_kwargs
 from nexus.prompts.registry import PromptId, load
@@ -40,7 +40,7 @@ from typing import List, Tuple, Optional, Dict, Any, Union
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 # Provider-specific imports
@@ -675,7 +675,7 @@ def parse_arguments() -> argparse.Namespace:
 def get_db_connection() -> Engine:
     """Get database connection using project settings."""
     try:
-        engine = create_engine(resolved_database_url(DB_URL))
+        engine = create_slot_engine(DB_URL)
         # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))

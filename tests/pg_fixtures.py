@@ -92,6 +92,7 @@ def disposable_slot_database(
     admin: Any = None
     original_use_pool = new_story_setup.USE_POOL
     try:
+        db_pool.dispose_database(dbname)
         # NEXUS_RUN_POSTGRES=1 asserts PostgreSQL is required: an unreachable
         # or misconfigured server is a failure, never a skip (a skipped gate is
         # how issue #735's debt hid for two months). The requires_postgres
@@ -142,13 +143,12 @@ def disposable_slot_database(
                 )
         else:
             new_story_setup.initialize_slot_database(dbname, source_db=source_db)
+        db_pool.dispose_database(dbname)
         yield dbname
     finally:
         new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
         try:
-            if pool is not None:
-                pool.closeall()
+            db_pool.dispose_database(dbname)
         finally:
             if admin is not None:
                 try:

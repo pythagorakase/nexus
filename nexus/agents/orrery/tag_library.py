@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 from nexus.database import connection_kwargs
 
@@ -17,7 +17,7 @@ from typing import Iterator, Literal, Optional, Sequence
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.resolver import (
@@ -645,8 +645,8 @@ def _slot_session(dbname: Optional[str]) -> Iterator[Session]:
     """Open a short read session for canonical Orrery state helpers."""
 
     resolved = _resolve_dbname(dbname)
-    engine = create_engine(
-        resolved_database_url(get_slot_db_url(dbname=resolved)),
+    engine = create_slot_engine(
+        get_slot_db_url(dbname=resolved),
         future=True,
     )
     try:

@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
+from nexus.api.db_pool import dispose_database
+
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
@@ -19,7 +21,6 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.api import slot_utils
-from nexus.api.db_pool import close_pool
 from nexus.config import load_settings_as_dict
 from nexus.config.story_model import StorySettings
 from nexus.database import connection_kwargs
@@ -68,6 +69,7 @@ def main() -> None:
     created = False
     original_dbnames = slot_utils.VALID_DBNAMES
     try:
+        dispose_database(dbname)
         with admin.cursor() as cursor:
             cursor.execute(
                 sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
@@ -102,6 +104,7 @@ def main() -> None:
             ],
             check=True,
         )
+        dispose_database(dbname)
         evidence["clone_frontier"] = read_rows(dbname, frontier_sql)
         assert evidence["clone_frontier"] == evidence["source_before"] == [(46, 49)]
         payload = json.loads(SOURCE.read_text())["payload"]
@@ -196,8 +199,7 @@ def main() -> None:
         evidence["source_after"] = read_rows("save_04", frontier_sql)
         assert evidence["source_after"] == evidence["source_before"]
     finally:
-        if dbname in slot_utils.VALID_DBNAMES:
-            close_pool(dbname)
+        dispose_database(dbname)
         slot_utils.VALID_DBNAMES = original_dbnames
         if created:
             with admin.cursor() as cursor:

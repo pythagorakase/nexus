@@ -12,6 +12,8 @@ import sys
 import threading
 from typing import Any
 
+from nexus.api.db_pool import dispose_database
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -177,7 +179,8 @@ def replay() -> None:
     import types
 
     import asyncpg
-    from sqlalchemy import create_engine, text
+    from nexus.database import create_slot_engine
+    from sqlalchemy import text
     from sqlalchemy.orm import Session
 
     from nexus.agents.lore.logon_utility import LogonUtility
@@ -308,7 +311,7 @@ def replay() -> None:
         with disposable_slot_database(
             "qa640_781_replay", source_db="save_04", include_data=True
         ) as dbname:
-            engine = create_engine(sqlalchemy_url(dbname))
+            engine = create_slot_engine(sqlalchemy_url(dbname))
             try:
                 with Session(engine) as session:
                     assert (
@@ -438,6 +441,7 @@ def main() -> None:
         replay()
         return
     if args.stage == "clone":
+        dispose_database(DB)
         from nexus.database import connection_kwargs
         from scripts.new_story_setup import _postgres_tools
         from psycopg2.extensions import make_dsn
@@ -492,6 +496,7 @@ def main() -> None:
                 "SELECT current_database(), (SELECT count(*) FROM narrative_chunks) AS narrative_chunks, (SELECT max(id) FROM narrative_chunks) AS max_chunk_id, (SELECT count(*) FROM characters) AS characters",
             )
         )
+        dispose_database(DB)
         return
     os.environ["NEXUS_SLOT"] = "4"
     os.environ["NEXUS_GATEWAY_PORT"] = "8015"

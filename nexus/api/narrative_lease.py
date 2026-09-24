@@ -20,6 +20,8 @@ from typing import Any, Optional
 
 from psycopg2.extras import RealDictCursor
 
+from nexus.database import AmbiguousCommit, commit_transaction, transaction
+
 logger = logging.getLogger("nexus.api.narrative_lease")
 
 
@@ -105,8 +107,10 @@ def acquire_generation_lease(
                 """,
                 (session_id, operation, stale_timeout_seconds),
             )
-        conn.commit()
+        commit_transaction(conn)
         return None
+    except AmbiguousCommit:
+        raise
     except Exception:
         conn.rollback()
         raise
@@ -142,7 +146,9 @@ def bind_generation_parent(conn: Any, *, session_id: str, parent_chunk_id: int) 
                 raise RuntimeError(
                     f"Generation session record {session_id} is missing."
                 )
-        conn.commit()
+        commit_transaction(conn)
+    except AmbiguousCommit:
+        raise
     except Exception:
         conn.rollback()
         raise
@@ -188,8 +194,10 @@ def claim_parent_embedding(conn: Any, *, session_id: str, parent_chunk_id: int) 
                 (parent_chunk_id, session_id),
             )
             claimed = cur.rowcount == 1
-        conn.commit()
+        commit_transaction(conn)
         return claimed
+    except AmbiguousCommit:
+        raise
     except Exception:
         conn.rollback()
         raise
@@ -265,7 +273,7 @@ def _finish_generation(
                 )
 
             if session["terminal_outcome"] in {"accepted", "superseded", "discarded"}:
-                conn.commit()
+                commit_transaction(conn)
                 return
             current_status = str(session["status"])
             if current_status == "complete" and status == "error":
@@ -309,11 +317,13 @@ def _finish_generation(
                     session_id,
                 ),
             )
-        conn.commit()
+        commit_transaction(conn)
         if released_lease:
             from nexus.jobs.scheduler import notify_generation_released
 
             notify_generation_released(conn.info.dbname)
+    except AmbiguousCommit:
+        raise
     except Exception:
         conn.rollback()
         raise
@@ -338,7 +348,7 @@ def heartbeat_generation(
     conn: Any, *, session_id: str, timeout_seconds: int, phase: Optional[str] = None
 ) -> None:
     """Renew a live owner and persist its actual phase in one transaction."""
-    with conn:
+    with transaction(conn):
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE narrative_generation_lease "
@@ -366,7 +376,7 @@ def read_generation_session(
     A fresh reader must also discover a turn that finished while disconnected.
     The latest session remains discoverable after its lease has been released.
     """
-    with conn:
+    with transaction(conn):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 "SELECT session_id FROM narrative_generation_lease "
