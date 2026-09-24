@@ -137,7 +137,7 @@ Before, the Elian→Tam `check_on_dependent` and Tam→Elian `surveil` IDs were 
 
 Before, the debt card was misattributed to Mara’s Wickglass obligation. Afterward, Gaia identified **Ivo’s debt to Ressa** and voided the unsuitable dead-drop proposal. Gaia also replaced Ren’s proposed dependent check with a qualified inquiry about Dr. Sera Vey. It still deferred Elian’s outreach; Tam’s joint-beat surveillance was ratified by omission. These are observations from one matched before/after pair, not evidence of a general acceptance-rate improvement.
 
-## Final Gates and Stop-Report
+## Previous Gate Stop (Resolved by the Fourth Amendment)
 
 Merged `origin/main` at `794e5a85` in `ba7e7b2e`. PostgreSQL, Backstage, Black, replay, TypeScript, and the UI build pass. The offline gate has **one non-exempt failure**, so this branch is **not gate-green and was not pushed**. No merge or paid provider call followed.
 
@@ -216,9 +216,39 @@ files generated
   ../dist/public/workbox-40c80ae4.js
 ```
 
+## Fourth Amendment: Final Gates
+
+Merged coordinator fix `879841a3` from `origin/main` in `75d971d5`. The offline gate now has zero failures; the PostgreSQL selection actually ran with no skips and no #885 exemptions. Black passes for all 17 changed Python files. No new provider calls, gateway starts, UI edits, or manual database operations were performed in this amendment. The prompt has no branch diff against main. Prior replay and UI receipts above remain historical evidence; this amendment reran the requested Python gates only.
+
+Import proof (`PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;print(nexus.__file__)'`) returned `/Users/pythagor/nexus/.claude/worktrees/781-card-identity/nexus/__init__.py`.
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2663 passed, 850 skipped, 9 warnings in 97.90s (0:01:37)
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery tests/test_lore -k 'card or exposure or proposal or rank or joint or imminent or pressure'
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+49 passed, 1808 deselected, 7 warnings in 9.64s
+```
+
+```sh
+git diff --diff-filter=ACM --name-only -z origin/main -- '*.py' | xargs -0 /Users/pythagor/nexus/.venv/bin/python -m black --check
+```
+```text
+All done! ✨ 🍰 ✨
+17 files would be left unchanged.
+```
+
 ## Coordinator Questions and Deferred Work
 
-1. Resolve the inherited Gaia prompt concision failure: the coordinator owns prompt prose and must reconcile the 753-word prompt with the existing `<700` gate. Then rerun the offline gate before pushing this branch to [PR #924](https://github.com/pythagorakase/nexus/pull/924).
+1. The inherited prompt concision failure is resolved by coordinator PR #927; the fourth-amendment gates below pass. No open implementation question remains.
 2. Apply migration 122 at landing. No fleet or template migration was performed. Every new column remains commented.
 3. Add the planned Gaia explanatory sentence at landing if still wanted; `prompts/` and `nexus.toml` have no branch diff against merged main.
 
