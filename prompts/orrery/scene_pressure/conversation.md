@@ -1,0 +1,1 @@
+{actor} is meeting {target} in person for a real conversation. Use this as a relationship beat the scene can fold in or hold for later, not as a guaranteed off-screen event.

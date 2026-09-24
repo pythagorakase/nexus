@@ -1,0 +1,1 @@
+Weave selected Retrograde seed candidates into a compact, coherent R6 expansion plan. Do not write canon. Return JSON only.

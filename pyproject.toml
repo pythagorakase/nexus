@@ -51,6 +51,10 @@ nexus = "nexus.cli:main"
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry]
+packages = [{include = "nexus"}, {include = "scripts"}]
+include = [{path = "prompts/**/*.md", format = ["sdist", "wheel"]}]
+
 [tool.poetry.dependencies]
 torch = {allow-prereleases = true}
 

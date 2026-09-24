@@ -8,10 +8,11 @@ from typing import Any, Literal, cast
 import pytest
 
 from nexus.agents.lore import logon_utility
-from nexus.agents.lore.logon_utility import LogonUtility, _render_letter_budget
+from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.logon.skald_wire import CharacterRef, PlaceRef, PresenceBaseline
 from nexus.config.loader import load_settings_as_dict
 from nexus.memory.correspondence import correspondence_settings
+from nexus.prompts.registry import PromptId, load
 
 
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
@@ -131,12 +132,8 @@ def test_private_letter_budget_render_fails_when_placeholder_is_missing(
 ) -> None:
     """Removing a prompt's budget slot fails loudly with its source name."""
 
-    with pytest.raises(ValueError, match=re.escape(source)):
-        _render_letter_budget(
-            "The private letter has no configured bound.",
-            max_letter_tokens=12345,
-            source=source,
-        )
+    with pytest.raises(ValueError, match="missing placeholders"):
+        load(PromptId[source.removesuffix(".md").upper()])
 
 
 def test_two_pass_prompts_and_validator_share_real_letter_budget(
@@ -364,13 +361,8 @@ def test_context_prompt_without_bootstrap_data_keeps_standard_shape() -> None:
     assert "=== BOOTSTRAP CONTEXT ===" not in prompt
     assert "\n=== USER INPUT ===\nContinue." in prompt
     assert "\n=== INSTRUCTIONS ===" in prompt
-    assert (
-        "Continue the narrative based on the provided context and user input." in prompt
-    )
-    assert (
-        "Maintain consistency with established characters, locations, and plot."
-        in prompt
-    )
+    assert load(PromptId.TURN_BLOCKS_CONTINUE_NARRATIVE) in prompt
+    assert load(PromptId.TURN_BLOCKS_MAINTAIN_CONSISTENCY) in prompt
 
 
 def test_context_prompt_rejects_nonpositive_recent_rulings_cap() -> None:
@@ -432,10 +424,7 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
     )
 
     assert "=== ORRERY SCENE PRESSURE ===" in prompt
-    assert (
-        "Storyteller-mediated pressures involving current on-screen characters"
-        in prompt
-    )
+    assert load(PromptId.TURN_BLOCKS_SCENE_PRESSURE) in prompt
     assert "present-character need pressure" in prompt
     assert "You may adapt, delay, ignore, or incorporate them" in prompt
     assert "Do not let Orrery decide what present characters do" in prompt
@@ -492,7 +481,7 @@ def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
 
     assert "=== ORRERY AMBIENT PERIPHERALS ===" in prompt
     assert "optional ambient peripherals from off-screen events" in prompt
-    assert "Ignore freely, render subtly" in prompt
+    assert load(PromptId.TURN_BLOCKS_AMBIENT_PERIPHERALS) in prompt
     assert (
         "If you use one with an actor name, include that exact name at least once "
         "in the prose — uptake is detected by matching that exact name."

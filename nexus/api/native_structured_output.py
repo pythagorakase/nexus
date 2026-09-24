@@ -6,6 +6,7 @@ schema and the boundary validation helpers in one place.
 """
 
 from __future__ import annotations
+from nexus.prompts.registry import PromptId, load
 
 import inspect
 from dataclasses import dataclass
@@ -192,10 +193,7 @@ def anthropic_strict_tool(
 
     return {
         "name": name,
-        "description": (
-            "Return the complete structured response for the current NEXUS "
-            "generation request."
-        ),
+        "description": (load(PromptId.OUTPUT_STRUCTURED_TOOL)),
         "input_schema": anthropic_json_schema(schema_model),
         "strict": True,
     }
@@ -274,14 +272,8 @@ def build_native_structured_provider(
 def retry_prompt(prompt: str, message: str) -> str:
     """Append a bounded repair instruction for semantic validation retries."""
 
-    return (
-        f"{prompt}\n\n"
-        "=== STRUCTURED OUTPUT RETRY ===\n"
-        "Your previous structured response failed validation before commit.\n"
-        f"{message}\n"
-        "Return a complete response satisfying the same schema. Use null or "
-        "empty arrays for absent optional values instead of omitting required "
-        "strict-schema keys."
+    return load(
+        PromptId.RETRY_STRUCTURED_OUTPUT, PROMPT=f"{prompt}", MESSAGE=f"{message}"
     )
 
 

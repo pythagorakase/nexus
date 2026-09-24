@@ -1,0 +1,1 @@
+Target entity: {{ROW_ENTITY_NAME}} ({{ROW_ENTITY_KIND}}). Generate shallow connected backstory for this entity only.

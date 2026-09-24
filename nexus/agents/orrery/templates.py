@@ -74,6 +74,7 @@ from nexus.agents.orrery.substrate import (
     validate_no_mood_in_entry_gates,
     weather_is,
 )
+from nexus.prompts.registry import PromptId, load
 
 
 def _place_any(*classes: str) -> Condition:
@@ -802,12 +803,7 @@ EXTRACT_VENGEANCE = Template(
             ),
             magnitude=0.85,
             mood_affinities={"restless": 2.0, "grim": 1.5},
-            scene_pressure_stub=(
-                "{actor}'s grudge is close enough to {target}'s current scene "
-                "to become immediate pressure. Treat it as a possible threat, "
-                "interruption, warning sign, or delayed consequence rather than "
-                "an automatic attack."
-            ),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_GRUDGE)),
         ),
         Branch(
             label="Surface a reputation attack in the right channels",
@@ -946,9 +942,7 @@ PROTECT_KIN = Template(
             ),
             magnitude=0.78,
             scene_pressure_stub=(
-                "{actor} may be close enough to intervene around {target}'s "
-                "current danger. Treat this as potential off-screen support or "
-                "complication for the scene, not as an automatic rescue."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_INTERVENE)
             ),
         ),
         Branch(
@@ -968,11 +962,7 @@ PROTECT_KIN = Template(
             event_type="protective_intervention",
             changed_fields=("character.current_activity",),
             magnitude=0.52,
-            scene_pressure_stub=(
-                "{actor} is moving toward {target}'s current location because "
-                "they believe the danger is real. You may foreshadow, delay, "
-                "or ignore their arrival based on the active scene."
-            ),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_ARRIVAL)),
         ),
         Branch(
             label="Signal kin networks to converge on the target",
@@ -1090,11 +1080,7 @@ SURVEIL = Template(
             signal_event_type="compliance_alert",
             changed_fields=("character.current_activity",),
             magnitude=0.48,
-            scene_pressure_stub=(
-                "{actor} may be reading signal traffic around {target}'s "
-                "current scene. Use it as optional pressure or atmosphere, "
-                "not as a canonical breach unless the scene earns it."
-            ),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SIGNALS)),
         ),
         Branch(
             label="Keep tabs from a distance",
@@ -1111,10 +1097,7 @@ SURVEIL = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.44,
             scene_pressure_stub=(
-                "{actor} is keeping tabs on {target} from off-screen. Treat "
-                "this as possible pressure, unease, traces, or delayed setup; "
-                "do not turn it into automatic contact or control of "
-                "{target}'s choices."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SURVEILLANCE)
             ),
         ),
         Branch(
@@ -1185,9 +1168,7 @@ SURVEIL = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.30,
             scene_pressure_stub=(
-                "{actor} may have mapped the public pattern around {target}. "
-                "Use this only as Storyteller-controlled scene pressure or a "
-                "future setup."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_PUBLIC_PATTERN)
             ),
         ),
         Branch(
@@ -1282,9 +1263,7 @@ ACT_ON_INTEL = Template(
             changed_fields=("character.current_activity", "world_events"),
             magnitude=0.58,
             scene_pressure_stub=(
-                "{actor} is confronting {target} with gathered intelligence. "
-                "Treat as charged pressure the scene can play as threat, "
-                "negotiation, or revelation."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_CONFRONTATION)
             ),
         ),
         Branch(
@@ -1374,11 +1353,7 @@ CULTIVATE_INFORMANT = Template(
             event_type="intel_acquired",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.62,
-            scene_pressure_stub=(
-                "{actor} may be trying to extract material intel from {target} "
-                "while {target} is in the current scene. Use it only if it "
-                "creates a believable opening, signal, or complication."
-            ),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_INTEL)),
         ),
         Branch(
             label="Routine contact to maintain the relationship",
@@ -1420,11 +1395,7 @@ CULTIVATE_INFORMANT = Template(
             signal_event_type="encoded_message",
             changed_fields=("character.current_activity",),
             magnitude=0.18,
-            scene_pressure_stub=(
-                "{actor} has placed a small indirect overture for {target}. "
-                "Treat it as optional atmosphere or a hook the Storyteller can "
-                "choose to pick up."
-            ),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_OVERTURE)),
         ),
     ),
     present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
@@ -1512,10 +1483,7 @@ TEND_WOUNDED = Template(
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.74,
             scene_pressure_stub=(
-                "{actor} may be close enough to attempt restorative work on "
-                "{target}'s wound in the active scene. Treat as offered help "
-                "the scene can accept, defer, or complicate, not as automatic "
-                "healing."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_RESTORATION)
             ),
         ),
         Branch(
@@ -1557,9 +1525,7 @@ TEND_WOUNDED = Template(
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.42,
             scene_pressure_stub=(
-                "{actor} has practical first-aid training and is at "
-                "{target}'s side. Treat as a stabilizing presence the scene "
-                "can use without granting full recovery."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_FIRST_AID)
             ),
         ),
         Branch(
@@ -1577,9 +1543,7 @@ TEND_WOUNDED = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.24,
             scene_pressure_stub=(
-                "{actor} is present at {target}'s side without medical "
-                "ability. Use this as accompaniment and witness — not as "
-                "intervention."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_ACCOMPANIMENT)
             ),
         ),
     ),
@@ -1762,9 +1726,7 @@ KEEP_VIGIL = Template(
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.46,
             scene_pressure_stub=(
-                "{actor} is keeping a contemplative vigil over {target}. "
-                "Use this as an emotional anchor in the scene, not an "
-                "active intervention."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_CONTEMPLATION)
             ),
         ),
         Branch(
@@ -1784,9 +1746,7 @@ KEEP_VIGIL = Template(
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.38,
             scene_pressure_stub=(
-                "{actor} is speaking to an unresponsive {target} through "
-                "a long stretch. Treat as audible presence the scene can "
-                "thread through quieter moments."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SPEAKING_VIGIL)
             ),
         ),
         Branch(
@@ -1806,9 +1766,7 @@ KEEP_VIGIL = Template(
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.32,
             scene_pressure_stub=(
-                "{actor} is keeping silent vigil over {target}. Use this "
-                "as ambient presence — a witness who shapes the scene by "
-                "being there, not by acting."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SILENT_VIGIL)
             ),
         ),
     ),
@@ -2719,11 +2677,7 @@ CHECK_ON_DEPENDENT = Template(
             event_type="welfare_check",
             changed_fields=("character.current_activity",),
             magnitude=0.44,
-            scene_pressure_stub=(
-                "{actor} is making a casual welfare check on {target}. "
-                "Treat as a low-key social presence the scene can absorb "
-                "or use as a beat of relationship texture."
-            ),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_WELFARE)),
         ),
         Branch(
             label="Reach out through customary channels",
@@ -2821,10 +2775,7 @@ REACH_OUT = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.36,
             scene_pressure_stub=(
-                "{actor} is meeting {target} in person for a real "
-                "conversation. Use this as a relationship beat the scene "
-                "can fold in or hold for later, not as a guaranteed "
-                "off-screen event."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_CONVERSATION)
             ),
         ),
         Branch(
@@ -2846,9 +2797,7 @@ REACH_OUT = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.16,
             scene_pressure_stub=(
-                "{actor} has sent {target} a small affectionate message. "
-                "Treat as ambient relationship-warmth — possibly an "
-                "incoming notification, possibly not surfaced at all."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_AFFECTION)
             ),
         ),
         Branch(
@@ -2866,9 +2815,7 @@ REACH_OUT = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.18,
             scene_pressure_stub=(
-                "{actor} is holding back a loaded attempt to reach {target}. "
-                "Use this as optional emotional pressure or a future story "
-                "beat; Orrery has not made contact happen."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_HELD_CONTACT)
             ),
         ),
         Branch(
@@ -2886,8 +2833,7 @@ REACH_OUT = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.08,
             scene_pressure_stub=(
-                "{actor} is choosing not to contact {target} for now. Treat "
-                "this as optional subtext, not as a visible scene event."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_NO_CONTACT)
             ),
         ),
     ),
@@ -2961,10 +2907,7 @@ CONSULT_RIVAL = Template(
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.62,
             scene_pressure_stub=(
-                "{actor} is in a tense face-to-face meeting with {target}, "
-                "a known rival. Treat as charged co-presence — the scene "
-                "can show this as observed truce, ambient discomfort, or "
-                "delayed consequence."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_RIVAL_MEETING)
             ),
         ),
         Branch(
@@ -2987,10 +2930,7 @@ CONSULT_RIVAL = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.48,
             scene_pressure_stub=(
-                "{actor} has sent {target} a carefully-routed message via "
-                "intermediary. Treat as off-screen pressure — the scene "
-                "may show {target} reacting to it, or it may resurface "
-                "later."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_INTERMEDIARY)
             ),
         ),
         Branch(
@@ -3012,9 +2952,7 @@ CONSULT_RIVAL = Template(
             changed_fields=("character.current_activity",),
             magnitude=0.34,
             scene_pressure_stub=(
-                "{actor} has placed a discreet overture for {target} to "
-                "find. Treat as a passive hook the scene can pick up if "
-                "useful, or leave dormant."
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_PASSIVE_OVERTURE)
             ),
         ),
     ),

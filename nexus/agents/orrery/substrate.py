@@ -2540,7 +2540,7 @@ class Branch:
     # Stochastic-only softmax multipliers keyed by the actor's mechanical
     # mood. They change selection weight, never magnitude/promotion salience.
     mood_affinities: Mapping[str, float] = field(default_factory=dict)
-    scene_pressure_stub: Optional[str] = None
+    scene_pressure_stub: str | Callable[[], str] | None = None
     # A second, additive world-event emission: the signal an act gives off
     # (threat_issued, compliance_alert, ...) alongside the deed's own
     # event_type. Signals feed other packages' gates without disturbing the
@@ -2882,7 +2882,11 @@ def evaluate(
                 event_type=branch.event_type,
                 changed_fields=branch.changed_fields,
                 magnitude=branch.magnitude,
-                scene_pressure_stub=branch.scene_pressure_stub,
+                scene_pressure_stub=(
+                    branch.scene_pressure_stub()
+                    if callable(branch.scene_pressure_stub)
+                    else branch.scene_pressure_stub
+                ),
                 signal_event_type=branch.signal_event_type,
                 promotable=branch.promotable,
                 binds_project_faction=template.binds_project_faction,

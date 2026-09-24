@@ -1,0 +1,1 @@
+The complete correspondence digest is too long ({{TOKEN_COUNT}} rendered tokens; hard cap {{HARD_CAP_TOKENS}}; target {{MAX_DIGEST_TOKENS}}). Compact it further without dropping plan judgments and resubmit the complete response.

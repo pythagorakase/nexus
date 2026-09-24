@@ -1,0 +1,1 @@
+{actor} may be trying to extract material intel from {target} while {target} is in the current scene. Use it only if it creates a believable opening, signal, or complication.

@@ -1,0 +1,1 @@
+[ACCEPT FATE ACTIVE] Follow the '### Accept Fate Protocol' in your instructions. Make bold, concrete choices immediately.

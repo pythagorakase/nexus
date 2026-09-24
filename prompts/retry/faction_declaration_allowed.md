@@ -1,0 +1,1 @@
+or declare a genuinely new faction in new_entities; 

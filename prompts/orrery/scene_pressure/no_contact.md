@@ -1,0 +1,1 @@
+{actor} is choosing not to contact {target} for now. Treat this as optional subtext, not as a visible scene event.

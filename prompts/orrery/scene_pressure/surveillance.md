@@ -1,0 +1,1 @@
+{actor} is keeping tabs on {target} from off-screen. Treat this as possible pressure, unease, traces, or delayed setup; do not turn it into automatic contact or control of {target}'s choices.

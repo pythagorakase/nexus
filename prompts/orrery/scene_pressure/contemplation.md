@@ -1,0 +1,1 @@
+{actor} is keeping a contemplative vigil over {target}. Use this as an emotional anchor in the scene, not an active intervention.

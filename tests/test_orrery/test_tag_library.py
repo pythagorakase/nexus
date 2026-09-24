@@ -8,11 +8,13 @@ import os
 import re
 from typing import Any, cast, Optional
 
+
 import pytest
 import tiktoken
 
 import nexus.agents.orrery.tag_library as tag_library
 from nexus.agents.lore.logon_utility import proposal_tag_names_from_payload
+from nexus.prompts.registry import PromptId, load
 
 
 def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None:
@@ -43,7 +45,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
     rendered = tag_library.format_tag_library_for_prompt("save_05")
 
     assert "Current Orrery Tag Library" in rendered
-    assert "Prefer exact registered tags when they fit" in rendered
+    assert load(PromptId.TAG_LIBRARY_HEADER) in rendered
     assert "Do not invent new tag names at runtime" in rendered
     assert "### Character Tags" in rendered
     assert "`wounded` (ephemeral): Character has an acute wound." in rendered

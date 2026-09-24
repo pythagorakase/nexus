@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 from typing import Annotated, Any, Literal, Mapping, Optional, Sequence, cast
 
@@ -30,6 +31,7 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     fold_entity_ref_for_identity,
     normalize_entity_ref,
 )
+from nexus.prompts.registry import PromptId, load
 
 EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
 """Prompt-local entity ref: a proper name, never a description.
@@ -633,10 +635,7 @@ def render_expansion_prompt(
         if set(junction["seed_ids"]) <= selected_seed_ids
     ]
     prompt_payload = {
-        "task": (
-            "Weave selected Retrograde seed candidates into a compact, coherent "
-            "R6 expansion plan. Do not write canon. Return JSON only."
-        ),
+        "task": (load(PromptId.RETROGRADE_EXPANSION_TASK)),
         "mutation_policy": {
             "writes": "none",
             "reason": "R6 expansion remains dry-run until commit blockers resolve.",
@@ -661,33 +660,9 @@ def render_expansion_prompt(
     geo_prompt = geo_prompt_from_context(packet)
     if geo_prompt is not None:
         prompt_payload["geo_authoring"] = geo_prompt
-    return (
-        "You are Skald-as-weaver for Retrograde R6 expansion.\n"
-        "Weave the selected seeds into a sparse history web with row-shaped "
-        "event/tag/relationship plans, but do not claim canonical persistence.\n"
-        "Write each event summary in a diegetic archival register — a fact "
-        "as a record-keeper, chronicler, or registry would state it (who, "
-        "what, when-relative, where) — never as scene prose or narration. "
-        "These summaries surface later as retrieved documents, not story.\n"
-        "Every selected seed must be accounted for as woven, deferred, or "
-        "rejected. Every woven thread must terminate in a present leaf anchor.\n"
-        "For every selected junction, either weave both member seeds through "
-        "the promised shared entity using structured event participants/location, "
-        "or reject both without planning events for either seed. Junction members "
-        "cannot be deferred or survive independently.\n"
-        "If the woven history means an entity is dead, destroyed, or "
-        "dissolved before the story opens, declare it as a mechanical_plan "
-        "row with plan='death' citing the causing event; a death asserted "
-        "only in summary prose leaves the entity alive to the engine and is "
-        "invalid.\n"
-        "If a mechanical plan cannot satisfy the hard validation rules, omit "
-        "that mechanical item or reject/defer the seed.\n"
-        "For each woven seed with project_intent, carry that exact intent into "
-        "project_plan with a character actor_ref. If you drop the intent, omit "
-        "the project row and explain the drop in that seed's thread note.\n"
-        "Return JSON only.\n\n"
-        "RETROGRADE_EXPANSION_REQUEST:\n"
-        f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}"
+    return load(
+        PromptId.RETROGRADE_EXPANSION,
+        REQUEST_JSON=f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}",
     )
 
 
@@ -788,10 +763,7 @@ def generate_expansion_with_skald(
     provider = build_native_structured_provider(
         model=selected_model,
         max_tokens=max_tokens or get_wizard_max_tokens(),
-        system_prompt=(
-            "You are Skald-as-weaver for a NEXUS Retrograde expansion pass. "
-            "Return a non-mutating expansion plan only."
-        ),
+        system_prompt=(load(PromptId.RETROGRADE_EXPANSION_SYSTEM)),
         structured_output_retries=get_wizard_retry_budget(),
         seat="retrograde_expansion",
     )
@@ -808,9 +780,7 @@ def generate_expansion_with_skald(
             )
         except RetrogradeExpansionValidationError as exc:
             raise ModelRetry(
-                "Retrograde expansion plan failed validation. Repair the JSON "
-                "by omitting invalid mechanics, accounting for every selected "
-                f"seed, or adding required refs:\n{exc}"
+                load(PromptId.RETROGRADE_EXPANSION_RETRY, EXC=f"{exc}")
             ) from exc
 
     provider.output_validator = _validate_output
@@ -1122,12 +1092,14 @@ def _planned_project_dependency_relationships(
             relationships.extend(planned_project_start_relationships([relationship]))
         except ValueError as exc:
             issues.append(
-                "seek_redemption project seed(s) "
-                f"{redemption_seed_ids!r} cannot classify "
-                f"relationship_plan[{index}].relationship_type "
-                f"{relationship.relationship_type!r}: {exc}. Use one of "
-                "seed_eligible_vocabulary.relationship_types "
-                f"{sorted(relationship_types)!r}"
+                load(
+                    PromptId.RETROGRADE_RELATIONSHIP_TYPE_RETRY,
+                    REDEMPTION_SEED_IDS=f"{redemption_seed_ids!r}",
+                    INDEX=f"{index}",
+                    RELATIONSHIP_RELATIONSHIP_TYPE=f"{relationship.relationship_type!r}",
+                    EXC=f"{exc}",
+                    SORTED_RELATIONSHIP_TYPES=f"{sorted(relationship_types)!r}",
+                )
             )
     return relationships, issues
 
@@ -1805,74 +1777,10 @@ def _commit_readiness_issues(
 def _hard_validation_rules() -> list[str]:
     """Return concise Skald-facing R6 validation rules."""
 
-    return [
-        "Every event_plan item must reference one or more selected seed ids.",
-        "Every selected seed must appear once in thread_plan.",
-        (
-            "Woven threads must reference planned event_ref values whose "
-            "event seed_ids include that thread's seed_id."
-        ),
-        (
-            "Each selected junction must have both member seeds woven through "
-            "its promised shared entity in structured event participants/location, "
-            "or both rejected with no events; junction members cannot be deferred."
-        ),
-        (
-            "mechanical_plan rows use plan='entity_tag', 'pair_tag', "
-            "'relationship', or 'death'. Leave fields irrelevant to that "
-            "plan as empty strings."
-        ),
-        (
-            "death mechanics require source_event_ref naming the causing "
-            "event, and that event must list the dying entity as a "
-            "participant."
-        ),
-        (
-            "death mechanics may only target new backstory figures this "
-            "plan itself introduces — never first-class starting entities "
-            "or entities already live in the story."
-        ),
-        (
-            "Event-anchored entity_tag mechanics require source_event_ref that "
-            "matches event_plan.event_ref."
-        ),
-        "Prompt-visible-only tags must not appear in mechanical_plan.",
-        "Pair tags must obey registered subject/object kind constraints.",
-        (
-            "Plan at most one status:* pair tag per subject/object edge; it "
-            "records final standing, while the arc belongs in event_plan."
-        ),
-        (
-            "Single-entity tags must be registered for the tagged entity_kind "
-            "in registered_tags_by_entity_kind; a tag listed only under another "
-            "kind is illegal."
-        ),
-        (
-            "relationship mechanics currently support only character->character "
-            "rows; express faction/place pressure through events or pair tags."
-        ),
-        (
-            "A trait with cold_start_relationships='forbidden' prohibits its "
-            "blocked relationship and pair-tag mechanics when either endpoint "
-            "is the protagonist or a listed alias. Keep permissible backstory "
-            "events; omit only the forbidden mechanical row."
-        ),
-        (
-            "project_plan may carry only a woven selected seed's exact "
-            "project_intent; explain any dropped woven intent in thread_plan.note."
-        ),
-        (
-            "Every seek_redemption project requires a TARGET->ACTOR relationship "
-            "at wary-or-worse valence in project_start_relationships or this "
-            "response's relationship mechanics."
-        ),
-        (
-            "Entity refs (subject_ref, object_ref, location_ref) "
-            f"are proper names of at most {ENTITY_REF_MAX_LENGTH} characters "
-            "-- never sentences or descriptive phrases. New implied entities "
-            "get a short invented name, not a description."
-        ),
-    ]
+    return load(
+        PromptId.RETROGRADE_EXPANSION_CONSTRAINTS,
+        ENTITY_REF_MAX_LENGTH=ENTITY_REF_MAX_LENGTH,
+    ).splitlines()
 
 
 def _prompt_response_contract() -> dict[str, Any]:
@@ -1899,7 +1807,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             "pair_tag": ["tag", "object_ref", "object_kind"],
             "relationship": ["relationship_type", "object_ref", "object_kind"],
             "death": [],
-            "unused_fields": "Use empty strings for fields irrelevant to the plan.",
+            "unused_fields": load(PromptId.RETROGRADE_UNUSED_PLAN_FIELDS),
         },
         "deterministic_fields_filled_by_runtime": [
             "schema_version",

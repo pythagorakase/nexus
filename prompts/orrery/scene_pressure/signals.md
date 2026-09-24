@@ -1,0 +1,1 @@
+{actor} may be reading signal traffic around {target}'s current scene. Use it as optional pressure or atmosphere, not as a canonical breach unless the scene earns it.

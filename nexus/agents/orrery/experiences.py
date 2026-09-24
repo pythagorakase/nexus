@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+
 from dataclasses import dataclass
 import hashlib
 import json
 import logging
-from pathlib import Path
 import re
 from typing import Any, Iterable, Mapping, Optional, Sequence
 from uuid import uuid4
@@ -23,6 +23,7 @@ from nexus.agents.orrery.player_identity import canonical_player_entity_id
 from nexus.config.settings_models import OrreryExperienceSettings
 from nexus.presence.roster import read_rosters
 from nexus.telemetry.usage import usage_context
+from nexus.prompts.registry import PromptId, load
 
 
 logger = logging.getLogger("nexus.orrery.experiences")
@@ -32,9 +33,6 @@ _POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
 _PLAYER_EXCLUSION_JOB_ERROR = (
     "Experience render job contains a player-owned seed while "
     "include_player_character is false"
-)
-_PROMPT_PATH = (
-    Path(__file__).resolve().parents[3] / "prompts" / "experience_renderer.md"
 )
 _CAPITALIZED_SEQUENCE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:[ '-][A-Z][A-Za-z0-9]*)*\b")
 _SENTENCE_INITIAL_ALLOWLIST = frozenset(
@@ -1448,7 +1446,7 @@ def _load_experience_sources(
 
 
 def _render_prompt(rows: Sequence[Mapping[str, Any]]) -> str:
-    prompt = _PROMPT_PATH.read_text(encoding="utf-8").strip()
+    prompt = load(PromptId.EXPERIENCE_RENDERER).strip()
     records = [
         {
             "experience_id": int(row["id"]),
@@ -1479,7 +1477,7 @@ def _experience_provider(cfg: OrreryExperienceSettings) -> Any:
     from nexus.api.config_utils import get_wizard_retry_budget
     from nexus.api.native_structured_output import build_native_structured_provider
 
-    prompt = _PROMPT_PATH.read_text(encoding="utf-8").strip()
+    prompt = load(PromptId.EXPERIENCE_RENDERER).strip()
     return build_native_structured_provider(
         model=cfg.model,
         max_tokens=cfg.max_output_tokens,

@@ -1,0 +1,1 @@
+{actor} is speaking to an unresponsive {target} through a long stretch. Treat as audible presence the scene can thread through quieter moments.

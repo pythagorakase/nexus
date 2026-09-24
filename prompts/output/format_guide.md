@@ -1,0 +1,1 @@
+Respond with a single JSON object matching this structure. Omit optional fields that have no value. No prose outside the JSON.

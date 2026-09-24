@@ -1,0 +1,1 @@
+These proposal pairs have the same two characters acting toward each other in this tick. Treat each pair as one scene if you wish: 'reciprocal' means both chose the same behavior (a meeting of intent); 'crossed' means their behaviors differ (tension you may spring). Adjudicate the underlying proposals by proposal_id as usual.

@@ -1,0 +1,1 @@
+{actor} is moving toward {target}'s current location because they believe the danger is real. You may foreshadow, delay, or ignore their arrival based on the active scene.

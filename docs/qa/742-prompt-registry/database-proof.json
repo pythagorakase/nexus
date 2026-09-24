@@ -1,0 +1,33 @@
+{
+  "source_before": [
+    {
+      "current_database": "save_04",
+      "narrative_chunks": 46,
+      "max_chunk_id": 49,
+      "characters": 23
+    }
+  ],
+  "after": [
+    {
+      "database": "save_04",
+      "sql": "SELECT current_database(), (SELECT count(*) FROM narrative_chunks) AS narrative_chunks, (SELECT max(id) FROM narrative_chunks) AS max_chunk_id, (SELECT count(*) FROM characters) AS characters",
+      "row": [
+        "save_04",
+        46,
+        49,
+        23
+      ]
+    },
+    {
+      "database": "qa640_742_prompt_registry",
+      "sql": "SELECT current_database(), (SELECT count(*) FROM narrative_chunks) AS narrative_chunks, (SELECT max(id) FROM narrative_chunks) AS max_chunk_id, (SELECT count(*) FROM characters) AS characters",
+      "row": [
+        "qa640_742_prompt_registry",
+        46,
+        49,
+        23
+      ]
+    }
+  ],
+  "clone_dropped": true
+}

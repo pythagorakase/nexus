@@ -1,0 +1,83 @@
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2672 passed, 854 skipped, 9 warnings in 99.63s (0:01:39)
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore tests/test_skald_wire.py -k 'prompt or format or placeholder or lint'
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+66 passed, 332 deselected, 5 warnings in 1.46s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_prompt_lint.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 5 warnings in 3.44s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/logon/orrery_tag_validation.py nexus/agents/lore/logon_utility.py nexus/agents/lore/lore.py nexus/agents/orrery/experiences.py nexus/agents/orrery/geo_authoring.py nexus/agents/orrery/retrograde_expansion.py nexus/agents/orrery/retrograde_packet.py nexus/agents/orrery/retrograde_seed_candidates.py nexus/agents/orrery/tag_library.py nexus/api/native_structured_output.py nexus/api/new_story_generator.py nexus/api/new_story_schemas.py nexus/api/setup_endpoints.py nexus/api/trait_input_derivation.py nexus/api/wizard_agent.py nexus/api/wizard_chat.py nexus/memory/correspondence.py nexus/prompts/__init__.py nexus/prompts/registry.py scripts/estimate_time_delta.py scripts/faction_relationship_analyst.py scripts/freestyle_api_query.py scripts/map_builder_legacy.py scripts/process_characters.py scripts/process_factions.py scripts/retrieval_query_bakeoff.py scripts/summarize_narrative.py tests/test_correspondence.py tests/test_lore/test_infrastructure.py tests/test_lore/test_logon_prompt_formatting.py tests/test_orrery/test_tag_library.py tests/test_prompt_lint.py tests/test_trait_input_derivation.py
+All done! ✨ 🍰 ✨
+33 files would be left unchanged.
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/check_reachability.py
+{
+  "maintained": 351,
+  "reachable_by_kind": {
+    "production": 189,
+    "operator": 173,
+    "migration": 171,
+    "test": 234
+  },
+  "test_only": 34,
+  "existing_unreachable": 75,
+  "newly_unreachable": [],
+  "lost_production_reachability": [],
+  "baseline_add_production_paths": [],
+  "baseline_remove_orphan_exemptions": [],
+  "baseline_remove_deleted_production_paths": [],
+  "forbidden_dependencies": [],
+  "tombstone_violations": [],
+  "unresolved_internal_imports": [],
+  "unregistered_dynamic_import_sites": [],
+  "route_reachability": "not_proven"
+}
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python temp/742_replay.py
+2026-09-24 15:43:02,453 - nexus.lore.logon - INFO - System prompt loaded: 20315 chars
+skald_writer prompt 133577 f178135295bd9e04d0167bb04fde7613215ca4b75f8fc0b499f0e835d0079d00
+skald_writer system_prompt 22405 c3b19e6093981ac9fbf4e7386b33f31310423818ac94a6e91e045be59ad6c360
+2026-09-24 15:43:03,106 - httpx - INFO - HTTP Request: POST http://127.0.0.1:5102/v1/responses "HTTP/1.1 200 OK"
+2026-09-24 15:43:03,169 - nexus.usage - INFO - USAGE provider=test model=TEST seat=skald_writer slot=- run=- attempt=1 outcome=accepted in=1000 out=800 total=1800 cached=? reasoning=? tier=?
+gaia prompt 134207 19801f4931c6c9765a45cfe7a6f73abbc73264febb80f0c3922ca0ff8581d625
+gaia system_prompt 9382 aad2b7214e4776689dbbb99dd061caee9da7657db5fbfa6bdf667f2e7399db42
+2026-09-24 15:43:03,193 - httpx - INFO - HTTP Request: POST http://127.0.0.1:5102/v1/responses "HTTP/1.1 200 OK"
+2026-09-24 15:43:03,278 - nexus.usage - INFO - USAGE provider=test model=TEST seat=gaia slot=- run=- attempt=1 outcome=accepted in=1000 out=800 total=1800 cached=? reasoning=? tier=?
+Both TEST seats completed; all four rendered prompts are byte-identical.
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python temp/742_render_adjacent.py after
+Rendered wizard and Retrograde prompts from qa640_742_prompt_registry
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python temp/742_verify_fragments.py
+88 registered templates match the base static prose and original rule order.
+
+BASELINE AND CORRECTED INTERMEDIATE TEST RUNS
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2664 passed, 854 skipped, 9 warnings in 105.61s (0:01:45)
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore tests/test_skald_wire.py -k 'prompt or format or placeholder or lint'
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+66 passed, 332 deselected, 5 warnings in 1.25s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_logon_prompt_formatting.py tests/test_correspondence.py tests/test_wizard_agent.py tests/test_trait_input_derivation.py tests/test_orrery/test_retrograde_seed_candidates.py tests/test_orrery/test_retrograde_expansion.py tests/test_orrery/test_retrograde_packet.py tests/test_summary_triggers.py
+=========================== short test summary info ============================
+FAILED tests/test_trait_input_derivation.py::test_prompt_requires_existing_prompt_file
+1 failed, 226 passed, 1 skipped, 5 warnings in 2.33s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_prompt_lint.py tests/test_lore/test_logon_prompt_formatting.py tests/test_correspondence.py tests/test_wizard_agent.py tests/test_trait_input_derivation.py tests/test_orrery/test_tag_library.py tests/test_orrery/test_retrograde_seed_candidates.py tests/test_orrery/test_retrograde_expansion.py tests/test_orrery/test_retrograde_packet.py tests/test_summary_triggers.py
+=========================== short test summary info ============================
+FAILED tests/test_correspondence.py::test_digest_budget_render_fails_when_placeholder_is_missing
+1 failed, 243 passed, 3 skipped, 5 warnings in 6.16s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+=========================== short test summary info ============================
+FAILED tests/test_prompt_lint.py::test_real_file_failure_and_process_cache - ...
+1 failed, 2671 passed, 854 skipped, 9 warnings in 102.97s (0:01:42)
+
+The intermediate failures were test adaptations: a removed PROMPT_PATH assertion and missing registry imports in a test and its isolated subprocess. The final full gate above passes all of them. No #885 exemption was used.

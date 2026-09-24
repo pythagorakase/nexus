@@ -1,0 +1,1 @@
+{actor}'s grudge is close enough to {target}'s current scene to become immediate pressure. Treat it as a possible threat, interruption, warning sign, or delayed consequence rather than an automatic attack.

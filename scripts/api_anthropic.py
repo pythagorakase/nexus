@@ -88,6 +88,8 @@ from nexus.api.native_structured_output import (
 )
 from nexus.telemetry.usage import record_anthropic_response
 
+from nexus.prompts.registry import PromptId, load
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -1059,10 +1061,7 @@ class AnthropicProvider(LLMProvider):
         params["tools"] = [
             {
                 "name": "submit_structured_response",
-                "description": (
-                    "Return the complete structured response for the current NEXUS "
-                    "generation request."
-                ),
+                "description": (load(PromptId.OUTPUT_STRUCTURED_TOOL)),
                 "input_schema": tool_input_schema,
             }
         ]

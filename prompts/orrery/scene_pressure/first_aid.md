@@ -1,0 +1,1 @@
+{actor} has practical first-aid training and is at {target}'s side. Treat as a stabilizing presence the scene can use without granting full recovery.

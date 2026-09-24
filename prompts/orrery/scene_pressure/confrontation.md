@@ -1,0 +1,1 @@
+{actor} is confronting {target} with gathered intelligence. Treat as charged pressure the scene can play as threat, negotiation, or revelation.

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+
 from nexus.database import connection_kwargs
 
 import inspect
 import logging
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Awaitable, Callable, Coroutine, Mapping, Optional, Sequence
 
 import psycopg2
@@ -17,6 +17,7 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.config.settings_models import calculate_digest_hard_cap_tokens
+from nexus.prompts.registry import PromptId, load
 
 
 logger = logging.getLogger(__name__)
@@ -63,10 +64,11 @@ def build_letter_length_validator(
                 from pydantic_ai import ModelRetry
 
                 raise ModelRetry(
-                    "The private storyteller letter is too long "
-                    f"({token_count} rendered tokens; limit "
-                    f"{max_letter_tokens}). Rewrite it more compactly and "
-                    "resubmit the complete response."
+                    load(
+                        PromptId.CORRESPONDENCE_LETTER_RETRY,
+                        TOKEN_COUNT=f"{token_count}",
+                        MAX_LETTER_TOKENS=f"{max_letter_tokens}",
+                    )
                 )
         if delegate is None:
             return output
@@ -109,11 +111,12 @@ def build_digest_length_validator(
             from pydantic_ai import ModelRetry
 
             raise ModelRetry(
-                "The complete correspondence digest is too long "
-                f"({token_count} rendered tokens; hard cap "
-                f"{hard_cap_tokens}; target {max_digest_tokens}). Compact it "
-                "further without dropping "
-                "plan judgments and resubmit the complete response."
+                load(
+                    PromptId.CORRESPONDENCE_DIGEST_RETRY,
+                    TOKEN_COUNT=f"{token_count}",
+                    HARD_CAP_TOKENS=f"{hard_cap_tokens}",
+                    MAX_DIGEST_TOKENS=f"{max_digest_tokens}",
+                )
             )
         if token_count > max_digest_tokens:
             logger.warning(
@@ -155,11 +158,8 @@ class CorrespondenceContext:
         """Render the complete private block, failing rather than truncating."""
 
         parts = [
-            "=== PRIVATE STORYTELLER CORRESPONDENCE ===",
-            (
-                "This authorial correspondence is invisible to the player "
-                "and is not canon."
-            ),
+            load(PromptId.CORRESPONDENCE_HEADER),
+            (load(PromptId.CORRESPONDENCE_PRIVACY)),
             "",
             "DIGEST",
             self.digest or "(No compacted correspondence yet.)",
@@ -399,40 +399,10 @@ def insert_digest_version(
     )
 
 
-def _render_digest_budget(
-    text: str,
-    *,
-    max_digest_tokens: int,
-    source: str,
-) -> str:
-    """Render the configured correspondence-digest budget into a prompt."""
-
-    placeholder = "{{MAX_DIGEST_TOKENS}}"
-    if placeholder not in text:
-        raise ValueError(
-            f"Digest token budget placeholder {placeholder} is missing from {source}"
-        )
-    rendered = text.replace(placeholder, str(int(max_digest_tokens)))
-    if placeholder in rendered:
-        raise ValueError(
-            f"Digest token budget placeholder {placeholder} remains in {source}"
-        )
-    return rendered
-
-
 def load_compaction_system_prompt(*, max_digest_tokens: int) -> str:
-    """Load the frozen compaction instructions without fallback prose."""
-
-    path = (
-        Path(__file__).resolve().parents[2] / "prompts" / "correspondence_compaction.md"
-    )
-    prompt = path.read_text()
-    if not prompt.strip():
-        raise ValueError(f"Correspondence compaction prompt is empty: {path}")
-    return _render_digest_budget(
-        prompt,
-        max_digest_tokens=max_digest_tokens,
-        source=str(path),
+    """Load the compaction instructions with the configured digest budget."""
+    return load(
+        PromptId.CORRESPONDENCE_COMPACTION, MAX_DIGEST_TOKENS=int(max_digest_tokens)
     )
 
 

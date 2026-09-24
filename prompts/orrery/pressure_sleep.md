@@ -1,0 +1,1 @@
+{actor} is carrying {{LABEL}} ({{DEBT_SCORE}}). You may render fatigue, dulled judgment, irritability, or the pull toward rest, but Orrery does not decide what {actor} does in scene.

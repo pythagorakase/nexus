@@ -1,0 +1,1 @@
+  {{STATUS}}: omit it from tags_add and replacement-state entity tag additions on entities where it is already active; the wire cannot express duration_override.
