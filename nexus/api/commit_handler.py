@@ -913,16 +913,36 @@ async def commit_incubator_to_database(
 
             await bind_exposures(conn, session_id, chunk_id, asyncpg=True)
 
+            if summary_tasks:
+                from nexus.config.story_model import StorySettings, resolve_seat
+
+                pins = await conn.fetchrow(
+                    "SELECT model, gaia_model, apex_context_window FROM global_variables WHERE id = TRUE FOR SHARE"
+                )
+                if pins is None:
+                    raise RuntimeError(
+                        "Enqueued model resolution requires story settings"
+                    )
+                summary_resolution = resolve_seat(
+                    "summaries.model",
+                    story=StorySettings(
+                        skald_model=pins["model"],
+                        gaia_model=pins["gaia_model"],
+                        apex_context_window=pins["apex_context_window"],
+                    ),
+                )
             for task in summary_tasks:
                 await conn.execute(
                     """INSERT INTO narrative_summary_jobs
-                    (kind, season, episode, generation_session_id)
-                    VALUES ($1, $2, $3, $4::uuid)
+                    (kind, season, episode, generation_session_id, resolved_model, resolved_source)
+                    VALUES ($1, $2, $3, $4::uuid, $5, $6)
                     ON CONFLICT (kind, season, episode) DO NOTHING""",
                     task.kind,
                     task.season,
                     task.episode,
                     session_id,
+                    summary_resolution.model,
+                    summary_resolution.source,
                 )
 
             # Step 10: Clear incubator

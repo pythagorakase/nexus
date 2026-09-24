@@ -281,6 +281,10 @@ class ModelConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    default_model_policy: Literal["fixed", "follow_story"] = Field(
+        default="fixed",
+        description="Use the configured seat ID or follow the story Skald model.",
+    )
     default_model: str = Field(
         ...,
         description=(
@@ -1437,6 +1441,10 @@ class OrreryExperienceSettings(BaseModel):
         default=False,
         description="Whether the player character may own experience rows",
     )
+    model_policy: Literal["fixed", "follow_story"] = Field(
+        default="follow_story",
+        description="Use the configured seat ID or follow the story Skald model.",
+    )
     model: str = Field(..., description="Registered model ID")
     dossier_fields: List[_ExperienceDossierField] = Field(
         default_factory=_default_experience_dossier_fields,
@@ -2505,12 +2513,15 @@ class OrreryRetrogradeMaturationSettings(BaseModel):
             "ceiling stays lower. 1.0 reproduces the full cold-start band."
         ),
     )
+    model_ref_policy: Literal["fixed", "follow_story"] = Field(
+        default="fixed",
+        description="Use the configured seat ID or follow the story Skald model.",
+    )
     model_ref: Optional[str] = Field(
         default=None,
         description=(
             "Frontier model for the R4/R6 maturation calls "
-            "(registered model ID). None follows the wizard "
-            "default model."
+            "(registered model ID). A configured ID is required at resolution."
         ),
     )
     max_tokens: Optional[int] = Field(
@@ -3120,6 +3131,10 @@ class StorytellerCorrespondenceSettings(BaseModel):
         ge=2,
         description="Uncompacted exchange-pair count that triggers compaction.",
     )
+    compaction_model_policy: Literal["fixed", "follow_story"] = Field(
+        default="follow_story",
+        description="Use the configured seat ID or follow the story Skald model.",
+    )
     compaction_model: str = Field(
         ...,
         description="Registered model ID used only for correspondence compaction.",
@@ -3291,12 +3306,16 @@ class SummariesSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    model_policy: Literal["fixed", "follow_story"] = Field(
+        default="follow_story",
+        description="Use the configured seat ID or follow the story Skald model.",
+    )
     model: Optional[str] = Field(
         default=None,
         description=(
             "Registry model reference used for episode and season summaries. "
-            "Absent (the default) follows the storyteller (apex.model); set "
-            "explicitly to decouple the summarizer from the storyteller. All "
+            "Absent uses apex.model as the seat default; model_policy controls "
+            "whether a story pin outranks that configured default. All "
             "registered native and OpenAI-compatible providers are routable."
         ),
     )
@@ -3528,6 +3547,10 @@ class IREvalJudgmentConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    model_policy: Literal["fixed", "follow_story"] = Field(
+        default="fixed",
+        description="Use the configured seat ID or follow the story Skald model.",
+    )
     model: str = Field(
         ...,
         description="LLM model identifier for relevance judgments",
@@ -3854,6 +3877,15 @@ class Settings(BaseModel):
             )
 
             self.model_entry(current).require_window_capabilities()
+
+        if (
+            self.ir_eval is not None
+            and self.ir_eval.judgment.model_policy == "follow_story"
+            and registry[self.apex.model] != "openai"
+        ):
+            raise ValueError(
+                "ir_eval.judgment.model follow_story requires OpenAI structured output"
+            )
 
         if self.local_models.model is not None:
             if registry[self.local_models.model] != "local":

@@ -102,10 +102,10 @@ except ImportError as e:
     print(e)
     sys.exit(1)
 
-from nexus.config import load_settings
+from nexus.config.story_model import resolve_seat
 
 # Legacy batch entry point shares the configured judgment model.
-DEFAULT_MODEL_FOR_SCRIPT = load_settings().ir_eval.judgment.model
+DEFAULT_MODEL_FOR_SCRIPT = resolve_seat("ir_eval.judgment.model").model
 
 # --- Database Schema Constants ---
 NARRATIVE_CHUNKS_TABLE = "narrative_chunks"

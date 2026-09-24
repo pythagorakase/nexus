@@ -60,6 +60,11 @@ from nexus.agents.orrery.tag_writer import (
     apply_tag_bestowal,
 )
 from nexus.config import load_settings_as_dict
+from nexus.config.story_model import (
+    SeatResolution,
+    persisted_job_model,
+    resolve_enqueued_seat,
+)
 from nexus.config.settings_models import (
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeRetrievalSettings,
@@ -213,6 +218,7 @@ def enqueue_declared_entity_maturations(
                 accepting_world_time=accepting_world_time,
             )
 
+        resolution = None
         for declaration, record in declaration_records:
             if declaration.name.lower() not in lowered_text:
                 result.signal_absent += 1
@@ -226,12 +232,20 @@ def enqueue_declared_entity_maturations(
                 )
                 continue
 
+            if resolution is None:
+                resolution = resolve_enqueued_seat(
+                    "orrery.retrograde.maturation.model_ref",
+                    cur,
+                    settings=settings_dict,
+                    slot=slot,
+                )
             inserted = _enqueue_job(
                 cur,
                 record=record,
                 declaration=declaration,
                 chunk_id=chunk_id,
                 slot_label=slot_label,
+                resolution=resolution,
             )
             if inserted:
                 result.jobs_enqueued += 1
@@ -500,6 +514,7 @@ def _enqueue_job(
     declaration: NewEntityDeclaration,
     chunk_id: int,
     slot_label: str,
+    resolution: SeatResolution,
 ) -> bool:
     """Insert one durable maturation job; returns False when already present."""
 
@@ -508,8 +523,8 @@ def _enqueue_job(
         /* orrery:maturation:enqueue */
         INSERT INTO orrery_maturation_jobs (
             entity_id, entity_kind, entity_subtype_id, entity_name,
-            slot, requesting_chunk_id, declaration
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+            slot, requesting_chunk_id, declaration, resolved_model, resolved_source
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
         ON CONFLICT (entity_id) DO NOTHING
         RETURNING id
         """,
@@ -521,6 +536,8 @@ def _enqueue_job(
             slot_label,
             chunk_id,
             declaration.model_dump_json(),
+            resolution.model,
+            resolution.source,
         ),
     )
     row = cur.fetchone()
@@ -595,7 +612,7 @@ def drain_maturation_jobs_sync(
                         j.requesting_chunk_id,
                         j.declaration,
                         j.attempts,
-                        j.result_manifest
+                        j.result_manifest, j.resolved_model, j.resolved_source
                     FROM orrery_maturation_jobs j
                     WHERE (j.state = 'queued' AND j.available_at <= now())
                        OR (
@@ -704,6 +721,7 @@ def _mature_one(
 
     from nexus.api.slot_utils import require_slot_dbname
 
+    model = persisted_job_model(row, table="orrery_maturation_jobs")
     started = time.monotonic()
     dbname = conn.info.dbname
     retrieval = _retrieval_settings(settings_dict)
@@ -764,7 +782,7 @@ def _mature_one(
     seed_started = time.monotonic()
     seed_result = run_seed_stage(
         packet=packet,
-        model_name=cfg.model_ref,
+        model_name=model,
         max_tokens=cfg.max_tokens,
     )
     seed_elapsed = time.monotonic() - seed_started
@@ -806,7 +824,7 @@ def _mature_one(
     expansion_result = generate_expansion_with_skald(
         packet=packet,
         seed_candidate_response=seed_response,
-        model_name=cfg.model_ref,
+        model_name=model,
         max_tokens=cfg.max_tokens,
     )
     expansion_elapsed = time.monotonic() - expansion_started

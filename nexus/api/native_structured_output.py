@@ -222,9 +222,11 @@ def build_native_structured_provider(
     from scripts.api_anthropic import AnthropicProvider
     from scripts.api_openai import OpenAIProvider
 
-    from nexus.config.story_model import resolve_story_model
+    from nexus.config import load_settings
 
-    model = resolve_story_model(seat or "structured", override=model)
+    # The caller supplies a resolved literal, including durable job identities.
+    # Validate registry membership without choosing a seat or consulting a pin.
+    model = load_settings().resolve_model_ref(model)
     endpoint = get_openai_compatible_endpoint(model)
     provider_type = get_provider_for_model(model)
     if provider_type == "anthropic" and endpoint is None:

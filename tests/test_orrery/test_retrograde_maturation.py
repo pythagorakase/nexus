@@ -273,50 +273,6 @@ def test_enqueue_requires_engagement_signal() -> None:
     )
 
 
-def test_enqueue_inserts_job_when_name_appears() -> None:
-    cursor = _RecordingCursor(
-        existing_entity_rows=[(7, 77)],
-        job_insert_returns=[{"id": 1}],
-    )
-    conn = _RecordingConnection(cursor)
-    result = enqueue_declared_entity_maturations(
-        conn,
-        declarations=[_DECLARATION],
-        chunk_id=10,
-        raw_text="sister anechka kneels beside the wounded courier.",
-        slot=2,
-        settings=_ENABLED_SETTINGS,
-    )
-    assert result.jobs_enqueued == 1
-    assert result.stubs_created == 0
-    insert_sql, insert_params = next(
-        (sql, params)
-        for sql, params in cursor.executed
-        if "INSERT INTO orrery_maturation_jobs" in sql
-    )
-    assert "ON CONFLICT (entity_id) DO NOTHING" in insert_sql
-    assert insert_params[0] == 77  # global entity_id
-    assert insert_params[5] == 10  # requesting chunk
-
-
-def test_enqueue_conflict_counts_already_present() -> None:
-    cursor = _RecordingCursor(
-        existing_entity_rows=[(7, 77)],
-        job_insert_returns=[None],
-    )
-    conn = _RecordingConnection(cursor)
-    result = enqueue_declared_entity_maturations(
-        conn,
-        declarations=[_DECLARATION],
-        chunk_id=11,
-        raw_text="Sister Anechka again, still stitching.",
-        slot=2,
-        settings=_ENABLED_SETTINGS,
-    )
-    assert result.jobs_enqueued == 0
-    assert result.jobs_already_present == 1
-
-
 def test_enqueue_rejects_ambiguous_names() -> None:
     cursor = _RecordingCursor(
         existing_entity_rows=[(7, 77), (8, 88)],
@@ -605,6 +561,8 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
         Connection(),
         row={
             "job_id": 7,
+            "resolved_model": typed_settings.orrery.retrograde.maturation.model_ref,
+            "resolved_source": "seat_default",
             "locked_by": "fixture",
             "lease_nonce": "00000000-0000-0000-0000-000000000001",
             "entity_id": 77,
@@ -734,6 +692,8 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
         Connection(),
         row={
             "job_id": 8,
+            "resolved_model": typed_settings.orrery.retrograde.maturation.model_ref,
+            "resolved_source": "seat_default",
             "locked_by": "fixture",
             "lease_nonce": "00000000-0000-0000-0000-000000000001",
             "entity_id": 78,

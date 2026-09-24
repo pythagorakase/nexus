@@ -395,7 +395,10 @@ class OpenAIProvider(LLMProvider):
         from nexus.config import load_settings
 
         settings = load_settings()
-        self.model = self.model or settings.ir_eval.judgment.model
+        if self.model is None:
+            from nexus.config.story_model import resolve_seat
+
+            self.model = resolve_seat("ir_eval.judgment.model", settings=settings).model
         try:
             provider = settings.provider_for_model(self.model)
         except ValueError as exc:

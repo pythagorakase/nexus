@@ -51,6 +51,7 @@ def start_attempt(
     prompt: str,
     settings: dict[str, Any],
     wire_schema: dict[str, Any],
+    resolved_source: str | None = None,
 ) -> None:
     """Insert the dispatch identity before generation, without copying canon."""
     factory = _connection_factory.get()
@@ -96,7 +97,14 @@ def start_attempt(
                 Json(blocks),
                 Json(window),
                 record.model,
-                Json(dict(zip(("model", "gaia_model", "apex_context_window"), pin))),
+                Json(
+                    {
+                        **dict(
+                            zip(("model", "gaia_model", "apex_context_window"), pin)
+                        ),
+                        "resolved_source": resolved_source,
+                    }
+                ),
                 identity_hash(settings),
                 identity_hash(wire_schema),
                 identity_hash({"system": system_prompt, "user": prompt}),

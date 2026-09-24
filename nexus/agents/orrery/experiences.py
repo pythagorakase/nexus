@@ -21,6 +21,7 @@ from nexus.agents.orrery.epistemics import (
 )
 from nexus.agents.orrery.player_identity import canonical_player_entity_id
 from nexus.config.settings_models import OrreryExperienceSettings
+from nexus.config.story_model import persisted_job_model, resolve_enqueued_seat
 from nexus.presence.roster import read_rosters
 from nexus.telemetry.usage import usage_context
 from nexus.prompts.registry import PromptId, load
@@ -1080,6 +1081,9 @@ def enqueue_scene_experience_job_sync(
             (boundary_chunk_id, world_layer),
         )
         next_batch_ordinal = int(cur.fetchone()["next_batch_ordinal"])
+        resolution = resolve_enqueued_seat(
+            "orrery.experiences.model", cur, settings=settings, slot=slot
+        )
         inserted = 0
         for batch_offset, start in enumerate(
             range(0, len(rows), cfg.max_seeds_per_render)
@@ -1093,10 +1097,10 @@ def enqueue_scene_experience_job_sync(
                     boundary_season, boundary_episode, boundary_scene,
                     scene_end_season, scene_end_episode, scene_end_scene,
                     batch_ordinal, experience_ids, slot, requested_model,
-                    source_digest
+                    source_digest, resolved_model, resolved_source
                 ) VALUES (
                     %s, %s, %s::world_layer_type, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 ON CONFLICT (
                     boundary_chunk_id, world_layer, batch_ordinal
@@ -1116,8 +1120,10 @@ def enqueue_scene_experience_job_sync(
                     batch_ordinal,
                     [int(row["id"]) for row in batch_rows],
                     str(slot) if slot is not None else "default",
-                    cfg.model,
+                    resolution.model,
                     _batch_digest(batch_rows),
+                    resolution.model,
+                    resolution.source,
                 ),
             )
             inserted += int(cur.fetchone() is not None)
@@ -1516,7 +1522,7 @@ def _complete_render(
                boundary_chunk_id, scene_end_chunk_id,
                boundary_season, boundary_episode, boundary_scene,
                scene_end_season, scene_end_episode, scene_end_scene,
-               requested_model
+               requested_model, resolved_model, resolved_source
         FROM character_experience_jobs
         WHERE id = %s
         FOR UPDATE
@@ -1543,6 +1549,8 @@ def _complete_render(
         "scene_end_episode",
         "scene_end_scene",
         "requested_model",
+        "resolved_model",
+        "resolved_source",
     )
     if any(current[field] != job[field] for field in frozen_fields):
         raise ExperienceSourceStaleError(
@@ -1819,7 +1827,7 @@ def drain_experience_render_jobs_sync(
             cur.execute(
                 """
                 SELECT job.id AS job_id, job.experience_ids, job.attempts,
-                       job.requested_model,
+                       job.requested_model, job.resolved_model, job.resolved_source,
                        source_digest, world_layer::text AS world_layer, slot,
                        boundary_chunk_id, scene_end_chunk_id,
                        boundary_season, boundary_episode, boundary_scene,
@@ -1860,6 +1868,7 @@ def drain_experience_render_jobs_sync(
             renderable_jobs = []
             for selected in selected_jobs:
                 job = dict(selected)
+                persisted_job_model(job, table="character_experience_jobs")
                 excluded_ids = [
                     int(value) for value in job.pop("excluded_player_experience_ids")
                 ]
@@ -1992,10 +2001,13 @@ def drain_experience_render_jobs_sync(
                 job["renderable_experience_ids"] = renderable_ids
                 job["render_experience_ids"] = render_ids
                 renderable_jobs.append(job)
-            if renderable_jobs:
-                # Match the hardened narration queue: provider construction
-                # must succeed before any durable lease is acquired.
-                renderer = provider or _experience_provider(cfg)
+            renderers = {}
+            for job in renderable_jobs:
+                model = persisted_job_model(job, table="character_experience_jobs")
+                if model not in renderers:
+                    renderers[model] = provider or _experience_provider(
+                        cfg.model_copy(update={"model": model})
+                    )
             jobs = []
             for job in renderable_jobs:
                 nonce = str(uuid4())
@@ -2050,7 +2062,7 @@ def drain_experience_render_jobs_sync(
                 slot=(int(job["slot"]) if str(job["slot"]).isdigit() else slot),
                 run_id=str(job["job_id"]),
             ):
-                response = renderer.get_structured_completion(
+                response = renderers[job["resolved_model"]].get_structured_completion(
                     prompt, ExperienceRenderBatch
                 )
             batch = response[0] if isinstance(response, tuple) else response
@@ -2073,7 +2085,7 @@ def drain_experience_render_jobs_sync(
                         job=job,
                         source_rows=source_rows,
                         validation=validation,
-                        render_model=cfg.model,
+                        render_model=job["resolved_model"],
                         cfg=cfg,
                     )
             rendered_count += len(validation.validated)
