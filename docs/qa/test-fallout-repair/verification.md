@@ -1,5 +1,17 @@
 # PostgreSQL Gate Repair Verification
 
+## Review Fixes for PR #922
+
+Merged `origin/main` as `5fe4f7c4` and addressed the third coordinator amendment on the same branch. The source tested by the final gates is `6b1f1f0f`.
+
+- **MEMNON configuration:** construction calls `nexus.config.loader.load_settings()` inside the owner's scope. All former `MEMNON_SETTINGS` and `GLOBAL_SETTINGS` readers now use instance dictionaries, including both evaluation entry points. Overrides validate through `MEMNONSettings`; module imports no longer load config or install logging handlers. The real two-LORE regression checks distinct debug, retrieval, and embedding settings on one disposable database (`tests/test_lore/test_runtime_config.py:169`; implementation `nexus/agents/memnon/memnon.py:207`).
+- **Historical map:** `/api/current-place` returns every setting of the latest committed chunk with settings in referenced place-ID order (`nexus/api/reader_endpoints.py:565`). The map centers on the first, marks all, and uses the existing readout for all names (`ui/client/src/components/nexus/MapPane.tsx:210`). A disposable HTTP/SQL regression also excludes later uncommitted drafts (`tests/test_presence_roster_pg.py:543`).
+- **Recall:** the anchor SQL carries the whole ordered setting list; scoring uses documented any-of semantics (`nexus/agents/orrery/knowledge_surfacing.py:474`). The disposable test checks a match for each setting and no match for a third place (`tests/test_presence_roster_pg.py:574`).
+- **Experience metadata without migration:** formation includes the complete setting list in its fingerprint. The existing `anchor_chunk_id` links each durable experience to all canonical setting references; `_load_experience_sources` recovers ordered IDs/names for rendering and name validation (`nexus/agents/orrery/experiences.py:1410`). The scalar `location_id` remains an explicit event location or an unambiguous singleton setting, and is null for an unspecified location on a multi-setting scene. Acquisitions retain their delivered-account entitlement boundary. Disposable regressions reread the experience through a fresh connection with and without an explicit event location (`tests/test_presence_roster_pg.py:645`). This follows the work order's no-migration constraint; no duplicate list column was added.
+- **Reachability:** kept exactly the two declarations already landed in #920 (`config/reachability.toml:38` and `:41`). The standalone checker reports no violations; the file now matches `origin/main`.
+
+The built map was inspected against read-only `save_02` on lane 8019, with no scheduler and browser API requests restricted to GET. Both setting pins were marked, the center matched the first place, and there were no page errors. [Map evidence](review-map-settings.png). The owned gateway was interrupted, the same-environment `nexus down` returned `nothing running`, and `lsof` found no listener on 8019. `tests/scheduler_helpers.py:113` still selects 8018.
+
 ## Scope and Coordinator Rulings
 
 Resumed from the first stop report after the coordinator supplied the historical-setting contract and #915's third commit. The starting worktree already contained cherry-picks `bbae037a` and `ca83ef22`; `6eb285b0` was cherry-picked as `a2ce73fe`. This work supersedes #915. No migration, fleet reset, or paid-provider opt-in is part of this repair. The reader UI location label is updated to honor the historical-settings ruling.
@@ -71,10 +83,10 @@ A final `lsof -nP -iTCP:8019 -sTCP:LISTEN` returned no listener. The scheduler t
 
 ## Validation
 
-[Executed commands and verbatim diagnostic tails](commands.md) record the complete repair sequence. The final unfiltered PostgreSQL run completed; its nonzero exit is entirely the authorized #885 exemption.
+[Initial repair commands](commands.md) and [review-fix commands with verbatim tails](review-commands.md) preserve diagnostics and the final evidence.
 
 ```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider > temp/gate/full-pg-final.log 2>&1
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider > temp/gate/review-full-pg.log 2>&1
 ```
 
 ```text
@@ -82,49 +94,72 @@ ERROR tests/test_orrery/test_polymorphic_patron_live.py::test_roster_start_to_st
 ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_writes_exclusive_pair_tag_with_provenance
 ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_and_raw_status_fail_loudly
 ERROR tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_floor_prevents_demotion_and_set_replaces_both_ways
-95 failed, 3278 passed, 49 skipped, 11 warnings, 32 errors in 736.90s (0:12:16)
+95 failed, 3298 passed, 49 skipped, 11 warnings, 32 errors in 762.47s (0:12:42)
 ```
 
-The exact set comparison found 127 remaining IDs, all class a: 95 failures and 32 setup errors. There are zero unexpected IDs and zero missing class-a IDs. Every one of the 54 original class-(b)–(g) IDs cleared. The complete remainder is listed below for the coordinator to post to #885. The first unfiltered diagnostic run still had six provider-fixture failures; the final run includes those repairs.
+The gate remainder is exactly the original 127 class-(a) IDs: 95 failures and 32 setup errors. There are zero unexpected IDs and zero missing expected IDs. The complete list remains below under **#885 Remainder**; [machine-readable comparison](review-gate-comparison.json). All 54 original class-(b)–(g) IDs and the review regressions pass.
 
 ```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_RUN_POSTGRES PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider > temp/gate/offline-final.log 2>&1
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_RUN_POSTGRES PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider > temp/gate/review-offline-final.log 2>&1
 ```
 
 ```text
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-2647 passed, 807 skipped, 9 warnings in 94.49s (0:01:34)
+2655 passed, 819 skipped, 9 warnings in 91.59s (0:01:31)
 ```
 
 ```sh
-/Users/pythagor/nexus/.venv/bin/python -m black --check $(git diff --name-only --diff-filter=ACM 1c5ce99a HEAD -- '*.py') > temp/gate/black-final.log 2>&1
+npm --prefix ui run check && npm --prefix ui test
+```
+
+```text
+ Test Files  22 passed (22)
+      Tests  238 passed (238)
+   Start at  13:59:35
+   Duration  1.95s (transform 1.17s, setup 989ms, collect 4.78s, tests 2.61s, environment 7.93s, prepare 1.26s)
+
+
+```
+
+```sh
+npm --prefix ui run build > temp/gate/review-ui-build.log 2>&1
+```
+
+```text
+PWA v1.0.3
+mode      generateSW
+precache  22 entries (2273.84 KiB)
+files generated
+  ../dist/public/sw.js
+  ../dist/public/workbox-40c80ae4.js
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check $(git diff --name-only --diff-filter=ACM origin/main -- '*.py') > temp/gate/review-black-final.log 2>&1
 ```
 
 ```text
 All done! ✨ 🍰 ✨
-39 files would be left unchanged.
+49 files would be left unchanged.
 ```
 
-All 39 changed Python files are Black-clean. A separate whole-repository probe reported 90 files requiring formatting; none intersects this change. That pre-existing formatting debt is deferred rather than expanded into this repair.
+All 49 Python files changed from `origin/main` are Black-clean. The initial repair recorded 90 unrelated whole-repository formatting failures; that pre-existing formatting debt remains outside this repair. The normal commit hooks passed.
 
 ```sh
-npm --prefix ui run check > temp/gate/ui-check.log 2>&1
-npm --prefix ui run build > temp/gate/ui-build.log 2>&1
-npm --prefix ui test -- client/src/components/nexus/NarrativePane.test.tsx > temp/gate/ui-reader-test.log 2>&1
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -S scripts/check_reachability.py --report temp/gate/review-reachability-final.json > temp/gate/review-reachability-final.log 2>&1
 ```
-
-TypeScript checking and the production build exited zero. Verbatim reader-test tail:
 
 ```text
-
- Test Files  1 passed (1)
-      Tests  3 passed (3)
-   Start at  13:28:43
-   Duration  496ms (transform 52ms, setup 24ms, collect 128ms, tests 48ms, environment 146ms, prepare 34ms)
-
+  "baseline_remove_deleted_production_paths": [],
+  "forbidden_dependencies": [],
+  "tombstone_violations": [],
+  "unresolved_internal_imports": [],
+  "unregistered_dynamic_import_sites": [],
+  "route_reachability": "not_proven"
+}
 ```
 
-No schema migration or `nexus.toml` change. No coordinator decision remains open; the coordinator should post the complete remainder to #885 and treat this PR as superseding #915.
+No migration, paid-provider call, or runtime-default change was introduced by the review fixes. The merge brought in the already-landed character-tag defaults from `origin/main`; `nexus.toml` and `config/reachability.toml` have no PR diff against it. No coordinator question remains: post the complete remainder to #885 at landing. This PR still supersedes #915 and remains unmerged.
 
 ## Classification
 
