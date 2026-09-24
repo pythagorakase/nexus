@@ -1,0 +1,88 @@
+..........F.................................................             [100%]
+=================================== FAILURES ===================================
+_______________ test_frontier_payload_below_ceiling_is_unchanged _______________
+
+turn_manager = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x10afded90>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x10add7810>
+
+    def test_frontier_payload_below_ceiling_is_unchanged(
+        turn_manager: TurnCycleManager, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Typical frontier assembly remains byte-for-byte equivalent in content."""
+        ctx = TurnContext(
+            turn_id="frontier-payload",
+            user_input="Continue.",
+            start_time=time.time(),
+        )
+        ctx.provider_wire_type = "openai"
+        ctx.provider_name = "openai"
+        ctx.warm_slice = [{"chunk_id": 10, "text": "Recent narrative.", "is_target": True}]
+        ctx.entity_data = {"characters": [{"name": "Mara", "summary": "Alert."}]}
+        ctx.retrieved_passages = [{"chunk_id": 2, "text": "Earlier context."}]
+        ctx.memory_state = {"pass2": {"detected": False}}
+        ctx.token_counts = {
+            "total_available": 36_000,
+            "warm_slice": 1_800,
+            "structured": 3_600,
+            "augmentation": 1_800,
+        }
+        turn_manager.settings["lore"] = {
+            "render_limits": load_settings_as_dict()["lore"]["render_limits"]
+        }
+    
+        with caplog.at_level(logging.INFO, logger="nexus.lore.turn_cycle"):
+            asyncio.run(turn_manager.assemble_context_payload(ctx))
+    
+        timestamp = ctx.context_payload["metadata"]["timestamp"]
+        expected_payload = {
+            "user_input": "Continue.",
+            "warm_slice": {"chunks": ctx.warm_slice, "token_count": 1_800},
+            "entity_data": ctx.entity_data,
+            "retrieved_passages": {
+                "results": ctx.retrieved_passages,
+                "token_count": 1_800,
+            },
+            "metadata": {"turn_id": "frontier-payload", "timestamp": timestamp},
+            "memory_state": ctx.memory_state,
+        }
+    
+        assembled_bytes = json.dumps(
+            ctx.context_payload, ensure_ascii=False, separators=(",", ":")
+        ).encode()
+        expected_bytes = json.dumps(
+            expected_payload, ensure_ascii=False, separators=(",", ":")
+        ).encode()
+    
+        assert assembled_bytes == expected_bytes
+>       assert ctx.context_payload["warm_slice"]["chunks"] is ctx.warm_slice
+E       AssertionError: assert [{'chunk_id': 10, 'is_target': True, 'text': 'Recent narrative.'}] is [{'chunk_id': 10, 'is_target': True, 'text': 'Recent narrative.'}]
+E        +  where [{'chunk_id': 10, 'is_target': True, 'text': 'Recent narrative.'}] = TurnContext(turn_id='frontier-payload', user_input='Continue.', start_time=1790285679.957658, phase_states={'orrery_ba...}}, target_chunk_id=None, note=None, orrery_proposal=None, ambient_pacing_allowed=None, bleed_menu=[], intertitle=None).warm_slice
+
+tests/test_lore/test_turn_cycle.py:508: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026-09-24 17:34:39,957 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log setup ------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:34:39,962 - asyncio - DEBUG - Using selector: KqueueSelector
+2026-09-24 17:34:39,963 - nexus.lore.turn_cycle - INFO - Context payload assembled: 0 rendered tokens
+------------------------------ Captured log call -------------------------------
+DEBUG    asyncio:selector_events.py:54 Using selector: KqueueSelector
+INFO     nexus.lore.turn_cycle:turn_cycle.py:1119 Context payload assembled: 0 rendered tokens
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_turn_cycle.py::test_frontier_payload_below_ceiling_is_unchanged
+1 failed, 59 passed, 5 warnings in 2.10s

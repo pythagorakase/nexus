@@ -19,7 +19,9 @@ def main() -> None:
     """Restore the stamped frontier and archive both TEST seat renders."""
     output = Path(__file__).parent
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=("before", "after"), default="after")
+    parser.add_argument(
+        "--phase", choices=("before", "after", "review"), default="after"
+    )
     phase = parser.parse_args().phase
     with disposable_slot_database(
         "qa640_742_scene", source_db="save_04", include_data=True
@@ -35,7 +37,7 @@ def main() -> None:
             assert baseline.config_fingerprint == pass2_baseline_config_fingerprint(
                 lore.settings
             )
-            if phase == "after":
+            if phase != "before":
                 assert (
                     baseline.config_fingerprint
                     == json.loads((output / "before.json").read_text())["fingerprint"]
@@ -95,9 +97,28 @@ def main() -> None:
                     "total": total,
                     "lane_ids": lanes,
                 }
+                if phase == "review":
+                    identities = [
+                        identity for ids in lanes.values() for identity in ids
+                    ]
+                    assert len(identities) == len(set(identities))
+                    assert lanes["recent narrative"] == list(range(40, parent + 1))
+                    assert lanes["recent narrative"][-1] == parent
+                    assert identities.count(parent) == 1
+                    narrative_kinds = list(lanes)
+                    assert narrative_kinds == [
+                        "historical context",
+                        "recalled scenes",
+                        "recent narrative",
+                    ]
+                    evidence["seats"][seat]["recalled_labels"] = [
+                        request.blocks[index][1].strip().split("]", 1)[0] + "]"
+                        for index in request.sources
+                        if request.blocks[index][0] == "recalled scenes"
+                    ]
                 if seat == "skald_writer":
                     pending = dict(lore.memory_manager._pending_retrieval_coverage)
-                    if phase == "after":
+                    if phase != "before":
                         old_tokens = {}
                         for memory in before_payload["warm_slice"]["chunks"]:
                             content = memory["text"]
@@ -151,7 +172,7 @@ def main() -> None:
                         row,
                     )
                 )
-                if phase == "after":
+                if phase != "before":
                     cur.execute(
                         "SELECT kept_chunk_ids, kept_tokens, raw_result_count, coverage, gap_entities FROM retrieval_coverage_log WHERE turn_id = %s",
                         (lore.turn_context.turn_id + ":before",),
@@ -168,19 +189,28 @@ def main() -> None:
                         for k, v in evidence["before_coverage"].items()
                         if k != "kept_tokens"
                     }
-            if phase == "after":
+            if phase != "before":
+                # Assembly now freezes the render selection; compare retrieval
+                # identities/prose against its uncapped inputs, not the payload.
+                candidates = {
+                    "warm_slice": {"chunks": lore.turn_context.warm_slice},
+                    "retrieved_passages": {
+                        "results": lore.turn_context.retrieved_passages
+                    },
+                }
                 for section, key in (
                     ("warm_slice", "chunks"),
                     ("retrieved_passages", "results"),
                 ):
                     assert {
-                        memory_identity(m): m["text"] for m in payload[section][key]
+                        memory_identity(m): m["text"] for m in candidates[section][key]
                     } == {
                         memory_identity(m): m["text"]
                         for m in before_payload[section][key]
                     }
                 assert [
-                    memory_identity(m) for m in payload["retrieved_passages"]["results"]
+                    memory_identity(m)
+                    for m in candidates["retrieved_passages"]["results"]
                 ] == [
                     memory_identity(m)
                     for m in before_payload["retrieved_passages"]["results"]
@@ -188,9 +218,23 @@ def main() -> None:
                 before = json.loads((output / "before.json").read_text())
                 for seat, data in evidence["seats"].items():
                     data["total_delta"] = data["total"] - before["seats"][seat]["total"]
+                if phase == "review":
+                    reviewed = json.loads((output / "after.json").read_text())
+                    for seat, data in evidence["seats"].items():
+                        data["review_delta"] = (
+                            data["total"] - reviewed["seats"][seat]["total"]
+                        )
+                    assert (
+                        evidence["seats"]["skald_writer"]["lane_ids"]
+                        == evidence["seats"]["gaia"]["lane_ids"]
+                    )
                 print("IDENTITIES_AND_PROSE_UNCHANGED")
             (output / f"{phase}.json").write_text(json.dumps(evidence, indent=2) + "\n")
             print(json.dumps(evidence, indent=2))
+            if phase == "review":
+                print(
+                    "REVIEW_PROOF_PASSED: unique identities; parent only in recent; seat parity; fingerprint unchanged; coverage identities unchanged"
+                )
         finally:
             lore.close()
 

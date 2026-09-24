@@ -6,6 +6,182 @@ Work order 742-B implements chronological scene rendering and the coordinator's
 recalled-lane amendments. No prompt prose, configuration defaults, fingerprint
 projection, schema, roster wording, or render caps changed.
 
+## PR #932 Review Fixes
+
+The third coordinator amendment is implemented in `7057b084`. After that fix,
+`git fetch origin && git merge origin/main` reported `Already up to date.`;
+the fetched main is `53ac8fa25c5b3925234d0f329666f904dd8ec50c`.
+
+The shared selection in `nexus/agents/lore/utils/scene_order.py:19` resolves
+identities across both sources before the ranked cap. Recent narrative wins
+over recalled scenes, then historical context. The next distinct candidate
+fills a duplicate's slot. Assembly freezes this selection before hydration
+(`nexus/agents/lore/utils/turn_cycle.py:1008`), so budget trimming cannot
+resurrect a discarded duplicate. Both seats use the same selector.
+
+Only selected recalled entries are hydrated. Missing or NULL clocks clear any
+stale timestamp and render the identity alone (`scene_order.py:90` and `:95`).
+Malformed non-NULL clocks still fail visibly. PostgreSQL regression coverage
+observes the actual query parameters: with a cap of one the query contains
+only chunk 8, excluding the beyond-cap summary's NULL anchor 46; with a cap of
+two both anchors are queried and both entries render undated. Other regressions
+cover a summary present in both Pass 2 and deep retrieval, duplicate parents,
+lane priority, cap refilling, and exact window counts after trimming a duplicate.
+
+### Refreshed Frontier Proof
+
+`review.json`, `review-payload.json`, and `review-{skald_writer,gaia}.txt` are the
+current evidence. `before-*` and `after-*` remain the original baseline and
+reviewed-head captures. The refreshed probe used disposable clone
+`qa640_742_scene_3b3f6d3fcb3c`, TEST rendering, and no generation. Its stored
+fingerprint remains
+`a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7`.
+
+Both seats have exactly these narrative identities:
+
+```text
+HISTORICAL CONTEXT: 34, 36, 28, 37, 27, 35, 26, 33, 21
+RECALLED SCENES: 8, 9, 11, 12, 15, 17, retrograde_summary:21, retrograde_summary:27
+RECENT NARRATIVE: 40, 41, 42, 43, 44, 45, 46, 47, 48, 49
+```
+
+All identities appear once; parent 49 appears only in RECENT NARRATIVE. The
+recalled labels and clocks are unchanged from the original proof below and are
+also recorded explicitly in `review.json`. The writer roster and user input
+still immediately follow the recent scene.
+
+| Block | Reviewed Writer | Fixed Writer | Reviewed Gaia | Fixed Gaia |
+|---|---:|---:|---:|---:|
+| historical context | 15171 | 9513 | 15171 | 9513 |
+| recalled scenes | 6161 | 6161 | 6161 | 6161 |
+| recent narrative | 9782 | 9782 | 9782 | 9782 |
+| Total | 42942 | 37284 | 40334 | 34676 |
+
+Every other block count is unchanged; all per-block counts are in `review.json`.
+Each seat loses exactly 5658 tokens of duplicated historical entries (49, 48,
+47, 43, 46, 42), independently counted in `review-duplicate-costs.json`. Thus the
+net change from the original preimplementation prompt is -5512 tokens: the
+accepted 146-token label cost minus these duplicate copies. This reduction is
+the third amendment's required deduplication, not a render-limit change.
+
+The probe asserts unchanged raw selected retrieval identities, prose, historical
+rank order, and coverage identities/entity coverage/gaps. Coverage `kept_tokens`
+is now 7719 (8252 before the original implementation; 8390 at the reviewed
+head), reflecting the rendered entries exactly once. Source save_04 is read
+only; `review-cleanup.json` confirms no remaining scene-proof databases and
+read-only save_05 counts of zero chunks and zero characters.
+
+The remaining sections document the original implementation and its archived
+gates. The review validation commands and current results are recorded below.
+
+## Review Validation
+
+The final offline gate has zero failures. The PostgreSQL subset ran all 109
+selected tests; its sole failure remains the explicitly exempt #885 slot-5
+coverage test. No other failure is exempt. Black and both commit hooks passed.
+No gateway, paid call, UI build, fleet/template migration, or save reset was used.
+
+The initial offline run found 11 fixture failures (`review-offline-initial.txt`):
+the minimal assembly fixtures lacked the required `RenderLimits` fields.
+Those fixtures now read the actual render limits from `nexus.toml` through the
+settings loader. The first fixture rerun (`review-fixtures-initial.txt`) also
+exposed one stale assertion that the list itself must be reused. It now asserts
+that individual chunk objects are retained; the existing byte-for-byte payload
+assertion remains. The next fixture rerun passed 60 tests, and the complete
+rerun passed 2714. These are fixture repairs in `9110efd6`, not production
+fallbacks or new exemptions. Initial failed logs are preserved under the
+`-initial` filenames; their commands were identical to the subsequent reruns.
+
+Commands and verbatim final tails:
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_scene_order_render.py tests/test_lore/test_historical_render.py > docs/qa/742-scene-order/review-focused.txt 2>&1
+```
+
+```text
+16 passed, 5 warnings in 3.29s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_turn_cycle.py tests/test_orrery/test_ambient.py tests/test_orrery/test_bleed.py > docs/qa/742-scene-order/review-fixtures.txt 2>&1
+```
+
+```text
+60 passed, 5 warnings in 2.20s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q > docs/qa/742-scene-order/review-offline.txt 2>&1
+```
+
+```text
+2714 passed, 894 skipped, 9 warnings in 134.78s (0:02:14)
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore -k 'render or format or window or coverage or warm or recent' > docs/qa/742-scene-order/review-postgres.txt 2>&1
+```
+
+```text
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_retrieval_coverage_live.py::test_handle_user_input_writes_exact_coverage_and_empty_detection
+1 failed, 108 passed, 212 deselected, 9 warnings in 22.63s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check . > docs/qa/742-scene-order/review-black.txt 2>&1
+```
+
+```text
+All done! ✨ 🍰 ✨
+667 files would be left unchanged.
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python docs/qa/742-scene-order/probe.py --phase review > docs/qa/742-scene-order/review-probe.log 2>&1
+```
+
+```text
+REVIEW_PROOF_PASSED: unique identities; parent only in recent; seat parity; fingerprint unchanged; coverage identities unchanged
+```
+
+Formatting commands run before the checks:
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black nexus/agents/lore/utils/scene_order.py nexus/agents/lore/utils/turn_cycle.py nexus/agents/lore/logon_utility.py tests/test_lore/test_scene_order_render.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+2 files reformatted, 2 files left unchanged.
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black docs/qa/742-scene-order/probe.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+1 file reformatted.
+```
+
+The probe transcript is archived as `review-probe.txt`. The import check
+(`review-import.txt`) prints this worktree's `nexus/__init__.py`.
+Read-only cleanup/source-state SQL behind `review-cleanup.json`:
+
+```sql
+-- Database: postgres
+SELECT datname FROM pg_database
+WHERE datname LIKE 'qa640_742_scene_%' OR datname LIKE 'qa640_scene_%'
+ORDER BY datname;
+-- Zero rows.
+
+-- Database: save_05
+SELECT (SELECT count(*) FROM narrative_chunks),
+       (SELECT count(*) FROM characters);
+-- 0, 0.
+```
+
 ## Rendering and Accounting
 
 Both seats now use the same narrative order: historical passages, recalled
@@ -13,13 +189,13 @@ scenes, recent scene. The recent scene is sorted by numeric chunk id, ending at
 the parent; the writer's existing roster line and the user input follow it.
 Pass-2 additions are marked only when added to the warm list, preserving
 selection, deduplication, and memory identities. Retrograde summaries from
-either source list enter the recalled lane. The historical cap still selects
-the ranked prefix before lane partitioning.
+either source list enter the recalled lane. The historical cap selects
+the ranked prefix after cross-source deduplication and before lane partitioning.
 
 Recalled narrative labels carry their own story clocks. Summary labels explicitly
 say `recorded at chunk` and use that anchor's clock; unanchored summaries remain
-undated. Clock hydration reads `narrative_view` in one query, fails loudly on an
-anchored memory without a clock, and formats every face with `clock_face`.
+undated. Clock hydration reads the selected entries from `narrative_view` in one
+query; an entry without a clock renders its id only. Every face uses `clock_face`.
 
 The prompt-window kind is `recalled scenes`. Trimming preserves the existing
 selection policy and subtracts from the actual lane; dropping its last entry
@@ -246,7 +422,13 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python docs/qa/742-scene-order/p
 
 ## Coordinator Questions
 
-None. The only deferred item is the already exempt #885 slot-5 fixture failure.
-The branch is for coordinator review; this run does not merge or wait for review bots.
+The separate bot comment [discussion_r4098645540](https://github.com/pythagorakase/nexus/pull/932#discussion_r4098645540)
+asks for a warm-window query bounded by an older explicit parent, rather than
+filtering the globally newest window. Does the coordinator want that selection
+change in a separate order? It is outside this amendment's two specified fixes;
+this run proves the save_04 frontier, not historical-parent continuation.
+
+The existing #885 slot-5 fixture failure remains exempt. The branch is for
+coordinator review; this run does not merge or wait for review bots.
 
 Codex, running GPT-6 Astra.

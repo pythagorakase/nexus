@@ -1,0 +1,29 @@
+{
+  "removed_historical_duplicates": [
+    {
+      "identity": 49,
+      "tokens": 1007
+    },
+    {
+      "identity": 48,
+      "tokens": 693
+    },
+    {
+      "identity": 47,
+      "tokens": 671
+    },
+    {
+      "identity": 43,
+      "tokens": 958
+    },
+    {
+      "identity": 46,
+      "tokens": 901
+    },
+    {
+      "identity": 42,
+      "tokens": 1428
+    }
+  ],
+  "total_removed_tokens": 5658
+}

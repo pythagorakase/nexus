@@ -1,0 +1,732 @@
+........................................................................ [  1%]
+............................ssssssssssssssssssssssssss.......ss.sss....s [  3%]
+....................................................sss................. [  5%]
+....................ssssssss.......s...ssssssssssss...sssssss........... [  7%]
+.ssssssssssssssssssss.....sssssssssssssssssss..sss...sssssssssssssssssss [  9%]
+ss...ssssss............................................................. [ 11%]
+............................ssssss......ss.........s.................... [ 13%]
+..........................s............................................. [ 15%]
+............................................................ssssssssssss [ 17%]
+ssssss..................s...s........................s.................. [ 19%]
+....ss..............................s....s..........s..sssssssssssssssss [ 21%]
+ssssssssssssss.ssssssssssssss...........sssss................s.........s [ 23%]
+sssss..s..........................................ss............ssssssss [ 25%]
+...............s........................................................ [ 27%]
+....................ssssssss...sssss...s......ssss......ss.............. [ 29%]
+.........................F.............................................. [ 31%]
+...ssss...........s.....sss.............ss..............sss............. [ 33%]
+........................................................................ [ 35%]
+...........................................ss........................... [ 37%]
+.....ssssssssssss......FFFFF......................sss................FFF [ 39%]
+FF..sssss..........ss.........ssss.ss...ssss...................sssssssss [ 41%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss.....sssss [ 43%]
+sss..............sssssssssssssssssss..................sssssssssssssssss. [ 45%]
+.......................................ss................ssss....sssssss [ 47%]
+ssssss........ssssssssss..s.sssssssssssss...s........................... [ 49%]
+........................................................................ [ 51%]
+........................................................sssssssss....... [ 53%]
+...................................................sssssssssssssssssssss [ 55%]
+sssssssssssssssss...................................................ssss [ 57%]
+ssssssssssssssssssssssssssssssssssssssss....................s........... [ 59%]
+.............sssssssssssssssssssssssssss............sss...........ssss.. [ 61%]
+......................sssssssssssssssssssssss......sssss..s............. [ 63%]
+......ssssssssssssssssssssssssssssssssssssssss.......................... [ 65%]
+........................................................................ [ 67%]
+..........sssssss....................................................... [ 69%]
+......................s...................ssss...s...................... [ 71%]
+....................ssssssssssssssssssssss.............................. [ 73%]
+...................sssssssssssss.s.........s....ssssssssss.....ss....... [ 75%]
+........ssss......................................ss....sssssssssss..... [ 77%]
+........................................................................ [ 79%]
+..ssssss........................ssssssssssss.............ssssss......... [ 81%]
+.s.....................................................sssssssssssssssss [ 83%]
+ssssssssssssss.....sssssssssssssssssss........s...ss.................... [ 85%]
+.s..........................ssssssssssssssssssssssssss.................. [ 87%]
+.......................s................................................ [ 89%]
+....................................ssssssss............................ [ 91%]
+...............................ssssssssssss............................. [ 93%]
+........................................................................ [ 95%]
+.s..s.....................s...................................sssss..... [ 97%]
+.........................................................sssssssssssssss [ 99%]
+ssssss                                                                   [100%]
+=================================== FAILURES ===================================
+_______________ test_frontier_payload_below_ceiling_is_unchanged _______________
+
+turn_manager = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x169d76f90>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x169f1bc50>
+
+    def test_frontier_payload_below_ceiling_is_unchanged(
+        turn_manager: TurnCycleManager, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Typical frontier assembly remains byte-for-byte equivalent in content."""
+        ctx = TurnContext(
+            turn_id="frontier-payload",
+            user_input="Continue.",
+            start_time=time.time(),
+        )
+        ctx.provider_wire_type = "openai"
+        ctx.provider_name = "openai"
+        ctx.warm_slice = [{"chunk_id": 10, "text": "Recent narrative.", "is_target": True}]
+        ctx.entity_data = {"characters": [{"name": "Mara", "summary": "Alert."}]}
+        ctx.retrieved_passages = [{"chunk_id": 2, "text": "Earlier context."}]
+        ctx.memory_state = {"pass2": {"detected": False}}
+        ctx.token_counts = {
+            "total_available": 36_000,
+            "warm_slice": 1_800,
+            "structured": 3_600,
+            "augmentation": 1_800,
+        }
+    
+        with caplog.at_level(logging.INFO, logger="nexus.lore.turn_cycle"):
+>           asyncio.run(turn_manager.assemble_context_payload(ctx))
+
+tests/test_lore/test_turn_cycle.py:482: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../.pyenv/versions/3.11.12/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+../../../../.pyenv/versions/3.11.12/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+../../../../.pyenv/versions/3.11.12/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x169d76f90>
+payload = {'entity_data': {'characters': [{'name': 'Mara', 'summary': 'Alert.'}]}, 'memory_state': {'pass2': {'detected': False}...-payload'}, 'retrieved_passages': {'results': [{'chunk_id': 2, 'text': 'Earlier context.'}], 'token_count': 1800}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+---------------------------- Captured stderr setup -----------------------------
+2026-09-24 17:32:57,703 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log setup ------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+_ test_both_eligible_renders_exactly_one_background_channel[100-ambient_scene] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x168efa3d0>
+anchor_chunk_id = 100, expected_channel = 'ambient_scene'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("anchor_chunk_id", "expected_channel"),
+        [(100, "ambient_scene"), (101, "bleed")],
+    )
+    async def test_both_eligible_renders_exactly_one_background_channel(
+        monkeypatch: pytest.MonkeyPatch,
+        anchor_chunk_id: int,
+        expected_channel: str,
+    ) -> None:
+        """Real selection and rendering expose one replay-stable arbitration winner."""
+    
+>       context = await _assemble_background_payload(
+            monkeypatch,
+            ambient=True,
+            bleed=True,
+            anchor_chunk_id=anchor_chunk_id,
+        )
+
+tests/test_orrery/test_ambient.py:359: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_orrery/test_ambient.py:343: in _assemble_background_payload
+    await manager.assemble_context_payload(context)
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x1686566d0>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:04.540018', 'turn_id': 'ambient-arbitration'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:04,526 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+_____ test_both_eligible_renders_exactly_one_background_channel[101-bleed] _____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x169e1b4d0>
+anchor_chunk_id = 101, expected_channel = 'bleed'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("anchor_chunk_id", "expected_channel"),
+        [(100, "ambient_scene"), (101, "bleed")],
+    )
+    async def test_both_eligible_renders_exactly_one_background_channel(
+        monkeypatch: pytest.MonkeyPatch,
+        anchor_chunk_id: int,
+        expected_channel: str,
+    ) -> None:
+        """Real selection and rendering expose one replay-stable arbitration winner."""
+    
+>       context = await _assemble_background_payload(
+            monkeypatch,
+            ambient=True,
+            bleed=True,
+            anchor_chunk_id=anchor_chunk_id,
+        )
+
+tests/test_orrery/test_ambient.py:359: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_orrery/test_ambient.py:343: in _assemble_background_payload
+    await manager.assemble_context_payload(context)
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x169165110>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:04.752277', 'turn_id': 'ambient-arbitration'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:04,739 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+_ test_background_texture_single_eligible_channel_is_unaffected[True-False-ambient_scene] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1692b6510>
+ambient = True, bleed = False, expected_channel = 'ambient_scene'
+
+    @pytest.mark.parametrize(
+        ("ambient", "bleed", "expected_channel"),
+        [(True, False, "ambient_scene"), (False, True, "bleed")],
+    )
+    @pytest.mark.asyncio
+    async def test_background_texture_single_eligible_channel_is_unaffected(
+        monkeypatch: pytest.MonkeyPatch,
+        ambient: bool,
+        bleed: bool,
+        expected_channel: str,
+    ) -> None:
+        """Real selection and rendering preserve the sole eligible channel."""
+    
+>       context = await _assemble_background_payload(
+            monkeypatch,
+            ambient=ambient,
+            bleed=bleed,
+        )
+
+tests/test_orrery/test_ambient.py:410: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_orrery/test_ambient.py:343: in _assemble_background_payload
+    await manager.assemble_context_payload(context)
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x1694df9d0>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:04.803381', 'turn_id': 'ambient-arbitration'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:04,789 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+_ test_background_texture_single_eligible_channel_is_unaffected[False-True-bleed] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x169f6d590>
+ambient = False, bleed = True, expected_channel = 'bleed'
+
+    @pytest.mark.parametrize(
+        ("ambient", "bleed", "expected_channel"),
+        [(True, False, "ambient_scene"), (False, True, "bleed")],
+    )
+    @pytest.mark.asyncio
+    async def test_background_texture_single_eligible_channel_is_unaffected(
+        monkeypatch: pytest.MonkeyPatch,
+        ambient: bool,
+        bleed: bool,
+        expected_channel: str,
+    ) -> None:
+        """Real selection and rendering preserve the sole eligible channel."""
+    
+>       context = await _assemble_background_payload(
+            monkeypatch,
+            ambient=ambient,
+            bleed=bleed,
+        )
+
+tests/test_orrery/test_ambient.py:410: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_orrery/test_ambient.py:343: in _assemble_background_payload
+    await manager.assemble_context_payload(context)
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x177093ad0>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:04.851885', 'turn_id': 'ambient-arbitration'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:04,839 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+______ test_failed_shared_density_draw_renders_neither_background_channel ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x16951f110>
+
+    @pytest.mark.asyncio
+    async def test_failed_shared_density_draw_renders_neither_background_channel(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The production payload path renders neither channel after a failed draw."""
+    
+        assert shared_ambient_pacing_allows(100, 0.0) is False
+>       context = await _assemble_background_payload(
+            monkeypatch,
+            ambient=True,
+            bleed=True,
+            pacing_allowed=False,
+            density=0.0,
+        )
+
+tests/test_orrery/test_ambient.py:430: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_orrery/test_ambient.py:343: in _assemble_background_payload
+    await manager.assemble_context_payload(context)
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x17706b950>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:04.893651', 'turn_id': 'ambient-arbitration'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:04,886 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+______________ test_assemble_context_payload_includes_bleed_menu _______________
+
+    @pytest.mark.asyncio
+    async def test_assemble_context_payload_includes_bleed_menu() -> None:
+        """LORE payload assembly injects selected ambient Orrery peripherals."""
+    
+        session = FakeSession(candidate_rows=[_candidate_row()])
+        manager = TurnCycleManager(FakeLore(_settings(), session))
+        context = TurnContext(
+            turn_id="t1",
+            user_input="Continue.",
+            start_time=0,
+            warm_slice=[{"id": 100, "text": "Rain ticks against the glass."}],
+        )
+        context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
+    
+>       await manager.assemble_context_payload(context)
+
+tests/test_orrery/test_bleed.py:612: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x169a7ff10>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:05.236637', 'turn_id': 't1'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:05,223 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+_________ test_assemble_context_payload_does_not_initialize_bleed_llm __________
+
+    @pytest.mark.asyncio
+    async def test_assemble_context_payload_does_not_initialize_bleed_llm() -> None:
+        """Orrery Bleed should not summon local inference during turn assembly."""
+    
+        session = FakeSession(candidate_rows=[_candidate_row()])
+        lore = FakeLore(_settings(), session)
+        manager = TurnCycleManager(lore)
+        context = TurnContext(
+            turn_id="t1",
+            user_input="Continue.",
+            start_time=0,
+            warm_slice=[{"id": 100, "text": "Rain ticks against the glass."}],
+        )
+        context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
+    
+>       await manager.assemble_context_payload(context)
+
+tests/test_orrery/test_bleed.py:637: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x1685bbb50>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:05.275018', 'turn_id': 't1'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:05,262 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+_________ test_assemble_context_payload_reuses_orrery_proposal_anchor __________
+
+    @pytest.mark.asyncio
+    async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
+        """Bleed uses the existing resolve anchor instead of recomputing max chunk."""
+    
+        session = FakeSession(candidate_rows=[_candidate_row()])
+        manager = TurnCycleManager(FakeLore(_settings(), session))
+        context = TurnContext(
+            turn_id="t1",
+            user_input="Continue.",
+            start_time=0,
+            warm_slice=[],
+        )
+        context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
+        context.orrery_proposal = OrreryTickProposal(
+            anchor_chunk_id=77, actor_count=0, resolutions=()
+        )
+    
+>       await manager.assemble_context_payload(context)
+
+tests/test_orrery/test_bleed.py:660: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x1770a6010>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:05.313373', 'turn_id': 't1'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:05,300 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+___________ test_assemble_context_payload_attaches_scene_conditions ____________
+
+    @pytest.mark.asyncio
+    async def test_assemble_context_payload_attaches_scene_conditions() -> None:
+        """The resolved anchor weather and time reach the Storyteller payload."""
+    
+        session = FakeSession()
+        manager = TurnCycleManager(FakeLore(_settings(), session))
+        context = TurnContext(
+            turn_id="t1",
+            user_input="Continue.",
+            start_time=0,
+            warm_slice=[],
+        )
+        context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
+        context.orrery_proposal = OrreryTickProposal(
+            anchor_chunk_id=77,
+            actor_count=0,
+            resolutions=(),
+            scene_conditions={"weather": "warm", "time_of_day": "afternoon"},
+        )
+    
+>       await manager.assemble_context_payload(context)
+
+tests/test_orrery/test_bleed.py:691: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x168efa550>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:05.354303', 'turn_id': 't1'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:05,341 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+_____________ test_assemble_context_payload_preserves_scene_moods ______________
+
+    @pytest.mark.asyncio
+    async def test_assemble_context_payload_preserves_scene_moods() -> None:
+        """Present-character mood context reaches the Storyteller unchanged."""
+    
+        session = FakeSession()
+        manager = TurnCycleManager(FakeLore(_settings(), session))
+        context = TurnContext(
+            turn_id="t1", user_input="Continue.", start_time=0, warm_slice=[]
+        )
+        context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
+        context.orrery_proposal = OrreryTickProposal(
+            anchor_chunk_id=77,
+            actor_count=0,
+            resolutions=(),
+            scene_conditions={
+                "moods": [{"entity_id": 1, "name": "Mara", "mood": "restless"}]
+            },
+        )
+    
+>       await manager.assemble_context_payload(context)
+
+tests/test_orrery/test_bleed.py:718: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+nexus/agents/lore/utils/turn_cycle.py:1008: in assemble_context_payload
+    self._select_scene_payload(turn_context.context_payload)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <nexus.agents.lore.utils.turn_cycle.TurnCycleManager object at 0x176fa4310>
+payload = {'entity_data': {}, 'memory_state': {}, 'metadata': {'timestamp': '2026-09-24T17:33:05.393984', 'turn_id': 't1'}, 'retrieved_passages': {'results': [], 'token_count': 0}, ...}
+
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+>       limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+E       relationships
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       events
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       threats
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+E       bleed_menu
+E         Field required [type=missing, input_value={}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.11/v/missing
+
+nexus/agents/lore/utils/turn_cycle.py:1160: ValidationError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:33:05,380 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+------------------------------ Captured log call -------------------------------
+INFO     nexus.memory.manager:manager.py:362 Using deterministic entity-based divergence detector
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+nexus/api/storyteller.py:307
+  /Users/pythagor/nexus/.claude/worktrees/742-scene-order/nexus/api/storyteller.py:307: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../../../.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_turn_cycle.py::test_frontier_payload_below_ceiling_is_unchanged
+FAILED tests/test_orrery/test_ambient.py::test_both_eligible_renders_exactly_one_background_channel[100-ambient_scene]
+FAILED tests/test_orrery/test_ambient.py::test_both_eligible_renders_exactly_one_background_channel[101-bleed]
+FAILED tests/test_orrery/test_ambient.py::test_background_texture_single_eligible_channel_is_unaffected[True-False-ambient_scene]
+FAILED tests/test_orrery/test_ambient.py::test_background_texture_single_eligible_channel_is_unaffected[False-True-bleed]
+FAILED tests/test_orrery/test_ambient.py::test_failed_shared_density_draw_renders_neither_background_channel
+FAILED tests/test_orrery/test_bleed.py::test_assemble_context_payload_includes_bleed_menu
+FAILED tests/test_orrery/test_bleed.py::test_assemble_context_payload_does_not_initialize_bleed_llm
+FAILED tests/test_orrery/test_bleed.py::test_assemble_context_payload_reuses_orrery_proposal_anchor
+FAILED tests/test_orrery/test_bleed.py::test_assemble_context_payload_attaches_scene_conditions
+FAILED tests/test_orrery/test_bleed.py::test_assemble_context_payload_preserves_scene_moods
+11 failed, 2703 passed, 894 skipped, 9 warnings in 153.46s (0:02:33)
