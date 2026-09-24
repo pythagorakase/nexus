@@ -5,6 +5,64 @@ All implementation and test commands ran from this worktree using
 `/Users/pythagor/nexus/.venv/bin/python`. No installation, fleet migration,
 template modification, paid provider call, or merge was performed.
 
+## PR #933 Review Amendments
+
+Fix commit `1d5b7d29` addresses the coordinator's P2/P3 and port findings:
+
+- `nexus/telemetry/attempt_manifest.py:77` locks the session row and copies its
+  terminal outcome on insert. Later session transitions still synchronize via
+  migration 124's existing trigger. `provider_outcome` remains independent.
+- `tests/test_api/test_attempt_manifest_pg.py:148` discards an existing session,
+  inserts its late retry, finishes the provider attempt as accepted, and asserts
+  both manifests remain discarded while the retry's provider outcome is accepted.
+- `nexus/agents/logon/orrery_tag_validation.py:1047` and `:1246` include the resolved
+  entity kind and database ID in active-extend-expiry repair notes. The manifest
+  retains those safe references and repair code alongside the original-note hash;
+  names, tags, paths and free text are omitted. The inspector prints repair codes.
+- The TEST turn requests port 0; `tests/scheduler_helpers.py:127` retains the bound
+  listener and propagates its actual ephemeral port, avoiding a release/rebind race.
+- `git fetch origin` followed by `git merge origin/main` reported
+  `Already up to date.` Main was `53ac8fa2`; PR #932 was not in that fetched main.
+
+The revised real TEST turn produced session
+`14f9ee7a-5ade-48ca-b06a-0af03293f58d`, accepted chunk **51**, accepted manifests
+for **gaia** and **skald_writer**, and correlated compaction job **2**. The migration
+preserved **46** existing chunk IDs/text hashes. The privacy/retention fixture
+pruned exactly one aged terminal manifest. No paid calls were made.
+
+### Amendment Validation
+
+```console
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black nexus/telemetry/attempt_manifest.py nexus/agents/logon/orrery_tag_validation.py nexus/cli.py tests/scheduler_helpers.py tests/test_api/test_attempt_manifest_pg.py
+All done! ✨ 🍰 ✨
+2 files reformatted, 3 files left unchanged.
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check nexus/telemetry/attempt_manifest.py nexus/agents/logon/orrery_tag_validation.py nexus/cli.py tests/scheduler_helpers.py tests/test_api/test_attempt_manifest_pg.py
+All done! ✨ 🍰 ✨
+5 files would be left unchanged.
+
+$ PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_api/test_attempt_manifest_pg.py
+3 passed, 9 warnings in 79.25s (0:01:19)
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+2708 passed, 895 skipped, 9 warnings in 147.08s (0:02:27)
+```
+
+```console
+$ PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_orrery -k 'session or manifest or inspect or job or correlat'
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_null_awareness_is_possession_terminal
+1 failed, 66 passed, 1917 deselected, 11 warnings in 173.23s (0:02:53)
+```
+
+Only the explicitly exempt #885 slot-5 test failed, with
+`need-clock anchor unavailable: no canonical world time or base_timestamp`.
+No selected PostgreSQL tests skipped. The offline gate and this PostgreSQL
+selection ran after the requested fetch/merge. Both repository commit hooks passed.
+
+The separate automated review comment about async exposure binding
+([discussion](https://github.com/pythagorakase/nexus/pull/933#discussion_r4098683930))
+is outside these frozen coordinator amendments and remains for coordinator triage.
+
 ## Behavior and Evidence
 
 - `nexus/api/commit_handler_sync.py:373` and `nexus/api/commit_handler.py:604`
@@ -41,9 +99,9 @@ template modification, paid provider call, or merge was performed.
 ## Database and TEST-Provider Proof
 
 `tests/test_api/test_attempt_manifest_pg.py` uses real PostgreSQL and the
-repository's HTTP TEST provider. The gateway runs on lane **8015**, checks for
-an existing listener before starting, and stops through the fixture and
-`nexus down` with the same lane environment. Every manually selected database
+repository's HTTP TEST provider. The revised gateway proof binds an ephemeral port (port 0), publishes the
+bound port to both gateway environment variables, and stops through the fixture
+and `nexus down` with that same environment. The original proof below used 8015. Every manually selected database
 prefix is `qa640_`; existing suite fixture prefixes remain unchanged.
 
 Migration 124 was applied by the repository migration runner to populated
