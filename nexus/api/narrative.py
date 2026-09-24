@@ -73,6 +73,8 @@ from nexus.api.narrative_lease import (
     acquire_generation_lease,
     bind_generation_parent,
     claim_parent_embedding,
+    discard_generation,
+    read_generation_session,
 )
 from nexus.api.config_utils import (
     get_generation_lease_timeout_seconds,
@@ -230,21 +232,29 @@ _include_backstage_router(app)
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
-        self.session_progress: Dict[str, Dict] = {}
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
 
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
+    async def broadcast(self, message: str, slot: int):
+        for connection in tuple(self.active_connections):
+            if connection.query_params.get("slot") != str(slot):
+                continue
+            try:
+                await connection.send_text(message)
+            except (RuntimeError, WebSocketDisconnect, OSError):
+                logger.warning(
+                    "Dropping disconnected narrative socket for slot %s", slot
+                )
+                self.disconnect(connection)
 
     async def send_progress(self, session_id: str, status: str, data: Dict = None):
         """Send progress update for a specific session"""
@@ -254,8 +264,11 @@ class ConnectionManager:
             "timestamp": datetime.now().isoformat(),
             "data": data or {},
         }
-        self.session_progress[session_id] = progress
-        await self.broadcast(json.dumps(progress))
+        slot = (data or {}).get("slot")
+        if slot is None:
+            raise ValueError("Narrative progress requires an explicit slot")
+        progress["slot"] = slot
+        await self.broadcast(json.dumps(progress), slot)
 
 
 manager = ConnectionManager()
@@ -691,12 +704,18 @@ def _bind_generation_owner(
 
 
 def _abandon_generation_owner(
-    *, slot: Optional[int], session_id: str, error: str
+    *,
+    slot: Optional[int],
+    session_id: str,
+    error: str,
+    error_class: str = "GenerationError",
 ) -> None:
     """Release a route-owned lease after a pre-scheduling failure."""
     conn = get_db_connection(slot)
     try:
-        abandon_generation(conn, session_id=session_id, error=error)
+        abandon_generation(
+            conn, session_id=session_id, error=error, error_class=error_class
+        )
     finally:
         conn.close()
 
@@ -706,6 +725,7 @@ def _abandon_unscheduled_generation_owner(
     slot: Optional[int],
     session_id: str,
     error: str,
+    error_class: str = "GenerationError",
 ) -> None:
     """Best-effort cleanup for a route that never scheduled its generator."""
 
@@ -714,6 +734,7 @@ def _abandon_unscheduled_generation_owner(
             slot=slot,
             session_id=session_id,
             error=error,
+            error_class=error_class,
         )
     except Exception as release_exc:
         logger.error(
@@ -901,6 +922,7 @@ async def continue_narrative(
     )
     scheduled = False
     accept_warnings: List[Dict[str, Any]] = []
+    failure_class = "GenerationError"
     failure_reason = "Narrative request ended before generation was scheduled."
     try:
         if request.chunk_id is None and state is not None:
@@ -1021,9 +1043,11 @@ async def continue_narrative(
             warnings=accept_warnings,
         )
     except asyncio.CancelledError:
+        failure_class = "CancelledError"
         failure_reason = "CancelledError"
         raise
     except Exception as exc:
+        failure_class = type(exc).__name__
         failure_reason = str(exc) or type(exc).__name__
         raise
     finally:
@@ -1032,66 +1056,36 @@ async def continue_narrative(
                 slot=request.slot,
                 session_id=session_id,
                 error=failure_reason,
+                error_class=failure_class,
             )
+
+
+@app.get("/api/narrative/active", response_model=Optional[NarrativeStatus])
+async def get_active_narrative(
+    slot: int = Query(..., ge=1, le=5)
+) -> Optional[NarrativeStatus]:
+    """Expose the lease owner or latest finished attempt for this explicit slot."""
+    conn = get_db_connection(slot)
+    try:
+        row = read_generation_session(conn)
+        return NarrativeStatus(slot=slot, **row) if row else None
+    finally:
+        conn.close()
 
 
 @app.get("/api/narrative/status/{session_id}", response_model=NarrativeStatus)
-async def get_narrative_status(session_id: str, slot: Optional[int] = None):
-    """Get durable status, validating every completed result binding."""
+async def get_narrative_status(
+    session_id: str, slot: int = Query(..., ge=1, le=5)
+) -> NarrativeStatus:
+    """Return durable phase and outcome from the requested slot only."""
     conn = get_db_connection(slot)
     try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT
-                    gs.session_id,
-                    CASE
-                        WHEN gs.status = 'complete' AND i.session_id IS NULL
-                             AND accepted.id IS NULL
-                            THEN 'error'
-                        ELSE gs.status
-                    END AS status,
-                    CASE
-                        WHEN gs.status = 'complete' AND i.session_id IS NULL
-                             AND accepted.id IS NULL
-                            THEN NULL
-                        ELSE gs.chunk_id
-                    END AS chunk_id,
-                    gs.parent_chunk_id,
-                    gs.created_at,
-                    CASE
-                        WHEN gs.status = 'complete' AND i.session_id IS NULL
-                             AND accepted.id IS NULL
-                            THEN (
-                                'Completed result is no longer loadable for '
-                                'this session.'
-                            )
-                        ELSE gs.error
-                    END AS error
-                FROM narrative_generation_sessions gs
-                LEFT JOIN incubator i
-                  ON i.session_id = gs.session_id
-                 AND i.chunk_id IS NOT DISTINCT FROM gs.chunk_id
-                 AND i.parent_chunk_id = gs.parent_chunk_id
-                LEFT JOIN narrative_chunks accepted ON accepted.id = gs.chunk_id
-                WHERE gs.session_id = %s
-                """,
-                (session_id,),
+        row = read_generation_session(conn, session_id=session_id)
+        if row is None:
+            raise HTTPException(
+                status_code=404, detail=f"Session {session_id} not found"
             )
-            result = cur.fetchone()
-
-        if result:
-            return NarrativeStatus(
-                session_id=session_id,
-                status=result["status"],
-                chunk_id=result["chunk_id"],
-                parent_chunk_id=result["parent_chunk_id"],
-                created_at=result["created_at"],
-                error=result["error"],
-            )
-
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-
+        return NarrativeStatus(slot=slot, **row)
     finally:
         conn.close()
 
@@ -1157,6 +1151,7 @@ async def regenerate_narrative(
         operation="regenerate",
     )
     scheduled = False
+    failure_class = "GenerationError"
     failure_reason = "Regeneration request ended before generation was scheduled."
     try:
         _bind_generation_owner(
@@ -1207,9 +1202,11 @@ async def regenerate_narrative(
             message=f"Regenerating chunk {chunk_id}",
         )
     except asyncio.CancelledError:
+        failure_class = "CancelledError"
         failure_reason = "CancelledError"
         raise
     except Exception as exc:
+        failure_class = type(exc).__name__
         failure_reason = str(exc) or type(exc).__name__
         raise
     finally:
@@ -1218,6 +1215,7 @@ async def regenerate_narrative(
                 slot=request.slot,
                 session_id=session_id,
                 error=failure_reason,
+                error_class=failure_class,
             )
 
 
@@ -1509,7 +1507,7 @@ async def select_choice(request: SelectChoiceRequest):
 
 
 @app.websocket("/ws/narrative")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, slot: int = Query(..., ge=1, le=5)):
     """WebSocket endpoint for real-time progress updates"""
     await manager.connect(websocket)
     try:
@@ -1555,11 +1553,14 @@ async def clear_incubator(
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM incubator WHERE id = TRUE "
-                "AND (%s IS NULL OR session_id = %s)",
+                "AND (%s IS NULL OR session_id = %s) RETURNING session_id",
                 (session_id, session_id),
             )
             if session_id is not None and cur.rowcount != 1:
                 raise HTTPException(status_code=404, detail="Pending session not found")
+            removed = cur.fetchone()
+            if removed is not None:
+                discard_generation(cur, str(removed[0]))
         conn.commit()
         return {"message": "Incubator cleared"}
     finally:

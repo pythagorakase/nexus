@@ -70,7 +70,8 @@ def acquire_generation_lease(
                 cur.execute(
                     """
                     UPDATE narrative_generation_sessions
-                    SET status = 'error',
+                    SET status = 'error', terminal_outcome = 'error',
+                        error_class = 'GenerationLeaseExpired',
                         error = 'Generation lease expired before completion.',
                         updated_at = NOW()
                     WHERE session_id = %s
@@ -201,6 +202,7 @@ def finish_generation(
     status: str,
     chunk_id: Optional[int] = None,
     error: Optional[str] = None,
+    error_class: Optional[str] = None,
 ) -> None:
     """Persist monotonic terminal status and release only this session's lease."""
     _finish_generation(
@@ -210,6 +212,7 @@ def finish_generation(
         chunk_id=chunk_id,
         error=error,
         release_embedding_claim=False,
+        error_class=error_class,
     )
 
 
@@ -221,6 +224,7 @@ def _finish_generation(
     chunk_id: Optional[int],
     error: Optional[str],
     release_embedding_claim: bool,
+    error_class: Optional[str] = None,
 ) -> None:
     """Apply one terminal transition using lease -> claims -> session order."""
     if status not in {"complete", "error"}:
@@ -247,7 +251,7 @@ def _finish_generation(
 
             cur.execute(
                 """
-                SELECT status, chunk_id
+                SELECT status, chunk_id, terminal_outcome
                 FROM narrative_generation_sessions
                 WHERE session_id = %s
                 FOR UPDATE
@@ -260,6 +264,9 @@ def _finish_generation(
                     f"Generation session record {session_id} is missing."
                 )
 
+            if session["terminal_outcome"] in {"accepted", "superseded"}:
+                conn.commit()
+                return
             current_status = str(session["status"])
             if current_status == "complete" and status == "error":
                 logger.error(
@@ -285,11 +292,22 @@ def _finish_generation(
                 UPDATE narrative_generation_sessions
                 SET status = %s,
                     chunk_id = %s,
+                    phase = CASE WHEN %s = 'complete' THEN 'complete' ELSE phase END,
+                    terminal_outcome = CASE WHEN %s = 'error' THEN 'error' END,
+                    error_class = %s,
                     error = %s,
                     updated_at = NOW()
                 WHERE session_id = %s
                 """,
-                (status, chunk_id, error, session_id),
+                (
+                    status,
+                    chunk_id,
+                    status,
+                    status,
+                    error_class or ("GenerationError" if status == "error" else None),
+                    error,
+                    session_id,
+                ),
             )
         conn.commit()
         if released_lease:
@@ -301,7 +319,9 @@ def _finish_generation(
         raise
 
 
-def abandon_generation(conn: Any, *, session_id: str, error: str) -> None:
+def abandon_generation(
+    conn: Any, *, session_id: str, error: str, error_class: str = "GenerationError"
+) -> None:
     """Fail a pre-scheduling route and release both its lease and parent claim."""
     _finish_generation(
         conn,
@@ -310,4 +330,88 @@ def abandon_generation(conn: Any, *, session_id: str, error: str) -> None:
         chunk_id=None,
         error=error,
         release_embedding_claim=True,
+        error_class=error_class,
+    )
+
+
+def heartbeat_generation(
+    conn: Any, *, session_id: str, timeout_seconds: int, phase: Optional[str] = None
+) -> None:
+    """Renew a live owner and persist its actual phase in one transaction."""
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE narrative_generation_lease "
+                "SET expires_at = clock_timestamp() + make_interval(secs => %s) "
+                "WHERE session_id = %s AND expires_at > clock_timestamp()",
+                (timeout_seconds, session_id),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"Generation session {session_id} lost its lease")
+            cur.execute(
+                "UPDATE narrative_generation_sessions SET heartbeat_at = clock_timestamp(), "
+                "phase = COALESCE(%s, phase), updated_at = clock_timestamp() "
+                "WHERE session_id = %s AND status = 'initiated'",
+                (phase, session_id),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"Generation session {session_id} is not active")
+
+
+def read_generation_session(
+    conn: Any, *, session_id: Optional[str] = None
+) -> Optional[dict[str, Any]]:
+    """Read the lease owner, or latest durable attempt, and reap crashed owners.
+
+    A fresh reader must also discover a turn that finished while disconnected.
+    The latest session remains discoverable after its lease has been released.
+    """
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT session_id FROM narrative_generation_lease "
+                "WHERE expires_at <= clock_timestamp()"
+            )
+            if cur.fetchone() is not None:
+                cur.execute(
+                    "LOCK TABLE narrative_generation_lease IN SHARE ROW EXCLUSIVE MODE"
+                )
+                cur.execute(
+                    "DELETE FROM narrative_generation_lease "
+                    "WHERE expires_at <= clock_timestamp() RETURNING session_id"
+                )
+                expired = cur.fetchone()
+                if expired:
+                    cur.execute(
+                        "UPDATE narrative_generation_sessions SET status = 'error', "
+                        "terminal_outcome = 'error', error_class = 'GenerationLeaseExpired', "
+                        "error = 'Generation lease expired before completion.', updated_at = NOW() "
+                        "WHERE session_id = %s AND status = 'initiated'",
+                        (expired["session_id"],),
+                    )
+            cur.execute(
+                "SELECT gs.*, lease.expires_at FROM narrative_generation_sessions gs "
+                "LEFT JOIN narrative_generation_lease lease USING (session_id) "
+                "WHERE (%s IS NULL OR gs.session_id = %s) "
+                "ORDER BY (lease.session_id IS NOT NULL) DESC, gs.created_at DESC LIMIT 1",
+                (session_id, session_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+            row = dict(row)
+            row["session_id"] = str(row["session_id"])
+            if row["replaced_by_session_id"] is not None:
+                row["replaced_by_session_id"] = str(row["replaced_by_session_id"])
+            return row
+
+
+def discard_generation(cur: Any, session_id: str) -> None:
+    """Record intentional draft removal in the same transaction as its delete."""
+    cur.execute(
+        "UPDATE narrative_generation_sessions SET status = 'error', "
+        "terminal_outcome = 'error', error_class = 'DraftDiscarded', "
+        "error = 'Completed result is no longer loadable for this session.', "
+        "updated_at = NOW() WHERE session_id = %s AND terminal_outcome IS NULL",
+        (session_id,),
     )

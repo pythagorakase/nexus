@@ -180,6 +180,10 @@ async def test_staging_bleed_regenerate_and_acceptance(acceptance_slot) -> None:
             assert cur.fetchone() == (0,)
         status = await narrative.get_narrative_status(regenerated.session_id, slot=5)
         assert status.status == "complete" and status.chunk_id is None
+        assert status.phase == "complete" and status.terminal_outcome is None
+        replaced = await narrative.get_narrative_status(session, slot=5)
+        assert replaced.terminal_outcome == "superseded"
+        assert replaced.replaced_by_session_id == regenerated.session_id
         selected = narrative._record_player_response_for_chunk(
             slot=5,
             chunk_id=None,
@@ -206,6 +210,9 @@ async def test_staging_bleed_regenerate_and_acceptance(acceptance_slot) -> None:
                 (regenerated.session_id,),
             )
             assert cur.fetchone() == (accepted,)
+        terminal = await narrative.get_narrative_status(regenerated.session_id, slot=5)
+        assert terminal.terminal_outcome == "accepted"
+        assert terminal.chunk_id == accepted
         with pytest.raises(ValueError, match="No incubator data"):
             commit_incubator_to_database_sync(conn, regenerated.session_id, slot=5)
         with conn.cursor() as cur:

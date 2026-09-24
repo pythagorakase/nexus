@@ -37,7 +37,29 @@ export interface FrontierClock {
 }
 
 /** Response model for GET /api/slot/{slot}/state (SlotStateResponse). */
+export interface GenerationSettings {
+  poll_interval_seconds: number;
+  wake_gap_threshold_seconds: number;
+  stale_lease_timeout_seconds: number;
+}
+
+export interface GenerationSession {
+  slot: number;
+  session_id: string;
+  status: "initiated" | "complete" | "error";
+  phase: NarrativePhase;
+  terminal_outcome: "accepted" | "superseded" | "error" | null;
+  replaced_by_session_id: string | null;
+  chunk_id: number | null;
+  created_at: string;
+  heartbeat_at: string;
+  expires_at: string | null;
+  error: string | null;
+  error_class: string | null;
+}
+
 export interface SlotState {
+  narrative_generation: GenerationSettings;
   slot: number;
   is_empty: boolean;
   is_wizard_mode: boolean;
@@ -62,6 +84,7 @@ export interface ContinueNarrativeResponse {
 
 /** WebSocket progress payload from /ws/narrative. */
 export interface NarrativeProgressPayload {
+  slot: number;
   session_id: string;
   status: string;
   message?: string;
@@ -73,6 +96,11 @@ export interface NarrativeProgressPayload {
 }
 
 export type NarrativePhase =
+  | "retrieval"
+  | "assembly"
+  | "writer"
+  | "gaia"
+  | "staging"
   | "initiated"
   | "loading_chunk"
   | "building_context"
@@ -83,6 +111,7 @@ export type NarrativePhase =
 
 /** Phases that indicate generation is actively in progress. */
 export const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
+  "retrieval", "assembly", "writer", "gaia", "staging",
   "initiated",
   "loading_chunk",
   "building_context",
@@ -95,6 +124,11 @@ export const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
  * in-reader status line). Plain language only - no internal module names.
  */
 export const PHASE_LABELS: Partial<Record<NarrativePhase, string>> = {
+  retrieval: "Loading context…",
+  assembly: "Assembling context…",
+  writer: "Writing…",
+  gaia: "Updating the world…",
+  staging: "Preparing scene…",
   initiated: "Request received…",
   loading_chunk: "Loading scene…",
   building_context: "Assembling context…",

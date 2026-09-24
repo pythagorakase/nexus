@@ -8,6 +8,8 @@ This module handles async narrative generation including:
 - Bootstrap narrative generation (generate_bootstrap_narrative)
 """
 
+import asyncio
+from contextlib import suppress
 import json
 import logging
 import uuid
@@ -24,7 +26,9 @@ from nexus.api.lore_adapter import (
     response_to_incubator,
     validate_incubator_data,
 )
-from nexus.api.narrative_lease import finish_generation
+from nexus.api.narrative_lease import finish_generation, heartbeat_generation
+from nexus.api.config_utils import get_generation_lease_timeout_seconds
+from nexus.telemetry.generation import generation_progress, report_generation_phase
 from nexus.api.presence_reconciliation import (
     read_character_roster_async,
     reconcile_public_prose_mentions,
@@ -90,7 +94,20 @@ def _correlate_generation_usage(
         slot: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
-        with usage_context(run_id=session_id, slot=slot):
+        def report(phase: str) -> None:
+            if kwargs.get("manage_generation_lease", True):
+                conn = kwargs["get_db_connection"](slot)
+                try:
+                    heartbeat_generation(
+                        conn,
+                        session_id=session_id,
+                        timeout_seconds=get_generation_lease_timeout_seconds(),
+                        phase=phase,
+                    )
+                finally:
+                    conn.close()
+
+        with usage_context(run_id=session_id, slot=slot), generation_progress(report):
             await function(
                 session_id,
                 parent_chunk_id,
@@ -142,12 +159,48 @@ async def generate_narrative_async(
         manage_generation_lease: Persist terminal durable status and release the
             lease. Production route tasks enable this after acquisition.
     """
+    underlying_manager = manager
+
+    class ScopedProgress:
+        async def send_progress(
+            self, session_id: str, status: str, data: Optional[Dict] = None
+        ) -> None:
+            """Attach the request slot to every acceleration hint."""
+            await underlying_manager.send_progress(
+                session_id, status, {**(data or {}), "slot": slot}
+            )
+
+    manager = ScopedProgress()
     conn = None
     is_bootstrap = parent_chunk_id == 0
+    heartbeat_task = None
+    owner_task = asyncio.current_task()
+    heartbeat_error = None
+
+    async def renew() -> None:
+        nonlocal heartbeat_error
+        try:
+            while True:
+                await asyncio.sleep(get_generation_lease_timeout_seconds() / 3)
+                heartbeat_conn = get_db_connection(slot)
+                try:
+                    heartbeat_generation(
+                        heartbeat_conn,
+                        session_id=session_id,
+                        timeout_seconds=get_generation_lease_timeout_seconds(),
+                    )
+                finally:
+                    heartbeat_conn.close()
+        except Exception as exc:
+            heartbeat_error = exc
+            owner_task.cancel()
 
     try:
         # Connect to database
         conn = get_db_connection(slot)
+        if manage_generation_lease:
+            heartbeat_task = asyncio.create_task(renew())
+        report_generation_phase("retrieval")
 
         # Send progress: loading chunk
         await manager.send_progress(session_id, "loading_chunk")
@@ -294,22 +347,15 @@ async def generate_narrative_async(
             # Validate the data before writing
             validate_incubator_data(incubator_data)
 
-        # Write to incubator
-        if expected_incubator_session is None:
-            await write_to_incubator(conn, incubator_data)
-        else:
-            await write_to_incubator(
-                conn,
-                incubator_data,
-                expected_incubator_session=expected_incubator_session,
-            )
+        report_generation_phase("staging")
+        # Stage the draft and release its lease atomically. A gateway crash
+        # cannot leave a loadable result with an initiated session.
+        staging_options = {}
         if manage_generation_lease:
-            finish_generation(
-                conn,
-                session_id=session_id,
-                status="complete",
-                chunk_id=incubator_data["chunk_id"],
-            )
+            staging_options["complete_session"] = True
+        if expected_incubator_session is not None:
+            staging_options["expected_incubator_session"] = expected_incubator_session
+        await write_to_incubator(conn, incubator_data, **staging_options)
 
         # The result and terminal status are already committed. A stale
         # WebSocket must not turn successful durable work into an error.
@@ -332,7 +378,8 @@ async def generate_narrative_async(
 
         logger.info(f"Narrative generation complete for session {session_id}")
 
-    except Exception as e:
+    except (Exception, asyncio.CancelledError) as e:
+        e = heartbeat_error or e
         error_detail = _exception_detail(e)
         logger.error(f"Error generating narrative: {error_detail}")
         if conn is not None and manage_generation_lease:
@@ -343,6 +390,7 @@ async def generate_narrative_async(
                     session_id=session_id,
                     status="error",
                     error=error_detail,
+                    error_class=type(e.__cause__ or e).__name__,
                 )
             except Exception as status_exc:
                 logger.error(
@@ -359,6 +407,10 @@ async def generate_narrative_async(
                 notification_exc,
             )
     finally:
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat_task
         if conn:
             conn.close()
 
@@ -397,6 +449,7 @@ async def write_to_incubator(
     data: Dict[str, Any],
     *,
     expected_incubator_session: Optional[str] = None,
+    complete_session: bool = False,
 ) -> None:
     """Persist only while the expected parent/session still owns the slot."""
     generation_model = data["generation_model"]
@@ -540,7 +593,21 @@ async def write_to_incubator(
                     raise RuntimeError(
                         "Incubator ownership changed during conditional replacement."
                     )
-        conn.commit()
+                cur.execute(
+                    "UPDATE narrative_generation_sessions "
+                    "SET terminal_outcome = 'superseded', replaced_by_session_id = %s, "
+                    "phase = 'complete', updated_at = NOW() "
+                    "WHERE session_id = %s AND terminal_outcome IS NULL",
+                    (data["session_id"], expected_incubator_session),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        "Replaced generation session is not a pending draft"
+                    )
+        if complete_session:
+            finish_generation(conn, session_id=data["session_id"], status="complete")
+        else:
+            conn.commit()
     except Exception:
         conn.rollback()
         raise

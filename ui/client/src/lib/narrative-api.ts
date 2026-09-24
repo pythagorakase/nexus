@@ -20,6 +20,7 @@ import type {
   ChunkContext,
   ChunkWithMetadata,
   ContinueNarrativeResponse,
+  GenerationSession,
   IncubatorPayload,
   SlotState,
 } from "@/types/narrative";
@@ -200,4 +201,13 @@ export async function continueNarrative(params: {
     throw new Error(`${res.status}: ${text}`);
   }
   return res.json();
+}
+
+/** Discover even a generation that completed while the reader was disconnected. */
+export function getActiveGeneration(slot: number): Promise<GenerationSession | null> {
+  return getJson(`/api/narrative/active?slot=${slot}`);
+}
+
+export function getGenerationStatus(slot: number, session: string): Promise<GenerationSession> {
+  return getJson(`/api/narrative/status/${encodeURIComponent(session)}?slot=${slot}`);
 }
