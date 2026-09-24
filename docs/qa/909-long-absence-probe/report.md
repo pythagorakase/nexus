@@ -1,10 +1,10 @@
-# Long-Absence Re-Entry Probe: Stop Report
+# Long-Absence Re-Entry Probe
 
 ## Outcome
 
-**STOP: seven live attempts yielded four accepted turns; the required six-turn probe cannot be completed within the eight-attempt cap.** Both Niko and Ora pairs are accepted as chunks **50–53**. Ivo A failed three times; Ivo B was not attempted. Exactly **13 paid generation requests** ran: seven writer calls and six Gaia calls, all on the configured `gpt-5.6-terra` story pin (Gaia follows that pin). No eighth attempt was spent because it could not complete the missing pair.
+**Complete as a two-subject measurement under the coordinator's third amendment.** Four accepted turns returned Niko and Ora as chunks **50–53**; both had been absent for **24 chunks**, the longest genuine absences in this corpus. No long-absence continuity contradiction appeared. The measurable gap is relationship-temperature visibility, not demonstrated memory failure.
 
-The failures are (1) an unresolved place update, (2) mutually exclusive presence operations, and (3) a tag-reapplication constraint. No validation was bypassed. This is a partial measurement and a successful stop under the work order's escape hatch, **not a completed #909 evidence gate**. No PR is opened for a completed probe; the coordinator must authorize how to resume. The four accepted turns do not show an unambiguous long-absence continuity contradiction, but omission and relationship-temperature ambiguity remain, detailed below.
+Seven live attempts dispatched exactly **13 paid generation requests**: seven writer calls and six Gaia calls, all on the configured `gpt-5.6-terra` story pin (Gaia follows that pin). Three Ivo attempts failed validation; no Ivo turn was accepted. Ivo's one-chunk absence would not have measured the target failure. Those failures are tracked separately in [#918](https://github.com/pythagorakase/nexus/issues/918), with every artifact retained here. No further paid attempts are authorized or were made during report finalization. The clone is dropped and lane 8018 is down.
 
 ## Scope and Method
 
@@ -27,7 +27,7 @@ Every character with at least one `present` reference appears below. Source: [su
 | 11 | Unknown municipal-gray stranger | 21 | 28 | 2:16:00 | No | Excluded: roster/prose mismatch |
 | 4 | Niko Rell | 25 | 24 | 2:02:00 | Yes | Subject 1 |
 | 14 | Ora Pell | 25 | 24 | 2:02:00 | No | Subject 2 |
-| 2 | Ivo Senn | 48 | 1 | 0:08:00 | Yes | Subject 3; tie broken by ID |
+| 2 | Ivo Senn | 48 | 1 | 0:08:00 | Yes | Short-absence comparison; three failed attempts |
 | 3 | Elian Rook | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
 | 5 | Ren Vale | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
 | 6 | Sister Calyx | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
@@ -58,7 +58,7 @@ The adjusted Ivo return (`d62347f1-cf28-468e-a44b-cd853c8d44f7`) reached Gaia an
 - orrery_adjudications[0].replacement_state_delta.entity_tags_add: applied_tags: Tag 'forewarned' uses reapplication_policy='extend_expiry', which requires duration_override; storyteller tags_add cannot express duration_override. If the tag is already active, leave it unchanged; otherwise omit it.
 ```
 
-See [final failed session](live/3A-final-failed-session.json) and [final failed usage](live/3A-final-failed-usage.json). This spent the second spare. Reaching six accepted turns now requires at least two further live attempts, exceeding the remaining one. All three failed Ivo attempts leave chunk 53 as the accepted frontier; unaccepted writer prose is not scored as accepted narrative.
+See [final failed session](live/3A-final-failed-session.json) and [final failed usage](live/3A-final-failed-usage.json). This spent the second spare. At the original stop, reaching six accepted turns required at least two further live attempts, exceeding the remaining one. The third amendment accepts the two-subject measurement and closes further attempts. All three failed Ivo attempts leave chunk 53 as the accepted frontier; unaccepted writer prose is not scored as accepted narrative.
 
 ## Per-Turn Evidence
 
@@ -188,40 +188,57 @@ Exact provider-reported counts; reasoning tokens are already included in output.
 
 ## Independent Rubric
 
-**0 = contradicted; 1 = absent; 2 = consistent.** “Fabricated history” scores 2 when no unsupported claim about established shared history is found, 1 when no assessable history is supplied, and 0 for fabricated established history. New events in the unobserved interval are permitted story progression, not automatically false memories; they are not treated as verified recall. Consistency is judged against the original last appearance and the original directed relationship baseline. A conservative 1 marks an omitted specific episode even when broad continuity survives. Totals are within a turn only; no averaging across scorers occurs.
+**0 = contradicted; 1 = absent; 2 = consistent.** “Fabricated history” scores 2 when no unsupported claim about established shared history is found, 1 when no assessable history is supplied, and 0 for fabricated established history. New events in the unobserved interval are permitted story progression, not automatically false memories; they are not treated as verified recall. Consistency is judged against the original last appearance and the original directed relationship baseline. Astra's original scores are preserved; the coordinator's independent scores and reasoning follow verbatim below. Totals are within a turn only; no averaging across scorers occurs.
 
 | Turn | Item | Astra | One-Line Justification | Coordinator |
 |---|---|---:|---|---|
-| 1A | Shared history | 1 | Protects Ora's privacy but does not recall the particular shutter/conduit episode or tin handoff. | Pending independent score |
-| 1A | State | 2 | Niko remains alert and protective of Ora; his separate arrival does not contradict the open withdrawal. | Pending independent score |
-| 1A | Temperature | 2 | Withholds Ora's whereabouts and sets hard limits; no reconciliation or trust is asserted despite offering a warning. | Pending independent score |
-| 1A | Fabricated history | 2 | The municipal inquiry is new offscreen action, not a rewritten claim about the established shutter scene. | Pending independent score |
-| 1B | Shared history | 2 | Explicitly preserves the supplied west-conduit/condensers route from chunk 25. | Pending independent score |
-| 1B | State | 2 | Reports only the leg Niko observed and refuses to infer Ora's onward route or safety. | Pending independent score |
-| 1B | Temperature | 1 | Kessa calls him “your friend” and his posture softens; the specific negative Niko-to-Mara grievance is absent, although his limits persist. | Pending independent score |
-| 1B | Fabricated history | 2 | Separation after the observed route leg extends the previously open interval without contradicting established shared actions. | Pending independent score |
-| 2A | Shared history | 1 | Receipt custody and autonomy persist, but the specific tin handoff/rescue-story exchange is not recalled. | Pending independent score |
-| 2A | State | 2 | Ora remains guarded and self-directed after leaving the bay; a tea stop and changed coat are new interval details. | Pending independent score |
+| 1A | Shared history | 1 | Protects Ora's privacy but does not recall the particular shutter/conduit episode or tin handoff. | 1 |
+| 1A | State | 2 | Niko remains alert and protective of Ora; his separate arrival does not contradict the open withdrawal. | 2 |
+| 1A | Temperature | 2 | Withholds Ora's whereabouts and sets hard limits; no reconciliation or trust is asserted despite offering a warning. | 1 |
+| 1A | Fabricated history | 2 | The municipal inquiry is new offscreen action, not a rewritten claim about the established shutter scene. | 2 |
+| 1B | Shared history | 2 | Explicitly preserves the supplied west-conduit/condensers route from chunk 25. | 2 |
+| 1B | State | 2 | Reports only the leg Niko observed and refuses to infer Ora's onward route or safety. | 2 |
+| 1B | Temperature | 1 | Kessa calls him “your friend” and his posture softens; the specific negative Niko-to-Mara grievance is absent, although his limits persist. | 1 |
+| 1B | Fabricated history | 2 | Separation after the observed route leg extends the previously open interval without contradicting established shared actions. | 2 |
+| 2A | Shared history | 1 | Receipt custody and autonomy persist, but the specific tin handoff/rescue-story exchange is not recalled. | 2 |
+| 2A | State | 2 | Ora remains guarded and self-directed after leaving the bay; a tea stop and changed coat are new interval details. | 2 |
 | 2A | Temperature | N/A | No relationship row exists for Ora; excluded from the denominator. | N/A |
-| 2A | Fabricated history | 2 | No shared prior promise, debt, or transfer is invented; changed clothing is not presented as Mara's remembered act. | Pending independent score |
-| 2B | Shared history | 2 | Confirms Mara caught the tin and preserves Ora's explicit rejection of a rescue story from chunk 25. | Pending independent score |
-| 2B | State | 2 | Ora retains her receipt and route agency and declines custody or debt claims. | Pending independent score |
+| 2A | Fabricated history | 2 | No shared prior promise, debt, or transfer is invented; changed clothing is not presented as Mara's remembered act. | 2 |
+| 2B | Shared history | 2 | Confirms Mara caught the tin and preserves Ora's explicit rejection of a rescue story from chunk 25. | 2 |
+| 2B | State | 2 | Ora retains her receipt and route agency and declines custody or debt claims. | 2 |
 | 2B | Temperature | N/A | No relationship row exists for Ora; excluded from the denominator. | N/A |
-| 2B | Fabricated history | 2 | The response assigns the known handoff and assistance accurately without inventing consent or obligation. | Pending independent score |
+| 2B | Fabricated history | 2 | The response assigns the known handoff and assistance accurately without inventing consent or obligation. | 2 |
 | 3A | All items | Not scored | Three failed attempts; no Ivo return was accepted. | Not scored |
-| 3B | All items | Not run | One remaining attempt cannot complete the required accepted pair. | Not run |
+| 3B | All items | Not run | Not needed for the accepted two-subject measurement; no further attempts authorized. | Not run |
 
-Astra totals: **1A 7/8; 1B 7/8; 2A 5/6; 2B 6/6**. Coordinator totals remain pending. The “friend” line is a specific disagreement candidate: Kessa's label is not itself proof that Niko reciprocates Mara's positive relationship, so Astra records absent directional temperature rather than a categorical contradiction. The coordinator should assess it independently from the full prose.
+| Turn | Astra Total | Coordinator Total | Disagreement |
+|---|---:|---:|---|
+| 1A | 7/8 | 6/8 | Temperature: Astra 2, coordinator 1 |
+| 1B | 7/8 | 7/8 | None |
+| 2A | 5/6 | 6/6 | Shared history: Astra 1, coordinator 2 |
+| 2B | 6/6 | 6/6 | None |
+
+Coordinator's independent rubric scores, verbatim:
+
+- 1A: shared history **1** (no recall of the shutter, conduit, or tin; custody implied only); state **2**; temperature **1** (Niko → Mara is `enemy`, −0.55; the prose has him volunteer a protective warning and counsel about the paper, wary respect rather than enmity: the negative direction is absent, not contradicted); fabricated **2**. Total **6/8** (Astra 7/8; disagreement on temperature).
+- 1B: shared history **2**; state **2**; temperature **1** (Kessa's "your friend" is a third party's label and Niko's own stance stays bounded; absent, not contradicted, and the writer had no way to see the −0.55 because the relationship block prints `Unknown → Unknown` with no valence); fabricated **2**. Total **7/8** (agree).
+- 2A: shared history **2** (the writer recalled the west-conduit leg unprompted, "changed out of whatever rain gear she wore on the west-conduit leg", a specific chunk-25 fact; the tin was not recalled, but the item asks whether last-appearance history was recalled or contradicted, and it was recalled); state **2**; temperature N/A; fabricated **2**. Total **6/6** (Astra 5/6; disagreement on shared history).
+- 2B: shared history **2**; state **2**; temperature N/A; fabricated **2**. Total **6/6** (agree).
+
+The two disagreements are retained without averaging. For 1A, Astra treated protective boundaries as sufficient consistency, while the coordinator requires evidence of the negative relationship direction. For 2A, Astra's justification focused on the omitted tin handoff; the coordinator credits the explicit west-conduit recall in the full [accepted prose](live/2A-accepted.json). Ora's temperature is N/A in both columns and excluded from both totals.
 
 ## Findings and Recommendation
 
-**No unambiguous long-absence continuity contradiction appeared in the four accepted Niko/Ora turns. The full ordered probe remains incomplete.** Specific history was absent in both A turns and accurately handled when supplied in B. That does not prove unaided recall, nor does omission in an open-ended greeting prove forgetting. Niko's relationship temperature remains ambiguous in 1B. The strong private storyteller correspondence already summarizes Ora/Niko's withdrawal and divided custody; it is a plausible support for continuity, not an experimentally isolated cause.
+**No long-absence continuity contradiction appeared in four accepted turns on a corpus whose longest absence is 24 chunks.** The measurable gap is relationship temperature, and it is a visibility defect rather than a memory defect: the relationship block renders `Unknown → Unknown` without valence, and the dossier's literal lines are generic stubs while the featured emotional-state line carries the useful signal. This is the coordinator's ruling; the two scoring disagreements remain recorded above. The strong private storyteller correspondence also summarizes Ora/Niko's withdrawal and divided custody; it is a plausible support for continuity, not an experimentally isolated cause. B turns supply reminders, and the sequential design does not isolate unaided recall.
 
-- **#913, reconnect summaries:** the clone has **zero `episodes` rows and zero `seasons` rows**, so this corpus offers no completed episode/season summary to reconnect. Private correspondence and rendered `retrograde_summary:*` blocks are different sources and already supply context. This run does not compare a summary intervention with a dossier and cannot establish #913's efficacy. See `episodes.json`, `seasons.json`, and their SQL results.
-- **#911, state-change salience:** chunk **25** was retrieved at position **14** for 1A but omitted by the five-entry historical cap and absent from the warm slice. It has **four relationship-version rows and seven state-delta rows**; the latter include Niko's protective withdrawal and Ora's route/custody state. This directly connects a state-bearing last-appearance chunk to a rendered omission. For 1B, 2A, and 2B, chunk 25 enters the printed top five. A salience prior could be tested against this ranking/cap interaction, but this run does not demonstrate a prose benefit. See [state fan-in](live/last-appearance-state-fan-in.json) and [actual deltas](live/state_delta_log-last-appearances.json).
-- **#793, the dossier:** the literal brief lines are generic (“watching the world go by,” “taking a small pleasure,” “pacing the near ground”), while the featured lines retain meaningful emotional state. The relationship block prints `Unknown → Unknown` and no numeric valence. A compiled, provenance-bearing dossier could make the useful state and directed grievance more explicit, but four accepted turns do not demonstrate that it is needed to prevent re-entry contradictions. Preserve the ruling; do not describe this incomplete run as satisfying its build gate.
+The coordinator's ordered follow-through is:
 
-No evidence here tests #912's proposed belief/opinion claim kind. The three Ivo validation failures are execution/acceptance failures, not evidence that the long-absence prose failure occurred. Do not conflate them.
+1. **[PR #916](https://github.com/pythagorakase/nexus/pull/916)** (in flight at the ruling) puts signed valence and names on the relationship line. This addresses the observed visibility defect; this probe does not measure the effect of that change.
+2. **[#911](https://github.com/pythagorakase/nexus/issues/911), state-change salience:** one concrete case is ready to test. Chunk **25** was retrieved at rank **14** in 1A, dropped by the **five-entry historical cap**, and absent from the warm slice while roughly **38K of a 71K budget** was used. Precisely, the [1A windows](live/1A-windows.json) report writer input **36,337** and Gaia input **38,733**, each with ceiling **71,000**; the ruling's rounded 38K should not be read as the writer's exact count. The printed-passage cap should be a configured limit inside the budget like the other render limits. Chunk 25 has **four relationship-version rows and seven state-delta rows**, including Niko's protective withdrawal and Ora's route/custody state ([fan-in](live/last-appearance-state-fan-in.json), [deltas](live/state_delta_log-last-appearances.json)). For 1B, 2A, and 2B it enters the printed top five. This supports a rendering-cap test, not a demonstrated prose benefit from salience changes.
+3. **[#913](https://github.com/pythagorakase/nexus/issues/913), reconnect summaries:** untestable on this corpus, which has **zero episodes and zero seasons** ([episodes](live/episodes.json), [seasons](live/seasons.json)). Private correspondence and retrograde-summary blocks are different sources; no summary intervention was tested.
+4. **[#793](https://github.com/pythagorakase/nexus/issues/793), the dossier build:** not shown necessary by this probe and stays gated. Rerun this probe on the owner's next native slot once it holds an absence of **a hundred chunks or more**, and build only if a contradiction appears.
+
+No evidence here tests #912's proposed belief/opinion claim kind. The three Ivo validation failures are tracked in [#918](https://github.com/pythagorakase/nexus/issues/918); they are wire-robustness failures, not long-absence continuity failures, and are not addressed in this documentation-only order.
 
 ## Verification Commands and Verbatim Tails
 
@@ -331,10 +348,10 @@ stopped gateway (pid 94636)
 
 `lsof` returned exit 1 with empty stdout. No other listener was stopped.
 
+Report finalization repeated read-only source/catalog checks and the listener check: **save_04 remains 46 rows, max ID 49; the clone remains absent; lane 8018 remains down**. The [closeout receipt](live/closeout-verification.json) records these results and validates report links, JSON artifacts, the 120-word excerpt limit, and the unchanged 13-request ledger. The two SQL statements reuse those in `probe.sql` and are appended to `live/sql.jsonl`. Black was checked again with the command above: `2 files would be left unchanged.` No suite, UI build, or paid generation ran during finalization.
+
 ## Coordinator Questions
 
-1. How should the three acceptance failures be repaired or avoided before resuming, and what additional paid-attempt budget is authorized? One remaining authorized attempt cannot complete Ivo's pair.
-2. Please provide independent scores for the four accepted turns, especially Niko's 1B temperature. Pending cells intentionally contain no invented coordinator assessment.
-3. For a resumed controlled comparison, should clone admission also cover `ChunkWorkflow`, and should a corpus with populated episode summaries and a third truly long-absent eligible subject be used?
+None for this closeout. The third amendment resolves subject count, independent scores, and the disposition of Ivo's failures. The future ≥100-chunk probe remains gated on a suitable native slot; no new paid calls or implementation work are authorized here.
 
 Codex — GPT-6 Astra.

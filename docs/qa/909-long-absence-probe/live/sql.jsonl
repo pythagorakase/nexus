@@ -103,3 +103,5 @@
 {"database": "save_04", "identity": {"current_database": "save_04"}, "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks", "rows": [{"current_database": "save_04", "count": 46, "max": 49}]}
 {"database": "qa640_909_long_absence", "identity": {"current_database": "qa640_909_long_absence"}, "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks", "rows": [{"current_database": "qa640_909_long_absence", "count": 50, "max": 53}]}
 {"database": "save_04", "identity": {"current_database": "save_04"}, "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks", "rows": [{"current_database": "save_04", "count": 46, "max": 49}]}
+{"database": "save_04", "identity": {"current_database": "save_04"}, "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks", "rows": [{"current_database": "save_04", "count": 46, "max": 49}]}
+{"database": "postgres", "identity": {"current_database": "postgres"}, "sql": "SELECT current_database(), datname FROM pg_database WHERE datname='qa640_909_long_absence'", "rows": []}

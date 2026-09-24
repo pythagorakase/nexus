@@ -1,8 +1,8 @@
-# Resumption File Manifest
+# Probe File Manifest
 
-Each changed or added file from this resumption is listed once. Historical artifacts from the prior stop remain in place.
+Each changed or added file in this PR is listed once. Historical artifacts from the prior stop remain in place.
 
-- `docs/qa/909-long-absence-probe/report.md` — Partial findings, rubric, exact failures, and coordinator questions.
+- `docs/qa/909-long-absence-probe/report.md` — Completed two-subject findings, independent scores, disagreements, and coordinator ruling.
 - `docs/qa/909-long-absence-probe/probe.sql` — All distinct probe-authored SQL, including cleanup.
 - `docs/qa/909-long-absence-probe/prior-stop-report.md` — Preserved earlier test-gate stop report.
 - `scripts/qa_shift/long_absence_probe.py` — Bounded QA launcher and evidence collection through real runtime paths.
@@ -137,3 +137,8 @@ Each changed or added file from this resumption is listed once. Historical artif
 - `docs/qa/909-long-absence-probe/live/subjects.json` — Database evidence, turn artifact, input, or cleanup receipt.
 - `docs/qa/909-long-absence-probe/live/tables.json` — Database evidence, turn artifact, input, or cleanup receipt.
 - `docs/qa/909-long-absence-probe/files-changed.md` — This one-line-per-file manifest.
+- `docs/qa/909-long-absence-probe/baseline.json` — Preserved probe evidence or file inventory.
+- `docs/qa/909-long-absence-probe/cleanup.json` — Preserved probe evidence or file inventory.
+- `docs/qa/909-long-absence-probe/startup.log` — Preserved probe evidence or file inventory.
+- `docs/qa/909-long-absence-probe/validation.log` — Preserved probe evidence or file inventory.
+- `docs/qa/909-long-absence-probe/live/closeout-verification.json` — Fresh read-only source, clone-disposal, lane, and artifact verification.
