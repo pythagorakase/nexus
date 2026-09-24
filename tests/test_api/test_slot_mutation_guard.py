@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import uuid
 from collections.abc import Iterator
 
@@ -101,7 +102,22 @@ def protected_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
                 cur.execute(
                     "CREATE TABLE incubator (id boolean PRIMARY KEY, session_id uuid)"
                 )
-                cur.execute("INSERT INTO incubator (id) VALUES (true)")
+                migrations = Path(__file__).resolve().parents[2] / "migrations"
+                for migration in (
+                    "098_narrative_generation_lease.sql",
+                    "121_generation_session_truth.sql",
+                ):
+                    cur.execute((migrations / migration).read_text())
+                session_id = str(uuid.uuid4())
+                cur.execute(
+                    "INSERT INTO narrative_generation_sessions (session_id, operation, status) "
+                    "VALUES (%s, 'continue', 'complete')",
+                    (session_id,),
+                )
+                cur.execute(
+                    "INSERT INTO incubator (id, session_id) VALUES (true, %s)",
+                    (session_id,),
+                )
                 cur.execute("CREATE VIEW incubator_view AS SELECT * FROM incubator")
         conn.close()
         monkeypatch.setattr(
