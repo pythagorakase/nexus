@@ -57,6 +57,7 @@ from typing import (
     TypeVar,
     Literal,
     cast,
+    Callable,
 )
 from datetime import datetime, timedelta
 
@@ -364,6 +365,8 @@ class OpenAIProvider(LLMProvider):
             else self.STRUCTURED_OUTPUT_RETRIES
         )
         self.output_validator = output_validator
+        # Summary consumers inspect completion status before any JSON parsing.
+        self.response_check: Optional[Callable[[Any], None]] = None
 
         # Validate reasoning effort if provided
         if (
@@ -592,14 +595,20 @@ class OpenAIProvider(LLMProvider):
                     from nexus.jobs.gate import before_provider_call
 
                     before_provider_call()
-                    response = self.client.responses.parse(
-                        **self._build_native_structured_request_params(
-                            active_prompt,
-                            schema_model,
-                            text_format=text_format,
-                            prompt_cache_key=prompt_cache_key,
-                        )
+                    request_params = self._build_native_structured_request_params(
+                        active_prompt,
+                        schema_model,
+                        text_format=(
+                            text_format or openai_response_text_format(schema_model)
+                            if self.response_check is not None
+                            else text_format
+                        ),
+                        prompt_cache_key=prompt_cache_key,
                     )
+                    if self.response_check is not None:
+                        response = self.client.responses.create(**request_params)
+                    else:
+                        response = self.client.responses.parse(**request_params)
                 except Exception as exc:
                     if not self._should_fallback_to_chat_completions(exc):
                         raise
@@ -618,6 +627,8 @@ class OpenAIProvider(LLMProvider):
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
+                if self.response_check is not None:
+                    self.response_check(response)
                 parsed_output = self._extract_native_parsed_output(
                     response, schema_model
                 )

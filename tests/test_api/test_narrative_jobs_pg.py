@@ -216,6 +216,64 @@ def test_summary_completion_rejects_stale_nonce(offline_gate_db):
                 )
 
 
+def test_summary_truncation_is_terminal_with_attempts_remaining(offline_gate_db):
+    """Persist the classifier's real error without rescheduling truncated work."""
+    from nexus.api.summary_errors import SummaryOutputTruncated, check_summary_response
+    from nexus.config import load_settings
+    from nexus.jobs.narrative_jobs import drain_job
+    from tests.test_summary_triggers import incomplete_summary_response
+
+    cfg = load_settings().runtime.scheduler.summaries.model_copy(
+        update={"max_attempts": 3}
+    )
+    completed = []
+
+    def prepare(job):
+        check_summary_response(
+            incomplete_summary_response(), mode=job["kind"], max_output_tokens=8000
+        )
+
+    with closing(connect(offline_gate_db)) as conn:
+        with conn, conn.cursor() as cur:
+            schedule_summary_generation(
+                [SummaryTask("episode", 1, 1)], cur=cur, session_id=str(uuid4())
+            )
+        with pytest.raises(SummaryOutputTruncated):
+            drain_job(
+                conn,
+                table="narrative_summary_jobs",
+                owner="truncation-proof",
+                cfg=cfg,
+                prepare=prepare,
+                complete=lambda *args: completed.append(args),
+            )
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT state::text, attempts, error_class, lease_nonce, locked_by, "
+                "lease_until FROM narrative_summary_jobs"
+            )
+            assert cur.fetchone() == (
+                "failed",
+                1,
+                "SummaryOutputTruncated",
+                None,
+                None,
+                None,
+            )
+        assert (
+            drain_job(
+                conn,
+                table="narrative_summary_jobs",
+                owner="truncation-proof",
+                cfg=cfg,
+                prepare=prepare,
+                complete=lambda *args: completed.append(args),
+            )
+            == 0
+        )
+        assert completed == []
+
+
 def test_scheduler_new_queue_status_and_interactive_priority(
     acceptance_slot, monkeypatch, tmp_path, mock_openai_server
 ):

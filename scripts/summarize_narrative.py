@@ -43,6 +43,7 @@ import os
 import re
 import sys
 import time
+from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field
@@ -54,9 +55,11 @@ if parent_dir not in sys.path:
 
 # Import shared API utilities
 from nexus.api.native_structured_output import build_native_structured_provider
+from nexus.api.summary_errors import SummaryOutputTruncated, check_summary_response
 from nexus.prompts.registry import PromptId, load
 from scripts.api_openai import (
     LLMResponse,
+    OpenAIProvider,
     get_token_count,
     is_abort_requested,
     setup_abort_handler,
@@ -1343,6 +1346,12 @@ class SummaryGenerator:
                 reasoning_effort=(self.effort if self.is_reasoning_model else None),
                 seat="summaries",
             )
+            if isinstance(provider, OpenAIProvider):
+                provider.response_check = partial(
+                    check_summary_response,
+                    mode=mode,
+                    max_output_tokens=self._max_output_tokens[mode],
+                )
             logger.info(
                 "Initialized %s summary provider for %s using %s",
                 provider.provider_name,
@@ -1604,6 +1613,8 @@ class SummaryGenerator:
                 logger.error(f"Failed to save summary for Season {season}")
                 return None
 
+        except SummaryOutputTruncated:
+            raise
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"Error generating season summary: {e}")
@@ -1795,6 +1806,8 @@ class SummaryGenerator:
                 logger.error(f"Failed to save summary for S{season:02d}E{episode:02d}")
                 return None
 
+        except SummaryOutputTruncated:
+            raise
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"Error generating episode summary: {e}")
@@ -2143,6 +2156,8 @@ class SummaryGenerator:
 
             return summary_dict
 
+        except SummaryOutputTruncated:
+            raise
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"Error generating chunk range summary: {e}")

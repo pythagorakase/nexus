@@ -12,6 +12,80 @@ from nexus.api.summary_triggers import (
 from tests.model_registry_helpers import registry_model
 
 
+def incomplete_summary_response(reason="max_output_tokens"):
+    """Build the SDK response shape seen in the paid truncation proof."""
+    from openai.types.responses import Response
+
+    return Response.model_validate(
+        {
+            "id": "resp-summary-truncated",
+            "object": "response",
+            "created_at": 0,
+            "model": "TEST",
+            "status": "incomplete",
+            "incomplete_details": {"reason": reason},
+            "error": None,
+            "instructions": None,
+            "metadata": {},
+            "parallel_tool_calls": False,
+            "tools": [],
+            "tool_choice": "auto",
+            "temperature": None,
+            "top_p": None,
+            "output": [
+                {
+                    "id": "msg-summary-truncated",
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "incomplete",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": '{"summary": "unfinished',
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "usage": {
+                "input_tokens": 44386,
+                "input_tokens_details": {"cached_tokens": 44383},
+                "output_tokens": 2500,
+                "output_tokens_details": {"reasoning_tokens": 264},
+                "total_tokens": 46886,
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize("mode", ["episode", "season"])
+@pytest.mark.parametrize("reason", ["max_output_tokens", "content_filter"])
+def test_summary_incomplete_response_is_terminal_before_parsing(mode, reason):
+    """TEST has no incomplete mode; classify an actual SDK response shape."""
+    from nexus.api.summary_errors import SummaryOutputTruncated
+    from nexus.config import load_settings
+    from scripts.summarize_narrative import SummaryGenerator
+
+    generator = SummaryGenerator(model="TEST", db_manager=_FakeDB())
+    provider = generator._provider_for_mode(mode)
+    response = incomplete_summary_response(reason)
+    allowance = getattr(load_settings().summaries, f"{mode}_max_output_tokens")
+    try:
+        with pytest.raises(SummaryOutputTruncated) as caught:
+            provider.response_check(response)
+        message = str(caught.value)
+        assert f"{mode} summary incomplete" in message
+        assert f"configured allowance={allowance}" in message
+        assert f"incomplete_details.reason={reason}" in message
+        for count in (44386, 44383, 2500, 264, 46886):
+            assert str(count) in message
+        # The checker permits completed responses; parsing remains downstream.
+        response.status = "completed"
+        provider.response_check(response)
+    finally:
+        provider.client.close()
+
+
 def test_plan_summary_tasks():
     assert plan_summary_tasks("continue", 5, 1) == []
 

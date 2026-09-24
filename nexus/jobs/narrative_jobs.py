@@ -9,6 +9,7 @@ from uuid import uuid4
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
+from nexus.api.summary_errors import SummaryOutputTruncated
 from nexus.config.settings_models import NarrativeJobSettings
 from nexus.jobs.gate import report_leased_job, track_job_lease
 
@@ -109,7 +110,12 @@ def drain_job(
                     WHERE id=%s"""
                 ).format(sql.Identifier(table)),
                 (
-                    "failed" if job["attempts"] + 1 >= cfg.max_attempts else "queued",
+                    (
+                        "failed"
+                        if isinstance(exc, SummaryOutputTruncated)
+                        or job["attempts"] + 1 >= cfg.max_attempts
+                        else "queued"
+                    ),
                     str(exc),
                     type(exc).__name__,
                     cfg.retry_delay_seconds,

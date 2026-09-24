@@ -216,6 +216,7 @@
     "nexus/api/slot_utils.py",
     "nexus/api/static_ui.py",
     "nexus/api/storyteller.py",
+    "nexus/api/summary_errors.py",
     "nexus/api/summary_triggers.py",
     "nexus/api/trait_compiler.py",
     "nexus/api/trait_compiler_schemas.py",

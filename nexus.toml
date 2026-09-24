@@ -1224,8 +1224,9 @@ suggestion_limit = 3
 # model = "MODEL_ID"
 temperature = 0.2
 reasoning_effort = "medium"
-episode_max_output_tokens = 2500
-season_max_output_tokens = 4000
+# For reasoning_accounting = "inside_output", allowances include reasoning tokens.
+episode_max_output_tokens = 8000
+season_max_output_tokens = 12000
 request_token_budget = 30000
 structured_output_retries = 0
 
