@@ -211,3 +211,13 @@ def test_identity_consumers_alias_collision_is_loud(roster_database):
             resolve_reference(cur, kind="character", id=None, name="Test Protagonist")
         with pytest.raises(ValueError, match="ambiguous"):
             _resolve_pair_hint_entity(cur, "Test Protagonist")
+
+
+def test_identity_missing_reference_never_binds_title_only_name(roster_database):
+    """An absent name cannot bind a title-only label normalized to an empty key."""
+    dbname, _, _ = roster_database
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO characters (name) VALUES ('Lady')")
+        for name in (None, "", "   "):
+            with pytest.raises(ValueError, match="Unresolved"):
+                resolve_reference(cur, kind="character", id=None, name=name)

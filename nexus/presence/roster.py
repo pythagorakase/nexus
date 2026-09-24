@@ -351,7 +351,7 @@ def character_identity_index(
 def _reference_index_entry(
     index: IdentityIndex, kind: Kind, name: str | None
 ) -> RosterEntry:
-    keys = index.matching_keys(name or "", kind)
+    keys = index.matching_keys(name, kind) if name and name.strip() else set()
     if len(keys) != 1:
         raise ValueError(
             f"{'Ambiguous' if keys else 'Unresolved'} {kind} reference name={name!r}: {sorted(keys)}"

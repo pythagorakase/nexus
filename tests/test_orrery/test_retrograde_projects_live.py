@@ -50,7 +50,8 @@ from nexus.agents.orrery.retrograde_vocabulary import (
 )
 from nexus.agents.orrery.substrate import coerce_project_policy
 from nexus.agents.orrery.templates import ADVANCE_BUILD_VENTURE
-from nexus.api.slot_utils import get_slot_db_url
+from nexus.api.slot_utils import VALID_DBNAMES
+from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
 from nexus.config import load_settings
 from nexus.agents.orrery.relationship_provenance import relationship_producer
 
@@ -59,11 +60,24 @@ pytestmark = pytest.mark.requires_postgres
 PROJECT_TYPES = tuple(PROJECT_FIRST_STAGES)
 
 
-@pytest.fixture()
-def project_db() -> Iterator[dict[str, Any]]:
-    """Open save_02 only inside an always-rolled-back transaction."""
+@pytest.fixture(scope="module")
+def project_corpus() -> Iterator[str]:
+    """Keep migration 123 and all project writes off the source save."""
+    with disposable_slot_database(
+        "qa640_projects799", source_db="save_02", include_data=True
+    ) as dbname:
+        VALID_DBNAMES.add(dbname)
+        try:
+            yield dbname
+        finally:
+            VALID_DBNAMES.discard(dbname)
 
-    engine = create_engine(get_slot_db_url(slot=2))
+
+@pytest.fixture()
+def project_db(project_corpus: str) -> Iterator[dict[str, Any]]:
+    """Open the migrated corpus copy in an always-rolled-back transaction."""
+
+    engine = create_engine(sqlalchemy_url(project_corpus))
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -108,11 +122,12 @@ def project_db() -> Iterator[dict[str, Any]]:
                     (character_ids, character_ids),
                 )
         yield {
+            "dbname": project_corpus,
             "conn": conn,
             "session": session,
             "characters": characters,
             "places": places,
-            "vocabulary": enumerate_seed_eligible_vocabulary(dbname="save_02"),
+            "vocabulary": enumerate_seed_eligible_vocabulary(dbname=project_corpus),
         }
     finally:
         session.close()
@@ -134,7 +149,7 @@ def test_writer_inserts_all_types_and_started_events(
             seed_candidate_response=seeds,
             expansion_plan_payload=expansion,
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             dry_run=False,
             project_seeding_enabled=True,
             max_seeded_projects=6,
@@ -215,7 +230,7 @@ def test_writer_dedup_cap_disabled_and_unresolvable_are_loud(
             seed_candidate_response=seeds,
             expansion_plan_payload=expansion,
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             dry_run=True,
             project_seeding_enabled=True,
             max_seeded_projects=3,
@@ -238,7 +253,7 @@ def test_writer_dedup_cap_disabled_and_unresolvable_are_loud(
             seed_candidate_response=seeds,
             expansion_plan_payload=expansion,
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             dry_run=True,
             project_seeding_enabled=False,
         )
@@ -256,7 +271,7 @@ def test_writer_dedup_cap_disabled_and_unresolvable_are_loud(
                 seed_candidate_response=seeds,
                 expansion_plan_payload=expansion,
                 slot=2,
-                dbname="save_02",
+                dbname=db["dbname"],
                 dry_run=True,
                 project_seeding_enabled=True,
                 project_settings=load_settings().orrery.projects,
@@ -282,7 +297,7 @@ def test_cap_dropped_projects_do_not_claim_actor_keys(
             seed_candidate_response=seeds,
             expansion_plan_payload=expansion,
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             dry_run=False,
             project_seeding_enabled=True,
             max_seeded_projects=1,
@@ -333,7 +348,7 @@ def test_dropped_project_targets_do_not_create_entity_stubs(
             seed_candidate_response=seeds,
             expansion_plan_payload=expansion,
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             dry_run=False,
             create_missing_entities=True,
             project_seeding_enabled=True,
@@ -401,7 +416,7 @@ def test_seek_redemption_requires_target_to_actor_negative_valence(
                 seed_candidate_response=seeds,
                 expansion_plan_payload=expansion,
                 slot=2,
-                dbname="save_02",
+                dbname=db["dbname"],
                 dry_run=True,
                 project_seeding_enabled=True,
                 project_settings=load_settings().orrery.projects,
@@ -450,7 +465,7 @@ def test_seek_redemption_rejects_non_materializing_planned_enemy(
                 seed_candidate_response=seeds,
                 expansion_plan_payload=expansion,
                 slot=2,
-                dbname="save_02",
+                dbname=db["dbname"],
                 dry_run=False,
                 create_missing_entities=True,
                 project_seeding_enabled=True,
@@ -553,7 +568,7 @@ def test_wizard_genesis_checkpoint_carries_seeded_project_through_replay(
     assert settings.orrery is not None
     bundle = RetrogradeGenerationBundle(
         slot=2,
-        dbname="save_02",
+        dbname=db["dbname"],
         model="test",
         weird={"level": "medium"},
         packet=packet,
@@ -662,7 +677,7 @@ def test_maturation_seeds_only_target_actor_and_logs_advisory_drops(
                 "requesting_chunk_id": request_chunk,
             },
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             settings=load_settings(),
             summaries_enabled=False,
         )
@@ -772,7 +787,7 @@ def test_maturation_shared_writer_validation_raises(
                         "requesting_chunk_id": request_chunk,
                     },
                     slot=2,
-                    dbname="save_02",
+                    dbname=db["dbname"],
                     settings=settings,
                     summaries_enabled=False,
                 )
@@ -817,7 +832,7 @@ def test_maturation_disabled_config_drops_intent_loudly(
                 "requesting_chunk_id": request_chunk,
             },
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             settings=disabled_settings,
             summaries_enabled=False,
         )
@@ -853,7 +868,7 @@ def test_summary_backfill_excludes_wizard_and_maturation_project_starts(
             seed_candidate_response=wizard_seeds,
             expansion_plan_payload=wizard_expansion,
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             dry_run=False,
             project_seeding_enabled=True,
             project_settings=settings.orrery.projects,
@@ -872,7 +887,7 @@ def test_summary_backfill_excludes_wizard_and_maturation_project_starts(
                 "requesting_chunk_id": request_chunk,
             },
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             settings=settings,
             summaries_enabled=True,
         )
@@ -953,7 +968,7 @@ def test_maturation_project_replays_exactly_and_hydrates_continuation(
                 "requesting_chunk_id": request_chunk,
             },
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             settings=settings,
             summaries_enabled=False,
         )
@@ -1054,7 +1069,7 @@ def test_maturation_start_at_base_chunk_replays_without_drift(
                 "requesting_chunk_id": base_chunk,
             },
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             settings=settings,
             summaries_enabled=False,
         )
@@ -1118,7 +1133,7 @@ def test_maturation_start_at_target_chunk_is_absent_without_drift(
                 "requesting_chunk_id": target_chunk,
             },
             slot=2,
-            dbname="save_02",
+            dbname=db["dbname"],
             settings=settings,
             summaries_enabled=False,
         )

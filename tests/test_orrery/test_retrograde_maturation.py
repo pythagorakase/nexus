@@ -2,8 +2,8 @@
 
 Offline tests cover the declaration schema, commit-side signal gating, and
 event-ref namespacing with recording cursors. PostgreSQL-gated tests run
-against save_02 inside transactions that are always rolled back (slot 2 is
-the writable working slot and carries migration 062); they are skipped
+against a migrated disposable save_02 copy inside rolled-back transactions;
+they are skipped
 unless ``NEXUS_RUN_POSTGRES=1`` is set.
 """
 
@@ -35,7 +35,7 @@ from nexus.agents.orrery.retrograde_maturation import (
 from nexus.api.lore_adapter import extract_new_entities
 from nexus.config.settings_models import OrreryRetrogradeMaturationSettings, Settings
 
-SAVE_02_DSN = "postgresql://pythagor@localhost:5432/save_02"
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 # ============================================================================
@@ -765,11 +765,19 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
 pytestmark_pg = pytest.mark.requires_postgres
 
 
-@pytest.fixture()
-def save_02_conn() -> Iterator[Any]:
-    """Open a save_02 connection whose transaction is always rolled back."""
+@pytest.fixture(scope="module")
+def maturation_corpus() -> Iterator[str]:
+    """Apply branch migrations only to a disposable copy of the source corpus."""
+    with disposable_slot_database(
+        "qa640_maturation799", source_db="save_02", include_data=True
+    ) as dbname:
+        yield dbname
 
-    conn = psycopg2.connect(SAVE_02_DSN)
+
+@pytest.fixture()
+def save_02_conn(maturation_corpus: str) -> Iterator[Any]:
+    """Roll back each proof on the migrated disposable save_02 copy."""
+    conn = connect(maturation_corpus)
     try:
         yield conn
     finally:

@@ -95,6 +95,15 @@ def disposable_need_clock_db() -> Iterator[str]:
                     sql.Identifier(source_db),
                 )
             )
+        with _transaction(dbname) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+                "AND table_name = 'character_aliases' AND column_name = 'provenance'"
+            )
+            if cur.fetchone() is None:
+                cur.execute(
+                    (ROOT / "migrations/123_character_alias_provenance.sql").read_text()
+                )
         VALID_DBNAMES.add(dbname)
         yield dbname
     finally:

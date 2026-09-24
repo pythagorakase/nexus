@@ -599,14 +599,10 @@ async def test_turn_payload_conditionally_attaches_world_knowledge(
         start_time=0,
     )
     context.token_counts = {"total_available": 75_000}
-    context.orrery_proposal = cast(
-        Any,
-        SimpleNamespace(
-            anchor_chunk_id=db["anchor"],
-            pressure_count=0,
-            resolution_count=0,
-            joint_beats=(),
-        ),
+    from nexus.agents.orrery.resolver import OrreryTickProposal
+
+    context.orrery_proposal = OrreryTickProposal(
+        anchor_chunk_id=db["anchor"], actor_count=0, resolutions=()
     )
 
     await manager.assemble_context_payload(context)
