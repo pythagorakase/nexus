@@ -466,11 +466,7 @@ def _install_route_boundaries(
         "get_db_connection",
         lambda _slot=None: _connect(scratch_dbname),
     )
-    monkeypatch.setattr(
-        narrative,
-        "_start_post_commit_orrery_work",
-        lambda _slot: None,
-    )
+    monkeypatch.setattr(narrative, "wake_scheduler", lambda _slot: None)
     monkeypatch.setattr(
         commit_handler_sync,
         "schedule_summary_generation",
