@@ -521,11 +521,17 @@ def test_real_file_failure_and_process_cache(tmp_path: Path) -> None:
     (package / "__init__.py").write_text("")
     shutil.copy2(ROOT / "nexus/prompts/registry.py", package / "registry.py")
     prompts = tmp_path / "prompts"
-    prompts.mkdir()
     script = """
 from pathlib import Path
 from nexus.prompts.registry import PromptId, load
 path = Path("prompts/storyteller_core.md")
+try:
+    load(PromptId.STORYTELLER_CORE)
+except FileNotFoundError as exc:
+    assert str(path.parent.resolve()) in str(exc)
+else:
+    raise AssertionError("missing directory was accepted")
+path.parent.mkdir()
 try:
     load(PromptId.STORYTELLER_CORE)
 except FileNotFoundError:
@@ -555,7 +561,8 @@ else:
     assert result.returncode == 0, result.stderr
 
 
-def test_wizard_tools_use_registered_descriptions() -> None:
+@pytest.mark.asyncio
+async def test_wizard_tools_use_registered_descriptions() -> None:
     from nexus.api import wizard_agent
 
     for name in (
@@ -573,7 +580,8 @@ def test_wizard_tools_use_registered_descriptions() -> None:
             wizard_agent, name
         )._function_toolset.tools.items():
             prompt_id = PromptId["WIZARD_TOOL_" + tool_name.upper()]
-            assert tool.description == load(prompt_id)
+            definition = await tool.prepare_tool_def(None)
+            assert definition.description == load(prompt_id)
 
 
 @pytest.mark.parametrize(
@@ -660,3 +668,21 @@ def test_review_injections_fail_the_gate_in_scratch_copy(tmp_path: Path) -> None
         assert "nexus/review_injection.py:1" in result.stdout
         assert "1 failed" in result.stdout
         print(f"Rejected {source.strip()}: 1 failed (expected)")
+
+
+def test_api_import_does_not_read_prompt_files() -> None:
+    """A fresh API process defers all prompt reads until runtime use."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import nexus.api.narrative; "
+            "from nexus.prompts.registry import _template; "
+            "assert _template.cache_info().misses == 0, _template.cache_info()",
+        ],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -903,6 +903,8 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
     }
 )
 
+# Both checkout and wheel layouts place prompts beside the nexus package.
+# Resolve lazily so importing API modules does not require prompt file IO.
 _PROMPTS_ROOT = Path(__file__).resolve().parents[2] / "prompts"
 _TEMPLATE_LOCK = Lock()
 PLACEHOLDER = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
@@ -911,6 +913,8 @@ PLACEHOLDER = re.compile(r"\{\{([A-Z][A-Z0-9_]*)\}\}")
 @lru_cache(maxsize=None)
 def _template(prompt_id: PromptId) -> str:
     spec = PROMPTS[prompt_id]
+    if not _PROMPTS_ROOT.is_dir():
+        raise FileNotFoundError(f"Prompt directory does not exist: {_PROMPTS_ROOT}")
     path = _PROMPTS_ROOT / spec.path
     text = path.read_text(encoding="utf-8")
     if not text.strip():

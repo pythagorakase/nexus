@@ -803,7 +803,7 @@ EXTRACT_VENGEANCE = Template(
             ),
             magnitude=0.85,
             mood_affinities={"restless": 2.0, "grim": 1.5},
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_GRUDGE)),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_GRUDGE)),
         ),
         Branch(
             label="Surface a reputation attack in the right channels",
@@ -941,7 +941,9 @@ PROTECT_KIN = Template(
                 "world_events",
             ),
             magnitude=0.78,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_INTERVENE)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_INTERVENE)
+            ),
         ),
         Branch(
             label="Travel toward the target's last known location",
@@ -960,7 +962,7 @@ PROTECT_KIN = Template(
             event_type="protective_intervention",
             changed_fields=("character.current_activity",),
             magnitude=0.52,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_ARRIVAL)),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_ARRIVAL)),
         ),
         Branch(
             label="Signal kin networks to converge on the target",
@@ -1078,7 +1080,7 @@ SURVEIL = Template(
             signal_event_type="compliance_alert",
             changed_fields=("character.current_activity",),
             magnitude=0.48,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_SIGNALS)),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SIGNALS)),
         ),
         Branch(
             label="Keep tabs from a distance",
@@ -1094,7 +1096,9 @@ SURVEIL = Template(
             event_type="surveillance_performed",
             changed_fields=("character.current_activity",),
             magnitude=0.44,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_SURVEILLANCE)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SURVEILLANCE)
+            ),
         ),
         Branch(
             label="Collect a proxy watcher report",
@@ -1163,7 +1167,9 @@ SURVEIL = Template(
             signal_event_type="compliance_alert",
             changed_fields=("character.current_activity",),
             magnitude=0.30,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_PUBLIC_PATTERN)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_PUBLIC_PATTERN)
+            ),
         ),
         Branch(
             label="Keep the target in view without contact",
@@ -1256,7 +1262,9 @@ ACT_ON_INTEL = Template(
             signal_event_type="threat_issued",
             changed_fields=("character.current_activity", "world_events"),
             magnitude=0.58,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_CONFRONTATION)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_CONFRONTATION)
+            ),
         ),
         Branch(
             label="File it and keep the watch alive",
@@ -1345,7 +1353,7 @@ CULTIVATE_INFORMANT = Template(
             event_type="intel_acquired",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.62,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_INTEL)),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_INTEL)),
         ),
         Branch(
             label="Routine contact to maintain the relationship",
@@ -1387,7 +1395,7 @@ CULTIVATE_INFORMANT = Template(
             signal_event_type="encoded_message",
             changed_fields=("character.current_activity",),
             magnitude=0.18,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_OVERTURE)),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_OVERTURE)),
         ),
     ),
     present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
@@ -1474,7 +1482,9 @@ TEND_WOUNDED = Template(
             event_type="wound_healed",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.74,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_RESTORATION)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_RESTORATION)
+            ),
         ),
         Branch(
             label="Work the wound with trained hands",
@@ -1514,7 +1524,9 @@ TEND_WOUNDED = Template(
             event_type="tended_wound",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.42,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_FIRST_AID)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_FIRST_AID)
+            ),
         ),
         Branch(
             label="Stay with the wound and do what can be done",
@@ -1530,7 +1542,9 @@ TEND_WOUNDED = Template(
             event_type="tended_wound",
             changed_fields=("character.current_activity",),
             magnitude=0.24,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_ACCOMPANIMENT)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_ACCOMPANIMENT)
+            ),
         ),
     ),
     present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
@@ -1711,7 +1725,9 @@ KEEP_VIGIL = Template(
             event_type="vigil_held",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.46,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_CONTEMPLATION)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_CONTEMPLATION)
+            ),
         ),
         Branch(
             label="Speak softly through the long hours",
@@ -1729,7 +1745,9 @@ KEEP_VIGIL = Template(
             event_type="vigil_held",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.38,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_SPEAKING_VIGIL)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SPEAKING_VIGIL)
+            ),
         ),
         Branch(
             label="Stand watch with attention but without intervention",
@@ -1747,7 +1765,9 @@ KEEP_VIGIL = Template(
             event_type="vigil_held",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.32,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_SILENT_VIGIL)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_SILENT_VIGIL)
+            ),
         ),
     ),
     present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
@@ -2657,7 +2677,7 @@ CHECK_ON_DEPENDENT = Template(
             event_type="welfare_check",
             changed_fields=("character.current_activity",),
             magnitude=0.44,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_WELFARE)),
+            scene_pressure_stub=(lambda: load(PromptId.ORRERY_SCENE_PRESSURE_WELFARE)),
         ),
         Branch(
             label="Reach out through customary channels",
@@ -2754,7 +2774,9 @@ REACH_OUT = Template(
             event_type="kin_visit",
             changed_fields=("character.current_activity",),
             magnitude=0.36,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_CONVERSATION)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_CONVERSATION)
+            ),
         ),
         Branch(
             label="Send a message that says less than it means",
@@ -2774,7 +2796,9 @@ REACH_OUT = Template(
             event_type="contact_made",
             changed_fields=("character.current_activity",),
             magnitude=0.16,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_AFFECTION)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_AFFECTION)
+            ),
         ),
         Branch(
             label="Draft the message and leave it unsent",
@@ -2790,7 +2814,9 @@ REACH_OUT = Template(
             event_type="contact_deferred",
             changed_fields=("character.current_activity",),
             magnitude=0.18,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_HELD_CONTACT)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_HELD_CONTACT)
+            ),
         ),
         Branch(
             label="Let the silence stand for now",
@@ -2806,7 +2832,9 @@ REACH_OUT = Template(
             event_type="contact_deferred",
             changed_fields=("character.current_activity",),
             magnitude=0.08,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_NO_CONTACT)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_NO_CONTACT)
+            ),
         ),
     ),
     present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
@@ -2878,7 +2906,9 @@ CONSULT_RIVAL = Template(
             event_type="rival_consulted",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.62,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_RIVAL_MEETING)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_RIVAL_MEETING)
+            ),
         ),
         Branch(
             label="Send a carefully-worded message through indirect channels",
@@ -2899,7 +2929,9 @@ CONSULT_RIVAL = Template(
             event_type="rival_consulted",
             changed_fields=("character.current_activity",),
             magnitude=0.48,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_INTERMEDIARY)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_INTERMEDIARY)
+            ),
         ),
         Branch(
             label=("Leave a sign the rival will recognize and a door they can open"),
@@ -2919,7 +2951,9 @@ CONSULT_RIVAL = Template(
             event_type="contact_made",
             changed_fields=("character.current_activity",),
             magnitude=0.34,
-            scene_pressure_stub=(load(PromptId.ORRERY_SCENE_PRESSURE_PASSIVE_OVERTURE)),
+            scene_pressure_stub=(
+                lambda: load(PromptId.ORRERY_SCENE_PRESSURE_PASSIVE_OVERTURE)
+            ),
         ),
     ),
     present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,

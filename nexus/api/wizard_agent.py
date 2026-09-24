@@ -6,15 +6,20 @@ from __future__ import annotations
 import calendar
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import frontmatter
 from pydantic_ai import Agent, CallDeferred, ModelRetry, NativeOutput
 from pydantic_ai.settings import ModelSettings
-from pydantic_ai.tools import DeferredToolRequests, RunContext
+from pydantic_ai.tools import (
+    DeferredToolRequests,
+    RunContext,
+    ToolDefinition,
+    ToolPrepareFunc,
+)
 
 from nexus.api.config_utils import get_wizard_max_tokens, get_wizard_retry_budget
 from nexus.api.new_story_cache import (
@@ -42,8 +47,6 @@ from nexus.agents.orrery.tag_library import format_tag_library_for_prompt
 from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.api.wizard_agent")
-
-ACCEPT_FATE_SIGNAL = load(PromptId.WIZARD_ACCEPT_FATE)
 
 
 @dataclass
@@ -239,7 +242,7 @@ def build_wizard_prompt(ctx: RunContext[WizardContext]) -> str:
         parts.append(_choices_instruction())
 
     if context.accept_fate:
-        parts.append(ACCEPT_FATE_SIGNAL)
+        parts.append(load(PromptId.WIZARD_ACCEPT_FATE))
 
     return "\n\n".join(parts)
 
@@ -570,6 +573,19 @@ def _make_accept_fate_validator(tool_name: str):
     return _validator
 
 
+def _prepare_description(
+    render: Callable[[], str],
+) -> ToolPrepareFunc[WizardContext]:
+    """Resolve file-backed tool text when preparing a model request."""
+
+    async def prepare(
+        ctx: RunContext[WizardContext], tool_def: ToolDefinition
+    ) -> ToolDefinition:
+        return replace(tool_def, description=render())
+
+    return prepare
+
+
 # -----------------------------------------------------------------------------
 # Setting Phase Agents
 # -----------------------------------------------------------------------------
@@ -583,7 +599,9 @@ _setting_agent = Agent(
     retries=_wizard_retries,
 )
 _setting_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_WORLD_DOCUMENT),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_WORLD_DOCUMENT)
+    ),
     name="submit_world_document",
     retries=_wizard_retries,
 )(_submit_world_impl)
@@ -597,7 +615,9 @@ _setting_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _setting_accept_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_WORLD_DOCUMENT),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_WORLD_DOCUMENT)
+    ),
     name="submit_world_document",
     retries=_wizard_retries,
 )(_submit_world_impl)
@@ -618,7 +638,9 @@ _concept_agent = Agent(
     retries=_wizard_retries,
 )
 _concept_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_CHARACTER_CONCEPT),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_CHARACTER_CONCEPT)
+    ),
     name="submit_character_concept",
     retries=_wizard_retries,
 )(_submit_concept_impl)
@@ -632,7 +654,9 @@ _concept_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _concept_accept_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_CHARACTER_CONCEPT),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_CHARACTER_CONCEPT)
+    ),
     name="submit_character_concept",
     retries=_wizard_retries,
 )(_submit_concept_impl)
@@ -654,7 +678,9 @@ _traits_agent = Agent(
     retries=_wizard_retries,
 )
 _traits_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_TRAIT_SELECTION),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_TRAIT_SELECTION)
+    ),
     name="submit_trait_selection",
     retries=_wizard_retries,
 )(_submit_traits_impl)
@@ -672,7 +698,9 @@ _wildcard_agent = Agent(
     retries=_wizard_retries,
 )
 _wildcard_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_WILDCARD_TRAIT),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_WILDCARD_TRAIT)
+    ),
     name="submit_wildcard_trait",
     retries=_wizard_retries,
 )(_submit_wildcard_impl)
@@ -686,7 +714,9 @@ _wildcard_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _wildcard_accept_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_WILDCARD_TRAIT),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_WILDCARD_TRAIT)
+    ),
     name="submit_wildcard_trait",
     retries=_wizard_retries,
 )(_submit_wildcard_impl)
@@ -707,7 +737,9 @@ _seed_agent = Agent(
     retries=_wizard_retries,
 )
 _seed_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_STARTING_SCENARIO),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_STARTING_SCENARIO)
+    ),
     name="submit_starting_scenario",
     retries=_wizard_retries,
 )(_submit_scenario_impl)
@@ -721,7 +753,9 @@ _seed_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _seed_accept_agent.tool(
-    description=load(PromptId.WIZARD_TOOL_SUBMIT_STARTING_SCENARIO),
+    prepare=_prepare_description(
+        lambda: load(PromptId.WIZARD_TOOL_SUBMIT_STARTING_SCENARIO)
+    ),
     name="submit_starting_scenario",
     retries=_wizard_retries,
 )(_submit_scenario_impl)
