@@ -47,7 +47,7 @@ def main():
         return
     
     # Example queries
-    early_query = "What was the first encounter between Alex and Emilia?"
+    early_query = "What was the first encounter between the captain and pilot?"
     recent_query = "What are the latest developments with the neural implant?"
     
     # Process each query

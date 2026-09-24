@@ -55,7 +55,7 @@ from .utils.embedding_tables import list_embedding_tables
 # Letta imports removed - using custom memory system instead
 
 # Import alias search utilities
-from .utils.alias_search import load_aliases_from_db, ALIAS_LOOKUP
+from .utils.alias_search import load_aliases_from_db
 
 # Set up a basic console logger for initial settings loading
 settings_logger = logging.getLogger("nexus.memnon.settings")
@@ -713,14 +713,8 @@ class MEMNON:
 
     def _load_aliases(self) -> Dict[str, List[str]]:
         """Load character aliases from the database."""
-        try:
-            with self.Session() as session:
-                return load_aliases_from_db(session)
-        except RuntimeError:
-            raise
-        except Exception as e:
-            logger.error(f"Error loading aliases: {e}")
-            return ALIAS_LOOKUP  # Use default if loading fails
+        with self.Session() as session:
+            return load_aliases_from_db(session)
 
     def perform_hybrid_search(
         self, query_text: str, filters: Dict[str, Any] = None, top_k: int = None
@@ -1280,7 +1274,7 @@ class MEMNON:
         elif command.get("action") == "test_hybrid_search":
             # Test hybrid search with provided query
             test_queries = command.get(
-                "queries", ["What happened to Alex?", "Who is Emilia?"]
+                "queries", ["What happened recently?", "Who is present?"]
             )
             return self._test_hybrid_search(test_queries)
 
@@ -1365,7 +1359,7 @@ class MEMNON:
                         command["queries"] = queries
                 except:
                     # If parsing fails, use default queries
-                    command["queries"] = ["What happened to Alex?", "Who is Emilia?"]
+                    command["queries"] = ["What happened recently?", "Who is present?"]
 
         elif message_text.startswith("raw"):
             command["action"] = "toggle_raw"

@@ -83,3 +83,61 @@ def test_query_patterns_follow_seeded_cast_and_aliases() -> None:
         assert empty.extract_entities("anything") == []
     with pytest.raises(psycopg2.OperationalError, match="does not exist"):
         QueryAnalyzer(db_url=sqlalchemy_url(dbname))
+
+
+@pytest.mark.requires_postgres
+def test_query_alias_patterns_use_database_and_propagate_failure() -> None:
+    """Real MEMNON alias loading follows the cast and rejects a broken table."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.exc import ProgrammingError
+    from sqlalchemy.orm import sessionmaker
+
+    from nexus.agents.memnon.memnon import MEMNON
+    from nexus.agents.memnon.utils.alias_search import alias_terms
+
+    with disposable_slot_database("qa640_908_aliases") as dbname:
+        character_id, _ = seed_protagonist(dbname, name="Mira Vale")
+        engine = create_engine(sqlalchemy_url(dbname))
+        # Exercise the production loader without initializing embedding models.
+        memnon = MEMNON.__new__(MEMNON)
+        memnon.Session = sessionmaker(bind=engine)
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO character_aliases (character_id, alias) VALUES (:id, 'Ember'), (:id, ' ')"
+                    ),
+                    {"id": character_id},
+                )
+            aliases = memnon._load_aliases()
+            assert set(aliases) == {"mira vale"}
+            assert set(aliases["mira vale"]) == {
+                "Mira Vale",
+                "Ember",
+                "You",
+                "Your",
+                "Yours",
+                "Yourself",
+            }
+            for query in ("Ember", "your journey", "You", "yourself"):
+                assert set(alias_terms(query, aliases)) == set(aliases["mira vale"])
+            for query in ("Alex", "Emilia", "Pete", "Alina", "Dr. Nyati", "yourselves"):
+                assert alias_terms(query, aliases) == []
+            with engine.begin() as conn:
+                conn.execute(
+                    text("UPDATE characters SET name = 'Orin Quill' WHERE id = :id"),
+                    {"id": character_id},
+                )
+                conn.execute(text("DELETE FROM character_aliases"))
+            changed = memnon._load_aliases()
+            assert set(changed) == {"orin quill"}
+            assert alias_terms("Mira Vale and Ember", changed) == []
+            assert "Orin Quill" in alias_terms("your journey", changed)
+            with engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE character_aliases RENAME TO hidden_aliases")
+                )
+            with pytest.raises(ProgrammingError, match="does not exist"):
+                memnon._load_aliases()
+        finally:
+            engine.dispose()

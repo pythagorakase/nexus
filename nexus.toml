@@ -973,7 +973,7 @@ tiers = [
 ]
 
 [memnon.retrieval.user_character_focus_boost]
-# Boost results that focus on user-controlled character (Alex)
+# Boost results that focus on user-controlled character
 enabled = true
 
 # Regex patterns that indicate user character focus

@@ -192,7 +192,7 @@ class HighSpecificityEntityDetector:
         # Check each character name/alias
         for name_or_alias, char_record in self.character_lookup.items():
             # Use word boundaries for exact matching
-            # This prevents matching "alex" in "alexander" or "complex"
+            # This prevents matching "ann" in "annex" or "banner"
             pattern = r"\b" + re.escape(name_or_alias) + r"\b"
             if re.search(pattern, text_lower):
                 found_characters[char_record["id"]] = char_record
