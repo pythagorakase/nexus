@@ -12,10 +12,12 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
-from psycopg2 import sql
 
-from nexus.config import load_settings
-from nexus.config.story_model import StorySettings, read_story_settings
+from nexus.config.story_model import (
+    StorySettings,
+    read_story_settings,
+    write_story_settings,
+)
 
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_schemas import (
@@ -287,31 +289,14 @@ def patch_slot_settings_endpoint(slot: int, patch: StorySettings) -> StorySettin
     updates = patch.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No story settings provided")
-    settings = load_settings()
-    for key in ("skald_model", "gaia_model"):
-        if updates.get(key) is not None:
-            try:
-                settings.resolve_model_ref(updates[key])
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-    columns = {
-        "skald_model": "model",
-        "gaia_model": "gaia_model",
-        "apex_context_window": "apex_context_window",
-    }
-    assignments = sql.SQL(", ").join(
-        sql.SQL("{} = %s").format(sql.Identifier(columns[key])) for key in updates
-    )
     dbname = slot_dbname(slot)
     with get_connection(dbname) as conn, conn.cursor() as cur:
-        cur.execute(
-            sql.SQL("UPDATE global_variables SET {} WHERE id = TRUE").format(
-                assignments
-            ),
-            tuple(updates.values()),
-        )
-        if cur.rowcount != 1:
-            raise HTTPException(status_code=409, detail="Story settings row is missing")
+        try:
+            write_story_settings(cur, patch)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     return read_story_settings(dbname)
 
 

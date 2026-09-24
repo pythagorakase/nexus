@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import logging
 from typing import Any, Literal, Mapping
 
+from psycopg2 import sql
 from pydantic import BaseModel, ConfigDict, Field
 
 from nexus.api.db_pool import get_connection
@@ -48,6 +49,31 @@ def read_story_settings(dbname: str) -> StorySettings:
     return StorySettings(
         skald_model=row[0], gaia_model=row[1], apex_context_window=row[2], dbname=dbname
     )
+
+
+def write_story_settings(cur: Any, patch: StorySettings) -> None:
+    """Validate and persist explicit pins on the caller's transaction."""
+    updates = patch.model_dump(exclude_unset=True)
+    if not updates:
+        raise ValueError("No story settings provided")
+    settings = load_settings()
+    for key in ("skald_model", "gaia_model"):
+        if updates.get(key) is not None:
+            settings.resolve_model_ref(updates[key])
+    columns = {
+        "skald_model": "model",
+        "gaia_model": "gaia_model",
+        "apex_context_window": "apex_context_window",
+    }
+    assignments = sql.SQL(", ").join(
+        sql.SQL("{} = %s").format(sql.Identifier(columns[key])) for key in updates
+    )
+    cur.execute(
+        sql.SQL("UPDATE global_variables SET {} WHERE id = TRUE").format(assignments),
+        tuple(updates.values()),
+    )
+    if cur.rowcount != 1:
+        raise RuntimeError("Story settings row is missing")
 
 
 SeatPolicy = Literal["fixed", "follow_story"]

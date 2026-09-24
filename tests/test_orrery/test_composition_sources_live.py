@@ -41,7 +41,7 @@ from nexus.agents.orrery.templates import (
 from nexus.api.slot_utils import get_slot_db_url
 
 
-pytestmark = pytest.mark.requires_postgres
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
 
 LIVE_SLOT = 5
 COMPOSITION = {

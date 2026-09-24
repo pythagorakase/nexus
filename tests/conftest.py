@@ -9,6 +9,10 @@ from typing import Iterable
 import psycopg2
 import pytest
 
+# Apply before collection and propagate to test subprocesses.
+if os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
+    os.environ["NEXUS_TEST_PROVIDER_ONLY"] = "1"
+
 from nexus.telemetry import usage as usage_telemetry
 
 

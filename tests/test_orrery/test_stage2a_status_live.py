@@ -34,7 +34,7 @@ from nexus.agents.orrery.tag_writer import apply_status_pair_tag_bestowal
 from nexus.api.slot_utils import get_slot_db_url, slot_dbname
 
 
-pytestmark = pytest.mark.requires_postgres
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
 
 LIVE_SLOT = 5
 ENABLED_MATURATION = {"orrery": {"retrograde": {"maturation": {"enabled": True}}}}

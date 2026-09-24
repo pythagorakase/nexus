@@ -399,6 +399,8 @@ class OpenAIProvider(LLMProvider):
             from nexus.config.story_model import resolve_seat
 
             self.model = resolve_seat("ir_eval.judgment.model", settings=settings).model
+        from nexus.config.provider_guard import require_test_provider
+
         try:
             provider = settings.provider_for_model(self.model)
         except ValueError as exc:
@@ -406,6 +408,7 @@ class OpenAIProvider(LLMProvider):
                 f"Model {self.model!r} is not declared in nexus.toml's "
                 "[global.model.api_models] registry; add its parameter capabilities."
             ) from exc
+        require_test_provider(self.model, settings=settings)
         entry = next(
             entry
             for entry in settings.global_.model.api_models[provider].models

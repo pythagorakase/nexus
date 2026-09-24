@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import uuid
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from typing import Any
 
 import psycopg2
@@ -16,6 +16,7 @@ from psycopg2.extensions import make_dsn
 from sqlalchemy.engine import URL
 
 from nexus.api import db_pool
+from nexus.config.story_model import StorySettings, write_story_settings
 from scripts import migrate, new_story_setup
 
 
@@ -76,17 +77,30 @@ def disposable_slot_database(
     *,
     source_db: str = "NEXUS_template",
     include_data: bool = False,
+    story_pin: str | None = "TEST",
 ) -> Iterator[str]:
     """Yield a uniquely named template clone and always remove it afterward.
 
     ``include_data`` snapshots a source corpus with pg_dump, restores it into
     the disposable target, and migrates only that clone. It never disconnects,
     unlocks, or changes the source database. Default cloning copies seed data
-    only, suitable for tests that create their own stories.
+    only, suitable for tests that create their own stories. Clones are pinned
+    to TEST before corpus migrations so backfilled work is also safe. Preserving
+    the source pin requires the explicit live-LLM opt-in.
 
     Fails loudly when the admin connection is unavailable; opting into the
     PostgreSQL gate means PostgreSQL is required.
     """
+
+    if story_pin is None and os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
+        raise ValueError("story_pin=None requires NEXUS_RUN_LIVE_LLM=1")
+
+    def pin_clone() -> None:
+        if story_pin is not None:
+            with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+                write_story_settings(
+                    cur, StorySettings(skald_model=story_pin, gaia_model=None)
+                )
 
     dbname = f"{prefix}_{uuid.uuid4().hex[:12]}"
     admin: Any = None
@@ -136,6 +150,7 @@ def disposable_slot_database(
                     capture_output=True,
                     text=True,
                 )
+            pin_clone()
             _, failed = migrate.migrate_database(dbname, skip_locked=False)
             if failed:
                 raise RuntimeError(
@@ -143,6 +158,7 @@ def disposable_slot_database(
                 )
         else:
             new_story_setup.initialize_slot_database(dbname, source_db=source_db)
+            pin_clone()
         db_pool.dispose_database(dbname)
         yield dbname
     finally:

@@ -54,7 +54,6 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
                 "SELECT version FROM schema_migrations WHERE version LIKE '126%'"
             )
             assert cur.fetchone() is not None
-            cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
             for table in TABLES:
                 cur.execute(
                     f"UPDATE {table} SET state='stale_rejected' WHERE state IN ('queued','leased','failed')"

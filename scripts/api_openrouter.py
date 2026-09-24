@@ -262,8 +262,11 @@ class OpenRouterProvider(LLMProvider):
             )
 
         self.provider_name = "openrouter"
-        self.api_key = self.api_key or self._get_api_key()
         self.model = self.model or self.DEFAULT_MODEL
+        from nexus.config.provider_guard import require_test_provider
+
+        require_test_provider(self.model)
+        self.api_key = self.api_key or self._get_api_key()
 
         # Map database model name to OpenRouter model ID
         if self.model in self.MODEL_MAPPING:

@@ -378,8 +378,11 @@ class AnthropicProvider(LLMProvider):
             )
 
         self.provider_name = "anthropic"
-        self.api_key = self.api_key or self._get_api_key()
         self.model = self.model or self.DEFAULT_MODEL
+        from nexus.config.provider_guard import require_test_provider
+
+        require_test_provider(self.model)
+        self.api_key = self.api_key or self._get_api_key()
 
         # Initialize the client
         self.client = anthropic.Anthropic(api_key=self.api_key, timeout=self.timeout)
