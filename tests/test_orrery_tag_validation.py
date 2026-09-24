@@ -1259,7 +1259,7 @@ def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
             )
 
     provider = OpenAIProvider(
-        model="gpt-4.1",
+        model="TEST",
         api_key="test-key",
         structured_output_retries=1,
         output_validator=build_storyteller_tag_validator("test_slot"),
@@ -1308,7 +1308,7 @@ def test_openai_chat_transport_repairs_invalid_declaration(
             )
 
     provider = OpenAIProvider(
-        model="local-test-model",
+        model="TEST",
         api_key="test-key",
         base_url="http://127.0.0.1:8012/v1",
         structured_transport="chat_completions",
@@ -1421,7 +1421,7 @@ async def test_openai_chat_transport_async_repairs_invalid_declaration(
             )
 
     provider = OpenAIProvider(
-        model="local-test-model",
+        model="TEST",
         api_key="test-key",
         base_url="http://127.0.0.1:8012/v1",
         structured_transport="chat_completions",
@@ -1579,7 +1579,7 @@ def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged
             )
 
     provider = OpenAIProvider(
-        model="gpt-4.1",
+        model="TEST",
         api_key="test-key",
         structured_output_retries=1,
         output_validator=build_storyteller_tag_validator("test_slot"),

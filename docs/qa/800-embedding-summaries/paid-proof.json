@@ -1,0 +1,43 @@
+{
+  "database": "qa640_800b_paid_e8d6a492eed0",
+  "error": "1 validation error for EpisodeSummaryModel\n  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\\n  \"summary\": \"OVERVIE...d an issuer. The worker', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid",
+  "wire_usage": [
+    {
+      "mode": "episode",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 44386,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 44383
+        },
+        "output_tokens": 2500,
+        "output_tokens_details": {
+          "reasoning_tokens": 264
+        },
+        "total_tokens": 46886
+      },
+      "id": "resp_09fa0154c03f1494006ab5a25c0d9887d297e87a063d67a225"
+    }
+  ],
+  "jobs": [
+    [
+      "episode",
+      "failed",
+      1,
+      "c4556637-8f8f-4a74-898c-c18688d63787"
+    ],
+    [
+      "season",
+      "queued",
+      0,
+      "c4556637-8f8f-4a74-898c-c18688d63787"
+    ]
+  ],
+  "summary_lengths": [],
+  "persisted_summaries": {},
+  "usage": []
+}

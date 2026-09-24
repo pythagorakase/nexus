@@ -4233,7 +4233,13 @@ def main() -> int:
     elif args.command == "usage":
         result = run_usage(args)
     elif args.command == "inspect-turn":
-        result = run_inspect_turn(args)
+        from nexus.telemetry.attempt_manifest import NoGenerationSessionError
+
+        try:
+            result = run_inspect_turn(args)
+        except NoGenerationSessionError as exc:
+            print(str(exc))
+            return 1
     elif args.command == "prune-manifests":
         result = run_prune_manifests(args)
     elif args.command == "jobs":

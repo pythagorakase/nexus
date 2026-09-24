@@ -37,11 +37,30 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config_path))
     initialize = SummaryGenerator._initialize_provider
     issued = []
+    wire_usage = []
 
     def bounded_provider(self, mode):
         # This wraps the real SDK; no fabricated responses or credentials.
         provider = initialize(self, mode)
         provider.client.max_retries = 0
+
+        def capture_response(response):
+            response.read()
+            payload = response.json()
+            wire_usage.append(
+                {
+                    "mode": mode,
+                    "status": payload.get("status"),
+                    "incomplete_details": payload.get("incomplete_details"),
+                    "usage": payload.get("usage"),
+                    "id": payload.get("id"),
+                }
+            )
+            Path("docs/qa/800-embedding-summaries/paid-wire-usage.json").write_text(
+                json.dumps(wire_usage, indent=2) + "\n"
+            )
+
+        provider.client._client.event_hooks["response"].append(capture_response)
         issued.append(mode)
         assert len(issued) <= 2, "The authorized two-call proof budget is exhausted"
         return provider
@@ -69,27 +88,51 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
                 session_id=session,
             )
         scheduler = SlotScheduler(4, dbname=dbname, settings=load_settings_as_dict())
-        result = scheduler.run_pass(
-            narration_limit=0, experience_limit=0, maturation_limit=0
-        )
-        assert result["narrative_summary_jobs"] == 2
-        assert issued == ["episode", "season"]
+        error = None
+        try:
+            result = scheduler.run_pass(
+                narration_limit=0, experience_limit=0, maturation_limit=0
+            )
+        except Exception as exc:
+            error = exc
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT kind, state::text, attempts, generation_session_id::text FROM narrative_summary_jobs ORDER BY id"
             )
             jobs = cur.fetchall()
-            assert all(row[1:3] == ("succeeded", 1) for row in jobs)
             cur.execute(
                 "SELECT length(summary->>'summary') FROM episodes WHERE season=1 AND episode=2 UNION ALL SELECT length(summary->>'summary') FROM seasons WHERE id=1"
             )
             lengths = [row[0] for row in cur.fetchall()]
-            assert len(lengths) == 2 and all(lengths)
+            cur.execute(
+                "SELECT 'episode' AS kind, summary FROM episodes WHERE season=1 AND episode=2 "
+                "UNION ALL SELECT 'season' AS kind, summary FROM seasons WHERE id=1"
+            )
+            persisted_summaries = dict(cur.fetchall())
         events = [
             json.loads(line)
             for path in usage._config.usage_dir.glob("*.jsonl")
             for line in path.read_text().splitlines()
         ]
+        evidence = {
+            "database": dbname,
+            "error": str(error) if error else None,
+            "wire_usage": wire_usage,
+            "jobs": jobs,
+            "summary_lengths": lengths,
+            "persisted_summaries": persisted_summaries,
+            "usage": events,
+        }
+        path = Path("docs/qa/800-embedding-summaries/paid-proof.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(evidence, indent=2) + "\n")
+        print("PAID PROOF " + json.dumps(evidence, sort_keys=True), flush=True)
+        if error is not None:
+            raise error
+        assert result["narrative_summary_jobs"] == 2
+        assert issued == ["episode", "season"]
+        assert all(row[1:3] == ("succeeded", 1) for row in jobs)
+        assert len(lengths) == 2 and all(lengths)
         assert len(events) == 2, events
         assert all(
             event["provider"] != "test"
@@ -97,13 +140,3 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
             and event["run_id"] == session
             for event in events
         )
-        evidence = {
-            "database": dbname,
-            "jobs": jobs,
-            "summary_lengths": lengths,
-            "usage": events,
-        }
-        path = Path("docs/qa/800-embedding-summaries/paid-proof.json")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(evidence, indent=2) + "\n")
-        print("PAID PROOF " + json.dumps(evidence, sort_keys=True), flush=True)

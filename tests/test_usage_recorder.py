@@ -22,6 +22,7 @@ from nexus.telemetry.usage import (
     summarize_usage,
 )
 from scripts.api_openai import OpenAIProvider
+from tests.model_registry_helpers import registry_model
 
 
 class _StructuredAnswer(BaseModel):
@@ -122,7 +123,7 @@ def test_single_responses_call_records_jsonl_log_and_cli_json(
             return response
 
     provider = OpenAIProvider(
-        model="gpt-test",
+        model="TEST",
         api_key="test-key",
         usage_provider_name="openai",
         usage_seat="skald_single_pass",
@@ -142,7 +143,7 @@ def test_single_responses_call_records_jsonl_log_and_cli_json(
     assert events[0]["input_tokens"] == 123
     assert events[0]["output_tokens"] == 45
     assert events[0]["total_tokens"] == 168
-    assert "USAGE provider=openai model=gpt-test" in caplog.text
+    assert "USAGE provider=openai model=TEST" in caplog.text
 
     monkeypatch.setattr(
         "sys.argv",
@@ -177,14 +178,14 @@ def test_two_provider_passes_keep_seats_models_and_sum(tmp_path: Path) -> None:
             return next(responses)
 
     writer = OpenAIProvider(
-        model="writer-model",
+        model=registry_model("openai"),
         api_key="test-key",
         usage_provider_name="openai",
         usage_seat="skald_writer",
     )
     writer.client = SimpleNamespace(responses=FakeResponses())
     gaia = OpenAIProvider(
-        model="gaia-model",
+        model="TEST",
         api_key="test-key",
         usage_provider_name="openai",
         usage_seat="gaia",
@@ -200,8 +201,8 @@ def test_two_provider_passes_keep_seats_models_and_sum(tmp_path: Path) -> None:
         "gaia",
     ]
     assert [event["model"] for event in summary["events"]] == [
-        "writer-model",
-        "gaia-model",
+        registry_model("openai"),
+        "TEST",
     ]
     assert summary["providers"]["openai"]["total"] == 25
 
@@ -229,7 +230,7 @@ def test_repair_loop_records_rejected_then_accepted(tmp_path: Path) -> None:
             return next(responses)
 
     provider = OpenAIProvider(
-        model="repair-model",
+        model="TEST",
         api_key="test-key",
         structured_output_retries=1,
         usage_provider_name="openai",
@@ -268,7 +269,7 @@ def test_exhausted_repair_labels_final_attempt_rejected_validation(
             return bad
 
     provider = OpenAIProvider(
-        model="exhaust-model",
+        model="TEST",
         api_key="test-key",
         structured_output_retries=1,
         usage_provider_name="openai",
@@ -359,7 +360,7 @@ def test_missing_usage_stays_null_and_counts_unknown(tmp_path: Path) -> None:
             return response
 
     provider = OpenAIProvider(
-        model="unknown-model",
+        model="TEST",
         api_key="test-key",
         usage_provider_name="openai",
         usage_seat="skald_single_pass",
