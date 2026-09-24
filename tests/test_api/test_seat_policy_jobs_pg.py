@@ -128,6 +128,12 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
                         (session,),
                     )
                     assert cur.fetchall() == before[table]
+                # Dispatch the compaction belonging to this accepted TEST turn.
+                cur.execute(
+                    "UPDATE correspondence_compaction_jobs SET state='stale_rejected' "
+                    "WHERE generation_session_id IS DISTINCT FROM %s AND state='queued'",
+                    (session,),
+                )
                 # Isolate this identity proof from unrelated embedding and milestone work.
                 cur.execute("DELETE FROM narrative_parent_embedding_claims")
                 cur.execute("DELETE FROM narrative_embedding_jobs")
@@ -142,7 +148,7 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
             print("Scheduler pass: " + json.dumps(result), flush=True)
             for table in TABLES:
                 assert any(
-                    f"{table} job " in record.message
-                    and "uses persisted model=TEST" in record.message
+                    f"{table} job {row[0]} uses persisted model=TEST" in record.message
+                    for row in before[table]
                     for record in caplog.records
                 ), table

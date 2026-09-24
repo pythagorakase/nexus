@@ -3373,7 +3373,8 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
                 cur.execute(
                     """
                     SELECT state::text AS state, experience_ids,
-                           boundary_chunk_id, lease_nonce, requested_model
+                           boundary_chunk_id, lease_nonce, requested_model,
+                           resolved_model, resolved_source
                     FROM character_experience_jobs
                     """
                 )
@@ -3382,7 +3383,8 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
             assert job["boundary_chunk_id"] == boundary_chunk_id
             assert len(job["experience_ids"]) == 1
             assert job["lease_nonce"] is None
-            assert job["requested_model"] == settings["orrery"]["experiences"]["model"]
+            assert job["requested_model"] == job["resolved_model"]
+            assert job["resolved_source"] == "story_follow"
 
             render_settings = deepcopy(settings)
             render_settings["orrery"]["experiences"]["model"] = "render-time-model"
@@ -3412,7 +3414,7 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
                 completed_job = dict(cur.fetchone())
             assert all(row["experience_text"] for row in rendered_rows)
             assert all(
-                row["render_model"] == "render-time-model" for row in rendered_rows
+                row["render_model"] == job["resolved_model"] for row in rendered_rows
             )
             assert all(
                 row["renderer_version"] == "experience-renderer-v1"
@@ -3450,13 +3452,13 @@ def test_fresh_duplicate_render_job_is_stale_rejected() -> None:
                             boundary_season, boundary_episode, boundary_scene,
                             scene_end_season, scene_end_episode, scene_end_scene,
                             batch_ordinal, experience_ids, slot, state, attempts,
-                            requested_model, source_digest
+                            requested_model, source_digest, resolved_model, resolved_source
                         )
                         SELECT boundary_chunk_id, scene_end_chunk_id, world_layer,
                                boundary_season, boundary_episode, boundary_scene,
                                scene_end_season, scene_end_episode, scene_end_scene,
                                batch_ordinal + 1, experience_ids, slot,
-                               'queued', 0, requested_model, source_digest
+                               'queued', 0, requested_model, source_digest, resolved_model, resolved_source
                         FROM character_experience_jobs
                         WHERE experience_ids = %s::bigint[]
                         RETURNING id
