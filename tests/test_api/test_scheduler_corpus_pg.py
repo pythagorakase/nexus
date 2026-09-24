@@ -112,7 +112,7 @@ def test_scheduler_drains_starved_corpus(monkeypatch, tmp_path, mock_openai_serv
 def test_scheduler_live_turn_starts_before_queued_render(
     monkeypatch, tmp_path, mock_openai_server
 ):
-    """A real auto-accept/TEST turn outruns due maintenance on lane 8017."""
+    """A real auto-accept/TEST turn outruns due maintenance on lane 8018."""
     import threading
     import time
     import requests
@@ -129,6 +129,19 @@ def test_scheduler_live_turn_starts_before_queued_render(
             cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
             cur.execute(
                 "UPDATE character_experience_jobs SET available_at=clock_timestamp()+interval '1 hour' WHERE state='queued'"
+            )
+        # The clone still carries the pre-#916 fingerprint. Preserve its
+        # memory contents while adapting both the tail and pending acceptance
+        # to this TEST configuration; never stamp the source save.
+        from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
+
+        _, _, fingerprint = refresh_tail_fingerprint(dbname=dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE incubator SET lore_pass_baseline = jsonb_set("
+                "lore_pass_baseline, '{config_fingerprint}', to_jsonb(%s::text), false) "
+                "WHERE lore_pass_baseline IS NOT NULL",
+                (fingerprint,),
             )
         generation_started = threading.Event()
         render_started = threading.Event()
@@ -179,7 +192,7 @@ def test_scheduler_live_turn_starts_before_queued_render(
             ], order
             print(f"Live ordering: {order}", flush=True)
             run_cli(monkeypatch, "status")
-            status = requests.get("http://127.0.0.1:8017/runtime/status", timeout=10)
+            status = requests.get("http://127.0.0.1:8018/runtime/status", timeout=10)
             assert status.status_code == 200, status.text
             print(
                 "/runtime/status: " + json.dumps(status.json(), sort_keys=True),

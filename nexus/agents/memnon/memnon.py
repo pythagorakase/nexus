@@ -57,51 +57,6 @@ from .utils.embedding_tables import list_embedding_tables
 # Import alias search utilities
 from .utils.alias_search import load_aliases_from_db
 
-# Set up a basic console logger for initial settings loading
-settings_logger = logging.getLogger("nexus.memnon.settings")
-settings_logger.setLevel(logging.INFO)
-if not settings_logger.handlers:
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
-    settings_logger.addHandler(console_handler)
-
-
-# Load settings
-def load_settings() -> Dict[str, Any]:
-    """Load settings using centralized config loader."""
-    # Import here to avoid circular imports. With no explicit path, the
-    # centralized loader owns runtime-config precedence and raises on errors.
-    from nexus.config import load_settings_as_dict
-
-    settings = load_settings_as_dict()
-    settings_logger.info("Loaded settings via centralized config loader")
-    return settings
-
-
-# Global settings
-SETTINGS = load_settings()
-MEMNON_SETTINGS = SETTINGS.get("Agent Settings", {}).get("MEMNON", {})
-GLOBAL_SETTINGS = SETTINGS.get("Agent Settings", {}).get("global", {})
-
-# Configure logging
-log_config = MEMNON_SETTINGS.get("logging", {})
-log_level = getattr(logging, log_config.get("level", "DEBUG"))
-log_file = log_config.get("file", "memnon.log")
-log_console = log_config.get("console", True)
-
-handlers = []
-if log_file:
-    handlers.append(logging.FileHandler(log_file))
-if log_console:
-    handlers.append(logging.StreamHandler())
-
-logging.basicConfig(
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=handlers,
-)
 logger = logging.getLogger("nexus.memnon")
 
 READONLY_SQL_ALLOWED_TABLES = {
@@ -130,10 +85,6 @@ READONLY_SQL_ALLOWED_TABLES = {
     "event_types",
     "tags",
 }
-
-# LLM settings
-MODEL_CONFIG = GLOBAL_SETTINGS.get("model", {})
-DEFAULT_MODEL_ID = MODEL_CONFIG.get("default_model", "llama-3.3-70b-instruct@q6_k")
 
 
 # Database settings - use slot-aware resolution
@@ -236,6 +187,7 @@ class MEMNON:
         model_id: str = None,  # This is now only for embedding models
         model_path: str = None,
         debug: bool = None,
+        settings_overrides: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         """
@@ -249,8 +201,25 @@ class MEMNON:
             model_id: DEPRECATED - LLM model ID is no longer used
             model_path: DEPRECATED - LLM model path is no longer used
             debug: Enable debug logging
+            settings_overrides: Validated per-instance MEMNON evaluation overrides.
             **kwargs: Additional arguments
         """
+        from nexus.config.loader import load_settings
+        from nexus.config.settings_models import MEMNONSettings
+
+        configuration = load_settings()
+        self.settings = configuration.memnon.model_dump(by_alias=True)
+        if settings_overrides is not None:
+            for key, value in settings_overrides.items():
+                if isinstance(value, dict) and isinstance(self.settings.get(key), dict):
+                    self.settings[key].update(value)
+                else:
+                    self.settings[key] = value
+            self.settings = MEMNONSettings.model_validate(self.settings).model_dump(
+                by_alias=True
+            )
+        self.global_settings = configuration.global_.model_dump(by_alias=True)
+
         # Store references
         self.interface = interface
         self.agent_state = agent_state
@@ -259,7 +228,7 @@ class MEMNON:
         # Store debug setting
         self.debug = debug
         if debug is None:
-            self.debug = MEMNON_SETTINGS.get("debug", False)
+            self.debug = self.settings.get("debug", False)
 
         # Set up logging if debug is enabled
         if self.debug:
@@ -270,14 +239,14 @@ class MEMNON:
         # If no db_url provided, use slot-aware resolution
         self.db_url = db_url or get_default_db_url()
         logger.info("Using the configured database target")
-        self.db_manager = DatabaseManager(self.db_url, settings=MEMNON_SETTINGS)
+        self.db_manager = DatabaseManager(self.db_url, settings=self.settings)
         self.Session = self.db_manager.Session
 
         # Set up embedding models using EmbeddingManager
         logger.info("Initializing embedding models through EmbeddingManager")
         from .utils.embedding_manager import EmbeddingManager
 
-        self.embedding_manager = EmbeddingManager(settings=MEMNON_SETTINGS)
+        self.embedding_manager = EmbeddingManager(settings=self.settings)
 
         # Initialize IDF dictionary
         logger.info("Initializing IDF dictionary for term weighting...")
@@ -287,7 +256,7 @@ class MEMNON:
 
         # Get model weights from settings
         model_weights = {}
-        for model_name, model_config in MEMNON_SETTINGS.get("models", {}).items():
+        for model_name, model_config in self.settings.get("models", {}).items():
             weight = model_config.get("weight", 0.33)  # Default equal weight
             model_weights[model_name] = weight
 
@@ -299,8 +268,8 @@ class MEMNON:
         self.force_text_first = False
 
         # Get query and retrieval settings from configuration
-        query_config = MEMNON_SETTINGS.get("query", {})
-        retrieval_config = MEMNON_SETTINGS.get("retrieval", {})
+        query_config = self.settings.get("query", {})
+        retrieval_config = self.settings.get("retrieval", {})
 
         # Configure retrieval settings using values from nexus.toml
         self.retrieval_settings = {
@@ -324,7 +293,7 @@ class MEMNON:
             db_url=self.db_url,
             embedding_manager=self.embedding_manager,
             idf_dictionary=self.idf_dictionary,
-            settings=MEMNON_SETTINGS,
+            settings=self.settings,
             retrieval_settings=self.retrieval_settings,
         )
 
@@ -338,7 +307,7 @@ class MEMNON:
         self.content_processor = ContentProcessor(
             db_manager=self.db_manager,
             embedding_manager=self.embedding_manager,
-            settings=MEMNON_SETTINGS,
+            settings=self.settings,
             load_aliases_func=self._load_aliases,
         )
 
@@ -653,7 +622,7 @@ class MEMNON:
 
                 # Set up hybrid search if enabled in settings
                 hybrid_search_enabled = (
-                    MEMNON_SETTINGS.get("retrieval", {})
+                    self.settings.get("retrieval", {})
                     .get("hybrid_search", {})
                     .get("enabled", False)
                 )
@@ -691,10 +660,10 @@ class MEMNON:
                 logger.warning("Hybrid search setup failed")
                 # Update settings in memory to reflect disabled status
                 if (
-                    "retrieval" in MEMNON_SETTINGS
-                    and "hybrid_search" in MEMNON_SETTINGS["retrieval"]
+                    "retrieval" in self.settings
+                    and "hybrid_search" in self.settings["retrieval"]
                 ):
-                    MEMNON_SETTINGS["retrieval"]["hybrid_search"]["enabled"] = False
+                    self.settings["retrieval"]["hybrid_search"]["enabled"] = False
                 return False
 
         except Exception as e:
@@ -705,10 +674,10 @@ class MEMNON:
             logger.warning("Disabling hybrid search due to setup failure")
             # Update settings to reflect disabled status
             if (
-                "retrieval" in MEMNON_SETTINGS
-                and "hybrid_search" in MEMNON_SETTINGS["retrieval"]
+                "retrieval" in self.settings
+                and "hybrid_search" in self.settings["retrieval"]
             ):
-                MEMNON_SETTINGS["retrieval"]["hybrid_search"]["enabled"] = False
+                self.settings["retrieval"]["hybrid_search"]["enabled"] = False
             return False
 
     def _load_aliases(self) -> Dict[str, List[str]]:
@@ -736,9 +705,7 @@ class MEMNON:
 
         try:
             # Get hybrid search settings
-            hybrid_config = MEMNON_SETTINGS.get("retrieval", {}).get(
-                "hybrid_search", {}
-            )
+            hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
             if not hybrid_config.get("enabled", False):
                 logger.warning("Hybrid search is disabled in settings")
                 return []
@@ -1193,7 +1160,7 @@ class MEMNON:
         # Delegate to ContentProcessor but handle reporting through interface
         try:
             # Get verbosity setting to determine if we should report progress
-            verbose = MEMNON_SETTINGS.get("import", {}).get("verbose", True)
+            verbose = self.settings.get("import", {}).get("verbose", True)
 
             # Use ContentProcessor for the actual processing
             total_chunks = self.content_processor.process_all_narrative_files(
@@ -1336,7 +1303,7 @@ class MEMNON:
                 command["pattern"] = pattern_match.group(1)
             else:
                 # Default pattern from settings
-                command["pattern"] = MEMNON_SETTINGS.get("import", {}).get(
+                command["pattern"] = self.settings.get("import", {}).get(
                     "file_pattern", "ALEX_*.md"
                 )
 
@@ -1467,9 +1434,7 @@ class MEMNON:
             # Add search configuration
             status += f"\nSearch configuration:\n"
 
-            hybrid_config = MEMNON_SETTINGS.get("retrieval", {}).get(
-                "hybrid_search", {}
-            )
+            hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
             hybrid_enabled = hybrid_config.get("enabled", False)
             status += (
                 f"  - Hybrid search: {'Enabled' if hybrid_enabled else 'Disabled'}\n"
@@ -1510,7 +1475,7 @@ class MEMNON:
         results += "=======================\n\n"
 
         # Check if hybrid search is enabled
-        hybrid_config = MEMNON_SETTINGS.get("retrieval", {}).get("hybrid_search", {})
+        hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
         if not hybrid_config.get("enabled", False):
             results += "ERROR: Hybrid search is disabled in settings.\n"
             return results
@@ -1818,7 +1783,7 @@ class MEMNON:
         strategies = []
 
         hybrid_enabled = (
-            MEMNON_SETTINGS.get("retrieval", {})
+            self.settings.get("retrieval", {})
             .get("hybrid_search", {})
             .get("enabled", False)
         )
@@ -1910,7 +1875,7 @@ class MEMNON:
         search_results_initial = final_results[:k]
 
         # Apply cross-encoder reranking if enabled
-        cross_encoder_config = MEMNON_SETTINGS.get("retrieval", {}).get(
+        cross_encoder_config = self.settings.get("retrieval", {}).get(
             "cross_encoder_reranking", {}
         )
         if (

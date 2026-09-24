@@ -7,6 +7,7 @@ from typing import Any
 
 from nexus.agents.memnon.memnon import MEMNON
 from nexus.agents.memnon.utils.search import SearchManager
+from nexus.config import load_settings
 
 
 class FakeResult:
@@ -158,6 +159,7 @@ def test_query_memory_vector_search_includes_retrograde_summary_collection() -> 
     # of explicit vector collection routing.
     search_manager = RecordingSearchManager()
     memnon = SimpleNamespace(
+        settings=load_settings().memnon.model_dump(by_alias=True),
         retrieval_settings={"default_top_k": 5},
         query_analyzer=QueryAnalyzerStub(),
         search_manager=search_manager,

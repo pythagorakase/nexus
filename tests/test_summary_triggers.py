@@ -331,14 +331,27 @@ def test_summary_generator_uses_registry_native_provider_contract(
             assert provider.temperature == settings.temperature
 
 
+@pytest.fixture
+def summary_database():
+    """Keep durable summary writes in a disposable template clone."""
+    from tests.pg_fixtures import disposable_slot_database
+
+    with disposable_slot_database("qa640_summary") as dbname:
+        yield dbname
+
+
 @pytest.mark.requires_postgres
-def test_generation_failure_marker_round_trips_and_can_be_replaced_live():
+def test_generation_failure_marker_round_trips_and_can_be_replaced_live(
+    summary_database,
+):
     """The real seasons JSONB surface stores errors and accepts a later summary."""
     from sqlalchemy import text
 
     from scripts.summarize_narrative import DatabaseManager
 
-    db = DatabaseManager()
+    from nexus.database import database_url
+
+    db = DatabaseManager(db_url=database_url(summary_database))
     season = -(uuid.uuid4().int % 1_000_000_000) - 1
     try:
         with db.engine.connect() as conn:
@@ -400,3 +413,4 @@ def test_generation_failure_marker_round_trips_and_can_be_replaced_live():
                 text("DELETE FROM public.seasons WHERE id = :id"), {"id": season}
             )
             conn.commit()
+        db.engine.dispose()

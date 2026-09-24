@@ -277,6 +277,7 @@ def test_completion_yields_to_hostility_despite_mutual_warmth() -> None:
 
 
 def _create_schema(cur: Any, schema: str) -> None:
+    cur.execute("SET LOCAL nexus.write_producer = 'manual'")
     cur.execute(f'CREATE SCHEMA "{schema}"')
     cur.execute(f'SET LOCAL search_path = "{schema}", public')
     cur.execute(

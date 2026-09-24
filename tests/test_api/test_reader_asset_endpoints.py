@@ -122,6 +122,19 @@ class TestNarrativeReads:
             assert set(entry.keys()) == {"id", "name", "reference"}
         for entry in context["places"]:
             assert set(entry.keys()) == {"id", "name", "referenceType"}
+        with get_connection(f"save_{READ_SLOT:02d}") as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT p.id, p.name FROM place_chunk_references r "
+                "JOIN places p ON p.id = r.place_id "
+                "WHERE r.chunk_id = %s AND r.reference_type = 'setting' ORDER BY p.id",
+                (outline[-1]["id"],),
+            )
+            expected_settings = cur.fetchall()
+        assert [
+            (place["id"], place["name"])
+            for place in context["places"]
+            if place["referenceType"] == "setting"
+        ] == expected_settings
 
     def test_chunks_by_season_episode(self, client: TestClient) -> None:
         outline = client.get(f"/api/narrative/outline?slot={READ_SLOT}").json()
@@ -207,7 +220,12 @@ class TestWorldReads:
     def test_current_place(self, client: TestClient) -> None:
         response = client.get(f"/api/current-place?slot={READ_SLOT}")
         assert response.status_code == 200
-        assert set(response.json().keys()) == {"placeId", "name", "chunkId"}
+        places = response.json()
+        assert isinstance(places, list) and places
+        assert all(set(place) == {"placeId", "name", "chunkId"} for place in places)
+        assert [place["placeId"] for place in places] == sorted(
+            place["placeId"] for place in places
+        )
 
     def test_relationships_and_psychology(self, client: TestClient) -> None:
         characters = client.get(f"/api/characters?slot={READ_SLOT}").json()

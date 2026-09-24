@@ -39,16 +39,35 @@ TEST_SLOT = 5
 pytestmark = pytest.mark.requires_postgres
 
 
+@pytest.fixture(autouse=True)
+def ephemeral_ports(monkeypatch):
+    """Allocate independent ports for real supervisor processes."""
+    import contextlib
+
+    with contextlib.ExitStack() as stack:
+        for name in (
+            "GATEWAY_PORT",
+            "MOCK_PORT",
+            "EXTERNAL_GATEWAY_PORT",
+            "OVERRIDE_GATEWAY_PORT",
+        ):
+            sock = stack.enter_context(socket.socket())
+            sock.bind(("127.0.0.1", 0))
+            monkeypatch.setitem(globals(), name, sock.getsockname()[1])
+
+
 def _write_config(
     tmp_path: Path,
     *,
     profile: str = "local",
-    gateway_port: int = GATEWAY_PORT,
-    mock_port: int = MOCK_PORT,
+    gateway_port: int | None = None,
+    mock_port: int | None = None,
     include_test_provider: bool = True,
     external_gateway_url: str | None = None,
     remote_base_url: str | None = None,
 ) -> Path:
+    gateway_port = GATEWAY_PORT if gateway_port is None else gateway_port
+    mock_port = MOCK_PORT if mock_port is None else mock_port
     doc = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
     doc["runtime"]["profile"] = profile
     doc["runtime"]["state_dir"] = str(tmp_path / "state")

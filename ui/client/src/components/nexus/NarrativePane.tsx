@@ -215,9 +215,10 @@ export function NarrativePane({
     !hasPending &&
     slotState.current_chunk_id === 0;
 
-  const settingPlace = chunkContext?.places.find(
-    (p) => p.referenceType === "setting",
-  );
+  const settingNames = chunkContext?.places
+    .filter((place) => place.referenceType === "setting")
+    .map((place) => place.name)
+    .join(", ");
 
   const nav = useMemo(
     () => resolveReaderNav({ readingChunkId, outlineIds, hasPending }),
@@ -436,7 +437,7 @@ export function NarrativePane({
             />
             <header className="scene-head">
               <h2 className="scene-title" data-testid="text-scene-location">
-                {settingPlace?.name ?? "UNCHARTED"}
+                {settingNames || "UNCHARTED"}
               </h2>
               <DecoDivider variant="glyph" />
             </header>
@@ -490,7 +491,7 @@ export function NarrativePane({
           />
           <header className="scene-head">
             <h2 className="scene-title" data-testid="text-scene-location">
-              {settingPlace?.name ?? "UNCHARTED"}
+              {settingNames || "UNCHARTED"}
             </h2>
             <DecoDivider variant="glyph" />
           </header>

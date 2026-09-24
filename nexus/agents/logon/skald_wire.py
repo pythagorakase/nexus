@@ -527,7 +527,6 @@ def _hydrate_references(
 
     result = apply_delta(roster_from_baseline(baseline), presence)
     roster = result.present.values()
-    setting = next(iter(result.setting.values()), None)
     mentions = result.referenced.values()
     transit = result.transitioning.values()
 
@@ -550,7 +549,7 @@ def _hydrate_references(
     )
 
     places: List[PlaceReference] = []
-    if setting is not None:
+    for setting in result.setting.values():
         places.append(
             PlaceReference(
                 place_id=setting.id,

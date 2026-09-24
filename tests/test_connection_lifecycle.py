@@ -90,7 +90,7 @@ def _watch_other(cluster: dict[str, Any], evidence: Path) -> Iterator[None]:
         observer.close()
 
 
-def _seed_background_work() -> None:
+def _seed_background_work() -> int:
     """Resolve real sleep pressure into durable work for the production worker."""
     from nexus.agents.orrery.events import commit_orrery_tick_sync
     from nexus.agents.orrery.resolver import resolve_dry_run
@@ -145,6 +145,7 @@ def _seed_background_work() -> None:
     with db_pool.get_connection("save_04") as conn:
         result = commit_orrery_tick_sync(conn, proposal, tick_chunk_id=chunk_id, slot=4)
         assert result.resolution_count >= 1
+    return int(chunk_id)
 
 
 @pytest.fixture
@@ -356,19 +357,37 @@ def test_connection_two_clusters_story_lifecycle(
         text_weight=1,
     )
     assert results, "MEMNON did not retrieve the committed bootstrap"
-    from nexus.agents.orrery.worker import process_orrery_outbox_sync
-
-    _seed_background_work()
-    jobs = process_orrery_outbox_sync(slot=4)
-    assert jobs.promoted >= 1
-    assert jobs.narrated >= 1
-    assert jobs.failed == jobs.maturation_failed == jobs.experience_render_failed == 0
+    # The gateway scheduler owns background work now. Observe its durable
+    # completion rather than racing it with a second legacy worker.
+    seeded_chunk_id = _seed_background_work()
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        with db_pool.get_connection("save_04") as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM orrery_narration_jobs j "
+                "JOIN orrery_resolutions r ON r.id = j.resolution_id "
+                "WHERE j.state = 'succeeded' AND r.tick_chunk_id = %s",
+                (seeded_chunk_id,),
+            )
+            if cur.fetchone()[0] >= 1:
+                break
+        time.sleep(0.05)
+    else:
+        pytest.fail("Gateway scheduler did not finish seeded narration work")
 
     with db_pool.get_connection("save_04") as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT count(*) FROM orrery_narration_jobs WHERE state = 'succeeded'"
+            "SELECT count(*) FROM orrery_narration_jobs j "
+            "JOIN orrery_resolutions r ON r.id = j.resolution_id "
+            "WHERE j.state = 'succeeded' AND r.tick_chunk_id = %s",
+            (seeded_chunk_id,),
         )
         assert cur.fetchone()[0] >= 1
         cur.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = 'save_04'")
         assert cur.fetchone()[0] >= 2  # gateway pool plus this observer
-    (tmp_path / "background.json").write_text(jobs.model_dump_json(indent=2))
+    from nexus.agents.orrery.job_queues import load_job_queues_sync
+
+    with db_pool.get_connection("save_04") as conn:
+        jobs = load_job_queues_sync(conn)
+    assert jobs["counts"]["failed"] == 0, jobs
+    (tmp_path / "background.json").write_text(json.dumps(jobs, indent=2, default=str))

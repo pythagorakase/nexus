@@ -30,11 +30,11 @@ from scripts.api_openai import OpenAIProvider
 
 
 # Measured against the shipped NEXUS_template registry on 2026-07-30:
-# 24,321 bytes / 5,982 o200k tokens / 626 enum values. The byte and token
-# ceilings retain ~10% headroom.
+# 24,321 bytes / 5,982 o200k tokens. The byte and token ceilings retain
+# ~10% headroom. The post-#916 registry has 625 enum values.
 GAIA_REGISTRY_STRICT_MAX_BYTES = 26_800
 GAIA_REGISTRY_STRICT_MAX_TOKENS = 6_600
-GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 626
+GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 625
 
 # Current OpenAI Structured Outputs documentation:
 # https://developers.openai.com/api/docs/guides/structured-outputs

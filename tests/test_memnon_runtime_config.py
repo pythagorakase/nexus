@@ -1,4 +1,4 @@
-"""Integration coverage for MEMNON's import-time runtime configuration."""
+"""Integration coverage for MEMNON's per-instance runtime configuration."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import pytest
 import tomlkit
+
+from tests.pg_fixtures import disposable_slot_database
+from nexus.database import database_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
@@ -26,7 +30,7 @@ def _write_config(tmp_path: Path, name: str, *, memnon_debug: bool) -> Path:
 
 
 def _import_memnon(
-    tmp_path: Path, environment: Dict[str, str]
+    tmp_path: Path, environment: Dict[str, str], db_url: str = "unused"
 ) -> subprocess.CompletedProcess[str]:
     """Import MEMNON in a fresh interpreter under the supplied config paths."""
     process_environment = dict(os.environ)
@@ -35,7 +39,11 @@ def _import_memnon(
     code = (
         "import json\n"
         "from nexus.agents.memnon import memnon\n"
-        "print(json.dumps({'debug': memnon.MEMNON_SETTINGS['debug']}))\n"
+        f"instance = memnon.MEMNON(interface=None, db_url={db_url!r})\n"
+        "try:\n"
+        "    print(json.dumps({'debug': instance.settings['debug']}))\n"
+        "finally:\n"
+        "    instance.close()\n"
     )
     return subprocess.run(
         [sys.executable, "-c", code],
@@ -47,6 +55,7 @@ def _import_memnon(
     )
 
 
+@pytest.mark.requires_postgres
 def test_memnon_uses_runtime_config_instead_of_legacy_settings_path(
     tmp_path: Path,
 ) -> None:
@@ -54,22 +63,24 @@ def test_memnon_uses_runtime_config_instead_of_legacy_settings_path(
     runtime_config = _write_config(tmp_path, "runtime.toml", memnon_debug=False)
     legacy_config = _write_config(tmp_path, "legacy.toml", memnon_debug=True)
 
-    result = _import_memnon(
-        tmp_path,
-        {
-            "NEXUS_RUNTIME_CONFIG": str(runtime_config),
-            "NEXUS_SETTINGS_PATH": str(legacy_config),
-        },
-    )
+    with disposable_slot_database("qa640_memnon_config") as dbname:
+        result = _import_memnon(
+            tmp_path,
+            {
+                "NEXUS_RUNTIME_CONFIG": str(runtime_config),
+                "NEXUS_SETTINGS_PATH": str(legacy_config),
+            },
+            db_url=database_url(dbname),
+        )
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout.splitlines()[-1]) == {"debug": False}
 
 
-def test_memnon_import_fails_loudly_for_missing_runtime_config(
+def test_memnon_construction_fails_loudly_for_missing_runtime_config(
     tmp_path: Path,
 ) -> None:
-    """A bad managed-runtime path must abort import instead of yielding {}."""
+    """A bad managed-runtime path must abort construction instead of yielding {}."""
     missing_runtime_config = tmp_path / "missing-runtime.toml"
     legacy_config = _write_config(tmp_path, "legacy.toml", memnon_debug=True)
 

@@ -240,7 +240,7 @@ def run_queries(
 
     Args:
         golden_queries_path: Path to the golden queries JSON file
-        settings_path: Path to custom settings.json (uses env var if None)
+        settings_path: Explicit configuration path (uses scoped/runtime config if None)
         override_settings: Dict of settings to override
         limit: Maximum number of queries to run
         k: Number of results to return for each query
@@ -374,51 +374,43 @@ def run_queries(
         f"Structured data search is {'enabled' if structured_data_enabled else 'disabled'}"
     )
 
-    # Set environment variable for settings path if provided
-    # CRITICAL: This must come BEFORE importing MEMNON, so settings are loaded from the correct path
-    if settings_path:
-        os.environ["NEXUS_SETTINGS_PATH"] = settings_path
-        logger.info(f"Using custom settings path: {settings_path}")
+    from contextlib import nullcontext
+    from nexus.config.loader import settings_path_scope
 
-    # Import MEMNON module (not the actual MEMNON class or settings yet)
+    # Each evaluation owns its configuration without reloading shared modules.
+    configuration_scope = (
+        settings_path_scope(settings_path) if settings_path else nullcontext()
+    )
     try:
-        import nexus.agents.memnon.memnon
-
-        # Force reload of the module to get fresh settings
-        import importlib
-
-        importlib.reload(nexus.agents.memnon.memnon)
-        # Now import the actual MEMNON class and settings
-        from nexus.agents.memnon.memnon import MEMNON, MEMNON_SETTINGS, GLOBAL_SETTINGS
+        from nexus.agents.memnon.memnon import MEMNON
+        from nexus.config.loader import load_settings_as_dict
 
         logger.info("Successfully imported MEMNON")
     except ImportError as e:
         logger.error(f"Error importing MEMNON: {e}")
         raise
 
+    configuration = load_settings_as_dict(settings_path)
+    memnon_settings = configuration["Agent Settings"]["MEMNON"]
+
     # Get database URL from settings
     db_url = database_url()
 
-    # Get model from global settings
-    model_id = GLOBAL_SETTINGS.get("model", {}).get(
-        "default_model", "llama-3.3-70b-instruct@q6_k"
-    )
-
     # If hybrid search flag is set, modify settings
     if hybrid is not None:
-        if "retrieval" not in MEMNON_SETTINGS:
-            MEMNON_SETTINGS["retrieval"] = {}
-        if "hybrid_search" not in MEMNON_SETTINGS["retrieval"]:
-            MEMNON_SETTINGS["retrieval"]["hybrid_search"] = {}
-        MEMNON_SETTINGS["retrieval"]["hybrid_search"]["enabled"] = hybrid
+        if "retrieval" not in memnon_settings:
+            memnon_settings["retrieval"] = {}
+        if "hybrid_search" not in memnon_settings["retrieval"]:
+            memnon_settings["retrieval"]["hybrid_search"] = {}
+        memnon_settings["retrieval"]["hybrid_search"]["enabled"] = hybrid
         logger.info(
             f"Hybrid search {'enabled' if hybrid else 'disabled'} by command line flag"
         )
 
     # Apply structured data setting from golden_queries.json
-    if "retrieval" not in MEMNON_SETTINGS:
-        MEMNON_SETTINGS["retrieval"] = {}
-    MEMNON_SETTINGS["retrieval"]["structured_data_enabled"] = structured_data_enabled
+    if "retrieval" not in memnon_settings:
+        memnon_settings["retrieval"] = {}
+    memnon_settings["retrieval"]["structured_data_enabled"] = structured_data_enabled
     logger.info(
         f"Structured data search {'enabled' if structured_data_enabled else 'disabled'} from settings"
     )
@@ -427,14 +419,14 @@ def run_queries(
     if override_settings:
         for key, value in override_settings.items():
             if (
-                key in MEMNON_SETTINGS
-                and isinstance(MEMNON_SETTINGS[key], dict)
+                key in memnon_settings
+                and isinstance(memnon_settings[key], dict)
                 and isinstance(value, dict)
             ):
                 # For dict values, update rather than replace
-                MEMNON_SETTINGS[key].update(value)
+                memnon_settings[key].update(value)
             else:
-                MEMNON_SETTINGS[key] = value
+                memnon_settings[key] = value
         logger.info(f"Applied {len(override_settings)} setting overrides")
 
     # Use chunks_per_query from golden_queries.json if k is not explicitly provided
@@ -454,9 +446,9 @@ def run_queries(
                 f"Using k={k} from golden_queries.json settings.query.chunks_per_query"
             )
         # Next try from MEMNON settings default_limit
-        elif "query" in MEMNON_SETTINGS and "default_limit" in MEMNON_SETTINGS["query"]:
-            k = MEMNON_SETTINGS["query"]["default_limit"]
-            logger.info(f"Using k={k} from MEMNON_SETTINGS.query.default_limit")
+        elif "query" in memnon_settings and "default_limit" in memnon_settings["query"]:
+            k = memnon_settings["query"]["default_limit"]
+            logger.info(f"Using k={k} from memnon_settings.query.default_limit")
         else:
             k = 50  # Fallback default
             logger.info(f"Using fallback default k={k} since no configuration found")
@@ -464,14 +456,15 @@ def run_queries(
     # Initialize MEMNON
     try:
         logger.info("Initializing MEMNON...")
-        memnon = MEMNON(
-            interface=SilentInterface(),
-            agent_state=None,  # Direct mode - no legacy Letta framework needed
-            user=None,
-            db_url=db_url,
-            model_id=model_id,
-            debug=True,
-        )
+        with configuration_scope:
+            memnon = MEMNON(
+                interface=SilentInterface(),
+                agent_state=None,  # Direct mode - no legacy Letta framework needed
+                user=None,
+                db_url=db_url,
+                settings_overrides=memnon_settings,
+                debug=True,
+            )
         logger.info("MEMNON initialized successfully")
     except Exception as e:
         logger.error(f"Error initializing MEMNON: {e}")
@@ -481,7 +474,7 @@ def run_queries(
         raise
 
     # Get formatted settings summary
-    settings_summary = get_memnon_settings_summary(MEMNON_SETTINGS)
+    settings_summary = get_memnon_settings_summary(memnon.settings)
     settings_text = format_settings_summary_text(settings_summary)
 
     # Prepare results structure
@@ -489,7 +482,7 @@ def run_queries(
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "settings": settings_summary,
         "settings_text": settings_text,
-        "global_settings": {"model": GLOBAL_SETTINGS.get("model", {})},
+        "global_settings": {"model": memnon.global_settings.get("model", {})},
         "query_results": [],
     }
 
@@ -611,10 +604,6 @@ def run_queries(
                 "results": [],
             }
             results["query_results"].append(query_data)
-
-    # Clear environment variable if we set it
-    if settings_path and "NEXUS_SETTINGS_PATH" in os.environ:
-        del os.environ["NEXUS_SETTINGS_PATH"]
 
     return results
 

@@ -290,6 +290,11 @@ def _seed_post_transition_world(dbname: str) -> None:
                     json.dumps([RETROGRADE_PROLOGUE_MARKER]),
                 ),
             )
+            cur.execute(
+                "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) "
+                "VALUES ((SELECT max(id) FROM narrative_chunks), %s, 'setting')",
+                (place_id,),
+            )
 
 
 def _insert_character_alias(
@@ -336,12 +341,14 @@ class _SchemaBoundaryProvider:
     """Deterministic external boundary beneath the real LOGON entry path."""
 
     model = "TEST"
+    usage_provider_name = "test"
 
     def __init__(
         self,
         payloads: Dict[type[BaseModel], Deque[dict[str, Any]]],
     ) -> None:
         self.payloads = payloads
+        self.prompt_window_guard = None
 
     async def get_structured_completion_async(
         self,
@@ -351,6 +358,8 @@ class _SchemaBoundaryProvider:
     ) -> tuple[Any, object]:
         """Validate raw provider data through the schema LOGON selected."""
 
+        if self.prompt_window_guard is not None:
+            self.prompt_window_guard(_prompt, 1, text_format=_kwargs.get("text_format"))
         queued = self.payloads.get(schema_model)
         if not queued:
             raise AssertionError(f"No provider payload queued for {schema_model}")
@@ -405,6 +414,8 @@ def _install_route_boundaries(
             utility.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
         utility.provider = cast(Any, _SchemaBoundaryProvider(payloads))
+        utility.provider.system_prompt = utility._load_system_prompt(bootstrap_mode)
+        utility._system_prompt = utility.provider.system_prompt
         utility._provider_bootstrap_mode = bootstrap_mode
         utility._provider_wire_type = "openai"
         utility._provider_type_name = "openai"
@@ -466,11 +477,7 @@ def _install_route_boundaries(
         "get_db_connection",
         lambda _slot=None: _connect(scratch_dbname),
     )
-    monkeypatch.setattr(
-        narrative,
-        "_start_post_commit_orrery_work",
-        lambda _slot: None,
-    )
+    monkeypatch.setattr(narrative, "wake_scheduler", lambda _slot: None)
     monkeypatch.setattr(
         commit_handler_sync,
         "schedule_summary_generation",
@@ -503,17 +510,14 @@ def _acquire_generation(session_id: str, *, parent_chunk_id: int) -> None:
 def _accept_pending(session_id: str, chunk_id: int) -> int:
     """Accept through the public continue route's synchronous worker entry."""
 
-    _choice, accepted_chunk_id, post_commit_thread = (
-        narrative._resolve_and_approve_pending_sync(
-            slot=5,
-            session_id=session_id,
-            chunk_id=chunk_id,
-            user_text="",
-            choice=1,
-            accept_fate=False,
-        )
+    _choice, accepted_chunk_id = narrative._resolve_and_approve_pending_sync(
+        slot=5,
+        session_id=session_id,
+        chunk_id=chunk_id,
+        user_text="",
+        choice=1,
+        accept_fate=False,
     )
-    assert post_commit_thread is None
     return accepted_chunk_id
 
 

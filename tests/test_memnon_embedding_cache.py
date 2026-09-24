@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator
 
 import pytest
+import tomlkit
 
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.config import load_settings_as_dict
@@ -65,6 +66,18 @@ def model_database() -> Iterator[str]:
             yield dbname
         finally:
             VALID_DBNAMES.discard(dbname)
+
+
+@pytest.fixture()
+def model_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Use a real validated config with only the regression embedder active."""
+    document = tomlkit.parse((Path(__file__).parents[1] / "nexus.toml").read_text())
+    for name, model in document["memnon"]["models"].items():
+        model["is_active"] = name == "bge-large"
+    path = tmp_path / "model-cache.toml"
+    path.write_text(tomlkit.dumps(document))
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(path))
+    return path
 
 
 def _settings() -> Dict[str, Any]:
@@ -130,9 +143,7 @@ def test_cached_model_survives_manager_teardown() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_memnon_close_disposes_engine(
-    monkeypatch: pytest.MonkeyPatch, model_database: str
-) -> None:
+def test_memnon_close_disposes_engine(model_config: Path, model_database: str) -> None:
     """MEMNON.close() must return its pooled Postgres connections.
 
     Pre-fix, each per-turn MEMNON's SQLAlchemy engine sat in cyclic garbage
@@ -142,12 +153,11 @@ def test_memnon_close_disposes_engine(
     import sqlalchemy as sa
 
     from nexus.agents.memnon import memnon as memnon_module
-
-    monkeypatch.setitem(memnon_module.MEMNON_SETTINGS, "models", _settings()["models"])
+    from nexus.database import database_url
 
     instance = memnon_module.MEMNON(
         interface=None,
-        db_url=sqlalchemy_url(model_database).render_as_string(hide_password=False),
+        db_url=database_url(model_database),
     )
     session = instance.db_manager.create_session()
     session.execute(sa.text("SELECT 1"))
@@ -164,7 +174,7 @@ def test_memnon_close_disposes_engine(
 
 @pytest.mark.requires_postgres
 def test_per_turn_lore_stacks_share_embedder_and_close(
-    monkeypatch: pytest.MonkeyPatch,
+    model_config: Path,
     model_database: str,
 ) -> None:
     """Successive per-turn LORE stacks reuse ONE embedder and tear down cleanly.
@@ -173,10 +183,6 @@ def test_per_turn_lore_stacks_share_embedder_and_close(
     API builds LORE fresh per turn; without the process cache each build
     added a full embedder copy.
     """
-    from nexus.agents.memnon import memnon as memnon_module
-
-    monkeypatch.setitem(memnon_module.MEMNON_SETTINGS, "models", _settings()["models"])
-
     from nexus.agents.lore.lore import LORE
 
     first = LORE(enable_logon=False, debug=False, dbname=model_database)

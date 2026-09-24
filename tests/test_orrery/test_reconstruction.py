@@ -173,6 +173,7 @@ def test_relationship_triggers_version_updates_and_deletes() -> None:
             chunk_id = cur.fetchone()[0]
             set_commit_chunk_attribution_sync(cur, chunk_id)
 
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 UPDATE character_relationships
@@ -201,6 +202,7 @@ def test_relationship_triggers_version_updates_and_deletes() -> None:
                 "[version probe]" not in old_row["dynamic"]
             ), "trigger must capture the PRE-image"
 
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 DELETE FROM character_relationships
@@ -222,12 +224,13 @@ def test_relationship_triggers_version_updates_and_deletes() -> None:
 
 
 def test_unattributed_relationship_write_versions_with_null_chunk() -> None:
-    """A writer that forgets attribution still gets versioned — with NULL
-    chunk, never a silent skip. The trigger cannot be forgotten."""
+    """A manual writer without source-chunk attribution is versioned with NULL
+    chunk. Explicit producer attribution is still required."""
 
     conn = _connect()
     try:
         with conn.cursor() as cur:
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 UPDATE character_relationships

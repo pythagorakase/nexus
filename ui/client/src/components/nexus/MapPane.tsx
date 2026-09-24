@@ -96,10 +96,15 @@ export function MapPane({ slot }: MapPaneProps) {
     queryFn: () => getZones(slot),
   });
 
-  const { data: currentPlace = null } = useQuery<CurrentPlace | null>({
+  const { data: currentPlaces = [] } = useQuery<CurrentPlace[]>({
     queryKey: ["/api/current-place", slot],
     queryFn: () => getCurrentPlace(slot),
   });
+
+  const currentPlaceIds = useMemo(
+    () => new Set(currentPlaces.map((place) => place.placeId)),
+    [currentPlaces],
+  );
 
   // ── Local state ─────────────────────────────────────────────────────
   const [hoveredId, setHoveredId] = useState<number | null>(null);
@@ -202,6 +207,15 @@ export function MapPane({ slot }: MapPaneProps) {
     return cache;
   }, [places, transformCoordinates]);
 
+  const firstCurrentPlaceId = currentPlaces[0]?.placeId;
+  useEffect(() => {
+    if (firstCurrentPlaceId === undefined) return;
+    const coordinates = placeCoordinates.get(firstCurrentPlaceId);
+    if (coordinates) {
+      setViewBox((previous) => centerViewBoxOn(coordinates, previous, panBounds));
+    }
+  }, [slot, firstCurrentPlaceId, placeCoordinates, panBounds]);
+
   // ── Label culling (failure mode 1) ──────────────────────────────────
   const labelVisibility = useMemo(() => {
     const candidates: LabelCandidate[] = [];
@@ -212,7 +226,7 @@ export function MapPane({ slot }: MapPaneProps) {
       let priority = 1;
       if (selectedId === place.id) priority = 4;
       else if (hoveredId === place.id) priority = 3;
-      else if (currentPlace?.placeId === place.id) priority = 2;
+      else if (currentPlaceIds.has(place.id)) priority = 2;
 
       candidates.push({
         placeId: place.id,
@@ -223,7 +237,7 @@ export function MapPane({ slot }: MapPaneProps) {
       });
     });
     return computeLabelVisibility(candidates, zoom);
-  }, [places, placeCoordinates, zoom, selectedId, hoveredId, currentPlace]);
+  }, [places, placeCoordinates, zoom, selectedId, hoveredId, currentPlaceIds]);
 
   // ── Zoom (failure mode 2): native non-passive wheel listener ────────
   useEffect(() => {
@@ -383,7 +397,7 @@ export function MapPane({ slot }: MapPaneProps) {
   );
 
   const pinState = (place: Place): "current" | "selected" | "hovered" | "rest" => {
-    if (currentPlace?.placeId === place.id) return "current";
+    if (currentPlaceIds.has(place.id)) return "current";
     if (selectedId === place.id) return "selected";
     if (hoveredId === place.id) return "hovered";
     return "rest";
@@ -626,10 +640,10 @@ export function MapPane({ slot }: MapPaneProps) {
 
         {/* Chrome: current-location readout (pin glyph carries the
             meaning — no caption) */}
-        {currentPlace && (
+        {currentPlaces.length > 0 && (
           <div className="map-chrome map-readout">
             <span className="map-readout-name">
-              <MapPin size={12} aria-hidden="true" /> {currentPlace.name}
+              <MapPin size={12} aria-hidden="true" /> {currentPlaces.map((place) => place.name).join(", ")}
             </span>
           </div>
         )}

@@ -213,9 +213,10 @@ def read_presence_baseline(
     conn = psycopg2.connect(**connection_kwargs(dbname))
     try:
         conn.set_session(readonly=True, autocommit=True)
-        from nexus.presence.roster import read_roster
+        from nexus.presence.roster import continuation_setting, read_roster
 
         roster = read_roster(conn, parent_chunk_id)
+        setting = continuation_setting(roster, parent_chunk_id)
         from nexus.agents.orrery.player_identity import canonical_player_character_id
 
         with conn.cursor() as cur:
@@ -226,13 +227,7 @@ def read_presence_baseline(
                 CharacterRef(kind="character", id=entry.id, name=entry.name)
                 for entry in roster.present.values()
             ],
-            setting=next(
-                (
-                    PlaceRef(kind="place", id=entry.id, name=entry.name)
-                    for entry in roster.setting.values()
-                ),
-                None,
-            ),
+            setting=PlaceRef(kind="place", id=setting.id, name=setting.name),
         )
     finally:
         conn.close()

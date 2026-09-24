@@ -32,6 +32,7 @@ from nexus.agents.orrery.substrate import (
     knows_claim_about,
     knows_recent_event,
 )
+from nexus.database import asyncpg_kwargs
 from nexus.api.slot_utils import get_slot_db_url
 from tests.test_orrery.test_claim_propagation_live import (
     LIVE_SLOT,
@@ -567,7 +568,7 @@ def test_sibling_accounts_hydrate_predicates_and_propagate_independently(
 async def test_async_variant_primitive_uses_real_postgres() -> None:
     """The async twin copies anchor/scope and writes no awareness rows."""
 
-    conn = await asyncpg.connect(get_slot_db_url(slot=LIVE_SLOT))
+    conn = await asyncpg.connect(**asyncpg_kwargs(f"save_{LIVE_SLOT:02d}"))
     transaction = conn.transaction()
     await transaction.start()
     try:

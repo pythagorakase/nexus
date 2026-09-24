@@ -255,6 +255,7 @@ def faction_context_db() -> Iterator[dict[str, Any]]:
             )
 
         for target_label in ("target_a", "target_b"):
+            session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
             session.execute(
                 text(
                     """
@@ -273,6 +274,7 @@ def faction_context_db() -> Iterator[dict[str, Any]]:
                     "target_character_id": character_ids[target_label],
                 },
             )
+        session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
         session.execute(
             text(
                 """

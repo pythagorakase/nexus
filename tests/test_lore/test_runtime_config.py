@@ -164,3 +164,40 @@ def test_lore_without_runtime_environment_falls_back_to_repo_root(
         assert apex["gaia_model"] == repository_settings.apex.gaia_model
     finally:
         lore.close()
+
+
+def test_lore_instances_keep_independent_memnon_configuration(
+    tmp_path: Path, runtime_database: str
+) -> None:
+    """Scoped LORE stacks retain their own retrieval and embedding settings."""
+    instances = []
+    try:
+        for index, debug in enumerate((True, False)):
+            document = tomlkit.parse(REPO_CONFIG.read_text())
+            memnon = document["memnon"]
+            memnon["debug"] = debug
+            memnon["query"]["default_limit"] = 11 + index
+            for model in memnon["models"].values():
+                model["is_active"] = False
+            memnon["models"]["bge-large"]["weight"] = 0.25 + index * 0.25
+            path = tmp_path / f"scope-{index}.toml"
+            path.write_text(tomlkit.dumps(document))
+            instances.append(
+                LORE(
+                    settings_path=str(path), enable_logon=False, dbname=runtime_database
+                )
+            )
+        for index, lore in enumerate(instances):
+            assert lore.memnon is not None
+            expected = load_settings(lore.settings_path).memnon.model_dump(
+                by_alias=True
+            )
+            assert lore.memnon.settings == expected
+            assert lore.memnon.embedding_manager.settings == expected
+            assert lore.memnon.search_manager.settings == expected
+            assert lore.memnon.settings["debug"] is (index == 0)
+            assert lore.memnon.settings["query"]["default_limit"] == 11 + index
+        assert instances[0].memnon.settings is not instances[1].memnon.settings
+    finally:
+        for lore in instances:
+            lore.close()

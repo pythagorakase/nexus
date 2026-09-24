@@ -93,6 +93,7 @@ ROSTER_LEGACY_TEMPLATE = Template(
 def _insert_relationship(
     session: Session, source_character_id: int, target_character_id: int
 ) -> None:
+    session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
     session.execute(
         text(
             """

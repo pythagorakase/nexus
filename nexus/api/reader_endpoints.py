@@ -562,31 +562,36 @@ async def get_places(slot: Optional[int] = None) -> List[Dict[str, Any]]:
 
 
 @router.get("/api/current-place")
-async def get_current_place(slot: Optional[int] = None) -> Dict[str, Any]:
-    """The narrative's current location (read-only).
+async def get_current_place(slot: Optional[int] = None) -> List[Dict[str, Any]]:
+    """All settings of the latest committed chunk with settings, in place-ID order.
 
-    The 'setting' place reference on the most recent COMMITTED chunk that
-    has one (committed = has a chunk_metadata row; without the join a
-    draft/incubator chunk's setting would leak in). 404 when the story has
-    no setting references yet.
+    A chunk is committed only when it has metadata, so draft settings never
+    leak into the historical map. A story without settings returns 404.
     """
     dbname = resolve_dbname(slot)
     rows = _fetch_all(
         dbname,
         """
+        WITH latest AS (
+            SELECT max(pcr.chunk_id) AS chunk_id
+            FROM place_chunk_references pcr
+            JOIN chunk_metadata cm ON cm.chunk_id = pcr.chunk_id
+            WHERE pcr.reference_type = 'setting'
+        )
         SELECT pcr.place_id, p.name, pcr.chunk_id
         FROM place_chunk_references pcr
         JOIN places p ON p.id = pcr.place_id
-        JOIN chunk_metadata cm ON cm.chunk_id = pcr.chunk_id
+        JOIN latest ON latest.chunk_id = pcr.chunk_id
         WHERE pcr.reference_type = 'setting'
-        ORDER BY pcr.chunk_id DESC
-        LIMIT 1
+        ORDER BY pcr.place_id
         """,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="No current place recorded")
-    row = rows[0]
-    return {"placeId": row["place_id"], "name": row["name"], "chunkId": row["chunk_id"]}
+    return [
+        {"placeId": row["place_id"], "name": row["name"], "chunkId": row["chunk_id"]}
+        for row in rows
+    ]
 
 
 @router.get("/api/zones")

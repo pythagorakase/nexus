@@ -65,6 +65,19 @@ def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:
     """Hydrate and stage a wire, then drive the genuine commit transaction."""
     from nexus.agents.logon.skald_wire import PresenceBaseline
 
+    if not parent_id and (wire.presence is None or wire.presence.scene_reset is None):
+        with connect(dbname) as conn, conn.cursor() as cur:
+            cur.execute("SELECT id FROM places WHERE name = 'Hall'")
+            hall = cur.fetchone()[0]
+        presence = wire.presence or PresenceDelta()
+        wire.presence = presence.model_copy(
+            update={
+                "scene_reset": SceneReset(
+                    place=PlaceRef(kind="place", id=hall, name="Hall"),
+                    present=presence.enter,
+                )
+            }
+        )
     baseline = (
         read_presence_baseline(dbname, parent_id) if parent_id else PresenceBaseline()
     )
@@ -464,3 +477,230 @@ def test_roster_operator_provenance_includes_historical_presence(
             assert "chunk-ref" in sources[entity_id]
     finally:
         engine.dispose()
+
+
+def test_historical_settings_are_ordered_but_frontier_is_rejected(
+    roster_database,
+) -> None:
+    """Historical reads retain every place; continuation names both conflicts."""
+    from nexus.presence.roster import render_roster
+
+    dbname, ids, hall = roster_database
+    first = commit_wire(
+        dbname,
+        0,
+        wire(
+            "The hall is quiet.",
+            presence=PresenceDelta(
+                scene_reset=SceneReset(
+                    place=PlaceRef(kind="place", id=hall, name="Hall"), present=[]
+                )
+            ),
+        ),
+    )
+    with connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+            )
+            garden = cur.fetchone()[0]
+            cur.execute(
+                "DELETE FROM place_chunk_references WHERE chunk_id = %s", (first,)
+            )
+            for place in (garden, hall):
+                cur.execute(
+                    "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) VALUES (%s, %s, 'setting')",
+                    (first, place),
+                )
+        roster = read_roster(conn, first)
+        assert [entry.name for entry in roster.setting.values()] == ["Hall", "Garden"]
+        assert "SETTING: Hall, Garden" in render_roster(roster)
+    with pytest.raises(ValueError, match=rf"Chunk {first}.*Hall.*Garden"):
+        read_presence_baseline(dbname, first)
+
+
+@pytest.fixture
+def historical_settings(roster_database):
+    """Give a committed chunk two settings in reverse insertion order."""
+    dbname, ids, hall = roster_database
+    chunk_id = commit_wire(dbname, 0, wire("The hall opens onto a garden."))
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+        )
+        garden = cur.fetchone()[0]
+        cur.execute(
+            "DELETE FROM place_chunk_references WHERE chunk_id = %s", (chunk_id,)
+        )
+        for place in (garden, hall):
+            cur.execute(
+                "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) VALUES (%s, %s, 'setting')",
+                (chunk_id, place),
+            )
+    return dbname, ids, chunk_id, hall, garden
+
+
+def test_current_place_returns_all_committed_settings(
+    historical_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real HTTP/SQL returns every setting and excludes a later draft."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from nexus.api import reader_endpoints
+
+    dbname, _, chunk_id, hall, garden = historical_settings
+    # Redirect only slot routing; the endpoint and pool execute genuine SQL.
+    monkeypatch.setattr(reader_endpoints, "resolve_dbname", lambda slot: dbname)
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO narrative_chunks (raw_text) VALUES ('Draft') RETURNING id"
+        )
+        draft_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) VALUES (%s, %s, 'setting')",
+            (draft_id, garden),
+        )
+    app = FastAPI()
+    app.include_router(reader_endpoints.router)
+    with TestClient(app) as client:
+        response = client.get("/api/current-place?slot=5")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"placeId": hall, "name": "Hall", "chunkId": chunk_id},
+        {"placeId": garden, "name": "Garden", "chunkId": chunk_id},
+    ]
+
+
+def test_recall_scores_any_historical_setting(historical_settings) -> None:
+    """Both historical settings earn location fit; a third place does not."""
+    dbname, ids, chunk_id, hall, garden = historical_settings
+    engine = create_engine(sqlalchemy_url(dbname))
+    try:
+        with Session(engine) as session:
+            owner = session.execute(
+                text("SELECT entity_id FROM characters WHERE id = :id"),
+                {"id": ids["Remote Friend"]},
+            ).scalar_one()
+            anchor_time = session.execute(
+                text("SELECT world_time FROM chunk_metadata WHERE chunk_id = :id"),
+                {"id": chunk_id},
+            ).scalar_one()
+            outside = session.execute(
+                text(
+                    "INSERT INTO places (name, type) VALUES ('Outside', 'fixed_location') RETURNING id"
+                )
+            ).scalar_one()
+            expected = {}
+            for place in (hall, garden, outside):
+                claim, event = _insert_claim(
+                    session,
+                    anchor_chunk_id=chunk_id,
+                    summary=f"A memory of place {place}.",
+                )
+                session.execute(
+                    text(
+                        "UPDATE world_events SET location_id = :place WHERE id = :event"
+                    ),
+                    {"place": place, "event": event},
+                )
+                _grant_awareness(
+                    session,
+                    claim_id=claim,
+                    knower_entity_id=owner,
+                    source_tier="participant",
+                    source_entity_id=None,
+                    acquired_at=anchor_time,
+                    source_chunk_id=chunk_id,
+                )
+                expected[claim] = float(place in (hall, garden))
+            cfg = load_settings().orrery
+            digest = build_knowledge_digest_sync(
+                session,
+                present_entity_ids=(owner,),
+                anchor_chunk_id=chunk_id,
+                settings=cfg.knowledge,
+                include_player_character=True,
+                recall_settings=cfg.recall,
+                disclosure_settings=cfg.disclosure,
+                turn_id="historical-settings",
+            )
+            assert digest
+            rows = (
+                session.execute(
+                    text(
+                        "SELECT claim_id, score_components FROM orrery_recall_trace WHERE turn_id = 'historical-settings'"
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            assert {
+                row["claim_id"]: row["score_components"]["place_match"] for row in rows
+            } == expected
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("event_has_location", [False, True])
+def test_experience_metadata_retains_all_historical_settings(
+    historical_settings, event_has_location: bool
+) -> None:
+    """Persist an experience and reread both settings without choosing one."""
+    import json
+    from psycopg2.extras import RealDictCursor
+    from nexus.agents.orrery.experiences import (
+        _known_and_allowed_names,
+        _load_experience_sources,
+        _render_prompt,
+        seed_character_experiences_sync,
+    )
+    from nexus.config import load_settings_as_dict
+
+    dbname, ids, chunk_id, hall, garden = historical_settings
+    with connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE characters SET summary = 'A careful observer.', "
+                "background = 'Raised near the hall.' WHERE id = %s RETURNING entity_id",
+                (ids["Remote Friend"],),
+            )
+            owner = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO world_events (event_type, tick_chunk_id, actor_entity_id, "
+                "location_id, world_layer, source, changed_fields, payload) "
+                "VALUES ('hunt_declared', %s, %s, %s, 'primary', 'resolver', '{}', "
+                "'{\"hidden\": true}'::jsonb) RETURNING id",
+                (chunk_id, owner, garden if event_has_location else None),
+            )
+            event = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO world_event_entities (event_id, entity_id, role) "
+                "VALUES (%s, %s, 'actor')",
+                (event, owner),
+            )
+        assert (
+            seed_character_experiences_sync(
+                conn, anchor_chunk_id=chunk_id, settings=load_settings_as_dict()
+            )
+            == 1
+        )
+    # A fresh connection proves the setting list is recovered from persisted
+    # anchor metadata rather than retained only in the formation call's locals.
+    with connect(dbname) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT id, location_id FROM character_experiences WHERE world_event_ids @> ARRAY[%s]::bigint[]",
+            (event,),
+        )
+        experience = cur.fetchone()
+        assert experience["location_id"] == (garden if event_has_location else None)
+        rows = _load_experience_sources(cur, [experience["id"]])
+        assert len(rows) == 1
+        assert rows[0]["setting_place_ids"] == [hall, garden]
+        assert rows[0]["setting_place_names"] == ["Hall", "Garden"]
+        _, allowed = _known_and_allowed_names(cur, rows[0])
+        assert {"Hall", "Garden"} <= allowed
+        records = json.loads(_render_prompt(rows).split("Scene seed records:\n", 1)[1])
+        assert records[0]["settings"] == [
+            {"id": hall, "name": "Hall"},
+            {"id": garden, "name": "Garden"},
+        ]

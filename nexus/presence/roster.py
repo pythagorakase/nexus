@@ -222,11 +222,22 @@ def _rosters(
     if missing:
         raise ValueError(f"Cannot read roster for missing chunks: {sorted(missing)}")
     for chunk_id, roster in rosters.items():
-        if len(roster.setting) > 1:
-            raise ValueError(f"Chunk {chunk_id} has multiple setting places")
         for key in roster.present | roster.setting | roster.transitioning:
             roster.referenced.pop(key, None)
     return rosters
+
+
+def continuation_setting(roster: PresenceRoster, chunk_id: int) -> RosterEntry:
+    """Require a single frontier setting without discarding historical places."""
+    settings = list(roster.setting.values())
+    if len(settings) != 1:
+        places = ", ".join(f"{entry.name} (id={entry.id})" for entry in settings)
+        raise ValueError(
+            f"Chunk {chunk_id} requires exactly one continuation setting; "
+            f"found {len(settings)}: {places or '(none)'}"
+        )
+    (setting,) = settings
+    return setting
 
 
 def read_rosters(conn: Any, chunk_ids: Iterable[int]) -> dict[int, PresenceRoster]:
@@ -256,8 +267,8 @@ def render_roster(
         entry.name + (" (player)" if entry.id == player_character_id else "")
         for entry in roster.present.values()
     ]
-    setting = next(iter(roster.setting.values()), None)
-    return f"PRESENT: {', '.join(names) or '(none)'} · SETTING: {setting.name if setting else '(none)'}"
+    settings = ", ".join(entry.name for entry in roster.setting.values())
+    return f"PRESENT: {', '.join(names) or '(none)'} · SETTING: {settings or '(none)'}"
 
 
 class IdentityIndex:

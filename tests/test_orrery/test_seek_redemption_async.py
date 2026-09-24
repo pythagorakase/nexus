@@ -16,6 +16,7 @@ from nexus.agents.orrery.events import (
 from nexus.agents.orrery.needs import NeedTuning
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import ProjectPolicy
+from nexus.database import asyncpg_kwargs
 from nexus.api.slot_utils import get_slot_db_url
 
 pytestmark = pytest.mark.requires_postgres
@@ -101,9 +102,10 @@ async def _create_schema(conn: asyncpg.Connection) -> None:
 
 @pytest.mark.asyncio
 async def test_async_seek_redemption_three_write_completion() -> None:
-    conn = await asyncpg.connect(get_slot_db_url(slot=2))
+    conn = await asyncpg.connect(**asyncpg_kwargs("save_02"))
     transaction = conn.transaction()
     await transaction.start()
+    await conn.execute("SET LOCAL nexus.write_producer = 'manual'")
     try:
         await _create_schema(conn)
         entities = await conn.fetch(

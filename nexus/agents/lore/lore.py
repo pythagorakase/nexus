@@ -152,7 +152,10 @@ class LORE:
         self.turn_context = None
 
         # Initialize utilities
-        self._initialize_components()
+        from nexus.config.loader import settings_path_scope
+
+        with settings_path_scope(self.settings_path):
+            self._initialize_components()
 
         logger.info("LORE agent initialized successfully")
 
@@ -351,7 +354,10 @@ class LORE:
             return
 
         if self.logon is None:
-            self._initialize_logon()
+            from nexus.config.loader import settings_path_scope
+
+            with settings_path_scope(self.settings_path):
+                self._initialize_logon()
 
     def close(self) -> None:
         """Deterministically release this turn-stack's per-instance resources.

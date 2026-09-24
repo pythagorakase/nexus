@@ -589,6 +589,7 @@ def _insert_experience(
     seed_summary: str,
     salience: float,
     world_layer: str,
+    setting_place_ids: Sequence[int] = (),
 ) -> bool:
     canonical_ids = sorted(set(int(value) for value in world_event_ids))
     source_digest = _digest(
@@ -600,6 +601,7 @@ def _insert_experience(
             "claim_awareness_id": claim_awareness_id,
             "basis": basis,
             "location_id": location_id,
+            "setting_place_ids": list(setting_place_ids),
             "world_time": world_time,
             "seed_summary": seed_summary,
             # Mechanical mood rows are destructively reapplied. They cannot
@@ -726,17 +728,15 @@ def seed_character_experiences_sync(
                    place.name AS location_name, r.state_delta,
                    metadata.world_time AS anchor_world_time,
                    metadata.world_layer::text AS anchor_world_layer,
-                   setting.place_id AS setting_place_id,
+                   setting.place_ids AS setting_place_ids,
                    COALESCE(participants.rows, '[]'::jsonb) AS participants
             FROM world_events e
             JOIN chunk_metadata metadata ON metadata.chunk_id = e.tick_chunk_id
             LEFT JOIN LATERAL (
-                SELECT pcr.place_id
+                SELECT ARRAY_AGG(pcr.place_id ORDER BY pcr.place_id) AS place_ids
                 FROM place_chunk_references pcr
                 WHERE pcr.chunk_id = e.tick_chunk_id
                   AND pcr.reference_type::text = 'setting'
-                ORDER BY pcr.place_id
-                LIMIT 1
             ) setting ON TRUE
             LEFT JOIN LATERAL (
                 SELECT jsonb_agg(
@@ -894,13 +894,19 @@ def seed_character_experiences_sync(
                 world_layer=world_layer,
                 cap=cfg.presence_duration_cap_chunks,
             )
+            setting_place_ids = metadata.get("setting_place_ids") or []
+            # A scalar can represent only an unambiguous setting. Historical
+            # multiplicity remains available through the durable anchor refs.
+            single_setting = None
+            if len(setting_place_ids) == 1:
+                (single_setting,) = setting_place_ids
             location_id = next(
                 (
                     int(row["location_id"])
                     for row in owned_events
                     if row.get("location_id")
                 ),
-                metadata.get("setting_place_id"),
+                single_setting,
             )
             basis_phrase = "participated in" if basis == "participant" else "witnessed"
             facts = " ".join(_event_fact(row) for row in owned_events)
@@ -919,6 +925,7 @@ def seed_character_experiences_sync(
                     claim_awareness_id=None,
                     basis=basis,
                     location_id=location_id,
+                    setting_place_ids=setting_place_ids,
                     world_time=world_time,
                     seed_summary=seed_summary,
                     salience=_salience(
@@ -1198,7 +1205,7 @@ def _known_and_allowed_names(
             UNION ALL
             SELECT place.name
             FROM places place
-            WHERE place.id = %s
+            WHERE place.id = %s OR place.id = ANY(%s::bigint[])
         ) names
         WHERE names.name IS NOT NULL
         """,
@@ -1208,6 +1215,7 @@ def _known_and_allowed_names(
             row["world_event_ids"],
             row["world_event_ids"],
             row.get("location_id"),
+            row.get("setting_place_ids", []),
         ),
     )
     allowed = {str(item["name"]) for item in cur.fetchall()}
@@ -1399,6 +1407,46 @@ def validate_render_batch(
     return RenderValidation(validated=validated, rejected=rejected)
 
 
+def _load_experience_sources(
+    cur: Any, experience_ids: Sequence[int]
+) -> list[dict[str, Any]]:
+    """Read ordered historical settings via the persisted experience anchor.
+
+    The anchor references are canonical metadata, so no duplicate list column
+    is needed. Acquisitions retain their delivered-account entitlement boundary.
+    """
+    cur.execute(
+        """
+        SELECT experience.id, experience.character_entity_id,
+               experience.world_event_ids, experience.claim_id,
+               experience.claim_awareness_id, experience.basis::text AS basis,
+               experience.location_id, experience.world_time,
+               experience.seed_summary, experience.source_digest,
+               character.name AS character_name, place.name AS location_name,
+               COALESCE(setting.place_ids, '{}'::bigint[]) AS setting_place_ids,
+               COALESCE(setting.place_names, '{}'::text[]) AS setting_place_names
+        FROM character_experiences experience
+        JOIN characters character
+          ON character.entity_id = experience.character_entity_id
+        LEFT JOIN places place ON place.id = experience.location_id
+        LEFT JOIN LATERAL (
+            SELECT ARRAY_AGG(pcr.place_id ORDER BY pcr.place_id) AS place_ids,
+                   ARRAY_AGG(setting_place.name::text ORDER BY pcr.place_id)
+                       AS place_names
+            FROM place_chunk_references pcr
+            JOIN places setting_place ON setting_place.id = pcr.place_id
+            WHERE pcr.chunk_id = experience.anchor_chunk_id
+              AND pcr.reference_type::text = 'setting'
+              AND experience.basis::text <> 'acquisition'
+        ) setting ON TRUE
+        WHERE experience.id = ANY(%s)
+        ORDER BY experience.id
+        """,
+        (list(experience_ids),),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def _render_prompt(rows: Sequence[Mapping[str, Any]]) -> str:
     prompt = _PROMPT_PATH.read_text(encoding="utf-8").strip()
     records = [
@@ -1408,6 +1456,14 @@ def _render_prompt(rows: Sequence[Mapping[str, Any]]) -> str:
             "basis": row["basis"],
             "world_time": row["world_time"],
             "location": row.get("location_name"),
+            "settings": [
+                {"id": place_id, "name": name}
+                for place_id, name in zip(
+                    row.get("setting_place_ids", []),
+                    row.get("setting_place_names", []),
+                    strict=True,
+                )
+            ],
             "seed": row["seed_summary"],
         }
         for row in rows
@@ -1973,27 +2029,7 @@ def drain_experience_render_jobs_sync(
         try:
             with conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute(
-                        """
-                        SELECT experience.id, experience.character_entity_id,
-                               experience.world_event_ids,
-                               experience.claim_id,
-                               experience.claim_awareness_id,
-                               experience.basis::text AS basis,
-                               experience.location_id, experience.world_time,
-                               experience.seed_summary, experience.source_digest,
-                               character.name AS character_name,
-                               place.name AS location_name
-                        FROM character_experiences experience
-                        JOIN characters character
-                          ON character.entity_id = experience.character_entity_id
-                        LEFT JOIN places place ON place.id = experience.location_id
-                        WHERE experience.id = ANY(%s)
-                        ORDER BY experience.id
-                        """,
-                        (job["experience_ids"],),
-                    )
-                    source_rows = [dict(row) for row in cur.fetchall()]
+                    source_rows = _load_experience_sources(cur, job["experience_ids"])
                     render_id_set = {
                         int(experience_id)
                         for experience_id in job["render_experience_ids"]

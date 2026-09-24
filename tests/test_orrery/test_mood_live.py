@@ -405,7 +405,9 @@ def test_expired_unswept_tag_does_not_source_actor_binding(
             CREATE TABLE character_routine_anchors (
                 character_entity_id bigint, mobility_policy text
             );
-            CREATE TABLE characters (id bigint PRIMARY KEY, entity_id bigint);
+            CREATE TABLE characters (id bigint PRIMARY KEY, entity_id bigint, name text, summary text);
+            CREATE TABLE narrative_chunks (id bigint PRIMARY KEY);
+            INSERT INTO narrative_chunks VALUES (1);
             CREATE TABLE chunk_character_references (
                 chunk_id bigint, character_id bigint, reference text
             );

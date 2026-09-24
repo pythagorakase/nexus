@@ -154,12 +154,12 @@ export function getPlaceImages(
   return getJson(`/api/places/${placeId}/images${slotQuery(slot)}`);
 }
 
-/** Returns null when the story has no setting references yet (404). */
+/** All historical settings; empty when none have been recorded (404). */
 export async function getCurrentPlace(
   slot: number | null,
-): Promise<CurrentPlace | null> {
+): Promise<CurrentPlace[]> {
   const res = await fetch(`/api/current-place${slotQuery(slot)}`);
-  if (res.status === 404) return null;
+  if (res.status === 404) return [];
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
