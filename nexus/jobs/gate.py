@@ -57,7 +57,7 @@ def report_leased_job(queue: str, job_id: int) -> None:
 def track_job_lease(
     queue: str, job_id: int, *, locked_by: str, lease_nonce: str, duration: float
 ) -> None:
-    """Give the scheduler the exact nonce to renew while preempted."""
+    """Give the scheduler the exact nonce to renew throughout execution."""
     tracker = _lease_tracker.get()
     if tracker is not None:
         tracker(

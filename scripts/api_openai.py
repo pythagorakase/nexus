@@ -285,8 +285,6 @@ class LLMProvider(abc.ABC):
 class OpenAIProvider(LLMProvider):
     """OpenAI provider implementation."""
 
-    # Default model if none specified
-    DEFAULT_MODEL = "gpt-4.1"
     STRUCTURED_OUTPUT_RETRIES = 1
 
     # Valid reasoning effort levels (model-specific)
@@ -394,11 +392,10 @@ class OpenAIProvider(LLMProvider):
             )
 
         self.provider_name = "openai"
-        self.model = self.model or self.DEFAULT_MODEL
-
         from nexus.config import load_settings
 
         settings = load_settings()
+        self.model = self.model or settings.ir_eval.judgment.model
         try:
             provider = settings.provider_for_model(self.model)
         except ValueError as exc:
@@ -476,7 +473,7 @@ class OpenAIProvider(LLMProvider):
                 score: float = Field(description="Confidence score (0-1)")
 
             # Get structured completion
-            provider = OpenAIProvider(model="gpt-4o")
+            provider = OpenAIProvider()  # Uses ir_eval.judgment.model
             result, response = provider.get_structured_completion(
                 "Analyze this text: 'I love this product!'",
                 SentimentAnalysis
@@ -767,6 +764,8 @@ class OpenAIProvider(LLMProvider):
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
+                if self.response_check is not None:
+                    self.response_check(response)
                 parsed_output = self._extract_chat_parsed_output(response, schema_model)
                 parsed_output = asyncio.run(
                     run_output_validator(
@@ -1199,8 +1198,8 @@ def get_default_llm_argument_parser():
     llm_group = parser.add_argument_group("OpenAI API Options")
     llm_group.add_argument(
         "--model",
-        default=OpenAIProvider.DEFAULT_MODEL,
-        help=f"Model name to use (default: {OpenAIProvider.DEFAULT_MODEL})",
+        default=None,
+        help="Model name to use (default: ir_eval.judgment.model in nexus.toml)",
     )
     llm_group.add_argument("--api-key", help="API key (optional)")
     llm_group.add_argument(

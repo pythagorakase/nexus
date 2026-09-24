@@ -176,3 +176,58 @@ def test_summary_generator_uses_registry_native_provider_contract(
         else:
             assert provider.reasoning_effort is None
             assert provider.temperature == settings.temperature
+
+
+def truncated_chat_summary_response(content='{"summary": "unfinished'):
+    """Build a validated SDK Chat result; TEST cannot emit finish_reason=length."""
+    from openai.types.chat import ChatCompletion
+
+    return ChatCompletion.model_validate(
+        {
+            "id": "chatcmpl-summary-truncated",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "TEST",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "length",
+                    "message": {"role": "assistant", "content": content},
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 80,
+                "total_tokens": 180,
+                "prompt_tokens_details": {"cached_tokens": 20},
+                "completion_tokens_details": {"reasoning_tokens": 10},
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize("mode", ["episode", "season"])
+@pytest.mark.parametrize(
+    "content", ['{"summary": "unfinished', '{"summary": "valid JSON"}']
+)
+def test_summary_chat_length_is_terminal_before_parsing(mode, content):
+    """Even syntactically valid truncated JSON must never be accepted."""
+    from nexus.api.summary_errors import SummaryOutputTruncated
+    from scripts.summarize_narrative import SummaryGenerator
+
+    generator = SummaryGenerator(model="TEST", db_manager=_FakeDB())
+    provider = generator._provider_for_mode(mode)
+    response = truncated_chat_summary_response(content)
+    try:
+        with pytest.raises(SummaryOutputTruncated) as caught:
+            provider.response_check(response)
+        message = str(caught.value)
+        assert f"{mode} summary incomplete" in message
+        assert f"configured allowance={provider.max_output_tokens}" in message
+        assert "finish_reason=length" in message
+        for count in (100, 80, 180, 20, 10):
+            assert str(count) in message
+        response.choices[0].finish_reason = "stop"
+        provider.response_check(response)
+    finally:
+        provider.client.close()

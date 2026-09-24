@@ -216,12 +216,18 @@ def test_summary_completion_rejects_stale_nonce(offline_gate_db):
                 )
 
 
-def test_summary_truncation_is_terminal_with_attempts_remaining(offline_gate_db):
+@pytest.mark.parametrize("transport", ["responses", "chat_completions"])
+def test_summary_truncation_is_terminal_with_attempts_remaining(
+    offline_gate_db, transport
+):
     """Persist the classifier's real error without rescheduling truncated work."""
     from nexus.api.summary_errors import SummaryOutputTruncated, check_summary_response
     from nexus.config import load_settings
     from nexus.jobs.narrative_jobs import drain_job
-    from tests.test_summary_triggers import incomplete_summary_response
+    from tests.test_summary_triggers import (
+        incomplete_summary_response,
+        truncated_chat_summary_response,
+    )
 
     cfg = load_settings().runtime.scheduler.summaries.model_copy(
         update={"max_attempts": 3}
@@ -230,7 +236,13 @@ def test_summary_truncation_is_terminal_with_attempts_remaining(offline_gate_db)
 
     def prepare(job):
         check_summary_response(
-            incomplete_summary_response(), mode=job["kind"], max_output_tokens=8000
+            (
+                incomplete_summary_response()
+                if transport == "responses"
+                else truncated_chat_summary_response()
+            ),
+            mode=job["kind"],
+            max_output_tokens=8000,
         )
 
     with closing(connect(offline_gate_db)) as conn:
@@ -317,3 +329,144 @@ def test_scheduler_new_queue_status_and_interactive_priority(
                 )
         finally:
             finish_generation(conn, session_id=session, status="complete")
+
+
+@pytest.mark.parametrize("lose_lease", [False, True])
+def test_summary_scheduler_renews_lease_through_prepare(offline_gate_db, lose_lease):
+    """Slow work outlives its initial lease; a stolen nonce stops at checkpoint."""
+    from time import sleep
+    from psycopg2.extras import Json
+    from nexus.jobs.gate import SchedulerStopped, before_provider_call, provider_gate
+    from nexus.jobs.narrative_jobs import drain_job
+    from tests.test_api.test_scheduler_pg import scheduler_settings, wait_until
+
+    settings = scheduler_settings()
+    settings["runtime"]["scheduler"]["summaries"]["lease_duration_seconds"] = 0.5
+    scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
+    nonces = []
+
+    def prepare(job):
+        before_provider_call()
+        nonces.append(job["lease_nonce"])
+        # Beyond the initial lease; heartbeat must keep renewing while no
+        # checkpoint is waiting and no transaction is open in this worker.
+        sleep(1.5)
+        with (
+            closing(connect(offline_gate_db)) as observer,
+            observer,
+            observer.cursor() as cur,
+        ):
+            cur.execute(
+                "SELECT lease_nonce::text, attempts, lease_until > clock_timestamp() FROM narrative_summary_jobs"
+            )
+            assert cur.fetchone() == (nonces[0], 1, True)
+            if lose_lease:
+                cur.execute(
+                    "UPDATE narrative_summary_jobs SET lease_nonce=%s", (str(uuid4()),)
+                )
+        if lose_lease:
+            wait_until(lambda: scheduler._job_lost)
+        before_provider_call()
+        return {"summary": "Slow local preparation completed"}
+
+    def complete(cur, job, result):
+        assert job["lease_nonce"] == nonces[0]
+        cur.execute(
+            "SELECT lease_nonce::text FROM narrative_summary_jobs WHERE id=%s",
+            (job["id"],),
+        )
+        assert cur.fetchone() == (nonces[0],)
+        cur.execute("INSERT INTO seasons (id, summary) VALUES (1, %s)", (Json(result),))
+
+    with closing(connect(offline_gate_db)) as conn:
+        with conn, conn.cursor() as cur:
+            schedule_summary_generation(
+                [SummaryTask("season", 1)], cur=cur, session_id=str(uuid4())
+            )
+        assert scheduler.acquire()
+        scheduler._start_heartbeat()
+        try:
+            with provider_gate(
+                lambda: scheduler.checkpoint(provider=True),
+                scheduler._report,
+                scheduler._track_lease,
+            ):
+
+                def drain():
+                    return drain_job(
+                        conn,
+                        table="narrative_summary_jobs",
+                        owner=scheduler.owner,
+                        cfg=scheduler.cfg.summaries,
+                        prepare=prepare,
+                        complete=complete,
+                    )
+
+                if lose_lease:
+                    with pytest.raises(
+                        SchedulerStopped, match="lease expired or changed"
+                    ):
+                        drain()
+                else:
+                    assert drain() == 1
+        finally:
+            scheduler._report(None)
+            scheduler._end_heartbeat()
+            scheduler.release()
+        with conn.cursor() as cur:
+            cur.execute("SELECT state::text, attempts FROM narrative_summary_jobs")
+            assert cur.fetchone() == ("leased" if lose_lease else "succeeded", 1)
+            cur.execute("SELECT count(*) FROM seasons WHERE summary IS NOT NULL")
+            assert cur.fetchone() == (0 if lose_lease else 1,)
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+def test_summary_span_failure_never_succeeds(offline_gate_db, blocked):
+    """An empty span or a real PostgreSQL lock timeout cannot complete a job."""
+    from psycopg2 import sql
+    from sqlalchemy.exc import OperationalError
+    from nexus.jobs.summaries import drain_summary
+
+    settings = load_settings_as_dict()
+    settings["runtime"]["scheduler"]["summaries"]["max_attempts"] = 1
+    scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
+    with closing(connect(offline_gate_db)) as conn:
+        with conn, conn.cursor() as cur:
+            schedule_summary_generation(
+                [SummaryTask("episode", 1, 1)], cur=cur, session_id=str(uuid4())
+            )
+        if blocked:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("ALTER DATABASE {} SET lock_timeout = '100ms'").format(
+                        sql.Identifier(offline_gate_db)
+                    )
+                )
+            with conn.cursor() as cur:
+                cur.execute("LOCK TABLE chunk_metadata IN ACCESS EXCLUSIVE MODE")
+        try:
+            with pytest.raises(
+                OperationalError if blocked else RuntimeError,
+                match="lock timeout" if blocked else "has no chunks to summarize",
+            ):
+                with closing(connect(offline_gate_db)) as worker_conn:
+                    drain_summary(
+                        worker_conn,
+                        dbname=offline_gate_db,
+                        slot=4,
+                        cfg=scheduler.cfg.summaries,
+                        owner=scheduler.owner,
+                    )
+        finally:
+            conn.rollback()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT state::text, attempts, error_class FROM narrative_summary_jobs"
+            )
+            assert cur.fetchone() == (
+                "failed",
+                1,
+                "OperationalError" if blocked else "RuntimeError",
+            )
+            cur.execute("SELECT count(*) FROM episodes WHERE summary IS NOT NULL")
+            assert cur.fetchone() == (0,)

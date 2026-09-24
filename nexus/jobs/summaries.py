@@ -35,7 +35,10 @@ def drain_summary(
                 episode
                 and db.get_episode_chunk_span(job["season"], job["episode"]) is None
             ):
-                return None
+                raise RuntimeError(
+                    f"Episode S{job['season']:02d}E{job['episode']:02d} has no chunks "
+                    "to summarize"
+                )
             settings = load_settings()
             if not settings.summaries.model:
                 raise ValueError("No narrative summary model is configured")

@@ -1172,76 +1172,69 @@ class DatabaseManager:
         Returns:
             Tuple of (min_id, max_id) or None if no chunks found
         """
-        try:
-            with self.engine.connect() as conn:
-                # First, get all chunk IDs for this episode with metadata
-                chunk_details_query = text(
-                    """
-                SELECT 
-                    nc.id as chunk_id, cm.season, cm.episode, cm.scene
-                FROM 
-                    public.narrative_chunks nc
-                JOIN 
-                    public.chunk_metadata cm ON nc.id = cm.chunk_id
-                WHERE 
-                    cm.season = :season AND cm.episode = :episode
-                ORDER BY 
-                    nc.id ASC
+        with self.engine.connect() as conn:
+            # First, get all chunk IDs for this episode with metadata
+            chunk_details_query = text(
                 """
-                )
+            SELECT
+                nc.id as chunk_id, cm.season, cm.episode, cm.scene
+            FROM
+                public.narrative_chunks nc
+            JOIN
+                public.chunk_metadata cm ON nc.id = cm.chunk_id
+            WHERE
+                cm.season = :season AND cm.episode = :episode
+            ORDER BY
+                nc.id ASC
+            """
+            )
 
-                chunk_details = list(
-                    conn.execute(
-                        chunk_details_query, {"season": season, "episode": episode}
+            chunk_details = list(
+                conn.execute(
+                    chunk_details_query, {"season": season, "episode": episode}
+                )
+            )
+
+            if not chunk_details:
+                logger.warning(f"No chunks found for S{season:02d}E{episode:02d}")
+                return None
+
+            # Get min and max IDs
+            min_id = chunk_details[0].chunk_id
+            max_id = chunk_details[-1].chunk_id
+
+            # Log all chunks for debugging
+            chunks_str = ", ".join([str(row.chunk_id) for row in chunk_details])
+            logger.info(f"Chunks for S{season:02d}E{episode:02d}: [{chunks_str}]")
+            logger.info(
+                f"Chunk span for S{season:02d}E{episode:02d}: {min_id} to {max_id}"
+            )
+
+            # Verify the boundaries to ensure they don't include other episodes
+            verify_query = text(
+                """
+            SELECT
+                cm.season, cm.episode, cm.scene
+            FROM
+                public.chunk_metadata cm
+            WHERE
+                cm.chunk_id = :min_id OR cm.chunk_id = :max_id
+            """
+            )
+
+            boundaries = list(
+                conn.execute(verify_query, {"min_id": min_id, "max_id": max_id})
+            )
+
+            for row in boundaries:
+                if row.season != season or row.episode != episode:
+                    logger.error(
+                        f"Boundary issue: Chunk ID belonging to S{row.season:02d}E{row.episode:02d} included in S{season:02d}E{episode:02d} span"
                     )
-                )
-
-                if not chunk_details:
-                    logger.warning(f"No chunks found for S{season:02d}E{episode:02d}")
+                    # Don't return wrong boundaries
                     return None
 
-                # Get min and max IDs
-                min_id = chunk_details[0].chunk_id
-                max_id = chunk_details[-1].chunk_id
-
-                # Log all chunks for debugging
-                chunks_str = ", ".join([str(row.chunk_id) for row in chunk_details])
-                logger.info(f"Chunks for S{season:02d}E{episode:02d}: [{chunks_str}]")
-                logger.info(
-                    f"Chunk span for S{season:02d}E{episode:02d}: {min_id} to {max_id}"
-                )
-
-                # Verify the boundaries to ensure they don't include other episodes
-                verify_query = text(
-                    """
-                SELECT 
-                    cm.season, cm.episode, cm.scene
-                FROM 
-                    public.chunk_metadata cm
-                WHERE 
-                    cm.chunk_id = :min_id OR cm.chunk_id = :max_id
-                """
-                )
-
-                boundaries = list(
-                    conn.execute(verify_query, {"min_id": min_id, "max_id": max_id})
-                )
-
-                for row in boundaries:
-                    if row.season != season or row.episode != episode:
-                        logger.error(
-                            f"Boundary issue: Chunk ID belonging to S{row.season:02d}E{row.episode:02d} included in S{season:02d}E{episode:02d} span"
-                        )
-                        # Don't return wrong boundaries
-                        return None
-
-                return (min_id, max_id)
-
-        except Exception as e:
-            logger.error(
-                f"Error getting chunk span for S{season:02d}E{episode:02d}: {e}"
-            )
-            return None
+            return (min_id, max_id)
 
 
 class SummaryGenerator:

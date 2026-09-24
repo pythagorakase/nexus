@@ -201,7 +201,7 @@ class SlotScheduler:
 
     def _renew_job(self) -> bool:
         # The local lock prevents a heartbeat from renewing an already-finished
-        # checkpoint's job. The database lock protects the nonce and wall clock.
+        # drain's job. The database lock protects the nonce and wall clock.
         with self._job_lock:
             if self._job is None:
                 return True
@@ -380,7 +380,10 @@ class SlotScheduler:
                 if not self.renew():
                     raise RuntimeError("Scheduler heartbeat lost ownership")
                 with self._job_lock:
-                    if self._waiting and not self._renew_job():
+                    # Keep the nonce alive during inference as well as while
+                    # waiting for interactive generation. The drain clears
+                    # tracking only after completion or failure is written.
+                    if not self._renew_job():
                         self.wakeup.set()
         except Exception as exc:
             # Both heartbeat writes use transaction(): commit connection loss
