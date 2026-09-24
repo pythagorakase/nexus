@@ -255,6 +255,7 @@
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
+    "nexus/telemetry/attempt_manifest.py",
     "nexus/telemetry/generation.py",
     "nexus/telemetry/prompt_window.py",
     "nexus/telemetry/usage.py",

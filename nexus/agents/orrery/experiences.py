@@ -1754,6 +1754,7 @@ def load_experience_status_sync(cur: Any) -> dict[str, Any]:
                 jsonb_agg(
                     jsonb_build_object(
                         'id', id,
+                        'generation_session_id', generation_session_id,
                         'queue', 'experience_render',
                         'state', state::text,
                         'attempts', attempts,

@@ -815,11 +815,13 @@ def _mark_promoted(
         """
         INSERT INTO orrery_narration_jobs (
             resolution_id, slot,
-            anchor_tick_chunk_id, anchor_world_layer
+            anchor_tick_chunk_id, anchor_world_layer, generation_session_id
         )
         SELECT
             r.id, %s, r.tick_chunk_id,
-            COALESCE(cm.world_layer, 'primary'::world_layer_type)
+            COALESCE(cm.world_layer, 'primary'::world_layer_type),
+            (SELECT session_id FROM narrative_generation_sessions
+             WHERE chunk_id = r.tick_chunk_id AND terminal_outcome = 'accepted')
         FROM orrery_resolutions AS r
         LEFT JOIN chunk_metadata AS cm ON cm.chunk_id = r.tick_chunk_id
         WHERE r.id = %s

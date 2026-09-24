@@ -918,6 +918,16 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         print(f"Error: {payload['error']}")
         return
 
+    if "turn_inspection" in payload:
+        _print_turn_inspection(payload["turn_inspection"])
+        return
+    if "manifests_pruned" in payload:
+        print("Slot\tRetention Days\tManifests Pruned")
+        print(
+            f"{payload['slot']}\t{payload['retention_days']}\t{payload['manifests_pruned']}"
+        )
+        return
+
     if payload.get("usage"):
         _print_usage(payload)
         return
@@ -3203,6 +3213,126 @@ def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
     return result
 
 
+def run_inspect_turn(args: argparse.Namespace) -> Dict[str, Any]:
+    """Inspect durable turn references through a read-only connection."""
+    from contextlib import closing
+    from nexus.api.slot_utils import get_slot_db_url
+    from nexus.telemetry.attempt_manifest import inspect_turn
+    import psycopg2
+
+    with closing(psycopg2.connect(get_slot_db_url(slot=args.slot))) as conn:
+        result = inspect_turn(conn, session=args.session, chunk=args.chunk)
+    return {"success": True, "slot": args.slot, "turn_inspection": result}
+
+
+def run_prune_manifests(args: argparse.Namespace) -> Dict[str, Any]:
+    """Explicitly apply configured manifest retention to one writable slot."""
+    from contextlib import closing
+    from nexus.api.slot_utils import get_slot_db_url
+    from nexus.api.slot_mutations import require_writable_slot
+    from nexus.config import load_settings
+    from nexus.telemetry.attempt_manifest import prune_manifests
+    import psycopg2
+
+    require_writable_slot(args.slot)
+    days = load_settings().usage.manifest_retention_days
+    with closing(psycopg2.connect(get_slot_db_url(slot=args.slot))) as conn:
+        count = prune_manifests(conn, days)
+    return {
+        "success": True,
+        "slot": args.slot,
+        "retention_days": days,
+        "manifests_pruned": count,
+    }
+
+
+def _print_turn_inspection(turn: Dict[str, Any]) -> None:
+    """Print compact metadata tables; --json retains complete blocks and hashes."""
+    session = turn["session"]
+    print("Session\tPhase\tOutcome\tAccepted Chunk\tReplacement")
+    print(
+        "\t".join(
+            str(session[key] or "-")
+            for key in (
+                "session_id",
+                "phase",
+                "terminal_outcome",
+                "accepted_chunk_id",
+                "replaced_by_session_id",
+            )
+        )
+    )
+    print("Phase\tRecorded At")
+    for row in turn["phases"]:
+        print(f"{row['phase']}\t{row['recorded_at']}")
+    print(
+        "Seat\tAttempt\tModel\tTokens\tWindow\tBlocks\tValidation Notes\tProvider Outcome\tOutcome"
+    )
+    for row in turn["manifests"]:
+        window = row["window_record"]
+        print(
+            "\t".join(
+                map(
+                    str,
+                    (
+                        row["seat"],
+                        row["attempt"],
+                        row["model_id"],
+                        window["input_tokens"],
+                        window["effective_ceiling"],
+                        len(row["blocks"]),
+                        len(row["validation"]),
+                        row["provider_outcome"] or "-",
+                        row["outcome"] or "-",
+                    ),
+                )
+            )
+        )
+    print(
+        "Seat\tAttempt\tSchema\tStory Pin\tConfig SHA-256/12\tWire SHA-256/12\tPrompt SHA-256/12\tResponse SHA-256/12"
+    )
+    for row in turn["manifests"]:
+        print(
+            "\t".join(
+                map(
+                    str,
+                    (
+                        row["seat"],
+                        row["attempt"],
+                        row["schema_version"],
+                        json.dumps(row["story_pin"], sort_keys=True),
+                        row["config_sha256"][:12],
+                        row["wire_schema_sha256"][:12],
+                        row["prompt_sha256"][:12],
+                        (row["response_sha256"] or "-")[:12],
+                    ),
+                )
+            )
+        )
+    print("Seat\tAttempt\tRetrieval IDs\tRecall IDs\tExposure IDs\tBlock Tokens")
+    for row in turn["manifests"]:
+        print(
+            "\t".join(
+                map(
+                    str,
+                    (
+                        row["seat"],
+                        row["attempt"],
+                        row["retrieval_ids"],
+                        row["recall_ids"],
+                        row["exposure_ids"],
+                        json.dumps(row["window_record"]["block_tokens"]),
+                    ),
+                )
+            )
+        )
+    print("Queue\tJob ID\tState\tGeneration Session")
+    for row in turn["jobs"]:
+        print(
+            f"{row['queue']}\t{row['id']}\t{row['state']}\t{row['generation_session_id']}"
+        )
+
+
 def run_jobs(args: argparse.Namespace) -> Dict[str, Any]:
     """Return every provider-capable durable Orrery queue for one slot."""
 
@@ -3315,6 +3445,11 @@ def _print_jobs(payload: Dict[str, Any]) -> None:
                 f"{state}={count}" for state, count in queue["counts"].items()
             )
             print(f"{queue_kind}: {counts}")
+    print("Queue\tJob ID\tState\tGeneration Session")
+    for job in payload.get("non_terminal_jobs", []):
+        print(
+            f"{job['queue']}\t{job['id']}\t{job['state']}\t{job.get('generation_session_id') or '-'}"
+        )
     if payload.get("unembedded_accepted_chunks"):
         print(f"unembedded_accepted_chunks: {payload['unembedded_accepted_chunks']}")
 
@@ -3465,6 +3600,18 @@ Examples:
     jobs_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
+
+    inspect_parser = subparsers.add_parser(
+        "inspect-turn", help="Inspect read-only turn references and hashes"
+    )
+    inspect_parser.add_argument("--slot", type=int, required=True, choices=range(1, 6))
+    identity = inspect_parser.add_mutually_exclusive_group(required=True)
+    identity.add_argument("--session", type=str)
+    identity.add_argument("--chunk", type=int)
+    prune_parser = subparsers.add_parser(
+        "prune-manifests", help="Explicitly prune expired terminal attempt manifests"
+    )
+    prune_parser.add_argument("--slot", type=int, required=True, choices=range(1, 6))
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
@@ -4079,6 +4226,10 @@ def main() -> int:
         result = run_logs(args)
     elif args.command == "usage":
         result = run_usage(args)
+    elif args.command == "inspect-turn":
+        result = run_inspect_turn(args)
+    elif args.command == "prune-manifests":
+        result = run_prune_manifests(args)
     elif args.command == "jobs":
         result = run_jobs(args)
     elif args.command == "load":

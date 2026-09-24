@@ -565,6 +565,7 @@ class OpenAIProvider(LLMProvider):
         active_prompt = prompt
         last_error: Optional[BaseException] = None
         for attempt in range(self.structured_output_retries + 1):
+            handed_off = False
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             guard = getattr(self, "prompt_window_guard", None)
@@ -596,9 +597,16 @@ class OpenAIProvider(LLMProvider):
                         "falling back to chat.completions response_format",
                         self.base_url,
                     )
+                    recorder = getattr(self, "attempt_manifest_result", None)
+                    if recorder is not None:
+                        recorder("error")
+                    handed_off = True
                     return self._get_structured_completion_chat_completions_sync(
                         active_prompt, schema_model, text_format=text_format
                     )
+                response_recorder = getattr(self, "attempt_manifest_response", None)
+                if response_recorder is not None:
+                    response_recorder(response)
                 parsed_output = self._extract_native_parsed_output(
                     response, schema_model
                 )
@@ -641,6 +649,9 @@ class OpenAIProvider(LLMProvider):
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
+                result_recorder = getattr(self, "attempt_manifest_result", None)
+                if result_recorder is not None and not handed_off:
+                    result_recorder(usage_outcome)
                 if response is not None:
                     record_openai_response(
                         response,
@@ -731,6 +742,9 @@ class OpenAIProvider(LLMProvider):
                         active_prompt, schema_model, text_format=text_format
                     )
                 )
+                response_recorder = getattr(self, "attempt_manifest_response", None)
+                if response_recorder is not None:
+                    response_recorder(response)
                 parsed_output = self._extract_chat_parsed_output(response, schema_model)
                 parsed_output = asyncio.run(
                     run_output_validator(
@@ -771,6 +785,9 @@ class OpenAIProvider(LLMProvider):
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
+                result_recorder = getattr(self, "attempt_manifest_result", None)
+                if result_recorder is not None:
+                    result_recorder(usage_outcome)
                 if response is not None:
                     record_openai_response(
                         response,

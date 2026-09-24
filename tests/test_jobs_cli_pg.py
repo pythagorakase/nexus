@@ -55,6 +55,10 @@ def _disposable_jobs_db() -> Iterator[str]:
                     sql.Identifier("NEXUS_template"),
                 )
             )
+        from scripts.migrate import migrate_database
+
+        _, failed = migrate_database(dbname, skip_locked=False)
+        assert failed == 0
         yield dbname
     finally:
         if admin is not None:
@@ -294,6 +298,7 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
             "Entity 2",
         ]
         assert set(maturation_rows[0]) == {
+            "generation_session_id",
             "id",
             "queue",
             "state",
@@ -307,6 +312,7 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
         }
         experience_rows = payload["queues"]["experience_render"]["non_terminal_jobs"]
         assert set(experience_rows[0]) == {
+            "generation_session_id",
             "id",
             "queue",
             "state",

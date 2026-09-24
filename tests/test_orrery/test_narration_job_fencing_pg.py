@@ -93,6 +93,10 @@ def _disposable_narration_db() -> Iterator[str]:
                     cur.execute(MIGRATION_SQL)
         finally:
             conn.close()
+        from scripts.migrate import migrate_database
+
+        _, failed = migrate_database(dbname, skip_locked=False)
+        assert failed == 0
         yield dbname
     finally:
         if admin is not None:

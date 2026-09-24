@@ -369,6 +369,10 @@ def commit_incubator_to_database_sync(
 
                 validate_commit_draft_sync(conn, dict(incubator, session_id=session_id))
 
+                cur.execute(
+                    "SELECT set_config('nexus.generation_session_id', %s, true)",
+                    (session_id,),
+                )
                 logger.info("Processing incubator session %s", session_id)
 
             # Step 2: Get parent context
@@ -811,6 +815,11 @@ def commit_incubator_to_database_sync(
                         accepting_chunk_id=chunk_id,
                         floor_turns=load_settings().storyteller.correspondence.floor_turns,
                     )
+
+            from nexus.telemetry.attempt_manifest import bind_exposures
+
+            with conn.cursor() as cur:
+                bind_exposures(cur, session_id, chunk_id)
 
             # Step 10: Clear incubator
             with conn.cursor() as cur:

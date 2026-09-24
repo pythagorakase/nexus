@@ -85,6 +85,7 @@ def _job(
     last_error: str | None = None,
 ) -> dict[str, object]:
     job: dict[str, object] = {
+        "generation_session_id": None,
         "id": 17,
         "queue": queue,
         "state": state,

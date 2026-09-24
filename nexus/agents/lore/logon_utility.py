@@ -1777,6 +1777,7 @@ class LogonUtility:
         )
 
         attempt_record = None
+        manifest_ordinal = 0
         delegate = getattr(provider, "output_validator", None)
         delegate = getattr(delegate, "_wire_validation_delegate", delegate)
 
@@ -1842,7 +1843,8 @@ class LogonUtility:
             text_format: Optional[Dict[str, Any]] = None,
             anthropic_request: Optional[Dict[str, Any]] = None,
         ) -> None:
-            nonlocal attempt_record
+            nonlocal attempt_record, manifest_ordinal
+            manifest_ordinal = max(attempt, manifest_ordinal + 1)
             if window is None:
                 resolved_window = resolve_storyteller_context_window(
                     self.settings, self._provider_wire_type, self._provider_type_name
@@ -1899,7 +1901,7 @@ class LogonUtility:
             attempt_record = PromptWindowRecord(
                 generation_session=generation_session,
                 seat=seat,
-                attempt=attempt,
+                attempt=manifest_ordinal,
                 model=provider.model,
                 block_tokens=counts,
                 input_tokens=tokens,
@@ -1907,6 +1909,49 @@ class LogonUtility:
                 policy_headroom=budget.policy_headroom,
                 headroom=budget.input_ceiling - tokens,
                 trimming=payload.get("window_trimming", {}),
+            )
+            from nexus.telemetry.attempt_manifest import start_attempt, identity_hash
+
+            start_attempt(
+                attempt_record,
+                blocks=[
+                    {
+                        "kind": "system",
+                        "tokens": counts["system"],
+                        "sha256": identity_hash(provider.system_prompt or ""),
+                    }
+                ]
+                + [
+                    {
+                        "kind": kind,
+                        "tokens": local_count.text_count(text),
+                        "sha256": identity_hash(text),
+                    }
+                    for kind, text in active_blocks
+                ]
+                + [
+                    {
+                        "kind": "request framing",
+                        "tokens": counts.get("request framing", 0),
+                        "sha256": identity_hash(
+                            text_format
+                            or {
+                                key: value
+                                for key, value in (anthropic_request or {}).items()
+                                if key in {"tools", "tool_choice", "output_config"}
+                            }
+                        ),
+                    }
+                ],
+                system_prompt=provider.system_prompt or "",
+                prompt=active_prompt,
+                settings=self.settings,
+                wire_schema=text_format
+                or {
+                    key: value
+                    for key, value in (anthropic_request or {}).items()
+                    if key in {"tools", "tool_choice", "output_config"}
+                },
             )
             record_prompt_window(attempt_record)
             self._enforce_final_prompt_window(
@@ -1931,6 +1976,20 @@ class LogonUtility:
                     record_coverage()
                     self.record_rendered_coverage = None
 
+        def manifest_response(response: Any) -> None:
+            from nexus.telemetry.attempt_manifest import record_response
+
+            if attempt_record is not None:
+                record_response(attempt_record, response)
+
+        def manifest_result(outcome: str) -> None:
+            from nexus.telemetry.attempt_manifest import finish_attempt
+
+            if attempt_record is not None:
+                finish_attempt(attempt_record, outcome)
+
+        provider.attempt_manifest_response = manifest_response
+        provider.attempt_manifest_result = manifest_result
         provider.prompt_window_guard = guard
 
     def _enforce_final_prompt_window(

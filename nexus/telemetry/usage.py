@@ -620,6 +620,9 @@ def record_pydantic_ai_result(
 
 def record_prompt_window(record: "PromptWindowRecord") -> None:
     """Append a pre-generation measurement beside provider usage events."""
+    from nexus.telemetry.attempt_manifest import update_validation
+
+    update_validation(record)
     config = _get_recorder_config()
     if not config.enabled:
         return
