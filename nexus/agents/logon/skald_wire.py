@@ -42,6 +42,7 @@ from nexus.api.native_structured_output import (
     openai_response_text_format,
     strict_json_schema,
 )
+from nexus.prompts.registry import PromptId, load
 
 
 class SceneDelta(BaseModel):
@@ -917,10 +918,7 @@ def _render_prompt_guide(
 
     lines = [
         "=== OUTPUT FORMAT ===",
-        (
-            "Respond with a single JSON object matching this structure. "
-            "Omit optional fields that have no value. No prose outside the JSON."
-        ),
+        (load(PromptId.OUTPUT_FORMAT_GUIDE)),
         "Legend: ! required; ? optional; named types are objects; T[] is an array.",
         "```text",
     ]

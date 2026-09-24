@@ -1,0 +1,1 @@
+Continue the narrative based on the provided context and user input.

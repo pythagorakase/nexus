@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from nexus.database import resolved_database_url
 
 from nexus.database import connection_kwargs
@@ -24,6 +25,7 @@ from nexus.agents.orrery.resolver import (
     load_current_entity_tags,
 )
 from nexus.api.slot_utils import get_slot_db_url, require_slot_dbname
+from nexus.prompts.registry import PromptId, load
 
 VALID_ENTITY_KINDS = frozenset({"character", "faction", "place"})
 EntityKind = Literal["character", "faction", "place"]
@@ -318,12 +320,7 @@ def format_tag_library_for_prompt(
 
     entries = read_tag_library(dbname, entity_kinds=entity_kinds)
     if not entries:
-        return (
-            "## Current Orrery Tag Library\n\n"
-            "No registered Orrery tags are currently available in this slot. "
-            "Do not invent tag names; leave `orrery_tags` empty until the "
-            "slot has registered vocabulary."
-        )
+        return load(PromptId.TAG_LIBRARY_EMPTY)
 
     by_kind: dict[str, dict[str, list[TagLibraryEntry]]] = defaultdict(
         lambda: defaultdict(list)
@@ -334,9 +331,7 @@ def format_tag_library_for_prompt(
     lines = [
         "## Current Orrery Tag Library",
         "",
-        "These are the tags already registered in this slot. Prefer exact "
-        "registered tags when they fit. Do not invent new tag names at runtime; "
-        "omit marginal or unsupported tags instead.",
+        load(PromptId.TAG_LIBRARY_HEADER),
         "",
     ]
     for entity_kind in ("character", "place", "faction"):
@@ -404,8 +399,7 @@ def format_contextual_tag_library(
         "",
         f"registry digest: {digest}",
         "",
-        "Every registered single-entity tag appears in the complete index; "
-        "descriptions are expanded only for tags relevant to this scene.",
+        load(PromptId.TAG_LIBRARY_CONTEXTUAL_INDEX),
         "",
         "### Category Taxonomy",
         "",
@@ -492,11 +486,7 @@ def format_contextual_tag_library(
                     if entry.tag in active_tag_names
                     else f"When `{entry.tag}` is already active"
                 )
-                lines.append(
-                    f"  {status}: omit it from tags_add and replacement-state entity "
-                    "tag additions on entities where it is already active; "
-                    "the wire cannot express duration_override."
-                )
+                lines.append(load(PromptId.TAG_LIBRARY_ACTIVE_TAG, STATUS=f"{status}"))
     else:
         lines.append(
             "No present entity or pending proposal currently selects a full tag entry."

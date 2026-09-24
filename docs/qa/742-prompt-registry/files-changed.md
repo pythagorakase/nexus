@@ -1,0 +1,141 @@
+# Files Changed
+
+- `config/reachability_baseline.json` — Record registry reachability and remove retired-module entries.
+- `docs/qa/742-prompt-registry/database-proof.json` — Verification evidence and review manifest.
+- `docs/qa/742-prompt-registry/files-changed.md` — Verification evidence and review manifest.
+- `docs/qa/742-prompt-registry/rendered-hashes.json` — Verification evidence and review manifest.
+- `docs/qa/742-prompt-registry/template-proof.json` — Verification evidence and review manifest.
+- `docs/qa/742-prompt-registry/validation.txt` — Verification evidence and review manifest.
+- `docs/qa/742-prompt-registry/verification.md` — Verification evidence and review manifest.
+- `nexus/agents/logon/orrery_tag_validation.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/agents/lore/logon_utility.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/agents/lore/lore.py` — Remove the unused LORE prompt load and interactive fallback.
+- `nexus/agents/lore/lore_system_prompt.md` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `nexus/agents/orrery/experiences.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/agents/orrery/geo_authoring.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/agents/orrery/retrograde_expansion.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/agents/orrery/retrograde_packet.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/agents/orrery/retrograde_seed_candidates.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/agents/orrery/tag_library.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/api/native_structured_output.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/api/new_story_generator.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/api/new_story_schemas.py` — Remove unused schema prompt constants; Field descriptions unchanged.
+- `nexus/api/setup_endpoints.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/api/trait_input_derivation.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/api/wizard_agent.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/api/wizard_chat.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/memory/correspondence.py` — Route prompt prose through the registry; Black formatting.
+- `nexus/memory/user_confirmation.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `nexus/prompts/__init__.py` — Typed prompt catalog, strict rendering, and cached file loading.
+- `nexus/prompts/registry.py` — Typed prompt catalog, strict rendering, and cached file loading.
+- `prompts/character_chunk_ranker.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/character_chunk_ranker_alt.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/character_chunk_ranker_old.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/character_episode_ranker.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/correspondence/digest_retry.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/correspondence/header.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/correspondence/letter_retry.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/faction_former.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/generate_psychology.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/map_builder.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/map_illustrator.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/operators/estimate_time_delta_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/estimate_time_delta_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/freestyle_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/freestyle_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/map_builder.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/map_builder_schema.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/process_characters.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/process_factions.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/operators/retrieval_query_bakeoff.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/populate_character_summaries.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/relationship_analyst.json` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/retrograde/expansion.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/expansion_constraints.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/expansion_retry.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/expansion_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/expansion_task.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/generation_constraints.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/generation_retry.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/generation_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/generation_task.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/mechanical_tag_rules.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/pair_tag_rule.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/review_contract.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/seed_generation.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/seed_selection.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/selection_priorities.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/selection_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/selection_task.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retrograde/weaver_instructions.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retry/closed_registry.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/retry/structured_output.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/setting_night_city_stories.md` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `prompts/summaries/default_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/summaries/episode_range_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/summaries/episode_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/summaries/episode_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/summaries/season_range_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/summaries/season_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/summaries/season_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/tag_library/active_tag.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/tag_library/contextual_index.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/tag_library/empty.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/tag_library/header.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/ambient_peripherals.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/authors_note.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/bootstrap_intro.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/bootstrap_secrets.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/continue_narrative.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/imminent_activity.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/joint_beats.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/maintain_consistency.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/turn_blocks/scene_pressure.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/accept_fate.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/accept_fate_retry.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/character_phase.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/choices_instruction.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/dev_preamble.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_character_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_character_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_location_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_location_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_seed_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_seed_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_setting_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/legacy_setting_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/seed_phase.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/set_designer_user.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/submit_instruction.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/suggested_traits_instruction.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/suggested_traits_intro.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/tools/submit_character_concept.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/tools/submit_starting_scenario.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/tools/submit_trait_selection.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/tools/submit_wildcard_trait.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/tools/submit_world_document.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `prompts/wizard/trait_deriver_system.md` — Verbatim file-backed prompt fragment or ordered instruction list.
+- `scripts/character_chunk_ranker.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/character_episode_ranker.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/estimate_time_delta.py` — Route prompt prose through the registry; Black formatting.
+- `scripts/faction_former.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/faction_relationship_analyst.py` — Route prompt prose through the registry; Black formatting.
+- `scripts/freestyle_api_query.py` — Route prompt prose through the registry; Black formatting.
+- `scripts/generate_character_summaries_experimental.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/generate_psychology copy.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/generate_psychology.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/map_builder.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/map_builder_fail.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/map_builder_legacy.py` — Route prompt prose through the registry; Black formatting.
+- `scripts/map_illustrator.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/process_characters.py` — Route prompt prose through the registry; Black formatting.
+- `scripts/process_factions.py` — Route prompt prose through the registry; Black formatting.
+- `scripts/relationship_analyst.py` — Retire an unused prompt, its batch reader, or its dead fallback.
+- `scripts/retrieval_query_bakeoff.py` — Route prompt prose through the registry; Black formatting.
+- `scripts/summarize_narrative.py` — Route prompt prose through the registry; Black formatting.
+- `tests/test_correspondence.py` — Registry lint or updated file-backed prompt assertions.
+- `tests/test_lore/test_infrastructure.py` — Registry lint or updated file-backed prompt assertions.
+- `tests/test_lore/test_logon_prompt_formatting.py` — Registry lint or updated file-backed prompt assertions.
+- `tests/test_orrery/test_tag_library.py` — Registry lint or updated file-backed prompt assertions.
+- `tests/test_prompt_lint.py` — Registry lint or updated file-backed prompt assertions.
+- `tests/test_trait_input_derivation.py` — Registry lint or updated file-backed prompt assertions.

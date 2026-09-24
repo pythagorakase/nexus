@@ -1,0 +1,1 @@
+{actor} is carrying {{LABEL}} ({{DEBT_SCORE}}). You may render wanting, suppression, privacy-seeking, or deferral with appropriate restraint, but Orrery does not decide what {actor} does in scene or who they choose.

@@ -1,0 +1,1 @@
+{actor} has placed a discreet overture for {target} to find. Treat as a passive hook the scene can pick up if useful, or leave dormant.

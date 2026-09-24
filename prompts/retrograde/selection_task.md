@@ -1,0 +1,1 @@
+Select the strongest subset of the candidate seeds below. You did not write these; judge them on the rubric alone. Return JSON only.

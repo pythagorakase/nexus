@@ -1430,25 +1430,6 @@ class NewStoryValidation(BaseModel):
 
 
 # Example structured output request for OpenAI
-SETTING_CARD_SCHEMA_PROMPT = """
-Generate a SettingCard based on the user's preferences. The output must be valid JSON
-that conforms to the SettingCard schema. Include rich detail while maintaining consistency
-with the genre and tone selected.
-"""
-
-CHARACTER_SHEET_SCHEMA_PROMPT = """
-Create a CharacterSheet with:
-- Core identity fields: name, summary, appearance, background, personality
-- Exactly 3 trait entries in trait_1/trait_2/trait_3 (name + description) from the 10-item trait menu
-- Required wildcard trait (wildcard_name + wildcard_description)
-
-The output must be valid JSON conforming to the CharacterSheet schema.
-"""
-
-STORY_SEEDS_SCHEMA_PROMPT = """
-Generate 3 unique StorySeed options based on the setting and character. Each should offer
-a different type of opening with clear player agency. Return a JSON array of 3 StorySeed objects.
-"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

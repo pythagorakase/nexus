@@ -31,6 +31,7 @@ Usage:
     python summarize_narrative.py --season 3 --dry-run
 """
 
+
 from nexus.database import resolved_database_url
 
 from nexus.database import database_url
@@ -54,6 +55,7 @@ if parent_dir not in sys.path:
 
 # Import shared API utilities
 from nexus.api.native_structured_output import build_native_structured_provider
+from nexus.prompts.registry import PromptId, load
 from scripts.api_openai import (
     LLMResponse,
     get_token_count,
@@ -1509,45 +1511,12 @@ class SummaryGenerator:
             System prompt string
         """
         if mode == "season":
-            return """You are a narrative continuity AI that creates structured, factual summaries for an AI storytelling system.
-
-Your SEASON summaries will be accessed by another AI to understand broad narrative patterns and maintain consistency across long stories. Focus on patterns, arcs, and transformations rather than listing every event.
-
-You MUST provide a structured output with these exact sections:
-
-1. OVERVIEW: A concise description of the season's overarching narrative and primary conflicts.
-
-2. CHARACTER_EVOLUTION: For each major character, document their starting state and motivation, key transformative moments (reference episodes), ending state and motivation, and relationship dynamics that evolved.
-
-3. NARRATIVE_ARCS: Map the major story arcs that spanned multiple episodes, including how and when each arc began, key developments across episodes, current state/resolution of the arc, and impact on the broader narrative.
-
-4. WORLD_DEVELOPMENT: Document major additions to the story world, including new settings and their significance, new or evolved social structures/factions, important mechanics of how the world functions, and backstory elements revealed.
-
-5. CONTINUITY_ANCHORS: List key elements that future narrative must maintain consistency with, including established facts, unresolved questions, and elements introduced that require future payoff.
-
-Be factual, objective, and comprehensive. Organize information logically to help the AI easily access relevant details."""
+            return load(PromptId.SUMMARIES_SEASON_SYSTEM)
         elif mode == "episode":
-            return """You are a narrative continuity AI that creates structured, factual summaries for an AI storytelling system.
-
-Your EPISODE summaries will be accessed by another AI to maintain precise narrative consistency. Focus on detailed events, immediate causality, and character states at specific moments.
-
-You MUST provide a structured output with these exact sections:
-
-1. OVERVIEW: A brief factual summary of what happened in this episode, focusing on major developments. Keep this concise (1-2 paragraphs maximum).
-
-2. TIMELINE: A detailed, chronological record of events in sequential order. This should be the LONGEST section (60-70% of your total output). Use past tense, active voice, and concrete details. Break down the episode into many specific events, each beginning with "THEN:" for clear parsing. Be thorough and granular - capture all significant story beats.
-
-3. CHARACTERS: List key characters and their emotional/physical/relationship status at the end of this episode.
-
-4. PLOT_THREADS: List ongoing storylines and their current status, categorized as active (continuing), resolved (concluded), or introduced (new).
-
-5. CONTINUITY_ELEMENTS: Note important objects, locations, or world states that should be tracked, including their current location/state/condition and any new information revealed.
-
-Be factual, objective, and chronological. Focus on concrete events and states rather than analysis. Your summary must provide all essential details needed to maintain narrative continuity."""
+            return load(PromptId.SUMMARIES_EPISODE_SYSTEM)
         else:
             # Generic fallback
-            return """You are a narrative continuity AI that creates structured, factual summaries for an AI storytelling system.
-Your summaries will be accessed by another AI to maintain narrative consistency. Be factual, objective, and comprehensive."""
+            return load(PromptId.SUMMARIES_DEFAULT_SYSTEM)
 
     def _prepare_chunks_text(self, chunks: List[Dict[str, Any]], mode: str) -> str:
         """
@@ -1701,22 +1670,12 @@ Your summaries will be accessed by another AI to maintain narrative consistency.
         chunks_text = self._prepare_chunks_text(chunks, "season")
 
         # Build the main prompt with previous summaries
-        prompt = f"""# Narrative Summary Request
-
-I need a comprehensive, structured summary of Season {season} of the narrative. Please analyze all the provided chunks to create a structured season summary following the format specified.
-
-{prev_summaries_text}## The Narrative Chunks:
-
-{chunks_text}
-
-## Important Requirements:
-
-1. Your summary must include ALL five required sections: OVERVIEW, CHARACTER_EVOLUTION, NARRATIVE_ARCS, WORLD_DEVELOPMENT, and CONTINUITY_ANCHORS.
-2. Focus on patterns, character arcs, and narrative developments that span the entire season.
-3. For CHARACTER_EVOLUTION, document each major character's transformation throughout the season.
-4. For NARRATIVE_ARCS, identify major storylines and track their progression across episodes.
-5. Be objective, factual, and comprehensive - your summary will be used by another AI to maintain narrative continuity.
-6. Maintain continuity with previous seasons - ensure your summary is compatible with the major plot developments and character arcs established in earlier seasons."""
+        prompt = load(
+            PromptId.SUMMARIES_SEASON_USER,
+            SEASON=f"{season}",
+            PREV_SUMMARIES_TEXT=f"{prev_summaries_text}",
+            CHUNKS_TEXT=f"{chunks_text}",
+        )
 
         # Token check
         if not self._token_check(prompt, "season"):
@@ -1897,31 +1856,13 @@ I need a comprehensive, structured summary of Season {season} of the narrative. 
         chunks_text = self._prepare_chunks_text(chunks, "episode")
 
         # Build the main prompt with context
-        prompt = f"""# Episode Summary Request
-
-I need a comprehensive, structured summary of Season {season}, Episode {episode} of the narrative. Please analyze all the provided chunks to create a structured episode summary following the format specified.
-
-{context_text}## The Narrative Chunks:
-
-{chunks_text}
-
-## Important Requirements:
-
-1. Your summary must include ALL five sections exactly as follows:
-
-   - OVERVIEW: A brief, concise summary of what happened (1-2 paragraphs only).
-   
-   - TIMELINE: The most detailed and extensive section (should be 60-70% of your total response). Break down the episode into many specific events, each starting with "THEN:". Include all significant events in chronological order.
-   
-   - CHARACTERS: A dictionary mapping character names to their current states.
-   
-   - PLOT_THREADS: A dictionary of active, resolved, and introduced storylines.
-   
-   - CONTINUITY_ELEMENTS: A dictionary of important objects, locations, and knowledge.
-
-2. Be objective, factual, and focus on concrete details - your summary will be used by another AI to maintain narrative continuity.
-
-3. Format matters! Your response must follow the exact structure required for machine processing."""
+        prompt = load(
+            PromptId.SUMMARIES_EPISODE_USER,
+            SEASON=f"{season}",
+            EPISODE=f"{episode}",
+            CONTEXT_TEXT=f"{context_text}",
+            CHUNKS_TEXT=f"{chunks_text}",
+        )
 
         # Token check
         if not self._token_check(prompt, "episode"):
@@ -2226,45 +2167,19 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
 
         # Build the main prompt
         if mode == "season":
-            prompt = f"""# Narrative Summary Request
-
-I need a comprehensive, structured summary of the provided narrative chunks (IDs {start_id}-{end_id}), treating them as a complete season. Please analyze all chunks to create a structured season summary following the format specified.
-
-## The Narrative Chunks:
-
-{chunks_text}
-
-## Important Requirements:
-
-1. Your summary must include ALL five required sections: OVERVIEW, CHARACTER_EVOLUTION, NARRATIVE_ARCS, WORLD_DEVELOPMENT, and CONTINUITY_ANCHORS.
-2. Focus on patterns, character arcs, and narrative developments that span these chunks as if they were a full season.
-3. For CHARACTER_EVOLUTION, document each major character's transformation throughout the chunks.
-4. For NARRATIVE_ARCS, identify major storylines and track their progression.
-5. Be objective, factual, and comprehensive - your summary will be used by another AI to maintain narrative continuity."""
+            prompt = load(
+                PromptId.SUMMARIES_SEASON_RANGE_USER,
+                START_ID=f"{start_id}",
+                END_ID=f"{end_id}",
+                CHUNKS_TEXT=f"{chunks_text}",
+            )
         else:
-            prompt = f"""# Narrative Summary Request
-
-I need a comprehensive, structured summary of the provided narrative chunks (IDs {start_id}-{end_id}), treating them as a complete episode. Please analyze all chunks to create a structured episode summary following the format specified.
-
-## The Narrative Chunks:
-
-{chunks_text}
-
-## Important Requirements:
-
-1. Your summary must include ALL five sections exactly as follows:
-
-   - OVERVIEW: A brief factual summary of what happened in this episode.
-   
-   - TIMELINE: A list of chronological events, each starting with "THEN:"
-   
-   - CHARACTERS: A dictionary mapping character names to their current states.
-   
-   - PLOT_THREADS: A dictionary of active, resolved, and introduced storylines.
-   
-   - CONTINUITY_ELEMENTS: A dictionary of important objects, locations, and knowledge.
-
-2. Be objective, factual, and focus on concrete details - your summary will be used by another AI to maintain narrative continuity."""
+            prompt = load(
+                PromptId.SUMMARIES_EPISODE_RANGE_USER,
+                START_ID=f"{start_id}",
+                END_ID=f"{end_id}",
+                CHUNKS_TEXT=f"{chunks_text}",
+            )
 
         # Token check
         if not self._token_check(prompt, mode):

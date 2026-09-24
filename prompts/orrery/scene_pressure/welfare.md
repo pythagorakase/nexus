@@ -1,0 +1,1 @@
+{actor} is making a casual welfare check on {target}. Treat as a low-key social presence the scene can absorb or use as a beat of relationship texture.

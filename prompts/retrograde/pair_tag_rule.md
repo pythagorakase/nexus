@@ -1,0 +1,1 @@
+Use only seed_eligible_vocabulary.multi_entity_tag_definitions with matching subject/object kinds.

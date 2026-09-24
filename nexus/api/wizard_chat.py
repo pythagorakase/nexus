@@ -11,7 +11,6 @@ story creation, including:
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -66,6 +65,7 @@ from nexus.api.wizard_agent import (
     _character_subphase,
 )
 from nexus.telemetry.usage import record_pydantic_ai_result
+from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.api.wizard_chat")
 
@@ -409,12 +409,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         client = ConversationsClient(model=selected_model)
 
-        prompt_path = (
-            Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
-        )
-        with prompt_path.open() as handle:
-            doc = frontmatter.load(handle)
-            welcome_message = doc.get("welcome_message", "")
+        doc = frontmatter.loads(load(PromptId.STORYTELLER_NEW))
+        welcome_message = doc.get("welcome_message", "")
 
         history = client.list_messages(request.thread_id, limit=history_limit)
         if len(history) == 0 and welcome_message:
@@ -735,10 +731,8 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
         upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
 
     client = ConversationsClient(model=selected_model)
-    prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
-    with prompt_path.open() as handle:
-        doc = frontmatter.load(handle)
-        welcome_message = doc.get("welcome_message", "")
+    doc = frontmatter.loads(load(PromptId.STORYTELLER_NEW))
+    welcome_message = doc.get("welcome_message", "")
 
     history = client.list_messages(request.thread_id, limit=history_limit)
     if len(history) == 0 and welcome_message:

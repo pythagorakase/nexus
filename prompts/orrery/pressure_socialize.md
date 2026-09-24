@@ -1,0 +1,1 @@
+{actor} is carrying {{LABEL}} ({{DEBT_SCORE}}). You may render loneliness, social friction, relief at being seen, or the pull toward company, but Orrery does not decide what {actor} does in scene.

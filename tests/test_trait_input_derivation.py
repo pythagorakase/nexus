@@ -38,6 +38,7 @@ from nexus.api.trait_input_derivation import (
     selected_trait_compile_inputs_model,
     traits_requiring_derived_inputs,
 )
+from nexus.prompts.registry import PromptId, load
 
 
 def _character(
@@ -274,9 +275,8 @@ def test_forbidden_relationship_trait_is_removed_before_derivation() -> None:
 
 def test_prompt_requires_existing_prompt_file() -> None:
     # The deriver must fail loudly if the prompt file is missing.
-    from nexus.api import trait_input_derivation
 
-    assert trait_input_derivation.PROMPT_PATH.exists()
+    assert load(PromptId.TRAIT_INPUT_DERIVER).strip()
 
 
 @pytest.mark.parametrize("missing_field", ["patron", "domain"])

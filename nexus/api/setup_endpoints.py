@@ -8,7 +8,6 @@ This module handles the setup phase of story creation including:
 """
 
 import logging
-from pathlib import Path
 from typing import Any, Dict, List
 
 import frontmatter
@@ -34,6 +33,7 @@ from nexus.api.new_story_flow import (
 from nexus.api.save_slots import get_slot_model
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
+from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
 
@@ -56,16 +56,9 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
             )
 
         # Load welcome message and choices from frontmatter
-        prompt_path = (
-            Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
-        )
-        welcome_message = ""
-        welcome_choices: List[str] = []
-        if prompt_path.exists():
-            with prompt_path.open() as f:
-                doc = frontmatter.load(f)
-                welcome_message = doc.get("welcome_message", "")
-                welcome_choices = doc.get("welcome_choices", [])
+        doc = frontmatter.loads(load(PromptId.STORYTELLER_NEW))
+        welcome_message = doc.get("welcome_message", "")
+        welcome_choices: List[str] = doc.get("welcome_choices", [])
 
         # Seed welcome message if exists (without choices - UI renders those)
         if welcome_message:

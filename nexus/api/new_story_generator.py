@@ -7,9 +7,9 @@ the new story initialization phase (new_story=true).
 
 from __future__ import annotations
 
+
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Dict, List, Optional, Type
 
 import frontmatter
@@ -26,6 +26,7 @@ from nexus.api.new_story_schemas import (
     PlaceProfile,
     TransitionData,
 )
+from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.api.new_story_generator")
 
@@ -107,16 +108,9 @@ class StoryComponentGenerator:
         Returns:
             A validated SettingCard object
         """
-        system_prompt = (
-            "You are a creative world-builder for an interactive narrative system. "
-            "Create rich, consistent settings that provide fertile ground for storytelling. "
-            "Ensure all details work together cohesively."
-        )
-        user_prompt = (
-            f"Based on these preferences, create a complete setting for the story:\n\n"
-            f"{user_preferences}\n\n"
-            f"Generate a detailed SettingCard with all required fields. "
-            f"Make the world feel lived-in and authentic to its genre."
+        system_prompt = load(PromptId.WIZARD_LEGACY_SETTING_SYSTEM)
+        user_prompt = load(
+            PromptId.WIZARD_LEGACY_SETTING_USER, USER_PREFERENCES=f"{user_preferences}"
         )
 
         try:
@@ -150,11 +144,7 @@ class StoryComponentGenerator:
         Returns:
             A validated CharacterSheet object
         """
-        system_prompt = (
-            "You are a character designer for an interactive narrative system. "
-            "Create compelling protagonists with clear motivations, flaws, and growth potential. "
-            "Characters should feel authentic to their setting while being interesting to play."
-        )
+        system_prompt = load(PromptId.WIZARD_LEGACY_CHARACTER_SYSTEM)
 
         # Include setting context
         setting_context = (
@@ -166,15 +156,10 @@ class StoryComponentGenerator:
             f"Tone: {setting.tone}"
         )
 
-        user_prompt = (
-            f"Create a protagonist for this setting:\n\n"
-            f"{setting_context}\n\n"
-            f"Character Concept:\n{character_concept}\n\n"
-            f"Generate a complete CharacterSheet with rich detail. "
-            f"The character should have clear strengths, weaknesses, and room for growth. "
-            f"Make them feel like a real person with history and relationships. "
-            f"Include trait_1, trait_2, and trait_3 (name + description) from the trait menu, "
-            f"plus the required wildcard trait."
+        user_prompt = load(
+            PromptId.WIZARD_LEGACY_CHARACTER_USER,
+            SETTING_CONTEXT=f"{setting_context}",
+            CHARACTER_CONCEPT=f"{character_concept}",
         )
 
         try:
@@ -229,27 +214,18 @@ class StoryComponentGenerator:
         )
         wildcard_text = f"{character.wildcard_name}: {character.wildcard_description}"
 
-        system_prompt = (
-            "You are a narrative designer creating compelling story openings. "
-            "Each seed should offer different types of experiences and player choices. "
-            "Openings should provide immediate engagement while setting up longer arcs."
-        )
-        user_prompt = (
-            "Create 2-4 unique story openings for:\n\n"
-            f"Setting: {setting.world_name} ({setting.genre})\n"
-            f"Protagonist: {character.name}\n"
-            f"Summary: {character.summary}\n"
-            f"Background: {character.background}\n"
-            f"Personality: {character.personality}\n\n"
-            f"Character Traits:\n{traits_text}\n\n"
-            f"Wildcard: {wildcard_text}\n\n"
-            f"Each seed should:\n"
-            f"1. Start in a different type of situation\n"
-            f"2. Offer clear player agency\n"
-            f"3. Connect to the character's traits and background\n"
-            f"4. Set up interesting narrative possibilities\n"
-            f"5. Feel appropriate to the {setting.tone} tone\n\n"
-            "Generate 2-4 StorySeed objects with all required fields."
+        system_prompt = load(PromptId.WIZARD_LEGACY_SEED_SYSTEM)
+        user_prompt = load(
+            PromptId.WIZARD_LEGACY_SEED_USER,
+            SETTING_WORLD_NAME=f"{setting.world_name}",
+            SETTING_GENRE=f"{setting.genre}",
+            CHARACTER_NAME=f"{character.name}",
+            CHARACTER_SUMMARY=f"{character.summary}",
+            CHARACTER_BACKGROUND=f"{character.background}",
+            CHARACTER_PERSONALITY=f"{character.personality}",
+            TRAITS_TEXT=f"{traits_text}",
+            WILDCARD_TEXT=f"{wildcard_text}",
+            SETTING_TONE=f"{setting.tone}",
         )
 
         try:
@@ -292,26 +268,14 @@ class StoryComponentGenerator:
 
             model_config = ConfigDict(extra="forbid")
 
-        system_prompt = (
-            "You are a location designer for an interactive narrative. "
-            "Create vivid, atmospheric locations that serve both as settings "
-            "and as active participants in the story."
-        )
-        user_prompt = (
-            f"Create the starting location for this story opening:\n\n"
-            f"Setting: {setting.world_name} ({setting.time_period})\n"
-            f"Opening: {seed.title}\n"
-            f"Situation: {seed.situation}\n"
-            f"Create the complete location hierarchy:\n"
-            f"1. A LayerDefinition for the world/planet\n"
-            f"2. A ZoneDefinition for the geographic region\n"
-            f"3. A PlaceProfile for the specific starting location WITH latitude/longitude\n\n"
-            f"CRITICAL: The PlaceProfile MUST include valid latitude and longitude fields.\n"
-            f"Use real Earth latitude/longitude even for fantasy settings. "
-            f"Treat fantasy worlds as 'mirror-Earth' - place locations where analogous real places would be. "
-            f"For example, a fantasy kingdom could use coordinates for Germany (51.5, 10.5), "
-            f"a desert city could use coordinates for Cairo (30.0, 31.2), etc.\n\n"
-            f"The place should be where {character.name} begins their story, with exact latitude/longitude."
+        system_prompt = load(PromptId.WIZARD_LEGACY_LOCATION_SYSTEM)
+        user_prompt = load(
+            PromptId.WIZARD_LEGACY_LOCATION_USER,
+            SETTING_WORLD_NAME=f"{setting.world_name}",
+            SETTING_TIME_PERIOD=f"{setting.time_period}",
+            SEED_TITLE=f"{seed.title}",
+            SEED_SITUATION=f"{seed.situation}",
+            CHARACTER_NAME=f"{character.name}",
         )
 
         try:
@@ -535,18 +499,8 @@ class SetDesignerOutput(BaseModel):
 
 
 def _load_set_designer_prompt() -> str:
-    """Load the set designer prompt from the prompts directory."""
-    prompt_path = (
-        Path(__file__).parent.parent.parent / "prompts" / "storyteller_set_designer.md"
-    )
-    if not prompt_path.exists():
-        raise FileNotFoundError(
-            f"Set designer prompt not found at {prompt_path}. "
-            "Please create prompts/storyteller_set_designer.md"
-        )
-    with prompt_path.open() as handle:
-        doc = frontmatter.load(handle)
-    return doc.content
+    """Load the set-designer document body."""
+    return frontmatter.loads(load(PromptId.STORYTELLER_SET_DESIGNER)).content
 
 
 async def generate_set_design(
@@ -577,32 +531,20 @@ async def generate_set_design(
     system_prompt = _load_set_designer_prompt()
 
     # Build context for the set designer
-    user_prompt = f"""## World Context
-
-**World Name:** {setting.world_name}
-**Genre:** {setting.genre.value}
-**Time Period:** {setting.time_period}
-**Tech Level:** {setting.tech_level.value}
-**Geographic Scope:** {setting.geographic_scope}
-**Tone:** {setting.tone}
-
-## Story Opening
-
-**Title:** {seed.title}
-**Type:** {seed.seed_type.value}
-**Situation:** {seed.situation}
-**Weather:** {seed.weather or "Not specified"}
-
-## Location Sketch
-
-{location_sketch}
-
----
-
-Generate the complete location hierarchy (layer, zone, place) based on the sketch above.
-For latitude/longitude, use Earth coordinates that match any Earth-analog hints in the sketch,
-or choose coordinates appropriate for the described environment (e.g., northern latitudes for
-cold climates, coastal coordinates for harbors, etc.)."""
+    user_prompt = load(
+        PromptId.WIZARD_SET_DESIGNER_USER,
+        SETTING_WORLD_NAME=f"{setting.world_name}",
+        SETTING_GENRE_VALUE=f"{setting.genre.value}",
+        SETTING_TIME_PERIOD=f"{setting.time_period}",
+        SETTING_TECH_LEVEL_VALUE=f"{setting.tech_level.value}",
+        SETTING_GEOGRAPHIC_SCOPE=f"{setting.geographic_scope}",
+        SETTING_TONE=f"{setting.tone}",
+        SEED_TITLE=f"{seed.title}",
+        SEED_SEED_TYPE_VALUE=f"{seed.seed_type.value}",
+        SEED_SITUATION=f"{seed.situation}",
+        SEED_WEATHER_OR_NOT_SPECIFIED=f"{seed.weather or 'Not specified'}",
+        LOCATION_SKETCH=f"{location_sketch}",
+    )
 
     provider = build_native_structured_provider(
         model=model,

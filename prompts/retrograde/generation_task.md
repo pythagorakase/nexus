@@ -1,0 +1,1 @@
+Generate and select Retrograde deep-history seed candidates. Do not write canon. Return JSON only. Keep every candidate concise.

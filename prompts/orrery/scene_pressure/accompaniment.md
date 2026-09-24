@@ -1,0 +1,1 @@
+{actor} is present at {target}'s side without medical ability. Use this as accompaniment and witness — not as intervention.

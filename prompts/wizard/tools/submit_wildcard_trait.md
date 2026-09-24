@@ -1,0 +1,1 @@
+Shared implementation for submit_wildcard_trait tool.

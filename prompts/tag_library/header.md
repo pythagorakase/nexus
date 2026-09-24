@@ -1,0 +1,1 @@
+These are the tags already registered in this slot. Prefer exact registered tags when they fit. Do not invent new tag names at runtime; omit marginal or unsupported tags instead.

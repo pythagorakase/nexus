@@ -1,0 +1,1 @@
+The private storyteller letter is too long ({{TOKEN_COUNT}} rendered tokens; limit {{MAX_LETTER_TOKENS}}). Rewrite it more compactly and resubmit the complete response.

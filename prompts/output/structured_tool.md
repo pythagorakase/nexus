@@ -1,0 +1,1 @@
+Return the complete structured response for the current NEXUS generation request.

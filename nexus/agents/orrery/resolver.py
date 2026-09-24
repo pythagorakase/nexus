@@ -67,6 +67,7 @@ from nexus.agents.orrery.weather import (
     weather_at,
 )
 from nexus.presence.roster import read_roster, read_rosters
+from nexus.prompts.registry import PromptId, load
 
 
 logger = logging.getLogger(__name__)
@@ -3324,39 +3325,34 @@ def _need_pressure_stub(
 ) -> str:
     label = f"{severity_name} {need_type} debt"
     if need_type == "sleep":
-        return (
-            "{actor} is carrying "
-            f"{label} ({debt_score:.1f}). You may render fatigue, dulled "
-            "judgment, irritability, or the pull toward rest, but Orrery "
-            "does not decide what {actor} does in scene."
+        return load(
+            PromptId.ORRERY_PRESSURE_SLEEP,
+            LABEL=f"{label}",
+            DEBT_SCORE=f"{debt_score:.1f}",
         )
     if need_type == "hunger":
-        return (
-            "{actor} is carrying "
-            f"{label} ({debt_score:.1f}). You may render distraction, "
-            "irritability, or interest in food, but Orrery does not decide "
-            "what {actor} does in scene."
+        return load(
+            PromptId.ORRERY_PRESSURE_HUNGER,
+            LABEL=f"{label}",
+            DEBT_SCORE=f"{debt_score:.1f}",
         )
     if need_type == "thirst":
-        return (
-            "{actor} is carrying "
-            f"{label} ({debt_score:.1f}). You may render thirst, discomfort, "
-            "or urgency around water, but Orrery does not decide what {actor} "
-            "does in scene."
+        return load(
+            PromptId.ORRERY_PRESSURE_THIRST,
+            LABEL=f"{label}",
+            DEBT_SCORE=f"{debt_score:.1f}",
         )
     if need_type == "socialize":
-        return (
-            "{actor} is carrying "
-            f"{label} ({debt_score:.1f}). You may render loneliness, social "
-            "friction, relief at being seen, or the pull toward company, but "
-            "Orrery does not decide what {actor} does in scene."
+        return load(
+            PromptId.ORRERY_PRESSURE_SOCIALIZE,
+            LABEL=f"{label}",
+            DEBT_SCORE=f"{debt_score:.1f}",
         )
     if need_type == "intimacy":
-        return (
-            "{actor} is carrying "
-            f"{label} ({debt_score:.1f}). You may render wanting, suppression, "
-            "privacy-seeking, or deferral with appropriate restraint, but Orrery "
-            "does not decide what {actor} does in scene or who they choose."
+        return load(
+            PromptId.ORRERY_PRESSURE_INTIMACY,
+            LABEL=f"{label}",
+            DEBT_SCORE=f"{debt_score:.1f}",
         )
     raise ValueError(f"Unhandled Orrery need pressure type: {need_type!r}")
 

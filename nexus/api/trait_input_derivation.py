@@ -16,9 +16,9 @@ vocabularies, named targets) before the trait compiler runs.
 
 from __future__ import annotations
 
+
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Optional, Type
 
 from pydantic import BaseModel, ConfigDict, create_model
@@ -31,13 +31,13 @@ from nexus.api.trait_compiler_schemas import (
     canonical_trait_name,
     suppress_cold_start_relationship_inputs,
 )
+from nexus.prompts.registry import PromptId, load
 
 if TYPE_CHECKING:
     from nexus.api.new_story_schemas import CharacterSheet, SettingCard
 
 logger = logging.getLogger("nexus.api.trait_input_derivation")
 
-PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "trait_input_deriver.md"
 
 # Patron functions mirror trait_compiler_schemas.PatronFunction.
 PATRON_FUNCTIONS = ("mentors", "sponsors", "protects", "authority_over")
@@ -131,7 +131,7 @@ def derived_input_issues(
     selected_set = set(selected)
 
     if inputs.reputation is not None:
-        issues.append("use the canonical 'fame' field, not 'reputation'")
+        issues.append(load(PromptId.WIZARD_CANONICAL_FAME))
 
     provided = {
         trait
@@ -236,9 +236,7 @@ def render_trait_input_prompt(
 ) -> str:
     """Render the deterministic derivation prompt for the Skald call."""
 
-    if not PROMPT_PATH.exists():
-        raise FileNotFoundError(f"Trait input deriver prompt not found: {PROMPT_PATH}")
-    instructions = PROMPT_PATH.read_text()
+    instructions = load(PromptId.TRAIT_INPUT_DERIVER)
 
     forbidden_traits = forbidden_cold_start_relationship_traits(character)
     payload = {
@@ -303,10 +301,7 @@ def derive_trait_compile_inputs(
     provider: Any = build_native_structured_provider(
         model=model_name,
         max_tokens=max_tokens,
-        system_prompt=(
-            "You convert finished NEXUS character-wizard prose into typed "
-            "trait compiler inputs. Follow the hard rules exactly."
-        ),
+        system_prompt=(load(PromptId.WIZARD_TRAIT_DERIVER_SYSTEM)),
         structured_output_retries=retries,
         seat="trait_input_derivation",
     )

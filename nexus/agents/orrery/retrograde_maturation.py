@@ -73,6 +73,7 @@ from nexus.presence.identity import (
     refresh_generated_aliases,
 )
 from nexus.telemetry.usage import usage_context
+from nexus.prompts.registry import PromptId, load
 
 
 logger = logging.getLogger("nexus.orrery.retrograde_maturation")
@@ -1095,29 +1096,21 @@ def build_runtime_maturation_packet(
             f"actor_ref must name the maturation target exactly: "
             f"{row['entity_name']}"
         ),
-        "target_rule": (
-            "Use the existing per-type Retrograde target shapes. COURT_PATRON "
-            "must target a character; faction patronage is deliberately not "
-            "seeded here."
-        ),
+        "target_rule": (load(PromptId.RETROGRADE_MATURATION_TARGET)),
     }
     request["prompt_sections"] = list(request["prompt_sections"]) + [
         {
             "heading": "Maturation directive",
             "items": [
                 (
-                    f"Target entity: {row['entity_name']} "
-                    f"({row['entity_kind']}). Generate shallow connected "
-                    "backstory for this entity only."
+                    load(
+                        PromptId.RETROGRADE_MATURATION_DIRECTIVE,
+                        ROW_ENTITY_NAME=f"{row['entity_name']}",
+                        ROW_ENTITY_KIND=f"{row['entity_kind']}",
+                    )
                 ),
-                (
-                    "This is a runtime pass with a tight budget; prefer few, "
-                    "sharp seeds over breadth."
-                ),
-                (
-                    "Implied entities get minimum viable mechanical weight "
-                    "only; never recursive histories."
-                ),
+                (load(PromptId.RETROGRADE_MATURATION_BUDGET)),
+                (load(PromptId.RETROGRADE_MATURATION_WEIGHT)),
                 (
                     "The maturation target may propose AT MOST ONE project. "
                     "Its actor_ref MUST be the maturation target; no other "

@@ -1,0 +1,19 @@
+{
+  "sql": "SELECT current_database(), (SELECT count(*) FROM narrative_chunks), (SELECT max(id) FROM narrative_chunks), (SELECT count(*) FROM characters)",
+  "rows": [
+    [
+      "save_04",
+      46,
+      49,
+      23
+    ],
+    [
+      "qa640_742_amend",
+      46,
+      49,
+      23
+    ]
+  ],
+  "source_access": "read-only pg_dump and SELECT",
+  "clone_access": "pg_restore then read-only render probes"
+}

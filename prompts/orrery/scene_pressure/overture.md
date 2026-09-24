@@ -1,0 +1,1 @@
+{actor} has placed a small indirect overture for {target}. Treat it as optional atmosphere or a hook the Storyteller can choose to pick up.

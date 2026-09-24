@@ -1,0 +1,1 @@
+Every registered single-entity tag appears in the complete index; descriptions are expanded only for tags relevant to this scene.

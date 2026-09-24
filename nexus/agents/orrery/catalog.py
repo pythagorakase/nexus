@@ -735,6 +735,8 @@ def _render_branch(idx: int, branch: Branch) -> List[str]:
         lines.append("")
         lines.extend(_render_narrative_stub(branch.narrative_stub))
     scene_stub = getattr(branch, "scene_pressure_stub", None)
+    if callable(scene_stub):
+        scene_stub = scene_stub()
     if scene_stub:
         lines.append("")
         lines.append(

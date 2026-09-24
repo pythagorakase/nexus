@@ -1,0 +1,1 @@
+Implied entities get minimum viable mechanical weight only; never recursive histories.

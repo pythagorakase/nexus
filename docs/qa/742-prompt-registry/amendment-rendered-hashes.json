@@ -1,0 +1,66 @@
+{
+  "base": "8020a550bb39f582945c7781bdd35f27910640e1",
+  "database": "qa640_742_amend",
+  "renders": [
+    {
+      "render": "accepted_correspondence",
+      "bytes": 27931,
+      "before_sha256": "c3326b41dcece24f576e5387f4fa5a51386e79d7d08edfecfad579f142b807b4",
+      "after_sha256": "c3326b41dcece24f576e5387f4fa5a51386e79d7d08edfecfad579f142b807b4"
+    },
+    {
+      "render": "retrograde_packet",
+      "bytes": 31870,
+      "before_sha256": "d34ed5c0628dc39b79f9bd927f83eb0fd83ff9f665248e5009794a032169ff8f",
+      "after_sha256": "d34ed5c0628dc39b79f9bd927f83eb0fd83ff9f665248e5009794a032169ff8f"
+    },
+    {
+      "render": "retrograde_prompt",
+      "bytes": 85430,
+      "before_sha256": "3afab2aaa1fb6794b69c413081da82b0f190dbb1a24dc815d5795a0e1845d241",
+      "after_sha256": "3afab2aaa1fb6794b69c413081da82b0f190dbb1a24dc815d5795a0e1845d241"
+    },
+    {
+      "render": "create_faction_to_faction_messages_system",
+      "bytes": 880,
+      "before_sha256": "159ec7599928ce7a219036188f989444d31eb234f4584d6d8d436eda12fcfd19",
+      "after_sha256": "159ec7599928ce7a219036188f989444d31eb234f4584d6d8d436eda12fcfd19"
+    },
+    {
+      "render": "create_faction_to_faction_messages_user",
+      "bytes": 7319,
+      "before_sha256": "3f2a61938643818185ee7643f23618156a334d1920124eebf1624c7375035136",
+      "after_sha256": "3f2a61938643818185ee7643f23618156a334d1920124eebf1624c7375035136"
+    },
+    {
+      "render": "create_faction_to_character_messages_system",
+      "bytes": 882,
+      "before_sha256": "5adc1c3d28a969915469a0ef647cb53293bd5c181f2766242de25b23f7fe8895",
+      "after_sha256": "5adc1c3d28a969915469a0ef647cb53293bd5c181f2766242de25b23f7fe8895"
+    },
+    {
+      "render": "create_faction_to_character_messages_user",
+      "bytes": 7216,
+      "before_sha256": "af1c9ba078a81ebf7832caab274bd24edf4714863d6be3673dca6f69c47a731a",
+      "after_sha256": "af1c9ba078a81ebf7832caab274bd24edf4714863d6be3673dca6f69c47a731a"
+    },
+    {
+      "render": "registry_retry_declarations_False",
+      "bytes": 1196,
+      "before_sha256": "0aa6d99ed269f24cc9d480240fe710b07a5408e414a89206cf86063e241c4bb2",
+      "after_sha256": "0aa6d99ed269f24cc9d480240fe710b07a5408e414a89206cf86063e241c4bb2"
+    },
+    {
+      "render": "registry_retry_declarations_True",
+      "bytes": 1210,
+      "before_sha256": "901a8ceb9ddcdb6fabcf7878d96a6139b519440527ea614c4031cb83fbf21aa1",
+      "after_sha256": "901a8ceb9ddcdb6fabcf7878d96a6139b519440527ea614c4031cb83fbf21aa1"
+    },
+    {
+      "render": "skald_format_guide",
+      "bytes": 6231,
+      "before_sha256": "5f9e31e2e492f025fc2e23f3800680ac080a7961df75e8b6670fb73aa5a05ee4",
+      "after_sha256": "5f9e31e2e492f025fc2e23f3800680ac080a7961df75e8b6670fb73aa5a05ee4"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+# Amendment Files
+
+- `docs/qa/742-prompt-registry/amendment-database-proof.json` — Record amendment proof, validation, or file inventory.
+- `docs/qa/742-prompt-registry/amendment-files.md` — Record amendment proof, validation, or file inventory.
+- `docs/qa/742-prompt-registry/amendment-rendered-hashes.json` — Record amendment proof, validation, or file inventory.
+- `docs/qa/742-prompt-registry/amendment-template-proof.json` — Record amendment proof, validation, or file inventory.
+- `docs/qa/742-prompt-registry/amendment-validation.txt` — Record amendment proof, validation, or file inventory.
+- `docs/qa/742-prompt-registry/verification.md` — Record amendment proof, validation, or file inventory.
+- `nexus/agents/logon/orrery_tag_validation.py` — Load relocated model instructions through the registry.
+- `nexus/agents/logon/skald_wire.py` — Load relocated model instructions through the registry.
+- `nexus/agents/orrery/resolver.py` — Load relocated model instructions through the registry.
+- `nexus/agents/orrery/retrograde_expansion.py` — Load relocated model instructions through the registry.
+- `nexus/agents/orrery/retrograde_maturation.py` — Load relocated model instructions through the registry.
+- `nexus/agents/orrery/retrograde_packet.py` — Load relocated model instructions through the registry.
+- `nexus/agents/orrery/retrograde_seed_candidates.py` — Load relocated model instructions through the registry.
+- `nexus/agents/orrery/templates.py` — Load relocated model instructions through the registry.
+- `nexus/api/native_structured_output.py` — Load relocated model instructions through the registry.
+- `nexus/api/trait_input_derivation.py` — Load relocated model instructions through the registry.
+- `nexus/api/wizard_agent.py` — Load relocated model instructions through the registry.
+- `nexus/memory/correspondence.py` — Load relocated model instructions through the registry.
+- `nexus/prompts/registry.py` — Register new documents, seats, and placeholder contracts.
+- `prompts/correspondence/privacy.md` — Verbatim model prose moved from Python.
+- `prompts/operators/faction_character_system.md` — Verbatim model prose moved from Python.
+- `prompts/operators/faction_character_user.md` — Verbatim model prose moved from Python.
+- `prompts/operators/faction_relationship_system.md` — Verbatim model prose moved from Python.
+- `prompts/operators/faction_relationship_user.md` — Verbatim model prose moved from Python.
+- `prompts/operators/map_builder_json_reminder.md` — Verbatim model prose moved from Python.
+- `prompts/operators/retrieval_query_system.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/pressure_hunger.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/pressure_intimacy.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/pressure_sleep.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/pressure_socialize.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/pressure_thirst.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/accompaniment.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/affection.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/arrival.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/confrontation.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/contemplation.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/conversation.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/first_aid.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/grudge.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/held_contact.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/intel.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/intermediary.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/intervene.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/no_contact.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/overture.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/passive_overture.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/public_pattern.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/restoration.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/rival_meeting.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/signals.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/silent_vigil.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/speaking_vigil.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/surveillance.md` — Verbatim model prose moved from Python.
+- `prompts/orrery/scene_pressure/welfare.md` — Verbatim model prose moved from Python.
+- `prompts/output/format_guide.md` — Verbatim model prose moved from Python.
+- `prompts/output/structured_tool.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/absent_supporting_fields.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/event_type_hint.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/intent_target_refs.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/maturation_budget.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/maturation_directive.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/maturation_target.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/maturation_weight.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/relationship_hint.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/relationship_type_retry.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/single_entity_tag_hint.md` — Verbatim model prose moved from Python.
+- `prompts/retrograde/unused_plan_fields.md` — Verbatim model prose moved from Python.
+- `prompts/retry/faction_declaration_allowed.md` — Verbatim model prose moved from Python.
+- `prompts/retry/faction_declaration_disabled.md` — Verbatim model prose moved from Python.
+- `prompts/retry/faction_exact_name.md` — Verbatim model prose moved from Python.
+- `prompts/retry/faction_new_name.md` — Verbatim model prose moved from Python.
+- `prompts/wizard/canonical_fame.md` — Verbatim model prose moved from Python.
+- `prompts/wizard/wildcard_tag_retry.md` — Verbatim model prose moved from Python.
+- `scripts/api_anthropic.py` — Load relocated model instructions through the registry.
+- `scripts/faction_relationship_analyst.py` — Load relocated model instructions through the registry.
+- `scripts/map_builder_legacy.py` — Load relocated model instructions through the registry.
+- `scripts/retrieval_query_bakeoff.py` — Load relocated model instructions through the registry.
+- `tests/test_prompt_lint.py` — Scan all string forms, document exact exceptions, and reject scratch injections.
+- `tests/test_skald_wire.py` — Pin the output-format guide to its Markdown document.

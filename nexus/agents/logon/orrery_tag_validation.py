@@ -15,6 +15,7 @@ back to the model while it still owns the turn.
 
 from __future__ import annotations
 
+
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from difflib import get_close_matches
@@ -37,6 +38,7 @@ from nexus.agents.orrery.tag_writer import (
 )
 from nexus.telemetry.usage import record_wire_repair
 from nexus.util.log_safety import quote_log_value
+from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.logon.orrery_tag_validation")
 
@@ -472,9 +474,9 @@ def collect_faction_identity_issues(
             continue
         if faction_name in declared_names:
             continue
-        resolution = "use an exact persisted name"
+        resolution = load(PromptId.RETRY_FACTION_EXACT_NAME)
         if allow_same_turn_faction_declarations:
-            resolution += " or declare a genuinely new faction in new_entities"
+            resolution += load(PromptId.RETRY_FACTION_NEW_NAME)
         issue = f"{path}: Unknown canonical faction name {faction_name!r}; {resolution}"
         issues.append(
             _with_near_misses(
@@ -1493,12 +1495,9 @@ def build_storyteller_tag_validator(
         if issues:
             formatted = "\n".join(f"- {issue}" for issue in issues)
             declaration_guidance = (
-                "or declare a genuinely new faction in new_entities; "
+                load(PromptId.RETRY_FACTION_DECLARATION_ALLOWED)
                 if allow_same_turn_faction_declarations
-                else (
-                    "same-turn declarations cannot back faction updates while "
-                    "runtime maturation is disabled; "
-                )
+                else (load(PromptId.RETRY_FACTION_DECLARATION_DISABLED))
             )
             logger.info(
                 "Storyteller output failed registry validation "
@@ -1507,24 +1506,11 @@ def build_storyteller_tag_validator(
                 quote_log_value(formatted),
             )
             raise ModelRetry(
-                "Your Orrery tags, new-entity declaration hints, replacement "
-                "event types, or faction update identities failed closed-registry "
-                "validation. For faction updates, use an exact persisted name "
-                "shown in the ENTITY DOSSIER (and its matching canonical id when "
-                f"supplying one), {declaration_guidance}drop an update with no "
-                "canonical equivalent. "
-                "For tags_add, tags_clear, and tag_hints, use bare registered tag "
-                "names only (e.g. 'comfortable'), never 'category:name' "
-                "composites. For pair_tag_hints, use the exact registered pair-tag "
-                "name; pair tags may contain colons (e.g. 'contact:social'). For "
-                "replacement_event_type, use an exact registered event type. Drop "
-                "any value with no registered equivalent. Replacement-state "
-                "entity tag lists follow the actor or target entity kind; "
-                "entity_pair_tags_target_clear_inbound uses exact registered "
-                "pair-tag names. A tags_add issue that requires duration_override "
-                "is not expressible on the storyteller wire; omit that tag. Fix "
-                "every listed "
-                f"path and resubmit the complete response:\n{formatted}"
+                load(
+                    PromptId.RETRY_CLOSED_REGISTRY,
+                    DECLARATION_GUIDANCE=f"{declaration_guidance}",
+                    FORMATTED=f"{formatted}",
+                )
             )
         return output
 

@@ -1,0 +1,1 @@
+Use the existing per-type Retrograde target shapes. COURT_PATRON must target a character; faction patronage is deliberately not seeded here.

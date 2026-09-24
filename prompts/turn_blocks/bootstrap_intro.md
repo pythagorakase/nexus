@@ -1,0 +1,1 @@
+Use this new-story context to write chunk #1. It is authoritative for the opening scene.

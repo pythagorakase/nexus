@@ -1,0 +1,1 @@
+Use empty strings for absent supporting_event_ref/rationale.

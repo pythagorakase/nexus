@@ -1,0 +1,1 @@
+Use only seed_eligible_vocabulary.relationship_types.

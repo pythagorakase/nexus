@@ -160,7 +160,6 @@ class TestInfrastructure:
 
         # Check required modules
         required_files = [
-            "lore_system_prompt.md",
             "utils/chunk_operations.py",
             "utils/context_validation.py",
             "utils/token_budget.py",

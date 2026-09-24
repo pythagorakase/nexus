@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+
 from fastapi import HTTPException
 from pydantic_ai import CallDeferred, ModelRetry
 
@@ -35,8 +36,8 @@ from nexus.api.new_story_schemas import (
     WildcardTrait,
     ZoneDefinition,
 )
+from nexus.prompts.registry import PromptId, load
 from nexus.api.wizard_agent import (
-    ACCEPT_FATE_SIGNAL,
     WizardContext,
     build_wizard_prompt,
     submit_character_concept,
@@ -201,7 +202,7 @@ def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(
     assert "TAG LIBRARY" in prompt
     assert "Trait Reference" in prompt
     assert "TRAIT MENU" in prompt
-    assert ACCEPT_FATE_SIGNAL in prompt
+    assert load(PromptId.WIZARD_ACCEPT_FATE) in prompt
     assert (
         wizard_module.get_wizard_agent(context) is wizard_module._concept_accept_agent
     )
@@ -543,6 +544,7 @@ async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> Non
 # Structural Tests for Agent Factory (no LLM required)
 # =============================================================================
 
+from nexus.prompts.registry import PromptId, load
 from nexus.api.wizard_agent import (
     get_wizard_agent,
     apply_trait_selection_to_state,
