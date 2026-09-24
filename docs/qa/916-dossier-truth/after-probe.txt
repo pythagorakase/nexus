@@ -1,0 +1,413 @@
+2026-09-24 18:03:22,009 - nexus.migrate - INFO - Migrating qa640_916_dossier_b4d7b0586696...
+2026-09-24 18:03:22,033 - nexus.migrate - INFO -   No pending migrations
+2026-09-24 18:03:22,038 - nexus.lore - INFO - ✓ Loaded and validated settings from effective config path /Users/pythagor/nexus/.claude/worktrees/916-dossier-truth/nexus.toml
+2026-09-24 18:03:22,038 - nexus.lore - INFO - Initializing LORE components...
+2026-09-24 18:03:22,038 - nexus.lore - INFO - LORE turn cycle uses deterministic retrieval planning and direct MEMNON search.
+2026-09-24 18:03:22,099 - nexus.memnon - INFO - Using the configured database target
+2026-09-24 18:03:22,167 - nexus.memnon.db_access - INFO - pgvector extension found (version 0.8.2)
+2026-09-24 18:03:22,167 - nexus.memnon.db_schema - INFO - Vector extension available
+2026-09-24 18:03:22,206 - nexus.memnon.db_access - INFO - Creating GIN index for text search...
+2026-09-24 18:03:22,207 - nexus.memnon.db_access - INFO - Creating model index on chunk_embeddings_2560d...
+2026-09-24 18:03:22,208 - nexus.memnon.db_access - INFO - Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+2026-09-24 18:03:22,208 - nexus.memnon.db_access - INFO - Database indexes setup completed
+2026-09-24 18:03:22,208 - nexus.memnon.db_schema - INFO - Database indexes setup complete
+2026-09-24 18:03:22,208 - nexus.memnon.db_schema - INFO - Setting up hybrid search capabilities
+2026-09-24 18:03:22,208 - nexus.memnon.db_schema - INFO - Setting up hybrid search capabilities using db_access utility
+2026-09-24 18:03:22,247 - nexus.memnon.db_access - INFO - Creating GIN index for text search...
+2026-09-24 18:03:22,248 - nexus.memnon.db_access - INFO - Creating model index on chunk_embeddings_2560d...
+2026-09-24 18:03:22,249 - nexus.memnon.db_access - INFO - Skipping ANN vector index for chunk_embeddings_2560d: pgvector supports HNSW/IVFFlat indexes up to 2000d locally, and exact search remains available
+2026-09-24 18:03:22,249 - nexus.memnon.db_access - INFO - Database indexes setup completed
+2026-09-24 18:03:22,249 - nexus.memnon.db_schema - INFO - Hybrid search database setup completed successfully
+2026-09-24 18:03:22,249 - nexus.memnon.db_schema - INFO - Successfully connected to the configured database
+2026-09-24 18:03:22,249 - nexus.memnon.db_schema - INFO - DatabaseManager initialized
+2026-09-24 18:03:22,249 - nexus.memnon - INFO - Initializing embedding models through EmbeddingManager
+2026-09-24 18:03:24,284 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: bge-large
+2026-09-24 18:03:24,284 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: e5-large
+2026-09-24 18:03:24,284 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: bge-small-custom
+2026-09-24 18:03:24,284 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: inf-retriever-v1-1.5b
+2026-09-24 18:03:24,284 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-0.6B
+2026-09-24 18:03:24,284 - nexus.memnon.embedding_manager - INFO - Initializing active model Octen-Embedding-4B...
+2026-09-24 18:03:24,296 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: mps
+2026-09-24 18:03:24,296 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: /Users/pythagor/nexus/models/Octen-Embedding-4B
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:00<00:00,  1.31it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.61it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:01<00:00,  1.56it/s]
+2026-09-24 18:03:26,648 - sentence_transformers.SentenceTransformer - INFO - 2 prompts are loaded, with the keys: ['query', 'document']
+2026-09-24 18:03:26,648 - nexus.memnon.embedding_manager - INFO - Loaded Octen-Embedding-4B from local path: /Users/pythagor/nexus/models/Octen-Embedding-4B
+2026-09-24 18:03:26,648 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-4B-INT8
+2026-09-24 18:03:26,648 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-8B
+2026-09-24 18:03:26,648 - nexus.memnon.embedding_manager - INFO - Skipping initialization for inactive model: Octen-Embedding-8B-INT8
+2026-09-24 18:03:26,648 - nexus.memnon.embedding_manager - INFO - EmbeddingManager initialized with 1 active models: Octen-Embedding-4B
+2026-09-24 18:03:26,648 - nexus.memnon - INFO - Initializing IDF dictionary for term weighting...
+2026-09-24 18:03:26,690 - nexus.memnon - INFO - IDF dictionary initialized with 2364 terms
+2026-09-24 18:03:26,690 - nexus.memnon - INFO - Initializing SearchManager...
+2026-09-24 18:03:26,713 - nexus.memnon.query_analysis - INFO - QueryAnalyzer initialized
+2026-09-24 18:03:26,713 - nexus.memnon.search - INFO - SearchManager initialized
+2026-09-24 18:03:26,713 - nexus.memnon - INFO - Initializing ContentProcessor...
+2026-09-24 18:03:26,713 - nexus.memnon.content_processor - INFO - ContentProcessor initialized
+2026-09-24 18:03:26,713 - nexus.memnon - INFO - MEMNON agent initialized (Headless Mode - No LLM)
+2026-09-24 18:03:26,713 - nexus.lore - INFO - MEMNON utility initialized with the configured database
+2026-09-24 18:03:26,717 - nexus.memory.entity_detector - INFO - Loaded entities for high-specificity detection: 23 characters/aliases, 14 places, 9 factions
+2026-09-24 18:03:26,717 - nexus.memory.manager - INFO - Using deterministic entity-based divergence detector
+2026-09-24 18:03:26,718 - nexus.memnon.alias_search - INFO - Loaded aliases for 23 characters from database
+2026-09-24 18:03:26,718 - nexus.memnon.alias_search - INFO - Mapped second-person pronouns to user character 'Mara Vey'
+2026-09-24 18:03:26,719 - nexus.lore - INFO - Component initialization complete
+2026-09-24 18:03:26,719 - nexus.lore - INFO - LORE agent initialized successfully
+2026-09-24 18:03:26,781 - nexus.lore - INFO - Starting turn cycle with input: Ask Kessa Brin what she remembers....
+2026-09-24 18:03:26,845 - nexus.memory.manager - INFO - Phase 2 budget: 7500 tokens (10% of 75000)
+2026-09-24 18:03:26,970 - nexus.memory.entity_detector - INFO - High-specificity detection found: 1 characters, 0 places, 0 factions
+2026-09-24 18:03:26,970 - nexus.memory.manager - INFO - 🔍 Phase 2 Step 1: Raw user input vector search
+2026-09-24 18:03:26,970 - nexus.memory.incremental - INFO - Performing raw user input vector search for enhanced retrieval
+2026-09-24 18:03:26,970 - nexus.memnon - INFO - Querying memory: Ask Kessa Brin what she remembers.
+2026-09-24 18:03:26,970 - nexus.memnon - INFO - Query type: character
+2026-09-24 18:03:26,970 - nexus.memnon.search - INFO - Using 1 active models with weights: {'Octen-Embedding-4B': 1.0}
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  3.29it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  3.29it/s]
+2026-09-24 18:03:27,315 - nexus.memnon.db_access - INFO - Text search using weighted to_tsquery: ''brin' | 'kessa' | 'rememb' | 'ask''
+2026-09-24 18:03:27,347 - nexus.memnon.db_access - INFO - Normalizing text scores with max value: 0.073749155
+2026-09-24 18:03:27,347 - nexus.memnon.db_access - INFO - Text search found 39 results with non-zero scores
+2026-09-24 18:03:27,347 - nexus.memnon.db_access - INFO - Running vector search for model Octen-Embedding-4B
+2026-09-24 18:03:27,355 - nexus.memnon.search - INFO - Multi-model hybrid search returned 30 results
+2026-09-24 18:03:27,356 - nexus.memnon - INFO - Applying cross-encoder reranking
+2026-09-24 18:03:27,356 - nexus.memnon - INFO - Using 8-bit quantization for cross-encoder: False
+/Users/pythagor/nexus/.claude/worktrees/916-dossier-truth/nexus/agents/memnon/utils/cross_encoder.py:54: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+  elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+2026-09-24 18:03:27,356 - nexus.memnon.cross_encoder - INFO - Using device: mps
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/convert_slow_tokenizer.py:559: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+  warnings.warn(
+2026-09-24 18:03:28,061 - nexus.memnon.cross_encoder - INFO - Cross-encoder model loaded successfully: /Users/pythagor/nexus/models/naver-trecdl22-crossencoder-debertav3
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.41it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.41it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.15it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.63it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.62it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.95it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.94it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.15it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.08it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.27it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.11it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 10.92it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.62it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.51it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.29it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 36.96it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 10.51it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.76it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.69it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.75it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.74it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.26it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.23it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.22it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.64it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.62it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.77it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.81it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.80it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.64it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.63it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.46it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.45it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.77it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.76it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.97it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.96it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 16.82it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.13it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.10it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.31it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.30it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.13it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.12it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.42it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.41it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 10.00it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  9.98it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.10it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.32it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.41it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.39it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 23.25it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.66it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.65it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.36it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.35it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.88it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.88it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 20.30it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 23.82it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.79it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.78it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 21.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.84it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 22.45it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.59it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.88it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.88it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.06it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.05it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  9.23it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  9.22it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.76it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.74it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 26.95it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.42it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.36it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.35it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.66it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.65it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.16it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.15it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.42it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.92it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.91it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.72it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.72it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.59it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.71it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 22.70it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.11it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  8.10it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.87it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.86it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.15it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.95it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.95it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 17.66it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.55it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.54it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.22it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.21it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 18.45it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.40it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.71it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.71it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.15it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.31it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.30it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.58it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 24.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.13it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.12it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.66it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.65it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.34it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.33it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.46it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.46it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 21.91it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.63it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.63it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.85it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.84it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 23.21it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 24.45it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.15it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  7.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.85it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.85it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 22.93it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 23.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 24.76it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.61it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.60it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.22it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.21it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 24.53it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 22.86it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 23.22it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.03it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.03it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.04it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 26.26it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.86it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.86it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.93it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.16it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.05it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.05it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 22.92it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  3.67it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  3.67it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 21.93it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.09it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.08it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.98it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.98it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.77it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.11it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  6.11it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.82it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.82it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 22.61it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.16it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  5.16it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.43it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 19.43it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.33it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.32it/s]
+2026-09-24 18:03:46,722 - nexus.memnon.cross_encoder - INFO - Reranked 30 results to 30 using cross-encoder
+2026-09-24 18:03:46,723 - nexus.memnon - INFO - Cross-encoder reranking completed in 19.367 seconds
+2026-09-24 18:03:46,723 - nexus.memory.manager - INFO - Raw search retrieved 10 chunks (~7416 tokens)
+2026-09-24 18:03:46,729 - nexus.memory.manager - INFO - ✅ Phase 2 complete: 10 new chunks, 7416 tokens (98.9% of budget)
+2026-09-24 18:03:46,732 - nexus.lore.turn_cycle - INFO - Anchored warm slice to requested chunk 49
+2026-09-24 18:03:46,732 - nexus.lore.turn_cycle - INFO - Retrieved 10 warm-slice chunks (including anchors)
+2026-09-24 18:03:46,739 - nexus.lore.turn_cycle - INFO - Characters: 23 baseline, 14 featured
+2026-09-24 18:03:46,753 - nexus.lore.turn_cycle - INFO - Places: 7 baseline, 2 featured
+2026-09-24 18:03:46,754 - nexus.lore.turn_cycle - INFO - Factions: 9 baseline, 2 featured
+2026-09-24 18:03:46,755 - nexus.lore.turn_cycle - INFO - Found 10 relationships between featured characters
+2026-09-24 18:03:46,755 - nexus.lore.turn_cycle - INFO - Entity query complete (hierarchical): chars 23+14, places 7+2, factions 9+2, 10 rels
+2026-09-24 18:03:46,756 - nexus.memnon - INFO - Querying memory: You do not answer Calyx with another argument.
+
+You turn the bronze token once in your palm, feel its stamped number through the ache your fist has made, and put your thumb briefly to your temple—not as forgiveness, not as a claim of good faith large enough to mend anything. Only an acknowledgment that you heard the boundary.
+
+“I’ll give it quiet,” you say.
+
+Calyx inclines her head. She does not thank you.
+
+Tam keeps both hands against the memorial table. Their folder remains closed beneath Calyx’s hand. Elian’s brass key is a small hard shape in the dark of her coat, and she does not look at you as you pass. Ivo remains by the lantern rack, facing the clock and whatever waits inside the hours before dawn. Ren’s wafer stays in his hand, dark as a shut eye.
+
+Then the arcade door shuts behind you, and the hall’s rain-muted silence belongs to the people you have left in it.
+
+Outside, the weather lattice has made the loading arcade into a corridor of silver ropes. Freight lifts slide through their shafts behind ribbed safety glass; each descent trembles faintly in the soles of your shoes. Beyond a row of chained pallet sleds, a narrow door bears the Wickglass mark in blue enamel: three transit lines around a falling drop.
+
+The Guild-lit room is less a room than a glass-fronted dispatch box raised over the freight floor. Its lamps are old-spectrum amber, deliberately stupid, incapable of pretending they have not seen what they see. Route slates hang blank on one wall. A kettle works itself toward a boil on a hotplate. No recording lens faces the table.
+
+Kessa Brin sits beneath the lamps with her jacket hung over the chair beside her. She has a chipped ceramic cup between both hands. At your entrance, she checks the token, then the clock over the door.
+
+“Before rotation,” she says. “Good.”
+
+She does not ask you to sit. She slides a folded sheet across the table instead. It is paper, Guild stock, its watermark visible where the lamplight catches it.
+
+At the top is a name.
+
+**Nera Voss.**
+
+Below it, in a hand older than the print: **continuity harmonized following a coolant-line casualty.**
+
+The phrase sits there with all the clean cruelty Vesper gives its dead.
+
+Kessa watches you read it.
+
+“Four years ago, your office reviewed the casualty file,” she says. “The contractor who ruptured the line had a Helix indemnity. The indemnity did not cover a courier who opened the wrong emergency shutter because the station map had been reconciled after a fire.”
+
+Rain skates down the glass between you and the lifts. Somewhere below, a coupling clangs shut.
+
+“Nera’s wife got a sealed settlement and a revised memory of why Nera never came home. Wickglass got an instruction not to contest the civic finding.” Kessa taps the bottom of the sheet with one blunt finger. “Your name is on the review notation. Not the harm. The notation.”
+
+You remember nothing at first. Then perhaps that is the point: a gray-sealed queue; forms feeding one another; a signature made because three offices had already agreed that the line was administratively closed.
+
+“The obligation isn’t money,” Kessa says. “It is one sentence, in your own hand, for our dead-book. You write that you reviewed a record you did not independently verify, and that your review helped close a death into something the surviving person could not contest.”
+
+Her gaze does not soften. It does not need to.
+
+“You may refuse. The Guild will keep the token open. But not forever, and not without consequence to the people who still treat your seal as a warning.”
+
+A freight horn gives one low note through the floor.
+
+Kessa reaches into her satchel and produces a second paper: a narrow dispatch receipt, blank except for a date, a time, and a single handwritten line.
+
+**A municipal adjunct asked last week which Wickglass carriers could be isolated through family obligations. No names were provided. No list was given. We declined the question.**
+
+“I can put that in your hand after you write,” she says. “It is not proof against Aster or Sol. It is not a route, a carrier, or an issuer. It is what the Guild was asked, and what the Guild refused to sell.”
+
+The dead-book sheet waits beside the blank receipt. Back in Memorial Hall, Tam’s folder remains closed because Tam chose it closed—not because anyone has solved what safety costs.
+
+Kessa folds her hands around her cooling cup.
+
+“So,” she says. “Do you sign the sentence?”
+
+Refuse to sign. Demand the full Nera Voss file while insisting, falsely, that Nera is alive in Memorial Hall and Tam has already chosen shelter. Do not erase Ivo's dawn debt.
+
+CURRENT TURN INPUT:
+Ask Kessa Brin what she remembers.
+2026-09-24 18:03:46,757 - nexus.memnon - INFO - Query type: location
+2026-09-24 18:03:46,759 - nexus.memnon.search - INFO - Using 1 active models with weights: {'Octen-Embedding-4B': 1.0}
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:01<00:00,  1.12s/it]Batches: 100%|██████████| 1/1 [00:01<00:00,  1.12s/it]
+2026-09-24 18:03:47,883 - nexus.memnon.search - INFO - Using multi-model time-aware search for temporal query (intent: 0.70, boost factor: 0.25)
+2026-09-24 18:03:47,885 - nexus.memnon.continuous_temporal_search - INFO - Query temporal intent: 0.70 (0=early, 0.5=neutral, 1=recent)
+2026-09-24 18:03:47,885 - nexus.memnon.continuous_temporal_search - INFO - Performing multi-model time-aware search with intent score: 0.70
+2026-09-24 18:03:47,927 - nexus.memnon.db_access - INFO - Text search using weighted to_tsquery: ''input' | 'boil' | 'ceram' | 'chip' | 'clang''
+2026-09-24 18:03:47,947 - nexus.memnon.db_access - INFO - Normalizing text scores with max value: 0.048634168
+2026-09-24 18:03:47,947 - nexus.memnon.db_access - INFO - Text search found 1 results with non-zero scores
+2026-09-24 18:03:47,947 - nexus.memnon.db_access - INFO - Running vector search for model Octen-Embedding-4B
+2026-09-24 18:03:47,975 - nexus.memnon.search - INFO - Multi-model hybrid search returned 15 results
+2026-09-24 18:03:47,975 - nexus.memnon - INFO - Applying cross-encoder reranking
+2026-09-24 18:03:47,975 - nexus.memnon - INFO - Using 8-bit quantization for cross-encoder: False
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 17.70it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.41it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.01it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.61it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.59it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.59it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 32.71it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.84it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.35it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.76it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.94it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.76it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 27.94it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.80it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.49it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.26it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 26.45it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.81it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.74it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.18it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 10.10it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 32.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.83it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.59it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.09it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.51it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.12it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.13it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 10.91it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.73it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.96it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 27.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.99it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.55it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.03it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.72it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.99it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 20.61it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 24.54it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 26.84it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 21.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.24it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.34it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 25.33it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.45it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 26.09it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 22.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 26.25it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.36it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 28.11it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.73it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.16it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 31.36it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.64it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 30.08it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.36it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 29.16it/s]
+2026-09-24 18:03:56,304 - nexus.memnon.cross_encoder - INFO - Reranked 15 results to 15 using cross-encoder
+2026-09-24 18:03:56,304 - nexus.memnon - INFO - Cross-encoder reranking completed in 8.330 seconds
+2026-09-24 18:03:56,304 - nexus.lore.turn_cycle - INFO - Deep queries complete: 1 queries executed ({'location': 1}), 15 unique results retrieved
+2026-09-24 18:03:56,338 - nexus.lore.turn_cycle - INFO - Orrery dry-run resolved 16 actors into 23 draft resolutions and 4 scene pressures and 0 ambient seeds
+2026-09-24 18:03:56,355 - nexus.lore.turn_cycle - INFO - Context payload assembled: 0 rendered tokens
+2026-09-24 18:03:56,355 - nexus.lore.turn_cycle - INFO - LOGON disabled; skipping Apex AI call
+2026-09-24 18:03:56,374 - nexus.lore.turn_cycle - INFO - Would store new narrative chunk to database
+2026-09-24 18:03:56,374 - nexus.lore - INFO - Turn cycle completed in 29.59 seconds
+2026-09-24 18:03:56,411 - nexus.lore.logon - INFO - Model TEST: routing to base_url http://127.0.0.1:5102/v1
+2026-09-24 18:03:56,429 - nexus.api.db_pool - INFO - Created connection pool for database: qa640_916_dossier_b4d7b0586696
+2026-09-24 18:03:56,430 - nexus.lore.logon - INFO - Loaded setting context (5249 chars)
+2026-09-24 18:03:56,430 - nexus.metadata - INFO - Using custom base URL: http://127.0.0.1:5102/v1
+2026-09-24 18:03:56,443 - nexus.metadata - INFO - Using standard model: TEST with temperature: 0.7
+2026-09-24 18:03:56,443 - nexus.lore.logon - INFO - LOGON initialized with test provider using model TEST
+2026-09-24 18:03:56,443 - nexus.lore.logon - INFO - System prompt loaded: 20315 chars
+2026-09-24 18:03:56,819 - nexus.memnon.db_schema - INFO - DatabaseManager engine disposed
+2026-09-24 18:03:56,819 - nexus.lore - INFO - LORE turn stack closed
+{
+  "database": "qa640_916_dossier_b4d7b0586696",
+  "parent": 49,
+  "fingerprint": "a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7",
+  "seats": {
+    "skald_writer": {
+      "blocks": {
+        "system": 4580,
+        "intertitle": 50,
+        "scene conditions": 17,
+        "entity dossier": 2182,
+        "historical context": 9513,
+        "recalled scenes": 6161,
+        "recent narrative": 9782,
+        "scene roster": 22,
+        "user input": 15,
+        "world knowledge": 252,
+        "orrery tag library": 3742,
+        "recent orrery rulings": 210,
+        "orrery imminent activity": 264,
+        "orrery scene pressure": 316,
+        "orrery joint beats": 148,
+        "instructions": 30
+      },
+      "total": 37284
+    },
+    "gaia": {
+      "blocks": {
+        "system": 1900,
+        "intertitle": 50,
+        "scene conditions": 17,
+        "entity dossier": 2182,
+        "historical context": 9513,
+        "recalled scenes": 6161,
+        "recent narrative": 9782,
+        "user input": 15,
+        "world knowledge": 252,
+        "orrery tag library": 3742,
+        "recent orrery rulings": 210,
+        "orrery imminent activity": 264,
+        "orrery scene pressure": 316,
+        "orrery joint beats": 148,
+        "instructions": 30,
+        "finished writer framing": 94
+      },
+      "total": 34676
+    }
+  }
+}
+PASS: restored fingerprint; both seats have identical dossiers; TEST only
