@@ -1,6 +1,6 @@
 # Narrative Summary Request
 
-I need a comprehensive, structured summary of the provided narrative chunks (IDs {{START_ID}}-{{END_ID}}), treating them as a complete episode. Please analyze all chunks to create a structured episode summary following the format specified.
+I need a structured summary of the provided narrative chunks (IDs {{START_ID}}-{{END_ID}}), treating them as a complete episode. Analyze all chunks and write the episode summary in the format specified.
 
 ## The Narrative Chunks:
 
@@ -8,16 +8,18 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
 
 ## Important Requirements:
 
-1. Your summary must include ALL five sections exactly as follows:
+1. The whole summary is at most 1,500 words. Stop before the limit rather than run past it.
 
-   - OVERVIEW: A brief factual summary of what happened in this episode.
-   
-   - TIMELINE: A list of chronological events, each starting with "THEN:"
-   
-   - CHARACTERS: A dictionary mapping character names to their current states.
-   
-   - PLOT_THREADS: A dictionary of active, resolved, and introduced storylines.
-   
-   - CONTINUITY_ELEMENTS: A dictionary of important objects, locations, and knowledge.
+2. Your summary must include ALL five sections exactly as follows:
 
-2. Be objective, factual, and focus on concrete details - your summary will be used by another AI to maintain narrative continuity.
+   - OVERVIEW: One paragraph, at most 120 words.
+   
+   - TIMELINE: The longest section. One line per significant beat, each starting with "THEN:", in chronological order. At most 30 lines, at most 30 words each.
+   
+   - CHARACTERS: One line per character who acted, mapping the name to their current state. At most 12 lines.
+   
+   - PLOT_THREADS: Active, resolved, and introduced storylines, one line each. At most 10 lines.
+   
+   - CONTINUITY_ELEMENTS: Important objects, locations, and knowledge, one line each. At most 10 lines.
+
+3. Be objective, factual, and focus on concrete details - your summary will be used by another AI to maintain narrative continuity.
