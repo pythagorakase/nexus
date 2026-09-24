@@ -1,16 +1,18 @@
-# PostgreSQL Gate Triage: Stop Report
+# PostgreSQL Gate Repair Verification
 
-## Status
+## Scope and Coordinator Rulings
 
-Stopped under the frozen work order's rule for a production defect requiring a design decision. The canonical roster reader rejects historical multi-setting chunks in the populated `save_02` corpus. No PR was opened and nothing was pushed: the proof gates have not passed. No production code, save data, migrations, or service listeners were changed by this run.
+Resumed from the first stop report after the coordinator supplied the historical-setting contract and #915's third commit. The starting worktree already contained cherry-picks `bbae037a` and `ca83ef22`; `6eb285b0` was cherry-picked as `a2ce73fe`. This work supersedes #915. No migration, fleet reset, paid-provider opt-in, or UI change is part of this repair.
 
-The supplied baseline log is `temp/gate/full-pg-gate-main.log`, recorded at `39b06734`:
+The supplied baseline at `39b06734` contains 181 distinct failing IDs:
 
 ```text
 142 failed, 3223 passed, 49 skipped, 11 warnings, 39 errors in 634.07s (0:10:34)
 ```
 
-This worktree actually started at `1c5ce99a` (the subsequent #919 landing). Import-path verification succeeded:
+The worktree's base also includes #919 (`1c5ce99a`). Its two new operator entry points needed reachability registration; these were not in the supplied baseline log.
+
+Import verification:
 
 ```sh
 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;print(nexus.__file__)'
@@ -20,100 +22,33 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;prin
 /Users/pythagor/nexus/.claude/worktrees/test-fallout-repair/nexus/__init__.py
 ```
 
-## Completed Work
-
-Fetched `origin/claude/fix-post-commit-patch` and checked `gh pr view 915 --json commits,headRefName,headRefOid`. Both sources contain **two**, not three, commits; remote head is `30603bc8b5db2c8fab095cb9b13d19ae84def465`. The missing enqueue-then-drain compaction commit's SHA was requested from the coordinator.
-
-- `db08794a` was cherry-picked as `bbae037a`: continue-validation patches `wake_scheduler`.
-- `30603bc8` was cherry-picked as `ca83ef22`: correspondence and wizard-opening fixtures patch `wake_scheduler`.
-- Both commit messages end with `Agent: Codex (GPT-6 Astra)`. Installed hooks ran on the amended commits; catalog regeneration passed and config validation reported no staged files to check.
-- All 181 distinct FAILED/ERROR IDs from the supplied log have one primary class in the table below. These are log-based triage assignments, **not** proof of an acceptable final remainder. The repairs and overlap audit stopped at the production finding.
-
-## Production Finding: Historical Settings
-
-Read-only SQL on `save_02`:
-
-```sql
-SELECT r.chunk_id, r.place_id, p.name, r.reference_type::text
-FROM place_chunk_references r
-JOIN places p ON p.id = r.place_id
-WHERE r.chunk_id IN (1374, 1425)
-  AND r.reference_type::text = 'setting'
-ORDER BY r.chunk_id, r.place_id;
-```
-
-| Chunk | Place ID | Place | Reference Type |
-| --- | --- | --- | --- |
-| 1374 | 313 | Le Chuchotement | setting |
-| 1374 | 319 | Streets of New Orleans | setting |
-| 1425 | 2 | The Land Rig | setting |
-| 1425 | 311 | Le Chat Noir | setting |
-
-A `conn.set_session(readonly=True)` connection and the production `read_roster(conn, chunk)` reproduced both errors:
-
-```text
-save_02 chunk 1374: ValueError: Chunk 1374 has multiple setting places
-save_02 chunk 1425: ValueError: Chunk 1425 has multiple setting places
-```
-
-The guard is at `nexus/presence/roster.py:224-226`; the write-side singleton rule is at `nexus/presence/roster.py:378-379`. `nexus/api/reader_endpoints.py:270` calls the shared reader to serve context; `nexus/agents/orrery/resolver.py:1291` calls it for historical actor binding windows. `nexus/agents/lore/logon_utility.py:228-234` converts settings to a single `PlaceRef` by taking the first entry. Merely deleting the reader guard would therefore silently select a setting in a continuation consumer. Selecting a canonical setting, preserving all historical settings while enforcing singleton continuation, or migrating historical data changes the contract and needs Claude's design decision. Rewriting the context/coverage tests to avoid these chunks would conceal a production failure.
-
-Affected original IDs (also included in class f below):
-
-- `tests/test_api/test_reader_asset_endpoints.py::TestNarrativeReads::test_context_shape`
-- `tests/test_orrery/test_projects.py::test_slot2_coverage_distribution_and_project_gate_payload`
-- `tests/test_orrery/test_recruit_ally_projects.py::test_slot2_recruitment_routes_persisted_target_without_routine_drift`
-
-## Verification Performed
-
-Exact pytest invocation (the only pytest run in this execution):
-
-```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_api/test_reader_asset_endpoints.py::TestNarrativeReads::test_context_shape > temp/gate/roster-reproduction.log 2>&1
-```
-
-Tail, verbatim:
-
-```text
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_api/test_reader_asset_endpoints.py::TestNarrativeReads::test_context_shape
-1 failed, 5 warnings in 0.26s
-```
-
-Black verification of the three cherry-picked Python files (not a repository-wide Black gate):
-
-```sh
-/Users/pythagor/nexus/.venv/bin/python -m black --check tests/test_api/test_correspondence_pg.py tests/test_api/test_narrative_continue_validation.py tests/test_wizard_opening_presence_pg.py
-```
-
-```text
-All done! ✨ 🍰 ✨
-3 files would be left unchanged.
-```
-
-Read-only `save_05` SQL also succeeded (the Postgres.app permission hazard did not occur):
+Read-only current SQL confirms the #885 precondition:
 
 ```sql
 SELECT (SELECT count(*) FROM narrative_chunks), (SELECT count(*) FROM characters);
 ```
 
 ```text
-(0, 0)
+save_05: (0, 0)
 ```
 
-## Deferred Work and Coordinator Questions
+## Repairs
 
-1. What is the intended historical multi-setting read/continuation contract? Supply that ruling before repair resumes.
-2. Where is #915's third compaction commit? Only two are currently published.
-3. Reconcile the 127 class-a IDs below with #885's named list. The adjudication-history test audits both slots 2 and 5, so slot-5 emptiness alone does not establish that all of its data debt is covered by #885. The owner explicitly exempted the whole dev-endpoint module; its multi-slot assertions are identified accordingly.
-4. Finish repairs for classes b-g, and inspect class-a tests for masked b-g defects. In particular, the six class-e async URL failures can expose slot-data failures after connection repair; do not reclassify them as a without first fixing the connection contract. Relationship provenance errors are g even where tests also depend on save data.
-5. Rerun the required full PostgreSQL gate and offline suite, then Black and the normal commit hooks. No claim of a green gate or a class-a-only remainder is made here. No gateway was started on 8019 or any other lane, so there is no owned service to stop.
-6. Preserve scheduler helper lane 8018. Two supplied failures show an existing listener there; no ownership or live-state conclusion about that PID was established in this run.
+- Historical rosters preserve all setting places, ordered by referenced place ID. Reader JSON returns the whole list; roster text renders every name. A continuation baseline requires exactly one setting and reports the chunk ID and every conflicting name/ID. The disposable regression inserts references in reverse place-ID order to prove stable ordering.
+- LORE's explicit configuration path now scopes nested component initialization via a context variable. Database setup honors the owner's path without changing process environment or suppressing a missing-config error.
+- Scheduler tests patch wakeup, unpack the two-value approval result, assert queued compaction before draining, and finish the generation lease before the scheduler pass. The lifecycle test observes the gateway scheduler's durable outcome rather than racing a second worker.
+- Asyncpg fixtures use the connection-contract adapter. Provider stubs declare real-provider attributes. The knowledge-only harness explicitly disables the storyteller seat.
+- Disposable corpus continuation refreshes only clone fingerprints. Gateway helpers retain lane 8018; the corpus status probe uses that same lane. Other gateway fixtures bind ephemeral ports.
+- Fixture-authored relationship changes declare the manual producer. This includes masked overlaps in class-a communication, composition, faction-context, reconstruction, and replay tests; their empty-story dependency is unchanged.
+- Queue summaries assert pending and stale-rejected states; the schema enum measurement tracks the current registry. Summary persistence uses a disposable clone instead of the default save. Roster-dependent miniature schemas include the columns read by the canonical query.
+
+## Validation
+
+Final proof and exact remainder pending the full gate below. Earlier diagnostic runs are retained under `temp/gate/` and are not claimed as final proof.
 
 ## Classification
 
-Each table row names one exact ID, its original outcome, exactly one primary class, and the observed cause or explicitly stated diagnostic inference. Class a rows are the exact inventory for coordinator reconciliation; they have not been fixed.
+Each table row names one exact ID, its original outcome, exactly one primary class, and the observed cause or explicitly stated diagnostic inference. Class a rows retain the empty-save cause. Masked independent defects are repaired as described above.
 
 - a: #885 empty slot 5 / explicitly exempted corpus-dependent audit.
 - b: scheduler fallout (#902).
@@ -148,7 +83,7 @@ Each table row names one exact ID, its original outcome, exactly one primary cla
 | `tests/test_api/test_orrery_dev_endpoints.py::test_coverage_report_is_internally_consistent[5]` | FAILED | a | Owner-exempt #885 dev endpoint assertion: audited slot data/actors/anchors absent; some assertions also cover slot 2. Log: AssertionError: {"detail":"No anchors to analyze: the slot has no narrative chunks"} |
 | `tests/test_api/test_orrery_dev_endpoints.py::test_coverage_data_quality_matches_sql_oracle` | FAILED | a | Owner-exempt #885 dev endpoint assertion: audited slot data/actors/anchors absent; some assertions also cover slot 2. Log: AssertionError: {"detail":"No anchors to analyze: the slot has no narrative chunks"} |
 | `tests/test_api/test_orrery_dev_endpoints.py::test_coverage_anchor_cap_and_sampling` | FAILED | a | Owner-exempt #885 dev endpoint assertion: audited slot data/actors/anchors absent; some assertions also cover slot 2. |
-| `tests/test_api/test_reader_asset_endpoints.py::TestNarrativeReads::test_context_shape` | FAILED | f | Production roster reader rejects persisted multi-setting chunks in populated save_02; STOP finding. |
+| `tests/test_api/test_reader_asset_endpoints.py::TestNarrativeReads::test_context_shape` | FAILED | f | Historical multi-setting reads rejected by the old roster guard; repaired under the coordinator ruling. |
 | `tests/test_api/test_scheduler_corpus_pg.py::test_scheduler_live_turn_starts_before_queued_render` | FAILED | d | Cloned save_04 pass-2 baseline fingerprint is incompatible after divergence configuration changed. |
 | `tests/test_api/test_scheduler_pg.py::test_scheduler_gateway_restart_recovers_leased_job` | FAILED | g | Lane 8018 was already occupied by PID 16798 in the supplied log; keep the mandated helper lane unchanged. |
 | `tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_recovers_terminated_heartbeat_backend` | FAILED | g | Lane 8018 was already occupied by PID 16798 in the supplied log; keep the mandated helper lane unchanged. |
@@ -159,7 +94,7 @@ Each table row names one exact ID, its original outcome, exactly one primary cla
 | `tests/test_lore/test_runtime_config.py::test_explicit_lore_settings_path_beats_runtime_environment` | FAILED | e | MEMNON connection setup reloads config via missing runtime path or relative nexus.toml, losing LORE config precedence. |
 | `tests/test_lore/test_runtime_config.py::test_lore_without_runtime_environment_falls_back_to_repo_root` | FAILED | e | MEMNON connection setup reloads config via missing runtime path or relative nexus.toml, losing LORE config precedence. |
 | `tests/test_memnon_embedding_cache.py::test_memnon_close_disposes_engine` | FAILED | e | Fixture URL uses localhost while runtime contract uses the Unix socket (empty host). |
-| `tests/test_orrery/test_adjudication_history.py::test_history_is_non_vacuous_on_audited_slots` | FAILED | a | Audits slots 2 and 5; neither has adjudication rows in the log, including empty slot 5. Coordinator must reconcile the multi-slot assertion with #885. Log: AssertionError: no audited slot has adjudication-log rows — the history assertions are vacuous; repoint HISTORY_SLOTS at a slot with Skald rulings |
+| `tests/test_orrery/test_adjudication_history.py::test_history_is_non_vacuous_on_audited_slots` | FAILED | a | Audits slots 2 and 5; neither has adjudication rows in the log, including empty slot 5. Coordinator ruling includes this multi-slot assertion in #885. Log: AssertionError: no audited slot has adjudication-log rows — the history assertions are vacuous; repoint HISTORY_SLOTS at a slot with Skald rulings |
 | `tests/test_orrery/test_build_venture_async.py::test_async_build_venture_start_and_completion_match_sync` | FAILED | e | asyncpg receives the SQLAlchemy/socket URL instead of connection kwargs; slot-5 data may be a second blocker. |
 | `tests/test_orrery/test_claim_accounts_live.py::test_scope_promotion_updates_every_sibling_and_hydrates_cleanly` | FAILED | a | Slot-5 fixture cannot seed needs: no canonical world time or base_timestamp in empty story. Log: psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp |
 | `tests/test_orrery/test_claim_accounts_live.py::test_old_divergent_sibling_scopes_raise_during_hydration` | FAILED | a | Slot-5 fixture cannot seed needs: no canonical world time or base_timestamp in empty story. Log: psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp |
@@ -203,14 +138,14 @@ Each table row names one exact ID, its original outcome, exactly one primary cla
 | `tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_executes_against_slot_db` | FAILED | a | Slot-5 fixture cannot seed needs: no canonical world time or base_timestamp in empty story. Log: psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp |
 | `tests/test_orrery/test_mood_live.py::test_expired_unswept_tag_does_not_source_actor_binding` | FAILED | f | Temporary schema lacks characters.name required by the new roster query. |
 | `tests/test_orrery/test_orbit_distance_live.py::test_hydrate_orbit_distance_from_active_relationship_graph` | FAILED | a | Slot-5 fixture cannot seed needs: no canonical world time or base_timestamp in empty story. Log: psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp |
-| `tests/test_orrery/test_projects.py::test_slot2_coverage_distribution_and_project_gate_payload` | FAILED | f | Production roster reader rejects persisted multi-setting chunks in populated save_02; STOP finding. |
+| `tests/test_orrery/test_projects.py::test_slot2_coverage_distribution_and_project_gate_payload` | FAILED | f | Historical multi-setting reads rejected by the old roster guard; repaired under the coordinator ruling. |
 | `tests/test_orrery/test_pursue_romance_async.py::test_async_pursue_romance_start_and_completion` | FAILED | e | asyncpg receives the SQLAlchemy/socket URL instead of connection kwargs; slot-5 data may be a second blocker. |
 | `tests/test_orrery/test_reconstruction.py::test_checkpoint_captures_every_section_and_is_idempotent` | FAILED | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: AssertionError: save_05 must carry active tags |
 | `tests/test_orrery/test_reconstruction.py::test_skald_state_updates_are_ledgered` | FAILED | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: cannot unpack non-iterable NoneType object |
 | `tests/test_orrery/test_reconstruction.py::test_relationship_triggers_version_updates_and_deletes` | FAILED | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: cannot unpack non-iterable NoneType object |
 | `tests/test_orrery/test_reconstruction.py::test_unattributed_relationship_write_versions_with_null_chunk` | FAILED | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: 'NoneType' object is not subscriptable |
 | `tests/test_orrery/test_recruit_ally_projects.py::test_live_stage_ladder_completion_and_applied_ledger` | FAILED | g | Relationship fixture writes omit mandatory nexus.write_producer provenance. |
-| `tests/test_orrery/test_recruit_ally_projects.py::test_slot2_recruitment_routes_persisted_target_without_routine_drift` | FAILED | f | Production roster reader rejects persisted multi-setting chunks in populated save_02; STOP finding. |
+| `tests/test_orrery/test_recruit_ally_projects.py::test_slot2_recruitment_routes_persisted_target_without_routine_drift` | FAILED | f | Historical multi-setting reads rejected by the old roster guard; repaired under the coordinator ruling. |
 | `tests/test_orrery/test_recruit_ally_replay.py::test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift` | FAILED | g | Relationship insertion deadlocks against another transaction in shared save_02; owner of competing transaction needs investigation. |
 | `tests/test_orrery/test_replay.py::test_scalar_replay_round_trip_and_within_chunk_ordering` | FAILED | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: cannot unpack non-iterable NoneType object |
 | `tests/test_orrery/test_replay.py::test_tag_bestowal_and_clearance_replay_at_exact_chunks` | FAILED | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: cannot unpack non-iterable NoneType object |
@@ -317,5 +252,3 @@ Each table row names one exact ID, its original outcome, exactly one primary cla
 | `tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_writes_exclusive_pair_tag_with_provenance` | ERROR | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: cannot unpack non-iterable NoneType object |
 | `tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_and_raw_status_fail_loudly` | ERROR | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: cannot unpack non-iterable NoneType object |
 | `tests/test_orrery/test_status_bestow_delta_live.py::test_status_bestow_floor_prevents_demotion_and_set_replaces_both_ways` | ERROR | a | Empty slot-5 story lacks a required actor, place, checkpoint, tag or chunk head; see exact exception below. Log: TypeError: cannot unpack non-iterable NoneType object |
-
-Codex (GPT-6 Astra).

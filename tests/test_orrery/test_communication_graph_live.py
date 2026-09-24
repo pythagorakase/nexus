@@ -88,6 +88,7 @@ def _insert_relationship(
     relationship_type: str,
     emotional_valence: str,
 ) -> None:
+    session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
     session.execute(
         text(
             """

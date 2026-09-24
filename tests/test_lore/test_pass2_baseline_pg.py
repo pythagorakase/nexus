@@ -25,7 +25,7 @@ from nexus.api import commit_handler, commit_handler_sync, slot_utils
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
-from nexus.config import load_settings_as_dict
+from nexus.config import get_provider_for_model, load_settings_as_dict
 from nexus.memory.context_state import bind_pass2_baseline
 from nexus.memory.manager import (
     ContextMemoryManager,
@@ -175,6 +175,7 @@ class _RouteProvider:
 
     def __init__(self, outputs: list[dict[str, Any]]) -> None:
         self.model = load_settings_as_dict()["API Settings"]["apex"]["model"]
+        self.usage_provider_name = get_provider_for_model(self.model)
         self.system_prompt = "Pass-2 lifecycle provider stub"
         self.outputs = outputs
         self.calls: list[dict[str, Any]] = []
@@ -263,6 +264,14 @@ def _seed_parent(conn: Any, label: str) -> int:
             ) VALUES (%s, 1, 1, 1, 'primary', %s)
             """,
             (chunk_id, f"pass2-{chunk_id}"),
+        )
+        cur.execute(
+            "INSERT INTO places (name, type) VALUES ('Pass Two Hall', 'fixed_location') RETURNING id"
+        )
+        place_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) VALUES (%s, %s, 'setting')",
+            (chunk_id, place_id),
         )
     return chunk_id
 

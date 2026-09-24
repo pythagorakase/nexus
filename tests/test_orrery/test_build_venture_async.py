@@ -13,6 +13,7 @@ from nexus.agents.orrery.events import _apply_state_delta_async
 from nexus.agents.orrery.needs import NeedTuning
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import ProjectPolicy
+from nexus.database import asyncpg_kwargs
 from nexus.api.slot_utils import get_slot_db_url
 
 
@@ -104,7 +105,7 @@ async def _create_runtime_schema(conn: asyncpg.Connection, schema: str) -> None:
 
 @pytest.mark.asyncio
 async def test_async_build_venture_start_and_completion_match_sync() -> None:
-    conn = await asyncpg.connect(get_slot_db_url(slot=2))
+    conn = await asyncpg.connect(**asyncpg_kwargs("save_02"))
     transaction = conn.transaction()
     await transaction.start()
     try:

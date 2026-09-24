@@ -230,6 +230,8 @@ def _seed_consumer_save(
 ) -> dict[str, Any]:
     """Seed actual resolver/context tables with an optional player identity."""
 
+    session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
+
     session.execute(
         text(
             """

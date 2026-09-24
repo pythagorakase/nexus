@@ -325,7 +325,7 @@ async def test_startup_recovery_preserves_incubator_and_clears_orphan(
 async def test_incubator_cli_load_and_undo_with_no_predicted_id(
     acceptance_slot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The public CLI reads and undoes a real draft through the gateway on 8014."""
+    """The public CLI reads and undoes a real draft through a gateway on an ephemeral port."""
     import os
     import socket
     import subprocess
@@ -343,13 +343,16 @@ async def test_incubator_cli_load_and_undo_with_no_predicted_id(
         await write_to_incubator(conn, draft(parent, resolution, session))
         finish_generation(conn, session_id=session, status="complete")
     monkeypatch.setenv("NEXUS_SLOT", "5")
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8014")
-    monkeypatch.setenv("NEXUS_API_URL", "http://127.0.0.1:8014")
-    server = uvicorn.Server(
-        uvicorn.Config(narrative.app, host="127.0.0.1", port=8014, log_level="warning")
-    )
     with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 8014))
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(port))
+        monkeypatch.setenv("NEXUS_API_URL", f"http://127.0.0.1:{port}")
+        server = uvicorn.Server(
+            uvicorn.Config(
+                narrative.app, host="127.0.0.1", port=port, log_level="warning"
+            )
+        )
         listener.listen()
         thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]})
         thread.start()

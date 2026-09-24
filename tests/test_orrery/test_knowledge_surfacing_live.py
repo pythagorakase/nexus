@@ -557,6 +557,8 @@ class _LiveMemnonHarness:
 
 
 class _LiveLoreHarness:
+    # This harness assembles knowledge; no storyteller seat is enabled.
+    enable_logon = False
     token_manager = None
 
     def __init__(self, session: Session, *, enabled: bool) -> None:

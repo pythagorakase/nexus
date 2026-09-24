@@ -241,6 +241,8 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
         assert payload["success"] is True
         assert payload["slot"] == 4
         assert payload["counts"] == {
+            "pending": 0,
+            "stale_rejected": 1,
             "queued": 2,
             "leased": 2,
             "succeeded": 2,
@@ -260,8 +262,17 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
             "stale_rejected": 1,
         }
         assert payload["counts"] == {
-            state: sum(queue["counts"][state] for queue in payload["queues"].values())
-            for state in ("queued", "leased", "succeeded", "failed")
+            state: sum(
+                queue["counts"].get(state, 0) for queue in payload["queues"].values()
+            )
+            for state in (
+                "pending",
+                "queued",
+                "leased",
+                "succeeded",
+                "failed",
+                "stale_rejected",
+            )
         }
         assert [row["state"] for row in payload["non_terminal_jobs"]] == [
             "queued",

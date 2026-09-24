@@ -43,6 +43,7 @@ def replay_project_db() -> Iterator[dict[str, Any]]:
     conn = psycopg2.connect(get_slot_db_url(slot=2))
     try:
         with conn.cursor() as cur:
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 "SELECT entity_id FROM characters "
                 "WHERE entity_id IS NOT NULL ORDER BY id LIMIT 2"

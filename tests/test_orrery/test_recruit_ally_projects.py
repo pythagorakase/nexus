@@ -302,6 +302,7 @@ def live_project_db() -> Iterator[dict[str, Any]]:
     conn = psycopg2.connect(get_slot_db_url(slot=2))
     try:
         with conn.cursor() as cur:
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute("SELECT max(id) FROM narrative_chunks")
             chunk_id = int(cur.fetchone()[0])
             cur.execute(

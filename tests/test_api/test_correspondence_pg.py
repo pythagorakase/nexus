@@ -438,6 +438,9 @@ def test_accept_reject_hysteresis_and_digest_undo(
         monkeypatch.setattr(
             slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
         )
+        from nexus.api.narrative_lease import finish_generation
+
+        finish_generation(conn, session_id=session_id, status="complete")
         SlotScheduler(4, dbname=dbname).run_pass()
         assert len(compaction_calls) == 1
         assert "writer secret 5" in compaction_calls[0]["user_prompt"]

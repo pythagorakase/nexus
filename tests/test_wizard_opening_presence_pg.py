@@ -290,6 +290,11 @@ def _seed_post_transition_world(dbname: str) -> None:
                     json.dumps([RETROGRADE_PROLOGUE_MARKER]),
                 ),
             )
+            cur.execute(
+                "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) "
+                "VALUES ((SELECT max(id) FROM narrative_chunks), %s, 'setting')",
+                (place_id,),
+            )
 
 
 def _insert_character_alias(

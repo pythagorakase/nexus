@@ -532,6 +532,7 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
 
             probe_chunk = _fabricate_chunk(cur, None)
             set_commit_chunk_attribution_sync(cur, probe_chunk)
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 UPDATE character_relationships SET dynamic = 'replay probe dynamic'
@@ -539,6 +540,7 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
                 """,
                 (u1, u2),
             )
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 DELETE FROM character_relationships
@@ -576,6 +578,7 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
                 """
             )
             n1, n2 = cur.fetchone()
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 INSERT INTO character_relationships (
@@ -2076,6 +2079,7 @@ def test_relationship_multi_version_unwind_order() -> None:
             c1, c2, original = cur.fetchone()
 
             set_commit_chunk_attribution_sync(cur, mid_chunk)
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 UPDATE character_relationships SET dynamic = 'mid value'
@@ -2084,6 +2088,7 @@ def test_relationship_multi_version_unwind_order() -> None:
                 (c1, c2),
             )
             set_commit_chunk_attribution_sync(cur, late_chunk)
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
                 UPDATE character_relationships SET dynamic = 'late value'

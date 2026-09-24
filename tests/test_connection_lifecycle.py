@@ -356,13 +356,20 @@ def test_connection_two_clusters_story_lifecycle(
         text_weight=1,
     )
     assert results, "MEMNON did not retrieve the committed bootstrap"
-    from nexus.agents.orrery.worker import process_orrery_outbox_sync
-
+    # The gateway scheduler owns background work now. Observe its durable
+    # completion rather than racing it with a second legacy worker.
     _seed_background_work()
-    jobs = process_orrery_outbox_sync(slot=4)
-    assert jobs.promoted >= 1
-    assert jobs.narrated >= 1
-    assert jobs.failed == jobs.maturation_failed == jobs.experience_render_failed == 0
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        with db_pool.get_connection("save_04") as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM orrery_narration_jobs WHERE state = 'succeeded'"
+            )
+            if cur.fetchone()[0] >= 1:
+                break
+        time.sleep(0.05)
+    else:
+        pytest.fail("Gateway scheduler did not finish seeded narration work")
 
     with db_pool.get_connection("save_04") as conn, conn.cursor() as cur:
         cur.execute(
@@ -371,4 +378,9 @@ def test_connection_two_clusters_story_lifecycle(
         assert cur.fetchone()[0] >= 1
         cur.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = 'save_04'")
         assert cur.fetchone()[0] >= 2  # gateway pool plus this observer
-    (tmp_path / "background.json").write_text(jobs.model_dump_json(indent=2))
+    from nexus.agents.orrery.job_queues import load_job_queues_sync
+
+    with db_pool.get_connection("save_04") as conn:
+        jobs = load_job_queues_sync(conn)
+    assert jobs["counts"]["failed"] == 0, jobs
+    (tmp_path / "background.json").write_text(json.dumps(jobs, indent=2, default=str))

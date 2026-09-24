@@ -142,12 +142,13 @@ def test_memnon_close_disposes_engine(
     import sqlalchemy as sa
 
     from nexus.agents.memnon import memnon as memnon_module
+    from nexus.database import database_url
 
     monkeypatch.setitem(memnon_module.MEMNON_SETTINGS, "models", _settings()["models"])
 
     instance = memnon_module.MEMNON(
         interface=None,
-        db_url=sqlalchemy_url(model_database).render_as_string(hide_password=False),
+        db_url=database_url(model_database),
     )
     session = instance.db_manager.create_session()
     session.execute(sa.text("SELECT 1"))

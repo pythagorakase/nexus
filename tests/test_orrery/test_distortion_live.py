@@ -20,6 +20,7 @@ from nexus.agents.orrery.epistemics import (
 from nexus.agents.orrery.propagation import drain_claim_propagation_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import reconstruct_state_at_sync
+from nexus.database import asyncpg_kwargs
 from nexus.api.slot_utils import get_slot_db_url
 from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 from tests.test_orrery.claim_accounts_test_support import (
@@ -596,7 +597,7 @@ def test_partial_stage_c_payload_fails_frontier_reconciliation(
 async def test_async_variant_mint_persists_validated_depth() -> None:
     """The async authoring twin stores the same nullable-positive contract."""
 
-    conn = await asyncpg.connect(get_slot_db_url(slot=LIVE_SLOT))
+    conn = await asyncpg.connect(**asyncpg_kwargs(f"save_{LIVE_SLOT:02d}"))
     transaction = conn.transaction()
     await transaction.start()
     try:

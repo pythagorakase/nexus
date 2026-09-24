@@ -685,6 +685,7 @@ def test_seek_redemption_dependency_is_repaired_before_mapper_transaction(
             actor, target = cur.fetchall()
             cur.execute(
                 """
+                SET LOCAL nexus.write_producer = 'manual';
                 DELETE FROM character_relationships
                 WHERE character1_id IN (%s, %s)
                   AND character2_id IN (%s, %s)
@@ -722,6 +723,7 @@ def test_seek_redemption_dependency_is_repaired_before_mapper_transaction(
         with conn.cursor() as cur:
             cur.execute(
                 """
+                SET LOCAL nexus.write_producer = 'manual';
                 UPDATE character_relationships
                 SET emotional_valence = '0|neutral'
                 WHERE character1_id = %s AND character2_id = %s
