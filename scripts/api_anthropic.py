@@ -80,6 +80,7 @@ except ImportError:
 from pydantic import ValidationError
 
 from nexus.api.native_structured_output import (
+    WireContractViolation,
     anthropic_output_config,
     retry_prompt,
     run_output_validator,
@@ -748,6 +749,12 @@ class AnthropicProvider(LLMProvider):
                 )
                 usage_outcome = "accepted"
                 return parsed_output, llm_response
+            except WireContractViolation as exc:
+                usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="native", attempt=attempt, exc=exc
+                )
+                raise
             except ModelRetry as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"
@@ -836,6 +843,12 @@ class AnthropicProvider(LLMProvider):
                 )
                 usage_outcome = "accepted"
                 return parsed_output, llm_response
+            except WireContractViolation as exc:
+                usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="tool_envelope", attempt=attempt, exc=exc
+                )
+                raise
             except ModelRetry as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"
@@ -918,6 +931,12 @@ class AnthropicProvider(LLMProvider):
                 )
                 usage_outcome = "accepted"
                 return parsed_output, llm_response
+            except WireContractViolation as exc:
+                usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="prompted", attempt=attempt, exc=exc
+                )
+                raise
             except ModelRetry as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"

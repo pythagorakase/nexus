@@ -1276,6 +1276,9 @@ def resolve_place_updates(response: Any, cur: Any, *, allow_declarations: bool) 
         if item.kind == "place" and allow_declarations
     )
     for update in updates.places:
+        if update.id is not None:
+            # Preserve the supplied id/name pair for the identity-conflict check.
+            continue
         update.id, update.name = resolve_place_update(
             cur, identifier=update.id, name=update.name, pending_names=pending
         )

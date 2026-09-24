@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
+from nexus.api.native_structured_output import WireContractViolation
+
 if TYPE_CHECKING:
     from nexus.agents.logon.skald_wire import (
         PresenceBaseline,
@@ -447,11 +449,13 @@ def resolve_place_update(
     identifier: int | None,
     name: str | None,
     pending_names: frozenset[str] = frozenset(),
+    lock: bool = False,
 ) -> tuple[int | None, str]:
-    """Resolve a place or admit a same-turn declaration without writing."""
+    """Resolve a place; only staging explicitly requests a shared row lock."""
+    lock_clause = " FOR SHARE" if lock else ""
     if identifier is not None:
         cur.execute(
-            "SELECT id, name FROM places WHERE id = %s FOR SHARE", (identifier,)
+            f"SELECT id, name FROM places WHERE id = %s{lock_clause}", (identifier,)
         )
     else:
         if not name:
@@ -468,7 +472,7 @@ def resolve_place_update(
             )
             params.append(name)
         cur.execute(
-            f"SELECT p.id, p.name FROM places p WHERE {predicate} FOR SHARE", params
+            f"SELECT p.id, p.name FROM places p WHERE {predicate}{lock_clause}", params
         )
     rows = cur.fetchall()
     if len(rows) > 1:
@@ -481,7 +485,7 @@ def resolve_place_update(
     if identifier is None and name in pending_names:
         return None, name
     identity = f"id {identifier}" if identifier is not None else f"name {name!r}"
-    raise ValueError(
+    raise WireContractViolation(
         f"Unresolved place state update {identity}; new places must be declared "
         "through new_entities in the same turn."
     )

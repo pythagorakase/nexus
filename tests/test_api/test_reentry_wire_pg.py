@@ -32,6 +32,7 @@ from nexus.agents.orrery.tag_library import (
 )
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
+from nexus.api.native_structured_output import WireContractViolation
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.api.presence_reconciliation import read_character_roster_from_connection
 from nexus.memory.manager import empty_pass2_baseline
@@ -110,7 +111,7 @@ async def test_place_fixture_rejects_before_staging(
     dbname, parent, _ = acceptance_slot
     gaia = SkaldGaiaWire.model_validate(fixture("place"))
     validator = build_storyteller_tag_validator(dbname)
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(WireContractViolation) as error:
         await validator(SimpleNamespace(retry=0), gaia)
     assert str(error.value) == (
         "Unresolved place state update name 'Loading Arcade'; new places must be "
@@ -123,7 +124,9 @@ async def test_place_fixture_rejects_before_staging(
         cur.execute("SELECT count(*) FROM places WHERE name='Loading Arcade'")
         assert cur.fetchone() == (0,)
         session = own_draft(conn, parent)
-        with pytest.raises(ValueError, match="Unresolved place state update"):
+        with pytest.raises(
+            WireContractViolation, match="Unresolved place state update"
+        ):
             await write_to_incubator(conn, staged(writer(), gaia, parent, session))
 
 
@@ -365,3 +368,216 @@ async def test_place_tag_registry_retry_uses_real_catalog(
         await validator(SimpleNamespace(retry=0), gaia)
     gaia.updates.places[0].tags_clear = ["haven"]
     assert await validator(SimpleNamespace(retry=1), gaia) is gaia
+
+
+@pytest.mark.parametrize("identity", ["id", "name"])
+def test_place_validation_does_not_lock_staging_does(
+    acceptance_slot: tuple[str, int, int], identity: str
+) -> None:
+    """Validation reads a locked row, whereas staging still requires FOR SHARE."""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    from psycopg2.errors import LockNotAvailable
+
+    from nexus.api.commit_handler_sync import resolve_state_update_ids_sync
+
+    dbname, _, _ = acceptance_slot
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO places(name,type) VALUES ('Loading Arcade','fixed_location') RETURNING id"
+        )
+        place_id = cur.fetchone()[0]
+    gaia = SkaldGaiaWire.model_validate(fixture("place"))
+    if identity == "id":
+        gaia.updates.places[0].id = place_id
+    validator = build_storyteller_tag_validator(dbname)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with closing(connect(dbname)) as blocker:
+            try:
+                with blocker.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM places WHERE id = %s FOR UPDATE", (place_id,)
+                    )
+                    cur.execute(
+                        "UPDATE places SET summary = 'Uncommitted' WHERE id = %s",
+                        (place_id,),
+                    )
+                future = executor.submit(
+                    asyncio.run, validator(SimpleNamespace(retry=0), gaia)
+                )
+                assert future.result(timeout=3) is gaia
+                assert gaia.updates.places[0].id == place_id
+                with closing(connect(dbname)) as staging_conn:
+                    with staging_conn.cursor() as cur:
+                        cur.execute("SET lock_timeout = '100ms'")
+                    with pytest.raises(LockNotAvailable):
+                        resolve_state_update_ids_sync(
+                            staging_conn,
+                            hydrate_skald_turn(
+                                combine_two_pass(writer(), gaia),
+                                presence_baseline=PresenceBaseline(),
+                            ).state_updates,
+                        )
+                    staging_conn.rollback()
+            finally:
+                blocker.rollback()
+
+
+@pytest.mark.parametrize(
+    "transport",
+    ["responses", "chat_completions", "native", "prompted", "tool_envelope"],
+)
+def test_place_contract_violation_never_retries_provider(
+    acceptance_slot: tuple[str, int, int],
+    transport: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real SDK HTTP, parser, PG validator, attempt guard and ledger; no paid calls."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    from scripts.api_anthropic import AnthropicProvider
+    from scripts.api_openai import OpenAIProvider
+    from tests.test_lore.window_helpers import window_logon
+
+    dbname, _, _ = acceptance_slot
+    body = fixture("place")
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            requests.append((self.path, request))
+            if transport == "responses":
+                response = {
+                    "id": "resp_918",
+                    "object": "response",
+                    "created_at": 0,
+                    "status": "completed",
+                    "model": "TEST",
+                    "output": [
+                        {
+                            "type": "message",
+                            "id": "msg_918",
+                            "role": "assistant",
+                            "status": "completed",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps(body),
+                                    "annotations": [],
+                                }
+                            ],
+                        }
+                    ],
+                    "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+                }
+            elif transport == "chat_completions":
+                response = {
+                    "id": "chatcmpl_918",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "TEST",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps(body),
+                            },
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            else:
+                content = {"type": "text", "text": json.dumps(body)}
+                if transport == "tool_envelope":
+                    content = {
+                        "type": "tool_use",
+                        "id": "tool_918",
+                        "name": "submit_structured_response",
+                        "input": body,
+                    }
+                response = {
+                    "id": "msg_918",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "TEST",
+                    "content": [content],
+                    "stop_reason": (
+                        "tool_use" if transport == "tool_envelope" else "end_turn"
+                    ),
+                    "stop_sequence": None,
+                    "usage": {"input_tokens": 1, "output_tokens": 1},
+                }
+            encoded = json.dumps(response).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        endpoint = f"http://127.0.0.1:{server.server_port}"
+        provider = None
+        try:
+            kwargs = dict(
+                api_key="fixture-only",
+                model="TEST",
+                structured_transport=transport,
+                structured_output_retries=3,
+                usage_provider_name="test",
+                usage_seat="gaia",
+                output_validator=build_storyteller_tag_validator(dbname),
+            )
+            if transport in {"responses", "chat_completions"}:
+                provider = OpenAIProvider(base_url=endpoint, **kwargs)
+            else:
+                monkeypatch.setenv("ANTHROPIC_BASE_URL", endpoint)
+                provider = AnthropicProvider(**kwargs)
+            utility = window_logon()
+            utility._gaia_window_blocks = [("user input", "Return.")]
+            session = str(uuid4())
+            utility._window_payload = {"metadata": {"turn_id": session}}
+            utility._attach_prompt_window_guard(
+                provider, "Return.", seat="gaia", window=75000
+            )
+            with pytest.raises(WireContractViolation, match="Loading Arcade") as error:
+                provider.get_structured_completion("Return.", SkaldGaiaWire)
+            assert (
+                len(requests) == 1
+            )  # One initial response; zero further provider calls.
+            rows = read_prompt_windows(
+                session, datetime.now(timezone.utc).date().isoformat()
+            )
+            assert len(rows) == 1
+            assert rows[0].attempt == 1
+            assert rows[0].validation_notes == [
+                {"rejection": "wire-contract-violation", "error": str(error.value)}
+            ]
+            print(
+                json.dumps(
+                    {
+                        "transport": transport,
+                        "provider_calls": len(requests),
+                        "validation_notes": rows[0].validation_notes,
+                    }
+                )
+            )
+        finally:
+            if provider is not None:
+                provider.client.close()
+            server.shutdown()
+            thread.join(timeout=5)

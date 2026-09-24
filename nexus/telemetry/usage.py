@@ -41,10 +41,20 @@ _validation_record: ContextVar[Optional["PromptWindowRecord"]] = ContextVar(
 
 @contextmanager
 def validation_attempt(record: Optional["PromptWindowRecord"]) -> Iterator[None]:
-    """Scope repair notes to the provider attempt currently being validated."""
+    """Retain repairs and terminal rejections on the current provider attempt."""
+    from nexus.api.native_structured_output import WireContractViolation
+
     token = _validation_record.set(record)
     try:
         yield
+    except WireContractViolation as exc:
+        note = {"rejection": "wire-contract-violation", "error": str(exc)}
+        session = record.generation_session if record else current_usage_context()[2]
+        logger.warning("Wire rejection session=%s note=%r", session, note)
+        if record is not None:
+            record.validation_notes.append(note)
+            record_prompt_window(record)
+        raise
     finally:
         _validation_record.reset(token)
 

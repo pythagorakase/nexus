@@ -220,7 +220,11 @@ def _require_state_update_id_sync(
 
         with conn.cursor() as cur:
             identifier, _ = resolve_place_update(
-                cur, identifier=current_id, name=name, pending_names=pending_names
+                cur,
+                identifier=current_id,
+                name=name,
+                pending_names=pending_names,
+                lock=True,
             )
         return identifier
     if current_id is not None:
