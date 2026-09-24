@@ -14,6 +14,7 @@ The architecture has been refactored to use modular utility classes:
 - DatabaseManager: Provides database connection and schema management
 - ContentProcessor: Manages content chunking, processing, and storage
 """
+
 from nexus.database import resolved_database_url
 from nexus.database import verify_database_url
 
@@ -47,7 +48,6 @@ from .utils.continuous_temporal_search import (
     analyze_temporal_intent,
 )
 from .utils.idf_dictionary import IDFDictionary, IDFStateError
-from .utils.query_analysis import QueryAnalyzer
 from .utils.db_schema import DatabaseManager
 from .utils.embedding_tables import list_embedding_tables
 
@@ -328,9 +328,8 @@ class MEMNON:
             retrieval_settings=self.retrieval_settings,
         )
 
-        # Initialize QueryAnalyzer
-        logger.info("Initializing QueryAnalyzer...")
-        self.query_analyzer = QueryAnalyzer(settings=MEMNON_SETTINGS)
+        # Share the database-derived cast used by retrieval.
+        self.query_analyzer = self.search_manager.query_analyzer
 
         # Initialize ContentProcessor
         logger.info("Initializing ContentProcessor...")
