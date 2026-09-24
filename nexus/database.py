@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import logging
 import os
 import re
 import socket
@@ -76,6 +77,36 @@ def connection_kwargs(
     if password is not None:
         params["password"] = password
     return params
+
+
+def maintenance_connection(
+    dbname: str | None = None,
+    *,
+    db_url: str | None = None,
+    write_locked_slot: bool = False,
+    operation: str,
+) -> Any:
+    """Open a maintenance session without changing the database's lock policy."""
+    import psycopg2
+
+    params = url_connection_kwargs(db_url) if db_url else connection_kwargs(dbname)
+    conn = psycopg2.connect(**params)
+    if write_locked_slot:
+        try:
+            # SET must precede the first work transaction, including FOR UPDATE.
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute("SET default_transaction_read_only = off")
+            conn.autocommit = False
+            logging.getLogger(__name__).warning(
+                "%s: session write override for %s (--write-locked-slot)",
+                params["dbname"],
+                operation,
+            )
+        except BaseException:
+            conn.close()
+            raise
+    return conn
 
 
 def _option_settings(options: str) -> list[tuple[str, str]]:
