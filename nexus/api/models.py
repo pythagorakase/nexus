@@ -3,6 +3,7 @@ Pydantic models for FastAPI endpoints.
 
 These match the TypeScript interfaces expected by the iris2 frontend.
 """
+
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
@@ -10,6 +11,7 @@ from datetime import datetime
 
 class Condition(BaseModel):
     """Model configuration for generation."""
+
     id: int
     slug: str
     provider: str
@@ -34,6 +36,7 @@ class Condition(BaseModel):
 
 class Generation(BaseModel):
     """A single generation result."""
+
     id: int
     condition_id: int
     prompt_id: int
@@ -47,6 +50,7 @@ class Generation(BaseModel):
 
 class Prompt(BaseModel):
     """Context package for generation."""
+
     id: int
     chunk_id: int
     category: Optional[str] = None
@@ -57,6 +61,7 @@ class Prompt(BaseModel):
 
 class Comparison(BaseModel):
     """A comparison between two generations."""
+
     id: int
     prompt_id: int
     condition_a: Condition
@@ -71,6 +76,7 @@ class Comparison(BaseModel):
 
 class ComparisonCreate(BaseModel):
     """Request to create a new comparison judgment."""
+
     prompt_id: int
     condition_a_id: int
     condition_b_id: int
@@ -81,6 +87,7 @@ class ComparisonCreate(BaseModel):
 
 class ELORating(BaseModel):
     """ELO rating for a condition."""
+
     condition_id: int
     condition: Condition
     rating: float
@@ -90,6 +97,7 @@ class ELORating(BaseModel):
 
 class ComparisonQueueItem(BaseModel):
     """Single item in comparison queue."""
+
     prompt: Prompt
     condition_a: Condition
     condition_b: Condition
@@ -99,6 +107,7 @@ class ComparisonQueueItem(BaseModel):
 
 class ComparisonQueue(BaseModel):
     """Queue of pending comparisons."""
+
     total: int
     current: int
     comparisons: List[ComparisonQueueItem]
@@ -106,6 +115,7 @@ class ComparisonQueue(BaseModel):
 
 class GenerationRun(BaseModel):
     """A batch generation run."""
+
     id: str  # UUID
     label: Optional[str] = None
     started_at: datetime
@@ -117,6 +127,7 @@ class GenerationRun(BaseModel):
 
 class AsyncGenerationStatus(BaseModel):
     """Telemetry for asynchronous batch polling."""
+
     pending_requests: int
     pending_batches: int
     remaining_generations: int
@@ -124,18 +135,22 @@ class AsyncGenerationStatus(BaseModel):
     next_poll_at: Optional[datetime] = None
     polling_interval_seconds: Optional[int] = None
     last_duration_seconds: Optional[float] = None
-    oldest_batch_age_hours: Optional[float] = None  # Age of oldest pending batch in hours
+    oldest_batch_age_hours: Optional[float] = (
+        None  # Age of oldest pending batch in hours
+    )
     has_aging_batches: bool = False  # True if any batch is > 24 hours old
 
 
 class RegenerateGenerationRequest(BaseModel):
     """Request payload to delete and rerun a specific generation."""
+
     generation_id: int
     async_providers: Optional[List[str]] = None
 
 
 class RegenerateGenerationResponse(BaseModel):
     """Response describing the regeneration outcome."""
+
     mode: Literal["sync", "async"]
     run_id: str
     generation_id: Optional[int] = None

@@ -19,7 +19,12 @@ from nexus.api.new_story_schemas import CharacterCreationState
 
 logger = logging.getLogger("nexus.api.wizard_test_cache")
 
-CACHE_FILE = Path(__file__).parent.parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
+CACHE_FILE = (
+    Path(__file__).parent.parent.parent
+    / "tests"
+    / "fixtures"
+    / "test_cache_wizard.json"
+)
 
 _cache: Optional[Dict[str, Any]] = None
 
@@ -55,7 +60,9 @@ def load_cache() -> Dict[str, Any]:
     return _cache
 
 
-def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dict[str, Any]:
+def get_cached_phase_response(
+    phase: str, subphase: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Get cached response for a wizard phase.
 
@@ -85,7 +92,9 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
             return {
                 "subphase_complete": True,
                 "artifact_type": "submit_character_concept",
-                "data": char["concept"],  # Direct fields: archetype, background, name, etc.
+                "data": char[
+                    "concept"
+                ],  # Direct fields: archetype, background, name, etc.
                 "message": "[TEST MODE] Character concept loaded from cache.",
             }
 

@@ -21,8 +21,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -47,14 +46,18 @@ class SimpleNarrativeTester:
         self.settings = settings
 
         # Get test mode settings
-        narrative_settings = settings.get("Agent Settings", {}).get("global", {}).get("narrative", {})
+        narrative_settings = (
+            settings.get("Agent Settings", {}).get("global", {}).get("narrative", {})
+        )
         self.test_mode = narrative_settings.get("test_mode", False)
 
         # Set up database connection
         self.conn = psycopg2.connect(**connection_kwargs())
         self.conn.autocommit = False
 
-        logger.info(f"Initialized SimpleNarrativeTester (test_mode={self.test_mode}, dry_run={self.dry_run})")
+        logger.info(
+            f"Initialized SimpleNarrativeTester (test_mode={self.test_mode}, dry_run={self.dry_run})"
+        )
         logger.info(f"Session ID: {self.session_id}")
 
     def get_chunk_info(self, chunk_id: int) -> Dict[str, Any]:
@@ -84,9 +87,7 @@ class SimpleNarrativeTester:
         return dict(result)
 
     def continue_narrative_simple(
-        self,
-        parent_chunk_id: int = 1425,
-        user_text: str = "Continue."
+        self, parent_chunk_id: int = 1425, user_text: str = "Continue."
     ) -> Dict[str, Any]:
         """
         Simplified narrative continuation - creates mock data for testing incubator
@@ -98,13 +99,17 @@ class SimpleNarrativeTester:
         Returns:
             Dict with incubator data
         """
-        logger.info(f"Starting simplified narrative continuation from chunk {parent_chunk_id}")
+        logger.info(
+            f"Starting simplified narrative continuation from chunk {parent_chunk_id}"
+        )
         logger.info(f"User text: '{user_text}'")
 
         # Get parent chunk info
         parent_info = self.get_chunk_info(parent_chunk_id)
-        logger.info(f"Parent chunk: S{parent_info['season']}E{parent_info['episode']}, "
-                   f"Location: {parent_info['place_name']}, Time: {parent_info['world_time']}")
+        logger.info(
+            f"Parent chunk: S{parent_info['season']}E{parent_info['episode']}, "
+            f"Location: {parent_info['place_name']}, Time: {parent_info['world_time']}"
+        )
 
         # Create mock generated narrative
         mock_storyteller_text = """The morning light filters through the rain-streaked windows of Le Chat Noir,
@@ -125,7 +130,7 @@ It's going to be another long day in Night City, but for now, in this moment, th
                 "time_delta_seconds": 180,  # 3 minutes later
                 "time_delta_description": "A few minutes later",
                 "world_layer": "primary",
-                "pacing": "moderate"
+                "pacing": "moderate",
             },
             "entity_updates": [
                 {
@@ -133,17 +138,17 @@ It's going to be another long day in Night City, but for now, in this moment, th
                     "id": 1,  # Alex
                     "field": "emotional_state",
                     "old_value": "anxious",
-                    "new_value": "contemplative"
+                    "new_value": "contemplative",
                 }
             ],
             "reference_updates": {
                 "character_present": [1],  # Alex
                 "character_referenced": [],
-                "place_referenced": []
+                "place_referenced": [],
             },
             "session_id": self.session_id,
             "llm_response_id": f"mock_response_{uuid.uuid4().hex[:8]}",
-            "status": "provisional"
+            "status": "provisional",
         }
 
         # Write to incubator or log in dry run
@@ -159,12 +164,14 @@ It's going to be another long day in Night City, but for now, in this moment, th
         result = {
             "success": True,
             "session_id": self.session_id,
-            "incubator_data": incubator_data
+            "incubator_data": incubator_data,
         }
 
         logger.info("=" * 80)
         logger.info("SIMPLIFIED TEST COMPLETE")
-        logger.info(f"Mock narrative for chunk {parent_chunk_id + 1} is provisional in incubator")
+        logger.info(
+            f"Mock narrative for chunk {parent_chunk_id + 1} is provisional in incubator"
+        )
         logger.info(f"Session ID: {self.session_id}")
         logger.info("=" * 80)
 
@@ -187,18 +194,21 @@ It's going to be another long day in Night City, but for now, in this moment, th
             )
             """
 
-            cur.execute(query, (
-                data["chunk_id"],
-                data["parent_chunk_id"],
-                data["user_text"],
-                data["storyteller_text"],
-                json.dumps(data["metadata_updates"]),
-                json.dumps(data["entity_updates"]),
-                json.dumps(data["reference_updates"]),
-                data["session_id"],
-                data["llm_response_id"],
-                data["status"]
-            ))
+            cur.execute(
+                query,
+                (
+                    data["chunk_id"],
+                    data["parent_chunk_id"],
+                    data["user_text"],
+                    data["storyteller_text"],
+                    json.dumps(data["metadata_updates"]),
+                    json.dumps(data["entity_updates"]),
+                    json.dumps(data["reference_updates"]),
+                    data["session_id"],
+                    data["llm_response_id"],
+                    data["status"],
+                ),
+            )
 
         self.conn.commit()
 
@@ -236,7 +246,7 @@ It's going to be another long day in Night City, but for now, in this moment, th
 
     def __del__(self):
         """Clean up database connection"""
-        if hasattr(self, 'conn') and self.conn:
+        if hasattr(self, "conn") and self.conn:
             self.conn.close()
 
 
@@ -245,16 +255,29 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Simple test for narrative turns")
-    parser.add_argument("--dry-run", action="store_true",
-                       help="Don't write to database, just show what would happen")
-    parser.add_argument("--chunk-id", type=int, default=1425,
-                       help="Parent chunk ID to continue from (default: 1425)")
-    parser.add_argument("--user-text", type=str, default="Continue.",
-                       help="User text to complete the chunk with (default: 'Continue.')")
-    parser.add_argument("--view", action="store_true",
-                       help="View current incubator contents")
-    parser.add_argument("--clear", action="store_true",
-                       help="Clear the incubator table")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Don't write to database, just show what would happen",
+    )
+    parser.add_argument(
+        "--chunk-id",
+        type=int,
+        default=1425,
+        help="Parent chunk ID to continue from (default: 1425)",
+    )
+    parser.add_argument(
+        "--user-text",
+        type=str,
+        default="Continue.",
+        help="User text to complete the chunk with (default: 'Continue.')",
+    )
+    parser.add_argument(
+        "--view", action="store_true", help="View current incubator contents"
+    )
+    parser.add_argument(
+        "--clear", action="store_true", help="Clear the incubator table"
+    )
 
     args = parser.parse_args()
 
@@ -267,8 +290,7 @@ def main():
             tester.view_incubator()
         else:
             result = tester.continue_narrative_simple(
-                parent_chunk_id=args.chunk_id,
-                user_text=args.user_text
+                parent_chunk_id=args.chunk_id, user_text=args.user_text
             )
 
             if result["success"]:

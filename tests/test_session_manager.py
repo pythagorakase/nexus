@@ -26,8 +26,7 @@ async def test_create_and_persist_session(tmp_path: Path) -> None:
 
     # Create session
     state = await manager.create_session(
-        session_name="Test",
-        initial_context="Once upon a time"
+        session_name="Test", initial_context="Once upon a time"
     )
 
     assert state.metadata.session_id
@@ -49,7 +48,7 @@ async def test_create_and_persist_session(tmp_path: Path) -> None:
         user_input="Hello",
         response={"narrative": {"text": "World"}},
         options={"temperature": 0.8},
-        context_payload={"warm_slice": []}
+        context_payload={"warm_slice": []},
     )
 
     assert turn.turn_id  # Should have a generated turn_id
@@ -64,9 +63,7 @@ async def test_create_and_persist_session(tmp_path: Path) -> None:
 
     # Get history
     history = await manager.load_turn_history(
-        state.metadata.session_id,
-        limit=5,
-        offset=0
+        state.metadata.session_id, limit=5, offset=0
     )
     assert len(history) == 1
     assert history[0].user_input == "Hello"
@@ -77,7 +74,7 @@ async def test_create_and_persist_session(tmp_path: Path) -> None:
         user_input="Hello again",
         response={"narrative": {"text": "Universe"}},
         options={},
-        context_payload={"warm_slice": [1]}
+        context_payload={"warm_slice": [1]},
     )
 
     assert new_turn.turn_id == turn.turn_id  # Same turn ID
@@ -105,9 +102,7 @@ async def test_history_bounds(tmp_path: Path) -> None:
 
     # Empty history
     history = await manager.load_turn_history(
-        state.metadata.session_id,
-        limit=5,
-        offset=0
+        state.metadata.session_id, limit=5, offset=0
     )
     assert history == []
 
@@ -121,18 +116,14 @@ async def test_history_bounds(tmp_path: Path) -> None:
 
     # Test different slices
     history = await manager.load_turn_history(
-        state.metadata.session_id,
-        limit=3,
-        offset=0
+        state.metadata.session_id, limit=3, offset=0
     )
     assert len(history) == 3
     assert history[0].user_input == "Input 9"  # Most recent
     assert history[2].user_input == "Input 7"
 
     history = await manager.load_turn_history(
-        state.metadata.session_id,
-        limit=3,
-        offset=3
+        state.metadata.session_id, limit=3, offset=3
     )
     assert len(history) == 3
     assert history[0].user_input == "Input 6"
@@ -140,9 +131,7 @@ async def test_history_bounds(tmp_path: Path) -> None:
 
     # Test offset beyond available turns
     history = await manager.load_turn_history(
-        state.metadata.session_id,
-        limit=5,
-        offset=10
+        state.metadata.session_id, limit=5, offset=10
     )
     assert history == []
 
@@ -174,8 +163,7 @@ async def test_update_metadata(tmp_path: Path) -> None:
 
     # Update phase
     updated_metadata = await manager.update_metadata(
-        state.metadata.session_id,
-        current_phase="apex_generation"
+        state.metadata.session_id, current_phase="apex_generation"
     )
     assert updated_metadata.current_phase == "apex_generation"
 
@@ -201,7 +189,7 @@ async def test_context_pruning(tmp_path: Path) -> None:
             session_id=state.metadata.session_id,
             user_input=f"Input {i}",
             response={"narrative": {"text": f"Response {i}"}},
-            context_payload={"turn_number": i}
+            context_payload={"turn_number": i},
         )
         await manager.finalize_turn(state.metadata.session_id)
 
@@ -224,7 +212,9 @@ async def test_session_id_validation(tmp_path: Path) -> None:
     assert state.metadata.session_id
 
     # Path traversal attempts should be rejected
-    with pytest.raises(ValueError, match="Invalid session|outside base|invalid characters"):
+    with pytest.raises(
+        ValueError, match="Invalid session|outside base|invalid characters"
+    ):
         await manager.load_session("../etc/passwd")
 
     with pytest.raises(ValueError, match="Invalid session"):

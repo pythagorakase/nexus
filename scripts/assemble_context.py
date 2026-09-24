@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 class DecimalEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles Decimal types."""
+
     def default(self, obj):
         if isinstance(obj, Decimal):
             # Convert Decimal to float for JSON serialization
@@ -47,7 +48,7 @@ class ContextAssembler:
     def __init__(self, filename: str, new: bool = False):
         """
         Initialize the context assembler.
-        
+
         Args:
             filename: Path to the JSON file
             new: If True, create a new file; otherwise load existing file
@@ -58,7 +59,7 @@ class ContextAssembler:
             "places": {},
             "seasons": {},
             "episodes": {},
-            "factions": {}
+            "factions": {},
         }
         self.conn = self._connect_to_db()
         self.encoder = tiktoken.get_encoding("cl100k_base")  # Default for GPT models
@@ -84,7 +85,7 @@ class ContextAssembler:
     def _load_file(self):
         """Load the context data from the JSON file."""
         try:
-            with open(self.filename, 'r') as f:
+            with open(self.filename, "r") as f:
                 self.data = json.load(f)
             logger.info(f"Loaded context from {self.filename}")
             # Calculate and display token count
@@ -106,13 +107,24 @@ class ContextAssembler:
             if "characters" in self.data and self.data["characters"]:
                 # Define the column order from the database
                 column_order = [
-                    "name", "summary", "appearance", "background", "personality",
-                    "emotional_state", "current_activity", "current_location",
-                    "extra_data", "created_at", "updated_at", "entity_type"
+                    "name",
+                    "summary",
+                    "appearance",
+                    "background",
+                    "personality",
+                    "emotional_state",
+                    "current_activity",
+                    "current_location",
+                    "extra_data",
+                    "created_at",
+                    "updated_at",
+                    "entity_type",
                 ]
 
                 sorted_characters = {}
-                for char_id, char_data in sorted(self.data["characters"].items(), key=lambda x: int(x[0])):
+                for char_id, char_data in sorted(
+                    self.data["characters"].items(), key=lambda x: int(x[0])
+                ):
                     # Create ordered character data
                     ordered_char_data = {}
                     # First add fields in the database column order
@@ -128,8 +140,15 @@ class ContextAssembler:
 
                 self.data["characters"] = sorted_characters
 
-            with open(self.filename, 'w') as f:
-                json.dump(self.data, f, indent=4, ensure_ascii=False, sort_keys=False, cls=DecimalEncoder)
+            with open(self.filename, "w") as f:
+                json.dump(
+                    self.data,
+                    f,
+                    indent=4,
+                    ensure_ascii=False,
+                    sort_keys=False,
+                    cls=DecimalEncoder,
+                )
             logger.info(f"Saved context to {self.filename}")
         except Exception as e:
             logger.error(f"Error saving file: {e}")
@@ -155,10 +174,10 @@ class ContextAssembler:
     def _parse_episode_range(self, range_str: str) -> List[str]:
         """
         Parse episode range expressions like s01e01-s01e06 or s01e01,s01e03
-        
+
         Args:
             range_str: Range expression for episodes
-            
+
         Returns:
             List of episode identifiers
         """
@@ -168,7 +187,10 @@ class ContextAssembler:
                 cur.execute(
                     "SELECT DISTINCT season, episode FROM episodes ORDER BY season, episode"
                 )
-                episodes = [f"s{row['season']:02d}e{row['episode']:02d}" for row in cur.fetchall()]
+                episodes = [
+                    f"s{row['season']:02d}e{row['episode']:02d}"
+                    for row in cur.fetchall()
+                ]
             return episodes
 
         if "," in range_str:
@@ -202,11 +224,18 @@ class ContextAssembler:
                     ORDER BY season, episode
                     """,
                     (
-                        start_season, start_season, start_episode,
-                        end_season, end_season, end_episode
-                    )
+                        start_season,
+                        start_season,
+                        start_episode,
+                        end_season,
+                        end_season,
+                        end_episode,
+                    ),
                 )
-                episodes = [f"s{row['season']:02d}e{row['episode']:02d}" for row in cur.fetchall()]
+                episodes = [
+                    f"s{row['season']:02d}e{row['episode']:02d}"
+                    for row in cur.fetchall()
+                ]
             return episodes
 
         # Single episode
@@ -215,7 +244,7 @@ class ContextAssembler:
     def add_character_field(self, character_id: int, field: str):
         """
         Add a character field to the context.
-        
+
         Args:
             character_id: ID of the character
             field: Field to add (e.g., 'summary', 'background')
@@ -225,8 +254,7 @@ class ContextAssembler:
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the character exists
             cur.execute(
-                "SELECT id, name FROM characters WHERE id = %s",
-                (character_id,)
+                "SELECT id, name FROM characters WHERE id = %s", (character_id,)
             )
             char_data = cur.fetchone()
 
@@ -241,7 +269,7 @@ class ContextAssembler:
                 FROM information_schema.columns 
                 WHERE table_name = 'characters' AND column_name = %s
                 """,
-                (field,)
+                (field,),
             )
 
             if not cur.fetchone():
@@ -250,8 +278,7 @@ class ContextAssembler:
 
             # Get the field value
             cur.execute(
-                f"SELECT {field} FROM characters WHERE id = %s",
-                (character_id,)
+                f"SELECT {field} FROM characters WHERE id = %s", (character_id,)
             )
             result = cur.fetchone()
 
@@ -262,9 +289,7 @@ class ContextAssembler:
             # Create the character entry if it doesn't exist
             if str(character_id) not in self.data["characters"]:
                 # Get the character name
-                self.data["characters"][str(character_id)] = {
-                    "name": char_data["name"]
-                }
+                self.data["characters"][str(character_id)] = {"name": char_data["name"]}
 
             # Add the field
             self.data["characters"][str(character_id)][field] = result[field]
@@ -274,7 +299,7 @@ class ContextAssembler:
     def remove_character_field(self, character_id: int, field: str):
         """
         Remove a character field from the context.
-        
+
         Args:
             character_id: ID of the character
             field: Field to remove
@@ -303,7 +328,7 @@ class ContextAssembler:
     def add_place_field(self, place_id: int, field: str):
         """
         Add a place field to the context.
-        
+
         Args:
             place_id: ID of the place
             field: Field to add
@@ -312,10 +337,7 @@ class ContextAssembler:
 
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the place exists
-            cur.execute(
-                "SELECT id, name, type FROM places WHERE id = %s",
-                (place_id,)
-            )
+            cur.execute("SELECT id, name, type FROM places WHERE id = %s", (place_id,))
             place_data = cur.fetchone()
 
             if not place_data:
@@ -329,7 +351,7 @@ class ContextAssembler:
                 FROM information_schema.columns 
                 WHERE table_name = 'places' AND column_name = %s
                 """,
-                (field,)
+                (field,),
             )
 
             if not cur.fetchone():
@@ -337,10 +359,7 @@ class ContextAssembler:
                 return
 
             # Get the field value
-            cur.execute(
-                f"SELECT {field} FROM places WHERE id = %s",
-                (place_id,)
-            )
+            cur.execute(f"SELECT {field} FROM places WHERE id = %s", (place_id,))
             result = cur.fetchone()
 
             if not result or result[field] is None:
@@ -351,7 +370,7 @@ class ContextAssembler:
             if str(place_id) not in self.data["places"]:
                 self.data["places"][str(place_id)] = {
                     "name": place_data["name"],
-                    "type": place_data["type"]
+                    "type": place_data["type"],
                 }
 
             # Add the field (special handling for geographic types)
@@ -365,14 +384,14 @@ class ContextAssembler:
                             ST_X(coordinates::geometry) as longitude
                         FROM places WHERE id = %s
                         """,
-                        (place_id,)
+                        (place_id,),
                     )
                     coord_result = coord_cur.fetchone()
 
                     if coord_result:
                         self.data["places"][str(place_id)][field] = {
                             "latitude": coord_result["latitude"],
-                            "longitude": coord_result["longitude"]
+                            "longitude": coord_result["longitude"],
                         }
                     else:
                         # Fallback to raw value if ST functions fail
@@ -385,7 +404,7 @@ class ContextAssembler:
     def remove_place_field(self, place_id: int, field: str):
         """
         Remove a place field from the context.
-        
+
         Args:
             place_id: ID of the place
             field: Field to remove
@@ -414,7 +433,7 @@ class ContextAssembler:
     def add_season_field(self, season_id: int, field: str):
         """
         Add a season field to the context.
-        
+
         Args:
             season_id: ID of the season
             field: Field to add
@@ -423,10 +442,7 @@ class ContextAssembler:
 
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the season exists
-            cur.execute(
-                "SELECT id FROM seasons WHERE id = %s",
-                (season_id,)
-            )
+            cur.execute("SELECT id FROM seasons WHERE id = %s", (season_id,))
 
             if not cur.fetchone():
                 logger.error(f"Season with ID {season_id} not found")
@@ -439,7 +455,7 @@ class ContextAssembler:
                 FROM information_schema.columns 
                 WHERE table_name = 'seasons' AND column_name = %s
                 """,
-                (field,)
+                (field,),
             )
 
             if not cur.fetchone():
@@ -447,10 +463,7 @@ class ContextAssembler:
                 return
 
             # Get the field value
-            cur.execute(
-                f"SELECT {field} FROM seasons WHERE id = %s",
-                (season_id,)
-            )
+            cur.execute(f"SELECT {field} FROM seasons WHERE id = %s", (season_id,))
             result = cur.fetchone()
 
             if not result or result[field] is None:
@@ -469,7 +482,7 @@ class ContextAssembler:
     def remove_season_field(self, season_id: int, field: str):
         """
         Remove a season field from the context.
-        
+
         Args:
             season_id: ID of the season
             field: Field to remove
@@ -498,7 +511,7 @@ class ContextAssembler:
     def add_faction_field(self, faction_id: int, field: str):
         """
         Add a faction field to the context.
-        
+
         Args:
             faction_id: ID of the faction
             field: Field to add
@@ -507,10 +520,7 @@ class ContextAssembler:
 
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First check if the faction exists
-            cur.execute(
-                "SELECT id, name FROM factions WHERE id = %s",
-                (faction_id,)
-            )
+            cur.execute("SELECT id, name FROM factions WHERE id = %s", (faction_id,))
             faction_data = cur.fetchone()
 
             if not faction_data:
@@ -524,7 +534,7 @@ class ContextAssembler:
                 FROM information_schema.columns 
                 WHERE table_name = 'factions' AND column_name = %s
                 """,
-                (field,)
+                (field,),
             )
 
             if not cur.fetchone():
@@ -532,10 +542,7 @@ class ContextAssembler:
                 return
 
             # Get the field value
-            cur.execute(
-                f"SELECT {field} FROM factions WHERE id = %s",
-                (faction_id,)
-            )
+            cur.execute(f"SELECT {field} FROM factions WHERE id = %s", (faction_id,))
             result = cur.fetchone()
 
             if not result or result[field] is None:
@@ -548,9 +555,7 @@ class ContextAssembler:
 
             # Create the faction entry if it doesn't exist
             if str(faction_id) not in self.data["factions"]:
-                self.data["factions"][str(faction_id)] = {
-                    "name": faction_data["name"]
-                }
+                self.data["factions"][str(faction_id)] = {"name": faction_data["name"]}
 
             # Add the field
             self.data["factions"][str(faction_id)][field] = result[field]
@@ -560,7 +565,7 @@ class ContextAssembler:
     def remove_faction_field(self, faction_id: int, field: str):
         """
         Remove a faction field from the context.
-        
+
         Args:
             faction_id: ID of the faction
             field: Field to remove
@@ -594,14 +599,16 @@ class ContextAssembler:
     def add_episode_summary(self, episode_identifiers: Union[str, List[str]]):
         """
         Add episode summaries to the context.
-        
+
         Args:
             episode_identifiers: Episode identifier(s) (e.g., 's01e01', 's01e01-s01e06')
         """
         if isinstance(episode_identifiers, str):
             episode_identifiers = self._parse_episode_range(episode_identifiers)
 
-        logger.info(f"Adding episode summaries for {len(episode_identifiers)} episodes...")
+        logger.info(
+            f"Adding episode summaries for {len(episode_identifiers)} episodes..."
+        )
 
         for episode_id in episode_identifiers:
             # Parse season and episode numbers
@@ -618,7 +625,7 @@ class ContextAssembler:
                 # Check if the episode exists
                 cur.execute(
                     "SELECT summary FROM episodes WHERE season = %s AND episode = %s",
-                    (season, episode)
+                    (season, episode),
                 )
                 result = cur.fetchone()
 
@@ -638,7 +645,7 @@ class ContextAssembler:
     def add_episode_raw(self, episode_identifiers: Union[str, List[str]]):
         """
         Add raw episode content to the context.
-        
+
         Args:
             episode_identifiers: Episode identifier(s) (e.g., 's01e01', 's01e01-s01e06')
         """
@@ -667,7 +674,7 @@ class ContextAssembler:
                     SELECT chunk_span FROM episodes 
                     WHERE season = %s AND episode = %s
                     """,
-                    (season, episode)
+                    (season, episode),
                 )
                 result = cur.fetchone()
 
@@ -680,20 +687,24 @@ class ContextAssembler:
                     # Extract the lower and upper bounds from the range string
                     chunk_span_str = str(result["chunk_span"])
                     # Format is typically like "[1,32)" or "[452,466)"
-                    if chunk_span_str.startswith('[') and chunk_span_str.endswith(')'):
+                    if chunk_span_str.startswith("[") and chunk_span_str.endswith(")"):
                         # Remove brackets and split
                         range_part = chunk_span_str[1:-1]  # Remove [ and )
-                        start_chunk, end_chunk = map(int, range_part.split(','))
+                        start_chunk, end_chunk = map(int, range_part.split(","))
 
                         # The upper bound is exclusive in PostgreSQL ranges
                         # For [144,168), we want chunks 144 through 167 (not including 168)
                         # We need to subtract 1 from end_chunk for the BETWEEN query
                         end_chunk = end_chunk - 1
                     else:
-                        logger.error(f"Unexpected chunk_span format for episode {episode_id}: {chunk_span_str}")
+                        logger.error(
+                            f"Unexpected chunk_span format for episode {episode_id}: {chunk_span_str}"
+                        )
                         continue
                 except Exception as e:
-                    logger.error(f"Error parsing chunk span for episode {episode_id}: {result['chunk_span']} - {str(e)}")
+                    logger.error(
+                        f"Error parsing chunk span for episode {episode_id}: {result['chunk_span']} - {str(e)}"
+                    )
                     continue
 
                 # Get the raw text for all chunks in this span
@@ -703,7 +714,7 @@ class ContextAssembler:
                     WHERE id BETWEEN %s AND %s
                     ORDER BY id
                     """,
-                    (start_chunk, end_chunk)
+                    (start_chunk, end_chunk),
                 )
                 chunks = cur.fetchall()
 
@@ -722,7 +733,9 @@ class ContextAssembler:
                 # Add the raw text for each chunk, using the original chunk ID as the key
                 for chunk in chunks:
                     chunk_id = str(chunk["id"])
-                    self.data["episodes"][episode_id]["raw_text"][chunk_id] = chunk["raw_text"]
+                    self.data["episodes"][episode_id]["raw_text"][chunk_id] = chunk[
+                        "raw_text"
+                    ]
 
         self._update_and_save()
 
@@ -753,7 +766,7 @@ class ContextAssembler:
                 SELECT chunk_id FROM chunk_metadata
                 WHERE season = %s AND episode = %s AND scene = %s
                 """,
-                (season, episode, scene)
+                (season, episode, scene),
             )
             result = cur.fetchone()
 
@@ -766,7 +779,7 @@ class ContextAssembler:
     def add_chunks_auto_character(self, character_id: int):
         """
         Automatically add all chunks that reference a specific character.
-        
+
         Args:
             character_id: ID of the character
         """
@@ -781,22 +794,24 @@ class ContextAssembler:
                 WHERE character_id = %s
                 ORDER BY chunk_id
                 """,
-                (character_id,)
+                (character_id,),
             )
 
-            chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
+            chunk_ids = [row["chunk_id"] for row in cur.fetchall()]
 
             if not chunk_ids:
                 logger.error(f"No chunks found referencing character {character_id}")
                 return
 
-            logger.info(f"Found {len(chunk_ids)} chunks referencing character {character_id}")
+            logger.info(
+                f"Found {len(chunk_ids)} chunks referencing character {character_id}"
+            )
             self.add_chunks(chunk_ids)
 
     def add_chunks_auto_faction(self, faction_id: int):
         """
         Automatically add all chunks that reference a specific faction.
-        
+
         Args:
             faction_id: ID of the faction
         """
@@ -811,27 +826,31 @@ class ContextAssembler:
                 WHERE faction_id = %s
                 ORDER BY chunk_id
                 """,
-                (faction_id,)
+                (faction_id,),
             )
 
-            chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
+            chunk_ids = [row["chunk_id"] for row in cur.fetchall()]
 
             if not chunk_ids:
                 logger.error(f"No chunks found referencing faction {faction_id}")
                 return
 
-            logger.info(f"Found {len(chunk_ids)} chunks referencing faction {faction_id}")
+            logger.info(
+                f"Found {len(chunk_ids)} chunks referencing faction {faction_id}"
+            )
             self.add_chunks(chunk_ids)
 
     def add_episodes_auto_character(self, character_id: int, content_type: str = "raw"):
         """
         Automatically add all episodes that contain chunks referencing a specific character.
-        
+
         Args:
             character_id: ID of the character
             content_type: Type of content to add ("raw" or "summary")
         """
-        logger.info(f"Finding all episodes containing references to character {character_id}...")
+        logger.info(
+            f"Finding all episodes containing references to character {character_id}..."
+        )
 
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get all chunk IDs that reference this character
@@ -841,10 +860,10 @@ class ContextAssembler:
                 FROM chunk_character_references 
                 WHERE character_id = %s
                 """,
-                (character_id,)
+                (character_id,),
             )
 
-            chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
+            chunk_ids = [row["chunk_id"] for row in cur.fetchall()]
 
             if not chunk_ids:
                 logger.error(f"No chunks found referencing character {character_id}")
@@ -863,11 +882,11 @@ class ContextAssembler:
 
             matching_episodes = []
             for row in cur.fetchall():
-                chunk_span_str = str(row['chunk_span'])
+                chunk_span_str = str(row["chunk_span"])
                 # Parse the range
-                if chunk_span_str.startswith('[') and chunk_span_str.endswith(')'):
+                if chunk_span_str.startswith("[") and chunk_span_str.endswith(")"):
                     range_part = chunk_span_str[1:-1]
-                    start_chunk, end_chunk = map(int, range_part.split(','))
+                    start_chunk, end_chunk = map(int, range_part.split(","))
 
                     # Check if any of our chunk_ids fall within this range
                     for chunk_id in chunk_ids:
@@ -878,10 +897,14 @@ class ContextAssembler:
                             break
 
             if not matching_episodes:
-                logger.error(f"No episodes found containing references to character {character_id}")
+                logger.error(
+                    f"No episodes found containing references to character {character_id}"
+                )
                 return
 
-            logger.info(f"Found {len(matching_episodes)} episodes containing references to character {character_id}")
+            logger.info(
+                f"Found {len(matching_episodes)} episodes containing references to character {character_id}"
+            )
             # Add content for all matching episodes
             for episode_id in matching_episodes:
                 if content_type == "raw":
@@ -892,12 +915,14 @@ class ContextAssembler:
     def add_episodes_auto_faction(self, faction_id: int, content_type: str = "raw"):
         """
         Automatically add all episodes that contain chunks referencing a specific faction.
-        
+
         Args:
             faction_id: ID of the faction
             content_type: Type of content to add ("raw" or "summary")
         """
-        logger.info(f"Finding all episodes containing references to faction {faction_id}...")
+        logger.info(
+            f"Finding all episodes containing references to faction {faction_id}..."
+        )
 
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get all chunk IDs that reference this faction
@@ -907,10 +932,10 @@ class ContextAssembler:
                 FROM chunk_faction_references 
                 WHERE faction_id = %s
                 """,
-                (faction_id,)
+                (faction_id,),
             )
 
-            chunk_ids = [row['chunk_id'] for row in cur.fetchall()]
+            chunk_ids = [row["chunk_id"] for row in cur.fetchall()]
 
             if not chunk_ids:
                 logger.error(f"No chunks found referencing faction {faction_id}")
@@ -928,11 +953,11 @@ class ContextAssembler:
 
             matching_episodes = []
             for row in cur.fetchall():
-                chunk_span_str = str(row['chunk_span'])
+                chunk_span_str = str(row["chunk_span"])
                 # Parse the range
-                if chunk_span_str.startswith('[') and chunk_span_str.endswith(')'):
+                if chunk_span_str.startswith("[") and chunk_span_str.endswith(")"):
                     range_part = chunk_span_str[1:-1]
-                    start_chunk, end_chunk = map(int, range_part.split(','))
+                    start_chunk, end_chunk = map(int, range_part.split(","))
 
                     # Check if any of our chunk_ids fall within this range
                     for chunk_id in chunk_ids:
@@ -943,10 +968,14 @@ class ContextAssembler:
                             break
 
             if not matching_episodes:
-                logger.error(f"No episodes found containing references to faction {faction_id}")
+                logger.error(
+                    f"No episodes found containing references to faction {faction_id}"
+                )
                 return
 
-            logger.info(f"Found {len(matching_episodes)} episodes containing references to faction {faction_id}")
+            logger.info(
+                f"Found {len(matching_episodes)} episodes containing references to faction {faction_id}"
+            )
             # Add content for all matching episodes
             for episode_id in matching_episodes:
                 if content_type == "raw":
@@ -989,21 +1018,29 @@ class ContextAssembler:
                             # Second part should be just a chunk number
                             end_chunk_num = int(end_part)
                             # Construct the full end slug
-                            full_end_slug = f"s{season:02d}e{episode:02d}c{end_chunk_num}"
+                            full_end_slug = (
+                                f"s{season:02d}e{episode:02d}c{end_chunk_num}"
+                            )
                             start_id = self._parse_chunk_slug(start_part)
                             end_id = self._parse_chunk_slug(full_end_slug)
 
                             if start_id and end_id:
                                 if start_id <= end_id:
                                     chunk_id_list = list(range(start_id, end_id + 1))
-                                    logger.debug(f"Shorthand range '{start_part}-{end_part}' resolved to chunk IDs: {chunk_id_list}")
+                                    logger.debug(
+                                        f"Shorthand range '{start_part}-{end_part}' resolved to chunk IDs: {chunk_id_list}"
+                                    )
                                 else:
-                                    logger.error(f"Invalid range: {start_part} (ID: {start_id}) is after c{end_chunk_num} (ID: {end_id})")
+                                    logger.error(
+                                        f"Invalid range: {start_part} (ID: {start_id}) is after c{end_chunk_num} (ID: {end_id})"
+                                    )
                                     return
                             else:
                                 return
                         except ValueError:
-                            logger.error(f"Invalid chunk range format: {chunk_ids}. For slug ranges, use format 's03e03c26-27'")
+                            logger.error(
+                                f"Invalid chunk range format: {chunk_ids}. For slug ranges, use format 's03e03c26-27'"
+                            )
                             return
                     else:
                         # Try to parse as numeric range (e.g., "33-34")
@@ -1053,7 +1090,7 @@ class ContextAssembler:
                     FROM chunk_metadata
                     WHERE id = %s OR chunk_id = %s
                     """,
-                    (chunk_id, chunk_id)
+                    (chunk_id, chunk_id),
                 )
 
                 episode_data = cur.fetchone()
@@ -1072,7 +1109,7 @@ class ContextAssembler:
                     SELECT id, raw_text FROM narrative_chunks
                     WHERE id = %s
                     """,
-                    (chunk_id,)
+                    (chunk_id,),
                 )
                 chunk = cur.fetchone()
 
@@ -1090,7 +1127,9 @@ class ContextAssembler:
 
                 # Add the raw text for the chunk, using the chunk ID as the key
                 chunk_id_str = str(chunk["id"])
-                self.data["episodes"][episode_id]["raw_text"][chunk_id_str] = chunk["raw_text"]
+                self.data["episodes"][episode_id]["raw_text"][chunk_id_str] = chunk[
+                    "raw_text"
+                ]
 
                 logger.info(f"Added chunk {chunk_id} to episode {episode_id}")
 
@@ -1131,21 +1170,29 @@ class ContextAssembler:
                             # Second part should be just a chunk number
                             end_chunk_num = int(end_part)
                             # Construct the full end slug
-                            full_end_slug = f"s{season:02d}e{episode:02d}c{end_chunk_num}"
+                            full_end_slug = (
+                                f"s{season:02d}e{episode:02d}c{end_chunk_num}"
+                            )
                             start_id = self._parse_chunk_slug(start_part)
                             end_id = self._parse_chunk_slug(full_end_slug)
 
                             if start_id and end_id:
                                 if start_id <= end_id:
                                     chunk_id_list = list(range(start_id, end_id + 1))
-                                    logger.debug(f"Shorthand range '{start_part}-{end_part}' resolved to chunk IDs: {chunk_id_list}")
+                                    logger.debug(
+                                        f"Shorthand range '{start_part}-{end_part}' resolved to chunk IDs: {chunk_id_list}"
+                                    )
                                 else:
-                                    logger.error(f"Invalid range: {start_part} (ID: {start_id}) is after c{end_chunk_num} (ID: {end_id})")
+                                    logger.error(
+                                        f"Invalid range: {start_part} (ID: {start_id}) is after c{end_chunk_num} (ID: {end_id})"
+                                    )
                                     return
                             else:
                                 return
                         except ValueError:
-                            logger.error(f"Invalid chunk range format: {chunk_ids}. For slug ranges, use format 's03e03c26-27'")
+                            logger.error(
+                                f"Invalid chunk range format: {chunk_ids}. For slug ranges, use format 's03e03c26-27'"
+                            )
                             return
                     else:
                         # Try to parse as numeric range (e.g., "33-34")
@@ -1191,7 +1238,9 @@ class ContextAssembler:
                 for chunk_id in chunk_id_list:
                     chunk_id_str = str(chunk_id)
                     if chunk_id_str in episode_data["raw_text"]:
-                        logger.info(f"Removing chunk {chunk_id} from episode {episode_id}")
+                        logger.info(
+                            f"Removing chunk {chunk_id} from episode {episode_id}"
+                        )
                         del episode_data["raw_text"][chunk_id_str]
                         removed_count += 1
 
@@ -1211,7 +1260,7 @@ class ContextAssembler:
     def handle_command(self, command: str):
         """
         Handle a command from the user.
-        
+
         Args:
             command: Command string
         """
@@ -1237,13 +1286,17 @@ class ContextAssembler:
             # Special handling for chunk command which needs fewer parameters
             if obj_type == "chunk" or obj_type == "chunks":
                 if len(parts) < 3:
-                    logger.error("Invalid add chunk command. Format: add chunk <id/range> or add chunk auto <character/faction> <id>")
+                    logger.error(
+                        "Invalid add chunk command. Format: add chunk <id/range> or add chunk auto <character/faction> <id>"
+                    )
                     return
 
                 # Check if this is an auto command
                 if parts[2].lower() == "auto":
                     if len(parts) < 5:
-                        logger.error("Invalid add chunk auto command. Format: add chunk auto <character/faction> <id>")
+                        logger.error(
+                            "Invalid add chunk auto command. Format: add chunk auto <character/faction> <id>"
+                        )
                         return
 
                     entity_type = parts[3].lower()
@@ -1255,7 +1308,9 @@ class ContextAssembler:
                         elif entity_type == "faction":
                             self.add_chunks_auto_faction(entity_id)
                         else:
-                            logger.error(f"Invalid entity type for auto chunk: {entity_type}. Use 'character' or 'faction'.")
+                            logger.error(
+                                f"Invalid entity type for auto chunk: {entity_type}. Use 'character' or 'faction'."
+                            )
                     except ValueError:
                         logger.error(f"Invalid entity ID: {parts[4]}")
                 else:
@@ -1274,7 +1329,7 @@ class ContextAssembler:
 
             # Parse comma-separated IDs
             obj_ids = []
-            for id_str in obj_ids_str.split(','):
+            for id_str in obj_ids_str.split(","):
                 id_str = id_str.strip()
                 if obj_type in ["character", "place", "season", "faction"]:
                     try:
@@ -1286,7 +1341,7 @@ class ContextAssembler:
                     obj_ids.append(id_str)
 
             # Parse comma-separated fields
-            fields = [f.strip() for f in fields_str.split(',')]
+            fields = [f.strip() for f in fields_str.split(",")]
 
             if obj_type == "character":
                 for char_id in obj_ids:
@@ -1300,7 +1355,11 @@ class ContextAssembler:
 
             elif obj_type == "season":
                 # Check if this is "add season summary all"
-                if len(obj_ids) == 1 and obj_ids_str.lower() == "summary" and fields_str.lower() == "all":
+                if (
+                    len(obj_ids) == 1
+                    and obj_ids_str.lower() == "summary"
+                    and fields_str.lower() == "all"
+                ):
                     # Get all seasons from database
                     with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
                         cur.execute("SELECT id FROM seasons ORDER BY id")
@@ -1312,7 +1371,7 @@ class ContextAssembler:
 
                     logger.info(f"Adding summaries for {len(seasons)} seasons...")
                     for season in seasons:
-                        self.add_season_field(season['id'], 'summary')
+                        self.add_season_field(season["id"], "summary")
                 else:
                     for season_id in obj_ids:
                         for field in fields:
@@ -1325,7 +1384,9 @@ class ContextAssembler:
 
             elif obj_type == "episode":
                 if len(parts) < 3:
-                    logger.error("Invalid add episode command. Format: add episode <summary/raw> <id>")
+                    logger.error(
+                        "Invalid add episode command. Format: add episode <summary/raw> <id>"
+                    )
                     return
 
                 field = parts[2].lower()
@@ -1334,7 +1395,9 @@ class ContextAssembler:
                     # Check if this is an auto command
                     if len(parts) > 3 and parts[3].lower() == "auto":
                         if len(parts) < 6:
-                            logger.error("Invalid add episode summary auto command. Format: add episode summary auto <character/faction> <id>")
+                            logger.error(
+                                "Invalid add episode summary auto command. Format: add episode summary auto <character/faction> <id>"
+                            )
                             return
 
                         entity_type = parts[4].lower()
@@ -1346,7 +1409,9 @@ class ContextAssembler:
                             elif entity_type == "faction":
                                 self.add_episodes_auto_faction(entity_id, "summary")
                             else:
-                                logger.error(f"Invalid entity type for auto episode: {entity_type}. Use 'character' or 'faction'.")
+                                logger.error(
+                                    f"Invalid entity type for auto episode: {entity_type}. Use 'character' or 'faction'."
+                                )
                         except ValueError:
                             logger.error(f"Invalid entity ID: {parts[5]}")
                     else:
@@ -1355,12 +1420,16 @@ class ContextAssembler:
                             episode_range = " ".join(parts[3:])
                             self.add_episode_summary(episode_range)
                         else:
-                            logger.error("Missing episode identifier. Format: add episode summary <id/range/all>")
+                            logger.error(
+                                "Missing episode identifier. Format: add episode summary <id/range/all>"
+                            )
                 elif field == "raw":
                     # Check if this is an auto command
                     if len(parts) > 3 and parts[3].lower() == "auto":
                         if len(parts) < 6:
-                            logger.error("Invalid add episode raw auto command. Format: add episode raw auto <character/faction> <id>")
+                            logger.error(
+                                "Invalid add episode raw auto command. Format: add episode raw auto <character/faction> <id>"
+                            )
                             return
 
                         entity_type = parts[4].lower()
@@ -1372,7 +1441,9 @@ class ContextAssembler:
                             elif entity_type == "faction":
                                 self.add_episodes_auto_faction(entity_id, "raw")
                             else:
-                                logger.error(f"Invalid entity type for auto episode: {entity_type}. Use 'character' or 'faction'.")
+                                logger.error(
+                                    f"Invalid entity type for auto episode: {entity_type}. Use 'character' or 'faction'."
+                                )
                         except ValueError:
                             logger.error(f"Invalid entity ID: {parts[5]}")
                     else:
@@ -1381,9 +1452,13 @@ class ContextAssembler:
                             episode_range = " ".join(parts[3:])
                             self.add_episode_raw(episode_range)
                         else:
-                            logger.error("Missing episode identifier. Format: add episode raw <id/range/all>")
+                            logger.error(
+                                "Missing episode identifier. Format: add episode raw <id/range/all>"
+                            )
                 else:
-                    logger.error(f"Invalid episode field: {field}. Use 'summary' or 'raw'.")
+                    logger.error(
+                        f"Invalid episode field: {field}. Use 'summary' or 'raw'."
+                    )
 
             else:
                 logger.error(f"Unknown object type: {obj_type}")
@@ -1398,7 +1473,9 @@ class ContextAssembler:
             # Special handling for chunk command which needs fewer parameters
             if obj_type == "chunk" or obj_type == "chunks":
                 if len(parts) < 3:
-                    logger.error("Invalid remove chunk command. Format: rm chunk <id/range>")
+                    logger.error(
+                        "Invalid remove chunk command. Format: rm chunk <id/range>"
+                    )
                     return
                 # The third argument is the chunk ID or range
                 chunk_ids = parts[2]
@@ -1415,7 +1492,7 @@ class ContextAssembler:
 
             # Parse comma-separated IDs
             obj_ids = []
-            for id_str in obj_ids_str.split(','):
+            for id_str in obj_ids_str.split(","):
                 id_str = id_str.strip()
                 if obj_type in ["character", "place", "season", "faction"]:
                     try:
@@ -1427,7 +1504,7 @@ class ContextAssembler:
                     obj_ids.append(id_str)
 
             # Parse comma-separated fields
-            fields = [f.strip() for f in fields_str.split(',')]
+            fields = [f.strip() for f in fields_str.split(",")]
 
             if obj_type == "character":
                 for char_id in obj_ids:
@@ -1451,7 +1528,9 @@ class ContextAssembler:
 
             elif obj_type == "episode":
                 if len(parts) < 4:
-                    logger.error("Invalid remove episode command. Format: rm episode <summary/raw> <id>")
+                    logger.error(
+                        "Invalid remove episode command. Format: rm episode <summary/raw> <id>"
+                    )
                     return
 
                 content_type = parts[2].lower()
@@ -1496,7 +1575,9 @@ class ContextAssembler:
                         logger.error(f"No raw text found for episode {episode_id}")
 
                 else:
-                    logger.error(f"Invalid episode content type: {content_type}. Use 'summary' or 'raw'.")
+                    logger.error(
+                        f"Invalid episode content type: {content_type}. Use 'summary' or 'raw'."
+                    )
 
             else:
                 logger.error(f"Unknown object type: {obj_type}")
@@ -1574,22 +1655,22 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--new", help="Create a new context package with this name")
     group.add_argument("--load", help="Load an existing context package")
-    
+
     args = parser.parse_args()
-    
+
     if args.new:
         # Check if file already exists
         if os.path.exists(args.new):
             overwrite = input(f"File {args.new} already exists. Overwrite? (y/n): ")
-            if overwrite.lower() != 'y':
+            if overwrite.lower() != "y":
                 logger.info("Operation canceled")
                 sys.exit(0)
         assembler = ContextAssembler(args.new, new=True)
     else:
         assembler = ContextAssembler(args.load, new=False)
-    
+
     print_help()
-    
+
     try:
         while True:
             try:

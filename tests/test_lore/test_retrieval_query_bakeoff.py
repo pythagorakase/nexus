@@ -1,6 +1,5 @@
 """Tests for the retrieval query bake-off harness."""
 
-
 from scripts.retrieval_query_bakeoff import (
     bootstrap_ci,
     build_query_sets,

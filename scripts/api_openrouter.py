@@ -44,32 +44,26 @@ from sqlalchemy import create_engine
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("metadata_processing.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler("metadata_processing.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("nexus.openrouter")
 
 # Default TPM limits if settings file is not available
-DEFAULT_TPM_LIMITS = {
-    "openrouter": 50000
-}
+DEFAULT_TPM_LIMITS = {"openrouter": 50000}
 
-DEFAULT_COOLDOWNS = {
-    "individual": 15,
-    "batch": 30,
-    "rate_limit": 300
-}
+DEFAULT_COOLDOWNS = {"individual": 15, "batch": 30, "rate_limit": 300}
 
 # Load settings using centralized config loader
 try:
     from nexus.config import load_settings_as_dict
+
     SETTINGS = load_settings_as_dict()
     TPM_LIMITS = SETTINGS.get("API Settings", {}).get("TPM", DEFAULT_TPM_LIMITS)
     COOLDOWNS = SETTINGS.get("API Settings", {}).get("cooldowns", DEFAULT_COOLDOWNS)
 except Exception as e:
-    logger.warning(f"Failed to load settings via config loader: {str(e)}. Using defaults.")
+    logger.warning(
+        f"Failed to load settings via config loader: {str(e)}. Using defaults."
+    )
     TPM_LIMITS = DEFAULT_TPM_LIMITS
     COOLDOWNS = DEFAULT_COOLDOWNS
 
@@ -77,14 +71,16 @@ except Exception as e:
 class LLMResponse:
     """Standardized response object from any LLM provider."""
 
-    def __init__(self,
-                content: str,
-                input_tokens: int,
-                output_tokens: int,
-                model: str,
-                raw_response: Any = None,
-                cache_creation_tokens: int = 0,
-                cache_read_tokens: int = 0):
+    def __init__(
+        self,
+        content: str,
+        input_tokens: int,
+        output_tokens: int,
+        model: str,
+        raw_response: Any = None,
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0,
+    ):
         self.content = content
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
@@ -106,12 +102,14 @@ class LLMResponse:
 class LLMProvider(abc.ABC):
     """Abstract base class for LLM providers."""
 
-    def __init__(self,
-                api_key: Optional[str] = None,
-                model: Optional[str] = None,
-                temperature: float = 0.1,
-                max_tokens: int = 4000,
-                system_prompt: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 4000,
+        system_prompt: Optional[str] = None,
+    ):
         self.api_key = api_key
         self.model = model
         self.temperature = temperature
@@ -138,7 +136,9 @@ class LLMProvider(abc.ABC):
         # Rough estimate: 1 token ≈ 4 characters
         return len(text) // 4
 
-    def check_tpm_limit(self, prompt: str, estimated_output_tokens: Optional[int] = None) -> Tuple[bool, int, int]:
+    def check_tpm_limit(
+        self, prompt: str, estimated_output_tokens: Optional[int] = None
+    ) -> Tuple[bool, int, int]:
         """
         Check if the request would exceed TPM limits from settings.json.
 
@@ -151,7 +151,9 @@ class LLMProvider(abc.ABC):
         """
         if not self.provider_name or self.provider_name.lower() not in TPM_LIMITS:
             # No provider name or no limit defined - assume it's safe
-            logger.warning(f"No TPM limit found for provider {self.provider_name}. Proceeding without limits.")
+            logger.warning(
+                f"No TPM limit found for provider {self.provider_name}. Proceeding without limits."
+            )
             return True, 0, 0
 
         # Count input tokens
@@ -172,8 +174,12 @@ class LLMProvider(abc.ABC):
         within_limit = total_tokens <= tpm_limit
 
         if not within_limit:
-            logger.warning(f"TPM limit exceeded: Request would use {total_tokens} tokens but limit is {tpm_limit}")
-            logger.warning(f"This exceeds the {self.provider_name} TPM limit set in settings.json")
+            logger.warning(
+                f"TPM limit exceeded: Request would use {total_tokens} tokens but limit is {tpm_limit}"
+            )
+            logger.warning(
+                f"This exceeds the {self.provider_name} TPM limit set in settings.json"
+            )
 
         return within_limit, input_tokens, total_tokens
 
@@ -204,19 +210,21 @@ class OpenRouterProvider(LLMProvider):
         "deepseek-v3.2-exp": "deepseek/deepseek-v3.2-exp",
     }
 
-    def __init__(self,
-                api_key: Optional[str] = None,
-                model: Optional[str] = None,
-                temperature: Optional[float] = 0.1,
-                max_tokens: int = 4000,
-                system_prompt: Optional[str] = None,
-                reasoning_effort: Optional[str] = None,
-                thinking_budget_tokens: Optional[int] = None,
-                top_p: Optional[float] = None,
-                min_p: Optional[float] = None,
-                frequency_penalty: Optional[float] = None,
-                presence_penalty: Optional[float] = None,
-                repetition_penalty: Optional[float] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = 0.1,
+        max_tokens: int = 4000,
+        system_prompt: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        thinking_budget_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        min_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        repetition_penalty: Optional[float] = None,
+    ):
         """
         Initialize OpenRouter provider.
 
@@ -243,13 +251,15 @@ class OpenRouterProvider(LLMProvider):
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
         )
 
     def initialize(self) -> None:
         """Initialize the OpenRouter client."""
         if not openai:
-            raise ImportError("The 'openai' package is required for OpenRouterProvider. Install with 'pip install openai'.")
+            raise ImportError(
+                "The 'openai' package is required for OpenRouterProvider. Install with 'pip install openai'."
+            )
 
         self.provider_name = "openrouter"
         self.api_key = self.api_key or self._get_api_key()
@@ -262,13 +272,12 @@ class OpenRouterProvider(LLMProvider):
             logger.info(f"Mapped model {original_model} -> {self.model}")
 
         # Initialize the client with OpenRouter base URL
-        self.client = openai.OpenAI(
-            api_key=self.api_key,
-            base_url=self.API_BASE
-        )
+        self.client = openai.OpenAI(api_key=self.api_key, base_url=self.API_BASE)
 
         # Log the configuration
-        logger.info(f"Using OpenRouter with model: {self.model}, temperature: {self.temperature}")
+        logger.info(
+            f"Using OpenRouter with model: {self.model}, temperature: {self.temperature}"
+        )
         if self.reasoning_effort:
             logger.info(f"Reasoning effort: {self.reasoning_effort}")
         if self.thinking_budget_tokens:
@@ -330,10 +339,10 @@ class OpenRouterProvider(LLMProvider):
         # OpenRouter's REST API supports parameters that the OpenAI SDK doesn't recognize
         # Route to HTTP if any non-standard parameters are set, otherwise use SDK for efficiency
         has_non_standard_params = (
-            self.reasoning_effort is not None or
-            self.thinking_budget_tokens is not None or
-            self.min_p is not None or
-            self.repetition_penalty is not None
+            self.reasoning_effort is not None
+            or self.thinking_budget_tokens is not None
+            or self.min_p is not None
+            or self.repetition_penalty is not None
         )
 
         if has_non_standard_params:
@@ -352,7 +361,7 @@ class OpenRouterProvider(LLMProvider):
                 input_tokens=response.usage.prompt_tokens if response.usage else 0,
                 output_tokens=response.usage.completion_tokens if response.usage else 0,
                 model=self.model,
-                raw_response=response
+                raw_response=response,
             )
         except Exception as e:
             # Handle API errors
@@ -365,10 +374,16 @@ class OpenRouterProvider(LLMProvider):
                 if hasattr(e, "response") and hasattr(e.response, "headers"):
                     retry_after = e.response.headers.get("retry-after")
 
-                logger.warning(f"Rate limit exceeded. Retry after: {retry_after or 'unknown'}")
+                logger.warning(
+                    f"Rate limit exceeded. Retry after: {retry_after or 'unknown'}"
+                )
 
                 # Implement exponential backoff retry
-                retry_wait = int(retry_after) if retry_after and retry_after.isdigit() else COOLDOWNS["rate_limit"]
+                retry_wait = (
+                    int(retry_after)
+                    if retry_after and retry_after.isdigit()
+                    else COOLDOWNS["rate_limit"]
+                )
                 logger.info(f"Waiting {retry_wait} seconds before retrying...")
                 time.sleep(retry_wait)
 
@@ -378,7 +393,9 @@ class OpenRouterProvider(LLMProvider):
             # Re-raise other exceptions
             raise
 
-    def _get_completion_http(self, prompt: str, messages: List[Dict[str, str]], enable_cache: bool) -> LLMResponse:
+    def _get_completion_http(
+        self, prompt: str, messages: List[Dict[str, str]], enable_cache: bool
+    ) -> LLMResponse:
         """
         Get completion via HTTP REST API (required for reasoning parameters).
 
@@ -439,7 +456,9 @@ class OpenRouterProvider(LLMProvider):
             try:
                 data = response.json()
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON response from OpenRouter. Raw response: {response.text[:500]}")
+                logger.error(
+                    f"Failed to parse JSON response from OpenRouter. Raw response: {response.text[:500]}"
+                )
                 raise
 
             content = data["choices"][0]["message"]["content"] or ""
@@ -453,12 +472,16 @@ class OpenRouterProvider(LLMProvider):
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:
-                retry_after = e.response.headers.get("retry-after", COOLDOWNS["rate_limit"])
+                retry_after = e.response.headers.get(
+                    "retry-after", COOLDOWNS["rate_limit"]
+                )
                 logger.warning(f"Rate limit exceeded. Waiting {retry_after} seconds...")
                 time.sleep(int(retry_after))
                 return self._get_completion_http(prompt, messages, enable_cache)
 
-            logger.error(f"OpenRouter HTTP error: {e.response.status_code} - {e.response.text[:500]}")
+            logger.error(
+                f"OpenRouter HTTP error: {e.response.status_code} - {e.response.text[:500]}"
+            )
             raise
         except json.JSONDecodeError:
             # Already logged above with raw response
@@ -489,33 +512,58 @@ def get_default_llm_argument_parser():
     """
     parser = argparse.ArgumentParser(
         description="Process with OpenRouter API.",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     # OpenRouter options
     llm_group = parser.add_argument_group("OpenRouter API Options")
-    llm_group.add_argument("--model", default=OpenRouterProvider.DEFAULT_MODEL,
-                         help=f"Model name to use (default: {OpenRouterProvider.DEFAULT_MODEL})")
+    llm_group.add_argument(
+        "--model",
+        default=OpenRouterProvider.DEFAULT_MODEL,
+        help=f"Model name to use (default: {OpenRouterProvider.DEFAULT_MODEL})",
+    )
     llm_group.add_argument("--api-key", help="API key (optional)")
-    llm_group.add_argument("--temperature", type=float, default=0.1,
-                         help="Model temperature (0.0-2.0, default: 0.1)")
-    llm_group.add_argument("--max-tokens", type=int, default=4000,
-                         help="Maximum tokens to generate in response (default: 4000)")
-    llm_group.add_argument("--system-prompt",
-                         help="Optional system prompt to use")
-    llm_group.add_argument("--reasoning-effort", choices=["minimal", "low", "medium", "high"],
-                         help="Reasoning effort for reasoning models")
-    llm_group.add_argument("--thinking-budget", type=int,
-                         help="Thinking token budget for extended thinking models")
+    llm_group.add_argument(
+        "--temperature",
+        type=float,
+        default=0.1,
+        help="Model temperature (0.0-2.0, default: 0.1)",
+    )
+    llm_group.add_argument(
+        "--max-tokens",
+        type=int,
+        default=4000,
+        help="Maximum tokens to generate in response (default: 4000)",
+    )
+    llm_group.add_argument("--system-prompt", help="Optional system prompt to use")
+    llm_group.add_argument(
+        "--reasoning-effort",
+        choices=["minimal", "low", "medium", "high"],
+        help="Reasoning effort for reasoning models",
+    )
+    llm_group.add_argument(
+        "--thinking-budget",
+        type=int,
+        help="Thinking token budget for extended thinking models",
+    )
 
     # Common processing options
     process_group = parser.add_argument_group("Processing Options")
-    process_group.add_argument("--batch-size", type=int, default=10,
-                             help="Number of items to process before prompting to continue (default: 10)")
-    process_group.add_argument("--dry-run", action="store_true",
-                             help="Don't actually save results to the database")
-    process_group.add_argument("--db-url",
-                        help="Database connection URL (optional, defaults to environment variables)")
+    process_group.add_argument(
+        "--batch-size",
+        type=int,
+        default=10,
+        help="Number of items to process before prompting to continue (default: 10)",
+    )
+    process_group.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Don't actually save results to the database",
+    )
+    process_group.add_argument(
+        "--db-url",
+        help="Database connection URL (optional, defaults to environment variables)",
+    )
 
     return parser
 
@@ -532,7 +580,9 @@ def validate_llm_requirements(api_key: Optional[str] = None) -> None:
         ValueError: If the configuration is invalid
     """
     if openai is None:
-        raise ImportError("The 'openai' package is required. Install with 'pip install openai'")
+        raise ImportError(
+            "The 'openai' package is required. Install with 'pip install openai'"
+        )
 
 
 # This file is now meant to be imported as a library, not run directly

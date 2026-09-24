@@ -27,7 +27,16 @@ import uuid
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
 
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Text, DateTime, inspect
+from sqlalchemy import (
+    create_engine,
+    Column,
+    String,
+    Integer,
+    ForeignKey,
+    Text,
+    DateTime,
+    inspect,
+)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -39,8 +48,8 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler("season_episode_extraction.log"),
-        logging.StreamHandler()
-    ]
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger("nexus.season_episode")
 
@@ -55,26 +64,32 @@ def get_db_connection_string() -> str:
 
 # Define ORM models
 class NarrativeChunk(Base):
-    __tablename__ = 'narrative_chunks'
-    
+    __tablename__ = "narrative_chunks"
+
     id = Column(UUID(as_uuid=True), primary_key=True)
     sequence = Column(Integer, unique=True, nullable=False)
     raw_text = Column(Text, nullable=False)
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationship to metadata (will set up after defining ChunkMetadata)
 
+
 class ChunkMetadata(Base):
-    __tablename__ = 'chunk_metadata'
-    
+    __tablename__ = "chunk_metadata"
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    chunk_id = Column(UUID(as_uuid=True), ForeignKey('narrative_chunks.id', ondelete='CASCADE'), nullable=False, unique=True)
-    
+    chunk_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("narrative_chunks.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+
     # We only care about season and episode for this script
     world_layer = Column(String(50))
     season = Column(Integer)
     episode = Column(Integer)
-    
+
     # All other fields are defined here to match the table structure
     location = Column(String(255))
     atmosphere = Column(String(255))
@@ -95,12 +110,16 @@ class ChunkMetadata(Base):
     continuity_markers = Column(JSONB)
     metadata_version = Column(String(20))
     generation_date = Column(DateTime, default=func.now())
-    
+
     # Relationship to parent chunk
     chunk = relationship("NarrativeChunk", backref="metadata")
 
+
 # Set up relationship now that both models are defined
-NarrativeChunk.metadata_relationship = relationship("ChunkMetadata", backref="narrative_chunk", uselist=False)
+NarrativeChunk.metadata_relationship = relationship(
+    "ChunkMetadata", backref="narrative_chunk", uselist=False
+)
+
 
 class SeasonEpisodeExtractor:
     """Extracts season and episode information from narrative chunks and updates the database."""
@@ -108,7 +127,7 @@ class SeasonEpisodeExtractor:
     def __init__(self, db_url: str, dry_run: bool = False):
         """
         Initialize the extractor.
-        
+
         Args:
             db_url: PostgreSQL database URL
             dry_run: If True, don't actually save results to the database
@@ -129,7 +148,7 @@ class SeasonEpisodeExtractor:
             "extracted_values": 0,
             "created_metadata": 0,
             "updated_metadata": 0,
-            "failed_extractions": 0
+            "failed_extractions": 0,
         }
 
     def initialize_database(self):
@@ -137,22 +156,22 @@ class SeasonEpisodeExtractor:
         # Create chunk_metadata table if it doesn't exist
         inspector = inspect(self.engine)
 
-        if 'chunk_metadata' not in inspector.get_table_names():
+        if "chunk_metadata" not in inspector.get_table_names():
             ChunkMetadata.__table__.create(self.engine)
             logger.info("Created chunk_metadata table")
 
     def extract_season_episode(self, raw_text: str) -> Tuple[int, int, str]:
         """
         Extract season and episode information from raw text.
-        
+
         Args:
             raw_text: The raw text of a chunk
-            
+
         Returns:
             Tuple of (season, episode, scene_id)
         """
         # Look for scene break marker with S00E00_000 format
-        scene_break_pattern = r'<!-- SCENE BREAK: (S(\d+)E(\d+)_(\d+)).*?-->'
+        scene_break_pattern = r"<!-- SCENE BREAK: (S(\d+)E(\d+)_(\d+)).*?-->"
         match = re.search(scene_break_pattern, raw_text)
 
         if match:
@@ -162,7 +181,7 @@ class SeasonEpisodeExtractor:
             return season, episode, scene_id
 
         # Secondary pattern - look for # S00E00: Title format
-        title_pattern = r'# S(\d+)E(\d+):'
+        title_pattern = r"# S(\d+)E(\d+):"
         match = re.search(title_pattern, raw_text)
 
         if match:
@@ -174,14 +193,19 @@ class SeasonEpisodeExtractor:
         self.stats["failed_extractions"] += 1
         return 1, 1, "S01E01"
 
-    def get_chunks_by_sequence_range(self, start: int, end: int) -> List[NarrativeChunk]:
+    def get_chunks_by_sequence_range(
+        self, start: int, end: int
+    ) -> List[NarrativeChunk]:
         """Get chunks within a sequence range."""
         session = self.Session()
         try:
-            chunks = session.query(NarrativeChunk)\
-                .filter(NarrativeChunk.sequence >= start)\
-                .filter(NarrativeChunk.sequence <= end)\
-                .order_by(NarrativeChunk.sequence).all()
+            chunks = (
+                session.query(NarrativeChunk)
+                .filter(NarrativeChunk.sequence >= start)
+                .filter(NarrativeChunk.sequence <= end)
+                .order_by(NarrativeChunk.sequence)
+                .all()
+            )
             return chunks
         finally:
             session.close()
@@ -190,7 +214,9 @@ class SeasonEpisodeExtractor:
         """Get all narrative chunks ordered by sequence."""
         session = self.Session()
         try:
-            chunks = session.query(NarrativeChunk).order_by(NarrativeChunk.sequence).all()
+            chunks = (
+                session.query(NarrativeChunk).order_by(NarrativeChunk.sequence).all()
+            )
             return chunks
         finally:
             session.close()
@@ -200,10 +226,13 @@ class SeasonEpisodeExtractor:
         session = self.Session()
         try:
             # Query for chunks that don't have a related metadata record
-            chunks = session.query(NarrativeChunk)\
-                .outerjoin(ChunkMetadata, NarrativeChunk.id == ChunkMetadata.chunk_id)\
-                .filter(ChunkMetadata.id == None)\
-                .order_by(NarrativeChunk.sequence).all()
+            chunks = (
+                session.query(NarrativeChunk)
+                .outerjoin(ChunkMetadata, NarrativeChunk.id == ChunkMetadata.chunk_id)
+                .filter(ChunkMetadata.id == None)
+                .order_by(NarrativeChunk.sequence)
+                .all()
+            )
             return chunks
         finally:
             session.close()
@@ -211,10 +240,10 @@ class SeasonEpisodeExtractor:
     def process_chunks(self, chunks: List[NarrativeChunk]) -> Dict[str, Any]:
         """
         Process narrative chunks to extract season and episode.
-        
+
         Args:
             chunks: List of narrative chunks to process
-            
+
         Returns:
             Statistics dictionary
         """
@@ -234,11 +263,17 @@ class SeasonEpisodeExtractor:
                 season, episode, scene_id = self.extract_season_episode(chunk.raw_text)
                 self.stats["extracted_values"] += 1
 
-                logger.info(f"Chunk {chunk.sequence}: Extracted S{season:02d}E{episode:02d} ({scene_id})")
+                logger.info(
+                    f"Chunk {chunk.sequence}: Extracted S{season:02d}E{episode:02d} ({scene_id})"
+                )
 
                 if not self.dry_run:
                     # Check if metadata already exists for this chunk
-                    metadata = session.query(ChunkMetadata).filter(ChunkMetadata.chunk_id == chunk.id).first()
+                    metadata = (
+                        session.query(ChunkMetadata)
+                        .filter(ChunkMetadata.chunk_id == chunk.id)
+                        .first()
+                    )
 
                     if metadata:
                         # Update existing metadata
@@ -254,7 +289,7 @@ class SeasonEpisodeExtractor:
                             episode=episode,
                             world_layer="primary",  # Default value
                             metadata_version="1.0.0",
-                            generation_date=datetime.now()
+                            generation_date=datetime.now(),
                         )
                         session.add(new_metadata)
                         self.stats["created_metadata"] += 1
@@ -262,8 +297,10 @@ class SeasonEpisodeExtractor:
             # Commit changes if not dry run
             if not self.dry_run:
                 session.commit()
-                logger.info(f"Committed {self.stats['updated_metadata']} updates and " 
-                          f"{self.stats['created_metadata']} new metadata records")
+                logger.info(
+                    f"Committed {self.stats['updated_metadata']} updates and "
+                    f"{self.stats['created_metadata']} new metadata records"
+                )
 
         except Exception as e:
             if not self.dry_run:
@@ -274,30 +311,43 @@ class SeasonEpisodeExtractor:
 
         return self.stats
 
+
 def main():
     """Main entry point for the script."""
-    parser = argparse.ArgumentParser(description="Extract season and episode information from narrative chunks")
-    
+    parser = argparse.ArgumentParser(
+        description="Extract season and episode information from narrative chunks"
+    )
+
     # Target chunk selection arguments
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--all", action="store_true", help="Process all chunks")
-    group.add_argument("--missing", action="store_true", help="Process only chunks without metadata")
-    group.add_argument("--range", nargs=2, type=int, metavar=("START", "END"),
-                     help="Process chunks in a sequence range (inclusive)")
-    
+    group.add_argument(
+        "--missing", action="store_true", help="Process only chunks without metadata"
+    )
+    group.add_argument(
+        "--range",
+        nargs=2,
+        type=int,
+        metavar=("START", "END"),
+        help="Process chunks in a sequence range (inclusive)",
+    )
+
     # Processing options
-    parser.add_argument("--dry-run", action="store_true", 
-                      help="Don't actually save results to the database")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Don't actually save results to the database",
+    )
     parser.add_argument("--db-url", help="Database connection URL (optional)")
-    
+
     args = parser.parse_args()
-    
+
     # Get database connection string
     db_url = args.db_url or get_db_connection_string()
-    
+
     # Initialize extractor
     extractor = SeasonEpisodeExtractor(db_url=db_url, dry_run=args.dry_run)
-    
+
     # Get chunks to process
     if args.all:
         logger.info("Processing all chunks")
@@ -309,10 +359,10 @@ def main():
         start, end = args.range
         logger.info(f"Processing chunks in sequence range {start}-{end}")
         chunks = extractor.get_chunks_by_sequence_range(start, end)
-    
+
     # Process chunks
     stats = extractor.process_chunks(chunks)
-    
+
     # Print summary
     logger.info("\nProcessing Summary:")
     logger.info(f"Total chunks processed: {stats['total_chunks']}")
@@ -323,9 +373,12 @@ def main():
         logger.info(f"Created new metadata records: {stats['created_metadata']}")
         logger.info(f"Updated existing metadata records: {stats['updated_metadata']}")
     if stats["failed_extractions"] > 0:
-        logger.warning(f"Failed extractions (using defaults): {stats['failed_extractions']}")
-    
+        logger.warning(
+            f"Failed extractions (using defaults): {stats['failed_extractions']}"
+        )
+
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

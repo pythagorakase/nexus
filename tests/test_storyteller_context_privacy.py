@@ -45,9 +45,7 @@ def test_story_context_storage_and_all_read_endpoints_exclude_correspondence(
 
         context = client.get(f"/api/story/context/{session_id}")
         assert context.status_code == 200
-        assert context.json()["public_marker"] == (
-            "safe diagnostic context"
-        )
+        assert context.json()["public_marker"] == ("safe diagnostic context")
 
         context_payload["storyteller_correspondence"] = (
             "REGENERATED-CONSPIRACY-MUST-NEVER-PERSIST"

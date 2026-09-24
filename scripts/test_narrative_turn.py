@@ -31,8 +31,7 @@ from nexus.telemetry.usage import usage_context
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,9 @@ class NarrativeTurnTester:
         self.settings = settings
 
         # Get test mode settings
-        narrative_settings = settings.get("Agent Settings", {}).get("global", {}).get("narrative", {})
+        narrative_settings = (
+            settings.get("Agent Settings", {}).get("global", {}).get("narrative", {})
+        )
         self.test_mode = narrative_settings.get("test_mode", False)
         self.test_suffix = narrative_settings.get("test_database_suffix", "_test")
 
@@ -70,7 +71,9 @@ class NarrativeTurnTester:
         self.conn = psycopg2.connect(**connection_kwargs())
         self.conn.autocommit = False
 
-        logger.info(f"Initialized NarrativeTurnTester (test_mode={self.test_mode}, dry_run={self.dry_run})")
+        logger.info(
+            f"Initialized NarrativeTurnTester (test_mode={self.test_mode}, dry_run={self.dry_run})"
+        )
         logger.info(f"Session ID: {self.session_id}")
 
     def get_chunk_info(self, chunk_id: int) -> Dict[str, Any]:
@@ -100,9 +103,7 @@ class NarrativeTurnTester:
         return dict(result)
 
     async def continue_narrative(
-        self,
-        parent_chunk_id: int = 1425,
-        user_text: str = "Continue."
+        self, parent_chunk_id: int = 1425, user_text: str = "Continue."
     ) -> Dict[str, Any]:
         """
         Continue the narrative from a given chunk
@@ -119,15 +120,14 @@ class NarrativeTurnTester:
 
         # Get parent chunk info
         parent_info = self.get_chunk_info(parent_chunk_id)
-        logger.info(f"Parent chunk: S{parent_info['season']}E{parent_info['episode']}, "
-                   f"Location: {parent_info['place_name']}, Time: {parent_info['world_time']}")
+        logger.info(
+            f"Parent chunk: S{parent_info['season']}E{parent_info['episode']}, "
+            f"Location: {parent_info['place_name']}, Time: {parent_info['world_time']}"
+        )
 
         # Step 1: Initialize LORE
         logger.info("Step 1: Initializing LORE agent...")
-        lore = LORE(
-            enable_logon=True,  # Use LOGON for generation
-            debug=True
-        )
+        lore = LORE(enable_logon=True, debug=True)  # Use LOGON for generation
 
         # Step 2: Process the turn (builds context and generates narrative)
         logger.info("Step 2: Processing turn with LORE (context + generation)...")
@@ -138,19 +138,21 @@ class NarrativeTurnTester:
             if self.session_id is None:
                 raise ValueError("A standalone narrative attempt requires --attempt-id")
             with usage_context(run_id=self.session_id):
-                response = await lore.process_turn(user_text, attempt_id=self.session_id)
+                response = await lore.process_turn(
+                    user_text, attempt_id=self.session_id
+                )
             logger.info(f"LORE returned response type: {type(response)}")
 
             # Print the response to see what we're working with
             if response:
-                print("\n" + "="*80)
+                print("\n" + "=" * 80)
                 print("LORE RESPONSE:")
-                print("="*80)
-                if hasattr(response, 'model_dump'):
+                print("=" * 80)
+                if hasattr(response, "model_dump"):
                     print(json.dumps(response.model_dump(), indent=2, default=str))
                 else:
                     print(f"Response: {response}")
-                print("="*80 + "\n")
+                print("=" * 80 + "\n")
         except Exception as e:
             logger.error(f"LORE process_turn failed: {e}")
             raise
@@ -162,7 +164,9 @@ class NarrativeTurnTester:
         logger.info("Step 3: Parsing response and preparing incubator data...")
 
         # Extract narrative text from the response
-        storyteller_text = response.narrative.text if hasattr(response, 'narrative') else None
+        storyteller_text = (
+            response.narrative.text if hasattr(response, "narrative") else None
+        )
 
         if not storyteller_text:
             raise ValueError("No narrative text in response")
@@ -176,111 +180,134 @@ class NarrativeTurnTester:
             "entity_updates": {},
             "reference_updates": {},
             "session_id": self.session_id,
-            "llm_response_id": getattr(response, 'response_id', None),
-            "status": "provisional"
+            "llm_response_id": getattr(response, "response_id", None),
+            "status": "provisional",
         }
 
         # Extract metadata updates
-        if hasattr(response, 'metadata') and response.metadata:
+        if hasattr(response, "metadata") and response.metadata:
             metadata = response.metadata
 
             # Handle chronology updates using new time fields
-            if hasattr(metadata, 'chronology') and metadata.chronology:
+            if hasattr(metadata, "chronology") and metadata.chronology:
                 chron = metadata.chronology
 
                 # Handle both old boolean format and new enum format
-                if hasattr(chron, 'episode_transition'):
+                if hasattr(chron, "episode_transition"):
                     # New format with enum
-                    episode_transition = chron.episode_transition.value if hasattr(chron.episode_transition, 'value') else chron.episode_transition or "continue"
+                    episode_transition = (
+                        chron.episode_transition.value
+                        if hasattr(chron.episode_transition, "value")
+                        else chron.episode_transition or "continue"
+                    )
                 else:
                     # Old format with boolean flags
-                    if getattr(chron, 'season_increment', False):
+                    if getattr(chron, "season_increment", False):
                         episode_transition = "new_season"
-                    elif getattr(chron, 'episode_increment', False):
+                    elif getattr(chron, "episode_increment", False):
                         episode_transition = "new_episode"
                     else:
                         episode_transition = "continue"
 
                 incubator_data["metadata_updates"]["chronology"] = {
                     "episode_transition": episode_transition,
-                    "time_delta_minutes": getattr(chron, 'time_delta_minutes', None),
-                    "time_delta_hours": getattr(chron, 'time_delta_hours', None),
-                    "time_delta_days": getattr(chron, 'time_delta_days', None),
-                    "time_delta_description": getattr(chron, 'time_delta_description', None) or getattr(chron, 'time_elapsed_description', None)
+                    "time_delta_minutes": getattr(chron, "time_delta_minutes", None),
+                    "time_delta_hours": getattr(chron, "time_delta_hours", None),
+                    "time_delta_days": getattr(chron, "time_delta_days", None),
+                    "time_delta_description": getattr(
+                        chron, "time_delta_description", None
+                    )
+                    or getattr(chron, "time_elapsed_description", None),
                 }
 
-            if hasattr(metadata, 'world_layer'):
-                incubator_data["metadata_updates"]["world_layer"] = metadata.world_layer.value if hasattr(metadata.world_layer, 'value') else metadata.world_layer
+            if hasattr(metadata, "world_layer"):
+                incubator_data["metadata_updates"]["world_layer"] = (
+                    metadata.world_layer.value
+                    if hasattr(metadata.world_layer, "value")
+                    else metadata.world_layer
+                )
 
         # Extract entity state updates
-        if hasattr(response, 'state_updates') and response.state_updates:
-            entity_updates = {
-                "characters": [],
-                "locations": [],
-                "factions": []
-            }
+        if hasattr(response, "state_updates") and response.state_updates:
+            entity_updates = {"characters": [], "locations": [], "factions": []}
 
             # Fix: Use 'characters' not 'character_updates'
-            if hasattr(response.state_updates, 'characters'):
+            if hasattr(response.state_updates, "characters"):
                 for char in response.state_updates.characters:
-                    entity_updates["characters"].append({
-                        "character_id": char.character_id,
-                        "character_name": getattr(char, 'character_name', None),
-                        "emotional_state": char.emotional_state,
-                        "current_activity": getattr(char, 'current_activity', None),
-                        "current_location": getattr(char, 'current_location', None)
-                    })
+                    entity_updates["characters"].append(
+                        {
+                            "character_id": char.character_id,
+                            "character_name": getattr(char, "character_name", None),
+                            "emotional_state": char.emotional_state,
+                            "current_activity": getattr(char, "current_activity", None),
+                            "current_location": getattr(char, "current_location", None),
+                        }
+                    )
 
-            if hasattr(response.state_updates, 'locations'):
+            if hasattr(response.state_updates, "locations"):
                 for loc in response.state_updates.locations:
-                    entity_updates["locations"].append({
-                        "place_id": loc.place_id,
-                        "place_name": getattr(loc, 'place_name', None),
-                        "current_status": loc.current_status
-                    })
+                    entity_updates["locations"].append(
+                        {
+                            "place_id": loc.place_id,
+                            "place_name": getattr(loc, "place_name", None),
+                            "current_status": loc.current_status,
+                        }
+                    )
 
-            if hasattr(response.state_updates, 'factions'):
+            if hasattr(response.state_updates, "factions"):
                 for faction in response.state_updates.factions:
-                    entity_updates["factions"].append({
-                        "faction_id": faction.faction_id,
-                        "faction_name": getattr(faction, 'faction_name', None),
-                        "current_activity": faction.current_activity
-                    })
+                    entity_updates["factions"].append(
+                        {
+                            "faction_id": faction.faction_id,
+                            "faction_name": getattr(faction, "faction_name", None),
+                            "current_activity": faction.current_activity,
+                        }
+                    )
 
             incubator_data["entity_updates"] = entity_updates
 
         # Extract entity references
-        if hasattr(response, 'referenced_entities') and response.referenced_entities:
+        if hasattr(response, "referenced_entities") and response.referenced_entities:
             refs = response.referenced_entities
-            reference_updates = {
-                "characters": [],
-                "places": [],
-                "factions": []
-            }
+            reference_updates = {"characters": [], "places": [], "factions": []}
 
-            if hasattr(refs, 'characters'):
+            if hasattr(refs, "characters"):
                 for char in refs.characters:
-                    reference_updates["characters"].append({
-                        "character_id": char.character_id,
-                        "character_name": getattr(char, 'character_name', None),
-                        "reference_type": char.reference_type.value if hasattr(char.reference_type, 'value') else char.reference_type
-                    })
+                    reference_updates["characters"].append(
+                        {
+                            "character_id": char.character_id,
+                            "character_name": getattr(char, "character_name", None),
+                            "reference_type": (
+                                char.reference_type.value
+                                if hasattr(char.reference_type, "value")
+                                else char.reference_type
+                            ),
+                        }
+                    )
 
-            if hasattr(refs, 'places'):
+            if hasattr(refs, "places"):
                 for place in refs.places:
-                    reference_updates["places"].append({
-                        "place_id": place.place_id,
-                        "place_name": getattr(place, 'place_name', None),
-                        "reference_type": place.reference_type.value if hasattr(place.reference_type, 'value') else place.reference_type,
-                        "evidence": getattr(place, 'evidence', None)
-                    })
+                    reference_updates["places"].append(
+                        {
+                            "place_id": place.place_id,
+                            "place_name": getattr(place, "place_name", None),
+                            "reference_type": (
+                                place.reference_type.value
+                                if hasattr(place.reference_type, "value")
+                                else place.reference_type
+                            ),
+                            "evidence": getattr(place, "evidence", None),
+                        }
+                    )
 
-            if hasattr(refs, 'factions'):
+            if hasattr(refs, "factions"):
                 for faction in refs.factions:
-                    reference_updates["factions"].append({
-                        "faction_id": faction.faction_id,
-                        "faction_name": getattr(faction, 'faction_name', None)
-                    })
+                    reference_updates["factions"].append(
+                        {
+                            "faction_id": faction.faction_id,
+                            "faction_name": getattr(faction, "faction_name", None),
+                        }
+                    )
 
             incubator_data["reference_updates"] = reference_updates
 
@@ -300,8 +327,12 @@ class NarrativeTurnTester:
             "incubator_data": incubator_data,
             "diagnostics": {
                 "total_time": total_time,
-                "response_length": len(incubator_data["storyteller_text"]) if incubator_data["storyteller_text"] else 0
-            }
+                "response_length": (
+                    len(incubator_data["storyteller_text"])
+                    if incubator_data["storyteller_text"]
+                    else 0
+                ),
+            },
         }
 
         logger.info("=" * 80)
@@ -330,18 +361,21 @@ class NarrativeTurnTester:
             )
             """
 
-            cur.execute(query, (
-                data["chunk_id"],
-                data["parent_chunk_id"],
-                data["user_text"],
-                data["storyteller_text"],
-                json.dumps(data["metadata_updates"]),
-                json.dumps(data["entity_updates"]),
-                json.dumps(data["reference_updates"]),
-                data["session_id"],
-                data["llm_response_id"],
-                data["status"]
-            ))
+            cur.execute(
+                query,
+                (
+                    data["chunk_id"],
+                    data["parent_chunk_id"],
+                    data["user_text"],
+                    data["storyteller_text"],
+                    json.dumps(data["metadata_updates"]),
+                    json.dumps(data["entity_updates"]),
+                    json.dumps(data["reference_updates"]),
+                    data["session_id"],
+                    data["llm_response_id"],
+                    data["status"],
+                ),
+            )
 
         self.conn.commit()
 
@@ -372,7 +406,7 @@ class NarrativeTurnTester:
 
     def __del__(self):
         """Clean up database connection"""
-        if hasattr(self, 'conn') and self.conn:
+        if hasattr(self, "conn") and self.conn:
             self.conn.close()
 
 
@@ -381,16 +415,31 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Test live narrative turns")
-    parser.add_argument("--dry-run", action="store_true",
-                       help="Don't write to database, just show what would happen")
-    parser.add_argument("--chunk-id", type=int, default=1425,
-                       help="Parent chunk ID to continue from (default: 1425)")
-    parser.add_argument("--user-text", type=str, default="Continue.",
-                       help="User text to complete the chunk with (default: 'Continue.')")
-    parser.add_argument("--view", action="store_true",
-                       help="View current incubator contents")
-    parser.add_argument("--attempt-id", type=uuid.UUID,
-                       help="Explicit diagnostic attempt UUID; required unless --view")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Don't write to database, just show what would happen",
+    )
+    parser.add_argument(
+        "--chunk-id",
+        type=int,
+        default=1425,
+        help="Parent chunk ID to continue from (default: 1425)",
+    )
+    parser.add_argument(
+        "--user-text",
+        type=str,
+        default="Continue.",
+        help="User text to complete the chunk with (default: 'Continue.')",
+    )
+    parser.add_argument(
+        "--view", action="store_true", help="View current incubator contents"
+    )
+    parser.add_argument(
+        "--attempt-id",
+        type=uuid.UUID,
+        help="Explicit diagnostic attempt UUID; required unless --view",
+    )
 
     args = parser.parse_args()
     if not args.view and args.attempt_id is None:
@@ -406,14 +455,17 @@ async def main():
             tester.view_incubator()
         else:
             result = await tester.continue_narrative(
-                parent_chunk_id=args.chunk_id,
-                user_text=args.user_text
+                parent_chunk_id=args.chunk_id, user_text=args.user_text
             )
 
             if result["success"]:
                 print("\n✅ Test completed successfully!")
-                print(f"📝 Generated text length: {result['diagnostics']['response_length']} characters")
-                print(f"⏱️  Total time: {result['diagnostics']['total_time']:.2f} seconds")
+                print(
+                    f"📝 Generated text length: {result['diagnostics']['response_length']} characters"
+                )
+                print(
+                    f"⏱️  Total time: {result['diagnostics']['total_time']:.2f} seconds"
+                )
                 print(f"🔑 Session ID: {result['session_id']}")
 
                 if not args.dry_run:

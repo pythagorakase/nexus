@@ -7,15 +7,15 @@ import os
 
 BASE_URL = os.environ.get("NEXUS_API_URL", "http://localhost:8002")
 
+
 def test_setup_flow(slot_number):
     print(f"Testing setup flow for slot {slot_number}...")
-    
+
     # 1. Start Setup
     print("1. Starting setup...")
     try:
         start_res = requests.post(
-            f"{BASE_URL}/api/story/new/setup/start",
-            json={"slot": slot_number}
+            f"{BASE_URL}/api/story/new/setup/start", json={"slot": slot_number}
         )
         start_res.raise_for_status()
         start_data = start_res.json()
@@ -23,7 +23,7 @@ def test_setup_flow(slot_number):
         print(f"   Setup started. Thread ID: {thread_id}")
     except Exception as e:
         print(f"   FAILED to start setup: {e}")
-        if hasattr(e, 'response') and e.response:
+        if hasattr(e, "response") and e.response:
             print(f"   Response: {e.response.text}")
         return
 
@@ -37,9 +37,9 @@ def test_setup_flow(slot_number):
                 "thread_id": thread_id,
                 "message": "A high fantasy world called Aethelgard. Magic is common. The tone is epic and adventurous. Tech level is medieval.",
                 "current_phase": "setting",
-                "context_data": {}
+                "context_data": {},
             },
-            timeout=60 # Set a timeout to catch hangs
+            timeout=60,  # Set a timeout to catch hangs
         )
         chat_res.raise_for_status()
         chat_data = chat_res.json()
@@ -59,9 +59,9 @@ def test_setup_flow(slot_number):
                     "thread_id": thread_id,
                     "message": "Just make it a standard high fantasy setting with elves and dwarves. No special twists.",
                     "current_phase": "setting",
-                    "context_data": {}
+                    "context_data": {},
                 },
-                timeout=60
+                timeout=60,
             )
             followup_res.raise_for_status()
             followup_data = followup_res.json()
@@ -72,11 +72,12 @@ def test_setup_flow(slot_number):
             else:
                 print("   Phase STILL NOT complete.")
                 print(f"   Message: {followup_data.get('message', '')[:100]}...")
-            
+
     except Exception as e:
         print(f"   FAILED to send message: {e}")
-        if hasattr(e, 'response') and e.response:
+        if hasattr(e, "response") and e.response:
             print(f"   Response: {e.response.text}")
+
 
 if __name__ == "__main__":
     # Test slot 3 as it exists

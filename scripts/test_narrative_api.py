@@ -11,6 +11,7 @@ from typing import Dict, Any
 
 API_BASE = "http://localhost:8002"
 
+
 def test_health():
     """Test health endpoint"""
     print("Testing /health endpoint...")
@@ -29,10 +30,7 @@ def test_continue_narrative(
 
     payload = {"chunk_id": chunk_id, "user_text": user_text, "slot": slot}
 
-    response = requests.post(
-        f"{API_BASE}/api/narrative/continue",
-        json=payload
-    )
+    response = requests.post(f"{API_BASE}/api/narrative/continue", json=payload)
 
     print(f"Status: {response.status_code}")
 
@@ -41,7 +39,7 @@ def test_continue_narrative(
         print(f"Session ID: {data['session_id']}")
         print(f"Status: {data['status']}")
         print(f"Message: {data['message']}")
-        return data['session_id']
+        return data["session_id"]
     else:
         print(f"Error: {response.text}")
         return None
@@ -61,11 +59,11 @@ def test_status(session_id: str, slot: int):
             data = response.json()
             print(f"Attempt {i+1}: Status = {data['status']}")
 
-            if data['status'] == 'complete':
+            if data["status"] == "complete":
                 print("Generation complete!")
                 print(f"Chunk ID: {data.get('chunk_id')}")
                 return True
-            elif data['status'] == 'error':
+            elif data["status"] == "error":
                 print(f"Error: {data.get('error')}")
                 return False
         else:
@@ -90,7 +88,7 @@ def test_incubator(slot: int):
 
     if response.status_code == 200:
         data = response.json()
-        if 'message' in data and data['message'] == 'Incubator is empty':
+        if "message" in data and data["message"] == "Incubator is empty":
             print("Incubator is empty")
         else:
             print("Incubator contents:")
@@ -98,8 +96,10 @@ def test_incubator(slot: int):
             print(f"  Parent Chunk ID: {data.get('parent_chunk_id')}")
             print(f"  Status: {data.get('status')}")
             print(f"  Session ID: {data.get('session_id')}")
-            if data.get('storyteller_text'):
-                print(f"  Storyteller text preview: {data['storyteller_text'][:100]}...")
+            if data.get("storyteller_text"):
+                print(
+                    f"  Storyteller text preview: {data['storyteller_text'][:100]}..."
+                )
         return True
     else:
         print(f"Error: {response.text}")
@@ -133,21 +133,26 @@ def main():
         choices=range(1, 6),
         help="Explicit target save slot (required except for --health)",
     )
-    parser.add_argument("--full", action="store_true",
-                       help="Run full test sequence")
-    parser.add_argument("--health", action="store_true",
-                       help="Test health endpoint only")
-    parser.add_argument("--continue", action="store_true", dest="continue_narrative",
-                       help="Test narrative continuation")
-    parser.add_argument("--incubator", action="store_true",
-                       help="View incubator contents")
-    parser.add_argument("--clear", action="store_true",
-                       help="Clear incubator")
+    parser.add_argument("--full", action="store_true", help="Run full test sequence")
+    parser.add_argument(
+        "--health", action="store_true", help="Test health endpoint only"
+    )
+    parser.add_argument(
+        "--continue",
+        action="store_true",
+        dest="continue_narrative",
+        help="Test narrative continuation",
+    )
+    parser.add_argument(
+        "--incubator", action="store_true", help="View incubator contents"
+    )
+    parser.add_argument("--clear", action="store_true", help="Clear incubator")
     parser.add_argument(
         "--chunk-id", type=int, default=None, help="Chunk ID to continue from"
     )
-    parser.add_argument("--user-text", type=str, default="Continue.",
-                       help="User text for continuation")
+    parser.add_argument(
+        "--user-text", type=str, default="Continue.", help="User text for continuation"
+    )
 
     args = parser.parse_args()
 
@@ -189,6 +194,7 @@ def main():
         print("Start the server with: ./iris")
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
+
 
 if __name__ == "__main__":
     main()

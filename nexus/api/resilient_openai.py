@@ -62,7 +62,9 @@ class ResilientOpenAI:
             return self._wrap_with_retry(attr, name)
 
         # For nested objects like client.chat.completions, we need to wrap deeper
-        if hasattr(attr, '__class__') and attr.__class__.__module__.startswith('openai'):
+        if hasattr(attr, "__class__") and attr.__class__.__module__.startswith(
+            "openai"
+        ):
             return ResilientWrapper(attr, self.config)
 
         return attr
@@ -78,6 +80,7 @@ class ResilientOpenAI:
         Returns:
             The wrapped function with retry logic
         """
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             last_exception = None
@@ -85,9 +88,14 @@ class ResilientOpenAI:
             for attempt in range(self.config.max_retries + 1):
                 try:
                     # Check circuit breaker
-                    if hasattr(openai_circuit_breaker, 'state') and openai_circuit_breaker.state == "open":
+                    if (
+                        hasattr(openai_circuit_breaker, "state")
+                        and openai_circuit_breaker.state == "open"
+                    ):
                         if not openai_circuit_breaker._should_attempt_reset():
-                            raise RuntimeError(f"Circuit breaker is OPEN for OpenAI API")
+                            raise RuntimeError(
+                                f"Circuit breaker is OPEN for OpenAI API"
+                            )
 
                     # Apply rate limiting
                     openai_rate_limiter.wait_if_needed()
@@ -96,7 +104,7 @@ class ResilientOpenAI:
                     result = func(*args, **kwargs)
 
                     # Mark success for circuit breaker
-                    if hasattr(openai_circuit_breaker, '_on_success'):
+                    if hasattr(openai_circuit_breaker, "_on_success"):
                         openai_circuit_breaker._on_success()
 
                     return result
@@ -105,7 +113,7 @@ class ResilientOpenAI:
                     last_exception = e
 
                     # Mark failure for circuit breaker
-                    if hasattr(openai_circuit_breaker, '_on_failure'):
+                    if hasattr(openai_circuit_breaker, "_on_failure"):
                         openai_circuit_breaker._on_failure()
 
                     if attempt < self.config.max_retries:
@@ -159,10 +167,14 @@ class ResilientWrapper:
 
         # If it's a method, wrap it with retry logic
         if callable(attr):
-            return self._wrap_with_retry(attr, f"{self._wrapped.__class__.__name__}.{name}")
+            return self._wrap_with_retry(
+                attr, f"{self._wrapped.__class__.__name__}.{name}"
+            )
 
         # For further nested objects, continue wrapping
-        if hasattr(attr, '__class__') and attr.__class__.__module__.startswith('openai'):
+        if hasattr(attr, "__class__") and attr.__class__.__module__.startswith(
+            "openai"
+        ):
             return ResilientWrapper(attr, self._config)
 
         return attr
@@ -173,6 +185,7 @@ class ResilientWrapper:
 
         This is similar to the ResilientOpenAI version but for nested objects.
         """
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             last_exception = None
@@ -242,7 +255,9 @@ class AsyncResilientOpenAI:
             return self._wrap_with_async_retry(attr, name)
 
         # For nested objects like client.chat.completions
-        if hasattr(attr, '__class__') and attr.__class__.__module__.startswith('openai'):
+        if hasattr(attr, "__class__") and attr.__class__.__module__.startswith(
+            "openai"
+        ):
             return AsyncResilientWrapper(attr, self.config)
 
         return attr
@@ -251,6 +266,7 @@ class AsyncResilientOpenAI:
         """
         Wrap an async function with retry logic.
         """
+
         @wraps(func)
         async def wrapper(*args, **kwargs):
             last_exception = None
@@ -258,9 +274,14 @@ class AsyncResilientOpenAI:
             for attempt in range(self.config.max_retries + 1):
                 try:
                     # Check circuit breaker
-                    if hasattr(openai_circuit_breaker, 'state') and openai_circuit_breaker.state == "open":
+                    if (
+                        hasattr(openai_circuit_breaker, "state")
+                        and openai_circuit_breaker.state == "open"
+                    ):
                         if not openai_circuit_breaker._should_attempt_reset():
-                            raise RuntimeError(f"Circuit breaker is OPEN for OpenAI API")
+                            raise RuntimeError(
+                                f"Circuit breaker is OPEN for OpenAI API"
+                            )
 
                     # Apply async rate limiting
                     await openai_rate_limiter.wait_if_needed_async()
@@ -269,7 +290,7 @@ class AsyncResilientOpenAI:
                     result = await func(*args, **kwargs)
 
                     # Mark success for circuit breaker
-                    if hasattr(openai_circuit_breaker, '_on_success'):
+                    if hasattr(openai_circuit_breaker, "_on_success"):
                         openai_circuit_breaker._on_success()
 
                     return result
@@ -278,7 +299,7 @@ class AsyncResilientOpenAI:
                     last_exception = e
 
                     # Mark failure for circuit breaker
-                    if hasattr(openai_circuit_breaker, '_on_failure'):
+                    if hasattr(openai_circuit_breaker, "_on_failure"):
                         openai_circuit_breaker._on_failure()
 
                     if attempt < self.config.max_retries:
@@ -326,10 +347,14 @@ class AsyncResilientWrapper:
 
         # If it's a method, wrap it with async retry logic
         if callable(attr):
-            return self._wrap_with_async_retry(attr, f"{self._wrapped.__class__.__name__}.{name}")
+            return self._wrap_with_async_retry(
+                attr, f"{self._wrapped.__class__.__name__}.{name}"
+            )
 
         # For further nested objects, continue wrapping
-        if hasattr(attr, '__class__') and attr.__class__.__module__.startswith('openai'):
+        if hasattr(attr, "__class__") and attr.__class__.__module__.startswith(
+            "openai"
+        ):
             return AsyncResilientWrapper(attr, self._config)
 
         return attr
@@ -338,6 +363,7 @@ class AsyncResilientWrapper:
         """
         Wrap an async function with retry logic.
         """
+
         @wraps(func)
         async def wrapper(*args, **kwargs):
             last_exception = None
@@ -378,7 +404,9 @@ class AsyncResilientWrapper:
         return wrapper
 
 
-def create_resilient_client(api_key: str, async_client: bool = False, config: Optional[RetryConfig] = None) -> Any:
+def create_resilient_client(
+    api_key: str, async_client: bool = False, config: Optional[RetryConfig] = None
+) -> Any:
     """
     Factory function to create a resilient OpenAI client.
 

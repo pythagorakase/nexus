@@ -9,6 +9,7 @@ from nexus.database import connection_kwargs
 import psycopg2
 import re
 
+
 def main():
     # Connect to the database
     print("Connecting to NEXUS database...")
@@ -19,7 +20,9 @@ def main():
     cur = conn.cursor()
 
     # First, let's get the current values to show before/after
-    cur.execute("SELECT season, episode, chunk_span FROM episodes ORDER BY season, episode")
+    cur.execute(
+        "SELECT season, episode, chunk_span FROM episodes ORDER BY season, episode"
+    )
     original_ranges = cur.fetchall()
 
     # Print the current ranges
@@ -30,7 +33,9 @@ def main():
         print(f"{row[0]:6d} | {row[1]:7d} | {row[2]}")
 
     # Skip confirmation in non-interactive mode
-    print("\nThis will update all episode chunk_span upper bounds from exclusive to inclusive.")
+    print(
+        "\nThis will update all episode chunk_span upper bounds from exclusive to inclusive."
+    )
     print("Proceeding with update...")
 
     try:
@@ -41,15 +46,17 @@ def main():
         # First, let's check if our version supports it
         cur.execute("SELECT version()")
         version_info = cur.fetchone()[0]
-        pg_version = int(re.search(r'PostgreSQL (\d+)', version_info).group(1))
+        pg_version = int(re.search(r"PostgreSQL (\d+)", version_info).group(1))
 
         if pg_version >= 14:
             # Use the built-in replace function for all records
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE episodes 
                 SET chunk_span = REPLACE(CAST(chunk_span AS TEXT), ')', ']')::int8range
                 WHERE CAST(chunk_span AS TEXT) LIKE '%)'
-            """)
+            """
+            )
             updated_count = cur.rowcount
         else:
             # Pre-14 approach: update each range individually
@@ -61,23 +68,28 @@ def main():
                 range_text = str(chunk_span)
 
                 # Only update if it ends with ')'
-                if range_text.endswith(')'):
+                if range_text.endswith(")"):
                     # Replace the closing parenthesis with a bracket
-                    new_range_text = range_text.replace(')', ']')
+                    new_range_text = range_text.replace(")", "]")
 
                     # Update the database
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE episodes 
                         SET chunk_span = %s::int8range
                         WHERE season = %s AND episode = %s
-                    """, (new_range_text, season, episode))
+                    """,
+                        (new_range_text, season, episode),
+                    )
 
                     updated_count += 1
 
         print(f"Updated {updated_count} ranges.")
 
         # Get the updated values
-        cur.execute("SELECT season, episode, chunk_span FROM episodes ORDER BY season, episode")
+        cur.execute(
+            "SELECT season, episode, chunk_span FROM episodes ORDER BY season, episode"
+        )
         updated_ranges = cur.fetchall()
 
         # Print the updated ranges
@@ -94,6 +106,7 @@ def main():
     finally:
         # Close the connection
         conn.close()
+
 
 if __name__ == "__main__":
     main()

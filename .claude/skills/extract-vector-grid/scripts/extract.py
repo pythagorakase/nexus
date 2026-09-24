@@ -66,6 +66,7 @@ class BBox:
 # Stage 1: format detection + conversion to flat SVG
 # --------------------------------------------------------------------------- #
 
+
 def detect_format(path: Path) -> str:
     """Return 'pdf', 'eps', or 'svg' based on libmagic output."""
     out = subprocess.run(
@@ -91,9 +92,7 @@ def convert_to_svg(src: Path, dst: Path, fmt: str) -> None:
             tmp_path = Path(tmp.name)
         shutil.copy(src, tmp_path)
         try:
-            subprocess.run(
-                ["pdftocairo", "-svg", str(tmp_path), str(dst)], check=True
-            )
+            subprocess.run(["pdftocairo", "-svg", str(tmp_path), str(dst)], check=True)
         finally:
             tmp_path.unlink(missing_ok=True)
         return
@@ -118,6 +117,7 @@ def convert_to_svg(src: Path, dst: Path, fmt: str) -> None:
 # --------------------------------------------------------------------------- #
 # Stage 2: shape extraction with absolute-coordinate bboxes
 # --------------------------------------------------------------------------- #
+
 
 def collect_shapes(svg_path: Path) -> tuple[list[tuple[Shape, BBox]], BBox]:
     """Return (shapes-with-bboxes, page-bbox).
@@ -156,14 +156,13 @@ def drop_page_background(
     shape exists at all.
     """
     page_area = max(page.area, 1.0)
-    return [
-        (s, bb) for s, bb in shapes if bb.area / page_area < coverage
-    ]
+    return [(s, bb) for s, bb in shapes if bb.area / page_area < coverage]
 
 
 # --------------------------------------------------------------------------- #
 # Stage 3: projection-profile gutter detection
 # --------------------------------------------------------------------------- #
+
 
 def find_gutter_midpoints(bboxes: Iterable[BBox], axis: str) -> list[float]:
     """Find midpoints of empty bands along an axis.
@@ -220,6 +219,7 @@ def union_bbox(items: list[tuple[Shape, BBox]]) -> BBox:
 # --------------------------------------------------------------------------- #
 # Stage 4: emit per-cell SVG
 # --------------------------------------------------------------------------- #
+
 
 def read_viewbox_width(svg_path: Path) -> float | None:
     """Return the viewBox width in user-units, or None if no viewBox.
@@ -407,15 +407,14 @@ def emit_cell_svg(
         else:
             translate_g.append(clone)
 
-    ET.ElementTree(new_root).write(
-        out_path, encoding="utf-8", xml_declaration=True
-    )
+    ET.ElementTree(new_root).write(out_path, encoding="utf-8", xml_declaration=True)
     return len(keep_xml)
 
 
 # --------------------------------------------------------------------------- #
 # Driver
 # --------------------------------------------------------------------------- #
+
 
 def extract(
     input_path: Path,
@@ -474,9 +473,7 @@ def extract(
         # Parse the flat SVG once and share the XML / reified walks across all
         # cells — keeps emit_cell_svg's per-call cost O(cell_shapes), not
         # O(total_shapes) × O(cells).
-        _, xml_nodes_in_order, shapes_in_order, parent_map = prepare_shape_index(
-            flat
-        )
+        _, xml_nodes_in_order, shapes_in_order, parent_map = prepare_shape_index(flat)
 
         manifest: list[dict] = []
         for (r, c), items in sorted(cells.items()):
@@ -484,8 +481,11 @@ def extract(
             out_name = f"{name_prefix}-r{r+1}c{c+1}.svg"
             out_path = output_dir / out_name
             shape_count = emit_cell_svg(
-                items, ubox, out_path,
-                padding=padding, coord_scale=coord_scale,
+                items,
+                ubox,
+                out_path,
+                padding=padding,
+                coord_scale=coord_scale,
                 xml_nodes_in_order=xml_nodes_in_order,
                 shapes_in_order=shapes_in_order,
                 parent_map=parent_map,
@@ -542,9 +542,7 @@ def extract(
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("input", type=Path, help="Input .ai / .pdf / .eps / .svg file")
-    p.add_argument(
-        "--out", "-o", type=Path, required=True, help="Output directory"
-    )
+    p.add_argument("--out", "-o", type=Path, required=True, help="Output directory")
     p.add_argument(
         "--name-prefix",
         "-n",

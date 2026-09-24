@@ -42,10 +42,8 @@ def main() -> int:
         idx = text.find("<svg")
         end = text.find(">", idx) + 1
         injected = (
-            text[:end]
-            + f'<rect x="-100%" y="-100%" width="300%" height="300%" '
-            f'fill="{args.bg}"/>'
-            + text[end:]
+            text[:end] + f'<rect x="-100%" y="-100%" width="300%" height="300%" '
+            f'fill="{args.bg}"/>' + text[end:]
         )
         cairosvg.svg2png(
             bytestring=injected.encode("utf-8"),
