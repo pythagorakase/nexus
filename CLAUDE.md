@@ -78,7 +78,9 @@ python scripts/migrate.py --template
 
 Migration files live in `migrations/` (e.g., `009_remove_assets_save_slots.sql`). The runner tracks applied migrations in a per-database `schema_migrations` table.
 
-**Locked slots are skipped** - unlock first if needed, then re-lock after migration.
+**Locked slots are skipped** unless `--write-locked-slot` is supplied (for example,
+`python scripts/migrate.py --slot 1 --write-locked-slot`). The override applies only
+to the maintenance session; the database stays locked and other backends stay connected.
 
 #### 2. Slot Initialization (for new/empty slots)
 

@@ -31,9 +31,10 @@ def set_locked(dbname: str, locked: bool) -> None:
 def test_locked_scheduler_observes_then_acquires(
     offline_gate_db, caplog, monkeypatch, capsys
 ) -> None:
-    """Lock polling is quiet and unlocking does not use fault backoff."""
+    """Lock polling is quiet and unlocking waits the configured observer hold."""
     settings = scheduler_settings()
     settings["runtime"]["scheduler"]["poll_interval_seconds"] = 1.0
+    settings["runtime"]["scheduler"]["unlock_hold_seconds"] = 1.0
     scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
     caplog.set_level(logging.INFO, logger="nexus.jobs.scheduler")
     set_locked(offline_gate_db, True)
@@ -72,8 +73,8 @@ def test_locked_scheduler_observes_then_acquires(
         sleep(0.3)
         started = monotonic()
         set_locked(offline_gate_db, False)
-        wait_until(lambda: scheduler.state == "owner", timeout=1.0)
-        assert monotonic() - started < 1.0
+        wait_until(lambda: scheduler.state == "owner", timeout=3.0)
+        assert monotonic() - started >= 1.0
         assert scheduler.reason is None
         assert scheduler.last_error is None
         assert sum("slot lock cleared" in r.message for r in caplog.records) == 1
@@ -110,5 +111,65 @@ def test_read_only_pass_becomes_observer(offline_gate_db, caplog) -> None:
         assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
     finally:
         scheduler.stop()
+        set_locked(offline_gate_db, False)
+        scheduler.release()
+
+
+def test_brief_unlock_does_not_admit_scheduler(offline_gate_db, caplog) -> None:
+    """An observed unlock shorter than the hold never creates an ownership row."""
+    settings = scheduler_settings()
+    settings["runtime"]["scheduler"]["unlock_hold_seconds"] = 0.5
+    scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
+    caplog.set_level(logging.INFO, logger="nexus.jobs.scheduler")
+    set_locked(offline_gate_db, True)
+    try:
+        scheduler.start()
+        assert scheduler.reason == "slot locked"
+        set_locked(offline_gate_db, False)
+        wait_until(lambda: scheduler._unlock_observed_at is not None)
+        sleep(0.1)
+        assert scheduler.state == "observer"
+        set_locked(offline_gate_db, True)
+        wait_until(lambda: scheduler._unlock_observed_at is None)
+        sleep(0.6)
+        assert scheduler.state == "observer"
+        with closing(connect(offline_gate_db)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM deferred_work_scheduler")
+            assert cur.fetchone() == (0,)
+        assert sum("slot lock cleared" in r.message for r in caplog.records) == 1
+        # A second unlock starts a fresh hold and eventually admits ownership.
+        set_locked(offline_gate_db, False)
+        wait_until(lambda: scheduler._unlock_observed_at is not None)
+        started = scheduler._unlock_observed_at
+        wait_until(lambda: scheduler.state == "owner")
+        assert monotonic() - started >= 0.5
+    finally:
+        scheduler.stop()
+        set_locked(offline_gate_db, False)
+
+
+def test_lock_hold_survives_database_error(offline_gate_db) -> None:
+    """A real SQL failure between lock observations cannot erase lock memory."""
+    import psycopg2
+
+    settings = scheduler_settings()
+    settings["runtime"]["scheduler"]["unlock_hold_seconds"] = 0.2
+    scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
+    set_locked(offline_gate_db, True)
+    try:
+        assert not scheduler.acquire()
+        try:
+            with closing(scheduler.connect()) as conn, conn.cursor() as cur:
+                cur.execute("SELECT 1 / 0")
+        except psycopg2.errors.DivisionByZero as exc:
+            scheduler._recover(exc)
+        assert scheduler.state == "recovering"
+        set_locked(offline_gate_db, False)
+        assert not scheduler.acquire()
+        assert scheduler.state == "observer"
+        assert scheduler.reason == "slot locked"
+        sleep(0.25)
+        assert scheduler.acquire()
+    finally:
         set_locked(offline_gate_db, False)
         scheduler.release()

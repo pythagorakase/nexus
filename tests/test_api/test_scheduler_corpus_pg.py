@@ -192,7 +192,9 @@ def test_scheduler_live_turn_starts_before_queued_render(
             ], order
             print(f"Live ordering: {order}", flush=True)
             run_cli(monkeypatch, "status")
-            status = requests.get("http://127.0.0.1:8018/runtime/status", timeout=10)
+            status = requests.get(
+                os.environ["NEXUS_API_URL"] + "/runtime/status", timeout=10
+            )
             assert status.status_code == 200, status.text
             print(
                 "/runtime/status: " + json.dumps(status.json(), sort_keys=True),

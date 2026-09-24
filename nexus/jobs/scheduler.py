@@ -65,12 +65,16 @@ class SlotScheduler:
         self._waiting = False
         self._job_called = False
         self._job_lost = False
+        self._lock_observed = False
+        self._unlock_observed_at: float | None = None
 
     def connect(self) -> Any:
         """Open an independent connection to this scheduler's explicit database."""
         return psycopg2.connect(**connection_kwargs(self.dbname))
 
     def _observe_lock(self) -> None:
+        self._lock_observed = True
+        self._unlock_observed_at = None
         if self.reason != "slot locked":
             logger.info("Deferred-work observer for %s: slot locked", self.dbname)
         self.state = "observer"
@@ -101,8 +105,22 @@ class SlotScheduler:
             conn.close()
         if locked:
             self._observe_lock()
-        elif self.reason == "slot locked":
-            logger.info("Deferred-work observer for %s: slot lock cleared", self.dbname)
+        elif self._lock_observed:
+            self.state = "observer"
+            self.reason = "slot locked"
+            self.last_error = None
+            now = time.monotonic()
+            if self._unlock_observed_at is None:
+                self._unlock_observed_at = now
+                logger.info(
+                    "Deferred-work observer for %s: slot lock cleared; holding for %s seconds",
+                    self.dbname,
+                    self.cfg.unlock_hold_seconds,
+                )
+            if now - self._unlock_observed_at < self.cfg.unlock_hold_seconds:
+                return True
+            self._unlock_observed_at = None
+            self._lock_observed = False
             self.reason = None
         return locked
 
@@ -322,6 +340,8 @@ class SlotScheduler:
         if isinstance(exc, SchedulerStopped) and self.reason == "slot locked":
             return
         self.reason = None
+        if self._lock_observed:
+            self._unlock_observed_at = None
         # Never issue diagnostic SQL here: the database may be unreachable.
         if not self._lost.is_set():
             self.last_error = str(exc)
