@@ -110,18 +110,18 @@ def gateway_lane(monkeypatch):
     import uvicorn
     from nexus.api import narrative
 
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8017")
-    monkeypatch.setenv("NEXUS_API_URL", "http://127.0.0.1:8017")
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8018")
+    monkeypatch.setenv("NEXUS_API_URL", "http://127.0.0.1:8018")
     check = subprocess.run(
-        ["lsof", "-nP", "-iTCP:8017", "-sTCP:LISTEN"], capture_output=True, text=True
+        ["lsof", "-nP", "-iTCP:8018", "-sTCP:LISTEN"], capture_output=True, text=True
     )
     assert check.returncode == 1, check.stdout + check.stderr
     server = uvicorn.Server(
-        uvicorn.Config(narrative.app, host="127.0.0.1", port=8017, log_level="warning")
+        uvicorn.Config(narrative.app, host="127.0.0.1", port=8018, log_level="warning")
     )
     with socket.socket() as listener:
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind(("127.0.0.1", 8017))
+        listener.bind(("127.0.0.1", 8018))
         listener.listen()
         thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]})
         thread.start()
@@ -131,10 +131,10 @@ def gateway_lane(monkeypatch):
                 not server.started and thread.is_alive() and time.monotonic() < deadline
             ):
                 time.sleep(0.01)
-            assert server.started, "Gateway 8017 failed to start"
+            assert server.started, "Gateway 8018 failed to start"
             yield narrative.app.state.scheduler
         finally:
             server.should_exit = True
             thread.join(timeout=30)
-            assert not thread.is_alive(), "Gateway 8017 did not shut down"
+            assert not thread.is_alive(), "Gateway 8018 did not shut down"
             run_cli(monkeypatch, "down")

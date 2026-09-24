@@ -131,6 +131,8 @@ def process_orrery_outbox_sync(
         maturation_limit=maturation_limit,
         experience_limit=experience_limit,
     )
+    if scheduler.reason == "slot locked":
+        raise psycopg2.errors.ReadOnlySqlTransaction("slot locked")
     promotion = result.get("promotion", (0, 0))
     narration = result.get("orrery_narration_jobs", (0, 0))
     experience = result.get("character_experience_jobs", (0, 0))
@@ -980,16 +982,20 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         payload = load_job_queues_for_slot_sync(args.slot or get_active_slot())
     else:
-        payload = process_orrery_outbox_sync(
-            args.slot,
-            promotion_limit=args.promotion_limit,
-            narration_limit=args.narration_limit,
-            semantic_clearance_limit=args.semantic_clearance_limit,
-            semantic_clearance_recent_chunks=args.semantic_clearance_recent_chunks,
-            semantic_clearance_evidence_chunks=args.semantic_clearance_evidence_chunks,
-            semantic_clearance_evidence_events=args.semantic_clearance_evidence_events,
-            maturation_limit=args.maturation_limit,
-        ).model_dump()
+        try:
+            payload = process_orrery_outbox_sync(
+                args.slot,
+                promotion_limit=args.promotion_limit,
+                narration_limit=args.narration_limit,
+                semantic_clearance_limit=args.semantic_clearance_limit,
+                semantic_clearance_recent_chunks=args.semantic_clearance_recent_chunks,
+                semantic_clearance_evidence_chunks=args.semantic_clearance_evidence_chunks,
+                semantic_clearance_evidence_events=args.semantic_clearance_evidence_events,
+                maturation_limit=args.maturation_limit,
+            ).model_dump()
+        except psycopg2.errors.ReadOnlySqlTransaction:
+            print("Orrery worker: slot locked")
+            return 1
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 

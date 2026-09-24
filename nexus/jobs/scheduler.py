@@ -58,6 +58,7 @@ class SlotScheduler:
         self._heartbeat_stop = threading.Event()
         self._lost = threading.Event()
         self.state = "observer"
+        self.reason: str | None = None
         self.last_error: str | None = None
         self._job_lock = threading.RLock()
         self._job: dict[str, Any] | None = None
@@ -69,8 +70,46 @@ class SlotScheduler:
         """Open an independent connection to this scheduler's explicit database."""
         return psycopg2.connect(**connection_kwargs(self.dbname))
 
+    def _observe_lock(self) -> None:
+        if self.reason != "slot locked":
+            logger.info("Deferred-work observer for %s: slot locked", self.dbname)
+        self.state = "observer"
+        self.reason = "slot locked"
+        self.last_error = None
+        self._lost.set()
+        self.wakeup.set()
+
+    def _slot_locked(self) -> bool:
+        # Match save_slots.is_slot_locked, using this scheduler's database.
+        conn = self.connect()
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT setconfig
+                    FROM pg_db_role_setting s
+                    JOIN pg_database d ON d.oid = s.setdatabase
+                    WHERE d.datname = %s AND s.setrole = 0
+                    """,
+                    (self.dbname,),
+                )
+                row = cur.fetchone()
+                locked = bool(
+                    row and row[0] and "default_transaction_read_only=on" in row[0]
+                )
+        finally:
+            conn.close()
+        if locked:
+            self._observe_lock()
+        elif self.reason == "slot locked":
+            logger.info("Deferred-work observer for %s: slot lock cleared", self.dbname)
+            self.reason = None
+        return locked
+
     def acquire(self) -> bool:
         """Acquire only a vacant or expired singleton; never steal a live owner."""
+        if self._slot_locked():
+            return False
         nonce = str(uuid4())
         conn = self.connect()
         try:
@@ -277,6 +316,12 @@ class SlotScheduler:
             conn.close()
 
     def _recover(self, exc: BaseException) -> None:
+        if isinstance(exc, psycopg2.errors.ReadOnlySqlTransaction):
+            self._observe_lock()
+            return
+        if isinstance(exc, SchedulerStopped) and self.reason == "slot locked":
+            return
+        self.reason = None
         # Never issue diagnostic SQL here: the database may be unreachable.
         if not self._lost.is_set():
             self.last_error = str(exc)
@@ -316,14 +361,26 @@ class SlotScheduler:
 
     def run_pass(self, **limits: Any) -> dict[str, Any]:
         """Run one operator pass under the very same ownership and heartbeat."""
-        if not self.acquire():
-            return {"owner": False, "drained": False}
-        self._start_heartbeat()
         try:
-            return self._drain(**limits)
-        finally:
-            self._end_heartbeat()
-            self.release()
+            if not self.acquire():
+                return {"owner": False, "drained": False}
+            self._start_heartbeat()
+            try:
+                return self._drain(**limits)
+            except psycopg2.errors.ReadOnlySqlTransaction as exc:
+                self._recover(exc)
+                return {"owner": False, "drained": False}
+            except SchedulerStopped:
+                if self.reason != "slot locked":
+                    raise
+                return {"owner": False, "drained": False}
+            finally:
+                self._end_heartbeat()
+                if self.reason != "slot locked":
+                    self.release()
+        except psycopg2.errors.ReadOnlySqlTransaction as exc:
+            self._recover(exc)
+            return {"owner": False, "drained": False}
 
     def _drain(self, **limits: Any) -> dict[str, Any]:
         from nexus.agents.orrery import worker
@@ -463,7 +520,12 @@ class SlotScheduler:
                 if self._lost.is_set():
                     self._end_heartbeat()
                     owned = False
-                    if self.stopping.wait(self.cfg.error_backoff_seconds):
+                    delay = (
+                        self.cfg.poll_interval_seconds
+                        if self.reason == "slot locked"
+                        else self.cfg.error_backoff_seconds
+                    )
+                    if self.stopping.wait(delay):
                         break
                     self._lost.clear()
                 self.wakeup.clear()
@@ -478,7 +540,8 @@ class SlotScheduler:
                     if not self.stopping.is_set():
                         self._recover(exc)
                     continue
-                self.wakeup.wait(self.cfg.poll_interval_seconds)
+                if not self._lost.is_set():
+                    self.wakeup.wait(self.cfg.poll_interval_seconds)
         finally:
             self._end_heartbeat()
             if owned and not self._lost.is_set():
@@ -498,7 +561,8 @@ class SlotScheduler:
         if self._thread:
             self._thread.join(timeout=max(0, deadline - time.monotonic()))
         self._heartbeat_stop.set()
-        try:
-            self.release()
-        except Exception as exc:
-            self._recover(exc)
+        if self.state == "owner" and not self._lost.is_set():
+            try:
+                self.release()
+            except Exception as exc:
+                self._recover(exc)
