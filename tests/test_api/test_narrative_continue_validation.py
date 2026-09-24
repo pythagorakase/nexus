@@ -1088,11 +1088,7 @@ def test_pending_choice_rolls_back_when_auto_approval_validation_fails(
         )
 
     monkeypatch.setattr(narrative, "generate_narrative_async", stop_after_approval)
-    monkeypatch.setattr(
-        narrative,
-        "_run_post_commit_orrery_work",
-        lambda _slot: None,
-    )
+    monkeypatch.setattr(narrative, "wake_scheduler", lambda _slot: None)
     with TestClient(narrative.app) as client:
         recovered = client.post(
             "/api/narrative/continue",
