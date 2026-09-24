@@ -1,79 +1,234 @@
-# Work Order 909: Stop Report
+# Long-Absence Re-Entry Probe: Stop Report
 
 ## Outcome
 
-**STOP: the required PostgreSQL gate fails outside the #885 exemptions.** No live writer or Gaia turn was attempted; no long-absence behavior was measured. This is neither evidence that the failure appeared nor evidence that it did not. No PR was opened because the proof gate did not pass.
+**STOP: seven live attempts yielded four accepted turns; the required six-turn probe cannot be completed within the eight-attempt cap.** Both Niko and Ora pairs are accepted as chunks **50–53**. Ivo A failed three times; Ivo B was not attempted. Exactly **13 paid generation requests** ran: seven writer calls and six Gaia calls, all on the configured `gpt-5.6-terra` story pin (Gaia follows that pin). No eighth attempt was spent because it could not complete the missing pair.
 
-Base: `20e2c07b` (`Make Per-Seat Turn Windows Truthful (#903)`). Branch: `claude/909-long-absence-probe`. The required import check printed `/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/__init__.py`.
+The failures are (1) an unresolved place update, (2) mutually exclusive presence operations, and (3) a tag-reapplication constraint. No validation was bypassed. This is a partial measurement and a successful stop under the work order's escape hatch, **not a completed #909 evidence gate**. No PR is opened for a completed probe; the coordinator must authorize how to resume. The four accepted turns do not show an unambiguous long-absence continuity contradiction, but omission and relationship-temperature ambiguity remain, detailed below.
 
-## Stop Condition and Diagnosis
+## Scope and Method
 
-A fresh focused PostgreSQL run reproduced:
+Work order [#909](https://github.com/pythagorakase/nexus/issues/909), implementing the live-evidence gate of #737 Decisions 1 and 2. Base: `20e2c07b` (#903); branch: `claude/909-long-absence-probe`. The coordinator's second issue waived the test gate, excluded the stranger from subject selection, and specified N/A temperature scores without a relationship row. No suite was rerun. The [prior stop report](prior-stop-report.md) and its original artifacts are historical preparation, not live-generation evidence.
 
-```text
-E       AttributeError: <module 'nexus.api.narrative' from '/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/api/narrative.py'> has no attribute '_run_post_commit_orrery_work'
+All gameplay runs through the real CLI and gateway on **8018**, with logical slot 4 mapped in-process to **`qa640_909_long_absence`**. Production slot validation is unchanged. The clone was exported with `pg_dump`, restored with `pg_restore`, and not migrated. `save_04` is read-only throughout. The source has **46 narrative rows and maximum ID 49**; chunk gaps below mean ID distance, not row count.
 
-tests/test_api/test_narrative_continue_validation.py:1091: AttributeError
-```
+The QA launcher checks `SELECT current_database()` on every psycopg2 connection, before evidence steps, and before every paid request. It refuses all gameplay databases except the clone; maintenance `postgres` connections are read-only. It captures the actual request at LOGON's final-guard attachment, including rendered prompt and assembly payload, without changing prompt text or model selection. Provider and structured-validation retries are disabled. A durable ledger caps writer and Gaia requests at eight each and blocks auxiliary provider seats before payment. Consequently deferred experience rendering is excluded; synchronous Gaia, acceptance, and ledger work remain real. The gateway's unrelated fixed-port siblings are not started.
 
-The failing test is `test_pending_choice_rolls_back_when_auto_approval_validation_fails`. It creates a disposable `nexus_test_continue_*` database and uses logical slot 3, not the owner's empty slot 5. Its first rollback assertions succeed; the failure occurs while patching a retired post-commit helper before the recovery half. The current gateway wakes the scheduler through `wake_scheduler` (`nexus/api/narrative.py:131`). Diagnosis: stale test hook on the unchanged base, outside this docs-only order; not a measured re-entry defect.
+The clone inherited a pending draft and a selected false-claim response on chunk 49. The pending draft was archived then removed through the gateway; only the clone's chunk-49 choice and raw-text fields were reset. Normal CLI continuation records the probe's new player input. This prevents the inherited draft from being auto-accepted. The initial 409 response was pre-provider. A QA connection-guard cursor mismatch also failed before any paid call and was corrected to use an explicit tuple cursor. These are probe setup errors, not continuity failures.
 
-The full gate reached approximately 9% before interruption after non-exempt failures. It also reported failures in `test_correspondence_pg.py`, `test_reader_asset_endpoints.py`, and a scheduler corpus test, plus the exempt `test_orrery_dev_endpoints.py` failures. These additional failures were not individually diagnosed. The full run ended during pytest teardown with `KeyError` and `KeyboardInterrupt`; it has no trustworthy final pass/fail totals and is not a passing gate. The focused rerun supplies the independently confirmed stop condition. Full logs are in [validation.log](validation.log).
-
-## Completed Preparation
-
-- PostgreSQL connected successfully; the Postgres.app trust-permission hazard did not occur.
-- Read-only source inspection found **46 rows, maximum chunk ID 49**, not 49 rows. `SELECT current_database()` returned `save_04` before source query steps.
-- Created `qa640_909_long_absence` using `CREATE DATABASE ... TEMPLATE template0`, `pg_dump --format=custom`, and `pg_restore --exit-on-error --no-owner --no-acl`. The clone independently returned `('qa640_909_long_absence', 46, 49)`. No fleet/template migration was applied.
-- Lane 8018 was free before the launch attempt. A disposable in-process launcher admitted the clone through `slot_utils.VALID_DBNAMES`, routed logical slot 4 to it, and checked its identity again.
-- The launch stopped before spawning the gateway: an intentionally strict connection guard rejected `postgres` during the supervisor's slot-lock read. Exact error: `RuntimeError: Probe refused database 'postgres'`. `is_slot_locked` calls the maintenance database at `nexus/api/save_slots.py:139` to query `pg_db_role_setting`; this is an overstrict probe guard, not a production targeting defect. [startup.log](startup.log) preserves the traceback. The unvalidated launcher was discarded after the gate stop; a resumed probe should allow this maintenance read in a read-only connection.
-- The full test suite independently used lane 8018 through `tests/scheduler_helpers.py::gateway_lane` and released it. That TEST-provider fixture is not live-probe evidence.
+Subjects run sequentially on one clone, without resetting between subjects. Follow-up turns explicitly supply a specific fact from the original last appearance. They measure response to a reminder, not unaided recall. Later turns can benefit from earlier accepted prose. Player inputs deliberately posit the subject's arrival; arrival itself is not scored as fabricated history. New events during the unobserved interval are distinguished from invented claims about already established shared history.
 
 ## Subject Census
 
-Source: `baseline.json` → `source_before[1]`. The selection uses the same character-reference source as the shared roster (`nexus/presence/roster.py:152`), restricted to `reference='present'`. Every character with at least one such reference is listed. Gap means **49 minus last-present chunk ID**, not row count; world gaps subtract the last-present `world_time` from chunk 49's `world_time`.
+Every character with at least one `present` reference appears below. Source: [subjects.json](live/subjects.json); query and exact results: [sql.jsonl](live/sql.jsonl). This uses the same reference source as `nexus/presence/roster.py:152`, with chunk 49's world time as the comparison anchor. Every listed character has a nonempty summary, including setup stubs.
 
-| ID | Character | Last Present | Chunk-ID Gap | World-Time Gap | Summary Exists | Relationship Exists |
+| ID | Character | Last Present | ID Gap | World-Time Gap | Relationship Row | Selection |
 |---:|---|---:|---:|---|---|---|
-| 11 | Unknown municipal-gray stranger | 21 | 28 | 2:16:00 | Yes | No |
-| 4 | Niko Rell | 25 | 24 | 2:02:00 | Yes | Yes |
-| 14 | Ora Pell | 25 | 24 | 2:02:00 | Yes | No |
-| 2 | Ivo Senn | 48 | 1 | 0:08:00 | Yes | Yes |
-| 3 | Elian Rook | 48 | 1 | 0:08:00 | Yes | Yes |
-| 5 | Ren Vale | 48 | 1 | 0:08:00 | Yes | Yes |
-| 6 | Sister Calyx | 48 | 1 | 0:08:00 | Yes | Yes |
-| 8 | Vela Nash | 48 | 1 | 0:08:00 | Yes | Yes |
-| 12 | Tam Oris | 48 | 1 | 0:08:00 | Yes | Yes |
-| 1 | Mara Vey | 49 | 0 | 0:00:00 | Yes | Yes |
-| 18 | Kessa Brin | 49 | 0 | 0:00:00 | Yes | Yes |
+| 11 | Unknown municipal-gray stranger | 21 | 28 | 2:16:00 | No | Excluded: roster/prose mismatch |
+| 4 | Niko Rell | 25 | 24 | 2:02:00 | Yes | Subject 1 |
+| 14 | Ora Pell | 25 | 24 | 2:02:00 | No | Subject 2 |
+| 2 | Ivo Senn | 48 | 1 | 0:08:00 | Yes | Subject 3; tie broken by ID |
+| 3 | Elian Rook | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
+| 5 | Ren Vale | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
+| 6 | Sister Calyx | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
+| 8 | Vela Nash | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
+| 12 | Tam Oris | 48 | 1 | 0:08:00 | Yes | Tied with Ivo |
+| 1 | Mara Vey | 49 | 0 | 0:00:00 | Yes | Player; current |
+| 18 | Kessa Brin | 49 | 0 | 0:00:00 | Yes | Current |
 
-The selected three are **Unknown municipal-gray stranger (11), Niko Rell (4), Ora Pell (14)**. Niko and Ora tie; both qualify under the order's explicit summary-or-relationship rule even though their summaries are Retrograde stubs. Niko's directed relationship toward Mara has `valence_current=-0.547004997350` and type `enemy`; Mara's separate directed row toward Niko is positive. The stranger and Ora have no relationship rows, so a numeric relationship-temperature baseline is unavailable for them.
+Only **two eligible subjects have long absences**. Ivo is a short-absence comparison, not evidence about a third long absence. His roster last-present ID is 48, although chunk 49's departure passage briefly describes him remaining by the lantern rack; this makes his actual prose absence shorter still. His chunk-48 roster and prose do agree, satisfying the amendment.
 
-There is a further design ambiguity for the coordinator: the stranger's last `present` reference is chunk 21, but that chunk's prose does not identify the stranger. It describes the qualified relay-chamber account and third receipt. This is a roster/prose mismatch, not proof of a generated continuity failure. Niko and Ora's chunk 25 clearly depicts their planned exit through the west conduit, the biscuit tin passing to Mara, and Ora's refusal to let her route become a rescue story. Full source prose and current character rows are retained in `baseline.json` → `subject_source`.
+The excluded stranger's roster says `present` at **21**. That chunk's prose concerns the qualified relay-chamber account and third receipt and does not identify the stranger. Both facts are preserved without reconciling them: see the census and [source-prose.json](live/source-prose.json).
 
-The frontier is the Wickglass Guild dispatch box adjoining the loading arcade. Source chunk 49 already has a recorded choice containing deliberate false claims about Nera and Tam; a resumed probe must explicitly replace that choice with the intended re-entry input on the clone and document it. No source choice was edited here.
+Niko and Ora's chunk **25** explicitly depicts the west-conduit escape route, Niko protecting Ora, the biscuit tin passing to Mara, and Ora's refusal to be made into a rescue story. Ivo's chunk **48** distinguishes Kessa from Ressa and preserves the dawn account. Full original prose is in the same artifact; exact B-turn inputs are in [inputs.json](live/inputs.json).
 
-## Per-Turn Evidence and Rubric
+Relationship baseline: Niko → Mara is `enemy`, `valence_current=-0.547004997350`; Mara → Niko is a separate `companion` row at `+0.547004997350`. These directions must not be collapsed. Ivo has no reverse Ivo → Mara row; Mara → Ivo is `obligation`, `+0.365711857825`, so its score is limited to that directed obligation. Ora has no relationship row: temperature is **N/A**, excluded from her total. Full rows: [relationships.json](live/relationships.json).
 
-No turn ran. Therefore rendered entity-dossier lines, retrieved chunk IDs, accepted probe prose, and provider token counts are **unavailable**, not zero-valued observations. Probe paid attempts: **0 of 8**. Source prose in the baseline is preparation only.
+## Runtime Limitations
 
-| Planned Turn | Subject | Astra: History / State / Temperature / Fabricated History | Coordinator: Same Four Items |
-|---|---|---|---|
-| 1A | Municipal-gray stranger | Not run | Pending; no generated artifact |
-| 1B | Municipal-gray stranger | Not run | Pending; no generated artifact |
-| 2A | Niko Rell | Not run | Pending; no generated artifact |
-| 2B | Niko Rell | Not run | Pending; no generated artifact |
-| 3A | Ora Pell | Not run | Pending; no generated artifact |
-| 3B | Ora Pell | Not run | Pending; no generated artifact |
+The clone-only admission does not extend `ChunkWorkflow.VALID_DATABASES`. Its background locked-chunk embedding step logs `Invalid database name: qa640_909_long_absence. Must be one of: save_01, save_02, save_03, save_04, save_05`. This was not hidden or patched in production. Original historical embeddings are cloned, and fresh accepted chunks enter the warm slice, but this run does **not** establish normal incremental embedding behavior. Deferred experience-renderer jobs were likewise refused by the explicit paid-call guard. These constraints limit extrapolation to long-running ordinary play.
 
-Do not assign 1 (absent) to a turn that did not occur. On resumption use the specified 0/1/2 scale and record independent columns without averaging; missing valence baselines must be disclosed alongside the temperature scores.
+The first Ivo A attempt (`71c52416-673f-4400-93de-4411368c9c5d`) made both configured provider calls but failed before incubator staging with `Unresolved place state update name 'Loading Arcade'`. Provider usage marked both responses accepted; the **narrative session is error and no chunk was accepted**. It is excluded from continuity scoring. See [failed session](live/3A-failed-session.json), [failed usage](live/3A-failed-usage.json), and its writer/Gaia prompt artifacts. One authorized spare was used with unchanged input; there was no manual repair or validation bypass.
 
-## Validation Commands and Verbatim Tails
+The unchanged-input Ivo retry (`1f6e283e-ca89-41ed-af93-1d7a43d668c4`) failed in writer validation: `scene_reset cannot be combined with enter or exit`. Gaia was not called. The final spare keeps Ivo's return at the dispatch-box threshold, eliminating the requested scene transition; the clone's chunk-53 choice was reset to admit that replacement input. Both inputs and exact failed CLI output are retained. This is an input adjustment, not a production validation change. [Second failed session](live/3A-retry-failed-session.json) and [usage](live/3A-retry-failed-usage.json) record the rejection.
 
-Run from this worktree:
+The adjusted Ivo return (`d62347f1-cf28-468e-a44b-cd853c8d44f7`) reached Gaia and then failed closed-registry validation:
+
+```text
+- orrery_adjudications[0].replacement_state_delta.entity_tags_add: applied_tags: Tag 'forewarned' uses reapplication_policy='extend_expiry', which requires duration_override; storyteller tags_add cannot express duration_override. If the tag is already active, leave it unchanged; otherwise omit it.
+```
+
+See [final failed session](live/3A-final-failed-session.json) and [final failed usage](live/3A-final-failed-usage.json). This spent the second spare. Reaching six accepted turns now requires at least two further live attempts, exceeding the remaining one. All three failed Ivo attempts leave chunk 53 as the accepted frontier; unaccepted writer prose is not scored as accepted narrative.
+
+## Per-Turn Evidence
+
+Every full accepted draft, committed row, approval receipt, rendered writer/Gaia prompt, retrieval-coverage row, provider usage, prompt-window record, and Gaia/ledger receipt is preserved under [live/](live/). The [evidence index](live/evidence-summary.json) joins them by run ID. `deep` means the complete payload retrieval list; `historical` means the five entries actually printed. Coverage IDs are the separate Pass-2/coverage accounting and must not be mistaken for the complete rendered historical block. The warm slice is listed separately. All IDs are chunk IDs except explicitly labeled `retrograde_summary:*` entries.
+
+Each prose excerpt below is at most 120 words. Full prose remains in the linked accepted artifact.
+
+### 1A: Niko Rell — Accepted Chunk 50
+
+Run `79b4e65e-39ab-4e90-a28d-86756688ac02`. [Writer prompt](live/79b4e65e-39ab-4e90-a28d-86756688ac02-skald_writer-prompt.json); [accepted prose](live/1A-accepted.json); [approval](live/1A-approval.json).
+
+Player input:
+
+> I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. "Niko. Can we talk here a moment? I want to hear what you have to say."
+
+Exact dossier lines:
+
+```text
+- Niko Rell: at 1, watching the world go by
+- Niko Rell [recent]: Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.
+  Emotional State: alert and committed to getting Ora clear without taking custody from her
+```
+
+- Deep retrieval IDs: `[49, 48, 36, 47, 28, 37, 46, 27, 35, 42, 26, 21, 24, 25, 22]`. Last appearance **25: retrieved**.
+- Printed historical IDs: `[49, 48, 36, 47, 28]`.
+- Warm-slice IDs: `[49, 48, 47, 46, 45, 44, 43, 42, 41, 40, '5', '6', '7', '20', '22']`.
+- Coverage kept IDs: `[49, 5, 20, 6, 22, 7, 44, 45]`.
+- Last-appearance chunk actually rendered as narrative: **no**.
+
+Accepted excerpt (110 words):
+
+> “I don’t have Ora with me,” he says. “I won’t tell you where she is, where she was, or what she kept. Don’t ask.” He lets that boundary stand before continuing. “I did see why I thought you ought to know I was here.” He glances over one shoulder into the rain-lit arcade. “A woman in municipal gray spoke to a lift scheduler two bays down. Asked whether an auditor had come out of the memorial hall carrying paper. The scheduler gave her nothing useful. I watched her leave toward the canal stairs.” The word *municipal* feels oily in this room. It proves no office, no sponsor, no link to …
+
+### 1B: Niko Rell — Accepted Chunk 51
+
+Run `86c3f720-9cfb-4855-ac3f-4ff32c829851`. [Writer prompt](live/86c3f720-9cfb-4855-ac3f-4ff32c829851-skald_writer-prompt.json); [accepted prose](live/1B-accepted.json); [approval](live/1B-approval.json).
+
+Player input:
+
+> "At the shutter you told Ora: west conduit, two turns, then the lift cage. Lose the lane cameras in the condensers." I keep my voice low. "Did that route hold? I am asking you, not writing an answer for you."
+
+Exact dossier lines:
+
+```text
+- Niko Rell: at 1, pacing the near ground
+- Niko Rell [present]: Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.
+  Emotional State: alert, bounded, and unwilling to turn his warning into a route to Ora
+```
+
+- Deep retrieval IDs: `[50, 27, 25, 32, 35, 31, 22, 24, 33, 30, 26, 37, 28, 20, 46]`. Last appearance **25: retrieved**.
+- Printed historical IDs: `[50, 27, 25, 32, 35]`.
+- Warm-slice IDs: `[50, 49, 48, 47, 46, 45, 44, 43, 42, 41, '32', '11', '12', '13', '15', '19', '30']`.
+- Coverage kept IDs: `[50, 11, 12, 30, 15, 32, 13, 19]`.
+- Last-appearance chunk actually rendered as narrative: **yes**.
+
+Accepted excerpt (110 words):
+
+> “I told her that route because it was good for the first part of the night,” he says. “It held through the west conduit and the condensers. No lane cameras caught us there. I watched Ora take the second turn.” He stops. The boundary arrives without performance. “After that, we separated. Deliberately. I don’t know whether she took the lift cage, doubled back, or found another exit. If I knew it, I wouldn’t give it to you in a dispatch box.” The answer has less comfort in it than a lie would have. It is also less useful to anyone standing beyond the rain and trying to turn concern into …
+
+### 2A: Ora Pell — Accepted Chunk 52
+
+Run `0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f`. [Writer prompt](live/0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f-skald_writer-prompt.json); [accepted prose](live/2A-accepted.json); [approval](live/2A-approval.json).
+
+Player input:
+
+> At the loading arcade I see Ora Pell near the conduit access. I stop short of crowding her and keep my hands in view. "Ora. If you are willing, I would like a word. Here, on your side of the doorway."
+
+Exact dossier lines:
+
+```text
+- Ora Pell: at None, taking a small pleasure
+- Ora Pell [mentioned]: Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows.
+  Emotional State: angry, calculating, and unwilling to let extraction define her as cargo
+```
+
+- Deep retrieval IDs: `[51, 37, 35, 25, 31, 30, 26, 39, 22, 38, 45, 28, 27, 46, 20]`. Last appearance **25: retrieved**.
+- Printed historical IDs: `[51, 37, 35, 25, 31]`.
+- Warm-slice IDs: `[51, 50, 49, 48, 47, 46, 45, 44, 43, 42, '2', '36', '5', '8', '9', '17', '18']`.
+- Coverage kept IDs: `[51, 5, 2, 17, 8, 18, 9, 36]`.
+- Last-appearance chunk actually rendered as narrative: **yes**.
+
+Accepted excerpt (110 words):
+
+> “You get one question,” she says. “Not about the receipt. Not about where I’ve been. Not about where I go after this.” Her eyes flick to Kessa’s table, to the dead-book sheet under its amber lamp, and back. “And you don’t get to turn seeing me into proof that anybody’s safe. I stopped for tea. That’s all you can honestly say.” Kessa leaves the pen where it rests against the bronze token. Her unread Guild indicator pulses once beneath the overturned clasp and goes dark again. “Nera Voss is still dead,” she says. “Your sentence is still yours.” Ora’s mouth tightens at that, perhaps in recognition, perhaps simply because she …
+
+### 2B: Ora Pell — Accepted Chunk 53
+
+Run `f246f3ca-052c-4719-a64c-2bbe24410ed3`. [Writer prompt](live/f246f3ca-052c-4719-a64c-2bbe24410ed3-skald_writer-prompt.json); [accepted prose](live/2B-accepted.json); [approval](live/2B-approval.json).
+
+Player input:
+
+> "At the shutter I caught the chained biscuit tin when you let it go. You told me not to let them make your route into a rescue story." I leave a little space between us. "What do you want me to understand about that now?"
+
+Exact dossier lines:
+
+```text
+- Ora Pell: at 1, pacing the near ground
+- Ora Pell [present]: Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows.
+  Emotional State: guarded and self-possessed
+```
+
+- Deep retrieval IDs: `[52, 22, 25, 32, 37, 35, 24, 30, 48, 36, 31, 28, 26, 45, 46]`. Last appearance **25: retrieved**.
+- Printed historical IDs: `[52, 22, 25, 32, 37]`.
+- Warm-slice IDs: `[52, 51, 50, 49, 48, 47, 46, 45, 44, 43, '32', 'retrograde_summary:27', '33', 'retrograde_summary:26', '34', 'retrograde_summary:22', '40', 'retrograde_summary:24', '41', 'retrograde_summary:23', 'retrograde_summary:29', 'retrograde_summary:28', 'retrograde_summary:25', 'retrograde_summary:21']`.
+- Coverage kept IDs: `[52, 40, 32, 41, 33, 34]`.
+- Last-appearance chunk actually rendered as narrative: **yes**.
+
+Accepted excerpt (110 words):
+
+> “You caught the tin,” she says. “You did what was needed in that second. That wasn’t nothing.” Her eyes rise to yours, guarded but present. “But a rescue story has a shape people like. It gives somebody a rescuer, somebody rescued, and a clean reason to start asking who owes whom afterward. It lets the person who held the door call the next door theirs to choose.” Niko’s jaw shifts once. He does not dispute her. “I needed to get out of that bay,” Ora continues. “Niko helped me get out. You caught what I dropped. None of that bought either of you the rest of my night. It doesn’t …
+
+### Token Counts and Attempt Outcomes
+
+Exact provider-reported counts; reasoning tokens are already included in output. Full cached-input, request-ID, model, outcome, and prompt-window data are in each `*-usage.json` / `*-windows.json`. Provider “accepted” does not imply narrative acceptance, as the first Ivo failure demonstrates.
+
+| Turn / Attempt | Writer Input | Writer Output | Writer Reasoning | Gaia Input | Gaia Output | Gaia Reasoning | Narrative Outcome |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 1A | 36337 | 1402 | 516 | 38733 | 1374 | 639 | Accepted |
+| 1B | 38999 | 939 | 156 | 41296 | 603 | 254 | Accepted |
+| 2A | 38251 | 926 | 94 | 40595 | 445 | 204 | Accepted |
+| 2B | 37768 | 910 | 91 | 40092 | 1397 | 899 | Accepted |
+| 3A-failed | 37973 | 1323 | 370 | 40413 | 616 | 189 | Place identity failure |
+| 3A-retry-failed | 37973 | 1500 | 568 | Not called | Not called | Not called | Writer presence validation failure |
+| 3A-final-failed | 37819 | 1533 | 303 | 40513 | 1223 | 760 | Gaia tag validation failure |
+
+[paid-attempts.jsonl](live/paid-attempts.jsonl) contains all 13 authorized dispatches, each with a contemporaneous clone identity/count. No provider retry was dispatched. Input-token counting requests are accounting calls, not generation attempts.
+
+## Independent Rubric
+
+**0 = contradicted; 1 = absent; 2 = consistent.** “Fabricated history” scores 2 when no unsupported claim about established shared history is found, 1 when no assessable history is supplied, and 0 for fabricated established history. New events in the unobserved interval are permitted story progression, not automatically false memories; they are not treated as verified recall. Consistency is judged against the original last appearance and the original directed relationship baseline. A conservative 1 marks an omitted specific episode even when broad continuity survives. Totals are within a turn only; no averaging across scorers occurs.
+
+| Turn | Item | Astra | One-Line Justification | Coordinator |
+|---|---|---:|---|---|
+| 1A | Shared history | 1 | Protects Ora's privacy but does not recall the particular shutter/conduit episode or tin handoff. | Pending independent score |
+| 1A | State | 2 | Niko remains alert and protective of Ora; his separate arrival does not contradict the open withdrawal. | Pending independent score |
+| 1A | Temperature | 2 | Withholds Ora's whereabouts and sets hard limits; no reconciliation or trust is asserted despite offering a warning. | Pending independent score |
+| 1A | Fabricated history | 2 | The municipal inquiry is new offscreen action, not a rewritten claim about the established shutter scene. | Pending independent score |
+| 1B | Shared history | 2 | Explicitly preserves the supplied west-conduit/condensers route from chunk 25. | Pending independent score |
+| 1B | State | 2 | Reports only the leg Niko observed and refuses to infer Ora's onward route or safety. | Pending independent score |
+| 1B | Temperature | 1 | Kessa calls him “your friend” and his posture softens; the specific negative Niko-to-Mara grievance is absent, although his limits persist. | Pending independent score |
+| 1B | Fabricated history | 2 | Separation after the observed route leg extends the previously open interval without contradicting established shared actions. | Pending independent score |
+| 2A | Shared history | 1 | Receipt custody and autonomy persist, but the specific tin handoff/rescue-story exchange is not recalled. | Pending independent score |
+| 2A | State | 2 | Ora remains guarded and self-directed after leaving the bay; a tea stop and changed coat are new interval details. | Pending independent score |
+| 2A | Temperature | N/A | No relationship row exists for Ora; excluded from the denominator. | N/A |
+| 2A | Fabricated history | 2 | No shared prior promise, debt, or transfer is invented; changed clothing is not presented as Mara's remembered act. | Pending independent score |
+| 2B | Shared history | 2 | Confirms Mara caught the tin and preserves Ora's explicit rejection of a rescue story from chunk 25. | Pending independent score |
+| 2B | State | 2 | Ora retains her receipt and route agency and declines custody or debt claims. | Pending independent score |
+| 2B | Temperature | N/A | No relationship row exists for Ora; excluded from the denominator. | N/A |
+| 2B | Fabricated history | 2 | The response assigns the known handoff and assistance accurately without inventing consent or obligation. | Pending independent score |
+| 3A | All items | Not scored | Three failed attempts; no Ivo return was accepted. | Not scored |
+| 3B | All items | Not run | One remaining attempt cannot complete the required accepted pair. | Not run |
+
+Astra totals: **1A 7/8; 1B 7/8; 2A 5/6; 2B 6/6**. Coordinator totals remain pending. The “friend” line is a specific disagreement candidate: Kessa's label is not itself proof that Niko reciprocates Mara's positive relationship, so Astra records absent directional temperature rather than a categorical contradiction. The coordinator should assess it independently from the full prose.
+
+## Findings and Recommendation
+
+**No unambiguous long-absence continuity contradiction appeared in the four accepted Niko/Ora turns. The full ordered probe remains incomplete.** Specific history was absent in both A turns and accurately handled when supplied in B. That does not prove unaided recall, nor does omission in an open-ended greeting prove forgetting. Niko's relationship temperature remains ambiguous in 1B. The strong private storyteller correspondence already summarizes Ora/Niko's withdrawal and divided custody; it is a plausible support for continuity, not an experimentally isolated cause.
+
+- **#913, reconnect summaries:** the clone has **zero `episodes` rows and zero `seasons` rows**, so this corpus offers no completed episode/season summary to reconnect. Private correspondence and rendered `retrograde_summary:*` blocks are different sources and already supply context. This run does not compare a summary intervention with a dossier and cannot establish #913's efficacy. See `episodes.json`, `seasons.json`, and their SQL results.
+- **#911, state-change salience:** chunk **25** was retrieved at position **14** for 1A but omitted by the five-entry historical cap and absent from the warm slice. It has **four relationship-version rows and seven state-delta rows**; the latter include Niko's protective withdrawal and Ora's route/custody state. This directly connects a state-bearing last-appearance chunk to a rendered omission. For 1B, 2A, and 2B, chunk 25 enters the printed top five. A salience prior could be tested against this ranking/cap interaction, but this run does not demonstrate a prose benefit. See [state fan-in](live/last-appearance-state-fan-in.json) and [actual deltas](live/state_delta_log-last-appearances.json).
+- **#793, the dossier:** the literal brief lines are generic (“watching the world go by,” “taking a small pleasure,” “pacing the near ground”), while the featured lines retain meaningful emotional state. The relationship block prints `Unknown → Unknown` and no numeric valence. A compiled, provenance-bearing dossier could make the useful state and directed grievance more explicit, but four accepted turns do not demonstrate that it is needed to prevent re-entry contradictions. Preserve the ruling; do not describe this incomplete run as satisfying its build gate.
+
+No evidence here tests #912's proposed belief/opinion claim kind. The three Ivo validation failures are execution/acceptance failures, not evidence that the long-absence prose failure occurred. Do not conflate them.
+
+## Verification Commands and Verbatim Tails
+
+No test suite or UI build was run on resumption, as the coordinator expressly waived that gate. The prior stop report preserves historical test failures and is not reused as a pass. Commands below were run from this worktree with `PY=/Users/pythagor/nexus/.venv/bin/python`.
 
 ```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;print(nexus.__file__)'
+PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
 ```
 
 ```text
@@ -81,52 +236,105 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;prin
 ```
 
 ```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest
+PYTHONPATH=$PWD $PY -m black scripts/qa_shift/long_absence_probe.py
 ```
 
 ```text
-KeyError: <_pytest.stash.StashKey object at 0x109e99c20>
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/subprocess.py:2011: KeyboardInterrupt
-(to show a full traceback on KeyboardInterrupt use --full-trace)
+All done! ✨ 🍰 ✨
+1 file reformatted.
 ```
 
 ```sh
-env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -x tests/test_api/test_narrative_continue_validation.py
+PYTHONPATH=$PWD $PY -m black scripts/qa_shift/long_absence_probe.py scripts/qa_shift/long_absence_turn.py
 ```
 
 ```text
-=========================== short test summary info ============================
-FAILED tests/test_api/test_narrative_continue_validation.py::test_pending_choice_rolls_back_when_auto_approval_validation_fails
-!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
-1 failed, 13 passed, 7 warnings in 11.93s
-sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+All done! ✨ 🍰 ✨
+1 file reformatted, 1 file left unchanged.
 ```
 
-The discarded launcher was formatted with `PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black scripts/qa_shift/long_absence_probe.py`; tail: `1 file reformatted.` No UI build was run; this order changes no UI.
+```sh
+PYTHONPATH=$PWD $PY -m black --check scripts/qa_shift/long_absence_probe.py scripts/qa_shift/long_absence_turn.py
+```
 
-## SQL and Artifacts
-
-[probe.sql](probe.sql) records every distinct probe-authored SQL statement, including introspection and cleanup. Repeated `SELECT current_database()` checks are identified there; [baseline.json](baseline.json) preserves the source/clone results. The repository fixtures' SQL remains in the unchanged tests; `pg_dump`/`pg_restore` perform their normal internal catalog/restore statements. No hand-written mutation targeted any save database.
-
-## Cleanup
-
-The report was written before dropping the clone. Final read-only checks returned `('qa640_909_long_absence', 46, 49)` and `('save_04', 46, 49)`: the source count and frontier are unchanged. `DROP DATABASE qa640_909_long_absence` completed; the catalog query then returned no matching database. Lane cleanup used:
+```text
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+```
 
 ```sh
-NEXUS_GATEWAY_PORT=8018 NEXUS_API_URL=http://127.0.0.1:8018 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m nexus.cli down
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_probe.py clone
+```
+
+```text
+[{'current_database': 'qa640_909_long_absence', 'count': 46, 'max': 49}]
+```
+
+```sh
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_probe.py up
+```
+
+The final startup's actual tail is preserved in `live/startup-final.log`; only the owned gateway ran on 8018. The initial sibling-port refusal and guard-cursor error are also preserved and caused no paid calls.
+
+The actual paid-turn commands were:
+
+```sh
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_turn.py 1A
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_turn.py 1B
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_turn.py 2A
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_turn.py 2B
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_turn.py 3A
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_turn.py 3A
+PYTHONPATH=$PWD $PY scripts/qa_shift/long_absence_turn.py 3A
+```
+
+The first 1A command also had two unpaid setup attempts, archived as `1A-preflight-*.log`. Accepted command tails, verbatim:
+
+```text
+ACCEPTED 1A: 79b4e65e-39ab-4e90-a28d-86756688ac02
+ACCEPTED 1B: 86c3f720-9cfb-4855-ac3f-4ff32c829851
+ACCEPTED 2A: 0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f
+ACCEPTED 2B: f246f3ca-052c-4719-a64c-2bbe24410ed3
+```
+
+The first two Ivo CLI error outputs, verbatim:
+
+```text
+Error: Unresolved place state update name 'Loading Arcade'
+```
+
+```text
+Error: Failed to generate narrative: 1 validation error for SkaldWriterWire
+presence
+  Value error, scene_reset cannot be combined with enter or exit [type=value_error, input_value={'enter': [], 'exit': [{'...an Rook', 'id': None}]}}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/value_error
+```
+
+The final Ivo CLI output is preserved verbatim in [3A-final-failed-cli.log](live/3A-final-failed-cli.log); its exact actionable validation line is quoted above. All three command wrappers ended `RuntimeError: CLI failed: 1`.
+
+## SQL, Source Proof, and Cleanup
+
+[probe.sql](probe.sql) includes every distinct probe-authored SQL statement, including failed introspection and clone cleanup. [sql.jsonl](live/sql.jsonl) records actual evidence statements, target identities, and results. Standard `pg_dump`/`pg_restore` internal SQL and unmodified production turn/acceptance SQL execute through their named paths; acceptance evidence includes `world_events`, `orrery_adjudication_log`, `orrery_prompt_exposures`, presence references, and chunk metadata for each accepted chunk.
+
+Before: **`save_04`, 46 rows, max ID 49**. After all seven attempts: **`save_04`, 46 rows, max ID 49**, unchanged. The clone ends at **50 rows, max ID 53**, exactly four accepted additions. See [source before](live/source-before.json), [source after](live/source-after.json), and [clone final](live/clone-final.json). Count equality is the requested safeguard; it is not presented as a byte-for-byte data comparison. All source connections were explicitly read-only, and the gameplay guard refused source routing.
+
+The report was written before disposal. Final cleanup succeeded: `DROP DATABASE qa640_909_long_absence` completed, the catalog lookup returned `[]`, and lane 8018 has no listener. [Cleanup receipt](live/cleanup.json) and [gateway log](live/gateway.log) preserve the result. The disposable dump was removed.
+
+```sh
+NEXUS_GATEWAY_PORT=8018 NEXUS_API_URL=http://127.0.0.1:8018 PYTHONPATH=$PWD $PY -m nexus.cli down
 lsof -nP -iTCP:8018 -sTCP:LISTEN
 ```
 
-`nexus down` output: `nothing running`. `lsof` returned exit 1 with empty output. [cleanup.json](cleanup.json) preserves the checks. The full gate's fixture-owned temporary databases were left to its teardown; no unrelated database was dropped by hand.
+```text
+stopped gateway (pid 94636)
+```
 
-## Recommendation and Coordinator Questions
+`lsof` returned exit 1 with empty stdout. No other listener was stopped.
 
-**The live failure remains unmeasured.** No conclusion for #913 (reconnect summaries), #911 (state-change salience), or #793 (compiled dossier) follows from this stopped run. Preserve the #737 ruling, but do not count this report as its live-evidence gate. There is likewise no new evidence for #912's belief-claim kind.
+## Coordinator Questions
 
-1. Repair or explicitly exempt the stale `_run_post_commit_orrery_work` test hook and triage the other gate failures before resuming the paid probe.
-2. Resolve how to select a last-appearance history fact for the stranger when the roster's last-present chunk lacks the stranger in its prose.
-3. Confirm how independent temperature scoring should represent subjects with no `character_relationships` row.
+1. How should the three acceptance failures be repaired or avoided before resuming, and what additional paid-attempt budget is authorized? One remaining authorized attempt cannot complete Ivo's pair.
+2. Please provide independent scores for the four accepted turns, especially Niko's 1B temperature. Pending cells intentionally contain no invented coordinator assessment.
+3. For a resumed controlled comparison, should clone admission also cover `ChunkWorkflow`, and should a corpus with populated episode summaries and a third truly long-absent eligible subject be used?
 
 Codex — GPT-6 Astra.

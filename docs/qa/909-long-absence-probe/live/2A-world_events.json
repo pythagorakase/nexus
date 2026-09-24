@@ -1,0 +1,500 @@
+[
+  {
+    "id": 221,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 3,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 146,
+    "payload": {
+      "bindings": {
+        "actor": 3
+      },
+      "proposal_id": "recreate:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+      "template_id": "recreate",
+      "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+      "branch_label": "Take a small private pleasure",
+      "narrative_stub": "Ivo Senn gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 222,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 147,
+    "payload": {
+      "bindings": {
+        "actor": 4
+      },
+      "proposal_id": "recreate:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "template_id": "recreate",
+      "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "branch_label": "Take a small private pleasure",
+      "narrative_stub": "Elian Rook gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 223,
+    "event_type": "upkeep_done",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 6,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 148,
+    "payload": {
+      "bindings": {
+        "actor": 6
+      },
+      "proposal_id": "upkeep:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+      "template_id": "upkeep",
+      "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Ren Vale tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 224,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 8,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.100",
+    "resolution_id": 149,
+    "payload": {
+      "bindings": {
+        "actor": 8
+      },
+      "proposal_id": "recreate:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "template_id": "recreate",
+      "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "branch_label": "Watch the world go by",
+      "narrative_stub": "Sister Calyx claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 225,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 11,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.100",
+    "resolution_id": 150,
+    "payload": {
+      "bindings": {
+        "actor": 11
+      },
+      "proposal_id": "recreate:9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "template_id": "recreate",
+      "binding_hash": "9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "branch_label": "Watch the world go by",
+      "narrative_stub": "Vela Nash claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 226,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 15,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.100",
+    "resolution_id": 151,
+    "payload": {
+      "bindings": {
+        "actor": 15
+      },
+      "proposal_id": "recreate:cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "template_id": "recreate",
+      "binding_hash": "cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "branch_label": "Watch the world go by",
+      "narrative_stub": "Unknown municipal-gray stranger claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 227,
+    "event_type": "upkeep_done",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 16,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 152,
+    "payload": {
+      "bindings": {
+        "actor": 16
+      },
+      "proposal_id": "upkeep:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "template_id": "upkeep",
+      "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Tam Oris tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 228,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 17,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 153,
+    "payload": {
+      "bindings": {
+        "actor": 17
+      },
+      "proposal_id": "recreate:305e6e930250a204eecf64396bde0c2476157ebb2cf96da089fdfc03b55a5183",
+      "template_id": "recreate",
+      "binding_hash": "305e6e930250a204eecf64396bde0c2476157ebb2cf96da089fdfc03b55a5183",
+      "branch_label": "Take a small private pleasure",
+      "narrative_stub": "Hale Morrow gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 229,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 19,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 154,
+    "payload": {
+      "bindings": {
+        "actor": 19
+      },
+      "proposal_id": "stroll:e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+      "template_id": "stroll",
+      "binding_hash": "e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Ora Pell moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 230,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 26,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 155,
+    "payload": {
+      "bindings": {
+        "actor": 26
+      },
+      "proposal_id": "recreate:cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "template_id": "recreate",
+      "binding_hash": "cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "branch_label": "Take a small private pleasure",
+      "narrative_stub": "Ressa Morn gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 231,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 29,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 156,
+    "payload": {
+      "bindings": {
+        "actor": 29
+      },
+      "proposal_id": "stroll:d2cc80d28c2579c304a983bc845f630ebbf1377080cfc9589074a06f60edf255",
+      "template_id": "stroll",
+      "binding_hash": "d2cc80d28c2579c304a983bc845f630ebbf1377080cfc9589074a06f60edf255",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Davin Sol moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 232,
+    "event_type": "upkeep_done",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 33,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 157,
+    "payload": {
+      "bindings": {
+        "actor": 33
+      },
+      "proposal_id": "upkeep:2822439ff92aa7a08ad509f0b27c6f2fb76a9943d8eedee11aa33e1c553cc779",
+      "template_id": "upkeep",
+      "binding_hash": "2822439ff92aa7a08ad509f0b27c6f2fb76a9943d8eedee11aa33e1c553cc779",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Orris Vale tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 233,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 34,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 158,
+    "payload": {
+      "bindings": {
+        "actor": 34
+      },
+      "proposal_id": "stroll:316323d743a437aa53081bcbbd3785a6c54dd649c56bffc095cc2fe0d434b23b",
+      "template_id": "stroll",
+      "binding_hash": "316323d743a437aa53081bcbbd3785a6c54dd649c56bffc095cc2fe0d434b23b",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Tarin Quell moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 234,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 35,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 159,
+    "payload": {
+      "bindings": {
+        "actor": 35
+      },
+      "proposal_id": "recreate:624b47219a92b2dd6434b550622aa7eb672ee59a67834fd3d64f1d5af5406e25",
+      "template_id": "recreate",
+      "binding_hash": "624b47219a92b2dd6434b550622aa7eb672ee59a67834fd3d64f1d5af5406e25",
+      "branch_label": "Take a small private pleasure",
+      "narrative_stub": "Dax Morrow gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 235,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": 3,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.440",
+    "resolution_id": 160,
+    "payload": {
+      "bindings": {
+        "actor": 4,
+        "target": 3
+      },
+      "proposal_id": "surveil:fbf925383bd4427cfc81fa57bd63330c251af24761367717626cca37ffcbb85a",
+      "template_id": "surveil",
+      "binding_hash": "fbf925383bd4427cfc81fa57bd63330c251af24761367717626cca37ffcbb85a",
+      "branch_label": "Keep tabs from a distance",
+      "narrative_stub": "Elian Rook keeps tabs on Ivo Senn without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 236,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 52,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": 16,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.380",
+    "resolution_id": 161,
+    "payload": {
+      "bindings": {
+        "actor": 4,
+        "target": 16
+      },
+      "proposal_id": "surveil:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "template_id": "surveil",
+      "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Elian Rook does not go near Tam Oris. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:34:27.023482+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:34:27.023482+00:00",
+    "experiences_quarantined_at": null
+  }
+]

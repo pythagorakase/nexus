@@ -1,0 +1,10 @@
+[
+  "/Users/pythagor/nexus/.venv/bin/python",
+  "-m",
+  "nexus.cli",
+  "continue",
+  "--slot",
+  "4",
+  "--user-text",
+  "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\""
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": 51,
+    "created_at": "2026-09-24 16:31:47.000637+00:00",
+    "turn_id": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+    "user_input": "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\"",
+    "detected_entities": [
+      {
+        "id": 4,
+        "kind": "character",
+        "name": "Niko Rell"
+      }
+    ],
+    "raw_result_count": 8,
+    "kept_chunk_ids": [
+      49,
+      5,
+      20,
+      6,
+      22,
+      7,
+      44,
+      45
+    ],
+    "kept_tokens": 8018,
+    "available_budget": 7500,
+    "coverage": [
+      {
+        "id": 4,
+        "kind": "character",
+        "name": "Niko Rell",
+        "covered": true,
+        "covering_chunk_ids": [
+          5,
+          6,
+          7,
+          22,
+          45
+        ]
+      }
+    ],
+    "gap_entities": []
+  }
+]

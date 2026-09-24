@@ -1,0 +1,139 @@
+# Resumption File Manifest
+
+Each changed or added file from this resumption is listed once. Historical artifacts from the prior stop remain in place.
+
+- `docs/qa/909-long-absence-probe/report.md` — Partial findings, rubric, exact failures, and coordinator questions.
+- `docs/qa/909-long-absence-probe/probe.sql` — All distinct probe-authored SQL, including cleanup.
+- `docs/qa/909-long-absence-probe/prior-stop-report.md` — Preserved earlier test-gate stop report.
+- `scripts/qa_shift/long_absence_probe.py` — Bounded QA launcher and evidence collection through real runtime paths.
+- `scripts/qa_shift/long_absence_turn.py` — Bounded QA launcher and evidence collection through real runtime paths.
+- `docs/qa/909-long-absence-probe/live/0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f-gaia-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/0eaa2cbf-a5b5-4b1b-a728-4ae381d71e9f-skald_writer-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/1A-accepted.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-after.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-approval.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-chunk_character_references.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-chunk_metadata.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-cli.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/1A-command.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-coverage.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-draft.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-orrery_adjudication_log.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-orrery_prompt_exposures.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1A-preflight-choice-conflict.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/1A-preflight-cursor-guard.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/1A-usage.json` — Provider-reported token usage and response outcome.
+- `docs/qa/909-long-absence-probe/live/1A-windows.json` — Per-attempt prompt-window accounting.
+- `docs/qa/909-long-absence-probe/live/1A-world_events.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-accepted.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-after.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-approval.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-chunk_character_references.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-chunk_metadata.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-cli.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/1B-command.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-coverage.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-draft.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-orrery_adjudication_log.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-orrery_prompt_exposures.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1B-usage.json` — Provider-reported token usage and response outcome.
+- `docs/qa/909-long-absence-probe/live/1B-windows.json` — Per-attempt prompt-window accounting.
+- `docs/qa/909-long-absence-probe/live/1B-world_events.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/1f6e283e-ca89-41ed-af93-1d7a43d668c4-skald_writer-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/2A-accepted.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-after.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-approval.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-chunk_character_references.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-chunk_metadata.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-cli.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/2A-command.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-coverage.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-draft.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-orrery_adjudication_log.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-orrery_prompt_exposures.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2A-usage.json` — Provider-reported token usage and response outcome.
+- `docs/qa/909-long-absence-probe/live/2A-windows.json` — Per-attempt prompt-window accounting.
+- `docs/qa/909-long-absence-probe/live/2A-world_events.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-accepted.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-after.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-approval.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-chunk_character_references.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-chunk_metadata.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-cli.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/2B-command.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-coverage.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-draft.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-orrery_adjudication_log.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-orrery_prompt_exposures.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/2B-usage.json` — Provider-reported token usage and response outcome.
+- `docs/qa/909-long-absence-probe/live/2B-windows.json` — Per-attempt prompt-window accounting.
+- `docs/qa/909-long-absence-probe/live/2B-world_events.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-adjusted-choice-reset.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-failed-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-failed-cli.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/3A-failed-command.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-failed-incubator.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-failed-session.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-failed-usage.json` — Provider-reported token usage and response outcome.
+- `docs/qa/909-long-absence-probe/live/3A-failed-windows.json` — Per-attempt prompt-window accounting.
+- `docs/qa/909-long-absence-probe/live/3A-final-failed-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-final-failed-cli.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/3A-final-failed-command.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-final-failed-incubator.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-final-failed-session.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-final-failed-usage.json` — Provider-reported token usage and response outcome.
+- `docs/qa/909-long-absence-probe/live/3A-final-failed-windows.json` — Per-attempt prompt-window accounting.
+- `docs/qa/909-long-absence-probe/live/3A-retry-failed-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-retry-failed-cli.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/3A-retry-failed-command.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-retry-failed-session.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/3A-retry-failed-usage.json` — Provider-reported token usage and response outcome.
+- `docs/qa/909-long-absence-probe/live/3A-retry-failed-windows.json` — Per-attempt prompt-window accounting.
+- `docs/qa/909-long-absence-probe/live/71c52416-673f-4400-93de-4411368c9c5d-gaia-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/71c52416-673f-4400-93de-4411368c9c5d-skald_writer-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/79b4e65e-39ab-4e90-a28d-86756688ac02-gaia-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/79b4e65e-39ab-4e90-a28d-86756688ac02-skald_writer-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/86c3f720-9cfb-4855-ac3f-4ff32c829851-gaia-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/86c3f720-9cfb-4855-ac3f-4ff32c829851-skald_writer-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/characters.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/cleanup.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/clear-inherited-draft.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/clone-final.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/d62347f1-cf28-468e-a44b-cd853c8d44f7-gaia-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/d62347f1-cf28-468e-a44b-cd853c8d44f7-skald_writer-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/episodes.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/evidence-summary.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/f246f3ca-052c-4719-a64c-2bbe24410ed3-gaia-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/f246f3ca-052c-4719-a64c-2bbe24410ed3-skald_writer-prompt.json` — Exact rendered provider request and assembly payload.
+- `docs/qa/909-long-absence-probe/live/format-check.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/frontier-after-choice-reset.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/frontier-before-choice-reset.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/frontier-reset-sql.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/gateway.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/globals.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/initial-incubator.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/initial-load.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/inputs-before-ivo-adjustment.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/inputs.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/last-appearance-state-fan-in.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/paid-attempts.jsonl` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/provenance-columns.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/relationship_versions-last-appearances.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/relationships.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/seasons.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/shutdown.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/source-after.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/source-before.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/source-prose.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/sql.jsonl` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/startup-final.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/startup-gateway-only.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/startup.log` — Verbatim CLI or gateway output.
+- `docs/qa/909-long-absence-probe/live/state_delta_log-last-appearances.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/subjects.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/live/tables.json` — Database evidence, turn artifact, input, or cleanup receipt.
+- `docs/qa/909-long-absence-probe/files-changed.md` — This one-line-per-file manifest.

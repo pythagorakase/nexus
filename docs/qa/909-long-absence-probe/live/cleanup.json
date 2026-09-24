@@ -1,0 +1,24 @@
+{
+  "pre_drop_checks": [
+    [
+      {
+        "current_database": "qa640_909_long_absence",
+        "count": 50,
+        "max": 53
+      }
+    ],
+    [
+      {
+        "current_database": "save_04",
+        "count": 46,
+        "max": 49
+      }
+    ]
+  ],
+  "admin_identity": "postgres",
+  "drop_sql": "DROP DATABASE qa640_909_long_absence",
+  "remaining": [],
+  "nexus_down": "stopped gateway (pid 94636)\n",
+  "lsof_exit_code": 1,
+  "lsof_stdout": ""
+}

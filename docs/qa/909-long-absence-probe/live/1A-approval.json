@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "body": {
+    "status": "committed",
+    "message": "Narrative committed as chunk 50",
+    "chunk_id": 50
+  }
+}

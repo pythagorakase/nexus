@@ -1,0 +1,916 @@
+[
+  {
+    "id": true,
+    "chunk_id": null,
+    "parent_chunk_id": 49,
+    "user_text": "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\"",
+    "storyteller_text": "Niko sees the lifted hand.\n\nFor a moment he does nothing. Rain stipples the loading arcade between you, turning the freight floor into a wavering reflection of lamps, boots, and descending steel. He has the look of someone who has already decided which questions he will not answer.\n\nThen he comes as far as the dispatch-box threshold and stops beneath its lintel.\n\nKessa does not rise from her chair. \u201cThis is a Guild-lit room,\u201d she says. \u201cNot a holding pen. He may stand there. He does not enter my conversation unless I ask him to.\u201d\n\nNiko gives her a brief nod, more recognition than apology. His gaze finds yours.\n\n\u201cI don\u2019t have Ora with me,\u201d he says. \u201cI won\u2019t tell you where she is, where she was, or what she kept. Don\u2019t ask.\u201d\n\nHe lets that boundary stand before continuing.\n\n\u201cI did see why I thought you ought to know I was here.\u201d He glances over one shoulder into the rain-lit arcade. \u201cA woman in municipal gray spoke to a lift scheduler two bays down. Asked whether an auditor had come out of the memorial hall carrying paper. The scheduler gave her nothing useful. I watched her leave toward the canal stairs.\u201d\n\nThe word *municipal* feels oily in this room. It proves no office, no sponsor, no link to Aster or Sol. It proves only that someone was willing to spend an ordinary question on your outline.\n\n\u201cI\u2019m not asking you to follow her,\u201d Niko says. \u201cAnd I\u2019m not offering you a route to anybody. I\u2019m telling you because people who want a person isolated usually begin by learning which door she used.\u201d\n\nKessa\u2019s cup clicks softly against its saucer. She has not taken her eyes from you.\n\n\u201cThe dead-book waits,\u201d she says. \u201cSo does my receipt. Neither becomes less true because the arcade has developed a shadow.\u201d\n\nNiko\u2019s face closes slightly at that, as if he respects the refusal to let fear turn every obligation into an emergency exit. He places an open palm against the doorframe.\n\n\u201cIf you sign,\u201d he says, \u201ckeep the paper in your own hand until you decide who has earned it. If you don\u2019t, don\u2019t pretend the token has stopped asking.\u201d\n\nOutside, a freight lift begins its slow climb, carrying a cage of sealed containers through the rain-bright shaft. Kessa\u2019s dead-book sheet lies beneath the amber lamp. Beside it, the narrow Wickglass receipt waits blank, a fact not yet bought with the sentence it requires.\n\nNiko remains at the threshold, available for only the kind of conversation he has chosen to permit.",
+    "metadata_updates": {
+      "chronology": {
+        "time_delta_days": null,
+        "time_delta_hours": null,
+        "episode_transition": "continue",
+        "time_delta_minutes": 4,
+        "time_delta_description": null
+      },
+      "world_layer": "primary"
+    },
+    "entity_updates": {
+      "factions": [
+        {
+          "faction_name": "Wickglass Transit Guild",
+          "recent_actions": [
+            "Maintains its condition: Mara's wet-ink admission regarding Nera Voss must precede release of the limited adjunct-inquiry receipt."
+          ],
+          "stance_changes": [
+            {
+              "stance": "bounded accountability without coercive leverage over Tam Oris or any shelter decision",
+              "target": "Mara Vey"
+            }
+          ]
+        }
+      ],
+      "locations": [
+        {
+          "place_name": "Wickglass Dispatch House",
+          "notable_changes": [
+            "Niko Rell has delivered a bounded warning at the threshold without compromising Ora Pell's route or custody."
+          ],
+          "current_conditions": "A Guild-lit dispatch conversation is underway under amber lamps; a municipal-gray inquiry has been reported nearby but has not entered or identified itself."
+        }
+      ],
+      "characters": [
+        {
+          "orrery_tags": {
+            "applied_tags": [
+              "forewarned"
+            ],
+            "tags_to_clear": []
+          },
+          "character_name": "Niko Rell",
+          "emotional_state": "alert, bounded, and unwilling to turn his warning into a route to Ora",
+          "current_activity": "standing at the Wickglass Dispatch House threshold after warning Mara about a municipal-gray inquiry"
+        },
+        {
+          "character_name": "Kessa Brin",
+          "emotional_state": "professional and unsparing; unwilling to let a watcher displace the obligation",
+          "current_activity": "holding the Guild-lit conversation open while keeping Nera Voss's dead-book admission and the conditional receipt separate"
+        },
+        {
+          "orrery_tags": {
+            "applied_tags": [
+              "surveillance_capable"
+            ],
+            "tags_to_clear": []
+          },
+          "character_name": "Unknown municipal-gray stranger",
+          "emotional_state": "controlled and testing the edges of Mara's isolation",
+          "current_activity": "following Mara's public exit from Memorial Hall through ordinary freight-side inquiry while withholding sponsor and authority"
+        }
+      ],
+      "relationships": []
+    },
+    "reference_updates": {
+      "places": [
+        {
+          "place_id": 7,
+          "place_name": "Wickglass Dispatch House",
+          "reference_type": "setting"
+        },
+        {
+          "place_name": "Lantern Quay Memorial Hall",
+          "reference_type": "mentioned"
+        }
+      ],
+      "factions": [],
+      "characters": [
+        {
+          "character_id": 1,
+          "character_name": "Mara Vey",
+          "reference_type": "present"
+        },
+        {
+          "character_id": 18,
+          "character_name": "Kessa Brin",
+          "reference_type": "present"
+        },
+        {
+          "character_id": 4,
+          "character_name": "Niko Rell",
+          "reference_type": "present"
+        },
+        {
+          "character_id": 14,
+          "character_name": "Ora Pell",
+          "reference_type": "mentioned"
+        }
+      ]
+    },
+    "session_id": "79b4e65e-39ab-4e90-a28d-86756688ac02",
+    "llm_response_id": null,
+    "status": "provisional",
+    "created_at": "2026-09-24 16:31:19.186194+00:00",
+    "updated_at": "2026-09-24 16:31:19.186194+00:00",
+    "choice_object": {
+      "selected": null,
+      "presented": [
+        "Write the required wet-ink sentence in Wickglass\u2019s dead-book and accept Kessa\u2019s limited receipt about the adjunct inquiry.",
+        "Ask Niko exactly what the municipal-gray woman said and what he personally observed, without seeking Ora\u2019s route or receipt.",
+        "Decline to sign tonight, keep the token, and leave the Dispatch House before the last freight rotation.",
+        "Ask Kessa whether Wickglass will witness your admission without giving you the carrier-pressure receipt."
+      ]
+    },
+    "choice_text": null,
+    "orrery_proposal": {
+      "actor_count": 16,
+      "joint_beats": [
+        {
+          "kind": "crossed",
+          "entity_a": 4,
+          "entity_b": 16,
+          "magnitude": 0.38,
+          "entity_names": {
+            "4": "Elian Rook",
+            "16": "Tam Oris"
+          },
+          "forward_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+          "reverse_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+          "forward_proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "forward_template_id": "check_on_dependent",
+          "reverse_proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "reverse_template_id": "surveil"
+        }
+      ],
+      "resolutions": [
+        {
+          "bindings": {
+            "actor": 3
+          },
+          "priority": 80,
+          "magnitude": 0.5,
+          "event_type": "honor_debt",
+          "promotable": true,
+          "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+          "state_delta": {
+            "character.current_activity": "servicing an old debt"
+          },
+          "template_id": "honor_debt",
+          "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+          "branch_label": "Fulfill obligation through a dead-drop",
+          "binding_names": {
+            "actor": "Ivo Senn"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ivo Senn tucks an encoded microdrive behind a loose ceramic tile and leaves a mark for the recipient.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 4
+          },
+          "priority": 84,
+          "magnitude": 0.36,
+          "event_type": "signal_exposure_reduced",
+          "promotable": true,
+          "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+          "state_delta": {
+            "character.current_activity": "reducing signal exposure"
+          },
+          "template_id": "hide",
+          "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+          "branch_label": "Go dark and reduce signal exposure",
+          "binding_names": {
+            "actor": "Elian Rook"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Elian Rook trims their signal down to almost nothing \u2014 no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 5
+          },
+          "priority": 12,
+          "magnitude": 0.08,
+          "event_type": "stroll_taken",
+          "promotable": true,
+          "proposal_id": "stroll:a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68",
+          "state_delta": {
+            "character.current_activity": "pacing the near ground"
+          },
+          "template_id": "stroll",
+          "binding_hash": "a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68",
+          "branch_label": "Pace the near ground",
+          "binding_names": {
+            "actor": "Niko Rell"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Niko Rell moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 6
+          },
+          "priority": 11,
+          "magnitude": 0.08,
+          "event_type": "upkeep_done",
+          "promotable": true,
+          "proposal_id": "upkeep:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+          "state_delta": {
+            "character.current_activity": "tidying their own space"
+          },
+          "template_id": "upkeep",
+          "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+          "branch_label": "Tidy what is theirs",
+          "binding_names": {
+            "actor": "Ren Vale"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ren Vale tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 8
+          },
+          "priority": 24,
+          "magnitude": 0.1,
+          "event_type": "drank",
+          "promotable": true,
+          "proposal_id": "drink:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+          "state_delta": {
+            "need.fulfill": {
+              "type": "thirst",
+              "quality": "routine",
+              "discharge_debt": 9999
+            },
+            "character.current_activity": "drinking routinely"
+          },
+          "template_id": "drink",
+          "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+          "branch_label": "Drink routinely from what is at hand",
+          "binding_names": {
+            "actor": "Sister Calyx"
+          },
+          "changed_fields": [
+            "character.current_activity",
+            "character_need_states.debt_score"
+          ],
+          "narrative_stub": "Sister Calyx drinks because the body has been quietly asking, then returns to the shape of the hour.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 11
+          },
+          "priority": 24,
+          "magnitude": 0.1,
+          "event_type": "drank",
+          "promotable": true,
+          "proposal_id": "drink:9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+          "state_delta": {
+            "need.fulfill": {
+              "type": "thirst",
+              "quality": "routine",
+              "discharge_debt": 9999
+            },
+            "character.current_activity": "drinking routinely"
+          },
+          "template_id": "drink",
+          "binding_hash": "9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+          "branch_label": "Drink routinely from what is at hand",
+          "binding_names": {
+            "actor": "Vela Nash"
+          },
+          "changed_fields": [
+            "character.current_activity",
+            "character_need_states.debt_score"
+          ],
+          "narrative_stub": "Vela Nash drinks because the body has been quietly asking, then returns to the shape of the hour.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 15
+          },
+          "priority": 24,
+          "magnitude": 0.1,
+          "event_type": "drank",
+          "promotable": true,
+          "proposal_id": "drink:cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+          "state_delta": {
+            "need.fulfill": {
+              "type": "thirst",
+              "quality": "routine",
+              "discharge_debt": 9999
+            },
+            "character.current_activity": "drinking routinely"
+          },
+          "template_id": "drink",
+          "binding_hash": "cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+          "branch_label": "Drink routinely from what is at hand",
+          "binding_names": {
+            "actor": "Unknown municipal-gray stranger"
+          },
+          "changed_fields": [
+            "character.current_activity",
+            "character_need_states.debt_score"
+          ],
+          "narrative_stub": "Unknown municipal-gray stranger drinks because the body has been quietly asking, then returns to the shape of the hour.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 16
+          },
+          "priority": 24,
+          "magnitude": 0.1,
+          "event_type": "drank",
+          "promotable": true,
+          "proposal_id": "drink:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "state_delta": {
+            "need.fulfill": {
+              "type": "thirst",
+              "quality": "routine",
+              "discharge_debt": 9999
+            },
+            "character.current_activity": "drinking routinely"
+          },
+          "template_id": "drink",
+          "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "branch_label": "Drink routinely from what is at hand",
+          "binding_names": {
+            "actor": "Tam Oris"
+          },
+          "changed_fields": [
+            "character.current_activity",
+            "character_need_states.debt_score"
+          ],
+          "narrative_stub": "Tam Oris drinks because the body has been quietly asking, then returns to the shape of the hour.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 19
+          },
+          "priority": 9,
+          "magnitude": 0.08,
+          "event_type": "recreation_taken",
+          "promotable": true,
+          "proposal_id": "recreate:e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+          "state_delta": {
+            "character.current_activity": "taking a small pleasure"
+          },
+          "template_id": "recreate",
+          "binding_hash": "e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+          "branch_label": "Take a small private pleasure",
+          "binding_names": {
+            "actor": "Ora Pell"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ora Pell gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 26
+          },
+          "priority": 12,
+          "magnitude": 0.12,
+          "event_type": "stroll_taken",
+          "promotable": true,
+          "proposal_id": "stroll:cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+          "state_delta": {
+            "character.current_activity": "taking the night air"
+          },
+          "template_id": "stroll",
+          "binding_hash": "cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+          "branch_label": "Take the night air",
+          "binding_names": {
+            "actor": "Ressa Morn"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ressa Morn steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 3,
+            "target": 4
+          },
+          "priority": 48,
+          "magnitude": 0.24,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+          "state_delta": {
+            "character.current_activity": "surveilling without contact"
+          },
+          "template_id": "surveil",
+          "binding_hash": "93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+          "branch_label": "Keep the target in view without contact",
+          "binding_names": {
+            "actor": "Ivo Senn",
+            "target": "Elian Rook"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ivo Senn keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 3,
+            "target": 26
+          },
+          "priority": 48,
+          "magnitude": 0.24,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:19b8dd6dbf3d6d7fa7307036406c3a1688bdaef1e43e0bb0e9cfdd6e70aef67e",
+          "state_delta": {
+            "character.current_activity": "surveilling without contact"
+          },
+          "template_id": "surveil",
+          "binding_hash": "19b8dd6dbf3d6d7fa7307036406c3a1688bdaef1e43e0bb0e9cfdd6e70aef67e",
+          "branch_label": "Keep the target in view without contact",
+          "binding_names": {
+            "actor": "Ivo Senn",
+            "target": "Ressa Morn"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ivo Senn keeps Ressa Morn in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 4,
+            "target": 16
+          },
+          "priority": 55,
+          "magnitude": 0.22,
+          "event_type": "contact_made",
+          "promotable": true,
+          "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "state_delta": {
+            "character.current_activity": "checking in on a dependent"
+          },
+          "template_id": "check_on_dependent",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "branch_label": "Reach out through customary channels",
+          "binding_names": {
+            "actor": "Elian Rook",
+            "target": "Tam Oris"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 4,
+            "target": 35
+          },
+          "priority": 48,
+          "magnitude": 0.44,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+          "state_delta": {
+            "character.current_activity": "keeping tabs from a distance"
+          },
+          "template_id": "surveil",
+          "binding_hash": "3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+          "branch_label": "Keep tabs from a distance",
+          "binding_names": {
+            "actor": "Elian Rook",
+            "target": "Dax Morrow"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Elian Rook keeps tabs on Dax Morrow without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 5,
+            "target": 6
+          },
+          "priority": 5,
+          "magnitude": 0.08,
+          "event_type": "contact_made",
+          "promotable": false,
+          "proposal_id": "make_acquaintance:9e8a4f8844a26f4aa0a8d416c053d415740b02f031bf934a5a9c4a9ac4cbe4e2",
+          "state_delta": {
+            "entity_pair_tags.add_inbound": [
+              "contact:social"
+            ],
+            "entity_pair_tags.add_outbound": [
+              "contact:social"
+            ]
+          },
+          "template_id": "make_acquaintance",
+          "binding_hash": "9e8a4f8844a26f4aa0a8d416c053d415740b02f031bf934a5a9c4a9ac4cbe4e2",
+          "branch_label": "Exchange names",
+          "binding_names": {
+            "actor": "Niko Rell",
+            "target": "Ren Vale"
+          },
+          "changed_fields": [
+            "entity_pair_tags"
+          ],
+          "narrative_stub": "Niko Rell and Ren Vale keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 6,
+            "target": 4
+          },
+          "priority": 48,
+          "magnitude": 0.24,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:b3cc725b505ed36ac637a7ff5f0a4dc9b0a5a1129d0379dca27b401778885fdf",
+          "state_delta": {
+            "character.current_activity": "surveilling without contact"
+          },
+          "template_id": "surveil",
+          "binding_hash": "b3cc725b505ed36ac637a7ff5f0a4dc9b0a5a1129d0379dca27b401778885fdf",
+          "branch_label": "Keep the target in view without contact",
+          "binding_names": {
+            "actor": "Ren Vale",
+            "target": "Elian Rook"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ren Vale keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 6,
+            "target": 13
+          },
+          "priority": 55,
+          "magnitude": 0.22,
+          "event_type": "contact_made",
+          "promotable": true,
+          "proposal_id": "check_on_dependent:02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+          "state_delta": {
+            "character.current_activity": "checking in on a dependent"
+          },
+          "template_id": "check_on_dependent",
+          "binding_hash": "02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+          "branch_label": "Reach out through customary channels",
+          "binding_names": {
+            "actor": "Ren Vale",
+            "target": "Dr. Sera Vey"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Ren Vale sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Dr. Sera Vey to say something real if they want to \u2014 and watches for what comes back.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 8,
+            "target": 14
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:30591ec27f31a3af94c815de9c750da4a3bad83453c70797285598655f0162a1",
+          "state_delta": {
+            "character.current_activity": "collecting a proxy watcher report"
+          },
+          "template_id": "surveil",
+          "binding_hash": "30591ec27f31a3af94c815de9c750da4a3bad83453c70797285598655f0162a1",
+          "branch_label": "Collect a proxy watcher report",
+          "binding_names": {
+            "actor": "Sister Calyx",
+            "target": "Ione Varr"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Sister Calyx does not go near Ione Varr. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 8,
+            "target": 33
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+          "state_delta": {
+            "character.current_activity": "collecting a proxy watcher report"
+          },
+          "template_id": "surveil",
+          "binding_hash": "969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+          "branch_label": "Collect a proxy watcher report",
+          "binding_names": {
+            "actor": "Sister Calyx",
+            "target": "Orris Vale"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Sister Calyx does not go near Orris Vale. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 11,
+            "target": 4
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:a11016364c36ce81aad032b93d3190dafd3beb372652543a71cae61f47c50cca",
+          "state_delta": {
+            "character.current_activity": "collecting a proxy watcher report"
+          },
+          "template_id": "surveil",
+          "binding_hash": "a11016364c36ce81aad032b93d3190dafd3beb372652543a71cae61f47c50cca",
+          "branch_label": "Collect a proxy watcher report",
+          "binding_names": {
+            "actor": "Vela Nash",
+            "target": "Elian Rook"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Vela Nash does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 11,
+            "target": 34
+          },
+          "priority": 48,
+          "magnitude": 0.24,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:7d2f5339743b75a1847811cb28c9c80ed4a72554493ac9c48bbc60886e24394e",
+          "state_delta": {
+            "character.current_activity": "surveilling without contact"
+          },
+          "template_id": "surveil",
+          "binding_hash": "7d2f5339743b75a1847811cb28c9c80ed4a72554493ac9c48bbc60886e24394e",
+          "branch_label": "Keep the target in view without contact",
+          "binding_names": {
+            "actor": "Vela Nash",
+            "target": "Tarin Quell"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Vela Nash keeps Tarin Quell in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 16,
+            "target": 4
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "event_type": "surveillance_performed",
+          "promotable": true,
+          "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "state_delta": {
+            "character.current_activity": "collecting a proxy watcher report"
+          },
+          "template_id": "surveil",
+          "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "branch_label": "Collect a proxy watcher report",
+          "binding_names": {
+            "actor": "Tam Oris",
+            "target": "Elian Rook"
+          },
+          "changed_fields": [
+            "character.current_activity"
+          ],
+          "narrative_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+          "signal_event_type": null
+        },
+        {
+          "bindings": {
+            "actor": 16,
+            "target": 28
+          },
+          "priority": 5,
+          "magnitude": 0.08,
+          "event_type": "contact_made",
+          "promotable": false,
+          "proposal_id": "make_acquaintance:cd68bd64333450c04ac110444f74402b2a745cc56fe95056619e76ad1e55ce05",
+          "state_delta": {
+            "entity_pair_tags.add_inbound": [
+              "contact:social"
+            ],
+            "entity_pair_tags.add_outbound": [
+              "contact:social"
+            ]
+          },
+          "template_id": "make_acquaintance",
+          "binding_hash": "cd68bd64333450c04ac110444f74402b2a745cc56fe95056619e76ad1e55ce05",
+          "branch_label": "Exchange names",
+          "binding_names": {
+            "actor": "Tam Oris",
+            "target": "Len Aster"
+          },
+          "changed_fields": [
+            "entity_pair_tags"
+          ],
+          "narrative_stub": "Tam Oris and Len Aster keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.",
+          "signal_event_type": null
+        }
+      ],
+      "generated_at": "2026-09-24T16:31:44.482354+00:00",
+      "anchor_chunk_id": 49,
+      "scene_pressures": [
+        {
+          "bindings": {
+            "actor": 3,
+            "target": 1
+          },
+          "priority": 48,
+          "magnitude": 0.3,
+          "prompt_text": "Ivo Senn may have mapped the public pattern around Mara Vey. Use this only as Storyteller-controlled scene pressure or a future setup.",
+          "template_id": "surveil",
+          "binding_hash": "5c8f9b44c7db6d471b98e007d3b1e3a1ea5e9813311970f8e3b36e6940197841",
+          "branch_label": "Follow the public pattern",
+          "pressure_stub": "{actor} may have mapped the public pattern around {target}. Use this only as Storyteller-controlled scene pressure or a future setup."
+        },
+        {
+          "bindings": {
+            "actor": 3,
+            "target": 31
+          },
+          "priority": 55,
+          "magnitude": 0.22,
+          "prompt_text": "Ivo Senn has sent Kessa Brin a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for Kessa Brin's decisions.",
+          "template_id": "check_on_dependent",
+          "binding_hash": "19cf0e8cced5d13a0a1d5cecf4b68ffa82e9c8bcb34f6224366667719d789ee0",
+          "branch_label": "Reach out through customary channels",
+          "pressure_stub": "{actor} has sent {target} a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for {target}'s decisions."
+        },
+        {
+          "bindings": {
+            "actor": 5,
+            "target": 1
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "prompt_text": "Niko Rell has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+          "template_id": "surveil",
+          "binding_hash": "92cf3d4abbbd0623849b8c73c3af3820b0426fde855eeb6fe7e32ca2d83ddac6",
+          "branch_label": "Collect a proxy watcher report",
+          "pressure_stub": "{actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all."
+        },
+        {
+          "bindings": {
+            "actor": 16,
+            "target": 1
+          },
+          "priority": 48,
+          "magnitude": 0.38,
+          "prompt_text": "Tam Oris has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+          "template_id": "surveil",
+          "binding_hash": "1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+          "branch_label": "Collect a proxy watcher report",
+          "pressure_stub": "{actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all."
+        }
+      ],
+      "scene_conditions": {
+        "weather": "rain",
+        "time_of_day": "night"
+      },
+      "ambient_scene_seeds": [],
+      "epistemics_settings": {
+        "enabled": true,
+        "aware_roles": [
+          "actor",
+          "observer",
+          "target",
+          "witness"
+        ],
+        "claim_event_types": [
+          "compliance_alert",
+          "encoded_message",
+          "hunt_called_off",
+          "hunt_declared",
+          "informant_contact",
+          "intel_acquired",
+          "intel_acted_on",
+          "protective_intervention",
+          "pursue_romance_completed",
+          "recruit_ally_completed",
+          "relationship_drift_milestone",
+          "retaliation_attempted",
+          "retaliation_executed",
+          "rival_consulted",
+          "seek_redemption_completed",
+          "surveillance_performed",
+          "threat_issued",
+          "warning_delivered"
+        ]
+      },
+      "_bleed_offer_resolution_ids": []
+    },
+    "authorial_directives": [],
+    "orrery_adjudications": [
+      {
+        "note": "The Wickglass obligation is presently a face-to-face wet-ink choice, not a dead-drop fulfillment; Mara has not signed or refused.",
+        "action": "defer",
+        "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b"
+      },
+      {
+        "note": "Kessa is actively holding a bounded Guild conversation, not tidying her space this tick.",
+        "action": "void",
+        "proposal_id": "upkeep:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f"
+      }
+    ],
+    "new_entities": [],
+    "generation_model": "gpt-5.6-terra",
+    "correspondence_writer_letter": "Niko\u2019s appearance is a bounded, player-initiated contact: he refuses Ora\u2019s location, route, receipt, and custody, but gives a qualified direct observation of municipal-gray inquiries about Mara exiting the hall. Treat this as pressure, not identification or pursuit proof. Kessa holds the moral center: Nera\u2019s dead-book admission is not displaced by danger, and the carrier-pressure receipt remains conditional on Mara\u2019s wet-ink sentence. Mara can earn a narrow fact, defer at reputational cost, or probe the watcher without converting Niko into a route.",
+    "correspondence_gaia_letter": "Taken up: Niko\u2019s contact stays narrow and earned. He has given Mara one firsthand observation\u2014municipal gray asking after an auditor carrying paper\u2014and nothing about Ora, the receipt, or any route. I am not treating it as identification, pursuit proof, or a summons to chase.\n\nBent: the watcher does not excuse Nera Voss. Kessa\u2019s room remains a moral appointment, not an escape hatch; the receipt stays conditional on Mara\u2019s sentence in the dead-book. If Mara probes Niko, keep him exact about what he saw and silent about what he refuses to expose.\n\nOff-screen, the municipal-gray question has now tested only Mara\u2019s public outline. A real move will have to spend more than a scheduler\u2019s answer: an intermediary, an authority, or a concrete bargain.",
+    "lore_pass_baseline": {
+      "producer": "nexus.memory.context_memory_manager",
+      "schema_version": 1,
+      "parent_chunk_id": null,
+      "remaining_budget": 14200,
+      "memory_identities": [
+        5,
+        6,
+        7,
+        20,
+        21,
+        22,
+        24,
+        25,
+        26,
+        27,
+        28,
+        35,
+        36,
+        37,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49
+      ],
+      "config_fingerprint": "434647cf417a9365a6e3af0e762d317915099deea8ea38cd4abb891ecbf36eca",
+      "prior_token_accounting": {
+        "structured": 49700,
+        "user_input": 53,
+        "warm_slice": 3550,
+        "apex_window": 75000,
+        "augmentation": 3550,
+        "system_prompt": 5000,
+        "baseline_tokens": 56800,
+        "total_available": 71000,
+        "response_reserve": 4000,
+        "reasoning_reserve": 0,
+        "reserve_shortfall": 3550,
+        "reserved_for_pass2": 17750,
+        "effective_input_ceiling": 71000
+      }
+    }
+  }
+]

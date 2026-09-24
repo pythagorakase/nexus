@@ -1,0 +1,10 @@
+[
+  "/Users/pythagor/nexus/.venv/bin/python",
+  "-m",
+  "nexus.cli",
+  "continue",
+  "--slot",
+  "4",
+  "--user-text",
+  "I walk back as far as the Memorial Hall threshold and wait for Ivo Senn to notice me. I keep my voice down. \"Ivo. Would you be willing to step into the arcade for a moment? You can say no.\""
+]

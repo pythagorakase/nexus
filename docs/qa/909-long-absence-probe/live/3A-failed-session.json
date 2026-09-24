@@ -1,0 +1,12 @@
+[
+  {
+    "session_id": "71c52416-673f-4400-93de-4411368c9c5d",
+    "operation": "continue",
+    "parent_chunk_id": 53,
+    "status": "error",
+    "chunk_id": null,
+    "error": "Unresolved place state update name 'Loading Arcade'",
+    "created_at": "2026-09-24 16:35:39.231674+00:00",
+    "updated_at": "2026-09-24 16:36:34.273826+00:00"
+  }
+]

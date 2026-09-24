@@ -1,0 +1,22 @@
+[
+  {
+    "source_table": "relationship_versions",
+    "source_chunk_id": 25,
+    "count": 4
+  },
+  {
+    "source_table": "relationship_versions",
+    "source_chunk_id": 48,
+    "count": 7
+  },
+  {
+    "source_table": "state_delta_log",
+    "source_chunk_id": 25,
+    "count": 7
+  },
+  {
+    "source_table": "state_delta_log",
+    "source_chunk_id": 48,
+    "count": 7
+  }
+]

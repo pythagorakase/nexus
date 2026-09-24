@@ -1,0 +1,10 @@
+[
+  "/Users/pythagor/nexus/.venv/bin/python",
+  "-m",
+  "nexus.cli",
+  "continue",
+  "--slot",
+  "4",
+  "--user-text",
+  "\"At the shutter you told Ora: west conduit, two turns, then the lift cage. Lose the lane cameras in the condensers.\" I keep my voice low. \"Did that route hold? I am asking you, not writing an answer for you.\""
+]

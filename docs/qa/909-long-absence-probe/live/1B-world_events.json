@@ -1,0 +1,628 @@
+[
+  {
+    "id": 201,
+    "event_type": "honor_debt",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 3,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.380",
+    "resolution_id": 126,
+    "payload": {
+      "bindings": {
+        "actor": 3
+      },
+      "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+      "template_id": "honor_debt",
+      "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+      "branch_label": "Leave a public sign",
+      "narrative_stub": "Ivo Senn pays a street artist in physical cash to place a specific glyph where only the intended recipient will read it."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 202,
+    "event_type": "upkeep_done",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 127,
+    "payload": {
+      "bindings": {
+        "actor": 4
+      },
+      "proposal_id": "upkeep:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "template_id": "upkeep",
+      "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Elian Rook tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 203,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 6,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 128,
+    "payload": {
+      "bindings": {
+        "actor": 6
+      },
+      "proposal_id": "stroll:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+      "template_id": "stroll",
+      "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Ren Vale moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 204,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 8,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.140",
+    "resolution_id": 129,
+    "payload": {
+      "bindings": {
+        "actor": 8
+      },
+      "proposal_id": "stroll:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "template_id": "stroll",
+      "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "branch_label": "Walk the familiar streets",
+      "narrative_stub": "Sister Calyx takes the long way through streets they know by wear rather than by name, registering the small changes \u2014 a new face at a stall, a repaired door \u2014 that a neighborhood shows only to its regulars."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 205,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 10,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 130,
+    "payload": {
+      "bindings": {
+        "actor": 10
+      },
+      "proposal_id": "stroll:eff5eef1587d5b44cc1d825c922be1f1ba5f9abe675c6996c1b71cdb57707997",
+      "template_id": "stroll",
+      "binding_hash": "eff5eef1587d5b44cc1d825c922be1f1ba5f9abe675c6996c1b71cdb57707997",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Tomas Quill moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 206,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 11,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.120",
+    "resolution_id": 131,
+    "payload": {
+      "bindings": {
+        "actor": 11
+      },
+      "proposal_id": "stroll:9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "template_id": "stroll",
+      "binding_hash": "9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "branch_label": "Take the night air",
+      "narrative_stub": "Vela Nash steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 207,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 13,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.120",
+    "resolution_id": 132,
+    "payload": {
+      "bindings": {
+        "actor": 13
+      },
+      "proposal_id": "stroll:a6becc935a481afe6c570d3d5d0ab734752ad0cedb7b21baa1d855bdcd16c83a",
+      "template_id": "stroll",
+      "binding_hash": "a6becc935a481afe6c570d3d5d0ab734752ad0cedb7b21baa1d855bdcd16c83a",
+      "branch_label": "Take the night air",
+      "narrative_stub": "Dr. Sera Vey steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 208,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 14,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.120",
+    "resolution_id": 133,
+    "payload": {
+      "bindings": {
+        "actor": 14
+      },
+      "proposal_id": "stroll:96668bd5a88be0dc94245965f572a5ef32a9248dadf3a15fec1b734652bd9e65",
+      "template_id": "stroll",
+      "binding_hash": "96668bd5a88be0dc94245965f572a5ef32a9248dadf3a15fec1b734652bd9e65",
+      "branch_label": "Take the night air",
+      "narrative_stub": "Ione Varr steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 209,
+    "event_type": "upkeep_done",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 15,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 134,
+    "payload": {
+      "bindings": {
+        "actor": 15
+      },
+      "proposal_id": "upkeep:cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "template_id": "upkeep",
+      "binding_hash": "cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Unknown municipal-gray stranger tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 210,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 16,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 135,
+    "payload": {
+      "bindings": {
+        "actor": 16
+      },
+      "proposal_id": "stroll:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "template_id": "stroll",
+      "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Tam Oris moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 211,
+    "event_type": "upkeep_done",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 26,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 136,
+    "payload": {
+      "bindings": {
+        "actor": 26
+      },
+      "proposal_id": "upkeep:cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "template_id": "upkeep",
+      "binding_hash": "cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Ressa Morn tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 212,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 33,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 137,
+    "payload": {
+      "bindings": {
+        "actor": 33
+      },
+      "proposal_id": "stroll:2822439ff92aa7a08ad509f0b27c6f2fb76a9943d8eedee11aa33e1c553cc779",
+      "template_id": "stroll",
+      "binding_hash": "2822439ff92aa7a08ad509f0b27c6f2fb76a9943d8eedee11aa33e1c553cc779",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Orris Vale moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 213,
+    "event_type": "upkeep_done",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 34,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 138,
+    "payload": {
+      "bindings": {
+        "actor": 34
+      },
+      "proposal_id": "upkeep:316323d743a437aa53081bcbbd3785a6c54dd649c56bffc095cc2fe0d434b23b",
+      "template_id": "upkeep",
+      "binding_hash": "316323d743a437aa53081bcbbd3785a6c54dd649c56bffc095cc2fe0d434b23b",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Tarin Quell tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 214,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 35,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 139,
+    "payload": {
+      "bindings": {
+        "actor": 35
+      },
+      "proposal_id": "stroll:624b47219a92b2dd6434b550622aa7eb672ee59a67834fd3d64f1d5af5406e25",
+      "template_id": "stroll",
+      "binding_hash": "624b47219a92b2dd6434b550622aa7eb672ee59a67834fd3d64f1d5af5406e25",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Dax Morrow moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 215,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": 6,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.440",
+    "resolution_id": 140,
+    "payload": {
+      "bindings": {
+        "actor": 4,
+        "target": 6
+      },
+      "proposal_id": "surveil:9bf7751734d4fe6f6b8c19f3e77cd99a8ec75a52c32235042732e4a3a833b4e2",
+      "template_id": "surveil",
+      "binding_hash": "9bf7751734d4fe6f6b8c19f3e77cd99a8ec75a52c32235042732e4a3a833b4e2",
+      "branch_label": "Keep tabs from a distance",
+      "narrative_stub": "Elian Rook keeps tabs on Ren Vale without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 216,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": 11,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.440",
+    "resolution_id": 141,
+    "payload": {
+      "bindings": {
+        "actor": 4,
+        "target": 11
+      },
+      "proposal_id": "surveil:29a094715b955d156ff5e27cf659d6c5d5e77f07f423fc8f1d853797363d5c4f",
+      "template_id": "surveil",
+      "binding_hash": "29a094715b955d156ff5e27cf659d6c5d5e77f07f423fc8f1d853797363d5c4f",
+      "branch_label": "Keep tabs from a distance",
+      "narrative_stub": "Elian Rook keeps tabs on Vela Nash without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 217,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 6,
+    "target_entity_id": 13,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.380",
+    "resolution_id": 142,
+    "payload": {
+      "bindings": {
+        "actor": 6,
+        "target": 13
+      },
+      "proposal_id": "surveil:02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+      "template_id": "surveil",
+      "binding_hash": "02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Ren Vale does not go near Dr. Sera Vey. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 218,
+    "event_type": "contact_deferred",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 8,
+    "target_entity_id": 33,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 143,
+    "payload": {
+      "bindings": {
+        "actor": 8,
+        "target": 33
+      },
+      "proposal_id": "reach_out:969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+      "template_id": "reach_out",
+      "binding_hash": "969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+      "branch_label": "Let the silence stand for now",
+      "narrative_stub": "Sister Calyx lets the thread remain unpulled. Whatever exists between them and Orris Vale, it is not made warmer by forcing the wrong kind of contact today."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 219,
+    "event_type": "contact_made",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 28,
+    "target_entity_id": 29,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "entity_pair_tags"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 144,
+    "payload": {
+      "bindings": {
+        "actor": 28,
+        "target": 29
+      },
+      "proposal_id": "make_acquaintance:b791812fc54443e5642d50410c3846a82d1ed1b2974d01cd99a9e1f05678e88c",
+      "template_id": "make_acquaintance",
+      "binding_hash": "b791812fc54443e5642d50410c3846a82d1ed1b2974d01cd99a9e1f05678e88c",
+      "branch_label": "Exchange names",
+      "narrative_stub": "Len Aster and Davin Sol keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 220,
+    "event_type": "contact_deferred",
+    "tick_chunk_id": 51,
+    "narration_chunk_id": null,
+    "actor_entity_id": 33,
+    "target_entity_id": 8,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 145,
+    "payload": {
+      "bindings": {
+        "actor": 33,
+        "target": 8
+      },
+      "proposal_id": "reach_out:7a3f2267aa84f130b6802127cbd55c82fa08f30102a143360402d3537a08527b",
+      "template_id": "reach_out",
+      "binding_hash": "7a3f2267aa84f130b6802127cbd55c82fa08f30102a143360402d3537a08527b",
+      "branch_label": "Let the silence stand for now",
+      "narrative_stub": "Orris Vale lets the thread remain unpulled. Whatever exists between them and Sister Calyx, it is not made warmer by forcing the wrong kind of contact today."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:33:33.216510+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:33:33.216510+00:00",
+    "experiences_quarantined_at": null
+  }
+]

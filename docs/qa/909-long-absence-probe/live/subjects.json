@@ -1,0 +1,101 @@
+[
+  {
+    "id": 11,
+    "name": "Unknown municipal-gray stranger",
+    "summary": "A municipal-accessed, deniable pressure actor who knows of Calyx's third sheet and demands the relay-chamber copy without yet declaring a sponsor or allegiance.",
+    "last_present": 21,
+    "id_gap": 28,
+    "world_gap": "2:16:00",
+    "has_relationship": false
+  },
+  {
+    "id": 4,
+    "name": "Niko Rell",
+    "summary": "Retrograde-generated character stub for Niko Rell. Created so Skald-selected setup history can resolve to canonical rows.",
+    "last_present": 25,
+    "id_gap": 24,
+    "world_gap": "2:02:00",
+    "has_relationship": true
+  },
+  {
+    "id": 14,
+    "name": "Ora Pell",
+    "summary": "Retrograde-generated character stub for Ora Pell. Created so Skald-selected setup history can resolve to canonical rows.",
+    "last_present": 25,
+    "id_gap": 24,
+    "world_gap": "2:02:00",
+    "has_relationship": false
+  },
+  {
+    "id": 2,
+    "name": "Ivo Senn",
+    "summary": "Trait-compiler character stub for Ivo Senn. Created so wizard trait selections resolve to canonical rows.",
+    "last_present": 48,
+    "id_gap": 1,
+    "world_gap": "0:08:00",
+    "has_relationship": true
+  },
+  {
+    "id": 3,
+    "name": "Elian Rook",
+    "summary": "Retrograde-generated character stub for Elian Rook. Created so Skald-selected setup history can resolve to canonical rows.",
+    "last_present": 48,
+    "id_gap": 1,
+    "world_gap": "0:08:00",
+    "has_relationship": true
+  },
+  {
+    "id": 5,
+    "name": "Ren Vale",
+    "summary": "Retrograde-generated character stub for Ren Vale. Created so Skald-selected setup history can resolve to canonical rows.",
+    "last_present": 48,
+    "id_gap": 1,
+    "world_gap": "0:08:00",
+    "has_relationship": true
+  },
+  {
+    "id": 6,
+    "name": "Sister Calyx",
+    "summary": "A careful keeper of durable paper testimony who has turned the memorial crowd into witnesses against a sealed civic petition.",
+    "last_present": 48,
+    "id_gap": 1,
+    "world_gap": "0:08:00",
+    "has_relationship": true
+  },
+  {
+    "id": 8,
+    "name": "Vela Nash",
+    "summary": "Retrograde-generated character stub for Vela Nash. Created so Skald-selected setup history can resolve to canonical rows.",
+    "last_present": 48,
+    "id_gap": 1,
+    "world_gap": "0:08:00",
+    "has_relationship": true
+  },
+  {
+    "id": 12,
+    "name": "Tam Oris",
+    "summary": "A frightened Records Integrity field contractor who carried an erased retrieval notice to Lantern Quay and has now put its wording into wet ink.",
+    "last_present": 48,
+    "id_gap": 1,
+    "world_gap": "0:08:00",
+    "has_relationship": true
+  },
+  {
+    "id": 1,
+    "name": "Mara Vey",
+    "summary": "A Disgraced civic memory auditor reassigned to petty disputes",
+    "last_present": 49,
+    "id_gap": 0,
+    "world_gap": "0:00:00",
+    "has_relationship": true
+  },
+  {
+    "id": 18,
+    "name": "Kessa Brin",
+    "summary": "An adult Wickglass Transit Guild courier who delivered Mara a bronze token for a private, outstanding Guild obligation and left without touching the hall's witness process.",
+    "last_present": 49,
+    "id_gap": 0,
+    "world_gap": "0:00:00",
+    "has_relationship": true
+  }
+]
