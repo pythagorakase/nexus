@@ -974,6 +974,12 @@ class RenderLimits(BaseModel):
     )
 
 
+class LOREChunkParameters(BaseModel):
+    """Bound the playable narrative window ending at the continuation parent."""
+
+    warm_slice_initial: int = Field(..., ge=1)
+
+
 class LORESettings(BaseModel):
     """LORE agent configuration."""
 
@@ -982,6 +988,7 @@ class LORESettings(BaseModel):
     debug: bool
     agentic_sql: bool
     render_limits: RenderLimits
+    chunk_parameters: LOREChunkParameters
     token_budget: TokenBudgetConfig
     payload_percent_budget: PayloadPercentBudget
     entity_inclusion: EntityInclusionConfig

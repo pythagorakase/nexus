@@ -660,10 +660,13 @@ def test_warm_analysis_ignores_parent_authorial_directives(
                 "authorial_directives": ["Legacy directive should be ignored."],
             }
 
-        def get_recent_chunks(self, limit: int) -> Dict[str, Any]:
+        def get_recent_chunks(
+            self, limit: int, *, through_chunk_id: int | None = None
+        ) -> Dict[str, Any]:
             return {"results": []}
 
     turn_manager.lore.memnon = DummyMemnon()
+    turn_manager.settings["lore"] = load_settings_as_dict()["lore"]
     ctx = TurnContext(
         turn_id="turn_parent_no_directives",
         user_input="Continue.",

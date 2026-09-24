@@ -401,15 +401,14 @@ class TurnCycleManager:
         if self.lore.memnon:
             try:
                 # Get chunk parameters from settings
-                chunk_params = (
-                    self.settings.get("Agent Settings", {})
-                    .get("LORE", {})
-                    .get("chunk_parameters", {})
-                )
-                initial_chunks = chunk_params.get("warm_slice_initial", 10)
+                initial_chunks = self.settings["lore"]["chunk_parameters"][
+                    "warm_slice_initial"
+                ]
 
-                # Get most recent chunks directly
-                recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
+                # Select the configured window ending at the requested parent.
+                recent_chunks = self.lore.memnon.get_recent_chunks(
+                    limit=initial_chunks, through_chunk_id=target_chunk_id
+                )
                 recent_list = recent_chunks.get("results", [])
                 if target_chunk_id is None and recent_list:
                     recent_list[0]["is_target"] = True

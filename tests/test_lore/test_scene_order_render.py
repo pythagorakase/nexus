@@ -364,3 +364,78 @@ def test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks() -> 
                     assert "recorded_at_world_time" not in summary["metadata"]
         finally:
             engine.dispose()
+
+
+@pytest.mark.requires_postgres
+def test_recent_warm_window_ends_at_historical_parent() -> None:
+    """Read a parent ten scenes behind save_04's frontier on a disposable clone.
+
+    Uses narrative_chunks and chunk_metadata through the real MEMNON query,
+    warm analysis, and both TEST seat renderers; the source save is read only.
+    """
+    from sqlalchemy import text
+
+    from nexus.agents.memnon.memnon import MEMNON
+    from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+    from nexus.database import database_url
+    from tests.pg_fixtures import disposable_slot_database
+
+    with disposable_slot_database(
+        "qa640_scene_parent", source_db="save_04", include_data=True
+    ) as dbname:
+        memnon = MEMNON(interface=None, db_url=database_url(dbname))
+        try:
+            utility = window_logon()
+            count = utility.settings["lore"]["chunk_parameters"]["warm_slice_initial"]
+            with memnon.Session() as session:
+                ids = list(
+                    session.execute(
+                        text(
+                            "SELECT nc.id FROM narrative_chunks nc WHERE "
+                            f"{playable_narrative_predicate()} ORDER BY nc.id DESC"
+                        )
+                    ).scalars()
+                )
+            assert len(ids) >= 10 + count
+            cycle = TurnCycleManager(
+                SimpleNamespace(settings=utility.settings, memnon=memnon)
+            )
+            for offset in (10, 0):
+                parent = ids[offset]
+                expected = sorted(ids[offset : offset + count])
+                context = TurnContext(
+                    turn_id=f"parent-window-{parent}",
+                    user_input="Continue.",
+                    start_time=0,
+                    target_chunk_id=parent,
+                )
+                asyncio.run(cycle.perform_warm_analysis(context))
+                assert sorted(chunk["id"] for chunk in context.warm_slice) == expected
+                assert (
+                    sum(chunk.get("is_target", False) for chunk in context.warm_slice)
+                    == 1
+                )
+                payload = {
+                    "user_input": context.user_input,
+                    "warm_slice": {"chunks": context.warm_slice},
+                    "retrieved_passages": {"results": []},
+                    "entity_data": {},
+                }
+                sources = {id(chunk): chunk["id"] for chunk in context.warm_slice}
+                for request in utility.measure_turn_requests(payload, 75000):
+                    rendered = [
+                        sources[source]
+                        for index, source in request.sources.items()
+                        if request.blocks[index][0] == "recent narrative"
+                    ]
+                    assert rendered == expected
+                    assert rendered[-1] == parent
+                print(
+                    f"WARM_WINDOW parent={parent} count={count} ids={expected}; both seats match"
+                )
+            assert [
+                chunk["id"]
+                for chunk in memnon.get_recent_chunks(limit=count)["results"]
+            ] == ids[:count]
+        finally:
+            memnon.db_manager.engine.dispose()
