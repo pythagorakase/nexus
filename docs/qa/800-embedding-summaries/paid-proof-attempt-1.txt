@@ -16,7 +16,7 @@
 2026-09-24 18:20:14,443 - nexus.metadata - WARNING - structured-output rejected transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 10906 (json_invalid)
 2026-09-24 18:20:14,443 - nexus.metadata - WARNING - structured-output retries exhausted transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 10906 (json_invalid) action=propagate
 2026-09-24 18:20:14,444 - nexus.summarize_narrative - ERROR - Error generating episode summary: 1 validation error for EpisodeSummaryModel
-  Invalid JSON: EOF while parsing a string at line 2 column 10906 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...first leaf locally, and', input_type=str]
+  Invalid JSON: EOF while parsing a string at line 2 column 10906 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]
     For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
 F
 =================================== FAILURES ===================================
@@ -134,7 +134,7 @@ job = RealDictRow([('id', 1), ('state', 'queued'), ('attempts', 0), ('available_
                     generator.last_error or "Summary provider returned no summary"
                 )
 E               RuntimeError: 1 validation error for EpisodeSummaryModel
-E                 Invalid JSON: EOF while parsing a string at line 2 column 10906 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...first leaf locally, and', input_type=str]
+E                 Invalid JSON: EOF while parsing a string at line 2 column 10906 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]
 E                   For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
 
 nexus/jobs/summaries.py:63: RuntimeError
@@ -157,7 +157,7 @@ INFO     httpx:_client.py:1025 HTTP Request: POST https://api.openai.com/v1/resp
 WARNING  nexus.metadata:api_openai.py:536 structured-output rejected transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 10906 (json_invalid)
 WARNING  nexus.metadata:api_openai.py:547 structured-output retries exhausted transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 10906 (json_invalid) action=propagate
 ERROR    nexus.summarize_narrative:summarize_narrative.py:1800 Error generating episode summary: 1 validation error for EpisodeSummaryModel
-  Invalid JSON: EOF while parsing a string at line 2 column 10906 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...first leaf locally, and', input_type=str]
+  Invalid JSON: EOF while parsing a string at line 2 column 10906 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]
     For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
 =============================== warnings summary ===============================
 <frozen abc>:106

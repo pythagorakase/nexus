@@ -16,9 +16,9 @@
 2026-09-24 18:22:10,499 - nexus.metadata - WARNING - structured-output rejected transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 11268 (json_invalid)
 2026-09-24 18:22:10,499 - nexus.metadata - WARNING - structured-output retries exhausted transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 11268 (json_invalid) action=propagate
 2026-09-24 18:22:10,499 - nexus.summarize_narrative - ERROR - Error generating episode summary: 1 validation error for EpisodeSummaryModel
-  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...d an issuer. The worker', input_type=str]
+  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]
     For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
-PAID PROOF {"database": "qa640_800b_paid_e8d6a492eed0", "error": "1 validation error for EpisodeSummaryModel\n  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\\n  \"summary\": \"OVERVIE...d an issuer. The worker', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid", "jobs": [["episode", "failed", 1, "c4556637-8f8f-4a74-898c-c18688d63787"], ["season", "queued", 0, "c4556637-8f8f-4a74-898c-c18688d63787"]], "persisted_summaries": {}, "summary_lengths": [], "usage": [], "wire_usage": [{"id": "resp_09fa0154c03f1494006ab5a25c0d9887d297e87a063d67a225", "incomplete_details": {"reason": "max_output_tokens"}, "mode": "episode", "status": "incomplete", "usage": {"input_tokens": 44386, "input_tokens_details": {"cache_write_tokens": 0, "cached_tokens": 44383}, "output_tokens": 2500, "output_tokens_details": {"reasoning_tokens": 264}, "total_tokens": 46886}}]}
+PAID PROOF {"database": "qa640_800b_paid_e8d6a492eed0", "error": "1 validation error for EpisodeSummaryModel\n  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid", "jobs": [["episode", "failed", 1, "c4556637-8f8f-4a74-898c-c18688d63787"], ["season", "queued", 0, "c4556637-8f8f-4a74-898c-c18688d63787"]], "persisted_summaries": {}, "summary_lengths": [], "usage": [], "wire_usage": [{"id": "resp_09fa0154c03f1494006ab5a25c0d9887d297e87a063d67a225", "incomplete_details": {"reason": "max_output_tokens"}, "mode": "episode", "status": "incomplete", "usage": {"input_tokens": 44386, "input_tokens_details": {"cache_write_tokens": 0, "cached_tokens": 44383}, "output_tokens": 2500, "output_tokens_details": {"reasoning_tokens": 264}, "total_tokens": 46886}}]}
 F
 =================================== FAILURES ===================================
 ____________________ test_scheduler_paid_episode_and_season ____________________
@@ -194,7 +194,7 @@ job = RealDictRow([('id', 1), ('state', 'queued'), ('attempts', 0), ('available_
                     generator.last_error or "Summary provider returned no summary"
                 )
 E               RuntimeError: 1 validation error for EpisodeSummaryModel
-E                 Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...d an issuer. The worker', input_type=str]
+E                 Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]
 E                   For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
 
 nexus/jobs/summaries.py:63: RuntimeError
@@ -217,7 +217,7 @@ INFO     httpx:_client.py:1025 HTTP Request: POST https://api.openai.com/v1/resp
 WARNING  nexus.metadata:api_openai.py:537 structured-output rejected transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 11268 (json_invalid)
 WARNING  nexus.metadata:api_openai.py:548 structured-output retries exhausted transport=responses model=gpt-6-astra seat=summaries attempt=1 exception=ValidationError error=<root>: Invalid JSON: EOF while parsing a string at line 2 column 11268 (json_invalid) action=propagate
 ERROR    nexus.summarize_narrative:summarize_narrative.py:1800 Error generating episode summary: 1 validation error for EpisodeSummaryModel
-  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...d an issuer. The worker', input_type=str]
+  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]
     For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
 =============================== warnings summary ===============================
 <frozen abc>:106

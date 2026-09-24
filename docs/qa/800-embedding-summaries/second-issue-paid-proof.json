@@ -1,6 +1,6 @@
 {
   "database": "qa640_800b_paid_e8d6a492eed0",
-  "error": "1 validation error for EpisodeSummaryModel\n  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\\n  \"summary\": \"OVERVIE...d an issuer. The worker', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid",
+  "error": "1 validation error for EpisodeSummaryModel\n  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid",
   "wire_usage": [
     {
       "mode": "episode",

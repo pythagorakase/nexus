@@ -10,7 +10,7 @@ Exact second-attempt error:
 
 ```text
 1 validation error for EpisodeSummaryModel
-  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...d an issuer. The worker', input_type=str]
+  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='[REDACTED generated response]', input_type=str]
     For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
 ```
 
