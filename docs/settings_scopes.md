@@ -31,3 +31,23 @@ Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write ma
 A pin naming a removed registry ID is readable but fails resolution. No automatic clearing occurs. Use `nexus model --slot N --clear`, or PATCH the corresponding model field to NULL. `nexus model --slot N --set ID` assigns a registered Skald pin.
 
 Migration 117 is applied to disposable databases during QA only. The coordinator applies fleet/template migrations at land time.
+
+## Refreshing a Pass-2 Fingerprint
+
+After a deliberate configuration-shape change that leaves Pass-2 semantics
+unchanged (such as removing an unused memory setting), run:
+
+```sh
+PYTHONPATH=$PWD python scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --slot N
+# Disposable/reference database alternative:
+PYTHONPATH=$PWD python scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --dbname qa640_example
+```
+
+Run with turns stopped for that target. This explicit compatibility operation
+uses the current settings projected through the target story's context-window
+pin. It prints the old and new hashes and updates only `config_fingerprint` in
+the accepted tail's existing baseline payload. Memory identities, accounting,
+budget, historical rows, and provisional drafts remain unchanged. Missing or
+malformed baselines are errors; refresh never stamps an empty replacement.
+Do not use refresh to bypass an actual change in retrieval semantics. The
+coordinator runs it for affected saves at landing after deploying this change.
