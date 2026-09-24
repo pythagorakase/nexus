@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from tests.test_lore.window_helpers import window_logon
 from nexus.memory import ContextMemoryManager
+from nexus.config import load_settings_as_dict
 
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
@@ -228,6 +229,7 @@ def _select(
 
 def _settings():
     return {
+        "lore": {"render_limits": load_settings_as_dict()["lore"]["render_limits"]},
         "Agent Settings": {
             "LORE": {
                 "token_budget": {

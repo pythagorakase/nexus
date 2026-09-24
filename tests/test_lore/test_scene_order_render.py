@@ -11,8 +11,7 @@ from nexus.agents.lore.utils.scene_order import recalled_clock_label
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.memory import ContextMemoryManager
-from nexus.memory.context_state import ContextPackage, PassTransition
-from nexus.memory.context_state import memory_identity
+from nexus.memory.context_state import ContextPackage, PassTransition, memory_identity
 from tests.test_lore.window_helpers import window_logon
 
 

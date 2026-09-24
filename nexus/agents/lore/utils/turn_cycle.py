@@ -16,9 +16,9 @@ from nexus.agents.lore.utils.scene_order import (
     is_recalled,
     select_scene_memories,
 )
-from nexus.config.settings_models import RenderLimits
 from nexus.agents.orrery.cards import rendered_selection
 from nexus.agents.orrery.player_identity import canonical_player_character_id
+from nexus.config.settings_models import RenderLimits
 from nexus.memory.context_state import memory_identity
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 

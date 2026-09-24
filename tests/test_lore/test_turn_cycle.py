@@ -477,6 +477,9 @@ def test_frontier_payload_below_ceiling_is_unchanged(
         "structured": 3_600,
         "augmentation": 1_800,
     }
+    turn_manager.settings["lore"] = {
+        "render_limits": load_settings_as_dict()["lore"]["render_limits"]
+    }
 
     with caplog.at_level(logging.INFO, logger="nexus.lore.turn_cycle"):
         asyncio.run(turn_manager.assemble_context_payload(ctx))
@@ -502,9 +505,10 @@ def test_frontier_payload_below_ceiling_is_unchanged(
     ).encode()
 
     assert assembled_bytes == expected_bytes
-    assert ctx.context_payload["warm_slice"]["chunks"] is ctx.warm_slice
+    assert ctx.context_payload["warm_slice"]["chunks"][0] is ctx.warm_slice[0]
     assert (
-        ctx.context_payload["retrieved_passages"]["results"] is ctx.retrieved_passages
+        ctx.context_payload["retrieved_passages"]["results"][0]
+        is ctx.retrieved_passages[0]
     )
     assert "Storyteller payload trimmed" not in caplog.text
 
