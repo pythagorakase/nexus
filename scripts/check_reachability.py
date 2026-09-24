@@ -190,7 +190,7 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
             directory = directory.parent
         while directory.is_relative_to(root):
             conftest = directory / "conftest.py"
-            if conftest.is_file():
+            if conftest.is_file() and _in_repository(conftest):
                 test_files.add(conftest.relative_to(root).as_posix())
             directory = directory.parent
     paths = sorted(maintained | test_files)

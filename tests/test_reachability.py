@@ -645,20 +645,23 @@ def test_ignored_files_are_not_source_in_a_git_checkout(static_repo) -> None:
     _write(root, "pkg/models/weights/modeling.py", "import pkg.helper\n")
     _write(root, "pkg/untracked.py", "import pkg.helper\n")
     _write(root, "tests/test_ignored.py", "def test_x():\n    import pkg.helper\n")
+    _write(root, "tests/conftest.py", "import pkg.helper\n")
     without_git = analyze_repository(root, config)
     assert "pkg/models/weights/modeling.py" in without_git["maintained_modules"]
+    assert any(edge["source"] == "tests/conftest.py" for edge in without_git["edges"])
 
     subprocess.run(["git", "init", "-q", str(root)], check=True)
     subprocess.run(
         ["git", "-C", str(root), "add", "pkg/cli.py", "tests/test_example.py"],
         check=True,
     )
-    _write(root, ".git/info/exclude", "/tests/test_ignored.py\n")
+    _write(root, ".git/info/exclude", "/tests/test_ignored.py\n/tests/conftest.py\n")
     report = analyze_repository(root, config)
     assert "pkg/models/weights/modeling.py" not in report["maintained_modules"]
     assert "pkg/untracked.py" in report["maintained_modules"]
     assert "pkg/cli.py" in report["maintained_modules"]
-    assert all(edge["source"] != "tests/test_ignored.py" for edge in report["edges"])
+    ignored_sources = {"tests/test_ignored.py", "tests/conftest.py"}
+    assert all(edge["source"] not in ignored_sources for edge in report["edges"])
     assert any(edge["source"] == "tests/test_example.py" for edge in report["edges"])
 
 
