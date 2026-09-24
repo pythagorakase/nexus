@@ -17,20 +17,23 @@ sys.path.insert(0, str(Path(__file__).parents[3]))
 
 # Import the relevant modules
 from nexus.agents.memnon.utils.temporal_search import (
-    classify_temporal_query, 
-    execute_time_aware_search
+    classify_temporal_query,
+    execute_time_aware_search,
 )
+
 
 # Load settings
 def load_settings():
     """Load database settings from config"""
     try:
         from nexus.config import load_settings_as_dict
+
         data = load_settings_as_dict()
         return data.get("Agent Settings", {}).get("MEMNON", {})
     except Exception as e:
         logger.error(f"Error loading settings: {e}")
         return {}
+
 
 def main():
     """Run a simple example of time-aware search"""
@@ -39,29 +42,29 @@ def main():
     if not settings:
         logger.error("Failed to load settings")
         return
-    
+
     # Get database URL
     db_url = settings.get("database", {}).get("url")
     if not db_url:
         logger.error("Database URL not found in settings")
         return
-    
+
     # Example queries
     early_query = "What was the first encounter between the captain and pilot?"
     recent_query = "What are the latest developments with the neural implant?"
-    
+
     # Process each query
     for query in [early_query, recent_query]:
         # Classify the query
         classification = classify_temporal_query(query)
         print(f"\nQuery: '{query}'")
         print(f"Classification: {classification}")
-        
+
         # Only proceed with temporal queries
         if classification == "non_temporal":
             print("This is not a temporal query, skipping search")
             continue
-        
+
         # In a real application, you would get the query embedding here
         # For this example, we'll skip the actual search execution
         print(f"Would execute time-aware search with classification: {classification}")
@@ -69,12 +72,12 @@ def main():
         print(f"  - Database URL: {db_url}")
         print(f"  - Temporal classification: {classification}")
         print(f"  - Temporal boost factor: 0.5 (default)")
-        
+
         # The actual search would be:
-        # 
+        #
         # # Generate embedding
         # query_embedding = generate_embedding(query)
-        # 
+        #
         # # Execute time-aware search
         # results = execute_time_aware_search(
         #     db_url=db_url,
@@ -83,11 +86,12 @@ def main():
         #     model_key="your-model-key",
         #     temporal_boost_factor=0.5
         # )
-        # 
+        #
         # # Process results
         # for result in results:
         #     print(f"ID: {result['id']}, Score: {result['score']}")
         #     print(f"Text: {result['text'][:100]}...")
+
 
 if __name__ == "__main__":
     main()

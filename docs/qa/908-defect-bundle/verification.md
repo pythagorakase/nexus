@@ -1,5 +1,149 @@
 # Work Order 908 Verification
 
+## PR #916 Review Fixes
+
+The following results supersede the earlier continuation proof below.
+
+- **P1 / defect 6:** `scripts/stamp_lore_pass_baseline.py:115` adds
+  `--refresh-fingerprint --slot N` or `--refresh-fingerprint --dbname qa640_*`.
+  It validates the existing tail baseline, uses the target's story projection,
+  locks the row, and changes only the payload's `config_fingerprint` with
+  `jsonb_set` (`:163`). It prints old/new hashes and refuses missing baselines.
+  `docs/settings_scopes.md` documents the explicit compatibility procedure;
+  the coordinator refreshes affected saves at landing, with turns stopped.
+- **P2 / defect 1:** `alias_search.py:21` loads names and populated aliases from
+  PostgreSQL and attaches second-person pronouns to the canonical player.
+  `memnon.py:714` propagates loader errors. No `ALIAS_LOOKUP` constant or cast
+  fallback remains. Legacy examples under `nexus/` now use generic roles;
+  the alias-search documentation describes the real database path.
+- **P3 / defect 6:** `CLAUDE.md:212` now describes all matched known entities,
+  the separate raw-retrieval decision, and downstream chunk deduplication.
+- **Defect 5:** Typed render limits and signed relationship valence remain
+  covered by the required PostgreSQL gate; #903 block budgeting is unchanged.
+- **Defect 4:** `git fetch origin && git merge origin/main` reported
+  `Already up to date.` Main is still `20e2c07b54cabbfb1981b0eee328dc03e2617804`.
+  `git show origin/main:nexus/agents/lore/utils/turn_cycle.py | rg -n -i
+  'events|threats|does not exist'` returned no matches (exit 1).
+- **Defects 2 and 3:** Still deferred to #914 and #913. No migration/index was
+  added; migration 119 is unallocated by this branch. No `prompts/*.md` edit.
+
+### Clone Continuation Evidence
+
+The first successful clone proof used save_04's actual stored fingerprint,
+without restamping it to manufacture the mismatch. The production
+`LORE.process_turn` path failed on the unchanged fingerprint check, then
+completed after running the refresh CLI. LOGON was disabled; no paid inference
+was called. This is continuation/context-assembly proof, not generated-prose QA.
+
+```text
+Before refresh: Error processing turn: Pass-2 baseline config fingerprint is incompatible for parent chunk 49: stored=434647cf417a9365a6e3af0e762d317915099deea8ea38cd4abb891ecbf36eca, current=a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7
+Refreshed qa640_908_fingerprint_63b2b47abc44 tail chunk 49 Pass-2 fingerprint: 434647cf417a9365a6e3af0e762d317915099deea8ea38cd4abb891ecbf36eca -> a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7
+Only the tail config_fingerprint changed; all other baseline content and incubator rows are identical.
+After refresh: LOGON disabled; baseline_available=True
+Story pin projection, repeat refresh, and missing-baseline refusal passed.
+```
+
+The durable regression reconstructs the historical `[memory]` shape only in
+its disposable clone so it remains useful after fleet refresh. It also verifies
+the story-window projection, repeat refresh, and refusal when the baseline is
+missing. The alias regression uses real PostgreSQL through MEMNON's loader,
+changes the cast, and renames the alias table to prove database errors propagate.
+All disposable databases were cleaned up by their fixtures. No save was written.
+
+The cast scan `rg -n -i '\b(alex|emilia|pete|alina|nyati|peter)\b' nexus`
+returned no matches. `rg -n 'ALIAS_LOOKUP' nexus` also returned no matches.
+`rg -n 'divergence_threshold|divergence_confidence' nexus tests nexus.toml CLAUDE.md`
+finds only the intentional historical-key seed in
+`tests/test_lore/test_baseline_fingerprint_refresh_pg.py:47`.
+
+### Review Validation
+
+All commands run in this worktree with no gateway environment overrides.
+Import verification again printed this worktree's `nexus/__init__.py`.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q > .qa908/review-offline.log 2>&1
+```
+
+```text
+2647 passed, 806 skipped, 9 warnings in 94.60s (0:01:34)
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_memnon_db_access.py tests/test_lore -k 'query or pattern or divergence or render or relationship' > .qa908/review-postgres.log 2>&1
+```
+
+```text
+42 passed, 246 deselected, 9 warnings in 70.85s (0:01:10)
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_lore/test_baseline_fingerprint_refresh_pg.py tests/test_lore/test_query_patterns_pg.py > .qa908/review-focused-final.log 2>&1
+```
+
+```text
+6 passed, 9 warnings in 32.46s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check $(git diff --name-only origin/main -- '*.py') > .qa908/review-black-final.log 2>&1
+```
+
+```text
+All done! ✨ 🍰 ✨
+22 files would be left unchanged.
+```
+
+The required PostgreSQL selection includes both new regression tests and had
+no skips. The offline suite intentionally skips database/live-provider tests.
+No #885 exemption was needed. `git diff --check` passed. Commit hooks passed.
+
+### Diagnostic Runs Before the Final Gates
+
+The first new clone test needed the same disposable-name allowlist setup used
+by the existing PostgreSQL fixtures. It failed before continuation with:
+`Invalid database name: 'qa640_908_fingerprint_5af77c642b84'. Must be one of:
+save_01, save_02, save_03, save_04, save_05`. The fix changes only the test's
+allowlist; real LORE, MEMNON, and PostgreSQL remain in use.
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_lore/test_baseline_fingerprint_refresh_pg.py tests/test_lore/test_query_patterns_pg.py > .qa908/review-focused.log 2>&1
+```
+
+```text
+FAILED tests/test_lore/test_baseline_fingerprint_refresh_pg.py::test_divergence_fingerprint_refresh_preserves_save4_continuation
+1 failed, 5 passed, 5 warnings in 3.34s
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_lore/test_baseline_fingerprint_refresh_pg.py > .qa908/review-fingerprint.log 2>&1
+```
+
+```text
+1 passed, 9 warnings in 29.23s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check $(git diff --name-only origin/main -- '*.py') > .qa908/review-black.log 2>&1
+```
+
+```text
+would reformat nexus/agents/memnon/utils/temporal_search_example.py
+
+Oh no! 💥 💔 💥
+1 file would be reformatted, 21 files would be left unchanged.
+```
+
+Black's initial check caught the longer generic query in
+`temporal_search_example.py`; formatting that file produced the clean gate above.
+
+### Coordinator Action
+
+Run the documented fingerprint refresh for affected saves after deployment,
+with turns stopped. No open design questions. Do not merge this PR from this
+work order.
+
+
 ## Amended Scope
 
 The coordinator deferred defect 2 to #914 after the initial stop below.
