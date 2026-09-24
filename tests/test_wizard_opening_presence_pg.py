@@ -348,6 +348,7 @@ class _SchemaBoundaryProvider:
         payloads: Dict[type[BaseModel], Deque[dict[str, Any]]],
     ) -> None:
         self.payloads = payloads
+        self.prompt_window_guard = None
 
     async def get_structured_completion_async(
         self,
@@ -357,6 +358,8 @@ class _SchemaBoundaryProvider:
     ) -> tuple[Any, object]:
         """Validate raw provider data through the schema LOGON selected."""
 
+        if self.prompt_window_guard is not None:
+            self.prompt_window_guard(_prompt, 1, text_format=_kwargs.get("text_format"))
         queued = self.payloads.get(schema_model)
         if not queued:
             raise AssertionError(f"No provider payload queued for {schema_model}")
@@ -411,6 +414,8 @@ def _install_route_boundaries(
             utility.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
         utility.provider = cast(Any, _SchemaBoundaryProvider(payloads))
+        utility.provider.system_prompt = utility._load_system_prompt(bootstrap_mode)
+        utility._system_prompt = utility.provider.system_prompt
         utility._provider_bootstrap_mode = bootstrap_mode
         utility._provider_wire_type = "openai"
         utility._provider_type_name = "openai"

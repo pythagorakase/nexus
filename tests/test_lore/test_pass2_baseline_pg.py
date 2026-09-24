@@ -25,7 +25,7 @@ from nexus.api import commit_handler, commit_handler_sync, slot_utils
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
-from nexus.config import get_provider_for_model, load_settings_as_dict
+from nexus.config import load_settings_as_dict
 from nexus.memory.context_state import bind_pass2_baseline
 from nexus.memory.manager import (
     ContextMemoryManager,
@@ -174,8 +174,8 @@ class _RouteProvider:
     """Structured-output provider stub used beneath a real LogonUtility."""
 
     def __init__(self, outputs: list[dict[str, Any]]) -> None:
-        self.model = load_settings_as_dict()["API Settings"]["apex"]["model"]
-        self.usage_provider_name = get_provider_for_model(self.model)
+        self.model = "TEST"
+        self.usage_provider_name = "test"
         self.system_prompt = "Pass-2 lifecycle provider stub"
         self.outputs = outputs
         self.calls: list[dict[str, Any]] = []
@@ -188,6 +188,7 @@ class _RouteProvider:
     ) -> tuple[Any, object]:
         """Validate the queued payload through LOGON's selected wire schema."""
 
+        self.prompt_window_guard(prompt, 1, text_format=kwargs.get("text_format"))
         self.calls.append(
             {
                 "prompt": prompt,
@@ -246,7 +247,7 @@ async def _connect_async(dbname: str) -> asyncpg.Connection:
     return conn
 
 
-def _seed_parent(conn: Any, label: str) -> int:
+def _seed_parent(conn: Any, label: str, *, season: int = 1) -> int:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -261,12 +262,12 @@ def _seed_parent(conn: Any, label: str) -> int:
             """
             INSERT INTO chunk_metadata (
                 chunk_id, season, episode, scene, world_layer, slug
-            ) VALUES (%s, 1, 1, 1, 'primary', %s)
+            ) VALUES (%s, %s, 1, %s, 'primary', %s)
             """,
-            (chunk_id, f"pass2-{chunk_id}"),
+            (chunk_id, season, chunk_id, f"pass2-{chunk_id}"),
         )
         cur.execute(
-            "INSERT INTO places (name, type) VALUES ('Pass Two Hall', 'fixed_location') RETURNING id"
+            "INSERT INTO places (name, type) VALUES ('Pass Two Hall', 'fixed_location') ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id"
         )
         place_id = cur.fetchone()[0]
         cur.execute(
@@ -366,6 +367,8 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
     _patch_unrelated_commit_work(monkeypatch)
     route_settings = load_settings_as_dict()
     route_settings["orrery"]["enabled"] = False
+    route_settings["API Settings"]["apex"]["model"] = "TEST"
+    route_settings["apex"]["model"] = "TEST"
     route_settings["API Settings"]["apex"]["turn_pipeline"] = "single_pass"
     route_settings["apex"]["turn_pipeline"] = "single_pass"
 
@@ -382,8 +385,12 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
         _wire_payload("Turn N plus one provider prose."),
     ]
     providers: list[_RouteProvider] = []
-    retrieval_id = 999_998
-    new_retrieval_id = 999_999
+    retrieval_id = _seed_parent(conn, "turn N retrieved memory", season=0)
+    new_retrieval_id = _seed_parent(conn, "new turn N+1 memory", season=0)
+    # Keep real historical rows outside the initial ten-chunk warm slice.
+    # Coverage now reads their canonical rosters at the final request guard.
+    for index in range(10):
+        _seed_parent(conn, f"Intervening scene {index}", season=0)
     retrieval_batches = [
         [{"chunk_id": retrieval_id, "text": "turn N retrieved memory"}],
         [
@@ -421,8 +428,8 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
         provider = _RouteProvider(provider_outputs)
         utility.provider = provider
         utility._provider_bootstrap_mode = False
-        utility._provider_wire_type = "openai"
-        utility._provider_type_name = "openai"
+        utility._provider_wire_type = utility.resolve_provider_wire_type()
+        utility._provider_type_name = "test"
         utility._system_prompt = provider.system_prompt
         lore.logon = utility
         lore._logon_initialized = True

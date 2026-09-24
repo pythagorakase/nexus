@@ -90,7 +90,7 @@ def _watch_other(cluster: dict[str, Any], evidence: Path) -> Iterator[None]:
         observer.close()
 
 
-def _seed_background_work() -> None:
+def _seed_background_work() -> int:
     """Resolve real sleep pressure into durable work for the production worker."""
     from nexus.agents.orrery.events import commit_orrery_tick_sync
     from nexus.agents.orrery.resolver import resolve_dry_run
@@ -145,6 +145,7 @@ def _seed_background_work() -> None:
     with db_pool.get_connection("save_04") as conn:
         result = commit_orrery_tick_sync(conn, proposal, tick_chunk_id=chunk_id, slot=4)
         assert result.resolution_count >= 1
+    return int(chunk_id)
 
 
 @pytest.fixture
@@ -358,12 +359,15 @@ def test_connection_two_clusters_story_lifecycle(
     assert results, "MEMNON did not retrieve the committed bootstrap"
     # The gateway scheduler owns background work now. Observe its durable
     # completion rather than racing it with a second legacy worker.
-    _seed_background_work()
+    seeded_chunk_id = _seed_background_work()
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         with db_pool.get_connection("save_04") as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT count(*) FROM orrery_narration_jobs WHERE state = 'succeeded'"
+                "SELECT count(*) FROM orrery_narration_jobs j "
+                "JOIN orrery_resolutions r ON r.id = j.resolution_id "
+                "WHERE j.state = 'succeeded' AND r.tick_chunk_id = %s",
+                (seeded_chunk_id,),
             )
             if cur.fetchone()[0] >= 1:
                 break
@@ -373,7 +377,10 @@ def test_connection_two_clusters_story_lifecycle(
 
     with db_pool.get_connection("save_04") as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT count(*) FROM orrery_narration_jobs WHERE state = 'succeeded'"
+            "SELECT count(*) FROM orrery_narration_jobs j "
+            "JOIN orrery_resolutions r ON r.id = j.resolution_id "
+            "WHERE j.state = 'succeeded' AND r.tick_chunk_id = %s",
+            (seeded_chunk_id,),
         )
         assert cur.fetchone()[0] >= 1
         cur.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = 'save_04'")
