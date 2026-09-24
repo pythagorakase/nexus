@@ -209,7 +209,7 @@ These skills contain detailed commands, workflows, troubleshooting guides, and b
 
 ## Entity-Based Divergence Detection
 
-The LORE turn loop (`nexus/memory/manager.py`) runs deterministic entity-based divergence detection (`nexus/memory/divergence.py`, `nexus/memory/entity_detector.py`) to identify when user input references known entities absent from the warm slice. Known character names and aliases, places, and factions produce a boolean match and explicit entity gaps; Phase 2 subtracts entities already covered by the warm slice before retrieval. No confidence score or threshold gates this deterministic detector. Tests at `tests/test_lore/test_memory_manager.py` and `tests/test_lore/test_pass2_chunk1369.py`.
+The LORE turn loop (`nexus/memory/manager.py`) runs deterministic entity-based divergence detection (`nexus/memory/divergence.py`, `nexus/memory/entity_detector.py`) to report every matched known entity in the input. Known character names and aliases, places, and factions produce a boolean match and explicit entity gaps, including entities already in the warm slice. `handle_user_input` decides whether to run raw retrieval based on baseline availability, simple-choice handling, and remaining budget; chunk deduplication happens downstream. No confidence score or threshold gates this deterministic detector. Tests at `tests/test_lore/test_memory_manager.py` and `tests/test_lore/test_pass2_chunk1369.py`.
 
 This is the **deterministic** entity-based variant. An earlier *LLM-based* divergence detection path was retired per the bake-off in `docs/retrieval_query_bakeoff_2026_05_18.md`; the `analyze-divergence` skill that documented the LLM-based path was removed alongside.
 
