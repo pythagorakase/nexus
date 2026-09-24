@@ -27,11 +27,11 @@ FACTION_TAG_CONTEXT_CATEGORIES = (
 
 
 def _attributed_tag_summary_join(*, table: str, kind: str) -> str:
-    """Share the current-tag view and frontier expiry rule across dossiers.
+    """Share the current-tag view and frontier validity rules across dossiers.
 
     Table and kind are internal SQL identifiers, never caller-supplied values.
-    The view owns soft clears, deprecated tags, and synonyms; world-time expiry
-    stays separate from the wall-clock clearance timestamp.
+    The view owns soft clears, deprecated tags, and synonyms; world-time starts
+    and expiry stay separate from wall-clock timestamps.
     """
     category_filter = ""
     if kind == "faction":
@@ -55,6 +55,12 @@ def _attributed_tag_summary_join(*, table: str, kind: str) -> str:
               AND EXISTS (
                     SELECT 1 FROM entity_tags et
                     WHERE et.id = etc.entity_tag_id
+                      AND (
+                            et.applied_at_world_time IS NULL
+                            OR et.applied_at_world_time <= (
+                                SELECT max(world_time) FROM chunk_metadata
+                            )
+                          )
                       AND (
                             (SELECT max(world_time) FROM chunk_metadata) IS NULL
                             OR et.expires_at_world_time IS NULL

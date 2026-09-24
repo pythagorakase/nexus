@@ -76,7 +76,7 @@ def dossier_database() -> Iterator[tuple[str, int, int]]:
                 cur.execute(
                     f"""INSERT INTO entity_tags
                     (entity_id, tag_id, source_kind, applied_at, applied_at_world_time, expires_at_world_time, cleared_at)
-                    VALUES (%s, %s, 'authored', '2099-01-01', '2100-01-01', {expiry_sql}, CASE WHEN %s THEN now() ELSE NULL END)""",
+                    VALUES (%s, %s, 'authored', '2099-01-01', (SELECT max(world_time) FROM chunk_metadata), {expiry_sql}, CASE WHEN %s THEN now() ELSE NULL END)""",
                     (entity_id, tag_id, cleared),
                 )
             cur.execute(
@@ -144,5 +144,80 @@ def test_dossier_character_tags_use_current_view_and_world_clock(
                 ]
                 == "capacity:dossier_alpha, capacity:dossier_zeta"
             )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("start_seconds", [None, -1, 0, 1])
+def test_dossier_tag_start_uses_world_clock(dossier_database, start_seconds) -> None:
+    """NULL/past/boundary starts render; future starts do not, for both kinds."""
+    dbname, character_id, faction_id = dossier_database
+    engine = create_engine(sqlalchemy_url(dbname))
+    try:
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    """UPDATE entity_tags
+                    SET applied_at = '2300-01-01',
+                        applied_at_world_time = (
+                            SELECT max(world_time) FROM chunk_metadata
+                        ) + :seconds * interval '1 second'
+                    WHERE tag_id IN (
+                        SELECT id FROM tags
+                        WHERE tag IN ('dossier_alpha', 'dossier_agenda')
+                    )"""
+                ),
+                {"seconds": start_seconds},
+            )
+            characters = fetch_all_characters_with_references(
+                session, [1], max_featured_characters=2
+            )
+            factions = fetch_all_factions_with_references(session, [1])
+            visible = start_seconds is None or start_seconds <= 0
+            for records, holder_id, tag in (
+                (characters, character_id, "capacity:dossier_alpha"),
+                (factions, faction_id, "agenda:dossier_agenda"),
+            ):
+                for tier in ("baseline", "featured"):
+                    row = next(row for row in records[tier] if row["id"] == holder_id)
+                    assert (tag in row["orrery_tag_summary"]) is visible
+    finally:
+        engine.dispose()
+
+
+def test_dossier_database_tags_reach_real_renderer(dossier_database) -> None:
+    """A seeded holder traverses the real query and LogonUtility renderer."""
+    from tests.test_lore.window_helpers import window_logon
+
+    dbname, character_id, _ = dossier_database
+    engine = create_engine(sqlalchemy_url(dbname))
+    try:
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    """UPDATE characters SET name = 'Iona',
+                    current_location = 'Hall', current_activity = 'Waiting.',
+                    summary = 'A patient observer.', personality = 'Deliberate.',
+                    emotional_state = 'Uneasy.' WHERE id = :character_id"""
+                ),
+                {"character_id": character_id},
+            )
+            characters = fetch_all_characters_with_references(
+                session, [1], max_featured_characters=2
+            )
+            prompt = window_logon()._format_context_prompt(
+                {"user_input": "Continue.", "entity_data": {"characters": characters}},
+                seat="writer",
+            )
+            lines = prompt.splitlines()
+            assert (
+                "- Iona: at Hall, Waiting. Tags: capacity:dossier_alpha, "
+                "capacity:dossier_zeta, state:dossier_live"
+            ) in lines
+            assert (
+                "- Iona [user_character]: A patient observer. Tags: "
+                "capacity:dossier_alpha, capacity:dossier_zeta, state:dossier_live"
+            ) in lines
+            assert "  Personality: Deliberate.\n  Emotional State: Uneasy." in prompt
     finally:
         engine.dispose()
