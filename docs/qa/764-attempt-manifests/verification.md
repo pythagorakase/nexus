@@ -5,6 +5,64 @@ All implementation and test commands ran from this worktree using
 `/Users/pythagor/nexus/.venv/bin/python`. No installation, fleet migration,
 template modification, paid provider call, or merge was performed.
 
+## Async Exposure Binding Amendment
+
+Both accepting handlers now call `nexus/telemetry/attempt_manifest.py:216`'s
+shared `bind_exposures` helper. The async handler awaits the update inside its
+existing transaction, after the Orrery tick inserts exposures and before clearing
+the incubator (`nexus/api/commit_handler.py:913`). The helper adapts parameter
+binding for psycopg2 and asyncpg; the update semantics are shared.
+
+The real TEST-provider turn proof is parameterized over sync HTTP approval and
+direct `commit_incubator_to_database()` acceptance. Both cases require nonempty
+`SELECT id FROM orrery_prompt_exposures WHERE tick_chunk_id=%s ORDER BY id`
+results and exact equality with every attempt manifest's `exposure_ids`, including
+both seats. The async case exercises the commit handler directly; session-outcome
+and compaction assertions remain on the sync approval path that owns those actions.
+Both cases bind ephemeral listeners and use disposable populated clones.
+
+`git fetch origin && git merge origin/main` returned `Already up to date.`
+
+Fix commit: `dee2bb1f`. Both repository hooks passed. The proof produced:
+
+| Acceptance | Session | Chunk | Exposure IDs | Seats |
+| --- | --- | --- | --- | --- |
+| Sync | `1cfcaabc-c964-498d-b8f3-109337fde4a1` | 51 | 388–400 | gaia, skald_writer |
+| Async | `911c3fc1-1495-47de-a1bf-f41157fed2b5` | 51 | 388–400 | gaia, skald_writer |
+
+Each case used its own disposable clone. Migration 124 preserved all 46 existing
+chunk IDs and text hashes; the retention fixture removed exactly one aged terminal
+manifest. Sync acceptance also produced correlated compaction job 2.
+
+```console
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black nexus/telemetry/attempt_manifest.py nexus/api/commit_handler.py tests/test_api/test_attempt_manifest_pg.py
+All done! ✨ 🍰 ✨
+1 file reformatted, 2 files left unchanged.
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check nexus/telemetry/attempt_manifest.py nexus/api/commit_handler.py tests/test_api/test_attempt_manifest_pg.py
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+
+$ PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_api/test_attempt_manifest_pg.py
+4 passed, 9 warnings in 102.57s (0:01:42)
+```
+
+### Final Amendment Gates
+
+```console
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+2708 passed, 896 skipped, 9 warnings in 142.06s (0:02:22)
+
+$ PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_orrery -k 'session or manifest or inspect or job or correlat'
+FAILED tests/test_orrery/test_claim_propagation_live.py::test_null_awareness_is_possession_terminal
+1 failed, 67 passed, 1917 deselected, 11 warnings in 223.78s (0:03:43)
+```
+
+The only failure is the explicitly exempt #885 slot-5 case:
+`need-clock anchor unavailable: no canonical world time or base_timestamp`.
+No selected PostgreSQL tests skipped. The offline skip count increased by one
+because the real-turn test now exercises both accepting handlers.
+
 ## PR #933 Review Amendments
 
 Fix commit `1d5b7d29` addresses the coordinator's P2/P3 and port findings:
@@ -59,9 +117,7 @@ Only the explicitly exempt #885 slot-5 test failed, with
 No selected PostgreSQL tests skipped. The offline gate and this PostgreSQL
 selection ran after the requested fetch/merge. Both repository commit hooks passed.
 
-The separate automated review comment about async exposure binding
-([discussion](https://github.com/pythagorakase/nexus/pull/933#discussion_r4098683930))
-is outside these frozen coordinator amendments and remains for coordinator triage.
+The async exposure-binding finding is addressed by the third coordinator amendment below.
 
 ## Behavior and Evidence
 
