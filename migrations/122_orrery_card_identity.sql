@@ -3,7 +3,7 @@
 ALTER TABLE narrative_chunks
     ADD COLUMN IF NOT EXISTS orrery_proposal jsonb;
 COMMENT ON COLUMN narrative_chunks.orrery_proposal IS
-    'Accepted-turn Orrery proposal snapshot, including template_id:binding_hash identities, zero-based positions in descending effective-priority order, canonical binding names and evaluated_at world time. NULL before migration 122; not a pending or rearm ledger.';
+    'Accepted-turn Orrery proposal snapshot, including template_id:binding_hash identities, zero-based positions in descending effective-priority order, canonical binding names, evaluated_at world time, and rendered_cards (the exact ordered kind/proposal_id selection, including repeated joint parents). NULL before migration 122; not a pending or rearm ledger.';
 
 ALTER TABLE orrery_prompt_exposures
     ADD COLUMN IF NOT EXISTS card jsonb;

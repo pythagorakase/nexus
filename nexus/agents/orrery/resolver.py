@@ -240,6 +240,7 @@ class OrreryTickProposal:
     scene_pressures: Tuple[OrreryScenePressureDraft, ...] = ()
     ambient_scene_seeds: Tuple[AmbientSceneSeed, ...] = ()
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
+    rendered_cards: Optional[Tuple[Mapping[str, str], ...]] = None
     # Transient read-side projection. Intentionally omitted from to_dict():
     # incubator persistence stores decisions, not a hydration-time graph.
     communication_graph: CommunicationGraph = field(
@@ -277,6 +278,11 @@ class OrreryTickProposal:
         return {
             "anchor_chunk_id": self.anchor_chunk_id,
             "actor_count": self.actor_count,
+            "rendered_cards": (
+                [dict(item) for item in self.rendered_cards]
+                if self.rendered_cards is not None
+                else None
+            ),
             "generated_at": self.generated_at,
             "resolutions": [draft.to_dict() for draft in self.resolutions],
             "scene_pressures": [
@@ -297,6 +303,11 @@ class OrreryTickProposal:
         return cls(
             anchor_chunk_id=data.get("anchor_chunk_id"),
             actor_count=int(data.get("actor_count") or 0),
+            rendered_cards=(
+                tuple(data["rendered_cards"])
+                if data.get("rendered_cards") is not None
+                else None
+            ),
             generated_at=str(data["generated_at"]),
             resolutions=tuple(
                 OrreryResolutionDraft.from_dict(item)

@@ -4,6 +4,7 @@ import { getBackstageTurn } from "@/lib/backstage-api";
 import type {
   BackstageCounts,
   BackstageKind,
+  BackstageOrreryRow,
   BackstageTurnResponse,
 } from "@/types/backstage";
 
@@ -30,6 +31,65 @@ interface BackstageDrawerProps {
   onClose: () => void;
   pollBusyMs?: number;
   pollIdleMs?: number;
+}
+
+function OrreryRows({ rows }: { rows: BackstageOrreryRow[] }) {
+  return (
+    <>
+      {rows.map((row, index) => {
+        const color = row.drive_band
+          ? (BAND_COLORS[row.drive_band] ?? "hsl(var(--muted-foreground))")
+          : "hsl(var(--muted-foreground))";
+        const magnitude = Math.max(
+          0,
+          Math.min(100, (row.magnitude ?? 0) * 100),
+        );
+        return (
+          <div
+            className="nexus-backstage-orrery-row"
+            title={[row.proposal_id, row.evaluated_at]
+              .filter(Boolean)
+              .join(" · ")}
+            key={`${row.template_id}-${row.event_type ?? "none"}-${index}`}
+          >
+            <span
+              className="nexus-backstage-band"
+              style={{ background: color }}
+            />
+            {row.position != null && <span>[{row.position}]</span>}
+            <span className="nexus-backstage-actor">
+              {row.actor_name ?? "—"}
+            </span>
+            <span
+              className="nexus-backstage-template"
+              style={{ color }}
+            >
+              {row.template_id}
+            </span>
+            {row.target_name && (
+              <span className="nexus-backstage-target">
+                → {row.target_name}
+              </span>
+            )}
+            <span className="nexus-backstage-branch">
+              {row.branch_label ?? row.brief ?? ""}
+            </span>
+            {row.event_type && (
+              <span
+                className="nexus-backstage-event"
+                style={{ borderColor: color, color }}
+              >
+                {row.event_type}
+              </span>
+            )}
+            <span className="nexus-backstage-mag" aria-label="magnitude">
+              <span style={{ width: `${magnitude}%`, background: color }} />
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
 }
 
 function displayValue(value: unknown): string {
@@ -235,54 +295,19 @@ export function BackstageDrawer({
             />
             {orreryOpen && (
               <section className="nexus-backstage-section nexus-backstage-orrery">
-                {data.orrery.rows.map((row, index) => {
-                  const color = row.drive_band
-                    ? (BAND_COLORS[row.drive_band] ?? "hsl(var(--muted-foreground))")
-                    : "hsl(var(--muted-foreground))";
-                  const magnitude = Math.max(
-                    0,
-                    Math.min(100, (row.magnitude ?? 0) * 100),
-                  );
-                  return (
-                    <div
-                      className="nexus-backstage-orrery-row"
-                      key={`${row.template_id}-${row.event_type ?? "none"}-${index}`}
+                <OrreryRows rows={data.orrery.rows} />
+                {!!data.orrery.inventory?.length && (
+                  <details className="opacity-60">
+                    <summary
+                      aria-label="Full ranked inventory"
+                      title="Full ranked inventory"
+                      className="cursor-pointer"
                     >
-                      <span
-                        className="nexus-backstage-band"
-                        style={{ background: color }}
-                      />
-                      <span className="nexus-backstage-actor">
-                        {row.actor_name ?? "—"}
-                      </span>
-                      <span
-                        className="nexus-backstage-template"
-                        style={{ color }}
-                      >
-                        {row.template_id}
-                      </span>
-                      {row.target_name && (
-                        <span className="nexus-backstage-target">
-                          → {row.target_name}
-                        </span>
-                      )}
-                      <span className="nexus-backstage-branch">
-                        {row.branch_label ?? row.brief ?? ""}
-                      </span>
-                      {row.event_type && (
-                        <span
-                          className="nexus-backstage-event"
-                          style={{ borderColor: color, color }}
-                        >
-                          {row.event_type}
-                        </span>
-                      )}
-                      <span className="nexus-backstage-mag" aria-label="magnitude">
-                        <span style={{ width: `${magnitude}%`, background: color }} />
-                      </span>
-                    </div>
-                  );
-                })}
+                      ⋯
+                    </summary>
+                    <OrreryRows rows={data.orrery.inventory} />
+                  </details>
+                )}
                 <div className="nexus-backstage-orrery-foot">
                   {data.orrery.history.map((entry) => (
                     <span key={entry.chunk_id}>

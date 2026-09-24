@@ -422,6 +422,8 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
             "orrery_scene_pressures": [
                 {
                     "template_id": "protect_kin",
+                    "binding_hash": "12345678",
+                    "binding_names": {"actor": "Mara", "target": "Vale"},
                     "branch_label": "Travel toward the target's last known location",
                     "prompt_text": "Mara is moving toward Vale.",
                 }
@@ -437,7 +439,7 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
     assert "present-character need pressure" in prompt
     assert "You may adapt, delay, ignore, or incorporate them" in prompt
     assert "Do not let Orrery decide what present characters do" in prompt
-    assert "Travel toward the target's last known location: Mara is moving" in prompt
+    assert "- [0] protect_kin:12345678 Mara → Vale: Mara is moving" in prompt
 
 
 def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
@@ -450,6 +452,8 @@ def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
                 {
                     "proposal_id": "sleep_pressure:sleepy-1",
                     "template_id": "sleep_pressure",
+                    "binding_hash": "sleepy-1",
+                    "binding_names": {"actor": "Mara"},
                     "branch_label": "Nod off",
                     "state_delta": {
                         "character.current_activity": "sleeping",
@@ -465,8 +469,8 @@ def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
     assert "void when a proposal is definitively false" in prompt
     assert "replace when your structured updates" in prompt
     assert "replacement_event_type" in prompt
-    assert "Refer only to proposal_id" in prompt
-    assert "sleep_pressure:sleepy-1 [Nod off]" in prompt
+    assert "Reference each proposal by the id shown on its card" in prompt
+    assert "- [0] sleep_pressure:sleepy-1 Mara: Nod off" in prompt
 
 
 def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
@@ -652,7 +656,9 @@ def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
             "metadata": {"target_chunk_id": 44},
             "orrery_imminent_activity": [
                 {
-                    "proposal_id": "proposal-1",
+                    "proposal_id": "hide:12345678",
+                    "template_id": "hide",
+                    "binding_hash": "12345678",
                     "state_delta": {
                         "entity_tags.add": ["wounded"],
                         "entity_tags_target.remove": ["off_grid"],
@@ -660,7 +666,9 @@ def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
                     },
                 },
                 {
-                    "proposal_id": "proposal-2",
+                    "proposal_id": "upkeep:12345678",
+                    "template_id": "upkeep",
+                    "binding_hash": "12345678",
                     "state_delta": {
                         "mood.set": {"mood": "restless"},
                     },

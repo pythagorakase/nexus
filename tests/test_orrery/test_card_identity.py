@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+from pathlib import Path
 from typing import Iterator
 
 import asyncpg
@@ -14,7 +15,13 @@ from sqlalchemy.orm import Session
 from nexus.agents.lore.logon_utility import LogonUtility, _orrery_card_identity
 from nexus.agents.orrery.audit import cognition_trace
 from nexus.agents.orrery.backstage import _orrery
-from nexus.agents.orrery.events import commit_orrery_tick_async, commit_orrery_tick_sync
+from nexus.agents.orrery.cards import proposal_handles, rendered_selection
+from nexus.agents.orrery.events import (
+    commit_orrery_tick_async,
+    commit_orrery_tick_sync,
+    normalize_proposal_adjudications,
+    validate_proposal_adjudications,
+)
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     OrreryTickProposal,
@@ -225,7 +232,7 @@ async def test_card_exposure_rank_joint_and_backstage_parity(
                 session.execute(
                     text(
                         "SELECT kind, proposal_id, position, card FROM orrery_prompt_exposures "
-                        "WHERE tick_chunk_id=:chunk ORDER BY position, kind"
+                        "WHERE tick_chunk_id=:chunk ORDER BY id"
                     ),
                     {"chunk": chunk},
                 )
@@ -246,9 +253,11 @@ async def test_card_exposure_rank_joint_and_backstage_parity(
                 assert _orrery_card_identity(row["card"]) in writer
             backstage = _orrery(session, chunk_id=chunk, prior_chunks=[])
             assert [row.proposal_id for row in backstage.rows] == [
-                card.proposal_id for card in proposal.resolutions
+                row["proposal_id"]
+                for row in exposures
+                if row["kind"] != "scene_pressure"
             ]
-            assert [row.position for row in backstage.rows] == list(
+            assert [row.position for row in backstage.inventory] == list(
                 range(proposal.resolution_count)
             )
             for beat in proposal.joint_beats[:1]:
@@ -260,5 +269,247 @@ async def test_card_exposure_rank_joint_and_backstage_parity(
                     joints = [row for row in shown if row["kind"] == "joint_beat"]
                     assert len(joints) == 2
                     assert all(row["payload"]["binding_names"] for row in joints)
+                    expected = [
+                        (row["kind"], row["proposal_id"])
+                        for row in exposures
+                        if actor
+                        in (
+                            row["card"]["bindings"].get("actor"),
+                            row["card"]["bindings"].get("target"),
+                        )
+                    ]
+                    assert [
+                        (row["kind"], row["proposal_id"]) for row in shown
+                    ] == expected
+            snapshot = session.execute(
+                text("SELECT orrery_proposal FROM narrative_chunks WHERE id=:chunk"),
+                {"chunk": chunk},
+            ).scalar_one()
+            assert [
+                (item["kind"], item["proposal_id"])
+                for item in snapshot["rendered_cards"]
+            ] == [(row["kind"], row["proposal_id"]) for row in exposures]
+            from nexus.agents.orrery.cards import proposal_handles
+
+            handles = proposal_handles(snapshot["rendered_cards"])
+            rendered_handles = [
+                line.split()[2]
+                for line in writer.splitlines()
+                if line.startswith("- [")
+            ]
+            assert rendered_handles == [
+                handles[row["proposal_id"]] for row in exposures
+            ]
+
     finally:
         engine.dispose()
+
+
+RECEIPTS = Path(__file__).resolve().parents[2] / "docs/qa/781-card-identity/live"
+
+
+def saved_turn() -> tuple[OrreryTickProposal, list[dict]]:
+    """Load the authorized real two-pass turn, without provider calls."""
+    draft = json.loads((RECEIPTS / "after-draft.json").read_text())[0]
+    proposal = OrreryTickProposal.from_dict(draft["orrery_proposal"])
+    return (
+        replace(proposal, rendered_cards=tuple(rendered_selection(proposal.to_dict()))),
+        draft["orrery_adjudications"],
+    )
+
+
+def test_rendered_handles_replay_saved_gaia_adjudications() -> None:
+    """Both canonical and displayed ids reach identical canonical validation."""
+    proposal, adjudications = saved_turn()
+    handles = proposal_handles(proposal.rendered_cards)
+    short = [
+        dict(item, proposal_id=handles[item["proposal_id"]]) for item in adjudications
+    ]
+    assert validate_proposal_adjudications(
+        proposal, normalize_proposal_adjudications(proposal, short)
+    ) == validate_proposal_adjudications(proposal, adjudications)
+    for invalid in (
+        "hide:ffffffff",
+        next(
+            card.proposal_id[: len(card.template_id) + 9]
+            for card in proposal.resolutions
+            if card.proposal_id not in handles
+        ),
+    ):
+        with pytest.raises(ValueError, match="unknown proposal_id"):
+            validate_proposal_adjudications(
+                proposal,
+                normalize_proposal_adjudications(
+                    proposal, [{"proposal_id": invalid, "action": "defer"}]
+                ),
+            )
+    with pytest.raises(ValueError, match="Duplicate"):
+        validate_proposal_adjudications(
+            proposal,
+            normalize_proposal_adjudications(proposal, [adjudications[0], short[0]]),
+        )
+
+
+def test_card_handles_lengthen_only_collisions_deterministically() -> None:
+    keys = [
+        "hide:12345678" + "a" * 56,
+        "hide:12345678b" + "a" * 55,
+        "upkeep:12345678" + "a" * 56,
+    ]
+    selected = [{"kind": "resolution", "proposal_id": key} for key in keys]
+    handles = proposal_handles(selected)
+    assert list(handles.values()) == [
+        "hide:12345678a",
+        "hide:12345678b",
+        "upkeep:12345678",
+    ]
+    assert proposal_handles(selected[::-1]) == handles
+
+
+def test_card_format_places_clock_and_both_seats() -> None:
+    context = json.loads((RECEIPTS / "replay-context.json").read_text())
+    utility = LogonUtility(load_settings_as_dict())
+    writer = utility._format_context_prompt(context)
+    gaia = utility._format_context_prompt(context, include_ambient_scene_seeds=False)
+    for prompt in (writer, gaia):
+        assert (
+            "- [0] hide:85dcc9f3 Elian Rook at Lantern Quay Memorial Hall: Go dark and reduce signal exposure"
+            in prompt
+        )
+        assert "→ Dr. Sera Vey: Reach out" in prompt
+        assert "unknown" not in prompt
+        assert "evaluated " not in prompt
+        assert "2189-10-17T" not in prompt
+        assert context["orrery_imminent_activity"][0]["proposal_id"] not in prompt
+    context["orrery_anchor_chunk_id"] = 48
+    context["metadata"]["target_chunk_id"] = 49
+    aged = utility._format_context_prompt(context)
+    assert " · evaluated 17 Oct 2189 · 22:37" in aged
+    from nexus.agents.lore.logon_utility import _orrery_card_identity
+
+    assert (
+        _orrery_card_identity(
+            {
+                "binding_names": {
+                    "actor": "Ren",
+                    "place": "Hall",
+                    "target": "Sera",
+                    "target_place": "Quay",
+                }
+            }
+        )
+        == "Ren at Hall → Sera at Quay"
+    )
+    assert (
+        _orrery_card_identity({"binding_names": {"actor": "Ren", "place": "unknown"}})
+        == "Ren"
+    )
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("replacement", [False, True])
+async def test_ren_rank_commit_replay(
+    card_database: str, asynchronous: bool, replacement: bool
+) -> None:
+    """Ren's highest rank wins in both writers, including Gaia's replacement."""
+    proposal, decisions = saved_turn()
+    ren = tuple(
+        card
+        for card in proposal.resolutions
+        if card.binding_names["actor"] == "Ren Vale"
+    )
+    assert [card.template_id for card in ren] == [
+        "check_on_dependent",
+        "surveil",
+        "upkeep",
+    ]
+    # Replay the actual competing deltas; the rest of the real turn is covered
+    # by the full replay receipt, not replaced with mocked commit calls.
+    proposal = replace(
+        proposal,
+        resolutions=ren,
+        scene_pressures=(),
+        joint_beats=(),
+        rendered_cards=None,
+    )
+    if replacement:
+        handles = proposal_handles(rendered_selection(proposal.to_dict()))
+        decisions = [
+            dict(item, proposal_id=handles[item["proposal_id"]])
+            for item in decisions
+            if item["proposal_id"] == ren[0].proposal_id
+        ]
+        expected = "preparing a qualified status inquiry regarding Dr. Sera Vey"
+    else:
+        decisions = []
+        expected = "checking in on a dependent"
+    engine = create_engine(sqlalchemy_url(card_database))
+    try:
+        with Session(engine) as session:
+            assert (
+                session.execute(text("SELECT current_database()")).scalar_one()
+                == card_database
+            )
+            chunk = session.execute(
+                text(
+                    "INSERT INTO narrative_chunks (raw_text, storyteller_text, state) VALUES ('Ren replay', 'Ren replay', 'accepted') RETURNING id"
+                )
+            ).scalar_one()
+            session.commit()
+            kwargs = {"tick_chunk_id": chunk, "adjudications": decisions}
+            if asynchronous:
+                conn = await asyncpg.connect(**asyncpg_kwargs(card_database))
+                try:
+                    async with conn.transaction():
+                        result = await commit_orrery_tick_async(
+                            conn, proposal, **kwargs
+                        )
+                finally:
+                    await conn.close()
+            else:
+                result = commit_orrery_tick_sync(
+                    session.connection().connection.driver_connection,
+                    proposal,
+                    **kwargs,
+                )
+                session.commit()
+            assert result.resolution_count == 3
+            assert (
+                session.execute(
+                    text(
+                        "SELECT current_activity FROM characters WHERE entity_id=:actor"
+                    ),
+                    {"actor": ren[0].bindings["actor"]},
+                ).scalar_one()
+                == expected
+            )
+    finally:
+        engine.dispose()
+
+
+def test_rendered_card_selection_survives_changed_prompt_limits() -> None:
+    """Acceptance replays the rendered snapshot, even if settings change."""
+    from nexus.agents.orrery.events import _prompt_exposure_rows
+
+    proposal, _ = saved_turn()
+    expected = [(item["kind"], item["proposal_id"]) for item in proposal.rendered_cards]
+    rows = _prompt_exposure_rows(proposal, max_proposals=1, max_pressures=1)
+    assert [
+        (kind, f"{template}:{fingerprint}")
+        for kind, template, fingerprint, _, _ in rows
+    ] == expected
+    payload = json.loads((RECEIPTS / "replay-context.json").read_text())
+    payload["orrery_rendered_cards"] = list(proposal.rendered_cards)
+    prompt = LogonUtility(
+        {
+            "orrery": {
+                "prompt": {"max_rendered_proposals": 1, "max_rendered_pressures": 1}
+            }
+        }
+    )._format_context_prompt(payload)
+    handles = proposal_handles(proposal.rendered_cards)
+    assert [
+        line.split()[2] for line in prompt.splitlines() if line.startswith("- [")
+    ] == [handles[key] for _, key in expected]

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
+from nexus.agents.orrery.cards import rendered_selection
 from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.memory.context_state import memory_identity
 from nexus.memory.retrieval_coverage import coerce_chunk_id
@@ -1025,6 +1026,23 @@ class TurnCycleManager:
             turn_context.context_payload["intertitle"] = turn_context.intertitle
 
         proposal: Any = turn_context.orrery_proposal
+        if proposal is not None:
+            proposal = replace(
+                proposal,
+                rendered_cards=tuple(
+                    rendered_selection(
+                        proposal.to_dict(),
+                        self.settings.get("orrery", {}).get("prompt"),
+                    )
+                ),
+            )
+            turn_context.orrery_proposal = proposal
+            turn_context.context_payload["orrery_rendered_cards"] = list(
+                proposal.rendered_cards
+            )
+            turn_context.context_payload["orrery_anchor_chunk_id"] = (
+                proposal.anchor_chunk_id
+            )
         if proposal and getattr(proposal, "resolution_count", 0):
             turn_context.context_payload["orrery_imminent_activity"] = [
                 draft.to_dict() for draft in proposal.resolutions

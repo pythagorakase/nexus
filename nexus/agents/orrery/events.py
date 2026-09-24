@@ -7,7 +7,7 @@ only place that materializes those proposals into canonical Orrery tables.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from hashlib import sha256
@@ -20,6 +20,7 @@ from nexus.agents.orrery.relationship_provenance import (
     relationship_producer_async,
 )
 from nexus.agents.orrery.ambient import AMBIENT_EXPOSURE_TEMPLATE_ID
+from nexus.agents.orrery.cards import proposal_handles, rendered_selection
 from nexus.agents.orrery.db_rows import row_get as _row_get
 from nexus.agents.orrery.drift import (
     drain_relationship_drift_async,
@@ -730,7 +731,16 @@ def commit_orrery_tick_sync(
         effective_epistemics_settings = coerced.epistemics_settings
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
-    adjudication_map = validate_proposal_adjudications(coerced, adjudications)
+    if coerced is not None:
+        coerced = replace(
+            coerced,
+            rendered_cards=tuple(
+                rendered_selection(coerced.to_dict(), prompt_settings)
+            ),
+        )
+    adjudication_map = validate_proposal_adjudications(
+        coerced, normalize_proposal_adjudications(coerced, adjudications)
+    )
     if has_resolutions:
         need_tuning = coerce_need_tuning(sunhelm_settings)
 
@@ -806,7 +816,7 @@ def commit_orrery_tick_sync(
         voided_count = 0
         replaced_count = 0
 
-        for draft in coerced.resolutions:
+        for draft in _commit_order(coerced):
             adjudicated = _adjudicate_draft(
                 draft,
                 adjudication_map,
@@ -1010,7 +1020,16 @@ async def commit_orrery_tick_async(
         effective_epistemics_settings = coerced.epistemics_settings
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
-    adjudication_map = validate_proposal_adjudications(coerced, adjudications)
+    if coerced is not None:
+        coerced = replace(
+            coerced,
+            rendered_cards=tuple(
+                rendered_selection(coerced.to_dict(), prompt_settings)
+            ),
+        )
+    adjudication_map = validate_proposal_adjudications(
+        coerced, normalize_proposal_adjudications(coerced, adjudications)
+    )
     if has_resolutions:
         need_tuning = coerce_need_tuning(sunhelm_settings)
 
@@ -1088,7 +1107,7 @@ async def commit_orrery_tick_async(
     voided_count = 0
     replaced_count = 0
 
-    for draft in coerced.resolutions:
+    for draft in _commit_order(coerced):
         adjudicated = _adjudicate_draft(
             draft,
             adjudication_map,
@@ -1261,6 +1280,36 @@ def _validate_proposal(proposal: OrreryTickProposal) -> None:
                 "Unsupported Orrery state_delta keys for "
                 f"{draft.template_id}: {', '.join(sorted(unsupported))}"
             )
+
+
+def _commit_order(proposal: OrreryTickProposal) -> list[OrreryResolutionDraft]:
+    """Apply lower ranks first so the highest-ranked scalar write wins.
+
+    Position zero is the highest rank. Legacy unranked proposals preserve
+    their serialized commit order; Gaia replacements remain in their slot.
+    """
+    if all(card.position is None for card in proposal.resolutions):
+        return list(proposal.resolutions)
+    if any(card.position is None for card in proposal.resolutions):
+        raise ValueError("Cannot commit a partially ranked Orrery proposal")
+    return sorted(proposal.resolutions, key=lambda card: card.position, reverse=True)
+
+
+def normalize_proposal_adjudications(
+    proposal: Optional[OrreryTickProposal], adjudications: Any
+) -> list[dict[str, Any]]:
+    """Expand only this turn's rendered handles before canonical validation."""
+    decisions = coerce_adjudications(adjudications)
+    handles = (
+        proposal_handles(rendered_selection(proposal.to_dict()))
+        if proposal is not None
+        else {}
+    )
+    canonical_by_handle = {handle: key for key, handle in handles.items()}
+    return [
+        asdict(replace(decision, proposal_id=canonical_by_handle.get(key, key)))
+        for key, decision in decisions.items()
+    ]
 
 
 def validate_proposal_adjudications(
@@ -1806,7 +1855,7 @@ def _prompt_exposure_rows(
     Legacy drafts without positions retain their original serialized order.
     """
     rows: list[tuple[str, str, str, int, dict[str, Any]]] = []
-    for index, draft in enumerate(proposal.resolutions[:max_proposals]):
+    for index, draft in enumerate(proposal.resolutions):
         position = draft.position if draft.position is not None else index
         rows.append(
             (
@@ -1817,7 +1866,7 @@ def _prompt_exposure_rows(
                 draft.to_dict(),
             )
         )
-    for position, pressure in enumerate(proposal.scene_pressures[:max_pressures]):
+    for position, pressure in enumerate(proposal.scene_pressures):
         rows.append(
             (
                 "scene_pressure",
@@ -1841,7 +1890,7 @@ def _prompt_exposure_rows(
         draft.proposal_id: (index, draft)
         for index, draft in enumerate(proposal.resolutions)
     }
-    for beat_position, beat in enumerate(proposal.joint_beats[:max_proposals]):
+    for beat_position, beat in enumerate(proposal.joint_beats):
         for proposal_id in (beat.forward_proposal_id, beat.reverse_proposal_id):
             index, draft = drafts[proposal_id]
             position = draft.position if draft.position is not None else index
@@ -1850,7 +1899,21 @@ def _prompt_exposure_rows(
             rows.append(
                 ("joint_beat", draft.template_id, draft.binding_hash, position, card)
             )
-    return rows
+    by_key = {
+        (kind, f"{template}:{fingerprint}"): row
+        for row in rows
+        for kind, template, fingerprint, _, _ in [row]
+    }
+    return [
+        by_key[(item["kind"], item["proposal_id"])]
+        for item in rendered_selection(
+            proposal.to_dict(),
+            {
+                "max_rendered_proposals": max_proposals,
+                "max_rendered_pressures": max_pressures,
+            },
+        )
+    ]
 
 
 def _insert_prompt_exposures_sync(

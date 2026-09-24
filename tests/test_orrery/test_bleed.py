@@ -11,6 +11,7 @@ from nexus.memory import ContextMemoryManager
 
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+from nexus.agents.orrery.resolver import OrreryTickProposal
 from nexus.agents.orrery.bleed import (
     assemble_bleed_proximity_graph,
     load_bleed_candidates,
@@ -652,7 +653,9 @@ async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
         warm_slice=[],
     )
     context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
-    context.orrery_proposal = SimpleNamespace(anchor_chunk_id=77, pressure_count=0)
+    context.orrery_proposal = OrreryTickProposal(
+        anchor_chunk_id=77, actor_count=0, resolutions=()
+    )
 
     await manager.assemble_context_payload(context)
 
@@ -678,9 +681,10 @@ async def test_assemble_context_payload_attaches_scene_conditions() -> None:
         warm_slice=[],
     )
     context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
-    context.orrery_proposal = SimpleNamespace(
+    context.orrery_proposal = OrreryTickProposal(
         anchor_chunk_id=77,
-        pressure_count=0,
+        actor_count=0,
+        resolutions=(),
         scene_conditions={"weather": "warm", "time_of_day": "afternoon"},
     )
 
@@ -702,9 +706,10 @@ async def test_assemble_context_payload_preserves_scene_moods() -> None:
         turn_id="t1", user_input="Continue.", start_time=0, warm_slice=[]
     )
     context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
-    context.orrery_proposal = SimpleNamespace(
+    context.orrery_proposal = OrreryTickProposal(
         anchor_chunk_id=77,
-        pressure_count=0,
+        actor_count=0,
+        resolutions=(),
         scene_conditions={
             "moods": [{"entity_id": 1, "name": "Mara", "mood": "restless"}]
         },

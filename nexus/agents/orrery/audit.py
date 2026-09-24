@@ -1695,6 +1695,11 @@ def cognition_trace(
                    pressure.target_entity_id AS pressure_target_entity_id,
                    pressure.prompt_text, pressure.bindings
             FROM orrery_prompt_exposures exposure
+            JOIN narrative_chunks chunk ON chunk.id = exposure.tick_chunk_id
+            LEFT JOIN LATERAL jsonb_array_elements(NULLIF(chunk.orrery_proposal->'rendered_cards', 'null'::jsonb))
+                WITH ORDINALITY AS rendered(card_key, ordinal)
+              ON rendered.card_key->>'kind' = exposure.kind
+             AND rendered.card_key->>'proposal_id' = exposure.proposal_id
             LEFT JOIN orrery_resolutions resolution
               ON exposure.kind IN ('resolution', 'joint_beat')
              AND resolution.tick_chunk_id = exposure.tick_chunk_id
@@ -1713,7 +1718,7 @@ def cognition_trace(
                   OR exposure.card->'bindings' @> jsonb_build_object('actor', :entity_id)
                   OR exposure.card->'bindings' @> jsonb_build_object('target', :entity_id)
               )
-            ORDER BY exposure.position, exposure.kind, exposure.id
+            ORDER BY rendered.ordinal, exposure.id
             """
         ),
         {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},

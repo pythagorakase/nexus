@@ -142,6 +142,7 @@ class BackstageOrrery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rows: list[BackstageOrreryRow] = Field(default_factory=list)
+    inventory: list[BackstageOrreryRow] = Field(default_factory=list)
     counts: BackstageCounts
     history: list[BackstageHistoryLine] = Field(default_factory=list)
 
@@ -613,26 +614,36 @@ def _orrery(
                 events=counts.events,
             )
         )
+    inventory = [
+        BackstageOrreryRow(
+            template_id=str(row["template_id"]),
+            actor_name=row["actor_name"],
+            target_name=row["target_name"],
+            magnitude=(
+                float(row["magnitude"]) if row["magnitude"] is not None else None
+            ),
+            brief=row["brief"],
+            branch_label=row["branch_label"],
+            event_type=row["event_type"],
+            drive_band=band_by_template.get(str(row["template_id"])),
+            proposal_id=row["proposal_id"],
+            position=row.get("position"),
+            binding_names=row.get("binding_names", {}),
+            evaluated_at=row.get("evaluated_at"),
+        )
+        for row in rows
+    ]
+    selected = inventory
+    if snapshot is not None and snapshot.get("rendered_cards") is not None:
+        by_key = {row.proposal_id: row for row in inventory}
+        selected = [
+            by_key[item["proposal_id"]]
+            for item in snapshot["rendered_cards"]
+            if item["kind"] in {"resolution", "joint_beat"}
+        ]
     return BackstageOrrery(
-        rows=[
-            BackstageOrreryRow(
-                template_id=str(row["template_id"]),
-                actor_name=row["actor_name"],
-                target_name=row["target_name"],
-                magnitude=(
-                    float(row["magnitude"]) if row["magnitude"] is not None else None
-                ),
-                brief=row["brief"],
-                branch_label=row["branch_label"],
-                event_type=row["event_type"],
-                drive_band=band_by_template.get(str(row["template_id"])),
-                proposal_id=row["proposal_id"],
-                position=row.get("position"),
-                binding_names=row.get("binding_names", {}),
-                evaluated_at=row.get("evaluated_at"),
-            )
-            for row in rows
-        ],
+        rows=selected,
+        inventory=inventory,
         counts=_orrery_counts(session, chunk_id),
         history=history,
     )
