@@ -1,0 +1,100 @@
+usage: -c [-h] [--json] [--truncate]
+          {up,down,restart,status,logs,usage,jobs,inspect-turn,prune-manifests,load,continue,undo,regenerate,model,clear,trait-audit,retrograde-packet,retrograde-seed-candidates,retrograde-expand-seeds,retrograde-apply-expansion,retrograde-embed-history,record-revelation,faction-audit,faction-manifest,faction-apply,character-manifest,character-apply,place-manifest,place-apply,backfill-review-packet,lock,unlock}
+          ...
+
+NEXUS CLI - Story management command-line interface
+
+positional arguments:
+  {up,down,restart,status,logs,usage,jobs,inspect-turn,prune-manifests,load,continue,undo,regenerate,model,clear,trait-audit,retrograde-packet,retrograde-seed-candidates,retrograde-expand-seeds,retrograde-apply-expansion,retrograde-embed-history,record-revelation,faction-audit,faction-manifest,faction-apply,character-manifest,character-apply,place-manifest,place-apply,backfill-review-packet,lock,unlock}
+    up                  Start the NEXUS runtime (gateway + enabled services)
+    down                Stop managed runtime services
+    restart             Restart managed runtime services
+    status              Show runtime health, processes, slot, and version
+    logs                Tail captured service logs
+    usage               Show exact provider-reported API token usage
+    jobs                Show provider-capable durable Orrery job state for one
+                        slot
+    inspect-turn        Inspect read-only turn references and hashes
+    prune-manifests     Explicitly prune expired terminal attempt manifests
+    load                Display current slot state
+    continue            Advance the story
+    undo                Revert last action
+    regenerate          Regenerate the last storyteller turn
+    model               Get or set model for a slot
+    clear               Clear a slot (reset wizard state)
+    trait-audit         Dry-run the new-story trait compiler against wizard
+                        cache
+    retrograde-packet   Build a non-mutating Retrograde seed review packet
+    retrograde-seed-candidates
+                        Call Skald for non-mutating Retrograde seed candidates
+    retrograde-expand-seeds
+                        Call Skald for a non-mutating Retrograde R6 expansion
+                        plan
+    retrograde-apply-expansion
+                        Dry-run or execute a Retrograde R6 expansion
+                        persistence plan
+    retrograde-embed-history
+                        Ensure and embed retrieval summaries for persisted
+                        Retrograde world events
+    record-revelation   Grant told or manual awareness of an existing claim
+    faction-audit       Dry-run legacy faction column migration into Orrery
+                        substrate
+    faction-manifest    Build read-only faction migration manifest from audit
+                        output
+    faction-apply       Dry-run or execute ready faction manifest operations
+                        into entity_tags
+    character-manifest  Build read-only character tag migration manifest
+    character-apply     Dry-run or execute ready character manifest operations
+                        into entity_tags
+    place-manifest      Build read-only place tag migration manifest
+    place-apply         Dry-run or execute ready place manifest operations
+                        into entity_tags
+    backfill-review-packet
+                        Build a read-only review packet from backfill
+                        manifests
+    lock                Lock a slot to prevent modifications
+    unlock              Unlock a slot to allow modifications
+
+options:
+  -h, --help            show this help message and exit
+  --json                Emit JSON output
+  --truncate            Truncate long text fields (head 10 + tail 10 lines)
+
+Examples:
+  nexus up                      Start the runtime (gateway + enabled services)
+  nexus up --foreground         Stay attached; Ctrl+C tears down
+  nexus status                  Runtime health, processes, slot, version
+  nexus usage --day 2026-07-29 Show exact API-reported UTC-day token usage
+  nexus jobs --slot 4           Show durable Retrograde maturation jobs
+  nexus logs gateway -f         Follow the gateway log
+  nexus down                    Stop the runtime
+  nexus load --slot 5           Show current state of slot 5
+  nexus continue --slot 5       Advance the story
+  nexus continue --slot 5 --choice 1   Select choice #1
+  nexus continue --slot 5 --user-text "I approach carefully"
+  nexus continue --slot 5 --accept-fate   Auto-advance
+  nexus undo --slot 5           Revert last action
+  nexus model --slot 5          Show current model
+  nexus model --slot 5 --set TEST   Change to TEST model
+  nexus model --list            List available models
+  nexus clear --slot 5          Clear slot (reset wizard state)
+  nexus lock --slot 1           Lock slot to prevent modifications
+  nexus unlock --slot 2         Unlock slot to allow modifications
+  nexus trait-audit --slot 5    Dry-run trait compiler audit
+  nexus retrograde-packet --slot 5 --output packet.json
+  nexus retrograde-seed-candidates --packet packet.json --output seeds.json
+  nexus retrograde-expand-seeds --packet packet.json --seed-candidates seeds.json
+  nexus retrograde-apply-expansion --slot 5 --packet packet.json ...
+  nexus retrograde-embed-history --slot 5  Dry-run Retrograde retrieval sync
+  nexus retrograde-embed-history --slot 5 --execute
+  nexus record-revelation --slot 2 --claim-id 7 --knower 42
+  nexus faction-audit --slot 2  Dry-run faction column migration audit
+  nexus faction-manifest --slot 2  Build faction migration manifest
+  nexus faction-apply --slot 2  Dry-run ready faction manifest operations
+  nexus faction-apply --slot 2 --manifest manifest.json --execute
+  nexus character-manifest --slot 2  Build character tag manifest
+  nexus character-apply --slot 2  Dry-run ready character manifest operations
+  nexus place-manifest --slot 2  Build place tag manifest
+  nexus place-apply --slot 2  Dry-run ready place manifest operations
+  nexus backfill-review-packet --slot 2 --faction-manifest faction.json ...
+        

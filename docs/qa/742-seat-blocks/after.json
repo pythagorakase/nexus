@@ -1,0 +1,50 @@
+{
+  "database": "qa640_742_seats_35b9d4eebf9a",
+  "parent": 49,
+  "fingerprint": "a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7",
+  "seats": {
+    "skald_writer": {
+      "blocks": {
+        "system": 4580,
+        "intertitle": 50,
+        "scene conditions": 17,
+        "entity dossier": 2182,
+        "historical context": 9513,
+        "recalled scenes": 6161,
+        "recent narrative": 9782,
+        "world knowledge": 252,
+        "recent orrery rulings": 210,
+        "orrery imminent activity": 176,
+        "orrery scene pressure": 263,
+        "orrery joint beats": 77,
+        "scene roster": 22,
+        "user input": 15,
+        "writer closer": 13
+      },
+      "total": 33313,
+      "saving": 3971
+    },
+    "gaia": {
+      "blocks": {
+        "system": 1900,
+        "intertitle": 50,
+        "scene conditions": 17,
+        "entity dossier": 2182,
+        "historical context": 9513,
+        "recalled scenes": 6161,
+        "recent narrative": 9782,
+        "world knowledge": 252,
+        "orrery tag library": 3742,
+        "recent orrery rulings": 210,
+        "orrery imminent activity": 264,
+        "orrery scene pressure": 316,
+        "orrery joint beats": 148,
+        "user input": 15,
+        "gaia closer": 14,
+        "finished writer framing": 94
+      },
+      "total": 34660,
+      "saving": 16
+    }
+  }
+}

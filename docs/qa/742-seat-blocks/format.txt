@@ -1,0 +1,4 @@
+reformatted tests/test_lore/test_seat_blocks.py
+
+All done! ✨ 🍰 ✨
+1 file reformatted.

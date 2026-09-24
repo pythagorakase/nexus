@@ -1,0 +1,4 @@
+reformatted docs/qa/742-seat-blocks/check_artifacts.py
+
+All done! ✨ 🍰 ✨
+1 file reformatted.

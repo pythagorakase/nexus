@@ -1,0 +1,1 @@
+ARTIFACT_PROOF_PASSED: writer suffix exact; common prose and card text unchanged; Gaia library/instructions retained; fingerprint unchanged
