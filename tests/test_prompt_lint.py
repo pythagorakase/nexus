@@ -23,6 +23,7 @@ import sys
 import pytest
 
 from nexus.prompts.registry import PLACEHOLDER, PROMPTS, PromptId, load
+from scripts.check_reachability import repository_files
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_ADDRESS = re.compile(
@@ -369,10 +370,17 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
 
 
 def _python_sources() -> list[Path]:
+    """Every maintained Python file in git's view of the checkout.
+
+    Ignored files (downloaded model weights under nexus/models/) are not
+    repository source; a scratch copy without ``.git`` scans everything on disk.
+    """
+    tracked = repository_files(ROOT)
     return sorted(
         path
         for directory in (ROOT / "nexus", ROOT / "scripts")
         for path in directory.rglob("*.py")
+        if tracked is None or path.relative_to(ROOT).as_posix() in tracked
     )
 
 
@@ -633,11 +641,10 @@ def test_allowlist_is_exact_and_has_no_stale_entries() -> None:
 
 def test_review_injections_fail_the_gate_in_scratch_copy(tmp_path: Path) -> None:
     """Run the actual repository lint against all three review injections."""
-    for directory in ("nexus", "scripts"):
-        for source in (ROOT / directory).rglob("*.py"):
-            target = tmp_path / source.relative_to(ROOT)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+    for source in _python_sources():
+        target = tmp_path / source.relative_to(ROOT)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
     test_file = tmp_path / "tests/test_prompt_lint.py"
     test_file.parent.mkdir()
     shutil.copy2(Path(__file__), test_file)

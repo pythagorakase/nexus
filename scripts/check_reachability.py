@@ -9,6 +9,7 @@ import configparser
 import fnmatch
 import importlib.util
 import json
+import subprocess
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -91,6 +92,38 @@ def _reachable(roots: Iterable[str], adjacency: dict[str, set[str]]) -> set[str]
     return seen
 
 
+def repository_files(root: Path) -> frozenset[str] | None:
+    """Return git's view of a checkout as POSIX paths, or None outside git.
+
+    The view is every tracked file plus every untracked file that the ignore
+    rules do not exclude. Ignored files, such as downloaded model weights under
+    nexus/models/, are not repository source and never enter the gate, while an
+    untracked new module still counts so its findings appear before it is
+    committed (#892). A directory without ``.git`` (the synthetic trees the
+    tests build) has no ignore rules, so every file on disk is source there.
+    """
+    if not (root / ".git").exists():
+        return None
+    # --exclude-standard applies .gitignore, .git/info/exclude, and the
+    # global excludes file, exactly as `git status` does.
+    listing = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return frozenset(path for path in listing.stdout.split("\0") if path)
+
+
 def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
     """Build a deterministic graph from source text and declared discovery rules."""
     root = root.resolve()
@@ -108,11 +141,16 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
             for declaration in config.get(section, [])
         ):
             raise ValueError(f"Every {section} declaration needs a reason")
+    tracked = repository_files(root)
+
+    def _in_repository(path: Path) -> bool:
+        return tracked is None or path.relative_to(root).as_posix() in tracked
+
     maintained = {
         path.relative_to(root).as_posix()
         for pattern in config["maintained"]
         for path in root.glob(pattern)
-        if path.is_file()
+        if path.is_file() and _in_repository(path)
     }
     pytest_config = configparser.ConfigParser()
     pytest_config.read(root / config["pytest"]["config"])
@@ -133,6 +171,7 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
         for target in [root / testpath]
         for path in ([target] if target.is_file() else target.rglob("*.py"))
         if path.suffix == ".py"
+        and _in_repository(path)
         and (
             path.relative_to(root).as_posix() in explicit_test_files
             or not any(

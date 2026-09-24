@@ -638,6 +638,30 @@ def test_dependency_direction_is_separate_from_reachability(static_repo) -> None
     ] == [("pkg/cli.py", "tests/support.py")]
 
 
+def test_ignored_files_are_not_source_in_a_git_checkout(static_repo) -> None:
+    """Git's ignore rules, not disk contents, decide what the gate scans (#892)."""
+    root, config = static_repo
+    _write(root, ".gitignore", "/pkg/models/\n")
+    _write(root, "pkg/models/weights/modeling.py", "import pkg.helper\n")
+    _write(root, "pkg/untracked.py", "import pkg.helper\n")
+    _write(root, "tests/test_ignored.py", "def test_x():\n    import pkg.helper\n")
+    without_git = analyze_repository(root, config)
+    assert "pkg/models/weights/modeling.py" in without_git["maintained_modules"]
+
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "add", "pkg/cli.py", "tests/test_example.py"],
+        check=True,
+    )
+    _write(root, ".git/info/exclude", "/tests/test_ignored.py\n")
+    report = analyze_repository(root, config)
+    assert "pkg/models/weights/modeling.py" not in report["maintained_modules"]
+    assert "pkg/untracked.py" in report["maintained_modules"]
+    assert "pkg/cli.py" in report["maintained_modules"]
+    assert all(edge["source"] != "tests/test_ignored.py" for edge in report["edges"])
+    assert any(edge["source"] == "tests/test_example.py" for edge in report["edges"])
+
+
 def test_repository_reachability_ratchet() -> None:
     """The ordinary pytest gate enforces the checked-in repository baseline."""
     config = tomllib.loads((REPO_ROOT / "config/reachability.toml").read_text())
