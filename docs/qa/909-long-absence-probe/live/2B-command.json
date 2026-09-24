@@ -1,0 +1,10 @@
+[
+  "/Users/pythagor/nexus/.venv/bin/python",
+  "-m",
+  "nexus.cli",
+  "continue",
+  "--slot",
+  "4",
+  "--user-text",
+  "\"At the shutter I caught the chained biscuit tin when you let it go. You told me not to let them make your route into a rescue story.\" I leave a little space between us. \"What do you want me to understand about that now?\""
+]

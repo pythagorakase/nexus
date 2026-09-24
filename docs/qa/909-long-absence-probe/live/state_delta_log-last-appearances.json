@@ -1,0 +1,142 @@
+[
+  {
+    "id": 176,
+    "source_chunk_id": 25,
+    "writer": "skald_state_update",
+    "entity_id": 5,
+    "field": "characters.emotional_state",
+    "old_value": null,
+    "new_value": "alert and committed to a protective withdrawal",
+    "created_at": "2026-07-30 05:27:46.554016+00:00"
+  },
+  {
+    "id": 177,
+    "source_chunk_id": 25,
+    "writer": "skald_state_update",
+    "entity_id": 5,
+    "field": "characters.current_activity",
+    "old_value": null,
+    "new_value": "covering Ora Pell's extraction through the west conduit while watching the shutter lane",
+    "created_at": "2026-07-30 05:27:46.554016+00:00"
+  },
+  {
+    "id": 178,
+    "source_chunk_id": 25,
+    "writer": "skald_state_update",
+    "entity_id": 19,
+    "field": "characters.emotional_state",
+    "old_value": null,
+    "new_value": "angry, calculating, and unwilling to become passive cargo",
+    "created_at": "2026-07-30 05:27:46.554016+00:00"
+  },
+  {
+    "id": 179,
+    "source_chunk_id": 25,
+    "writer": "skald_state_update",
+    "entity_id": 19,
+    "field": "characters.current_activity",
+    "old_value": null,
+    "new_value": "preparing to move the split receipt's custody through the west conduit without surrendering its route",
+    "created_at": "2026-07-30 05:27:46.554016+00:00"
+  },
+  {
+    "id": 180,
+    "source_chunk_id": 25,
+    "writer": "skald_state_update",
+    "entity_id": 3,
+    "field": "characters.emotional_state",
+    "old_value": null,
+    "new_value": "panicked, ashamed, and cornered by a threat he cannot verify",
+    "created_at": "2026-07-30 05:27:46.554016+00:00"
+  },
+  {
+    "id": 181,
+    "source_chunk_id": 25,
+    "writer": "skald_state_update",
+    "entity_id": 3,
+    "field": "characters.current_activity",
+    "old_value": null,
+    "new_value": "holding an active debt-book threat against his guarantor's family while deciding whether to call Ressa Morn",
+    "created_at": "2026-07-30 05:27:46.554016+00:00"
+  },
+  {
+    "id": 182,
+    "source_chunk_id": 25,
+    "writer": "skald_state_update",
+    "entity_id": 24,
+    "field": "places.current_status",
+    "old_value": null,
+    "new_value": "The unpinned service shutter is open into a rain-dark lane; a freight dolly and hooded negotiator hold the threshold under active pressure.",
+    "created_at": "2026-07-30 05:27:46.554016+00:00"
+  },
+  {
+    "id": 387,
+    "source_chunk_id": 48,
+    "writer": "skald_state_update",
+    "entity_id": 1,
+    "field": "characters.emotional_state",
+    "old_value": null,
+    "new_value": "publicly contradicted, depleted, and further isolated after trying to conscript absent witnesses",
+    "created_at": "2026-08-21 04:49:55.030065+00:00"
+  },
+  {
+    "id": 388,
+    "source_chunk_id": 48,
+    "writer": "skald_state_update",
+    "entity_id": 1,
+    "field": "characters.current_activity",
+    "old_value": null,
+    "new_value": "standing with the intact Wickglass token while Calyx asks whether she will give Tam's paper distance",
+    "created_at": "2026-08-21 04:49:55.030065+00:00"
+  },
+  {
+    "id": 389,
+    "source_chunk_id": 48,
+    "writer": "skald_state_update",
+    "entity_id": 8,
+    "field": "characters.emotional_state",
+    "old_value": null,
+    "new_value": "exact and unwilling to let the hall's quiet be treated as optional",
+    "created_at": "2026-08-21 04:49:55.030065+00:00"
+  },
+  {
+    "id": 390,
+    "source_chunk_id": 48,
+    "writer": "skald_state_update",
+    "entity_id": 8,
+    "field": "characters.current_activity",
+    "old_value": null,
+    "new_value": "holding Tam's folder closed while offering Mara a non-punitive boundary around the paper",
+    "created_at": "2026-08-21 04:49:55.030065+00:00"
+  },
+  {
+    "id": 391,
+    "source_chunk_id": 48,
+    "writer": "skald_state_update",
+    "entity_id": 16,
+    "field": "characters.emotional_state",
+    "old_value": null,
+    "new_value": "shaken, firm, and less willing to let Mara remain near their account",
+    "created_at": "2026-08-21 04:49:55.030065+00:00"
+  },
+  {
+    "id": 392,
+    "source_chunk_id": 48,
+    "writer": "skald_state_update",
+    "entity_id": 16,
+    "field": "characters.current_activity",
+    "old_value": null,
+    "new_value": "remaining beside the memorial table with their shelter decision paused and their need for quiet newly explicit",
+    "created_at": "2026-08-21 04:49:55.030065+00:00"
+  },
+  {
+    "id": 393,
+    "source_chunk_id": 48,
+    "writer": "skald_state_update",
+    "entity_id": 2,
+    "field": "places.current_status",
+    "old_value": null,
+    "new_value": "Rain-muted and strained; Tam's folder remains closed while Calyx's request for distance hangs publicly in the room.",
+    "created_at": "2026-08-21 04:49:55.030065+00:00"
+  }
+]

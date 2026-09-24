@@ -1,0 +1,15 @@
+{
+  "source": [
+    {
+      "current_database": "save_04",
+      "count": 46,
+      "max": 49
+    }
+  ],
+  "remaining": [],
+  "lsof_exit_code": 1,
+  "lsof_stdout": "",
+  "paid_requests": 13,
+  "report_links_and_json": "valid",
+  "excerpt_limit": "passed"
+}

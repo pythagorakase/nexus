@@ -1,0 +1,70 @@
+[
+  {
+    "id": true,
+    "base_timestamp": "2189-10-17 19:12:00+00:00",
+    "user_character": 1,
+    "setting": {
+      "tone": "dark",
+      "genre": "cyberpunk",
+      "themes": [
+        "identity and memory",
+        "institutional power",
+        "intimacy under surveillance",
+        "political noir",
+        "complicity",
+        "truth as a contested public good",
+        "slow-burn consequence"
+      ],
+      "story_seed": {
+        "hook": "Mara must keep a public grief ritual from becoming a legal seizure, a factional incident, or proof of her own complicity\u2014while determining whether the living dead woman is a fraud, a revision survivor, or evidence that Mara's supposedly reliable work has been used against her.",
+        "title": "The Woman Who Died Twice",
+        "stakes": "Mara's remaining civic access, her credibility as an auditor, the safety of a woman who may be legally dead, and the fragile trust of Ren, Ivo, and the people gathered to mourn.",
+        "secrets": "Elian Rook's legal death was constructed from a genuine but incomplete chain of evidence, and someone ensured Mara would be the certifying auditor. The brass key opens access to a physical custody system outside ordinary Archive revision protocols, but it is not clear whether it contains proof, bait, or a mechanism for planting a false past. The new voice on Mara's childhood recording belongs to someone who knew the fabricated memory's commissioning context, though the recording itself may be responding to the key rather than revealing a stable truth. Each of Vespera's four factions has touched the Rook case for defensible reasons, and none yet possesses the whole story.",
+        "weather": "Steady orbital rain beads against the viaduct glazing; distant maintenance thunder rolls through the station rings.",
+        "key_npcs": [
+          "Elian Rook, the dockworker legally and ceremonially dead",
+          "Ren Vale, Continuity prosecutor and Mara's damaged former intimate",
+          "Ivo Senn, Blackwake smuggler holding Mara's life-debt",
+          "Sister Calyx, Wet Ink organizer attending in solidarity with the dockworkers"
+        ],
+        "seed_type": "mystery",
+        "situation": "Rain hushes the mourners beneath the transit viaduct at the Lantern Quay Memorial Hall, where Mara Vey has come to pay formal respects to Elian Rook, a dockworker whose death she personally certified after an Archive review. Before the eulogy ends, Rook walks through the doors alive, presses a tarnished brass key into Mara's palm, and whispers, \"You wrote the version where I died.\" When attention turns, she loudly insists she has never met Mara. In the same minute, Continuity prosecutor Ren Vale arrives with a courteous warrant for Mara's handwritten anchor book, Blackwake smuggler Ivo Senn calls to invoke Mara's life-debt, and Mara's sealed childhood recording plays a new voice through its dead speaker.",
+        "base_timestamp": {
+          "day": 17,
+          "hour": 19,
+          "year": 2189,
+          "month": 10,
+          "minute": 12,
+          "second": 0
+        },
+        "immediate_goal": "Secure the brass key and preserve her anchor book and the changed recording long enough to speak privately with Elian Rook or identify where she goes.",
+        "tension_source": "Every conversation can be read several ways: Ren's warrant may be protective or punitive; Ivo's demand may be a rescue or an extraction; Rook's denial may be coercion, strategy, or genuine revision. The memorial's attendees include sympathizers, observers, and people who fear the official version of Rook's death is about to fail."
+      },
+      "tech_level": "far_future",
+      "world_name": "Vesper Station",
+      "time_period": "2189 CE",
+      "magic_exists": false,
+      "cultural_notes": "Vesperians greet one another with a thumb briefly touched to the temple: a polite sign that a memory is offered in good faith. People keep private 'anchor books' of handwritten sensory details, trade favors in unrecorded rooms, and speak carefully of the Archive, whose edits are legal rather than visibly coercive. Rain\u2014condensation from the station's weather lattice\u2014is treated as a small civic blessing, because its noise defeats cheap microphones and its water cannot be convincingly forged in a recollection.",
+      "language_notes": "Public records use soothing bureaucratic euphemisms: memory edits are 'reconciliations,' deleted testimony is 'harmonized,' and politically inconvenient people become 'unconfirmed continuities.' Street slang calls altered recollections 'ghostprints' and trustworthy secrets 'wet ink.'",
+      "major_conflict": "Control of the Palimpsest Civic Archive\u2014the legally authoritative system that can amend a citizen's remembered life\u2014has become the quiet war beneath the station's orderly democracy.",
+      "geographic_scope": "regional",
+      "secondary_genres": [
+        "scifi",
+        "noir",
+        "mystery",
+        "thriller"
+      ],
+      "diegetic_artifact": "EXTRACT FROM THE VESPER VISITOR'S CIVIC ORIENTATION, REVISION 41\n\nWelcome to Vesper Station: the ring of lights above the old Atlantic, where rain falls indoors on schedule and every resident is entitled to a continuous life.\n\nThe phrase is carved over the doors of the Palimpsest Civic Archive. New arrivals tend to photograph it. Long-term residents do not. They have learned that continuity is not the same thing as truth.\n\nVesper turns slowly above the drowned-weather Atlantic, a kilometer-wide orbital habitat of stacked neighborhoods, hydroponic galleries, docking spines, and the narrow, rain-polished avenues of the Inner Rim. Its municipal weather lattice releases warm condensate every evening. The rain runs down neon signs, gathers in shoe soles, and makes a hundred thousand windows look like uncertain witnesses. Down on the street decks, courier bikes hiss through puddles while expensive transit glides soundlessly overhead. A person can cross half the station without ever seeing a star, provided they have the fare and the right permissions.\n\nThe Compact calls itself a democracy of records. Every birth, contract, grievance, and vote passes through Palimpsest, the civic archive charged with preserving the public memory of Vesper. Its rarest authority is Reconciliation: when evidence declares a memory harmful, fraudulent, or destabilizing, trained archivists may alter its legal and lived form. The procedure is said to spare victims trauma, protect witnesses, and prevent panic. It can also make a debt disappear, turn a lover into a stranger, or leave an elected official honestly unable to remember accepting a bribe. Reconciled citizens retain enough of themselves to function. What they lack is certainty about what was taken.\n\nFour powers keep Vesper from admitting it is already divided.\n\nThe Civic Continuity Office operates Palimpsest and insists that records are mercy. Its archivists wear gray seals at the throat and speak the language of procedure; no one knows whether they serve the Compact or merely the system that outlived its founders.\n\nThe Helix Consortium owns life-support patents, freight insurance, and most of the station's private security. Its executives campaign for clean governance while their subcontractors make problems vanish in the maintenance dark.\n\nThe Wet Ink Mutual is a loose network of printmakers, medics, neighborhood advocates, and former Archive technicians. They preserve uneditable testimony on paper, film, scar tissue, and trusted human recollection. The Compact calls them irresponsible. The Consortium calls them terrorists when cameras are present.\n\nFinally, the Blackwake Assembly controls little openly and much after midnight: dock crews, unlicensed data ferries, debt shelters, and the smuggling routes that allow people\u2014and unwanted versions of their lives\u2014to leave the station. They sell secrecy, but their own internal loyalties are worth less than a good raincoat.\n\nNo faction holds Vesper alone. Each needs the others badly enough to negotiate and hates the others enough to prepare for betrayal. That is why the station still functions. That is why it is dangerous.\n\nVisitors are advised to retain independent copies of significant correspondence, to verify an old memory through more than one witness, and never to mistake a familiar face for proof of shared history. If a stranger offers you an anchor book, do not open it in public.\n\nAnd when the evening rain begins, listen carefully. Under its cover, Vesper tells the truth\u2014though never all of it, and never for free.",
+      "magic_description": null,
+      "political_structure": "A nominally elected municipal Compact governs Vesper Station through licensed civic systems, while four entrenched blocs bargain, blackmail, and sabotage one another beneath its public procedures."
+    },
+    "new_story": true,
+    "model": "gpt-5.6-terra",
+    "slot_number": 4,
+    "last_played": null,
+    "slot_created_at": "2026-07-30 04:49:44.071666+00:00",
+    "is_active": false,
+    "gaia_model": null,
+    "apex_context_window": null
+  }
+]

@@ -1,0 +1,4 @@
+Error: Failed to generate narrative: 1 validation error for SkaldWriterWire
+presence
+  Value error, scene_reset cannot be combined with enter or exit [type=value_error, input_value={'enter': [], 'exit': [{'...an Rook', 'id': None}]}}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.11/v/value_error

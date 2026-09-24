@@ -1,0 +1,227 @@
+[
+  {
+    "table_name": "incubator",
+    "column_name": "id",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "chunk_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "parent_chunk_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "user_text",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "storyteller_text",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "metadata_updates",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "entity_updates",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "reference_updates",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "session_id",
+    "data_type": "uuid"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "llm_response_id",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "status",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "choice_object",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "choice_text",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "orrery_proposal",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "authorial_directives",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "orrery_adjudications",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "new_entities",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "generation_model",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "correspondence_writer_letter",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "correspondence_gaia_letter",
+    "data_type": "text"
+  },
+  {
+    "table_name": "incubator",
+    "column_name": "lore_pass_baseline",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "id",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "raw_text",
+    "data_type": "text"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "state",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "finalized_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "embedding_generated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "regeneration_count",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "storyteller_text",
+    "data_type": "text"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "choice_object",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "choice_text",
+    "data_type": "text"
+  },
+  {
+    "table_name": "narrative_chunks",
+    "column_name": "authorial_directives",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "id",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "turn_id",
+    "data_type": "text"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "user_input",
+    "data_type": "text"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "detected_entities",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "raw_result_count",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "kept_chunk_ids",
+    "data_type": "ARRAY"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "kept_tokens",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "available_budget",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "coverage",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "retrieval_coverage_log",
+    "column_name": "gap_entities",
+    "data_type": "jsonb"
+  }
+]

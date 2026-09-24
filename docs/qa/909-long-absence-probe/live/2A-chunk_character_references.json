@@ -1,0 +1,27 @@
+[
+  {
+    "chunk_id": 52,
+    "character_id": 1,
+    "reference": "present"
+  },
+  {
+    "chunk_id": 52,
+    "character_id": 4,
+    "reference": "present"
+  },
+  {
+    "chunk_id": 52,
+    "character_id": 14,
+    "reference": "present"
+  },
+  {
+    "chunk_id": 52,
+    "character_id": 18,
+    "reference": "present"
+  },
+  {
+    "chunk_id": 52,
+    "character_id": 23,
+    "reference": "mentioned"
+  }
+]

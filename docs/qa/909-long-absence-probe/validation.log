@@ -1,0 +1,1919 @@
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest
+============================= test session starts ==============================
+platform darwin -- Python 3.11.12, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe
+configfile: pytest.ini
+testpaths: tests
+plugins: asyncio-1.2.0, anyio-4.9.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 3439 items / 2 skipped
+
+tests/config/test_model_uses.py ...........                              [  0%]
+tests/config/test_save_settings.py ..                                    [  0%]
+tests/config/test_settings_models.py ................................... [  1%]
+...........................................                              [  2%]
+tests/config/test_story_model.py .........                               [  2%]
+tests/test_api/test_acceptance_staging_pg.py ..................          [  3%]
+tests/test_api/test_backstage_endpoints_pg.py ........                   [  3%]
+tests/test_api/test_choice_promotion.py .......                          [  3%]
+tests/test_api/test_chunk_workflow_integration.py ..                     [  3%]
+tests/test_api/test_conversations.py .s                                  [  3%]
+tests/test_api/test_correspondence_pg.py .F                              [  4%]
+tests/test_api/test_cors.py ....                                         [  4%]
+tests/test_api/test_frontier_clock_pg.py .                               [  4%]
+tests/test_api/test_import_side_effects.py .........                     [  4%]
+tests/test_api/test_local_inference.py .....................             [  5%]
+tests/test_api/test_local_models_endpoints.py ..................         [  5%]
+tests/test_api/test_lore_adapter.py ....                                 [  5%]
+tests/test_api/test_mock_wizard_responses.py ........................... [  6%]
+..                                                                       [  6%]
+tests/test_api/test_mock_wizard_timestamp.py ..                          [  6%]
+tests/test_api/test_narrative_continue_validation.py .............F.     [  7%]
+tests/test_api/test_narrative_generation.py ......                       [  7%]
+tests/test_api/test_narrative_post_commit.py .....                       [  7%]
+tests/test_api/test_orrery_config_reuse_pg.py ..                         [  7%]
+tests/test_api/test_orrery_dev_endpoints.py F.FFF.FFF...F.FF...          [  7%]
+tests/test_api/test_preferences.py ......                                [  8%]
+tests/test_api/test_pydantic_ai_utils.py ......                          [  8%]
+tests/test_api/test_reader_asset_endpoints.py .......F........EEEE       [  8%]
+tests/test_api/test_reader_chunk_payload.py .....                        [  9%]
+tests/test_api/test_runtime_status.py ..                                 [  9%]
+tests/test_api/test_scheduler_corpus_pg.py .F.                           [  9%]
+tests/test_api/test_scheduler_locked_pg.py .Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pytest/__main__.py", line 9, in <module>
+    raise SystemExit(pytest.console_main())
+                     ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+           ^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/config/__init__.py", line 175, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_hooks.py", line 513, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_callers.py", line 139, in _multicall
+    raise exception.with_traceback(exception.__traceback__)
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_callers.py", line 103, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/main.py", line 330, in pytest_cmdline_main
+    return wrap_session(config, _main)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/main.py", line 318, in wrap_session
+    config.hook.pytest_sessionfinish(
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_hooks.py", line 513, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_callers.py", line 139, in _multicall
+    raise exception.with_traceback(exception.__traceback__)
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_callers.py", line 122, in _multicall
+    teardown.throw(exception)  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/logging.py", line 868, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_callers.py", line 122, in _multicall
+    teardown.throw(exception)  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/terminal.py", line 893, in pytest_sessionfinish
+    result = yield
+             ^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_callers.py", line 122, in _multicall
+    teardown.throw(exception)  # type: ignore[union-attr]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/warnings.py", line 141, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/pluggy/_callers.py", line 103, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/runner.py", line 107, in pytest_sessionfinish
+    session._setupstate.teardown_exact(None)
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/runner.py", line 557, in teardown_exact
+    raise exceptions[0]
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/runner.py", line 546, in teardown_exact
+    fin()
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/fixtures.py", line 1032, in finish
+    raise exceptions[0]
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/fixtures.py", line 1021, in finish
+    fin()
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/fixtures.py", line 907, in _teardown_yield_fixture
+    next(it)
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/tmpdir.py", line 271, in tmp_path
+    result_dict = request.node.stash[tmppath_result_key]
+                  ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/_pytest/stash.py", line 84, in __getitem__
+    return cast(T, self._storage[key])
+                   ~~~~~~~~~~~~~^^^^^
+KeyError: <_pytest.stash.StashKey object at 0x109e99c20>
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/subprocess.py:2011: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -x tests/test_api/test_narrative_continue_validation.py
+.............F
+=================================== FAILURES ===================================
+______ test_pending_choice_rolls_back_when_auto_approval_validation_fails ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c5bdad0>
+disposable_narrative_db = 'nexus_test_continue_5843054c5f9b'
+
+    @pytest.mark.requires_postgres
+    def test_pending_choice_rolls_back_when_auto_approval_validation_fails(
+        monkeypatch: pytest.MonkeyPatch,
+        disposable_narrative_db: str,
+    ) -> None:
+        """The real pending continue route makes choice resolution and approval atomic."""
+        dbname = disposable_narrative_db
+        choices = ["Open the door.", "Wait in silence."]
+        pending_session_id = str(uuid.uuid4())
+        with _clone_connection(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    TRUNCATE incubator, narrative_chunks,
+                        narrative_generation_lease,
+                        narrative_parent_embedding_claims,
+                        narrative_generation_sessions
+                    RESTART IDENTITY CASCADE
+                    """
+                )
+                cur.execute("DELETE FROM assets.new_story_creator")
+                cur.execute(
+                    """
+                    INSERT INTO narrative_chunks (
+                        raw_text, storyteller_text, state
+                    ) VALUES (%s, %s, 'finalized')
+                    RETURNING id
+                    """,
+                    ("The door waits.", "The door waits."),
+                )
+                parent_chunk_id = cur.fetchone()[0]
+                cur.execute(
+                    """
+                    INSERT INTO chunk_metadata (
+                        chunk_id, season, episode, scene, world_layer, slug
+                    ) VALUES (%s, 1, 1, 1, 'primary', 'S01E01_001')
+                    """,
+                    (parent_chunk_id,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO incubator (
+                        id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+                        generation_model, choice_object, choice_text,
+                        metadata_updates, entity_updates, reference_updates,
+                        orrery_proposal, orrery_adjudications, new_entities,
+                        lore_pass_baseline, session_id, llm_response_id, status
+                    ) VALUES (
+                        TRUE, %s, %s, %s, %s, %s, %s, NULL,
+                        %s, %s, %s, NULL, %s, %s, %s, %s, %s, 'provisional'
+                    )
+                    """,
+                    (
+                        parent_chunk_id + 1,
+                        parent_chunk_id,
+                        "Approach the door.",
+                        "The hinges begin to move.",
+                        _valid_override(),
+                        Json({"presented": choices, "selected": None}),
+                        Json(
+                            {
+                                "chronology": {"episode_transition": "invalid-transition"},
+                                "world_layer": "primary",
+                            }
+                        ),
+                        Json({}),
+                        Json({"characters": [], "places": [], "factions": []}),
+                        Json([]),
+                        Json([]),
+                        Json(TEST_BASELINE_PAYLOAD),
+                        pending_session_id,
+                        "invalid-approval-fixture",
+                    ),
+                )
+    
+        _route_clone_to_slot(monkeypatch, dbname)
+        with TestClient(narrative.app, raise_server_exceptions=False) as client:
+            response = client.post(
+                "/api/narrative/continue",
+                json={"slot": 3, "choice": 1},
+            )
+    
+        assert response.status_code == 500
+        with _clone_connection(dbname, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT choice_text, choice_object
+                    FROM incubator
+                    WHERE session_id = %s
+                    """,
+                    (pending_session_id,),
+                )
+                pending = cur.fetchone()
+                assert pending == {
+                    "choice_text": None,
+                    "choice_object": {"presented": choices, "selected": None},
+                }
+                cur.execute("SELECT COUNT(*) AS count FROM narrative_chunks")
+                assert cur.fetchone()["count"] == 1
+                cur.execute("SELECT COUNT(*) AS count FROM narrative_generation_lease")
+                assert cur.fetchone()["count"] == 0
+    
+        # Simulate the carried finding's already-in-the-wild recovery state: an
+        # earlier request committed the choice before approval failed. The same
+        # choice must be reusable without a conflict, and real approval must commit.
+        with _clone_connection(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE incubator
+                    SET choice_text = %s,
+                        choice_object = %s,
+                        metadata_updates = %s
+                    WHERE session_id = %s
+                    """,
+                    (
+                        choices[0],
+                        Json({"presented": choices, "selected": 1}),
+                        Json(
+                            {
+                                "chronology": {
+                                    "episode_transition": "continue",
+                                    "time_delta_minutes": 1,
+                                },
+                                "world_layer": "primary",
+                            }
+                        ),
+                        pending_session_id,
+                    ),
+                )
+    
+        async def stop_after_approval(
+            session_id: str,
+            _parent_chunk_id: int,
+            _user_text: str,
+            slot: int,
+            **_kwargs: Any,
+        ) -> None:
+            narrative._abandon_generation_owner(
+                slot=slot,
+                session_id=session_id,
+                error="Fixture stops after proving approval recovery.",
+            )
+    
+        monkeypatch.setattr(narrative, "generate_narrative_async", stop_after_approval)
+>       monkeypatch.setattr(
+            narrative,
+            "_run_post_commit_orrery_work",
+            lambda _slot: None,
+        )
+E       AttributeError: <module 'nexus.api.narrative' from '/Users/pythagor/nexus/.claude/worktrees/909-long-absence-probe/nexus/api/narrative.py'> has no attribute '_run_post_commit_orrery_work'
+
+tests/test_api/test_narrative_continue_validation.py:1091: AttributeError
+---------------------------- Captured stdout setup -----------------------------
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE SCHEMA
+SET
+SET
+SET
+SET
+SET
+SET
+ set_config 
+------------
+ 
+(1 row)
+
+SET
+SET
+SET
+SET
+COMMENT
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE DOMAIN
+ALTER DOMAIN
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE TYPE
+ALTER TYPE
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+CREATE FUNCTION
+ALTER FUNCTION
+COMMENT
+CREATE FUNCTION
+ALTER FUNCTION
+SET
+SET
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE VIEW
+ALTER VIEW
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE TABLE
+ALTER TABLE
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE VIEW
+ALTER VIEW
+COMMENT
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+COMMENT
+COMMENT
+COMMENT
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+CREATE SEQUENCE
+ALTER SEQUENCE
+ALTER SEQUENCE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE INDEX
+COMMENT
+CREATE INDEX
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+COMMENT
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COMMENT
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+REVOKE
+SET
+SET
+SET
+SET
+SET
+SET
+ set_config 
+------------
+ 
+(1 row)
+
+SET
+SET
+SET
+SET
+COPY 11
+COPY 108
+COPY 29
+COPY 117
+COPY 45
+COPY 465
+ setval 
+--------
+     29
+(1 row)
+
+ setval 
+--------
+    532
+(1 row)
+
+---------------------------- Captured stderr setup -----------------------------
+2026-09-24 12:22:41,680 - nexus.new_story_setup - INFO - Created database nexus_test_continue_5843054c5f9b
+2026-09-24 12:22:41,680 - nexus.new_story_setup - INFO - Dumping schema (public + assets) from NEXUS_template
+2026-09-24 12:22:42,399 - nexus.new_story_setup - INFO - Restoring schema into nexus_test_continue_5843054c5f9b
+2026-09-24 12:22:42,884 - nexus.new_story_setup - INFO - Copying template data (seed rows + migration stamps) from NEXUS_template
+pg_dump: warning: there are circular foreign-key constraints on this table:
+pg_dump: detail: tags
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+pg_dump: warning: there are circular foreign-key constraints on this table:
+pg_dump: detail: event_types
+pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
+pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
+2026-09-24 12:22:43,098 - nexus.new_story_setup - INFO - Inserted default global_variables row in nexus_test_continue_5843054c5f9b (model=TEST)
+2026-09-24 12:22:43,099 - nexus.new_story_setup - INFO - Running migrations on nexus_test_continue_5843054c5f9b...
+2026-09-24 12:22:43,125 - nexus.migrate - INFO - Migrating nexus_test_continue_5843054c5f9b...
+2026-09-24 12:22:43,154 - nexus.migrate - INFO -   No pending migrations
+2026-09-24 12:22:43,154 - nexus.new_story_setup - INFO - Applied 0 migrations to nexus_test_continue_5843054c5f9b
+2026-09-24 12:22:43,178 - nexus.new_story_setup - INFO - Database nexus_test_continue_5843054c5f9b ready
+------------------------------ Captured log setup ------------------------------
+INFO     nexus.new_story_setup:new_story_setup.py:207 Created database nexus_test_continue_5843054c5f9b
+INFO     nexus.new_story_setup:new_story_setup.py:211 Dumping schema (public + assets) from NEXUS_template
+INFO     nexus.new_story_setup:new_story_setup.py:244 Restoring schema into nexus_test_continue_5843054c5f9b
+INFO     nexus.new_story_setup:new_story_setup.py:332 Copying template data (seed rows + migration stamps) from NEXUS_template
+INFO     nexus.new_story_setup:new_story_setup.py:118 Inserted default global_variables row in nexus_test_continue_5843054c5f9b (model=TEST)
+INFO     nexus.new_story_setup:new_story_setup.py:265 Running migrations on nexus_test_continue_5843054c5f9b...
+INFO     nexus.migrate:migrate.py:294 Migrating nexus_test_continue_5843054c5f9b...
+INFO     nexus.migrate:migrate.py:338   No pending migrations
+INFO     nexus.new_story_setup:new_story_setup.py:270 Applied 0 migrations to nexus_test_continue_5843054c5f9b
+INFO     nexus.new_story_setup:new_story_setup.py:277 Database nexus_test_continue_5843054c5f9b ready
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 12:22:43,381 - nexus.api.narrative - INFO - Auto-approving pending incubator session fb0bd701-a2ee-497e-82c2-815b6c7d39a3 for slot 3
+2026-09-24 12:22:43,414 - nexus.api.commit_handler_sync - ERROR - Failed to commit incubator session fb0bd701-a2ee-497e-82c2-815b6c7d39a3: 1 validation error for ChunkMetadataUpdate
+chronology.episode_transition
+  Input should be 'continue', 'new_episode' or 'new_season' [type=literal_error, input_value='invalid-transition', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.11/v/literal_error
+2026-09-24 12:22:43,414 - nexus.api.narrative - ERROR - Failed to commit narrative: 1 validation error for ChunkMetadataUpdate
+chronology.episode_transition
+  Input should be 'continue', 'new_episode' or 'new_season' [type=literal_error, input_value='invalid-transition', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.11/v/literal_error
+2026-09-24 12:22:43,436 - httpx - INFO - HTTP Request: POST http://testserver/api/narrative/continue "HTTP/1.1 500 Internal Server Error"
+------------------------------ Captured log call -------------------------------
+INFO     nexus.api.narrative:narrative.py:918 Auto-approving pending incubator session fb0bd701-a2ee-497e-82c2-815b6c7d39a3 for slot 3
+ERROR    nexus.api.commit_handler_sync:commit_handler_sync.py:784 Failed to commit incubator session fb0bd701-a2ee-497e-82c2-815b6c7d39a3: 1 validation error for ChunkMetadataUpdate
+chronology.episode_transition
+  Input should be 'continue', 'new_episode' or 'new_season' [type=literal_error, input_value='invalid-transition', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.11/v/literal_error
+ERROR    nexus.api.narrative:narrative.py:770 Failed to commit narrative: 1 validation error for ChunkMetadataUpdate
+chronology.episode_transition
+  Input should be 'continue', 'new_episode' or 'new_season' [type=literal_error, input_value='invalid-transition', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.11/v/literal_error
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/narrative/continue "HTTP/1.1 500 Internal Server Error"
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_api/test_narrative_continue_validation.py::test_pending_choice_rolls_back_when_auto_approval_validation_fails
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 13 passed, 7 warnings in 11.93s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

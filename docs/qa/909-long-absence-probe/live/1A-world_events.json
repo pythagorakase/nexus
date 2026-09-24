@@ -1,0 +1,670 @@
+[
+  {
+    "id": 194,
+    "event_type": "contact_made",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 6,
+    "target_entity_id": 13,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.220",
+    "resolution_id": 119,
+    "payload": {
+      "bindings": {
+        "actor": 6,
+        "target": 13
+      },
+      "proposal_id": "check_on_dependent:02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+      "template_id": "check_on_dependent",
+      "binding_hash": "02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+      "branch_label": "Reach out through customary channels",
+      "narrative_stub": "Ren Vale sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Dr. Sera Vey to say something real if they want to \u2014 and watches for what comes back."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 180,
+    "event_type": "signal_exposure_reduced",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.360",
+    "resolution_id": 105,
+    "payload": {
+      "bindings": {
+        "actor": 4
+      },
+      "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "template_id": "hide",
+      "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "branch_label": "Go dark and reduce signal exposure",
+      "narrative_stub": "Elian Rook trims their signal down to almost nothing \u2014 no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 181,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 5,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 106,
+    "payload": {
+      "bindings": {
+        "actor": 5
+      },
+      "proposal_id": "stroll:a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68",
+      "template_id": "stroll",
+      "binding_hash": "a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Niko Rell moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 182,
+    "event_type": "drank",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 8,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity",
+      "character_need_states.debt_score"
+    ],
+    "magnitude": "0.100",
+    "resolution_id": 107,
+    "payload": {
+      "bindings": {
+        "actor": 8
+      },
+      "proposal_id": "drink:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "template_id": "drink",
+      "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Sister Calyx drinks because the body has been quietly asking, then returns to the shape of the hour."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 183,
+    "event_type": "drank",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 11,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity",
+      "character_need_states.debt_score"
+    ],
+    "magnitude": "0.100",
+    "resolution_id": 108,
+    "payload": {
+      "bindings": {
+        "actor": 11
+      },
+      "proposal_id": "drink:9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "template_id": "drink",
+      "binding_hash": "9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Vela Nash drinks because the body has been quietly asking, then returns to the shape of the hour."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 184,
+    "event_type": "drank",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 15,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity",
+      "character_need_states.debt_score"
+    ],
+    "magnitude": "0.100",
+    "resolution_id": 109,
+    "payload": {
+      "bindings": {
+        "actor": 15
+      },
+      "proposal_id": "drink:cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "template_id": "drink",
+      "binding_hash": "cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Unknown municipal-gray stranger drinks because the body has been quietly asking, then returns to the shape of the hour."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 185,
+    "event_type": "drank",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 16,
+    "target_entity_id": null,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity",
+      "character_need_states.debt_score"
+    ],
+    "magnitude": "0.100",
+    "resolution_id": 110,
+    "payload": {
+      "bindings": {
+        "actor": 16
+      },
+      "proposal_id": "drink:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "template_id": "drink",
+      "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Tam Oris drinks because the body has been quietly asking, then returns to the shape of the hour."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 186,
+    "event_type": "recreation_taken",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 19,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 111,
+    "payload": {
+      "bindings": {
+        "actor": 19
+      },
+      "proposal_id": "recreate:e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+      "template_id": "recreate",
+      "binding_hash": "e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+      "branch_label": "Take a small private pleasure",
+      "narrative_stub": "Ora Pell gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 187,
+    "event_type": "stroll_taken",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 26,
+    "target_entity_id": null,
+    "location_id": null,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.120",
+    "resolution_id": 112,
+    "payload": {
+      "bindings": {
+        "actor": 26
+      },
+      "proposal_id": "stroll:cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "template_id": "stroll",
+      "binding_hash": "cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "branch_label": "Take the night air",
+      "narrative_stub": "Ressa Morn steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 188,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 3,
+    "target_entity_id": 4,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.240",
+    "resolution_id": 113,
+    "payload": {
+      "bindings": {
+        "actor": 3,
+        "target": 4
+      },
+      "proposal_id": "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+      "template_id": "surveil",
+      "binding_hash": "93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Ivo Senn keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 189,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 3,
+    "target_entity_id": 26,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.240",
+    "resolution_id": 114,
+    "payload": {
+      "bindings": {
+        "actor": 3,
+        "target": 26
+      },
+      "proposal_id": "surveil:19b8dd6dbf3d6d7fa7307036406c3a1688bdaef1e43e0bb0e9cfdd6e70aef67e",
+      "template_id": "surveil",
+      "binding_hash": "19b8dd6dbf3d6d7fa7307036406c3a1688bdaef1e43e0bb0e9cfdd6e70aef67e",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Ivo Senn keeps Ressa Morn in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 190,
+    "event_type": "contact_made",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": 16,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.220",
+    "resolution_id": 115,
+    "payload": {
+      "bindings": {
+        "actor": 4,
+        "target": 16
+      },
+      "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "template_id": "check_on_dependent",
+      "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "branch_label": "Reach out through customary channels",
+      "narrative_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 191,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 4,
+    "target_entity_id": 35,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.440",
+    "resolution_id": 116,
+    "payload": {
+      "bindings": {
+        "actor": 4,
+        "target": 35
+      },
+      "proposal_id": "surveil:3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+      "template_id": "surveil",
+      "binding_hash": "3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+      "branch_label": "Keep tabs from a distance",
+      "narrative_stub": "Elian Rook keeps tabs on Dax Morrow without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 192,
+    "event_type": "contact_made",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 5,
+    "target_entity_id": 6,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "entity_pair_tags"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 117,
+    "payload": {
+      "bindings": {
+        "actor": 5,
+        "target": 6
+      },
+      "proposal_id": "make_acquaintance:9e8a4f8844a26f4aa0a8d416c053d415740b02f031bf934a5a9c4a9ac4cbe4e2",
+      "template_id": "make_acquaintance",
+      "binding_hash": "9e8a4f8844a26f4aa0a8d416c053d415740b02f031bf934a5a9c4a9ac4cbe4e2",
+      "branch_label": "Exchange names",
+      "narrative_stub": "Niko Rell and Ren Vale keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 193,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 6,
+    "target_entity_id": 4,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.240",
+    "resolution_id": 118,
+    "payload": {
+      "bindings": {
+        "actor": 6,
+        "target": 4
+      },
+      "proposal_id": "surveil:b3cc725b505ed36ac637a7ff5f0a4dc9b0a5a1129d0379dca27b401778885fdf",
+      "template_id": "surveil",
+      "binding_hash": "b3cc725b505ed36ac637a7ff5f0a4dc9b0a5a1129d0379dca27b401778885fdf",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Ren Vale keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 195,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 8,
+    "target_entity_id": 14,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.380",
+    "resolution_id": 120,
+    "payload": {
+      "bindings": {
+        "actor": 8,
+        "target": 14
+      },
+      "proposal_id": "surveil:30591ec27f31a3af94c815de9c750da4a3bad83453c70797285598655f0162a1",
+      "template_id": "surveil",
+      "binding_hash": "30591ec27f31a3af94c815de9c750da4a3bad83453c70797285598655f0162a1",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Sister Calyx does not go near Ione Varr. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 196,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 8,
+    "target_entity_id": 33,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.380",
+    "resolution_id": 121,
+    "payload": {
+      "bindings": {
+        "actor": 8,
+        "target": 33
+      },
+      "proposal_id": "surveil:969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+      "template_id": "surveil",
+      "binding_hash": "969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Sister Calyx does not go near Orris Vale. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 197,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 11,
+    "target_entity_id": 4,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.380",
+    "resolution_id": 122,
+    "payload": {
+      "bindings": {
+        "actor": 11,
+        "target": 4
+      },
+      "proposal_id": "surveil:a11016364c36ce81aad032b93d3190dafd3beb372652543a71cae61f47c50cca",
+      "template_id": "surveil",
+      "binding_hash": "a11016364c36ce81aad032b93d3190dafd3beb372652543a71cae61f47c50cca",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Vela Nash does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 198,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 11,
+    "target_entity_id": 34,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.240",
+    "resolution_id": 123,
+    "payload": {
+      "bindings": {
+        "actor": 11,
+        "target": 34
+      },
+      "proposal_id": "surveil:7d2f5339743b75a1847811cb28c9c80ed4a72554493ac9c48bbc60886e24394e",
+      "template_id": "surveil",
+      "binding_hash": "7d2f5339743b75a1847811cb28c9c80ed4a72554493ac9c48bbc60886e24394e",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Vela Nash keeps Tarin Quell in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 199,
+    "event_type": "surveillance_performed",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 16,
+    "target_entity_id": 4,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "character.current_activity"
+    ],
+    "magnitude": "0.380",
+    "resolution_id": 124,
+    "payload": {
+      "bindings": {
+        "actor": 16,
+        "target": 4
+      },
+      "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+      "template_id": "surveil",
+      "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  },
+  {
+    "id": 200,
+    "event_type": "contact_made",
+    "tick_chunk_id": 50,
+    "narration_chunk_id": null,
+    "actor_entity_id": 16,
+    "target_entity_id": 28,
+    "location_id": 1,
+    "world_layer": "primary",
+    "source": "resolver",
+    "changed_fields": [
+      "entity_pair_tags"
+    ],
+    "magnitude": "0.080",
+    "resolution_id": 125,
+    "payload": {
+      "bindings": {
+        "actor": 16,
+        "target": 28
+      },
+      "proposal_id": "make_acquaintance:cd68bd64333450c04ac110444f74402b2a745cc56fe95056619e76ad1e55ce05",
+      "template_id": "make_acquaintance",
+      "binding_hash": "cd68bd64333450c04ac110444f74402b2a745cc56fe95056619e76ad1e55ce05",
+      "branch_label": "Exchange names",
+      "narrative_stub": "Tam Oris and Len Aster keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again."
+    },
+    "superseded_by_event_id": null,
+    "created_at": "2026-09-24 16:32:37.501667+00:00",
+    "world_time": null,
+    "experiences_formed_at": "2026-09-24 16:32:37.501667+00:00",
+    "experiences_quarantined_at": null
+  }
+]

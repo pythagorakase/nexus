@@ -1,0 +1,12 @@
+[
+  {
+    "session_id": "1f6e283e-ca89-41ed-af93-1d7a43d668c4",
+    "operation": "continue",
+    "parent_chunk_id": 53,
+    "status": "error",
+    "chunk_id": null,
+    "error": "Failed to generate narrative: 1 validation error for SkaldWriterWire\npresence\n  Value error, scene_reset cannot be combined with enter or exit [type=value_error, input_value={'enter': [], 'exit': [{'...an Rook', 'id': None}]}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/value_error",
+    "created_at": "2026-09-24 16:36:51.108543+00:00",
+    "updated_at": "2026-09-24 16:37:32.474939+00:00"
+  }
+]
