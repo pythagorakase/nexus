@@ -1,108 +1,201 @@
-# STOP-REPORT: Missing Exact Replay Responses
+# Re-Entry Wire Verification
 
-Work order #918 cannot meet its mandatory exact-output replay gate with the
-artifacts supplied in this worktree. Implementation stopped under the work
-order's escape hatch. No production code or prompts were changed; no PR was
-opened, no provider was called, and no gateway was started.
+Implemented work order #918 with the coordinator's fixture and tag-scope amendments.
+The earlier exact-replay stop is resolved by those amendments. These are minimal
+synthetic fixtures, not recovered provider response bodies.
 
-## Evidence Inspected
+## Baseline Oracles
 
-Read issue #918 with `gh issue view 918`, the repository guidance, every
-`live/3A-*.json` artifact, the five corresponding session-prefixed prompt
-artifacts, and the relevant gateway-log intervals. Checked the tracked artifact
-inventory with `git ls-tree -r --name-only origin/main
-docs/qa/909-long-absence-probe` and searched the evidence directory for all three
-session IDs.
+The initial branch contained `cc1e39fc` (the earlier stop report) over
+`03b29882`; production code was unchanged from that main baseline. Before editing
+production, the three JSON fixtures reproduced the recorded messages through the
+real Pydantic parser, registry validator, and staging boundary on disposable
+`qa640_acceptance_*` databases. The baseline oracle test passed all three expected
+failures. `baseline-errors.txt` retains their printed messages.
 
-The session-prefixed JSON objects have only these top-level keys:
-`run`, `seat`, `model`, `prompt`, `system_prompt`, `payload`. They capture
-requests and assembly inputs. The two Gaia prompts contain finished writer
-narrative, but do not supply the missing Gaia responses or the rejected writer
-response. The window records contain counts, and the usage records contain
-request IDs and token accounting. The failed incubator snapshots are empty.
+- `fixtures/place.json`: `Unresolved place state update name 'Loading Arcade'`
+  from staging, matching `../909-long-absence-probe/live/3A-failed-session.json:8`.
+- `fixtures/presence.json`: `Value error, scene_reset cannot be combined with enter or exit`
+  from writer parsing, matching the invariant message in
+  `../909-long-absence-probe/live/3A-retry-failed-session.json:8`. Pydantic's
+  payload preview differs because this fixture is intentionally minimal.
+- `fixtures/tag.json`: the full field-qualified `forewarned` duration-override
+  error matched `../909-long-absence-probe/live/3A-final-failed-session.json:8`.
+  The actor had an active `forewarned` row in the fixture database.
 
-| Failure | Missing Replay Input | Available Evidence |
+The baseline harness used the same command as the final fixture proof below;
+its assertions initially expected these failures, then changed to the ruled
+behavior. Its verbatim tail was:
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+3 passed, 7 warnings in 2.23s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+## Resulting Behavior and Evidence
+
+| Case | Result | Evidence |
 | --- | --- | --- |
-| Loading Arcade | Complete Gaia output for `71c52416-673f-4400-93de-4411368c9c5d` | `../909-long-absence-probe/live/3A-failed-session.json:8`; `../909-long-absence-probe/live/gateway.log:5546` |
-| Reset plus crossings | Complete writer output for `1f6e283e-ca89-41ed-af93-1d7a43d668c4` | `../909-long-absence-probe/live/3A-retry-failed-session.json:8`; `../909-long-absence-probe/live/gateway.log:6473` shows only a truncated Pydantic input |
-| Forewarned | Complete Gaia output for `d62347f1-cf28-468e-a44b-cd853c8d44f7` | `../909-long-absence-probe/live/3A-final-failed-session.json:8`; `../909-long-absence-probe/live/gateway.log:7408` |
+| Unknown Loading Arcade | Gaia validation raises an error naming the place and `new_entities` before staging is invoked; both the place catalog and incubator remain empty for this fixture | `tests/test_api/test_reentry_wire_pg.py:106`; `nexus/agents/logon/orrery_tag_validation.py:1266` |
+| Known place, optional alias, same-turn declaration | All stage; the optional alias is canonicalized and staging also resolves it independently | `tests/test_api/test_reentry_wire_pg.py:132`; `nexus/presence/roster.py:444` |
+| Reset plus crossings | Enter is folded into the reset, exit is discarded, and canonical-name/alias duplicates become one character by the existing ID-first roster rules | `tests/test_api/test_reentry_wire_pg.py:189`; `nexus/agents/logon/skald_wire.py:151` |
+| Active extend-expiry | Dropped from ordinary updates and actor/target replacement additions; staging and acceptance preserve the original tag row and expiry | `tests/test_api/test_reentry_wire_pg.py:234`; `nexus/agents/logon/orrery_tag_validation.py:1192` |
+| Inactive extend-expiry | Retained in all three paths and actually applied at acceptance, attributed to the accepted chunk | Same parameterized PostgreSQL proof |
+| Contextual vocabulary | Active scene tags carry a direct hint; proposal-only entries carry conditional guidance covering both update and replacement additions | `nexus/agents/orrery/tag_library.py:493`; PostgreSQL vocabulary assertions |
+| Attempt accounting | Session, moved/dropped names, tag and path are logged; append-only ledger revisions retain notes, and reads return one latest row per seat/attempt | `nexus/telemetry/usage.py:52`; `nexus/telemetry/prompt_window.py:172` |
+| Rejected attempt and CLI | Real TEST provider guard keeps a repair note even when letter validation subsequently rejects the attempt; a second attempt is separate; real `nexus usage --run 918-ledger --json` entrypoint returns both notes | `tests/test_reentry_wire_ledger.py:17` |
 
-Exact recorded errors:
+`repair-records.json` contains actual logged session IDs and repair notes from the
+fixture run. The test also reads each note back from the file ledger. A final
+`pg_database` lookup for the 12 database names recorded by that run returned no
+remaining databases.
 
-```text
-Unresolved place state update name 'Loading Arcade'
+Read-only SQL against `save_04` established that it currently has no
+`place_aliases` table and that `forewarned` has
+`reapplication_policy='extend_expiry'`, `clearance_kind='semantic'`, and no default
+duration:
+
+```sql
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_name IN ('places', 'place_aliases')
+ORDER BY table_name, ordinal_position;
+
+SELECT tag, reapplication_policy, clearance_kind, default_duration
+FROM tags WHERE tag = 'forewarned';
 ```
 
-```text
-Value error, scene_reset cannot be combined with enter or exit [type=value_error, input_value={'enter': [], 'exit': [{'...an Rook', 'id': None}]}}, input_type=dict]
-```
+Alias-table coverage creates that optional relation only inside a disposable
+fixture database, with comments on its table and columns. There is no production
+migration. Existing row locks are retained during place identity resolution.
 
-```text
-orrery_adjudications[0].replacement_state_delta.entity_tags_add: applied_tags: Tag 'forewarned' uses reapplication_policy='extend_expiry', which requires duration_override; storyteller tags_add cannot express duration_override. If the tag is already active, leave it unchanged; otherwise omit it.
-```
+## Commands and Verbatim Tails
 
-These are historical errors from #909, not newly replayed failures. Synthesizing
-payloads from their messages would not satisfy the exact recorded-output gate.
-No remote response retrieval was attempted under the no-provider-call rule.
+All commands ran from `/Users/pythagor/nexus/.claude/worktrees/918-reentry-wire`.
+`PY=/Users/pythagor/nexus/.venv/bin/python` below abbreviates the exact interpreter
+used for every test. No Poetry install, Node build, gateway, or provider generation
+call was used. The TEST provider's real guard/tokenizer/validator was exercised
+without issuing a completion request; the CLI proof invokes its real entrypoint.
 
-## Implementation Findings
-
-- `nexus/agents/logon/skald_wire.py:135` explicitly rejects a reset combined
-  with either crossing list.
-- `nexus/api/commit_handler_sync.py:230` resolves name-addressed state updates
-  by exact table name, without consulting place aliases.
-- `nexus/agents/logon/orrery_tag_validation.py:616` already implements active
-  extend-expiry normalization for `updates.characters`, `updates.places`, and
-  `updates.factions`. The recorded failure is instead in an adjudication's
-  `replacement_state_delta.entity_tags_add`. The gateway log at lines
-  7406–7408 shows ordinary character-tag first applications being admitted
-  immediately before that separate adjudication rejection. It does not
-  establish whether the adjudication actor already had the tag active.
-- `nexus/telemetry/prompt_window.py:158` defines the attempt record. It has a
-  free-form `trimming` dictionary but no explicit validation-notes field on
-  this branch.
-
-## Commands Run and Results
-
-Import provenance command, from the worktree root:
+Import provenance:
 
 ```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;print(nexus.__file__)'
+PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
 ```
-
-Exact output:
 
 ```text
 /Users/pythagor/nexus/.claude/worktrees/918-reentry-wire/nexus/__init__.py
 ```
 
-Initial PostgreSQL staging baseline, run before discovering the missing replay
-inputs:
+Initial staging baseline:
 
 ```sh
-NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api/test_acceptance_staging_pg.py -x
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_api/test_acceptance_staging_pg.py -x
 ```
-
-Verbatim tail:
 
 ```text
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-18 passed, 7 warnings in 18.37s
+18 passed, 7 warnings in 22.99s
 sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
 
-The tests used their existing disposable `qa640_acceptance_*` fixtures and
-completed teardown. No hand-created database was used. The full offline suite,
-the requested filtered PostgreSQL suite, and the exact replays were not run.
-The baseline above is not a claim that the work-order gates passed. No build
-was run.
+Final fixture proof, including actual acceptance for active/inactive tags:
 
-## Coordinator Questions
+```sh
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -s tests/test_api/test_reentry_wire_pg.py
+```
 
-1. Where are the complete provider response bodies for the three sessions
-   listed above? Please supply the saved bodies in this worktree, or revise
-   the exact-replay requirement explicitly if they were never retained.
-2. Confirm that the tag ruling covers adjudication replacement deltas as well
-   as ordinary `updates.*.tags_add`; the recorded failure is in the former.
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+12 passed, 7 warnings in 15.82s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+Existing extend-expiry regressions plus the new fixture proofs:
+
+```sh
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_api/test_reentry_wire_pg.py tests/test_orrery_tag_validation_pg.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+41 passed, 7 warnings in 17.49s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+Ledger and CLI proof:
+
+```sh
+$PY -m pytest -q tests/test_reentry_wire_ledger.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 5 warnings in 0.77s
+```
+
+Required offline gate:
+
+```sh
+$PY -m pytest -q
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2655 passed, 831 skipped, 9 warnings in 93.39s (0:01:33)
+```
+
+Required PostgreSQL gate:
+
+```sh
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_skald_wire.py tests/test_api -k "wire or presence or staging or tag or place"
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_api/test_orrery_dev_endpoints.py::test_what_if_pair_tag_injection_kills_a_winner
+1 failed, 138 passed, 2 skipped, 341 deselected, 9 warnings in 32.61s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+The sole PostgreSQL failure is the work order's explicit #885 exemption,
+`tests/test_api/test_orrery_dev_endpoints.py::test_what_if_pair_tag_injection_kills_a_winner`.
+It hardwires the empty owner slot 5. The two skipped cases are the empty-slot
+presence-baseline read and the opt-in paid live writer test. The disposable
+PostgreSQL fixture proofs ran; they were not skipped. Offline PostgreSQL/live
+skips are expected for the separately requested offline gate.
+
+Black formatted all 14 changed Python files; the final `--check` reported
+`14 files would be left unchanged`. Both pre-commit hooks
+(`regenerate-orrery-catalog` and `validate-config`) ran successfully. No
+`nexus.toml`, production schema, or prompt file changed.
+
+## Development Corrections
+
+The initial fixture setup lacked tag `source_kind`, then used an invalid source
+kind; it was corrected to `llm_generated` before the baseline oracle passed.
+The initial presence proof lacked a required baseline; the acceptance extension
+initially nested a psycopg transaction context. Both were fixture errors and were
+corrected. The first offline gate exposed existing fake-provider/cursor assumptions
+and the new-module reachability ratchet. The resolver was placed in the existing
+roster module, optional delegates remain supported, existing test contracts were
+updated, and the old fake place-tag retry case was replaced by a real PostgreSQL
+case. The ledger test explicitly clears inherited `NEXUS_SLOT` for its slotless
+TEST route. These development failures are not represented as passing gates.
+
+## Coordinator Follow-Up
+
+No implementation blocker remains. Prompt edits remain the coordinator's pen.
+Proposed exact Gaia sentences:
+
+> Resolve place state updates against existing canonical names or aliases; declare a new place in `new_entities` in the same turn before updating it.
+
+> When an `extend_expiry` tag is already active on an entity, omit it from both `updates.*.tags_add` and replacement-state entity tag additions, because this wire cannot express `duration_override`.
+
+The current writer reset guidance remains valid; the repair is defensive. No
+fleet/template migration was applied, and no gateway was started. Lane 8016
+remained unused. No PR merge or review-bot wait is authorized.
 
 Codex — GPT-6 Astra

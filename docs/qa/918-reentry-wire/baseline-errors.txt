@@ -1,0 +1,5 @@
+Unresolved place state update name 'Loading Arcade'
+
+Value error, scene_reset cannot be combined with enter or exit
+
+orrery_adjudications[0].replacement_state_delta.entity_tags_add: applied_tags: Tag 'forewarned' uses reapplication_policy='extend_expiry', which requires duration_override; storyteller tags_add cannot express duration_override. If the tag is already active, leave it unchanged; otherwise omit it.

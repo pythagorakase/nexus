@@ -450,7 +450,9 @@ def resolve_place_update(
 ) -> tuple[int | None, str]:
     """Resolve a place or admit a same-turn declaration without writing."""
     if identifier is not None:
-        cur.execute("SELECT id, name FROM places WHERE id = %s", (identifier,))
+        cur.execute(
+            "SELECT id, name FROM places WHERE id = %s FOR SHARE", (identifier,)
+        )
     else:
         if not name:
             raise ValueError("place state update requires an id or name")
@@ -465,7 +467,9 @@ def resolve_place_update(
                 "WHERE a.place_id = p.id AND lower(a.alias) = lower(%s))"
             )
             params.append(name)
-        cur.execute(f"SELECT p.id, p.name FROM places p WHERE {predicate}", params)
+        cur.execute(
+            f"SELECT p.id, p.name FROM places p WHERE {predicate} FOR SHARE", params
+        )
     rows = cur.fetchall()
     if len(rows) > 1:
         raise ValueError(f"Ambiguous place state update name {name!r}")

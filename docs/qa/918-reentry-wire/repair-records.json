@@ -1,0 +1,41 @@
+[
+  {
+    "generation_session": "fe27bdb2-5304-46e8-9d4b-9bee69d047b0",
+    "validation_note": {
+      "repair": "scene-reset-crossings",
+      "moved": [
+        "Player Alias"
+      ],
+      "dropped": [
+        "Fixture Player"
+      ]
+    }
+  },
+  {
+    "generation_session": "089b3545-8bc3-423d-bdb5-362080f3a9ce",
+    "validation_note": {
+      "repair": "active-extend-expiry",
+      "path": "orrery_adjudications[0].replacement_state_delta.entity_tags_add",
+      "entity_id": 1,
+      "tag": "forewarned"
+    }
+  },
+  {
+    "generation_session": "1a7aa1ad-4be1-4ffe-9cdc-2e5626913896",
+    "validation_note": {
+      "repair": "active-extend-expiry",
+      "path": "orrery_adjudications[0].replacement_state_delta.entity_tags_target_add",
+      "entity_id": 1,
+      "tag": "forewarned"
+    }
+  },
+  {
+    "generation_session": "aa648da1-d8db-40a3-a962-68aec37e575a",
+    "validation_note": {
+      "repair": "active-extend-expiry",
+      "path": "updates.characters[0]",
+      "entity_name": "Fixture Player",
+      "tag": "forewarned"
+    }
+  }
+]
