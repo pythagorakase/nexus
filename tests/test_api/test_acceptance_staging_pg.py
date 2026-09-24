@@ -279,7 +279,9 @@ async def test_staging_rejects_invalid_state_without_allocating_id(
 
 
 @pytest.mark.asyncio
-async def test_undo_clears_parent_choice_via_endpoint(acceptance_slot) -> None:
+async def test_undo_discards_session_and_clears_parent_choice_via_endpoint(
+    acceptance_slot,
+) -> None:
     """Undo clears both response representations while retaining offered choices."""
     dbname, parent, resolution = acceptance_slot
     with closing(connect(dbname)) as conn:
@@ -292,6 +294,18 @@ async def test_undo_clears_parent_choice_via_endpoint(acceptance_slot) -> None:
         response = client.post("/api/slot/5/undo")
     assert response.status_code == 200, response.text
     assert response.json()["success"]
+    with TestClient(narrative.app) as fresh_client:
+        status = fresh_client.get(
+            f"/api/narrative/status/{session}", params={"slot": 5}
+        )
+        assert status.status_code == 200, status.text
+        assert status.json()["terminal_outcome"] == "discarded"
+        assert status.json()["status"] == "complete"
+        assert status.json()["error"] is None
+        assert status.json()["error_class"] is None
+        active = fresh_client.get("/api/narrative/active", params={"slot": 5})
+        assert active.status_code == 200, active.text
+        assert active.json() is None
     with closing(connect(dbname)) as conn:
         choice, raw, storyteller, menu = parent_choice(conn, parent)
         assert choice is None

@@ -348,6 +348,71 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 assert superseded["replaced_by_session_id"] == third
                 snapshot("Regenerate Replacement Lineage")
                 run_cli(monkeypatch, "load", "--slot", "4", "--json")
+                # Undo the actual pending replacement, then mount a new reader.
+                recovered.close()
+                racing = context.new_page()
+
+                def undo_after_discovery(route):
+                    # Delay a real discovery response across undo so the next
+                    # status read sees discarded, exercising the quiet client
+                    # terminal branch as well as the later empty discovery.
+                    response = route.fetch()
+                    assert response.json()["session_id"] == third
+                    run_cli(monkeypatch, "undo", "--slot", "4", "--json")
+                    route.fulfill(response=response)
+
+                racing.route("**/api/narrative/active?*", undo_after_discovery, times=1)
+                with racing.expect_response(
+                    lambda response: f"/api/narrative/status/{third}?" in response.url
+                ) as raced_status:
+                    racing.goto(BASE + "/nexus")
+                assert raced_status.value.json()["terminal_outcome"] == "discarded"
+                racing.get_by_test_id("input-freeform").wait_for()
+                racing.wait_for_timeout(500)
+                assert racing.get_by_text("Generation Failed", exact=True).count() == 0
+                racing.close()
+                discarded = wait_status(third)
+                assert discarded["terminal_outcome"] == "discarded", discarded
+                assert discarded["error_class"] is None
+                assert discarded["error"] is None
+                snapshot("Draft Discarded by Undo")
+                fresh = context.new_page()
+                discoveries_after_undo = []
+                fresh_posts = []
+                fresh.on(
+                    "response",
+                    lambda response: (
+                        discoveries_after_undo.append(response)
+                        if "/api/narrative/active?" in response.url
+                        else None
+                    ),
+                )
+                fresh.on(
+                    "request",
+                    lambda request: (
+                        fresh_posts.append(request.url)
+                        if request.method == "POST"
+                        else None
+                    ),
+                )
+                fresh.goto(BASE + "/nexus")
+                fresh.get_by_test_id("input-freeform").wait_for()
+                deadline = time.monotonic() + 15
+                while len(discoveries_after_undo) < 3 and time.monotonic() < deadline:
+                    fresh.wait_for_timeout(50)
+                assert len(discoveries_after_undo) >= 3
+                for response in discoveries_after_undo:
+                    assert response.status == 200
+                    assert response.json() is None
+                assert fresh.get_by_text("Generation Failed", exact=True).count() == 0
+                assert fresh.get_by_text("DraftDiscarded").count() == 0
+                assert fresh_posts == [], fresh_posts
+                fresh.screenshot(
+                    path=str(EVIDENCE / "discarded-reader.png"), full_page=True
+                )
+                print(
+                    "Undo: discarded; fresh reader: no active attempt, no error, no inference"
+                )
                 browser.close()
             events = [
                 json.loads(line)

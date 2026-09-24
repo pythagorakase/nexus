@@ -264,7 +264,7 @@ def _finish_generation(
                     f"Generation session record {session_id} is missing."
                 )
 
-            if session["terminal_outcome"] in {"accepted", "superseded"}:
+            if session["terminal_outcome"] in {"accepted", "superseded", "discarded"}:
                 conn.commit()
                 return
             current_status = str(session["status"])
@@ -409,9 +409,8 @@ def read_generation_session(
 def discard_generation(cur: Any, session_id: str) -> None:
     """Record intentional draft removal in the same transaction as its delete."""
     cur.execute(
-        "UPDATE narrative_generation_sessions SET status = 'error', "
-        "terminal_outcome = 'error', error_class = 'DraftDiscarded', "
-        "error = 'Completed result is no longer loadable for this session.', "
+        "UPDATE narrative_generation_sessions SET status = 'complete', "
+        "terminal_outcome = 'discarded', error_class = NULL, error = NULL, "
         "updated_at = NOW() WHERE session_id = %s AND terminal_outcome IS NULL",
         (session_id,),
     )

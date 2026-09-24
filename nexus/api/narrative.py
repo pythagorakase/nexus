@@ -1069,6 +1069,8 @@ async def get_active_narrative(
     conn = get_db_connection(slot)
     try:
         row = read_generation_session(conn)
+        if row and row["terminal_outcome"] == "discarded":
+            return None
         return NarrativeStatus(slot=slot, **row) if row else None
     finally:
         conn.close()

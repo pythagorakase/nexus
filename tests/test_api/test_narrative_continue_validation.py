@@ -684,11 +684,15 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
         )
     assert cleared.status_code == 200
     assert unloaded_status.status_code == 200
-    assert unloaded_status.json()["status"] == "error"
+    assert unloaded_status.json()["status"] == "complete"
+    assert unloaded_status.json()["terminal_outcome"] == "discarded"
     assert unloaded_status.json()["chunk_id"] is None
-    assert unloaded_status.json()["error"] == (
-        "Completed result is no longer loadable for this session."
-    )
+    assert unloaded_status.json()["error"] is None
+    assert unloaded_status.json()["error_class"] is None
+    with TestClient(narrative.app) as fresh_client:
+        active = fresh_client.get("/api/narrative/active", params={"slot": 3})
+        assert active.status_code == 200
+        assert active.json() is None
 
 
 @pytest.mark.requires_postgres

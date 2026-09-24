@@ -4,7 +4,7 @@ ALTER TABLE narrative_generation_sessions
     ADD COLUMN phase TEXT NOT NULL DEFAULT 'retrieval'
         CHECK (phase IN ('retrieval', 'assembly', 'writer', 'gaia', 'staging', 'complete')),
     ADD COLUMN terminal_outcome TEXT
-        CHECK (terminal_outcome IN ('accepted', 'superseded', 'error')),
+        CHECK (terminal_outcome IN ('accepted', 'superseded', 'discarded', 'error')),
     ADD COLUMN replaced_by_session_id UUID
         REFERENCES narrative_generation_sessions(session_id),
     ADD COLUMN error_class TEXT,
@@ -19,7 +19,7 @@ SET phase = CASE WHEN status = 'complete' THEN 'complete' ELSE 'retrieval' END,
 COMMENT ON COLUMN narrative_generation_sessions.phase IS
     'Last durable engine phase: retrieval, assembly, writer, gaia, staging, or complete.';
 COMMENT ON COLUMN narrative_generation_sessions.terminal_outcome IS
-    'Canonical attempt outcome; NULL while generating or awaiting a draft decision, accepted only in the accepting transaction.';
+    'Canonical attempt outcome; NULL while generating or awaiting a draft decision, accepted only in the accepting transaction; discarded means intentional draft removal, not failure.';
 COMMENT ON COLUMN narrative_generation_sessions.replaced_by_session_id IS
     'Replacement attempt UUID, bound atomically when regenerate replaces the draft.';
 COMMENT ON COLUMN narrative_generation_sessions.error_class IS

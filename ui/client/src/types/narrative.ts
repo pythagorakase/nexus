@@ -49,7 +49,7 @@ export interface GenerationSession {
   session_id: string;
   status: "initiated" | "complete" | "error";
   phase: NarrativePhase;
-  terminal_outcome: "accepted" | "superseded" | "error" | null;
+  terminal_outcome: "accepted" | "superseded" | "discarded" | "error" | null;
   replaced_by_session_id: string | null;
   chunk_id: number | null;
   created_at: string;

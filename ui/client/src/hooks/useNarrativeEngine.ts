@@ -203,6 +203,12 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         if (obsolete()) return;
         setBackendReachable(true);
         if (!state) {
+          if (lastTerminal) {
+            lastTerminal = "";
+            invalidateNarrativeQueries();
+          }
+          setGenerationError(null);
+          setReceiving(false);
           sessionRef.current = null;
           phaseRef.current = null;
           setPhase(null);
@@ -228,7 +234,10 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           if (terminal !== lastTerminal) {
             lastTerminal = terminal;
             invalidateNarrativeQueries();
-            if (state.terminal_outcome === "error" || state.status === "error") {
+            if (state.terminal_outcome === "discarded") {
+              setGenerationError(null);
+              setReceiving(false);
+            } else if (state.terminal_outcome === "error" || state.status === "error") {
               const message =
                 state.error || state.error_class || "Narrative generation failed";
               setGenerationError(message);
