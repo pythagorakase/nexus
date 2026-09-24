@@ -17,10 +17,12 @@ import {
   getSlotState,
   getActiveGeneration,
   getGenerationStatus,
+  getRecoveryPreferences,
 } from "@/lib/narrative-api";
 import {
   ACTIVE_GENERATION_PHASES,
   type NarrativePhase,
+  type GenerationSettings,
   type NarrativeProgressPayload,
   type SkaldStatus,
   type SlotState,
@@ -93,7 +95,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     isLoading: isSlotStateLoading,
   } = useQuery<SlotState, Error>({
     queryKey: ["/api/slot/state", slot],
-    queryFn: () => getSlotState(slot as number),
+    queryFn: ({ signal }) => getSlotState(slot as number, signal),
     enabled: slot !== null,
   });
 
@@ -111,8 +113,22 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     });
   }, [queryClient, slot]);
 
-  const pollSeconds = slotState?.narrative_generation.poll_interval_seconds;
-  const wakeSeconds = slotState?.narrative_generation.wake_gap_threshold_seconds;
+  // Preferences need no slot/database read. Retry bootstrap failures even when
+  // the application QueryClient disables retries; lifecycle listeners below
+  // can also cancel and restart a stalled bootstrap request.
+  const { data: recoveryPreferences, error: recoverySettingsError } = useQuery({
+    queryKey: ["/api/preferences", "narrative-recovery"],
+    queryFn: ({ signal }) => getRecoveryPreferences(signal),
+    enabled: slot !== null,
+    retry: true,
+  });
+  const settings =
+    slotState?.narrative_generation ?? recoveryPreferences?.narrative_generation;
+  const settingsRef = useRef<GenerationSettings | undefined>(settings);
+  settingsRef.current = settings;
+  useEffect(() => {
+    recoverRef.current();
+  }, [settings]);
 
   // PostgreSQL owns the lifecycle. Every boundary discovers the server's
   // attempt; socket payloads only request an earlier durable read.
@@ -124,31 +140,56 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     setGenerationError(null);
     setReceiving(false);
     stopClock();
-    if (slot === null || pollSeconds === undefined || wakeSeconds === undefined) return;
+    if (slot === null) return;
     let cancelled = false;
-    let inFlight = false;
-    let rerun = false;
+    let currentRequest: AbortController | null = null;
+    let interval: number | undefined;
     let lastTerminal = "";
     let lastTick = Date.now();
     let ws: WebSocket | null = null;
     let reconnect: number | undefined;
 
-    const recover = async () => {
-      if (cancelled || submittingRef.current) return;
-      if (inFlight) {
-        rerun = true;
-        return;
+    const recover = async (interrupt = false) => {
+      if (cancelled) return;
+      if (interrupt) {
+        currentRequest?.abort();
+        currentRequest = null;
       }
-      inFlight = true;
+      const config = settingsRef.current;
+      if (!config) return;
+      if (interval === undefined) {
+        interval = window.setTimeout(tick, config.poll_interval_seconds * 1000);
+      }
+      if (currentRequest) return;
+      const request = new AbortController();
+      currentRequest = request;
       const epoch = submissionEpochRef.current;
-      const obsolete = () => cancelled || epoch !== submissionEpochRef.current;
+      const obsolete = () =>
+        cancelled || request.signal.aborted || epoch !== submissionEpochRef.current;
+      // Each read gets its own timeout, including response-body consumption.
+      const read = async <T,>(
+        fetcher: (signal: AbortSignal) => Promise<T>,
+      ): Promise<T> => {
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        request.signal.addEventListener("abort", abort, { once: true });
+        const timeout = window.setTimeout(
+          () => controller.abort(), config.request_timeout_seconds * 1000,
+        );
+        try {
+          return await fetcher(controller.signal);
+        } finally {
+          window.clearTimeout(timeout);
+          request.signal.removeEventListener("abort", abort);
+        }
+      };
       try {
-        const active = await getActiveGeneration(slot);
+        const active = await read((signal) => getActiveGeneration(slot, signal));
         if (obsolete()) return;
         // A previous owner may have been superseded. Read that terminal state
         // before adopting the new owner, then follow the server's current one.
         if (sessionRef.current && active?.session_id !== sessionRef.current) {
-          await getGenerationStatus(slot, sessionRef.current);
+          await read((signal) => getGenerationStatus(slot, sessionRef.current!, signal));
           if (obsolete()) return;
           invalidateNarrativeQueries();
         }
@@ -157,7 +198,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           : "";
         const state =
           active && (active.status === "initiated" || terminalKey !== lastTerminal)
-            ? await getGenerationStatus(slot, active.session_id)
+            ? await read((signal) => getGenerationStatus(slot, active.session_id, signal))
             : active;
         if (obsolete()) return;
         setBackendReachable(true);
@@ -216,23 +257,37 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           setGenerationError(
             error instanceof Error ? error.message : String(error),
           );
-          if (error instanceof TypeError) setBackendReachable(false);
+          if (
+            error instanceof TypeError ||
+            (error instanceof DOMException && error.name === "AbortError")
+          ) setBackendReachable(false);
         }
       } finally {
-        inFlight = false;
-        if (rerun && !cancelled) {
-          rerun = false;
-          void recover();
+        // A cancelled request must never clear its replacement.
+        if (currentRequest === request) {
+          currentRequest = null;
         }
       }
     };
-    recoverRef.current = () => {
-      void recover();
-    };
     const boundary = () => {
       invalidateNarrativeQueries();
-      void recover();
+      if (!settingsRef.current) {
+        const queryKey = ["/api/preferences", "narrative-recovery"];
+        void queryClient.cancelQueries({ queryKey }).then(() => {
+          if (!cancelled) void queryClient.refetchQueries({ queryKey });
+        });
+      }
+      void recover(true);
     };
+    const tick = () => {
+      interval = undefined;
+      const now = Date.now();
+      const config = settingsRef.current;
+      if (config && now - lastTick > config.wake_gap_threshold_seconds * 1000) boundary();
+      else void recover();
+      lastTick = now;
+    };
+    recoverRef.current = () => { void recover(true); };
     const onVisible = () => {
       if (document.visibilityState === "visible") boundary();
     };
@@ -260,16 +315,11 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     boundary();
     connect();
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(() => {
-      const now = Date.now();
-      if (now - lastTick > wakeSeconds * 1000) boundary();
-      else void recover();
-      lastTick = now;
-    }, pollSeconds * 1000);
     return () => {
       cancelled = true;
       recoverRef.current = () => {};
-      window.clearInterval(interval);
+      currentRequest?.abort();
+      window.clearTimeout(interval);
       window.clearTimeout(reconnect);
       if (receivingTimeoutRef.current !== null) {
         window.clearTimeout(receivingTimeoutRef.current);
@@ -279,7 +329,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
       ws?.close();
     };
   }, [
-    slot, pollSeconds, wakeSeconds,
+    slot, queryClient,
     invalidateNarrativeQueries, startClock, stopClock,
   ]);
 
@@ -315,8 +365,8 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
 
       submissionEpochRef.current += 1;
       submittingRef.current = true;
-      phaseRef.current = "initiated";
-      setPhase("initiated");
+      phaseRef.current = "retrieval";
+      setPhase("retrieval");
       setGenerationError(null);
       sessionRef.current = null;
       startClock();
@@ -368,8 +418,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
   } else if (receiving) {
     skaldStatus = "RECEIVING";
   } else if (
-    phase === "writer" || phase === "gaia" || phase === "staging" ||
-    phase === "calling_llm" || phase === "processing_response"
+    phase === "writer" || phase === "gaia" || phase === "staging"
   ) {
     skaldStatus = "GENERATING";
   } else if (isActivePhase(phase)) {
@@ -384,7 +433,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     phase,
     skaldStatus,
     elapsedMs,
-    generationError,
+    generationError: generationError ?? recoverySettingsError?.message ?? null,
     isGenerating: isActivePhase(phase),
     completedGenerations,
     submitTurn,

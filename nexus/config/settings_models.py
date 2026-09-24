@@ -3426,6 +3426,7 @@ class APINarrativeGenerationSettings(BaseModel):
 
     poll_interval_seconds: float = Field(..., gt=0)
     wake_gap_threshold_seconds: float = Field(..., gt=0)
+    request_timeout_seconds: float = Field(..., gt=0)
 
     stale_lease_timeout_seconds: int = Field(
         ...,

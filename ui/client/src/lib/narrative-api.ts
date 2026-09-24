@@ -21,13 +21,15 @@ import type {
   ChunkWithMetadata,
   ContinueNarrativeResponse,
   GenerationSession,
+  GenerationSettings,
   IncubatorPayload,
   SlotState,
 } from "@/types/narrative";
+import { parseNarrativePhase } from "@/types/narrative";
 import type { OutlineRow } from "@/lib/narrative-nav";
 
-async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await (signal ? fetch(url, { signal }) : fetch(url));
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
@@ -35,8 +37,8 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
-export function getSlotState(slot: number): Promise<SlotState> {
-  return getJson(`/api/slot/${slot}/state`);
+export function getSlotState(slot: number, signal?: AbortSignal): Promise<SlotState> {
+  return getJson(`/api/slot/${slot}/state`, signal);
 }
 
 /** Returns null when the slot has no committed chunks yet (404 = new story). */
@@ -203,11 +205,18 @@ export async function continueNarrative(params: {
   return res.json();
 }
 
-/** Discover even a generation that completed while the reader was disconnected. */
-export function getActiveGeneration(slot: number): Promise<GenerationSession | null> {
-  return getJson(`/api/narrative/active?slot=${slot}`);
+/** Bootstrap timing independently of slot/database reads. */
+export function getRecoveryPreferences(signal: AbortSignal): Promise<{ narrative_generation: GenerationSettings }> {
+  return getJson("/api/preferences", signal);
 }
 
-export function getGenerationStatus(slot: number, session: string): Promise<GenerationSession> {
-  return getJson(`/api/narrative/status/${encodeURIComponent(session)}?slot=${slot}`);
+/** Discover even a generation that completed while the reader was disconnected. */
+export async function getActiveGeneration(slot: number, signal: AbortSignal): Promise<GenerationSession | null> {
+  const state = await getJson<GenerationSession | null>(`/api/narrative/active?slot=${slot}`, signal);
+  return state ? { ...state, phase: parseNarrativePhase(state.phase) } : null;
+}
+
+export async function getGenerationStatus(slot: number, session: string, signal: AbortSignal): Promise<GenerationSession> {
+  const state = await getJson<GenerationSession>(`/api/narrative/status/${encodeURIComponent(session)}?slot=${slot}`, signal);
+  return { ...state, phase: parseNarrativePhase(state.phase) };
 }

@@ -41,6 +41,15 @@ from nexus.telemetry.usage import usage_context
 logger = logging.getLogger("nexus.api.narrative_generation")
 
 
+def generation_error_class(exc: BaseException) -> str:
+    """Keep the originating failure class across nested explicit wrappers."""
+    seen: set[int] = set()
+    while exc.__cause__ is not None and id(exc.__cause__) not in seen:
+        seen.add(id(exc))
+        exc = exc.__cause__
+    return type(exc).__name__
+
+
 def _exception_detail(exc: Exception) -> str:
     """Return the most useful user-facing detail from an exception."""
     if isinstance(exc, HTTPException) and exc.detail:
@@ -258,7 +267,7 @@ async def generate_narrative_async(
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to generate bootstrap narrative: {str(e)}",
-                )
+                ) from e
         else:
             # Real LORE integration for continuation
             logger.info("Initializing LORE for narrative generation")
@@ -297,7 +306,7 @@ async def generate_narrative_async(
                     raise HTTPException(
                         status_code=500,
                         detail=f"Failed to generate narrative: {error_detail}",
-                    )
+                    ) from e
 
                 # Send progress: processing response
                 await manager.send_progress(session_id, "processing_response")
@@ -390,7 +399,7 @@ async def generate_narrative_async(
                     session_id=session_id,
                     status="error",
                     error=error_detail,
-                    error_class=type(e.__cause__ or e).__name__,
+                    error_class=generation_error_class(e),
                 )
             except Exception as status_exc:
                 logger.error(

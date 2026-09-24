@@ -38,6 +38,7 @@ export interface FrontierClock {
 
 /** Response model for GET /api/slot/{slot}/state (SlotStateResponse). */
 export interface GenerationSettings {
+  request_timeout_seconds: number;
   poll_interval_seconds: number;
   wake_gap_threshold_seconds: number;
   stale_lease_timeout_seconds: number;
@@ -95,29 +96,33 @@ export interface NarrativeProgressPayload {
   };
 }
 
-export type NarrativePhase =
-  | "retrieval"
-  | "assembly"
-  | "writer"
-  | "gaia"
-  | "staging"
-  | "initiated"
-  | "loading_chunk"
-  | "building_context"
-  | "calling_llm"
-  | "processing_response"
-  | "complete"
-  | "error";
+/** The durable phase order, shown once in the reader's progress ledger. */
+export const GENERATION_PHASES = [
+  "retrieval", "assembly", "writer", "gaia", "staging", "complete",
+] as const;
+export type DurableNarrativePhase = typeof GENERATION_PHASES[number];
+export const LEGACY_GENERATION_PHASES = {
+  initiated: "retrieval",
+  loading_chunk: "retrieval",
+  building_context: "assembly",
+  calling_llm: "writer",
+  processing_response: "staging",
+} as const;
+export type NarrativePhase = DurableNarrativePhase | "error";
 
-/** Phases that indicate generation is actively in progress. */
-export const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
-  "retrieval", "assembly", "writer", "gaia", "staging",
-  "initiated",
-  "loading_chunk",
-  "building_context",
-  "calling_llm",
-  "processing_response",
-];
+/** Normalize older wire names at the parsing boundary, never in the ledger. */
+export function parseNarrativePhase(phase: string): NarrativePhase {
+  if (phase in LEGACY_GENERATION_PHASES) {
+    return LEGACY_GENERATION_PHASES[phase as keyof typeof LEGACY_GENERATION_PHASES];
+  }
+  if (phase === "error" || GENERATION_PHASES.includes(phase as DurableNarrativePhase)) {
+    return phase as NarrativePhase;
+  }
+  throw new Error(`Unknown generation phase: ${phase}`);
+}
+
+export const ACTIVE_GENERATION_PHASES: readonly NarrativePhase[] =
+  GENERATION_PHASES.filter((phase) => phase !== "complete");
 
 /**
  * Reader-facing labels for the active generation phases (telemetry rail and
@@ -129,11 +134,7 @@ export const PHASE_LABELS: Partial<Record<NarrativePhase, string>> = {
   writer: "Writing…",
   gaia: "Updating the world…",
   staging: "Preparing scene…",
-  initiated: "Request received…",
-  loading_chunk: "Loading scene…",
-  building_context: "Assembling context…",
-  calling_llm: "Writing…",
-  processing_response: "Processing response…",
+  complete: "Complete",
 };
 
 /** Operator-strip status derived from the generation phase. */

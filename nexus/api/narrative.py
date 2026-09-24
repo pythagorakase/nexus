@@ -63,6 +63,7 @@ from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import all_slots, slot_dbname, require_slot_dbname
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_generation import (
+    generation_error_class,
     generate_narrative_async,
     get_chunk_info,
     write_to_incubator,
@@ -1047,7 +1048,7 @@ async def continue_narrative(
         failure_reason = "CancelledError"
         raise
     except Exception as exc:
-        failure_class = type(exc).__name__
+        failure_class = generation_error_class(exc)
         failure_reason = str(exc) or type(exc).__name__
         raise
     finally:
@@ -1206,7 +1207,7 @@ async def regenerate_narrative(
         failure_reason = "CancelledError"
         raise
     except Exception as exc:
-        failure_class = type(exc).__name__
+        failure_class = generation_error_class(exc)
         failure_reason = str(exc) or type(exc).__name__
         raise
     finally:

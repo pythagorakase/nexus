@@ -5,8 +5,12 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.config import load_settings
 from nexus.config.preferences import load_preferences, save_preferences
-from nexus.config.settings_models import PreferencesSettings
+from nexus.config.settings_models import (
+    APINarrativeGenerationSettings,
+    PreferencesSettings,
+)
 
 router = APIRouter(prefix="/api/preferences", tags=["preferences"])
 
@@ -29,19 +33,27 @@ class PreferencesPatch(BaseModel):
     wizard_model: str | None = Field(default=None, min_length=1)
 
 
+class PreferencesResponse(PreferencesSettings):
+    """Player preferences with read-only, database-independent recovery timing."""
+
+    narrative_generation: APINarrativeGenerationSettings = Field(
+        default_factory=lambda: load_settings().api.narrative_generation
+    )
+
+
 @router.get("")
-def get_preferences() -> PreferencesSettings:
+def get_preferences() -> PreferencesResponse:
     """Return persisted player values, or defaults before the first write."""
-    return load_preferences()
+    return PreferencesResponse(**load_preferences().model_dump())
 
 
 @router.patch("")
-def patch_preferences(patch: PreferencesPatch) -> PreferencesSettings:
+def patch_preferences(patch: PreferencesPatch) -> PreferencesResponse:
     """Persist preferences without changing nexus.toml."""
     updates = patch.model_dump(exclude_unset=True, exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No preferences provided")
     try:
-        return save_preferences(updates)
+        return PreferencesResponse(**save_preferences(updates).model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

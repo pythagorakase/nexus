@@ -5,7 +5,7 @@
  * minimalism doctrine):
  * - generation telemetry: the phase stream + progress strip + elapsed clock,
  *   rendered ONLY while a generation request is actually in flight (keyed
- *   off the websocket phase signal) - it vanishes entirely when idle;
+ *   off the durable session phase) - it vanishes entirely when idle;
  * - the story tree: season -> episode -> scene(chunk) slugs, expandable and
  *   clickable. Clicking an older scene loads it in the reader (read-only);
  *   the live frontier row is highlighted and clicking it restores the
@@ -22,7 +22,7 @@ import {
 } from "@/lib/narrative-nav";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import {
-  ACTIVE_GENERATION_PHASES,
+  GENERATION_PHASES,
   PHASE_LABELS,
   type NarrativePhase,
 } from "@/types/narrative";
@@ -97,11 +97,11 @@ export function RightLedger({
   };
 
   const phaseIdx = phase
-    ? ACTIVE_GENERATION_PHASES.findIndex((p) => p === phase)
+    ? GENERATION_PHASES.findIndex((p) => p === phase)
     : -1;
   const stripPct =
     phaseIdx >= 0
-      ? ((phaseIdx + 1) / ACTIVE_GENERATION_PHASES.length) * 100
+      ? ((phaseIdx + 1) / GENERATION_PHASES.length) * 100
       : 0;
 
   return (
@@ -110,7 +110,7 @@ export function RightLedger({
       {isGenerating && (
         <section className="ledger-section" data-testid="telemetry">
           <div className="phase-stream" data-testid="phase-stream">
-            {ACTIVE_GENERATION_PHASES.map((p: NarrativePhase, i) => (
+            {GENERATION_PHASES.map((p: NarrativePhase, i) => (
               <div
                 key={p}
                 className={`phase-row ${phaseIdx >= 0 && i < phaseIdx ? "done" : ""} ${

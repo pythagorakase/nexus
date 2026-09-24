@@ -96,6 +96,7 @@ function renderPane(
   }
   const slotState: SlotState = {
     narrative_generation: {
+      request_timeout_seconds: 10,
       poll_interval_seconds: 2,
       wake_gap_threshold_seconds: 15,
       stale_lease_timeout_seconds: 3600,

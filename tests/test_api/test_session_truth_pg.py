@@ -4,6 +4,7 @@ The browser proof uses the repository TEST HTTP provider and a disposable copy
 of save_04. Nothing writes to a saved story or calls a paid provider.
 """
 
+import asyncio
 from contextlib import closing
 from pathlib import Path
 from uuid import uuid4
@@ -19,6 +20,8 @@ from nexus.api.narrative_lease import (
 )
 from tests.pg_fixtures import connect, disposable_slot_database
 from tests.scheduler_helpers import route_slot
+
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -123,3 +126,52 @@ def test_session_routes_and_socket_hints_do_not_cross_slots(monkeypatch):
                     other_connection,
                 )
                 assert other.receive_text() == "end of hints"
+
+
+@pytest.mark.parametrize("failure", ["provider_timeout", "validation"])
+def test_generation_session_preserves_bootstrap_error_class(
+    monkeypatch, tmp_path, request, failure
+):
+    """Real TEST HTTP timeout and invalid story input survive the bootstrap wrapper."""
+    import tomlkit
+    from nexus.config import load_settings
+    from nexus.api.narrative_generation import generate_narrative_async
+    from tests.scheduler_helpers import test_provider_config
+
+    config = test_provider_config(tmp_path, "http://127.0.0.1:1", monkeypatch)
+    provider = request.getfixturevalue("mock_openai_server")
+    test_provider_config(tmp_path, provider, monkeypatch)
+    doc = tomlkit.parse(config.read_text())
+    doc["api"]["test_provider"]["writer_response_delay_seconds"] = 2
+    doc["global"]["model"]["api_models"]["test"]["request_timeout_seconds"] = 0.1
+    doc["apex"]["structured_output_retries"] = 0
+    config.write_text(tomlkit.dumps(doc))
+    with disposable_slot_database(
+        "qa640_775_errors", source_db="save_04", include_data=True
+    ) as dbname:
+        route_slot(monkeypatch, dbname)
+        session = str(uuid4())
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
+            if failure == "validation":
+                cur.execute("UPDATE global_variables SET setting=NULL")
+            acquire_generation_lease(
+                conn, session_id=session, operation="continue", stale_timeout_seconds=60
+            )
+        asyncio.run(
+            generate_narrative_async(
+                session,
+                0,
+                "Begin the story.",
+                4,
+                get_db_connection=narrative.get_db_connection,
+                load_settings=lambda: load_settings().model_dump(),
+                manager=narrative.manager,
+            )
+        )
+        with closing(connect(dbname)) as conn:
+            state = read_generation_session(conn, session_id=session)
+            assert state["terminal_outcome"] == "error", state
+            expected = "ReadTimeout" if failure == "provider_timeout" else "ValueError"
+            assert state["error_class"] == expected, state
+            print(f"{failure}: {state['error_class']} ({state['terminal_outcome']})")

@@ -54,6 +54,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
     doc["api"]["test_provider"]["writer_response_delay_seconds"] = 3
     doc["api"]["narrative_generation"]["poll_interval_seconds"] = 0.2
     doc["api"]["narrative_generation"]["wake_gap_threshold_seconds"] = 1
+    doc["api"]["narrative_generation"]["request_timeout_seconds"] = 5
     config.write_text(tomlkit.dumps(doc))
     with disposable_slot_database(
         "qa640_775_browser", source_db="save_04", include_data=True
@@ -152,16 +153,31 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 page.goto(BASE + "/nexus")
                 page.get_by_test_id("input-freeform").wait_for()
                 # An explicit human submission; recovery itself must never POST.
-                with page.expect_response(
-                    lambda r: r.request.method == "POST"
-                    and r.url.endswith("/api/narrative/continue"),
-                    timeout=180000,
-                ) as initiated:
-                    page.get_by_test_id("input-freeform").fill(
-                        "I pause and listen before making my next move."
-                    )
-                    page.get_by_test_id("input-freeform").press("Enter")
-                first = initiated.value.json()["session_id"]
+                held_submissions = []
+                polled_while_submitting = []
+
+                def hold_submission_response(route):
+                    # Forward the real POST, but lose its response to the reader.
+                    held_submissions.append(route.fetch(timeout=180000))
+
+                page.route("**/api/narrative/continue", hold_submission_response)
+                page.on(
+                    "response",
+                    lambda r: (
+                        polled_while_submitting.append(r.url)
+                        if "/api/narrative/status/" in r.url and r.ok
+                        else None
+                    ),
+                )
+                page.get_by_test_id("input-freeform").fill(
+                    "I pause and listen before making my next move."
+                )
+                page.get_by_test_id("input-freeform").press("Enter")
+                deadline = time.monotonic() + 180
+                while not held_submissions and time.monotonic() < deadline:
+                    page.wait_for_timeout(50)
+                assert held_submissions
+                first = held_submissions[0].json()["session_id"]
                 deadline = time.monotonic() + 180
                 while time.monotonic() < deadline:
                     active = requests.get(
@@ -172,6 +188,13 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                         break
                     time.sleep(0.05)
                 assert active["phase"] == "writer", active
+                deadline = time.monotonic() + 10
+                while not polled_while_submitting and time.monotonic() < deadline:
+                    page.wait_for_timeout(50)
+                assert polled_while_submitting, "Pending POST disabled recovery"
+                print(
+                    "Recovery polled durable status while the real POST response was withheld"
+                )
                 snapshot("Writer Active Before Disconnect")
                 page.close()  # Closes the socket and all in-memory session refs.
                 time.sleep(3.2)
@@ -196,6 +219,33 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                         else None
                     ),
                 )
+                failures = {"slot": 0, "active": 0, "status": 0}
+                stalled = []
+                aborted = []
+                recovered.on("requestfailed", lambda r: aborted.append(r.url))
+
+                def disrupt_first_reads(route):
+                    url = route.request.url
+                    kind = (
+                        "slot"
+                        if "/api/slot/4/state" in url
+                        else ("active" if "/api/narrative/active?" in url else "status")
+                    )
+                    failures[kind] += 1
+                    if kind == "slot" and failures[kind] <= 2:
+                        route.abort("connectionfailed")
+                    elif kind == "active" and failures[kind] == 1:
+                        route.abort("connectionfailed")
+                    elif (kind == "active" and failures[kind] == 2) or (
+                        kind == "status" and failures[kind] == 1
+                    ):
+                        stalled.append(route)  # No fabricated server response.
+                    else:
+                        route.continue_()
+
+                recovered.route("**/api/slot/4/state", disrupt_first_reads)
+                recovered.route("**/api/narrative/active?*", disrupt_first_reads)
+                recovered.route("**/api/narrative/status/*", disrupt_first_reads)
                 recovered.goto(BASE + "/nexus")
                 deadline = time.monotonic() + 30
                 while not seen_statuses and time.monotonic() < deadline:
@@ -204,6 +254,13 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                     seen_statuses and seen_statuses[-1]["status"] == "complete"
                 ), seen_statuses
                 assert posts == [], posts
+                assert failures["active"] >= 3 and failures["status"] >= 2, failures
+                assert any("/api/narrative/active?" in url for url in aborted), aborted
+                assert any("/api/narrative/status/" in url for url in aborted), aborted
+                print(
+                    f"Recovered after failed slot/discovery reads and timed-out discovery/status: {failures}"
+                )
+                recovered.unroute_all(behavior="ignoreErrors")
                 # Exercise the same mounted reader's remaining recovery boundaries
                 # using real browser lifecycle events and a real closed socket.
                 discoveries = []
@@ -220,12 +277,30 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                     "window.proofSockets.forEach(socket => socket.close())",
                     "(() => { const start = Date.now(); while (Date.now() - start < 1200) {} })()",
                 ):
-                    before = len(discoveries)
-                    recovered.evaluate(boundary)
+                    pending = []
+
+                    def hold_one_discovery(route):
+                        if not pending:
+                            pending.append(route)
+                        else:
+                            route.continue_()
+
+                    recovered.route("**/api/narrative/active?*", hold_one_discovery)
                     deadline = time.monotonic() + 10
+                    while not pending and time.monotonic() < deadline:
+                        recovered.wait_for_timeout(50)
+                    assert pending
+                    before, before_aborted = len(discoveries), len(aborted)
+                    recovered.evaluate(boundary)
+                    deadline = (
+                        time.monotonic() + 4.5
+                    )  # Shorter than configured request timeout.
                     while len(discoveries) == before and time.monotonic() < deadline:
-                        recovered.wait_for_timeout(100)
+                        recovered.wait_for_timeout(50)
                     assert len(discoveries) > before, boundary
+                    assert len(aborted) > before_aborted, boundary
+                    recovered.unroute("**/api/narrative/active?*", hold_one_discovery)
+                    print(f"Recovery boundary preempted stalled discovery: {boundary}")
                 assert posts == [], posts
                 recovered.screenshot(
                     path=str(EVIDENCE / "recovered-reader.png"), full_page=True
