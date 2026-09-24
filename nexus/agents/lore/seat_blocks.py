@@ -86,13 +86,17 @@ SEAT_BLOCKS: Mapping[ContextSeat, tuple[BlockId, ...]] = MappingProxyType(
 def order_seat_blocks(
     sections: RenderedSections, seat: ContextSeat
 ) -> RenderedSections:
-    """Apply the seat manifest while preserving exact chunk ownership for #903."""
-    known = {block for manifest in SEAT_BLOCKS.values() for block in manifest}
-    unknown = set(sections.kinds) - known
-    if unknown:
-        raise ValueError(f"Unregistered storyteller context blocks: {sorted(unknown)}")
+    """Apply the seat manifest while preserving exact chunk ownership for #903.
+
+    A rendered block whose kind the seat's manifest does not list is a
+    composition error, never something to drop quietly.
+    """
+    manifest = SEAT_BLOCKS[seat]
+    foreign = sorted(set(sections.kinds) - set(manifest))
+    if foreign:
+        raise ValueError(f"Blocks rendered outside the {seat} manifest: {foreign}")
     ordered = RenderedSections()
-    for block_id in SEAT_BLOCKS[seat]:
+    for block_id in manifest:
         ordered.kind = block_id
         for index, (kind, content) in enumerate(zip(sections.kinds, sections)):
             if kind == block_id:

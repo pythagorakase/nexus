@@ -105,6 +105,16 @@ def test_seat_block_order_and_card_prose(seat: str) -> None:
     )
 
 
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+def test_blocks_outside_the_seat_manifest_fail_loudly(seat: str) -> None:
+    """Bootstrap data on a two-pass turn is a composition error, not a silent drop."""
+    utility = window_logon()
+    payload = seat_payload()
+    payload["bootstrap_data"] = {"setting": {"world_name": "Veyra"}}
+    with pytest.raises(ValueError, match=f"outside the {seat} manifest"):
+        utility._format_context_prompt(payload, seat=seat)
+
+
 @pytest.mark.parametrize("seat", ["single_pass", "bootstrap"])
 def test_legacy_seat_blocks_keep_union_and_order(seat: str) -> None:
     """The exempt seats retain the previous inputs, instructions, and ordering."""
