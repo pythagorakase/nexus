@@ -1132,6 +1132,10 @@ async def responses_create(request: ResponsesRequest):
     # must receive only its own projection); bootstrap requests
     # (StorytellerResponseBootstrap) carry neither updates nor presence.
     output_fields = _requested_output_properties(request)
+    if output_fields and "narrative" in output_fields:
+        await asyncio.sleep(
+            load_settings().api.test_provider.writer_response_delay_seconds
+        )
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
         if output_fields == {"recollections"}:

@@ -465,7 +465,9 @@ def commit_incubator_to_database_sync(
                     (chunk_id, session_id),
                 )
                 cur.execute(
-                    "UPDATE narrative_generation_sessions SET chunk_id = %s "
+                    "UPDATE narrative_generation_sessions SET chunk_id = %s, "
+                    "terminal_outcome = 'accepted', phase = 'complete', "
+                    "status = 'complete', updated_at = NOW() "
                     "WHERE session_id = %s",
                     (chunk_id, session_id),
                 )

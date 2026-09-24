@@ -204,8 +204,12 @@ tool_search_paths = ["/Applications/Postgres.app/Contents/Versions/latest/bin"]
 
 [api.test_provider]
 experience_response_delay_seconds = 0
+writer_response_delay_seconds = 0
 
 [api.narrative_generation]
+poll_interval_seconds = 2
+wake_gap_threshold_seconds = 15
+request_timeout_seconds = 10
 # A crashed gateway must not brick a slot. This exceeds the longest configured
 # storyteller request budget while still allowing eventual lease reclamation.
 stale_lease_timeout_seconds = 3600

@@ -37,7 +37,30 @@ export interface FrontierClock {
 }
 
 /** Response model for GET /api/slot/{slot}/state (SlotStateResponse). */
+export interface GenerationSettings {
+  request_timeout_seconds: number;
+  poll_interval_seconds: number;
+  wake_gap_threshold_seconds: number;
+  stale_lease_timeout_seconds: number;
+}
+
+export interface GenerationSession {
+  slot: number;
+  session_id: string;
+  status: "initiated" | "complete" | "error";
+  phase: NarrativePhase;
+  terminal_outcome: "accepted" | "superseded" | "discarded" | "error" | null;
+  replaced_by_session_id: string | null;
+  chunk_id: number | null;
+  created_at: string;
+  heartbeat_at: string;
+  expires_at: string | null;
+  error: string | null;
+  error_class: string | null;
+}
+
 export interface SlotState {
+  narrative_generation: GenerationSettings;
   slot: number;
   is_empty: boolean;
   is_wizard_mode: boolean;
@@ -62,6 +85,7 @@ export interface ContinueNarrativeResponse {
 
 /** WebSocket progress payload from /ws/narrative. */
 export interface NarrativeProgressPayload {
+  slot: number;
   session_id: string;
   status: string;
   message?: string;
@@ -72,34 +96,45 @@ export interface NarrativeProgressPayload {
   };
 }
 
-export type NarrativePhase =
-  | "initiated"
-  | "loading_chunk"
-  | "building_context"
-  | "calling_llm"
-  | "processing_response"
-  | "complete"
-  | "error";
+/** The durable phase order, shown once in the reader's progress ledger. */
+export const GENERATION_PHASES = [
+  "retrieval", "assembly", "writer", "gaia", "staging", "complete",
+] as const;
+export type DurableNarrativePhase = typeof GENERATION_PHASES[number];
+export const LEGACY_GENERATION_PHASES = {
+  initiated: "retrieval",
+  loading_chunk: "retrieval",
+  building_context: "assembly",
+  calling_llm: "writer",
+  processing_response: "staging",
+} as const;
+export type NarrativePhase = DurableNarrativePhase | "error";
 
-/** Phases that indicate generation is actively in progress. */
-export const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
-  "initiated",
-  "loading_chunk",
-  "building_context",
-  "calling_llm",
-  "processing_response",
-];
+/** Normalize older wire names at the parsing boundary, never in the ledger. */
+export function parseNarrativePhase(phase: string): NarrativePhase {
+  if (phase in LEGACY_GENERATION_PHASES) {
+    return LEGACY_GENERATION_PHASES[phase as keyof typeof LEGACY_GENERATION_PHASES];
+  }
+  if (phase === "error" || GENERATION_PHASES.includes(phase as DurableNarrativePhase)) {
+    return phase as NarrativePhase;
+  }
+  throw new Error(`Unknown generation phase: ${phase}`);
+}
+
+export const ACTIVE_GENERATION_PHASES: readonly NarrativePhase[] =
+  GENERATION_PHASES.filter((phase) => phase !== "complete");
 
 /**
  * Reader-facing labels for the active generation phases (telemetry rail and
  * in-reader status line). Plain language only - no internal module names.
  */
 export const PHASE_LABELS: Partial<Record<NarrativePhase, string>> = {
-  initiated: "Request received…",
-  loading_chunk: "Loading scene…",
-  building_context: "Assembling context…",
-  calling_llm: "Writing…",
-  processing_response: "Processing response…",
+  retrieval: "Loading context…",
+  assembly: "Assembling context…",
+  writer: "Writing…",
+  gaia: "Updating the world…",
+  staging: "Preparing scene…",
+  complete: "Complete",
 };
 
 /** Operator-strip status derived from the generation phase. */

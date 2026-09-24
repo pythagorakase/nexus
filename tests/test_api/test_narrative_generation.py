@@ -464,3 +464,23 @@ async def test_regenerate_route_threads_incubator_parent_into_generation_task(
     assert task.args[0] != "pending-session"
     assert task.args[1] == 17
     assert task.kwargs["expected_incubator_session"] == "pending-session"
+
+
+def test_session_error_class_unwraps_nested_validation_failure() -> None:
+    """A real schema failure keeps its class through multiple HTTP wrappers."""
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
+    from nexus.api.narrative_generation import generation_error_class
+    from nexus.api.narrative_schemas import ContinueNarrativeRequest
+
+    try:
+        try:
+            try:
+                ContinueNarrativeRequest.model_validate({"slot": 99})
+            except ValidationError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except HTTPException as exc:
+            raise HTTPException(status_code=500, detail="Continuation failed") from exc
+    except HTTPException as exc:
+        assert generation_error_class(exc) == "ValidationError"

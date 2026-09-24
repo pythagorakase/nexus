@@ -3431,6 +3431,10 @@ class APINarrativeGenerationSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    poll_interval_seconds: float = Field(..., gt=0)
+    wake_gap_threshold_seconds: float = Field(..., gt=0)
+    request_timeout_seconds: float = Field(..., gt=0)
+
     stale_lease_timeout_seconds: int = Field(
         ...,
         ge=1,
@@ -3463,6 +3467,7 @@ class APITestProviderSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     experience_response_delay_seconds: float = Field(default=0, ge=0)
+    writer_response_delay_seconds: float = Field(default=0, ge=0)
 
 
 class APISettings(BaseModel):

@@ -1837,6 +1837,9 @@ class LogonUtility:
         self, provider: Any, prompt: str, *, seat: str, window: Optional[int]
     ) -> None:
         """Bind exact rendered accounting to every provider attempt, including repair."""
+        from nexus.telemetry.generation import report_generation_phase
+
+        report_generation_phase("gaia" if seat == "gaia" else "writer")
         from nexus.config.seat_window import resolve_seat_window
         from nexus.telemetry.prompt_window import (
             PromptWindowRecord,

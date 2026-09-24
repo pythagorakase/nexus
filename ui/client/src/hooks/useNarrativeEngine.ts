@@ -12,10 +12,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
-import { continueNarrative, getSlotState } from "@/lib/narrative-api";
+import {
+  continueNarrative,
+  getSlotState,
+  getActiveGeneration,
+  getGenerationStatus,
+  getRecoveryPreferences,
+} from "@/lib/narrative-api";
 import {
   ACTIVE_GENERATION_PHASES,
   type NarrativePhase,
+  type GenerationSettings,
   type NarrativeProgressPayload,
   type SkaldStatus,
   type SlotState,
@@ -53,12 +60,14 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
   const [completedGenerations, setCompletedGenerations] = useState(0);
 
   const sessionRef = useRef<string | null>(null);
+  const submittingRef = useRef(false);
+  const submissionEpochRef = useRef(0);
   const phaseRef = useRef<NarrativePhase | null>(null);
   const timerRef = useRef<number | null>(null);
   const receivingTimeoutRef = useRef<number | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<number | null>(null);
-  const mountedRef = useRef(true);
+  const recoverRef = useRef<() => void>(() => {});
+  const activeSlotRef = useRef(slot);
+  activeSlotRef.current = slot;
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -71,9 +80,8 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     }
   }, []);
 
-  const startClock = useCallback(() => {
+  const startClock = useCallback((startedAt = Date.now()) => {
     stopClock();
-    const startedAt = Date.now();
     setElapsedMs(0);
     timerRef.current = window.setInterval(() => {
       setElapsedMs(Date.now() - startedAt);
@@ -87,17 +95,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     isLoading: isSlotStateLoading,
   } = useQuery<SlotState, Error>({
     queryKey: ["/api/slot/state", slot],
-    queryFn: () => getSlotState(slot as number),
+    queryFn: ({ signal }) => getSlotState(slot as number, signal),
     enabled: slot !== null,
   });
-
-  // Adopt an in-flight session after a page reload: the slot state carries
-  // the live session id while incubator content is pending.
-  useEffect(() => {
-    if (slotState?.session_id && !sessionRef.current) {
-      sessionRef.current = slotState.session_id;
-    }
-  }, [slotState?.session_id]);
 
   // Refetch slot state + narrative reads. Needed after `complete` (a new
   // pending chunk exists) AND after `error`: submitting from a pending chunk
@@ -113,98 +113,234 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     });
   }, [queryClient, slot]);
 
-  const handleProgress = useCallback(
-    (payload: NarrativeProgressPayload) => {
-      const { session_id: sessionId, status } = payload;
-      if (!sessionId || !status) return;
+  // Preferences need no slot/database read. Retry bootstrap failures even when
+  // the application QueryClient disables retries; lifecycle listeners below
+  // can also cancel and restart a stalled bootstrap request.
+  const { data: recoveryPreferences, error: recoverySettingsError } = useQuery({
+    queryKey: ["/api/preferences", "narrative-recovery"],
+    queryFn: ({ signal }) => getRecoveryPreferences(signal),
+    enabled: slot !== null,
+    retry: true,
+  });
+  const settings =
+    slotState?.narrative_generation ?? recoveryPreferences?.narrative_generation;
+  const settingsRef = useRef<GenerationSettings | undefined>(settings);
+  settingsRef.current = settings;
+  useEffect(() => {
+    recoverRef.current();
+  }, [settings]);
 
-      // Ignore telemetry from sessions other than ours (but adopt the
-      // session if we don't have one - e.g. generation started elsewhere).
-      if (sessionRef.current && sessionRef.current !== sessionId) return;
-      if (!sessionRef.current) sessionRef.current = sessionId;
+  // PostgreSQL owns the lifecycle. Every boundary discovers the server's
+  // attempt; socket payloads only request an earlier durable read.
+  useEffect(() => {
+    sessionRef.current = null;
+    submittingRef.current = false;
+    phaseRef.current = null;
+    setPhase(null);
+    setGenerationError(null);
+    setReceiving(false);
+    stopClock();
+    if (slot === null) return;
+    let cancelled = false;
+    let currentRequest: AbortController | null = null;
+    let interval: number | undefined;
+    let lastTerminal = "";
+    let lastTick = Date.now();
+    let ws: WebSocket | null = null;
+    let reconnect: number | undefined;
 
-      const nextPhase = status as NarrativePhase;
-      setPhase(nextPhase);
-
-      if (nextPhase === "complete") {
-        stopClock();
-        setGenerationError(null);
-        setReceiving(true);
-        if (receivingTimeoutRef.current !== null) {
-          window.clearTimeout(receivingTimeoutRef.current);
-        }
-        receivingTimeoutRef.current = window.setTimeout(() => {
-          if (!mountedRef.current) return;
-          setReceiving(false);
-          setPhase(null);
-        }, RECEIVING_HOLD_MS);
-        sessionRef.current = null;
-        setCompletedGenerations((n) => n + 1);
-        // The new pending chunk lives in slot state + incubator.
-        invalidateNarrativeQueries();
-      } else if (nextPhase === "error") {
-        stopClock();
-        const message =
-          (payload.data?.error as string) || "Narrative generation failed";
-        setGenerationError(message);
-        sessionRef.current = null;
-        // The submitted chunk may already be committed (auto-approval runs
-        // before generation) - resync so the reader doesn't show it as
-        // pending with stale choices.
-        invalidateNarrativeQueries();
-        toast({
-          title: "Generation Failed",
-          description: message,
-          variant: "destructive",
-        });
-      } else {
-        setGenerationError(null);
+    const recover = async (interrupt = false) => {
+      if (cancelled) return;
+      if (interrupt) {
+        currentRequest?.abort();
+        currentRequest = null;
       }
-    },
-    [invalidateNarrativeQueries, stopClock],
-  );
-
-  const handleProgressRef = useRef(handleProgress);
-  useEffect(() => {
-    handleProgressRef.current = handleProgress;
-  }, [handleProgress]);
-
-  // WebSocket lifecycle with auto-reconnect.
-  useEffect(() => {
-    mountedRef.current = true;
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/ws/narrative`;
-
+      const config = settingsRef.current;
+      if (!config) return;
+      if (interval === undefined) {
+        interval = window.setTimeout(tick, config.poll_interval_seconds * 1000);
+      }
+      if (currentRequest) return;
+      const request = new AbortController();
+      currentRequest = request;
+      const epoch = submissionEpochRef.current;
+      const obsolete = () =>
+        cancelled || request.signal.aborted || epoch !== submissionEpochRef.current;
+      // Each read gets its own timeout, including response-body consumption.
+      const read = async <T,>(
+        fetcher: (signal: AbortSignal) => Promise<T>,
+      ): Promise<T> => {
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        request.signal.addEventListener("abort", abort, { once: true });
+        const timeout = window.setTimeout(
+          () => controller.abort(), config.request_timeout_seconds * 1000,
+        );
+        try {
+          return await fetcher(controller.signal);
+        } finally {
+          window.clearTimeout(timeout);
+          request.signal.removeEventListener("abort", abort);
+        }
+      };
+      try {
+        const active = await read((signal) => getActiveGeneration(slot, signal));
+        if (obsolete()) return;
+        // A previous owner may have been superseded. Read that terminal state
+        // before adopting the new owner, then follow the server's current one.
+        if (sessionRef.current && active?.session_id !== sessionRef.current) {
+          await read((signal) => getGenerationStatus(slot, sessionRef.current!, signal));
+          if (obsolete()) return;
+          invalidateNarrativeQueries();
+        }
+        const terminalKey = active
+          ? `${active.session_id}:${active.status}:${active.terminal_outcome}`
+          : "";
+        const state =
+          active && (active.status === "initiated" || terminalKey !== lastTerminal)
+            ? await read((signal) => getGenerationStatus(slot, active.session_id, signal))
+            : active;
+        if (obsolete()) return;
+        setBackendReachable(true);
+        if (!state) {
+          if (lastTerminal) {
+            lastTerminal = "";
+            invalidateNarrativeQueries();
+          }
+          setGenerationError(null);
+          setReceiving(false);
+          sessionRef.current = null;
+          phaseRef.current = null;
+          setPhase(null);
+          stopClock();
+          return;
+        }
+        if (state.slot !== slot) throw new Error("Generation response slot mismatch");
+        if (state.status === "initiated" && !state.terminal_outcome) {
+          if (sessionRef.current !== state.session_id) {
+            startClock(Date.parse(state.created_at));
+          }
+          sessionRef.current = state.session_id;
+          phaseRef.current = state.phase;
+          setPhase(state.phase);
+          setGenerationError(null);
+          setReceiving(false);
+        } else {
+          sessionRef.current = null;
+          phaseRef.current = null;
+          setPhase(null);
+          stopClock();
+          const terminal = `${state.session_id}:${state.status}:${state.terminal_outcome}`;
+          if (terminal !== lastTerminal) {
+            lastTerminal = terminal;
+            invalidateNarrativeQueries();
+            if (state.terminal_outcome === "discarded") {
+              setGenerationError(null);
+              setReceiving(false);
+            } else if (state.terminal_outcome === "error" || state.status === "error") {
+              const message =
+                state.error || state.error_class || "Narrative generation failed";
+              setGenerationError(message);
+              toast({
+                title: "Generation Failed",
+                description: message,
+                variant: "destructive",
+              });
+            } else {
+              setGenerationError(null);
+              setCompletedGenerations((n) => n + 1);
+              setReceiving(true);
+              if (receivingTimeoutRef.current !== null) {
+                window.clearTimeout(receivingTimeoutRef.current);
+              }
+              receivingTimeoutRef.current = window.setTimeout(() => {
+                if (!cancelled) setReceiving(false);
+              }, RECEIVING_HOLD_MS);
+            }
+          }
+        }
+      } catch (error) {
+        if (!obsolete()) {
+          // Connectivity alone drives OFFLINE. A durable generation failure
+          // clears the transient phase and is surfaced independently.
+          setGenerationError(
+            error instanceof Error ? error.message : String(error),
+          );
+          if (
+            error instanceof TypeError ||
+            (error instanceof DOMException && error.name === "AbortError")
+          ) setBackendReachable(false);
+        }
+      } finally {
+        // A cancelled request must never clear its replacement.
+        if (currentRequest === request) {
+          currentRequest = null;
+        }
+      }
+    };
+    const boundary = () => {
+      invalidateNarrativeQueries();
+      if (!settingsRef.current) {
+        const queryKey = ["/api/preferences", "narrative-recovery"];
+        void queryClient.cancelQueries({ queryKey }).then(() => {
+          if (!cancelled) void queryClient.refetchQueries({ queryKey });
+        });
+      }
+      void recover(true);
+    };
+    const tick = () => {
+      interval = undefined;
+      const now = Date.now();
+      const config = settingsRef.current;
+      if (config && now - lastTick > config.wake_gap_threshold_seconds * 1000) boundary();
+      else void recover();
+      lastTick = now;
+    };
+    recoverRef.current = () => { void recover(true); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") boundary();
+    };
     const connect = () => {
-      if (!mountedRef.current) return;
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
+      if (cancelled) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(
+        `${protocol}//${window.location.host}/ws/narrative?slot=${slot}`,
+      );
+      ws.onopen = boundary;
       ws.onmessage = (event) => {
         try {
-          handleProgressRef.current(JSON.parse(event.data));
+          const payload: NarrativeProgressPayload = JSON.parse(event.data);
+          if (payload.slot !== slot || !payload.session_id) return;
+          if (sessionRef.current && payload.session_id !== sessionRef.current) return;
+          void recover();
         } catch (error) {
           console.error("[NarrativeWS] Failed to parse message:", error);
         }
       };
       ws.onclose = () => {
-        wsRef.current = null;
-        if (mountedRef.current) {
-          reconnectRef.current = window.setTimeout(connect, WS_RECONNECT_MS);
-        }
+        if (!cancelled) reconnect = window.setTimeout(connect, WS_RECONNECT_MS);
       };
     };
-
+    boundary();
     connect();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      mountedRef.current = false;
-      if (reconnectRef.current !== null) window.clearTimeout(reconnectRef.current);
+      cancelled = true;
+      recoverRef.current = () => {};
+      currentRequest?.abort();
+      window.clearTimeout(interval);
+      window.clearTimeout(reconnect);
       if (receivingTimeoutRef.current !== null) {
         window.clearTimeout(receivingTimeoutRef.current);
       }
+      document.removeEventListener("visibilitychange", onVisible);
       stopClock();
-      wsRef.current?.close();
+      ws?.close();
     };
-  }, [stopClock]);
+  }, [
+    slot, queryClient,
+    invalidateNarrativeQueries, startClock, stopClock,
+  ]);
 
   // Backend connectivity probe - drives the OFFLINE status.
   useEffect(() => {
@@ -228,7 +364,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
   const submitTurn = useCallback(
     async (params: { choice?: number; userText?: string }) => {
       if (slot === null) throw new Error("No active slot");
-      if (isActivePhase(phaseRef.current)) {
+      if (submittingRef.current || isActivePhase(phaseRef.current)) {
         toast({
           title: "Generation Active",
           description: "Wait for the current turn to finish.",
@@ -236,7 +372,10 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         return;
       }
 
-      setPhase("initiated");
+      submissionEpochRef.current += 1;
+      submittingRef.current = true;
+      phaseRef.current = "retrieval";
+      setPhase("retrieval");
       setGenerationError(null);
       sessionRef.current = null;
       startClock();
@@ -252,13 +391,20 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
             ? slotState.session_id ?? undefined
             : undefined,
         });
+        if (activeSlotRef.current !== slot) return;
         sessionRef.current = result.session_id;
+        submittingRef.current = false;
+        recoverRef.current();
         // Continue accepts the previous draft before starting generation.
         // Refresh its frontier clock now, without waiting for the next draft.
         invalidateNarrativeQueries();
       } catch (error) {
+        if (activeSlotRef.current !== slot) return;
+        submittingRef.current = false;
         stopClock();
-        setPhase("error");
+        phaseRef.current = null;
+        setPhase(null);
+        recoverRef.current();
         const message =
           error instanceof Error ? error.message : "Failed to start turn";
         setGenerationError(message);
@@ -280,12 +426,13 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     skaldStatus = "OFFLINE";
   } else if (receiving) {
     skaldStatus = "RECEIVING";
-  } else if (phase === "calling_llm" || phase === "processing_response") {
+  } else if (
+    phase === "writer" || phase === "gaia" || phase === "staging"
+  ) {
     skaldStatus = "GENERATING";
   } else if (isActivePhase(phase)) {
     skaldStatus = "TRANSMITTING";
-  } else if (phase === "error") {
-    skaldStatus = "OFFLINE";
+
   }
 
   return {
@@ -295,7 +442,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     phase,
     skaldStatus,
     elapsedMs,
-    generationError,
+    generationError: generationError ?? recoverySettingsError?.message ?? null,
     isGenerating: isActivePhase(phase),
     completedGenerations,
     submitTurn,

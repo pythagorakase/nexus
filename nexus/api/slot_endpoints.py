@@ -25,6 +25,7 @@ from nexus.api.narrative_schemas import (
     TraitMenuItemResponse,
 )
 from nexus.api.slot_mutations import require_writable_slot
+from nexus.api.narrative_lease import discard_generation
 from nexus.api.slot_utils import slot_dbname
 
 logger = logging.getLogger("nexus.api.slot_endpoints")
@@ -226,6 +227,8 @@ async def slot_undo_endpoint(slot: int):
                             "DELETE FROM incubator WHERE session_id = %s",
                             (narrative.session_id,),
                         )
+
+                        discard_generation(cur, narrative.session_id)
 
                         # Reset the parent chunk's choice fields within the
                         # same cursor/transaction. Skipped for bootstrap

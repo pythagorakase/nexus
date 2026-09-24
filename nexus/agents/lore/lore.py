@@ -44,6 +44,7 @@ from uuid import UUID
 # Import NEXUS configuration loader
 from nexus.config import load_settings_as_dict
 from nexus.config.loader import RUNTIME_CONFIG_ENV
+from nexus.telemetry.generation import report_generation_phase
 from nexus.telemetry.usage import usage_context
 
 # Support legacy top-level ``utils`` imports when the module is run directly.
@@ -431,6 +432,7 @@ class LORE:
                     )
                 self.memory_manager.restore_pass2_baseline(parent_chunk_id)
 
+            report_generation_phase("retrieval")
             # Phase 1: User Input Processing
             self.current_phase = TurnPhase.USER_INPUT
             await self.turn_manager.process_user_input(self.turn_context)
@@ -455,6 +457,7 @@ class LORE:
             # eventually, the user) — independent of Orrery enablement.
             await self.turn_manager.stamp_intertitle(self.turn_context)
 
+            report_generation_phase("assembly")
             # Phase 5: Payload Assembly
             self.current_phase = TurnPhase.PAYLOAD_ASSEMBLY
             await self.turn_manager.assemble_context_payload(self.turn_context)

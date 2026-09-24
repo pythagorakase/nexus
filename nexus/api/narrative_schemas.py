@@ -19,6 +19,8 @@ from pydantic import (
 
 # Re-export ChoiceSelection from shared module for backward compatibility
 from nexus.api.choice_handling import ChoiceSelection
+from nexus.config import load_settings
+from nexus.config.settings_models import APINarrativeGenerationSettings
 
 
 # =============================================================================
@@ -131,7 +133,14 @@ class NarrativeStatus(BaseModel):
     """Status of a narrative generation session"""
 
     session_id: str
-    status: str  # provisional, approved, committed, error
+    status: str
+    slot: int
+    phase: str
+    terminal_outcome: Optional[str]
+    replaced_by_session_id: Optional[str]
+    error_class: Optional[str]
+    heartbeat_at: datetime
+    expires_at: Optional[datetime] = None
     chunk_id: Optional[int]
     parent_chunk_id: Optional[int]
     created_at: Optional[datetime]
@@ -242,6 +251,9 @@ class FrontierClock(BaseModel):
 class SlotStateResponse(BaseModel):
     """Response model for slot state endpoint."""
 
+    narrative_generation: APINarrativeGenerationSettings = Field(
+        default_factory=lambda: load_settings().api.narrative_generation
+    )
     slot: int = Field(ge=1, le=5)
     is_empty: bool
     is_wizard_mode: bool
