@@ -1,0 +1,52 @@
+[
+  {
+    "transport": "responses",
+    "provider_calls": 1,
+    "validation_notes": [
+      {
+        "rejection": "wire-contract-violation",
+        "error": "Unresolved place state update name 'Loading Arcade'; new places must be declared through new_entities in the same turn."
+      }
+    ]
+  },
+  {
+    "transport": "chat_completions",
+    "provider_calls": 1,
+    "validation_notes": [
+      {
+        "rejection": "wire-contract-violation",
+        "error": "Unresolved place state update name 'Loading Arcade'; new places must be declared through new_entities in the same turn."
+      }
+    ]
+  },
+  {
+    "transport": "native",
+    "provider_calls": 1,
+    "validation_notes": [
+      {
+        "rejection": "wire-contract-violation",
+        "error": "Unresolved place state update name 'Loading Arcade'; new places must be declared through new_entities in the same turn."
+      }
+    ]
+  },
+  {
+    "transport": "prompted",
+    "provider_calls": 1,
+    "validation_notes": [
+      {
+        "rejection": "wire-contract-violation",
+        "error": "Unresolved place state update name 'Loading Arcade'; new places must be declared through new_entities in the same turn."
+      }
+    ]
+  },
+  {
+    "transport": "tool_envelope",
+    "provider_calls": 1,
+    "validation_notes": [
+      {
+        "rejection": "wire-contract-violation",
+        "error": "Unresolved place state update name 'Loading Arcade'; new places must be declared through new_entities in the same turn."
+      }
+    ]
+  }
+]

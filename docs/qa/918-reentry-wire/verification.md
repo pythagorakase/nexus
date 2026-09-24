@@ -68,7 +68,8 @@ FROM tags WHERE tag = 'forewarned';
 
 Alias-table coverage creates that optional relation only inside a disposable
 fixture database, with comments on its table and columns. There is no production
-migration. Existing row locks are retained during place identity resolution.
+migration. Staging explicitly requests shared row locks; validation lookups do not
+lock place rows (corrected in the review revision below).
 
 ## Commands and Verbatim Tails
 
@@ -184,6 +185,132 @@ roster module, optional delegates remain supported, existing test contracts were
 updated, and the old fake place-tag retry case was replaced by a real PostgreSQL
 case. The ledger test explicitly clears inherited `NEXUS_SLOT` for its slotless
 TEST route. These development failures are not represented as passing gates.
+
+## PR #926 Review Revision
+
+The third coordinator amendment is implemented in fix commit `2d8832d9`.
+`origin/main` was fetched and merged without conflicts in `0a176094`; the final
+gates below run on that merged tree. Import provenance was rechecked and still
+points inside this worktree.
+
+- **Terminal rejection:** `WireContractViolation` is distinct from retryable
+  validation failures. Both OpenAI transports and all three Anthropic transports
+  propagate it immediately and classify the response as rejected validation.
+  The attempt guard retains a `wire-contract-violation` note with the original
+  place/new-entity error on the prompt-window ledger row.
+- **Identity conflicts:** place updates with supplied IDs keep their supplied
+  names. Name-only updates still resolve canonical names and aliases. The real
+  extend-expiry boundary now sees and rejects mismatched place IDs/names with
+  `reason=id-name-conflict`; the name-only counterpart succeeds.
+- **Row locks:** `resolve_place_update(..., lock=False)` is the shared default;
+  the staging caller explicitly passes `lock=True`. A second connection holds
+  the place row with `SELECT ... FOR UPDATE` and an uncommitted `UPDATE` while
+  the real Gaia validator finishes. Staging on that locked row still encounters
+  `LockNotAvailable` with a bounded test-only `lock_timeout`.
+
+The five transport proofs serve the same minimal unknown-place fixture over
+loopback HTTP, using the real provider SDKs, parsers, PostgreSQL validator,
+prompt-window guard, and file ledger. Each has `structured_output_retries=3`,
+exactly **one initial provider request and zero further requests**, one attempt
+record, and the terminal rejection note. No SDK/client/parser/validator is
+mocked; no paid inference endpoint is contacted. The model is `TEST`; its real
+local tokenizer accounts for the request. Loopback fixture servers use ephemeral
+ports and shut down in teardown; no gateway was started.
+
+Review regression tests:
+
+- `tests/test_api/test_reentry_wire_pg.py::test_place_contract_violation_never_retries_provider`
+- `tests/test_api/test_reentry_wire_pg.py::test_place_validation_does_not_lock_staging_does`
+- `tests/test_orrery_tag_validation_pg.py::test_place_resolution_preserves_supplied_identity_conflicts`
+
+The first development run reported `3 failed, 47 passed, 7 warnings in 24.88s`:
+the lock proof passed a wire delta where staging requires hydrated state updates,
+and the name-only proof assumed a tag-only no-op update would be retained. The
+fixtures now hydrate through the real adapter and include a substantive place
+condition. The corrected pre-merge focused run reported:
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api/test_reentry_wire_pg.py tests/test_orrery_tag_validation_pg.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+50 passed, 7 warnings in 25.55s
+```
+
+### Post-Merge Gates
+
+Merged main revision: `607c393c4d2dab121d99c1b4ef9680fc547f0187`.
+The following results supersede the earlier pre-review gate totals.
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m pytest -q
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2658 passed, 844 skipped, 9 warnings in 98.44s (0:01:38)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_skald_wire.py tests/test_api -k 'wire or presence or staging or tag or place'
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_api/test_orrery_dev_endpoints.py::test_what_if_pair_tag_injection_kills_a_winner
+1 failed, 145 passed, 2 skipped, 348 deselected, 9 warnings in 43.35s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_api/test_reentry_wire_pg.py tests/test_orrery_tag_validation_pg.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+50 passed, 7 warnings in 23.77s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+The only PostgreSQL failure remains the explicitly exempt #885 test named above.
+The two skips remain the empty-slot presence read and the paid writer opt-in;
+all new disposable-database tests actually ran. The offline gate intentionally
+skips PostgreSQL and live-provider cases.
+
+`review-rejection-records.json` preserves the five transport results and their
+actual ledger notes from the post-merge run. All 20 fixture database names found
+in that run's log were checked after teardown:
+
+```sql
+SELECT datname FROM pg_database WHERE datname = ANY(%s);
+```
+
+The parameter was the complete list of `qa640_acceptance_*` and `qa649_*` names
+from the fixture log; the result was `[]` (zero remaining databases).
+
+Production evidence: `nexus/api/native_structured_output.py:35` defines the
+terminal exception; `scripts/api_openai.py:615` and `:745`, and
+`scripts/api_anthropic.py:752`, `:846`, and `:934` propagate it.
+`nexus/telemetry/usage.py:43` persists terminal rejection notes.
+`nexus/agents/logon/orrery_tag_validation.py:1279` preserves supplied identity
+pairs. `nexus/presence/roster.py:446` defaults to no lock and
+`nexus/api/commit_handler_sync.py:227` explicitly requests the staging lock.
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/api/native_structured_output.py nexus/presence/roster.py nexus/api/commit_handler_sync.py nexus/agents/logon/orrery_tag_validation.py nexus/telemetry/usage.py scripts/api_openai.py scripts/api_anthropic.py tests/test_api/test_reentry_wire_pg.py tests/test_orrery_tag_validation_pg.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+9 files would be left unchanged.
+```
+
+`git diff --check` passed. Both pre-commit hooks passed for the fix commit.
+The review revision adds no tunable, schema migration, or prompt change; the
+merged main carries its own unrelated configuration and maintenance changes.
+No implementation question remains. The coordinator retains the two proposed
+Gaia prompt sentences below and the eventual merge/landing decision.
 
 ## Coordinator Follow-Up
 
