@@ -16,10 +16,10 @@
 # Config load refuses any consumer section that configures one of them.
 [global.model.api_models.openai]
 models = [
-    { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"] },
-    { id = "gpt-6-astra", label = "GPT-6-Astra", unsupported_params = ["temperature", "top_p"], uses = ["apex.model", "wizard.default_model"]},
-    { id = "gpt-5.6-sol", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"], uses = ["orrery.experiences.model", "storyteller.correspondence.compaction_model"] },
-    { id = "gpt-5.6-terra", label = "GPT-5.6-Terra", unsupported_params = ["temperature", "top_p"], uses = ["global.model.default_model", "ir_eval.judgment.model", "orrery.retrograde.maturation.model_ref"] },
+    { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"], tokenizer_encoding = "o200k_base", context_window = 200000, max_output_tokens = 100000, reasoning_accounting = "inside_output" }, # https://developers.openai.com/api/docs/models/o3 (retrieved 2026-09-23). No separate input maximum documented; derive input from total minus the seat output allowance.
+    { id = "gpt-6-astra", label = "GPT-6-Astra", unsupported_params = ["temperature", "top_p"], uses = ["apex.model", "wizard.default_model"], tokenizer_encoding = "o200k_base", context_window = 1050000, max_output_tokens = 128000, reasoning_accounting = "inside_output" }, # https://developers.openai.com/api/docs/models/gpt-6-astra (retrieved 2026-09-23). Provider documents total and output maximum only; 922000 was inferred, not an input limit. Derive input from total minus seat output.
+    { id = "gpt-5.6-sol", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"], uses = ["orrery.experiences.model", "storyteller.correspondence.compaction_model"], tokenizer_encoding = "o200k_base", context_window = 1050000, max_output_tokens = 128000, reasoning_accounting = "inside_output" }, # https://developers.openai.com/api/docs/models/gpt-5.6-sol (retrieved 2026-09-23). Provider documents total and output maximum only; 922000 was inferred, not an input limit. Derive input from total minus seat output.
+    { id = "gpt-5.6-terra", label = "GPT-5.6-Terra", unsupported_params = ["temperature", "top_p"], uses = ["global.model.default_model", "ir_eval.judgment.model", "orrery.retrograde.maturation.model_ref"], tokenizer_encoding = "o200k_base", context_window = 1050000, max_output_tokens = 128000, reasoning_accounting = "inside_output" }, # https://developers.openai.com/api/docs/models/gpt-5.6-terra (retrieved 2026-09-23). Provider documents total and output maximum only; 922000 was inferred, not an input limit. Derive input from total minus seat output.
 ]
 
 [global.model.api_models.anthropic]
@@ -28,10 +28,10 @@ models = [
 # 4/4 wizard phases on opus-4-8, plus a fable-5 setting-phase probe); the
 # schema strip set it relies on was proven on the legacy path in PR #410.
 models = [
-    { id = "claude-sonnet-5-0", label = "Sonnet 5.0", native_structured_output = true, uses = ["wizard.fallback_model"] },
-    { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
-    { id = "claude-opus-5", label = "Opus 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
-    { id = "claude-fable-5-1", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
+    { id = "claude-sonnet-5", label = "Sonnet 5.0", native_structured_output = true, uses = ["wizard.fallback_model"], tokenizer_encoding = "o200k_base", context_window = 1000000, max_output_tokens = 128000, token_count_safety_margin = 4096, reasoning_accounting = "inside_output" }, # https://platform.claude.com/docs/en/models/overview (retrieved 2026-09-23). No separate input maximum documented; derive input from total minus the seat output allowance. o200k_base is the local trimming approximation; 4096-token safety margin is policy, verified by the single remote guard.
+    { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true, tokenizer_encoding = "o200k_base", context_window = 1000000, max_output_tokens = 128000, token_count_safety_margin = 4096, reasoning_accounting = "inside_output" }, # https://platform.claude.com/docs/en/models/opus-4-8/overview (retrieved 2026-09-23). No separate input maximum documented; derive input from total minus the seat output allowance. o200k_base is the local trimming approximation; 4096-token safety margin is policy, verified by the single remote guard.
+    { id = "claude-opus-5", label = "Opus 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true, tokenizer_encoding = "o200k_base", context_window = 1000000, max_output_tokens = 128000, token_count_safety_margin = 4096, reasoning_accounting = "inside_output" }, # https://platform.claude.com/docs/en/models/opus-5/overview (retrieved 2026-09-23). No separate input maximum documented; derive input from total minus the seat output allowance. o200k_base is the local trimming approximation; 4096-token safety margin is policy, verified by the single remote guard.
+    { id = "claude-fable-5-1", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true, tokenizer_encoding = "o200k_base", context_window = 1000000, max_output_tokens = 128000, token_count_safety_margin = 4096, reasoning_accounting = "inside_output" }, # https://platform.claude.com/docs/en/models/fable-5-1/overview (retrieved 2026-09-23). No separate input maximum documented; derive input from total minus the seat output allowance. o200k_base is the local trimming approximation; 4096-token safety margin is policy, verified by the single remote guard.
 ]
 
 # Non-native providers are OpenAI-compatible servers: `base_url` is where the
@@ -43,7 +43,7 @@ models = [
 ui_visible = false  # Backend/CLI-only mock server; hidden from UI model pickers
 base_url = "http://127.0.0.1:5102/v1"
 models = [
-    { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)", uses = ["global.model.default_slot_model"] },
+    { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)", uses = ["global.model.default_slot_model"], tokenizer_encoding = "o200k_base", context_window = 1000000, max_input_tokens = 872000, max_output_tokens = 128000, reasoning_accounting = "none" }, # https://github.com/pythagorakase/nexus/blob/main/nexus/api/mock_openai.py (retrieved 2026-09-23). No provider limits; explicit synthetic test contract, not a hardware claim.
 ]
 
 # Headless `llama-server` (llama.cpp) serves this local model over a GGUF quant.
@@ -56,8 +56,8 @@ base_url = "http://127.0.0.1:1234/v1"
 structured_transport = "chat_completions"
 request_timeout_seconds = 1800
 models = [
-    { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)", uses = ["local_models.model"] },
-    { id = "nousresearch/hermes-4.3-36b", label = "Hermes 4.3 36B (Local)", description = "Local llama-server inference (GGUF, Seed-OSS)" },
+    { id = "nousresearch/hermes-4-70b", tokenizer_repository = "NousResearch/Hermes-4-70B", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)", uses = ["local_models.model"], context_window = 131072, max_output_tokens = 65536, reasoning_accounting = "inside_output" }, # https://huggingface.co/NousResearch/Hermes-4-70B/raw/main/config.json (retrieved 2026-09-23). Only total documented; output maximum is a conservative architectural half-window; input derives from the configured serving total minus seat output.
+    { id = "nousresearch/hermes-4.3-36b", tokenizer_repository = "NousResearch/Hermes-4.3-36B", label = "Hermes 4.3 36B (Local)", description = "Local llama-server inference (GGUF, Seed-OSS)", context_window = 524288, max_output_tokens = 262144, reasoning_accounting = "inside_output" }, # https://huggingface.co/NousResearch/Hermes-4.3-36B/raw/main/config.json (retrieved 2026-09-23). Only total documented; output maximum is a conservative architectural half-window; input derives from the configured serving total minus seat output.
 ]
 
 # OpenRouter: one OpenAI-compatible funnel for the prose-model casting roster
@@ -74,12 +74,12 @@ api_key_secret = "openrouter"
 structured_transport = "chat_completions"
 request_timeout_seconds = 600
 models = [
-    { id = "moonshotai/kimi-k2.5", label = "Kimi K2.5", description = "Moonshot K2.5 via OpenRouter" },
-    { id = "moonshotai/kimi-k3", label = "Kimi K3", description = "Moonshot K3 via OpenRouter", request_params = { reasoning = { effort = "low" } } },
-    { id = "deepseek/deepseek-v4-pro", label = "DeepSeek V4 Pro", description = "DeepSeek V4 Pro via OpenRouter" },
-    { id = "nousresearch/hermes-4-405b", label = "Hermes 4 405B", description = "Nous Hermes 4 405B via OpenRouter" },
-    { id = "minimax/minimax-m3", label = "MiniMax M3", description = "MiniMax M3 via OpenRouter" },
-    { id = "z-ai/glm-5", label = "GLM-5", description = "Zhipu GLM-5 via OpenRouter" },
+    { id = "moonshotai/kimi-k2.5", tokenizer_repository = "moonshotai/Kimi-K2.5", label = "Kimi K2.5", description = "Moonshot K2.5 via OpenRouter", context_window = 262144, max_output_tokens = 235929, reasoning_accounting = "inside_output" }, # https://openrouter.ai/api/v1/models (retrieved 2026-09-23). Top-provider total and completion maximum; no separate input maximum documented. Input derives from total minus seat output; reasoning shares generated tokens.
+    { id = "moonshotai/kimi-k3", tokenizer_repository = "moonshotai/Kimi-K3", label = "Kimi K3", description = "Moonshot K3 via OpenRouter", request_params = { reasoning = { effort = "low" } }, context_window = 1048576, max_output_tokens = 943718, reasoning_accounting = "inside_output" }, # https://openrouter.ai/api/v1/models (retrieved 2026-09-23). Top-provider total and completion maximum; no separate input maximum documented. Input derives from total minus seat output; reasoning shares generated tokens.
+    { id = "deepseek/deepseek-v4-pro", tokenizer_repository = "deepseek-ai/DeepSeek-V4-Pro", label = "DeepSeek V4 Pro", description = "DeepSeek V4 Pro via OpenRouter", context_window = 1024000, max_output_tokens = 384000, reasoning_accounting = "inside_output" }, # https://openrouter.ai/api/v1/models (retrieved 2026-09-23). Top-provider total and completion maximum; no separate input maximum documented. Input derives from total minus seat output; reasoning shares generated tokens.
+    { id = "nousresearch/hermes-4-405b", tokenizer_repository = "NousResearch/Hermes-4-405B", label = "Hermes 4 405B", description = "Nous Hermes 4 405B via OpenRouter", context_window = 131072, max_output_tokens = 117964, reasoning_accounting = "inside_output" }, # https://openrouter.ai/api/v1/models (retrieved 2026-09-23). Top-provider total and completion maximum; no separate input maximum documented. Input derives from total minus seat output; reasoning shares generated tokens.
+    { id = "minimax/minimax-m3", tokenizer_repository = "MiniMaxAI/Minimax-M3", label = "MiniMax M3", description = "MiniMax M3 via OpenRouter", context_window = 524288, max_output_tokens = 512000, reasoning_accounting = "inside_output" }, # https://openrouter.ai/api/v1/models (retrieved 2026-09-23). Top-provider total and completion maximum; no separate input maximum documented. Input derives from total minus seat output; reasoning shares generated tokens.
+    { id = "z-ai/glm-5", tokenizer_repository = "zai-org/GLM-5", label = "GLM-5", description = "Zhipu GLM-5 via OpenRouter", context_window = 198000, max_output_tokens = 128000, reasoning_accounting = "inside_output" }, # https://openrouter.ai/api/v1/models (retrieved 2026-09-23). Top-provider total and completion maximum; no separate input maximum documented. Input derives from total minus seat output; reasoning shares generated tokens.
 ]
 
 # Interactive local GGUF management. The endpoint is configured in
@@ -229,10 +229,10 @@ max_deep_queries = 5
 
 [lore.token_budget]
 # Context window limits for APEX generation
-apex_context_window = 75_000  # Total tokens available for APEX (includes prompt + context)
-system_prompt_tokens = 5000  # Reserved tokens for system prompt
-# Reserve for LOGON's tag library and formatting after Phase 5; live chunk
-# 1369 measured +2,999 tokens. Keep headroom above that observed overhead.
+apex_context_window = 75_000  # Owner default input spend; model ceiling and seat headroom apply
+system_prompt_tokens = 5000  # Legacy allocation hint; enforcement counts the rendered system prompt
+# Legacy fingerprinted allocation hint; retained for existing stamped baselines.
+# Exact rendered enforcement uses apex.response_reserve_tokens instead.
 prompt_overhead_tokens = 4_000
 
 [lore.token_budget.provider_overrides]
@@ -1156,7 +1156,9 @@ max_rendered_tokens = 16000
 
 [apex]
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
-max_output_tokens = 25000     # Maximum tokens for generated narrative
+max_output_tokens = 25000     # Output allowance, including inside-output reasoning
+reasoning_reserve_tokens = 21000 # Inside output when the model declares inside_output
+response_reserve_tokens = 4000 # Input headroom for response framing and retries
 anthropic_storyteller_transport = "prompted" # "prompted", "native", or "tool_envelope"
 turn_pipeline = "two_pass" # "single_pass" or "two_pass"; two_pass default per #578 casting ruling (owner, 2026-07-26)
 # Gaia — the turn's second movement (#578 rung 2, renamed from "clerk"):
@@ -1173,6 +1175,11 @@ structured_output_retries = 3 # Validation retry budget for structured story tur
 # including local 70B-class turns, which can run several minutes per the
 # [runtime.services.llama_server] notes.
 generation_timeout_seconds = 1200
+
+[apex.gaia]
+max_output_tokens = 25000
+reasoning_reserve_tokens = 21000
+response_reserve_tokens = 4000
 
 [apex.tag_library]
 # Measurement-stage A/B lever: false restores the complete described library.
@@ -1306,10 +1313,9 @@ command = [
     # so it matches [global.model.api_models.local].models[].id.
     "--alias", "nousresearch/hermes-4-70b",
     "--host", "{host}", "--port", "{port}",
-    # Context must hold the full storyteller prompt (lore.token_budget
-    # apex_context_window = 75k ceiling; measured 36.8k at slot-5 depth ~75)
-    # PLUS generation headroom — 32768 rejected real turns with
-    # exceed_context_size_error. 98304 = 75k prompt ceiling + >20k output.
+    # Runtime context holds input plus output. The local input profile is
+    # lore.token_budget.provider_overrides.local; seat headroom and output
+    # allowance are declared under apex. Both fit this deployed 98,304 total.
     # --parallel 1: NEXUS turns are strictly sequential, and the server
     # build defaults to 4 slots, each provisioning the full ctx — 4x98304
     # of KV (~120GB) spilled off-Metal and prefill collapsed to ~30 tok/s

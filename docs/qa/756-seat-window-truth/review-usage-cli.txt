@@ -1,0 +1,48 @@
+OpenAI API-reported tokens (UTC day 2026-09-23): 0
+openai allowance: 0 / 10,000,000 (remaining 10,000,000; unknown events 0)
+
+Providers:
+  (none)
+
+Seats:
+  (none)
+
+skald_writer attempt 1: 38314 / 71000 (headroom 32686)
+  BLOCK                                TOKENS
+  system                               4580
+  intertitle                           50
+  scene conditions                     17
+  private storyteller correspondence   5667
+  recent narrative                     15431
+  scene roster                         22
+  user input                           24
+  entity dossier                       1795
+  historical context                   4583
+  world knowledge                      252
+  orrery tag library                   3702
+  recent orrery rulings                210
+  orrery imminent activity             431
+  orrery scene pressure                229
+  orrery joint beats                   191
+  instructions                         30
+  request framing                      1100
+
+gaia attempt 1: 64900 / 66868 (headroom 1968)
+  BLOCK                                TOKENS
+  system                               1900
+  intertitle                           50
+  scene conditions                     17
+  private storyteller correspondence   5667
+  recent narrative                     15431
+  user input                           24
+  entity dossier                       1795
+  historical context                   4583
+  world knowledge                      252
+  orrery tag library                   3702
+  recent orrery rulings                210
+  orrery imminent activity             431
+  orrery scene pressure                229
+  orrery joint beats                   191
+  instructions                         30
+  finished writer output               25071
+  request framing                      5317

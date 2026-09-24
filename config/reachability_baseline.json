@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Issue 800 adds gateway-owned scheduler and durable correspondence compaction modules.",
+  "reason": "Register shared seat-window accounting, the gateway scheduler, and durable correspondence compaction as production-reachable modules.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -233,7 +233,9 @@
     "nexus/cli.py",
     "nexus/config/__init__.py",
     "nexus/config/loader.py",
+    "nexus/config/local_window.py",
     "nexus/config/preferences.py",
+    "nexus/config/seat_window.py",
     "nexus/config/settings_models.py",
     "nexus/config/story_model.py",
     "nexus/database.py",
@@ -259,6 +261,7 @@
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
+    "nexus/telemetry/prompt_window.py",
     "nexus/telemetry/usage.py",
     "nexus/util/__init__.py",
     "nexus/util/clock_face.py",

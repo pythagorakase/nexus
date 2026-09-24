@@ -72,33 +72,12 @@ class TokenBudgetManager:
                 )
             apex_model = configured_model
 
-        using_reasoning_model = (
-            apex_model.startswith("o")
-            or "gpt-5" in apex_model  # pin: family-prefix feature detection
-        )
+        from nexus.config.seat_window import resolve_seat_window
 
-        # Reserve tokens for reasoning if needed (up to 30k for high-effort reasoning)
-        reasoning_reserve = 30000 if using_reasoning_model else 0
-        response_reserve = 4000
-
-        # Calculate available context
-        available_context = (
-            apex_window
-            - system_prompt
-            - user_input_tokens
-            - reasoning_reserve
-            - response_reserve
+        window = resolve_seat_window(
+            self.settings, apex_model, seat="skald_writer", window=apex_window
         )
-        if available_context < 1000:
-            raise ValueError(
-                "Storyteller payload budget must leave at least 1000 context "
-                "tokens: "
-                f"window={apex_window} - system_prompt={system_prompt} - "
-                f"user_input={user_input_tokens} - "
-                f"reasoning_reserve={reasoning_reserve} - "
-                f"response_reserve={response_reserve} = "
-                f"available_context={available_context}; model={apex_model}"
-            )
+        available_context = window.input_ceiling
 
         # Calculate component allocations using minimum percentages initially
         warm_slice_min = self.allocation_config.get("warm_slice", {}).get("min", 40)
@@ -120,126 +99,15 @@ class TokenBudgetManager:
             "warm_slice": warm_slice_tokens,
             "structured": structured_tokens,
             "augmentation": augmentation_tokens,
-            "reasoning_reserve": reasoning_reserve,
-            "response_reserve": response_reserve,
-            "using_reasoning_model": using_reasoning_model,
+            "reasoning_reserve": 0,
+            "response_reserve": window.policy_headroom,
+            "effective_input_ceiling": window.input_ceiling,
             "apex_window": apex_window,
             "system_prompt": system_prompt,
         }
 
         logger.debug(f"Token budget calculated: {budget}")
         return budget
-
-    def calculate_utilization(self, token_counts: Dict[str, int]) -> float:
-        """
-        Calculate the utilization percentage of the token budget.
-
-        Args:
-            token_counts: Dictionary with actual token usage
-
-        Returns:
-            Utilization percentage (0-100)
-        """
-        total_used = sum(
-            [
-                token_counts.get("user_input", 0),
-                token_counts.get("warm_slice", 0),
-                token_counts.get("structured", 0),
-                token_counts.get("augmentation", 0),
-            ]
-        )
-
-        total_available = token_counts.get("total_available", 1)
-        utilization = (total_used / total_available) * 100 if total_available > 0 else 0
-
-        return utilization
-
-    def optimize_allocation(
-        self, current_counts: Dict[str, int], available_content: Dict[str, int]
-    ) -> Dict[str, int]:
-        """
-        Optimize token allocation to reach target utilization.
-
-        Args:
-            current_counts: Current token usage
-            available_content: Available content that could be added
-
-        Returns:
-            Optimized token allocation
-        """
-        current_utilization = self.calculate_utilization(current_counts)
-        target_utilization = self.token_budget_config.get("utilization", {}).get(
-            "target", 95
-        )
-
-        if current_utilization >= target_utilization:
-            return current_counts
-
-        # Calculate remaining tokens
-        total_available = current_counts.get("total_available", 0)
-        current_used = sum(
-            [
-                current_counts.get("user_input", 0),
-                current_counts.get("warm_slice", 0),
-                current_counts.get("structured", 0),
-                current_counts.get("augmentation", 0),
-            ]
-        )
-
-        target_additional = int(
-            (target_utilization / 100) * total_available - current_used
-        )
-
-        # Get max allocation percentages
-        warm_slice_max = self.allocation_config.get("warm_slice", {}).get("max", 70)
-        structured_max = self.allocation_config.get("structured_summaries", {}).get(
-            "max", 25
-        )
-        augmentation_max = self.allocation_config.get(
-            "contextual_augmentation", {}
-        ).get("max", 40)
-
-        # Calculate max tokens for each component
-        max_warm = int(total_available * warm_slice_max / 100)
-        max_structured = int(total_available * structured_max / 100)
-        max_augmentation = int(total_available * augmentation_max / 100)
-
-        # Distribute remaining tokens proportionally
-        optimized = current_counts.copy()
-
-        # Priority order: warm slice, augmentation, structured
-        if available_content.get("warm_slice", 0) > 0:
-            additional_warm = min(
-                target_additional // 2,
-                max_warm - current_counts.get("warm_slice", 0),
-                available_content.get("warm_slice", 0),
-            )
-            optimized["warm_slice"] += additional_warm
-            target_additional -= additional_warm
-
-        if available_content.get("augmentation", 0) > 0 and target_additional > 0:
-            additional_aug = min(
-                target_additional,
-                max_augmentation - current_counts.get("augmentation", 0),
-                available_content.get("augmentation", 0),
-            )
-            optimized["augmentation"] += additional_aug
-            target_additional -= additional_aug
-
-        if available_content.get("structured", 0) > 0 and target_additional > 0:
-            additional_struct = min(
-                target_additional,
-                max_structured - current_counts.get("structured", 0),
-                available_content.get("structured", 0),
-            )
-            optimized["structured"] += additional_struct
-
-        logger.debug(
-            "Optimized allocation from %.1f%% to %.1f%%",
-            current_utilization,
-            self.calculate_utilization(optimized),
-        )
-        return optimized
 
     def calculate_token_budget(
         self, tpm: int, system_tokens: int, user_tokens: int

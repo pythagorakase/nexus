@@ -711,6 +711,18 @@ class AnthropicProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    anthropic_request=self._build_native_structured_request_params(
+                        active_prompt,
+                        schema_model,
+                        output_config=output_config,
+                        output_format=output_format,
+                    ),
+                )
             try:
                 from nexus.jobs.gate import before_provider_call
 
@@ -787,6 +799,15 @@ class AnthropicProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    anthropic_request=self._build_tool_envelope_structured_request_params(
+                        active_prompt, schema_model, input_schema=input_schema
+                    ),
+                )
             try:
                 from nexus.jobs.gate import before_provider_call
 
@@ -864,6 +885,15 @@ class AnthropicProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    anthropic_request=self._build_prompted_structured_request_params(
+                        active_prompt
+                    ),
+                )
             try:
                 from nexus.jobs.gate import before_provider_call
 

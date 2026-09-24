@@ -339,7 +339,7 @@ async def _assemble_background_payload(
     )
     context.orrery_proposal = proposal
     context.ambient_pacing_allowed = pacing_allowed
-    context.token_counts = {"total_available": 75_000}
+    context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
     await manager.assemble_context_payload(context)
     return context
 

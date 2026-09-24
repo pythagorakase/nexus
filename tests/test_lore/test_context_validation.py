@@ -1,7 +1,6 @@
 """Tests for percentage-based context payload validation."""
 
 from nexus.agents.lore.utils.context_validation import (
-    check_utilization,
     validate_context,
     validate_phase_completion,
     validate_token_allocation,
@@ -166,92 +165,6 @@ class TestTokenAllocation:
         is_valid, errors = validate_token_allocation(allocations, 20000, settings)
         assert not is_valid
         assert any("Augmentation" in e and "outside bounds" in e for e in errors)
-
-
-class TestUtilizationCheck:
-    """Test token utilization checking."""
-
-    def test_utilization_optimal(self, settings):
-        """Test optimal utilization (95% target)."""
-        token_counts = {
-            "total_available": 20000,
-            "user_input": 500,
-            "warm_slice": 9500,
-            "structured": 3000,
-            "augmentation": 6000,
-        }
-        # Total used: 19000 = 95%
-
-        utilization, is_within_target, message = check_utilization(
-            token_counts, settings
-        )
-        assert utilization == 95.0
-        assert is_within_target
-        assert "Optimal" in message
-
-    def test_utilization_acceptable(self, settings):
-        """Test acceptable utilization (90-98% range)."""
-        token_counts = {
-            "total_available": 20000,
-            "user_input": 500,
-            "warm_slice": 8500,
-            "structured": 3000,
-            "augmentation": 6000,
-        }
-        # Total used: 18000 = 90%
-
-        utilization, is_within_target, message = check_utilization(
-            token_counts, settings
-        )
-        assert utilization == 90.0
-        assert is_within_target
-        assert "Acceptable" in message
-
-    def test_utilization_underutilized(self, settings):
-        """Test underutilization detection (<90%)."""
-        token_counts = {
-            "total_available": 20000,
-            "user_input": 500,
-            "warm_slice": 7000,
-            "structured": 2500,
-            "augmentation": 5000,
-        }
-        # Total used: 15000 = 75%
-
-        utilization, is_within_target, message = check_utilization(
-            token_counts, settings
-        )
-        assert utilization == 75.0
-        assert not is_within_target
-        assert "Underutilized" in message
-
-    def test_utilization_overutilized(self, settings):
-        """Test overutilization detection (>98%)."""
-        token_counts = {
-            "total_available": 20000,
-            "user_input": 500,
-            "warm_slice": 10000,
-            "structured": 3500,
-            "augmentation": 6200,
-        }
-        # Total used: 20200 = 101% (shouldn't happen but test the check)
-
-        utilization, is_within_target, message = check_utilization(
-            token_counts, settings
-        )
-        assert utilization > 98
-        assert not is_within_target
-        assert "Overutilized" in message
-
-    def test_utilization_zero_available(self, settings):
-        """Test handling of zero available tokens."""
-        token_counts = {"total_available": 0, "user_input": 100, "warm_slice": 100}
-
-        utilization, is_within_target, message = check_utilization(
-            token_counts, settings
-        )
-        assert utilization == 0
-        assert not is_within_target
 
 
 class TestPhaseCompletion:

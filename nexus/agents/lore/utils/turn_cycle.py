@@ -13,7 +13,6 @@ from typing import Any, Dict, Iterable, List, Optional, Union
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.memory.context_state import memory_identity
-from nexus.memory.manager import resolve_storyteller_prompt_overhead_tokens
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 
 logger = logging.getLogger("nexus.lore.turn_cycle")
@@ -1089,14 +1088,6 @@ class TurnCycleManager:
 
         payload_budget = self._enforce_context_payload_budget(turn_context)
 
-        # Calculate utilization
-        if self.lore.token_manager:
-            utilization = self.lore.token_manager.calculate_utilization(
-                turn_context.token_counts
-            )
-        else:
-            utilization = 0
-
         turn_context.phase_states["payload_assembly"] = {
             "total_tokens_used": payload_budget["tokens_after"],
             "tokens_before_trimming": payload_budget["tokens_before"],
@@ -1105,10 +1096,12 @@ class TurnCycleManager:
             "memory_budget_refunded": payload_budget["memory_budget_refunded"],
             "payload_ceiling": payload_budget["payload_ceiling"],
             "prompt_overhead_tokens": payload_budget["prompt_overhead_tokens"],
-            "utilization_percentage": utilization,
         }
 
-        logger.info(f"Context payload assembled: {utilization:.1f}% budget utilization")
+        logger.info(
+            "Context payload assembled: %s rendered tokens",
+            payload_budget["tokens_after"],
+        )
 
     def _build_recent_orrery_rulings_section(
         self, turn_context: TurnContext
@@ -1160,34 +1153,35 @@ class TurnCycleManager:
             raise ValueError(
                 "Storyteller total_available token ceiling must be at least 1000"
             )
-        prompt_overhead_tokens = resolve_storyteller_prompt_overhead_tokens(
-            self.settings
-        )
-        ceiling = total_available - prompt_overhead_tokens
-        if ceiling < 0:
-            raise ValueError(
-                "Storyteller prompt overhead exceeds the available payload "
-                f"ceiling: total_available={total_available}, "
-                f"prompt_overhead_tokens={prompt_overhead_tokens}"
-            )
-
         payload = turn_context.context_payload
-        tokens_before = _context_component_token_count(payload)
+        if not getattr(self.lore, "enable_logon", True):
+            return {
+                "tokens_before": 0,
+                "tokens_after": 0,
+                "warm_chunks_dropped": 0,
+                "retrieved_passages_dropped": 0,
+                "memory_budget_refunded": 0,
+                "payload_ceiling": total_available,
+                "prompt_overhead_tokens": 0,
+            }
+        logon = self.lore.logon
+        window = turn_context.token_counts["apex_window"]
+        requests = logon.measure_turn_requests(payload, window)
+        writer = requests[0]
+        tokens_before = writer.tokens
+        prompt_overhead_tokens = writer.budget.policy_headroom
+
+        def over_budget() -> bool:
+            return any(request.tokens > request.target for request in requests)
+
+        def drop(chunk: Dict[str, Any], kind: str) -> None:
+            for request in requests:
+                request.drop(chunk, kind)
+
         tokens_after = tokens_before
         warm_chunks_dropped = 0
         retrieved_passages_dropped = 0
         memory_budget_refunded = 0
-
-        if tokens_after <= ceiling:
-            return {
-                "tokens_before": tokens_before,
-                "tokens_after": tokens_after,
-                "warm_chunks_dropped": 0,
-                "retrieved_passages_dropped": 0,
-                "memory_budget_refunded": 0,
-                "payload_ceiling": ceiling,
-                "prompt_overhead_tokens": prompt_overhead_tokens,
-            }
 
         warm_section = payload.get("warm_slice")
         retrieved_section = payload.get("retrieved_passages")
@@ -1207,18 +1201,28 @@ class TurnCycleManager:
         dropped_chunks: List[Dict[str, Any]] = []
 
         protected_chunk = _protected_warm_chunk(warm_chunks) if warm_chunks else None
-        while tokens_after > ceiling and protected_chunk is not None:
+        while over_budget() and protected_chunk is not None:
             oldest_index = _oldest_droppable_warm_index(warm_chunks, protected_chunk)
             if oldest_index is None:
                 break
-            dropped_chunks.append(warm_chunks.pop(oldest_index))
+            chunk = warm_chunks.pop(oldest_index)
+            dropped_chunks.append(chunk)
+            drop(chunk, "recent narrative")
             warm_chunks_dropped += 1
-            tokens_after = _context_component_token_count(payload)
+            tokens_after = writer.tokens
 
-        while tokens_after > ceiling and retrieved_passages:
-            dropped_chunks.append(retrieved_passages.pop())
+        while over_budget() and retrieved_passages:
+            chunk = retrieved_passages.pop()
+            dropped_chunks.append(chunk)
+            drop(chunk, "historical context")
             retrieved_passages_dropped += 1
-            tokens_after = _context_component_token_count(payload)
+            tokens_after = writer.tokens
+
+        # Express the tighter seat constraint in writer-token units for telemetry.
+        ceiling = min(
+            request.target - request.tokens + writer.tokens for request in requests
+        )
+        logon._assembly_window_requests = requests
 
         if warm_chunks_dropped or retrieved_passages_dropped:
             memory_manager = getattr(self.lore, "memory_manager", None)
@@ -1254,14 +1258,46 @@ class TurnCycleManager:
                 retrieved_passages_dropped,
             )
 
-        if tokens_after > ceiling:
-            raise ValueError(
-                "Structured storyteller context exceeds the configured payload "
-                "window after all trimmable context was removed: "
-                f"wire_class={turn_context.provider_wire_type!r}, "
-                f"tokens={tokens_after}, ceiling={ceiling}. "
-                "The structured core is a configuration error."
-            )
+        payload["window_trimming"] = {
+            "tokens_before": tokens_before,
+            "tokens_after": tokens_after,
+            "tokens_recovered": tokens_before - tokens_after,
+            "dropped_chunk_ids": [memory_identity(chunk) for chunk in dropped_chunks],
+            "dropped_blocks": {
+                "recent narrative": warm_chunks_dropped,
+                "historical context": retrieved_passages_dropped,
+            },
+            "seats": {
+                request.budget.seat: {
+                    "input_tokens": request.tokens,
+                    "input_ceiling": request.budget.input_ceiling,
+                    "trim_target": request.target,
+                    "reserved_writer_output": request.reserved_output,
+                    "token_count_safety_margin": request.safety_margin,
+                }
+                for request in requests
+            },
+        }
+
+        chunks = (
+            payload["warm_slice"]["chunks"]
+            + payload["retrieved_passages"]["results"][:5]
+        )
+        identities = {id(chunk): memory_identity(chunk) for chunk in chunks}
+        chunk_tokens: Dict[Any, int] = {}
+        for index, source in writer.sources.items():
+            if index not in writer.removed and source in identities:
+                identity = identities[source]
+                chunk_tokens[identity] = (
+                    chunk_tokens.get(identity, 0) + writer.sizes[index]
+                )
+
+        def record_coverage() -> None:
+            self.lore.memory_manager.record_rendered_coverage(chunks, chunk_tokens)
+
+        logon.record_rendered_coverage = record_coverage
+
+        # The final generation guard alone rejects an untrimmable core.
 
         return {
             "tokens_before": tokens_before,

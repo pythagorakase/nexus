@@ -194,8 +194,12 @@ def test_logon_real_entrypoint_records_registry_provider_and_single_pass_seat(
                 }
             },
         },
-        model_override="registry-test-model",
+        model_override="TEST",
     )
+    from nexus.config import load_settings_as_dict
+
+    utility.settings.update(load_settings_as_dict())
+    utility.settings["apex"]["turn_pipeline"] = "single_pass"
     endpoint: dict[str, Any] = {
         "base_url": "http://127.0.0.1:5102/v1",
         "api_key": "test-dummy-key",
@@ -208,9 +212,10 @@ def test_logon_real_entrypoint_records_registry_provider_and_single_pass_seat(
     utility._setting_context = None
     utility._initialize_provider(
         False,
-        resolved_route=("registry-test-model", "test", endpoint, "local"),
+        resolved_route=("TEST", "test", endpoint, "local"),
     )
     assert isinstance(utility.provider, OpenAIProvider)
+    utility.provider.output_validator = utility._build_letter_output_validator()
 
     wire = SkaldTurnWire(
         narrative="The mocked boundary returns a complete turn.",
@@ -241,7 +246,7 @@ def test_logon_real_entrypoint_records_registry_provider_and_single_pass_seat(
         effective_context_window=75_000,
     )
 
-    assert response.generation_model == "registry-test-model"
+    assert response.generation_model == "TEST"
     event = summarize_usage(usage_dir=tmp_path / "usage")["events"][0]
     assert event["provider"] == "test"
     assert event["seat"] == "skald_single_pass"

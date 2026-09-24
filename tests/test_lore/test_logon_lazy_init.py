@@ -526,69 +526,18 @@ def test_context_bootstrap_mode_does_not_mutate_logon_instance(
     assert logon._provider_bootstrap_mode is True
 
 
-@pytest.mark.asyncio
-async def test_final_prompt_overflow_from_tag_library_raises(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Too-small overhead cannot let LOGON send an oversized final prompt."""
-    settings = {
-        "Agent Settings": {
-            "LORE": {
-                "token_budget": {
-                    "apex_context_window": 1_000,
-                    "prompt_overhead_tokens": 0,
-                    "provider_overrides": {"local": 1_000},
-                }
-            }
-        }
-    }
-    provider = _DummyProvider()
-    logon = LogonUtility(settings, model_override="dummy-model")
-    logon.provider = cast(Any, provider)
-    logon._provider_bootstrap_mode = False
-    logon._provider_wire_type = "local"
-    logon._provider_type_name = "local"
+def test_final_prompt_overflow_from_rendered_rulings_raises():
+    """The real renderer includes rulings before the sole final guard."""
+    from tests.test_lore.window_helpers import window_logon
 
-    class PromptLore:
-        def __init__(self) -> None:
-            self.settings = settings
-            self.memnon = None
-            self.memory_manager = ContextMemoryManager(settings)
-            self.token_manager = None
-
-    turn_manager = TurnCycleManager(PromptLore())
-    turn_context = TurnContext(
-        turn_id="undersized-overhead",
-        user_input="Continue.",
-        start_time=0,
-    )
-    turn_context.provider_wire_type = "local"
-    turn_context.warm_slice = [{"chunk_id": 1, "text": "Parent.", "is_target": True}]
-    turn_context.token_counts = {
-        "total_available": 1_000,
-        "warm_slice": 100,
-        "structured": 0,
-        "augmentation": 0,
-    }
-    await turn_manager.assemble_context_payload(turn_context)
-    assert turn_context.phase_states["payload_assembly"]["payload_ceiling"] == 1_000
-
-    monkeypatch.setattr(
-        logon,
-        "_format_turn_tag_library",
-        lambda _context, *, presence_baseline: "oversized-tag " * 2_000,
-    )
-
-    with caplog.at_level(logging.DEBUG, logger="nexus.lore.logon"):
-        with pytest.raises(
-            ValueError,
-            match="Final storyteller prompt exceeds the effective context window",
-        ):
-            await logon.generate_narrative_async(
-                turn_context.context_payload,
-                effective_context_window=1_000,
-            )
-
-    assert provider.calls == 0
-    assert "Final storyteller prompt size: wire_class=local" in caplog.text
+    logon = window_logon()
+    payload = _minimal_payload()
+    payload["orrery_recent_rulings_section"] = ["Recent ruling " * 1000]
+    total, budget, blocks, count = logon.measure_writer_request(payload, 75000)
+    assert any(kind == "recent orrery rulings" and text for kind, text in blocks)
+    with pytest.raises(ValueError, match="Final storyteller prompt exceeds"):
+        logon._enforce_final_prompt_window(
+            "".join(text for _, text in blocks),
+            effective_context_window=total - 1,
+            rendered_tokens=total,
+        )

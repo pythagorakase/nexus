@@ -867,7 +867,7 @@ class ContextMemoryManager:
 
         if not context or not transition:
             logger.debug("No baseline context available; skipping Phase 2")
-            audit_retrieval_coverage(
+            self._stage_retrieval_coverage(
                 incremental_retriever=self.incremental,
                 entity_match=entity_match,
                 turn_id=turn_id,
@@ -889,7 +889,7 @@ class ContextMemoryManager:
         # STEP 1: Check if simple choice -> skip Phase 2 if yes
         if self.skip_simple_choices and self._is_simple_choice(user_input):
             logger.info("📌 Phase 2 skipped: Simple choice detected")
-            audit_retrieval_coverage(
+            self._stage_retrieval_coverage(
                 incremental_retriever=self.incremental,
                 entity_match=entity_match,
                 turn_id=turn_id,
@@ -908,7 +908,7 @@ class ContextMemoryManager:
 
         if available_budget <= 0:
             logger.info("📉 Phase 2 skipped: No remaining token budget available")
-            audit_retrieval_coverage(
+            self._stage_retrieval_coverage(
                 incremental_retriever=self.incremental,
                 entity_match=entity_match,
                 turn_id=turn_id,
@@ -935,7 +935,7 @@ class ContextMemoryManager:
 
         if not raw_search_results:
             logger.info("No results from raw vector search - Phase 2 complete")
-            audit_retrieval_coverage(
+            self._stage_retrieval_coverage(
                 incremental_retriever=self.incremental,
                 entity_match=entity_match,
                 turn_id=turn_id,
@@ -999,7 +999,7 @@ class ContextMemoryManager:
         else:
             logger.info("Phase 2 complete: No chunks fit in remaining budget")
 
-        audit_retrieval_coverage(
+        self._stage_retrieval_coverage(
             incremental_retriever=self.incremental,
             entity_match=entity_match,
             turn_id=turn_id,
@@ -1016,6 +1016,35 @@ class ContextMemoryManager:
             total_tokens,
             baseline_available=True,
         )
+
+    def _stage_retrieval_coverage(self, **kwargs: Any) -> None:
+        """Keep retrieval evidence pending until the shipped block set is known."""
+        self._pending_retrieval_coverage = kwargs
+
+    def record_rendered_coverage(
+        self,
+        chunks: Iterable[Dict[str, Any]],
+        rendered_chunk_tokens: Dict[MemoryIdentity, int],
+    ) -> None:
+        """Write coverage from retrieved identities that survived final rendering."""
+        pending = getattr(self, "_pending_retrieval_coverage", None)
+        if pending is None:
+            return
+        shipped = {
+            self._memory_identity(chunk) for chunk in chunks if chunk.get("text")
+        }
+        kept = [
+            chunk
+            for chunk in pending["kept_chunks"]
+            if self._memory_identity(chunk) in shipped
+        ]
+        data = dict(pending)
+        data["kept_chunks"] = kept
+        data["kept_tokens"] = sum(
+            rendered_chunk_tokens[self._memory_identity(chunk)] for chunk in kept
+        )
+        audit_retrieval_coverage(**data)
+        self._pending_retrieval_coverage = None
 
     def unregister_payload_chunks(
         self, chunks: Iterable[Dict[str, Any]]

@@ -6,6 +6,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from tests.test_lore.window_helpers import window_logon
+from nexus.memory import ContextMemoryManager
 
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
@@ -138,6 +140,12 @@ class FakeStoryResponse:
 class FakeLogon:
     """LOGON stand-in returning a successful structured narrative."""
 
+    def __init__(self):
+        self.window_logon = window_logon()
+
+    def measure_turn_requests(self, payload, window):
+        return self.window_logon.measure_turn_requests(payload, window)
+
     async def generate_narrative_async(self, _payload, **_route):
         return FakeStoryResponse()
 
@@ -161,6 +169,7 @@ class FakeLore:
     def __init__(self, settings, session, logon=None):
         self.settings = settings
         self.memnon = FakeMemnon(session)
+        self.memory_manager = ContextMemoryManager(settings)
         self.logon = logon or FakeLogon()
 
     def ensure_logon(self):
@@ -597,7 +606,7 @@ async def test_assemble_context_payload_includes_bleed_menu() -> None:
         start_time=0,
         warm_slice=[{"id": 100, "text": "Rain ticks against the glass."}],
     )
-    context.token_counts = {"total_available": 75_000}
+    context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
 
     await manager.assemble_context_payload(context)
 
@@ -622,7 +631,7 @@ async def test_assemble_context_payload_does_not_initialize_bleed_llm() -> None:
         start_time=0,
         warm_slice=[{"id": 100, "text": "Rain ticks against the glass."}],
     )
-    context.token_counts = {"total_available": 75_000}
+    context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
 
     await manager.assemble_context_payload(context)
 
@@ -642,7 +651,7 @@ async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
         start_time=0,
         warm_slice=[],
     )
-    context.token_counts = {"total_available": 75_000}
+    context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
     context.orrery_proposal = SimpleNamespace(anchor_chunk_id=77, pressure_count=0)
 
     await manager.assemble_context_payload(context)
@@ -668,7 +677,7 @@ async def test_assemble_context_payload_attaches_scene_conditions() -> None:
         start_time=0,
         warm_slice=[],
     )
-    context.token_counts = {"total_available": 75_000}
+    context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
     context.orrery_proposal = SimpleNamespace(
         anchor_chunk_id=77,
         pressure_count=0,
@@ -692,7 +701,7 @@ async def test_assemble_context_payload_preserves_scene_moods() -> None:
     context = TurnContext(
         turn_id="t1", user_input="Continue.", start_time=0, warm_slice=[]
     )
-    context.token_counts = {"total_available": 75_000}
+    context.token_counts = {"total_available": 75_000, "apex_window": 75_000}
     context.orrery_proposal = SimpleNamespace(
         anchor_chunk_id=77,
         pressure_count=0,

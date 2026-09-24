@@ -158,12 +158,11 @@ def audit_retrieval_coverage(
     available_budget: int,
     turn_id: Optional[str] = None,
 ) -> None:
-    """Write one best-effort retrieval coverage row for a Pass 2 turn.
+    """Write one retrieval coverage row for a rendered Pass 2 turn.
 
     A fake or structurally incomplete MEMNON has no SQLAlchemy engine, so unit
     callers skip telemetry without attempting a connection. Once a database
-    path exists, every failure is logged with the complete audit context and
-    suppressed so telemetry cannot abort narrative generation.
+    path exists, failures propagate so a turn cannot ship with a false audit.
     """
 
     memnon = getattr(incremental_retriever, "memnon", None)
@@ -181,23 +180,10 @@ def audit_retrieval_coverage(
         "available_budget": available_budget,
     }
 
-    try:
-        if hasattr(database_access, "connect"):
-            with database_access.begin() as connection:
-                _write_retrieval_coverage(
-                    connection,
-                    entity_match=entity_match,
-                    turn_id=turn_id,
-                    user_input=user_input,
-                    raw_result_count=raw_result_count,
-                    kept_chunk_ids=kept_chunk_ids,
-                    kept_tokens=kept_tokens,
-                    available_budget=available_budget,
-                    error_context=error_context,
-                )
-        else:
+    if hasattr(database_access, "connect"):
+        with database_access.begin() as connection:
             _write_retrieval_coverage(
-                database_access,
+                connection,
                 entity_match=entity_match,
                 turn_id=turn_id,
                 user_input=user_input,
@@ -207,8 +193,15 @@ def audit_retrieval_coverage(
                 available_budget=available_budget,
                 error_context=error_context,
             )
-    except Exception:
-        logger.exception(
-            "Retrieval coverage audit failed; narrative turn continues (context=%r)",
-            error_context,
+    else:
+        _write_retrieval_coverage(
+            database_access,
+            entity_match=entity_match,
+            turn_id=turn_id,
+            user_input=user_input,
+            raw_result_count=raw_result_count,
+            kept_chunk_ids=kept_chunk_ids,
+            kept_tokens=kept_tokens,
+            available_budget=available_budget,
+            error_context=error_context,
         )
