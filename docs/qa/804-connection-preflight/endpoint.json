@@ -1,0 +1,20 @@
+{
+  "request": "POST /api/story/new/setup/reset {\"slot\":4}",
+  "http_status": 200,
+  "response": {
+    "status": "reset",
+    "slot": 4
+  },
+  "before": {
+    "database": "qa640_804_endpoint",
+    "pool_oid": 41180112,
+    "engine_oid": 41180112,
+    "pool_pid": 44667
+  },
+  "after": {
+    "database": "qa640_804_endpoint",
+    "pool_oid": 41222344,
+    "engine_oid": 41222344,
+    "pool_pid": 44709
+  }
+}

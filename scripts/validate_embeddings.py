@@ -10,7 +10,7 @@ This script:
 4. Validates that the appropriate table is being used for each model
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 from nexus.database import database_url
 
@@ -18,7 +18,7 @@ import os
 import sys
 import argparse
 import logging
-from sqlalchemy import create_engine, text, Column, String
+from sqlalchemy import text, Column, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import numpy as np
@@ -181,7 +181,7 @@ def main():
 
     try:
         # Create engine and connect
-        engine = create_engine(resolved_database_url(conn_string))
+        engine = create_slot_engine(conn_string)
         with engine.connect() as connection:
             # Run validations
             validate_table_counts(connection)

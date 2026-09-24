@@ -32,7 +32,7 @@ Usage:
 """
 
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 from nexus.database import database_url
 
@@ -95,7 +95,7 @@ SUMMARY_FAILURE_STATUS = "error"
 
 # Database connection using SQLAlchemy
 import sqlalchemy as sa
-from sqlalchemy import create_engine, MetaData, Table, Column, text
+from sqlalchemy import MetaData, Table, Column, text
 from sqlalchemy.dialects.postgresql import TSRANGE, JSONB
 
 
@@ -241,7 +241,7 @@ class DatabaseManager:
             db_url: Optional database URL. If not provided, will use environment variables.
         """
         self.db_url = db_url or self._get_db_url()
-        self.engine = create_engine(resolved_database_url(self.db_url))
+        self.engine = create_slot_engine(self.db_url)
         self.metadata = MetaData()
         self._init_tables()
 

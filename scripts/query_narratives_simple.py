@@ -5,7 +5,7 @@ Simple Query Utility for NEXUS
 Provides a simple way to search for narrative chunks by keyword.
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import sys
 import argparse
@@ -21,7 +21,7 @@ def main():
     args = parser.parse_args()
 
     # Connect to the database
-    engine = sa.create_engine(resolved_database_url(None))
+    engine = create_slot_engine(None)
 
     try:
         # Simple text search using ILIKE

@@ -9,6 +9,9 @@ Actions:
 
 from __future__ import annotations
 
+from nexus.api.db_pool import dispose_database
+from nexus.api.slot_utils import slot_dbname
+
 from nexus.database import subprocess_env
 
 from nexus.database import connection_kwargs
@@ -137,7 +140,8 @@ def create_slot_schema_only(
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
-    target_db = f"save_{slot:02d}"
+    target_db = slot_dbname(slot)
+    dispose_database(target_db)
     initialize_slot_database(target_db, source_db=source_db, force=force)
 
 
@@ -179,6 +183,7 @@ def initialize_slot_database(
     already-applied migrations against the post-migration schema and fails
     (e.g. 053 alters factions.power_level, which 058 already dropped).
     """
+    dispose_database(target_db)
     # NEXUS_template is the canonical fresh-slot image (schema + seed data)
     source_db = source_db or "NEXUS_template"
     tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
@@ -274,6 +279,7 @@ def initialize_slot_database(
         )
 
     _initialize_empty_idf_corpora(target_db)
+    dispose_database(target_db)
     LOG.info("Database %s ready", target_db)
 
 
@@ -375,7 +381,8 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
-    target_db = f"save_{slot:02d}"
+    target_db = slot_dbname(slot)
+    dispose_database(target_db)
 
     if force:
         subprocess.run(
@@ -433,6 +440,7 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
             ["psql", target_db, "-f", dump_path], check=True, env=subprocess_env()
         )
         _post_clone_cleanup(target_db)
+        dispose_database(target_db)
         LOG.info("Cloned %s into %s (with data)", source_db, target_db)
     finally:
         try:

@@ -13,7 +13,7 @@ Example:
     python query_narratives_vector.py "Alex discovers the secret" --model bge-large
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import os
 import sys
@@ -85,7 +85,7 @@ except ImportError:
 # Try to import SQLAlchemy
 try:
     import sqlalchemy as sa
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import text
     from sqlalchemy.orm import sessionmaker
 except ImportError:
     logger.error("SQLAlchemy not found. Please install with: pip install sqlalchemy")
@@ -128,7 +128,7 @@ class NarrativeSearcher:
         self.db_url = db_url or os.environ.get("NEXUS_DB_URL", default_db_url)
 
         # Initialize database connection
-        self.engine = create_engine(resolved_database_url(self.db_url))
+        self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
         # Initialize embedding models

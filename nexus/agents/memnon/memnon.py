@@ -15,7 +15,7 @@ The architecture has been refactored to use modular utility classes:
 - ContentProcessor: Manages content chunking, processing, and storage
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 from nexus.database import verify_database_url
 
 
@@ -30,7 +30,7 @@ from datetime import datetime, date
 from pathlib import Path
 
 import sqlalchemy as sa
-from sqlalchemy import create_engine, Column, Table, MetaData, text, inspect, func, or_
+from sqlalchemy import Column, Table, MetaData, text, inspect, func, or_
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY, JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -599,7 +599,7 @@ class MEMNON:
         """Initialize connection to PostgreSQL database."""
         try:
             self.db_url = verify_database_url(self.db_url)
-            engine = create_engine(resolved_database_url(self.db_url))
+            engine = create_slot_engine(self.db_url)
 
             # Verify connection
             connection = engine.connect()

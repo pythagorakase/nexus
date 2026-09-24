@@ -27,7 +27,7 @@ embedding step instead of re-running generation.
 
 from __future__ import annotations
 
-from nexus.database import connection_kwargs
+from nexus.database import connection_kwargs, is_connection_failure
 
 import json
 import logging
@@ -666,6 +666,8 @@ def drain_maturation_jobs_sync(
                     "Rejected stale maturation completion %s", row["job_id"]
                 )
             except Exception as exc:
+                if is_connection_failure(exc):
+                    raise
                 failed += 1
                 with conn:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:

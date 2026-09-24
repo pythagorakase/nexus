@@ -20,7 +20,7 @@ Example:
     python simple_update.py transcripts/ALEX_4.md --fix-metadata --resequence
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import os
 import sys
@@ -43,7 +43,7 @@ logger = logging.getLogger("nexus.simple_update")
 try:
     import sqlalchemy as sa
     from sqlalchemy.sql import text
-    from sqlalchemy.engine import Engine, create_engine
+    from sqlalchemy.engine import Engine
 except ImportError:
     logger.error("SQLAlchemy not found. Please install it with: pip install sqlalchemy")
     sys.exit(1)
@@ -1052,7 +1052,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize database connection
-    engine = create_engine(resolved_database_url(args.db_url))
+    engine = create_slot_engine(args.db_url)
 
     # Expand file patterns
     all_files = []

@@ -13,7 +13,7 @@ Example:
     python update_raw_text.py ALEX_*_revised.md --dry-run
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import os
 import sys
@@ -39,7 +39,7 @@ logger = logging.getLogger("nexus.update_raw_text")
 # Import SQLAlchemy
 try:
     import sqlalchemy as sa
-    from sqlalchemy import create_engine, Column, text, inspect
+    from sqlalchemy import Column, text, inspect
     from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy.orm import sessionmaker, Session
 except ImportError:
@@ -90,7 +90,7 @@ class ChunkUpdater:
         self.dry_run = dry_run
 
         # Initialize database connection
-        self.engine = create_engine(resolved_database_url(self.db_url))
+        self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
         # Statistics

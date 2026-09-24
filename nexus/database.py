@@ -7,13 +7,125 @@ import logging
 import os
 import re
 import socket
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 from urllib.parse import quote
+from weakref import WeakSet
 
-from sqlalchemy.engine import URL, make_url
+from sqlalchemy.engine import URL, Engine, make_url
 
 from nexus.config import load_settings
 from nexus.util.secret_manager import get_secret
+
+
+class AmbiguousCommit(RuntimeError):
+    """A disconnected commit has an unknown outcome; never replay (docs/database.md)."""
+
+
+def is_connection_failure(exc: BaseException) -> bool:
+    """Recognize connection loss even through driver or domain exception wrappers."""
+    import psycopg2
+
+    pending = [exc]
+    seen: set[int] = set()
+    while pending:
+        error = pending.pop()
+        if id(error) in seen:
+            continue
+        seen.add(id(error))
+        if isinstance(
+            error, (AmbiguousCommit, psycopg2.OperationalError, psycopg2.InterfaceError)
+        ):
+            return True
+        for inner in (error.__cause__, error.__context__, getattr(error, "orig", None)):
+            if isinstance(inner, BaseException):
+                pending.append(inner)
+    return False
+
+
+def commit_transaction(conn: Any) -> None:
+    """Commit once and make connection loss a terminal, named outcome."""
+    import psycopg2
+
+    dbname = conn.info.dbname
+    try:
+        conn.commit()
+    except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
+        conn.close()
+        raise AmbiguousCommit(f"Ambiguous commit for database {dbname}: {exc}") from exc
+
+
+@contextmanager
+def transaction(conn: Any) -> Iterator[Any]:
+    """Manage a direct transaction without masking or replaying commit failure."""
+    try:
+        yield conn
+    except BaseException:
+        try:
+            conn.rollback()
+        except Exception:
+            conn.close()
+        raise
+    else:
+        commit_transaction(conn)
+
+
+def application_name(role: str) -> str:
+    """Label a backend with adapter role and gateway port, or process ID."""
+    config = load_settings().api.database
+    suffix = os.environ.get("NEXUS_GATEWAY_PORT") or str(os.getpid())
+    return f"{config.application_name_prefix}:{role}:{suffix}"
+
+
+_engines: dict[str, WeakSet] = {}
+_engines_lock = threading.RLock()
+
+
+def create_slot_engine(
+    dbname_or_url: str | URL | None = None, **overrides: Any
+) -> Engine:
+    """Create a registered SQLAlchemy engine with checkout and session policy.
+
+    ``None`` (or an empty string) selects the active slot, exactly as the
+    retired ``resolved_database_url(None)`` did for script callers.
+    """
+    from sqlalchemy import create_engine
+
+    config = load_settings().api.database
+    if not dbname_or_url:
+        params = connection_kwargs(None)
+    elif isinstance(dbname_or_url, URL) or "://" in dbname_or_url:
+        params = url_connection_kwargs(dbname_or_url)
+    else:
+        params = connection_kwargs(dbname_or_url)
+    params.update(overrides.pop("connect_args", {}))
+    params["options"] = _session_options(params.get("options"), config.session_timezone)
+    params["application_name"] = application_name("sqlalchemy")
+    options = {
+        "pool_size": config.pool_min_connections,
+        "max_overflow": config.pool_max_connections - config.pool_min_connections,
+        **overrides,
+        "pool_pre_ping": True,
+    }
+    with _engines_lock:
+        engine = create_engine(
+            URL.create("postgresql+psycopg2", database=params["dbname"]),
+            connect_args=params,
+            **options,
+        )
+        _engines.setdefault(params["dbname"], WeakSet()).add(engine)
+        return engine
+
+
+def dispose_database_engines(dbname: str | None = None) -> None:
+    """Dispose registered engines; keep live engines registered for later resets."""
+    with _engines_lock:
+        names = [dbname] if dbname is not None else list(_engines)
+        for name in names:
+            for engine in list(_engines.get(name, ())):
+                engine.dispose()
 
 
 def connection_kwargs(
@@ -67,6 +179,7 @@ def connection_kwargs(
             os.environ.get("PGCONNECT_TIMEOUT") or config.connect_timeout_seconds
         ),
         "options": _session_options(options, timezone),
+        "application_name": application_name("sync"),
     }
     if password is None:
         password = (
@@ -172,6 +285,7 @@ def database_url(dbname: str | None = None, **overrides: Any) -> str:
     query = {
         "connect_timeout": str(params["connect_timeout"]),
         "options": params["options"],
+        "application_name": params["application_name"],
     }
     if host.startswith("/"):
         query["host"] = host
@@ -218,6 +332,10 @@ def asyncpg_kwargs(dbname: str | None = None, **overrides: Any) -> dict[str, Any
     params["database"] = params.pop("dbname")
     params["timeout"] = params.pop("connect_timeout")
     params["server_settings"] = dict(_option_settings(params.pop("options")))
+    params.pop("application_name")
+    params["server_settings"].setdefault(
+        "application_name", application_name("asyncpg")
+    )
     if not params["host"]:
         params.pop("host")
     return params
@@ -248,6 +366,7 @@ def verify_database_url(db_url: str, *, dbname: str | None = None) -> str:
 def subprocess_env() -> dict[str, str]:
     """Apply the same target/session policy to PostgreSQL command-line tools."""
     params = connection_kwargs("postgres")
+    params["application_name"] = application_name("subprocess")
     env = os.environ.copy()
     for key, name in (
         ("host", "PGHOST"),
@@ -256,6 +375,7 @@ def subprocess_env() -> dict[str, str]:
         ("password", "PGPASSWORD"),
         ("options", "PGOPTIONS"),
         ("connect_timeout", "PGCONNECT_TIMEOUT"),
+        ("application_name", "PGAPPNAME"),
     ):
         if key in params:
             env[name] = str(params[key])

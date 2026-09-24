@@ -68,7 +68,7 @@ Database URL (from api_batch.py):
 """
 
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 from nexus.prompts.registry import PromptId, load
 
 import os
@@ -82,7 +82,7 @@ from typing import List, Tuple, Optional, Dict, Any, Set
 
 import sqlalchemy as sa
 from sqlalchemy.engine import Engine
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 # Import necessary components from api_batch.py
 try:
@@ -245,7 +245,7 @@ def parse_arguments() -> argparse.Namespace:
 def get_db_connection(db_url: str) -> Engine:
     """Get database connection using SQLAlchemy."""
     try:
-        engine = create_engine(resolved_database_url(db_url))
+        engine = create_slot_engine(db_url)
         # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))

@@ -22,6 +22,7 @@ from sqlalchemy.engine import make_url
 from nexus.api import db_pool, slot_utils
 from nexus.config.settings_models import APIDatabaseSettings
 from nexus.database import (
+    create_slot_engine,
     asyncpg_kwargs,
     connection_kwargs,
     connection_target,
@@ -533,3 +534,17 @@ def test_connection_two_clusters_pool_url_async_timezone_and_guard(
         assert "CREATE " not in unseen
     finally:
         observer.close()
+
+
+@pytest.mark.parametrize("selector", [None, ""])
+def test_engine_factory_defaults_to_the_active_slot(
+    monkeypatch: pytest.MonkeyPatch, selector: str | None
+) -> None:
+    """Script callers that pass nothing get the active slot, as before #939."""
+    monkeypatch.setenv("NEXUS_SLOT", "4")
+    engine = create_slot_engine(selector)
+    try:
+        assert engine.url.database == "save_04"
+        assert engine.pool._pre_ping is True
+    finally:
+        engine.dispose()

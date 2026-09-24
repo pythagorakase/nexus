@@ -12,7 +12,7 @@ Example:
     python import_narratives.py ALEX_*_copy_notime.md
 """
 
-from nexus.database import resolved_database_url
+from nexus.database import create_slot_engine
 
 import os
 import sys
@@ -72,7 +72,7 @@ except ImportError:
 # Try to import SQLAlchemy
 try:
     import sqlalchemy as sa
-    from sqlalchemy import create_engine, Column, ForeignKey, String, Text
+    from sqlalchemy import Column, ForeignKey, String, Text
     from sqlalchemy.dialects.postgresql import UUID, BYTEA
     from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy.orm import sessionmaker
@@ -211,7 +211,7 @@ class NarrativeImporter:
         self.db_url = db_url or os.environ.get("NEXUS_DB_URL", default_db_url)
 
         # Initialize database connection
-        self.engine = create_engine(resolved_database_url(self.db_url))
+        self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
         # First make sure pgvector extension is available
