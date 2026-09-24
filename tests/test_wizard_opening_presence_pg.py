@@ -336,6 +336,7 @@ class _SchemaBoundaryProvider:
     """Deterministic external boundary beneath the real LOGON entry path."""
 
     model = "TEST"
+    usage_provider_name = "test"
 
     def __init__(
         self,
@@ -499,17 +500,14 @@ def _acquire_generation(session_id: str, *, parent_chunk_id: int) -> None:
 def _accept_pending(session_id: str, chunk_id: int) -> int:
     """Accept through the public continue route's synchronous worker entry."""
 
-    _choice, accepted_chunk_id, post_commit_thread = (
-        narrative._resolve_and_approve_pending_sync(
-            slot=5,
-            session_id=session_id,
-            chunk_id=chunk_id,
-            user_text="",
-            choice=1,
-            accept_fate=False,
-        )
+    _choice, accepted_chunk_id = narrative._resolve_and_approve_pending_sync(
+        slot=5,
+        session_id=session_id,
+        chunk_id=chunk_id,
+        user_text="",
+        choice=1,
+        accept_fate=False,
     )
-    assert post_commit_thread is None
     return accepted_chunk_id
 
 

@@ -405,7 +405,6 @@ def test_accept_reject_hysteresis_and_digest_undo(
                 },
             )
         )
-        event_loop_thread = threading.get_ident()
         monkeypatch.setattr(
             narrative,
             "get_db_connection",
@@ -421,8 +420,26 @@ def test_accept_reject_hysteresis_and_digest_undo(
         )
         accepting_chunk_id = int(approval["chunk_id"])
         assert approval["status"] == "committed"
+        # Acceptance enqueues a durable compaction job and returns without the
+        # paid call; the slot scheduler runs it off the request path (#902).
+        assert compaction_calls == []
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT state::text FROM correspondence_compaction_jobs
+                WHERE accepting_chunk_id = %s
+                """,
+                (accepting_chunk_id,),
+            )
+            assert cur.fetchone() == ("queued",)
+        from nexus.api import slot_utils
+        from nexus.jobs.scheduler import SlotScheduler
+
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        SlotScheduler(4, dbname=dbname).run_pass()
         assert len(compaction_calls) == 1
-        assert compaction_calls[0]["thread"] != event_loop_thread
         assert "writer secret 5" in compaction_calls[0]["user_prompt"]
         assert "writer secret 11" in compaction_calls[0]["user_prompt"]
         assert (
