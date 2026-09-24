@@ -1,0 +1,5 @@
+prompts/storyteller_gaia.md: byte-identical to origin/main; SHA256 8a7465a37c50680649468426120ea71b6c72fd09951cc8521231f2ae38f1171b
+origin/main word count: 753
+tests/test_lore/test_two_pass_pipeline.py: byte-identical to origin/main; SHA256 bee03a38bae353f1952defb475aee045e6ba653d9e465912035b8f74c74fabb3
+origin/main gate: assert len(prompt.split()) < 700
+origin/main: 794e5a85798fdd7f5b494014d17c0999e319d7ac

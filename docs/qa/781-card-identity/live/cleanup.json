@@ -1,0 +1,23 @@
+{
+  "database": "qa640_781_card_identity",
+  "dropped": true,
+  "lane": 8015,
+  "listener": false,
+  "source_before": [
+    {
+      "current_database": "save_04",
+      "narrative_chunks": 46,
+      "max_chunk_id": 49,
+      "characters": 23
+    }
+  ],
+  "source_after": [
+    {
+      "current_database": "save_04",
+      "narrative_chunks": 46,
+      "max_chunk_id": 49,
+      "characters": 23
+    }
+  ],
+  "source_counts_unchanged": true
+}

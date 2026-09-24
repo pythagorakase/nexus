@@ -1,0 +1,46 @@
+{
+  "model": "gpt-5.6-terra",
+  "accounting": "#903 local_text_counter and measure_blocks; card blocks only, no system/schema framing",
+  "seats": {
+    "writer": {
+      "original": {
+        "blocks": {
+          "system": 0,
+          "orrery imminent activity": 657,
+          "orrery scene pressure": 431,
+          "orrery joint beats": 306
+        },
+        "total": 1394
+      },
+      "amended": {
+        "blocks": {
+          "system": 0,
+          "orrery imminent activity": 264,
+          "orrery scene pressure": 316,
+          "orrery joint beats": 148
+        },
+        "total": 728
+      }
+    },
+    "gaia": {
+      "original": {
+        "blocks": {
+          "system": 0,
+          "orrery imminent activity": 657,
+          "orrery scene pressure": 431,
+          "orrery joint beats": 306
+        },
+        "total": 1394
+      },
+      "amended": {
+        "blocks": {
+          "system": 0,
+          "orrery imminent activity": 264,
+          "orrery scene pressure": 316,
+          "orrery joint beats": 148
+        },
+        "total": 728
+      }
+    }
+  }
+}

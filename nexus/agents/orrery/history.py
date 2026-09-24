@@ -410,6 +410,9 @@ def adjudication_history(
             "scene_pressure": exposures.get(
                 "scene_pressure", {"rows": 0, "earliest_tick": None}
             ),
+            "joint_beat": exposures.get(
+                "joint_beat", {"rows": 0, "earliest_tick": None}
+            ),
         },
         "scene_pressures": {
             "rows": pressure_stats["rows"],

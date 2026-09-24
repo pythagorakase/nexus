@@ -538,8 +538,9 @@ def test_commit_logs_seed_exposure_without_seed_state_writes(
     assert result.prompt_exposure_count == 1
     assert result.resolution_count == 0
     assert result.event_count == 0
-    assert len(cursor.executed) == 1
-    sql, params = cursor.executed[0]
+    assert len(cursor.executed) == 2
+    assert "UPDATE narrative_chunks SET orrery_proposal" in cursor.executed[0][0]
+    sql, params = cursor.executed[1]
     assert "INSERT INTO orrery_prompt_exposures" in sql
     assert params[1] == "scene_pressure"
     assert params[2].startswith(f"{AMBIENT_EXPOSURE_TEMPLATE_ID}:")

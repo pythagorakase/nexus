@@ -1,0 +1,844 @@
+{
+  "user_input": "I remain quiet for a moment, giving Calyx the space I promised.",
+  "metadata": {
+    "turn_id": "9ead86cb-57e4-48ed-9d83-e2c48003b387",
+    "timestamp": "2026-09-24T14:48:29.636875",
+    "target_chunk_id": 49
+  },
+  "intertitle": {
+    "season": 1,
+    "episode": 2,
+    "scene": 45,
+    "world_layer": "primary",
+    "world_time": "2189-10-17T22:37:00+00:00",
+    "location_name": "Lantern Quay Memorial Hall",
+    "location_geom": "SRID=4326;POINT(-122.3321 47.6062 0 0)"
+  },
+  "orrery_imminent_activity": [
+    {
+      "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "template_id": "hide",
+      "priority": 84,
+      "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "bindings": {
+        "actor": 4
+      },
+      "binding_names": {
+        "actor": "Elian Rook",
+        "place": "Lantern Quay Memorial Hall"
+      },
+      "position": 0,
+      "effective_priority": 84.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Go dark and reduce signal exposure",
+      "narrative_stub": "Elian Rook trims their signal down to almost nothing \u2014 no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there.",
+      "state_delta": {
+        "character.current_activity": "reducing signal exposure"
+      },
+      "event_type": "signal_exposure_reduced",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.36,
+      "promotable": true
+    },
+    {
+      "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+      "template_id": "honor_debt",
+      "priority": 80,
+      "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+      "bindings": {
+        "actor": 3
+      },
+      "binding_names": {
+        "actor": "Ivo Senn",
+        "place": "Lantern Quay Memorial Hall"
+      },
+      "position": 1,
+      "effective_priority": 80.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Fulfill obligation through a dead-drop",
+      "narrative_stub": "Ivo Senn tucks an encoded microdrive behind a loose ceramic tile and leaves a mark for the recipient.",
+      "state_delta": {
+        "character.current_activity": "servicing an old debt"
+      },
+      "event_type": "honor_debt",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.5,
+      "promotable": true
+    },
+    {
+      "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "template_id": "check_on_dependent",
+      "priority": 55,
+      "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "bindings": {
+        "actor": 4,
+        "target": 16
+      },
+      "binding_names": {
+        "actor": "Elian Rook",
+        "target": "Tam Oris",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "position": 2,
+      "effective_priority": 52.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Reach out through customary channels",
+      "narrative_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+      "state_delta": {
+        "character.current_activity": "checking in on a dependent"
+      },
+      "event_type": "contact_made",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.22,
+      "promotable": true
+    },
+    {
+      "proposal_id": "check_on_dependent:02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+      "template_id": "check_on_dependent",
+      "priority": 55,
+      "binding_hash": "02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+      "bindings": {
+        "actor": 6,
+        "target": 13
+      },
+      "binding_names": {
+        "actor": "Ren Vale",
+        "target": "Dr. Sera Vey",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "unknown"
+      },
+      "position": 3,
+      "effective_priority": 52.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Reach out through customary channels",
+      "narrative_stub": "Ren Vale sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Dr. Sera Vey to say something real if they want to \u2014 and watches for what comes back.",
+      "state_delta": {
+        "character.current_activity": "checking in on a dependent"
+      },
+      "event_type": "contact_made",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.22,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+      "bindings": {
+        "actor": 3,
+        "target": 4
+      },
+      "binding_names": {
+        "actor": "Ivo Senn",
+        "target": "Elian Rook",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "position": 4,
+      "effective_priority": 48.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Ivo Senn keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+      "state_delta": {
+        "character.current_activity": "surveilling without contact"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.24,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:19b8dd6dbf3d6d7fa7307036406c3a1688bdaef1e43e0bb0e9cfdd6e70aef67e",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "19b8dd6dbf3d6d7fa7307036406c3a1688bdaef1e43e0bb0e9cfdd6e70aef67e",
+      "bindings": {
+        "actor": 3,
+        "target": 26
+      },
+      "binding_names": {
+        "actor": "Ivo Senn",
+        "target": "Ressa Morn",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "unknown"
+      },
+      "position": 5,
+      "effective_priority": 48.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Ivo Senn keeps Ressa Morn in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+      "state_delta": {
+        "character.current_activity": "surveilling without contact"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.24,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:a11016364c36ce81aad032b93d3190dafd3beb372652543a71cae61f47c50cca",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "a11016364c36ce81aad032b93d3190dafd3beb372652543a71cae61f47c50cca",
+      "bindings": {
+        "actor": 11,
+        "target": 4
+      },
+      "binding_names": {
+        "actor": "Vela Nash",
+        "target": "Elian Rook",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "position": 6,
+      "effective_priority": 48.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Vela Nash does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+      "state_delta": {
+        "character.current_activity": "collecting a proxy watcher report"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.38,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:7d2f5339743b75a1847811cb28c9c80ed4a72554493ac9c48bbc60886e24394e",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "7d2f5339743b75a1847811cb28c9c80ed4a72554493ac9c48bbc60886e24394e",
+      "bindings": {
+        "actor": 11,
+        "target": 34
+      },
+      "binding_names": {
+        "actor": "Vela Nash",
+        "target": "Tarin Quell",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "unknown"
+      },
+      "position": 7,
+      "effective_priority": 48.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Vela Nash keeps Tarin Quell in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+      "state_delta": {
+        "character.current_activity": "surveilling without contact"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.24,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:30591ec27f31a3af94c815de9c750da4a3bad83453c70797285598655f0162a1",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "30591ec27f31a3af94c815de9c750da4a3bad83453c70797285598655f0162a1",
+      "bindings": {
+        "actor": 8,
+        "target": 14
+      },
+      "binding_names": {
+        "actor": "Sister Calyx",
+        "target": "Ione Varr",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "unknown"
+      },
+      "position": 8,
+      "effective_priority": 45.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Sister Calyx does not go near Ione Varr. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+      "state_delta": {
+        "character.current_activity": "collecting a proxy watcher report"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.38,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+      "bindings": {
+        "actor": 8,
+        "target": 33
+      },
+      "binding_names": {
+        "actor": "Sister Calyx",
+        "target": "Orris Vale",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "unknown"
+      },
+      "position": 9,
+      "effective_priority": 45.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Sister Calyx does not go near Orris Vale. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+      "state_delta": {
+        "character.current_activity": "collecting a proxy watcher report"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.38,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+      "bindings": {
+        "actor": 16,
+        "target": 4
+      },
+      "binding_names": {
+        "actor": "Tam Oris",
+        "target": "Elian Rook",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "position": 10,
+      "effective_priority": 45.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Collect a proxy watcher report",
+      "narrative_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+      "state_delta": {
+        "character.current_activity": "collecting a proxy watcher report"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.38,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+      "bindings": {
+        "actor": 4,
+        "target": 35
+      },
+      "binding_names": {
+        "actor": "Elian Rook",
+        "target": "Dax Morrow",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "unknown"
+      },
+      "position": 11,
+      "effective_priority": 42.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Keep tabs from a distance",
+      "narrative_stub": "Elian Rook keeps tabs on Dax Morrow without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact.",
+      "state_delta": {
+        "character.current_activity": "keeping tabs from a distance"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.44,
+      "promotable": true
+    },
+    {
+      "proposal_id": "surveil:b3cc725b505ed36ac637a7ff5f0a4dc9b0a5a1129d0379dca27b401778885fdf",
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "b3cc725b505ed36ac637a7ff5f0a4dc9b0a5a1129d0379dca27b401778885fdf",
+      "bindings": {
+        "actor": 6,
+        "target": 4
+      },
+      "binding_names": {
+        "actor": "Ren Vale",
+        "target": "Elian Rook",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "position": 12,
+      "effective_priority": 42.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Keep the target in view without contact",
+      "narrative_stub": "Ren Vale keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+      "state_delta": {
+        "character.current_activity": "surveilling without contact"
+      },
+      "event_type": "surveillance_performed",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.24,
+      "promotable": true
+    },
+    {
+      "proposal_id": "drink:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "template_id": "drink",
+      "priority": 24,
+      "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+      "bindings": {
+        "actor": 8
+      },
+      "binding_names": {
+        "actor": "Sister Calyx",
+        "place": "Lantern Quay Memorial Hall"
+      },
+      "position": 13,
+      "effective_priority": 24.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Sister Calyx drinks because the body has been quietly asking, then returns to the shape of the hour.",
+      "state_delta": {
+        "character.current_activity": "drinking routinely",
+        "need.fulfill": {
+          "type": "thirst",
+          "quality": "routine",
+          "discharge_debt": 9999
+        }
+      },
+      "event_type": "drank",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity",
+        "character_need_states.debt_score"
+      ],
+      "magnitude": 0.1,
+      "promotable": true
+    },
+    {
+      "proposal_id": "drink:9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "template_id": "drink",
+      "priority": 24,
+      "binding_hash": "9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+      "bindings": {
+        "actor": 11
+      },
+      "binding_names": {
+        "actor": "Vela Nash",
+        "place": "Lantern Quay Memorial Hall"
+      },
+      "position": 14,
+      "effective_priority": 24.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Vela Nash drinks because the body has been quietly asking, then returns to the shape of the hour.",
+      "state_delta": {
+        "character.current_activity": "drinking routinely",
+        "need.fulfill": {
+          "type": "thirst",
+          "quality": "routine",
+          "discharge_debt": 9999
+        }
+      },
+      "event_type": "drank",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity",
+        "character_need_states.debt_score"
+      ],
+      "magnitude": 0.1,
+      "promotable": true
+    },
+    {
+      "proposal_id": "drink:cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "template_id": "drink",
+      "priority": 24,
+      "binding_hash": "cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+      "bindings": {
+        "actor": 15
+      },
+      "binding_names": {
+        "actor": "Unknown municipal-gray stranger",
+        "place": "unknown"
+      },
+      "position": 15,
+      "effective_priority": 24.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Unknown municipal-gray stranger drinks because the body has been quietly asking, then returns to the shape of the hour.",
+      "state_delta": {
+        "character.current_activity": "drinking routinely",
+        "need.fulfill": {
+          "type": "thirst",
+          "quality": "routine",
+          "discharge_debt": 9999
+        }
+      },
+      "event_type": "drank",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity",
+        "character_need_states.debt_score"
+      ],
+      "magnitude": 0.1,
+      "promotable": true
+    },
+    {
+      "proposal_id": "drink:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "template_id": "drink",
+      "priority": 24,
+      "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+      "bindings": {
+        "actor": 16
+      },
+      "binding_names": {
+        "actor": "Tam Oris",
+        "place": "Lantern Quay Memorial Hall"
+      },
+      "position": 16,
+      "effective_priority": 24.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Drink routinely from what is at hand",
+      "narrative_stub": "Tam Oris drinks because the body has been quietly asking, then returns to the shape of the hour.",
+      "state_delta": {
+        "character.current_activity": "drinking routinely",
+        "need.fulfill": {
+          "type": "thirst",
+          "quality": "routine",
+          "discharge_debt": 9999
+        }
+      },
+      "event_type": "drank",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity",
+        "character_need_states.debt_score"
+      ],
+      "magnitude": 0.1,
+      "promotable": true
+    },
+    {
+      "proposal_id": "upkeep:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+      "template_id": "upkeep",
+      "priority": 11,
+      "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+      "bindings": {
+        "actor": 6
+      },
+      "binding_names": {
+        "actor": "Ren Vale",
+        "place": "Lantern Quay Memorial Hall"
+      },
+      "position": 17,
+      "effective_priority": 11.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Tidy what is theirs",
+      "narrative_stub": "Ren Vale tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.",
+      "state_delta": {
+        "character.current_activity": "tidying their own space"
+      },
+      "event_type": "upkeep_done",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.08,
+      "promotable": true
+    },
+    {
+      "proposal_id": "stroll:a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68",
+      "template_id": "stroll",
+      "priority": 12,
+      "binding_hash": "a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68",
+      "bindings": {
+        "actor": 5
+      },
+      "binding_names": {
+        "actor": "Niko Rell",
+        "place": "Lantern Quay Memorial Hall"
+      },
+      "position": 18,
+      "effective_priority": 9.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Pace the near ground",
+      "narrative_stub": "Niko Rell moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds.",
+      "state_delta": {
+        "character.current_activity": "pacing the near ground"
+      },
+      "event_type": "stroll_taken",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.08,
+      "promotable": true
+    },
+    {
+      "proposal_id": "make_acquaintance:cd68bd64333450c04ac110444f74402b2a745cc56fe95056619e76ad1e55ce05",
+      "template_id": "make_acquaintance",
+      "priority": 5,
+      "binding_hash": "cd68bd64333450c04ac110444f74402b2a745cc56fe95056619e76ad1e55ce05",
+      "bindings": {
+        "actor": 16,
+        "target": 28
+      },
+      "binding_names": {
+        "actor": "Tam Oris",
+        "target": "Len Aster",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "position": 19,
+      "effective_priority": 5.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Exchange names",
+      "narrative_stub": "Tam Oris and Len Aster keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.",
+      "state_delta": {
+        "entity_pair_tags.add_outbound": [
+          "contact:social"
+        ],
+        "entity_pair_tags.add_inbound": [
+          "contact:social"
+        ]
+      },
+      "event_type": "contact_made",
+      "signal_event_type": null,
+      "changed_fields": [
+        "entity_pair_tags"
+      ],
+      "magnitude": 0.08,
+      "promotable": false
+    },
+    {
+      "proposal_id": "stroll:cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "template_id": "stroll",
+      "priority": 12,
+      "binding_hash": "cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+      "bindings": {
+        "actor": 26
+      },
+      "binding_names": {
+        "actor": "Ressa Morn",
+        "place": "unknown"
+      },
+      "position": 20,
+      "effective_priority": 2.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Take the night air",
+      "narrative_stub": "Ressa Morn steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves.",
+      "state_delta": {
+        "character.current_activity": "taking the night air"
+      },
+      "event_type": "stroll_taken",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.12,
+      "promotable": true
+    },
+    {
+      "proposal_id": "make_acquaintance:9e8a4f8844a26f4aa0a8d416c053d415740b02f031bf934a5a9c4a9ac4cbe4e2",
+      "template_id": "make_acquaintance",
+      "priority": 5,
+      "binding_hash": "9e8a4f8844a26f4aa0a8d416c053d415740b02f031bf934a5a9c4a9ac4cbe4e2",
+      "bindings": {
+        "actor": 5,
+        "target": 6
+      },
+      "binding_names": {
+        "actor": "Niko Rell",
+        "target": "Ren Vale",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "position": 21,
+      "effective_priority": 2.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Exchange names",
+      "narrative_stub": "Niko Rell and Ren Vale keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.",
+      "state_delta": {
+        "entity_pair_tags.add_outbound": [
+          "contact:social"
+        ],
+        "entity_pair_tags.add_inbound": [
+          "contact:social"
+        ]
+      },
+      "event_type": "contact_made",
+      "signal_event_type": null,
+      "changed_fields": [
+        "entity_pair_tags"
+      ],
+      "magnitude": 0.08,
+      "promotable": false
+    },
+    {
+      "proposal_id": "recreate:e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+      "template_id": "recreate",
+      "priority": 9,
+      "binding_hash": "e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+      "bindings": {
+        "actor": 19
+      },
+      "binding_names": {
+        "actor": "Ora Pell",
+        "place": "unknown"
+      },
+      "position": 22,
+      "effective_priority": 0.0,
+      "evaluated_at": "2189-10-17T22:37:00+00:00",
+      "branch_label": "Take a small private pleasure",
+      "narrative_stub": "Ora Pell gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it.",
+      "state_delta": {
+        "character.current_activity": "taking a small pleasure"
+      },
+      "event_type": "recreation_taken",
+      "signal_event_type": null,
+      "changed_fields": [
+        "character.current_activity"
+      ],
+      "magnitude": 0.08,
+      "promotable": true
+    }
+  ],
+  "orrery_scene_pressures": [
+    {
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "5c8f9b44c7db6d471b98e007d3b1e3a1ea5e9813311970f8e3b36e6940197841",
+      "bindings": {
+        "actor": 3,
+        "target": 1
+      },
+      "branch_label": "Follow the public pattern",
+      "pressure_stub": "{actor} may have mapped the public pattern around {target}. Use this only as Storyteller-controlled scene pressure or a future setup.",
+      "prompt_text": "Ivo Senn may have mapped the public pattern around Mara Vey. Use this only as Storyteller-controlled scene pressure or a future setup.",
+      "magnitude": 0.3,
+      "binding_names": {
+        "actor": "Ivo Senn",
+        "target": "Mara Vey",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "evaluated_at": "2189-10-17T22:37:00+00:00"
+    },
+    {
+      "template_id": "check_on_dependent",
+      "priority": 55,
+      "binding_hash": "19cf0e8cced5d13a0a1d5cecf4b68ffa82e9c8bcb34f6224366667719d789ee0",
+      "bindings": {
+        "actor": 3,
+        "target": 31
+      },
+      "branch_label": "Reach out through customary channels",
+      "pressure_stub": "{actor} has sent {target} a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for {target}'s decisions.",
+      "prompt_text": "Ivo Senn has sent Kessa Brin a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for Kessa Brin's decisions.",
+      "magnitude": 0.22,
+      "binding_names": {
+        "actor": "Ivo Senn",
+        "target": "Kessa Brin",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "unknown"
+      },
+      "evaluated_at": "2189-10-17T22:37:00+00:00"
+    },
+    {
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "92cf3d4abbbd0623849b8c73c3af3820b0426fde855eeb6fe7e32ca2d83ddac6",
+      "bindings": {
+        "actor": 5,
+        "target": 1
+      },
+      "branch_label": "Collect a proxy watcher report",
+      "pressure_stub": "{actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+      "prompt_text": "Niko Rell has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+      "magnitude": 0.38,
+      "binding_names": {
+        "actor": "Niko Rell",
+        "target": "Mara Vey",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "evaluated_at": "2189-10-17T22:37:00+00:00"
+    },
+    {
+      "template_id": "surveil",
+      "priority": 48,
+      "binding_hash": "1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+      "bindings": {
+        "actor": 16,
+        "target": 1
+      },
+      "branch_label": "Collect a proxy watcher report",
+      "pressure_stub": "{actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+      "prompt_text": "Tam Oris has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+      "magnitude": 0.38,
+      "binding_names": {
+        "actor": "Tam Oris",
+        "target": "Mara Vey",
+        "place": "Lantern Quay Memorial Hall",
+        "target_place": "Lantern Quay Memorial Hall"
+      },
+      "evaluated_at": "2189-10-17T22:37:00+00:00"
+    }
+  ],
+  "orrery_joint_beats": [
+    {
+      "kind": "crossed",
+      "entity_a": 4,
+      "entity_b": 16,
+      "forward_proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "reverse_proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+      "forward_template_id": "check_on_dependent",
+      "reverse_template_id": "surveil",
+      "forward_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+      "reverse_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+      "magnitude": 0.38,
+      "entity_names": {
+        "4": "Elian Rook",
+        "16": "Tam Oris"
+      }
+    }
+  ],
+  "orrery_recent_rulings_section": [
+    "=== RECENT ORRERY RULINGS ===",
+    "[RATIFIED] Kessa Brin tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up. (turn N-1)",
+    "[RATIFIED] Ressa Morn drinks because the body has been quietly asking, then returns to the shape of the hour. (turn N-1)",
+    "[RATIFIED] Ora Pell tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up. (turn N-1)",
+    "[RATIFIED] Kessa Brin moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds. (turn N-2)",
+    "[RATIFIED] Len Aster steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves. (turn N-2)"
+  ]
+}

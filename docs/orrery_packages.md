@@ -3721,6 +3721,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/063_orrery_adjudication_history.sql`
 - `migrations/067_rename_orrery_templates.sql`
 - `migrations/100_orrery_need_clock_anchor.sql`
+- `migrations/122_orrery_card_identity.sql`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

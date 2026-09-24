@@ -124,6 +124,7 @@
     "nexus/agents/orrery/audit.py",
     "nexus/agents/orrery/backstage.py",
     "nexus/agents/orrery/bleed.py",
+    "nexus/agents/orrery/cards.py",
     "nexus/agents/orrery/catalog.py",
     "nexus/agents/orrery/communication.py",
     "nexus/agents/orrery/coverage.py",

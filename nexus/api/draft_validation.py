@@ -11,7 +11,11 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
 )
-from nexus.agents.orrery.events import coerce_proposal, validate_proposal_adjudications
+from nexus.agents.orrery.events import (
+    coerce_proposal,
+    normalize_proposal_adjudications,
+    validate_proposal_adjudications,
+)
 from nexus.agents.orrery.tag_writer import _row_value, validate_tag_bestowal
 from nexus.api.commit_handler_sync import (
     _require_state_update_id_sync,
@@ -34,8 +38,10 @@ def validate_commit_draft_sync(conn: Any, data: Mapping[str, Any]) -> None:
     """
     validate_incubator_data(dict(data))
     proposal, _ = split_staged_orrery_payload(data.get("orrery_proposal"))
+    proposal = coerce_proposal(proposal)
     validate_proposal_adjudications(
-        coerce_proposal(proposal), data.get("orrery_adjudications")
+        proposal,
+        normalize_proposal_adjudications(proposal, data.get("orrery_adjudications")),
     )
     parent = data["parent_chunk_id"]
     season, episode = 1, 1

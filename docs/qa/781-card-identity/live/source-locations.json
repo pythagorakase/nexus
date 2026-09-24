@@ -1,0 +1,145 @@
+{
+  "database": "save_04",
+  "read_only": true,
+  "sql": "SELECT c.entity_id, c.name, c.current_location, p.name AS place_name FROM characters c LEFT JOIN places p ON p.id=c.current_location ORDER BY c.entity_id",
+  "rows": [
+    {
+      "entity_id": 1,
+      "name": "Mara Vey",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 3,
+      "name": "Ivo Senn",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 4,
+      "name": "Elian Rook",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 5,
+      "name": "Niko Rell",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 6,
+      "name": "Ren Vale",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 8,
+      "name": "Sister Calyx",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 10,
+      "name": "Tomas Quill",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 11,
+      "name": "Vela Nash",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 13,
+      "name": "Dr. Sera Vey",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 14,
+      "name": "Ione Varr",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 15,
+      "name": "Unknown municipal-gray stranger",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 16,
+      "name": "Tam Oris",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 17,
+      "name": "Hale Morrow",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 19,
+      "name": "Ora Pell",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 26,
+      "name": "Ressa Morn",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 28,
+      "name": "Len Aster",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 29,
+      "name": "Davin Sol",
+      "current_location": 1,
+      "place_name": "Lantern Quay Memorial Hall"
+    },
+    {
+      "entity_id": 31,
+      "name": "Kessa Brin",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 33,
+      "name": "Orris Vale",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 34,
+      "name": "Tarin Quell",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 35,
+      "name": "Dax Morrow",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 36,
+      "name": "Tamsin Pire",
+      "current_location": null,
+      "place_name": null
+    },
+    {
+      "entity_id": 39,
+      "name": "Nera Voss",
+      "current_location": null,
+      "place_name": null
+    }
+  ]
+}

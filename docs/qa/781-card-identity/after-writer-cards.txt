@@ -1,0 +1,19 @@
+=== ORRERY IMMINENT ACTIVITY ===
+These are current-tick Orrery proposals. If you omit a proposal from orrery_adjudications, commit will ratify it. You remain sovereign: use defer to leave pressure unresolved, void when a proposal is definitively false, and replace when your structured updates or replacement_state_delta supersede it. A replacement only emits a world_event if you provide replacement_event_type. Reference each proposal by the id shown on its card.
+- [0] hide:85dcc9f3 Elian Rook at Lantern Quay Memorial Hall: Go dark and reduce signal exposure
+- [1] honor_debt:ff450d8c Ivo Senn at Lantern Quay Memorial Hall: Fulfill obligation through a dead-drop
+- [2] check_on_dependent:b141c5fd Elian Rook at Lantern Quay Memorial Hall → Tam Oris: Reach out through customary channels
+- [3] check_on_dependent:02e54df4 Ren Vale at Lantern Quay Memorial Hall → Dr. Sera Vey: Reach out through customary channels
+- [4] surveil:93626842 Ivo Senn at Lantern Quay Memorial Hall → Elian Rook: Keep the target in view without contact
+
+=== ORRERY SCENE PRESSURE ===
+These are Storyteller-mediated pressures involving current on-screen characters. Some may originate from off-screen actors; some may be present-character need pressure. You may adapt, delay, ignore, or incorporate them. Do not let Orrery decide what present characters do.
+- [0] surveil:5c8f9b44 Ivo Senn at Lantern Quay Memorial Hall → Mara Vey: Ivo Senn may have mapped the public pattern around Mara Vey. Use this only as Storyteller-controlled scene pressure or a future setup.
+- [1] check_on_dependent:19cf0e8c Ivo Senn at Lantern Quay Memorial Hall → Kessa Brin: Ivo Senn has sent Kessa Brin a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for Kessa Brin's decisions.
+- [2] surveil:92cf3d4a Niko Rell at Lantern Quay Memorial Hall → Mara Vey: Niko Rell has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.
+- [3] surveil:1e994ef5 Tam Oris at Lantern Quay Memorial Hall → Mara Vey: Tam Oris has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.
+
+=== ORRERY JOINT BEATS ===
+These proposal pairs have the same two characters acting toward each other in this tick. Treat each pair as one scene if you wish: 'reciprocal' means both chose the same behavior (a meeting of intent); 'crossed' means their behaviors differ (tension you may spring). Adjudicate the underlying proposals by proposal_id as usual.
+- [2] check_on_dependent:b141c5fd Elian Rook at Lantern Quay Memorial Hall → Tam Oris: Reach out through customary channels
+- [10] surveil:31b0006f Tam Oris at Lantern Quay Memorial Hall → Elian Rook: Collect a proxy watcher report

@@ -1,0 +1,29 @@
+[
+  {
+    "proposal_id": "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+    "action": "void",
+    "replacement_state_delta": null
+  },
+  {
+    "proposal_id": "check_on_dependent:02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+    "action": "replace",
+    "replacement_state_delta": {
+      "character.current_activity": "preparing a qualified status inquiry regarding Dr. Sera Vey"
+    }
+  },
+  {
+    "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+    "action": "defer",
+    "replacement_state_delta": null
+  },
+  {
+    "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+    "action": "void",
+    "replacement_state_delta": null
+  },
+  {
+    "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+    "action": "defer",
+    "replacement_state_delta": null
+  }
+]

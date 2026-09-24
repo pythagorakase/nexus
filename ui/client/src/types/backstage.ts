@@ -43,16 +43,8 @@ export interface BackstageTurnResponse {
     history: BackstageHistoryLine[];
   };
   orrery: {
-    rows: Array<{
-      template_id: string;
-      actor_name: string | null;
-      target_name: string | null;
-      magnitude: number | null;
-      brief: string | null;
-      branch_label: string | null;
-      event_type: string | null;
-      drive_band: string | null;
-    }>;
+    rows: BackstageOrreryRow[];
+    inventory?: BackstageOrreryRow[];
     counts: BackstageCounts;
     history: BackstageHistoryLine[];
   };
@@ -71,4 +63,19 @@ export interface BackstageHistoryLine {
   fired: number | null;
   pressures: number | null;
   events: number | null;
+}
+
+export interface BackstageOrreryRow {
+  template_id: string;
+  actor_name: string | null;
+  target_name: string | null;
+  magnitude: number | null;
+  brief: string | null;
+  branch_label: string | null;
+  event_type: string | null;
+  drive_band: string | null;
+  proposal_id?: string | null;
+  position?: number | null;
+  binding_names?: Record<string, string>;
+  evaluated_at?: string | null;
 }

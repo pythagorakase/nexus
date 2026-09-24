@@ -10,7 +10,6 @@ import json
 import math
 import os
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Iterator, Mapping, cast
 from uuid import uuid4
 
@@ -32,6 +31,7 @@ from nexus.agents.memnon.utils.embedding_tables import (
 )
 from nexus.agents.orrery.audit import CognitionTraceInputError, cognition_trace
 from nexus.agents.orrery.events import commit_orrery_tick_sync
+from nexus.agents.orrery.resolver import OrreryTickProposal
 from nexus.agents.orrery.knowledge_surfacing import (
     _eligible_rows,
     build_knowledge_digest_sync,
@@ -2092,14 +2092,8 @@ def test_turn_inputs_change_experience_ranking_via_shared_query_embedding(
             ],
         )
         context.token_counts = {"total_available": 75_000}
-        context.orrery_proposal = cast(
-            Any,
-            SimpleNamespace(
-                anchor_chunk_id=anchor,
-                pressure_count=0,
-                resolution_count=0,
-                joint_beats=(),
-            ),
+        context.orrery_proposal = OrreryTickProposal(
+            anchor_chunk_id=anchor, actor_count=0, resolutions=()
         )
 
         asyncio.run(manager.execute_deep_queries(context))

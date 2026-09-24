@@ -38,6 +38,9 @@ reason = "Read-only clock identity QA family documented in scripts/qa_shift/READ
 target = "scripts/qa_shift/long_absence_probe.py:main"
 reason = "Clone-only long-absence probe launcher from issue 909; writes only to a qa640_* clone."
 [[operators]]
+target = "scripts/qa_shift/card_identity_probe.py:main"
+reason = "Bounded before/after card identity proof for issue 781 on a qa640_* clone, lane 8015."
+[[operators]]
 target = "scripts/qa_shift/long_absence_turn.py:main"
 reason = "Long-absence probe turn driver from issue 909; CLI generation, acceptance, and evidence capture on the clone."
 [[operators]]

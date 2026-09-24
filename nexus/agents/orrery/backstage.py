@@ -108,7 +108,7 @@ class BackstageStateWrites(BaseModel):
 
 
 class BackstageOrreryRow(BaseModel):
-    """One persisted Orrery resolution and its optional emitted event."""
+    """One persisted proposal card (or a legacy resolution) and emitted event."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -120,6 +120,10 @@ class BackstageOrreryRow(BaseModel):
     branch_label: Optional[str] = None
     event_type: Optional[str] = None
     drive_band: Optional[str] = None
+    proposal_id: Optional[str] = None
+    position: Optional[int] = None
+    binding_names: dict[str, str] = Field(default_factory=dict)
+    evaluated_at: Optional[str] = None
 
 
 class BackstageCounts(BaseModel):
@@ -138,6 +142,7 @@ class BackstageOrrery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rows: list[BackstageOrreryRow] = Field(default_factory=list)
+    inventory: list[BackstageOrreryRow] = Field(default_factory=list)
     counts: BackstageCounts
     history: list[BackstageHistoryLine] = Field(default_factory=list)
 
@@ -534,10 +539,12 @@ def _orrery(
     band_by_template = {
         template.id: template.drive_band.value for template in BUILTIN_TEMPLATES
     }
-    rows = session.execute(
-        text(
-            f"""
+    rows = (
+        session.execute(
+            text(
+                f"""
             SELECT resolution.template_id,
+                   resolution.template_id || ':' || resolution.binding_hash AS proposal_id,
                    {_entity_label_sql('actor')} AS actor_name,
                    COALESCE({_entity_label_sql('direct_target')},
                             {_entity_label_sql('participant_target')}) AS target_name,
@@ -567,9 +574,34 @@ def _orrery(
             WHERE resolution.tick_chunk_id = :chunk_id
             ORDER BY resolution.id, event.id
             """
-        ),
+            ),
+            {"chunk_id": chunk_id},
+        )
+        .mappings()
+        .all()
+    )
+    snapshot = session.execute(
+        text("SELECT orrery_proposal FROM narrative_chunks WHERE id = :chunk_id"),
         {"chunk_id": chunk_id},
-    ).mappings()
+    ).scalar_one()
+    if snapshot is not None:
+        committed = {row["proposal_id"]: row for row in rows}
+        rows = [
+            {
+                "template_id": card["template_id"],
+                "proposal_id": card["proposal_id"],
+                "position": card["position"],
+                "binding_names": card["binding_names"],
+                "evaluated_at": card["evaluated_at"],
+                "actor_name": card["binding_names"].get("actor"),
+                "target_name": card["binding_names"].get("target"),
+                "magnitude": card["magnitude"],
+                "brief": card["narrative_stub"],
+                "branch_label": card["branch_label"],
+                "event_type": committed.get(card["proposal_id"], {}).get("event_type"),
+            }
+            for card in snapshot["resolutions"]
+        ]
     history: list[BackstageHistoryLine] = []
     for chunk in prior_chunks:
         counts = _orrery_counts(session, int(chunk["id"]))
@@ -582,22 +614,36 @@ def _orrery(
                 events=counts.events,
             )
         )
+    inventory = [
+        BackstageOrreryRow(
+            template_id=str(row["template_id"]),
+            actor_name=row["actor_name"],
+            target_name=row["target_name"],
+            magnitude=(
+                float(row["magnitude"]) if row["magnitude"] is not None else None
+            ),
+            brief=row["brief"],
+            branch_label=row["branch_label"],
+            event_type=row["event_type"],
+            drive_band=band_by_template.get(str(row["template_id"])),
+            proposal_id=row["proposal_id"],
+            position=row.get("position"),
+            binding_names=row.get("binding_names", {}),
+            evaluated_at=row.get("evaluated_at"),
+        )
+        for row in rows
+    ]
+    selected = inventory
+    if snapshot is not None and snapshot.get("rendered_cards") is not None:
+        by_key = {row.proposal_id: row for row in inventory}
+        selected = [
+            by_key[item["proposal_id"]]
+            for item in snapshot["rendered_cards"]
+            if item["kind"] in {"resolution", "joint_beat"}
+        ]
     return BackstageOrrery(
-        rows=[
-            BackstageOrreryRow(
-                template_id=str(row["template_id"]),
-                actor_name=row["actor_name"],
-                target_name=row["target_name"],
-                magnitude=(
-                    float(row["magnitude"]) if row["magnitude"] is not None else None
-                ),
-                brief=row["brief"],
-                branch_label=row["branch_label"],
-                event_type=row["event_type"],
-                drive_band=band_by_template.get(str(row["template_id"])),
-            )
-            for row in rows
-        ],
+        rows=selected,
+        inventory=inventory,
         counts=_orrery_counts(session, chunk_id),
         history=history,
     )

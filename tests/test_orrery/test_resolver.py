@@ -211,6 +211,7 @@ class FakeSession:
             {"id": 1, "name": "Mara"},
             {"id": 2, "name": "Vale"},
             {"id": 3, "name": "Iris"},
+            {"id": 1000, "name": "The Commons"},
         ]
         self.need_debt_rows = need_debt_rows or []
         self.travel_state_rows = travel_state_rows or []
@@ -3568,15 +3569,15 @@ def test_resolution_drafts_carry_binding_names_for_skald() -> None:
 
     assert proposal.resolution_count == 1
     draft = proposal.resolutions[0]
-    assert draft.binding_names == {"actor": "Brother Edran Vell"}
+    assert draft.binding_names == {"actor": "Brother Edran Vell", "place": "unknown"}
     assert "{actor}" not in draft.narrative_stub
     assert "Brother Edran Vell" in draft.narrative_stub
 
     # The Skald-facing dict and the incubator round-trip both keep names.
     data = draft.to_dict()
-    assert data["binding_names"] == {"actor": "Brother Edran Vell"}
+    assert data["binding_names"] == draft.binding_names
     rehydrated = OrreryResolutionDraft.from_dict(data)
-    assert rehydrated.binding_names == {"actor": "Brother Edran Vell"}
+    assert rehydrated.binding_names == draft.binding_names
 
 
 def test_habituation_dampens_repeat_winner_and_respects_exemptions() -> None:

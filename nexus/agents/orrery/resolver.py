@@ -36,6 +36,7 @@ from nexus.agents.orrery.reciprocal import (
     detect_joint_beats,
 )
 from nexus.agents.orrery.substrate import (
+    HabituationPolicy,
     PackageSelection,
     ProjectPolicy,
     ProjectState,
@@ -109,6 +110,9 @@ class OrreryResolutionDraft:
     # without names it cannot tell WHO an off-screen resolution is about and
     # may misattribute it to an on-screen character (M9 gate finding).
     binding_names: Mapping[str, str] = field(default_factory=dict)
+    position: Optional[int] = None
+    effective_priority: Optional[float] = None
+    evaluated_at: Optional[str] = None
 
     @property
     def proposal_id(self) -> str:
@@ -126,6 +130,9 @@ class OrreryResolutionDraft:
             "binding_hash": self.binding_hash,
             "bindings": dict(self.bindings),
             "binding_names": dict(self.binding_names),
+            "position": self.position,
+            "effective_priority": self.effective_priority,
+            "evaluated_at": self.evaluated_at,
             "branch_label": self.branch_label,
             "narrative_stub": self.narrative_stub,
             "state_delta": dict(self.state_delta),
@@ -167,6 +174,9 @@ class OrreryResolutionDraft:
             magnitude=float(data.get("magnitude") or 0.0),
             promotable=bool(data.get("promotable", True)),
             binding_names=dict(data.get("binding_names") or {}),
+            position=data.get("position"),
+            effective_priority=data.get("effective_priority"),
+            evaluated_at=data.get("evaluated_at"),
         )
 
 
@@ -182,6 +192,8 @@ class OrreryScenePressureDraft:
     pressure_stub: str
     prompt_text: str
     magnitude: float = 0.0
+    binding_names: Mapping[str, str] = field(default_factory=dict)
+    evaluated_at: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation of this scene pressure."""
@@ -195,6 +207,8 @@ class OrreryScenePressureDraft:
             "pressure_stub": self.pressure_stub,
             "prompt_text": self.prompt_text,
             "magnitude": self.magnitude,
+            "binding_names": dict(self.binding_names),
+            "evaluated_at": self.evaluated_at,
         }
 
     @classmethod
@@ -211,6 +225,8 @@ class OrreryScenePressureDraft:
             pressure_stub=pressure_stub,
             prompt_text=str(data.get("prompt_text") or pressure_stub),
             magnitude=float(data.get("magnitude") or 0.0),
+            binding_names=dict(data.get("binding_names") or {}),
+            evaluated_at=data.get("evaluated_at"),
         )
 
 
@@ -224,6 +240,7 @@ class OrreryTickProposal:
     scene_pressures: Tuple[OrreryScenePressureDraft, ...] = ()
     ambient_scene_seeds: Tuple[AmbientSceneSeed, ...] = ()
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
+    rendered_cards: Optional[Tuple[Mapping[str, str], ...]] = None
     # Transient read-side projection. Intentionally omitted from to_dict():
     # incubator persistence stores decisions, not a hydration-time graph.
     communication_graph: CommunicationGraph = field(
@@ -261,6 +278,11 @@ class OrreryTickProposal:
         return {
             "anchor_chunk_id": self.anchor_chunk_id,
             "actor_count": self.actor_count,
+            "rendered_cards": (
+                [dict(item) for item in self.rendered_cards]
+                if self.rendered_cards is not None
+                else None
+            ),
             "generated_at": self.generated_at,
             "resolutions": [draft.to_dict() for draft in self.resolutions],
             "scene_pressures": [
@@ -281,6 +303,11 @@ class OrreryTickProposal:
         return cls(
             anchor_chunk_id=data.get("anchor_chunk_id"),
             actor_count=int(data.get("actor_count") or 0),
+            rendered_cards=(
+                tuple(data["rendered_cards"])
+                if data.get("rendered_cards") is not None
+                else None
+            ),
             generated_at=str(data["generated_at"]),
             resolutions=tuple(
                 OrreryResolutionDraft.from_dict(item)
@@ -534,7 +561,6 @@ def hydrate_world_state(
                    p.type::text AS location_class,
                    true AS is_primary
             FROM places p
-            WHERE p.type IS NOT NULL
             UNION ALL
             SELECT p.id,
                    p.entity_id AS place_entity_id,
@@ -557,11 +583,11 @@ def hydrate_world_state(
     ).mappings():
         place_id = row["id"]
         class_name = row["location_class"]
-        if class_name is None:
-            continue
         place_entity_id = row.get("place_entity_id")
         if place_entity_id is not None:
             location_entity_ids[place_id] = place_entity_id
+        if class_name is None:
+            continue
         zone_id = row.get("zone_id")
         if zone_id is not None:
             location_zones[place_id] = zone_id
@@ -2606,6 +2632,7 @@ def resolve_dry_run(
         spec["actor_entity_id"] for spec in present_need_pressure_specs
     }
     name_entity_ids = draft_entity_ids | pressure_entity_ids
+    name_entity_ids.update(state.location_entity_ids.values())
     if ambient_settings is not None and ambient_pacing_allowed:
         name_entity_ids.update(composition_cache.present_actor_ids)
     if state.mood_enabled:
@@ -2615,10 +2642,8 @@ def resolve_dry_run(
     drafts = [
         replace(
             draft,
-            binding_names={
-                slot: _entity_label(value, entity_names)
-                for slot, value in draft.bindings.items()
-            },
+            binding_names=_card_binding_names(draft.bindings, state, entity_names),
+            evaluated_at=state.world_time.isoformat() if state.world_time else None,
             narrative_stub=_render_bound_text(
                 draft.narrative_stub,
                 draft.bindings,
@@ -2628,6 +2653,7 @@ def resolve_dry_run(
         )
         for draft in drafts
     ]
+    drafts = rank_proposals(drafts, templates_list, state, habituation)
 
     scene_pressures = tuple(
         _scene_pressure_from_resolution(resolution, entity_names)
@@ -2639,6 +2665,14 @@ def resolve_dry_run(
             need_tuning=need_tuning,
         )
         for spec in present_need_pressure_specs
+    )
+    scene_pressures = tuple(
+        replace(
+            pressure,
+            binding_names=_card_binding_names(pressure.bindings, state, entity_names),
+            evaluated_at=state.world_time.isoformat() if state.world_time else None,
+        )
+        for pressure in scene_pressures
     )
 
     unique_actors = (
@@ -2669,7 +2703,16 @@ def resolve_dry_run(
         ]
         if moods:
             scene_conditions["moods"] = moods
-    joint_beats = detect_joint_beats(drafts, entity_names)
+    ranked_by_id = {draft.proposal_id: draft for draft in drafts}
+    joint_beats = tuple(
+        sorted(
+            detect_joint_beats(drafts, entity_names),
+            key=lambda beat: min(
+                ranked_by_id[beat.forward_proposal_id].position,
+                ranked_by_id[beat.reverse_proposal_id].position,
+            ),
+        )
+    )
     if ambient_settings is not None and ambient_pacing_allowed is None:
         raise ValueError(
             "ambient_pacing_allowed is required when ambient_settings are supplied"
@@ -2703,6 +2746,58 @@ def resolve_dry_run(
         },
         scene_conditions=scene_conditions,
     )
+
+
+def rank_proposals(
+    drafts: Iterable[OrreryResolutionDraft],
+    templates: Iterable[Template],
+    state: WorldState,
+    habituation: HabituationPolicy,
+) -> list[OrreryResolutionDraft]:
+    """Stamp one stable, descending effective-priority sequence for the turn.
+
+    Use the resolver's existing habituation policy; ties retain composition
+    order, as equal priorities retain registry order inside an actor's stack.
+    Consumers retain these positions rather than re-ranking serialized cards.
+    """
+    by_id = {template.id: template for template in templates}
+    scored = [
+        replace(
+            draft,
+            effective_priority=habituation.effective_priority(
+                by_id[draft.template_id],
+                state,
+                {Slot(slot): value for slot, value in draft.bindings.items()},
+            ),
+        )
+        for draft in drafts
+    ]
+    return [
+        replace(draft, position=position)
+        for position, draft in enumerate(
+            sorted(scored, key=lambda draft: draft.effective_priority, reverse=True)
+        )
+    ]
+
+
+def _card_binding_names(
+    bindings: Mapping[str, Any],
+    state: WorldState,
+    entity_names: Mapping[int, str],
+) -> dict[str, str]:
+    """Name bound entities and their recorded places without changing identity."""
+    names = {
+        slot: _entity_label(value, entity_names) for slot, value in bindings.items()
+    }
+    for slot, label in (("actor", "place"), ("target", "target_place")):
+        if slot not in bindings:
+            continue
+        place_id = state.locations.get(bindings[slot])
+        place_entity_id = state.location_entity_ids.get(place_id)
+        names[label] = (
+            entity_names[place_entity_id] if place_entity_id is not None else "unknown"
+        )
+    return names
 
 
 def _load_recent_events(

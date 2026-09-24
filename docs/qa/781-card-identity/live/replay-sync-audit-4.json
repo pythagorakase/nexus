@@ -1,0 +1,698 @@
+{
+  "entity": {
+    "entity_id": 4,
+    "name": "Elian Rook"
+  },
+  "anchor": {
+    "chunk_id": 50,
+    "world_time": "2189-10-17T18:38:00-04:00",
+    "world_layer": "primary",
+    "season": 1,
+    "episode": 2,
+    "scene": 46
+  },
+  "actor_facing": {
+    "possessed_accounts": [
+      {
+        "awareness_id": 7,
+        "claim_id": 5,
+        "summary": "Surveillance performed: actor Elian Rook, target Dax Morrow.",
+        "scope": "bounded",
+        "account_label": "canonical",
+        "account_payload": null,
+        "distorted_from_claim_id": null,
+        "distortion_min_depth": null,
+        "possession": {
+          "source_tier": "participant",
+          "channel": null,
+          "acquisition_chunk_id": 50,
+          "acquired_at_world_time": "2189-10-17T18:38:00-04:00",
+          "propagation_depth": null,
+          "source_chain": [
+            {
+              "kind": "possession",
+              "entity_id": 4,
+              "name": "Elian Rook"
+            }
+          ]
+        },
+        "source_event": {
+          "event_id": 191
+        }
+      }
+    ],
+    "experiences": [
+      {
+        "experience_id": 25,
+        "anchor_chunk_id": 24,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:32:00-04:00",
+        "seed_summary": "Elian Rook participated in the accepted scene at 2189-10-17T16:32:00-04:00. surveillance_performed: Elian Rook affected Ren Vale at Lantern Quay Memorial Hall (Elian Rook keeps tabs on Ren Vale without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.264,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "7e6572902803568e327d6caa205a9bdcffec3f03d177f50aa246a69ee1a024a9",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          48
+        ]
+      },
+      {
+        "experience_id": 32,
+        "anchor_chunk_id": 25,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:35:00-04:00",
+        "seed_summary": "Elian Rook participated in the accepted scene at 2189-10-17T16:35:00-04:00. hideout_maintained: Elian Rook at Lantern Quay Memorial Hall (Elian Rook does the unglamorous work of staying missing: small routines, smaller footprints, and the discipline not to reach toward the people who would make the silence easier to bear.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.132,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "c2cc998b5e5edd8671d89c6381073cb62ce55aa9ed39b3e7f334093d67a8d041",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          55
+        ]
+      },
+      {
+        "experience_id": 50,
+        "anchor_chunk_id": 27,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:42:00-04:00",
+        "seed_summary": "Elian Rook participated in the accepted scene at 2189-10-17T16:42:00-04:00. contact_made: Elian Rook affected Niko Rell at Lantern Quay Memorial Hall (Elian Rook and Niko Rell keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.048,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "a46c786578a84ef2f7afdc5624a85b45a4f500ab37e7ae33865a4b82a8eccfb2",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          76
+        ]
+      },
+      {
+        "experience_id": 58,
+        "anchor_chunk_id": 28,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:44:00-04:00",
+        "seed_summary": "Elian Rook participated in the accepted scene at 2189-10-17T16:44:00-04:00. welfare_check: Elian Rook affected Tam Oris at Lantern Quay Memorial Hall (Elian Rook stops by \u2014 ostensibly for something else, the way these visits often are \u2014 and uses the small window to read Tam Oris's state: how they look, what they say without saying, what they decline to mention. It will be enough information for now.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.264,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "563e934f17a4e91f05e9487ef83736825ddd9220bfbfd370136af6f78a43cc45",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          83
+        ]
+      },
+      {
+        "experience_id": 62,
+        "anchor_chunk_id": 30,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:50:00-04:00",
+        "seed_summary": "Elian Rook participated in the accepted scene at 2189-10-17T16:50:00-04:00. surveillance_performed: Elian Rook affected Tam Oris at Lantern Quay Memorial Hall (Elian Rook keeps tabs on Tam Oris without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.28275,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "1a5ef16a92d33e4048329073a3e7b699513464b052c193e6df473314b11e22eb",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          89
+        ]
+      }
+    ],
+    "recall_candidates": [],
+    "recall_truncated": false,
+    "disclosure_results": [],
+    "prompt_exposure": {
+      "orrery_proposals": [
+        {
+          "kind": "resolution",
+          "exposure_id": 378,
+          "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+          "template_id": "hide",
+          "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+          "position": 0,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 4,
+          "target_entity_id": null,
+          "payload": {
+            "bindings": {
+              "actor": 4
+            },
+            "position": 0,
+            "priority": 84,
+            "magnitude": 0.36,
+            "event_type": "signal_exposure_reduced",
+            "promotable": true,
+            "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+            "state_delta": {
+              "character.current_activity": "reducing signal exposure"
+            },
+            "template_id": "hide",
+            "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+            "branch_label": "Go dark and reduce signal exposure",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Elian Rook",
+              "place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Elian Rook trims their signal down to almost nothing \u2014 no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there.",
+            "signal_event_type": null,
+            "effective_priority": 84.0
+          }
+        },
+        {
+          "kind": "resolution",
+          "exposure_id": 380,
+          "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "template_id": "check_on_dependent",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "position": 2,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 4,
+          "target_entity_id": 16,
+          "payload": {
+            "bindings": {
+              "actor": 4,
+              "target": 16
+            },
+            "position": 2,
+            "priority": 55,
+            "magnitude": 0.22,
+            "event_type": "contact_made",
+            "promotable": true,
+            "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "state_delta": {
+              "character.current_activity": "checking in on a dependent"
+            },
+            "template_id": "check_on_dependent",
+            "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "branch_label": "Reach out through customary channels",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Elian Rook",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Tam Oris",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+            "signal_event_type": null,
+            "effective_priority": 52.0
+          }
+        },
+        {
+          "kind": "resolution",
+          "exposure_id": 382,
+          "proposal_id": "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+          "template_id": "surveil",
+          "binding_hash": "93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+          "position": 4,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 3,
+          "target_entity_id": 4,
+          "payload": {
+            "bindings": {
+              "actor": 3,
+              "target": 4
+            },
+            "position": 4,
+            "priority": 48,
+            "magnitude": 0.24,
+            "event_type": "surveillance_performed",
+            "promotable": true,
+            "proposal_id": "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+            "state_delta": {
+              "character.current_activity": "surveilling without contact"
+            },
+            "template_id": "surveil",
+            "binding_hash": "93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+            "branch_label": "Keep the target in view without contact",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Ivo Senn",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Elian Rook",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Ivo Senn keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+            "signal_event_type": null,
+            "effective_priority": 48.0
+          }
+        },
+        {
+          "kind": "joint_beat",
+          "exposure_id": 387,
+          "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "template_id": "check_on_dependent",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "position": 2,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 4,
+          "target_entity_id": 16,
+          "payload": {
+            "bindings": {
+              "actor": 4,
+              "target": 16
+            },
+            "position": 2,
+            "priority": 55,
+            "magnitude": 0.22,
+            "event_type": "contact_made",
+            "promotable": true,
+            "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "state_delta": {
+              "character.current_activity": "checking in on a dependent"
+            },
+            "template_id": "check_on_dependent",
+            "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "branch_label": "Reach out through customary channels",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Elian Rook",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Tam Oris",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+            "signal_event_type": null,
+            "effective_priority": 52.0,
+            "joint_beat_position": 0
+          }
+        },
+        {
+          "kind": "joint_beat",
+          "exposure_id": 388,
+          "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "template_id": "surveil",
+          "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "position": 10,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 16,
+          "target_entity_id": 4,
+          "payload": {
+            "bindings": {
+              "actor": 16,
+              "target": 4
+            },
+            "position": 10,
+            "priority": 48,
+            "magnitude": 0.38,
+            "event_type": "surveillance_performed",
+            "promotable": true,
+            "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+            "state_delta": {
+              "character.current_activity": "collecting a proxy watcher report"
+            },
+            "template_id": "surveil",
+            "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+            "branch_label": "Collect a proxy watcher report",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Tam Oris",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Elian Rook",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+            "signal_event_type": null,
+            "effective_priority": 45.0,
+            "joint_beat_position": 0
+          }
+        }
+      ],
+      "knowledge_surfacing": []
+    },
+    "experience_jobs": [
+      {
+        "job_id": 2,
+        "state": "queued",
+        "attempts": 1,
+        "available_at": "2026-08-21T00:56:55.882001-04:00",
+        "lease_until": null,
+        "locked_by": null,
+        "lease_nonce": null,
+        "last_error": "Experience 26 names entities absent from its source scene: ['Dr', 'Sera Vey']",
+        "requested_model": "gpt-5.6-terra",
+        "source_digest": "d8398dd9eeddbb44e6749f12f1bbdec997b52b1bfbd4843d474fde7c52568b62",
+        "experience_ids": [
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37
+        ],
+        "timeline_identity": {
+          "world_layer": "primary",
+          "boundary_chunk_id": 49,
+          "boundary_season": 1,
+          "boundary_episode": 2,
+          "boundary_scene": 45,
+          "scene_end_chunk_id": 48,
+          "scene_end_season": 1,
+          "scene_end_episode": 2,
+          "scene_end_scene": 44
+        }
+      },
+      {
+        "job_id": 4,
+        "state": "queued",
+        "attempts": 0,
+        "available_at": "2026-08-21T00:51:41.719029-04:00",
+        "lease_until": null,
+        "locked_by": null,
+        "lease_nonce": null,
+        "last_error": null,
+        "requested_model": "gpt-5.6-terra",
+        "source_digest": "1c6b3659d1da27755efec13df311462988c9bff9b64defc14d7bc96323a03f7d",
+        "experience_ids": [
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61
+        ],
+        "timeline_identity": {
+          "world_layer": "primary",
+          "boundary_chunk_id": 49,
+          "boundary_season": 1,
+          "boundary_episode": 2,
+          "boundary_scene": 45,
+          "scene_end_chunk_id": 48,
+          "scene_end_season": 1,
+          "scene_end_episode": 2,
+          "scene_end_scene": 44
+        }
+      },
+      {
+        "job_id": 5,
+        "state": "queued",
+        "attempts": 0,
+        "available_at": "2026-08-21T00:51:41.719029-04:00",
+        "lease_until": null,
+        "locked_by": null,
+        "lease_nonce": null,
+        "last_error": null,
+        "requested_model": "gpt-5.6-terra",
+        "source_digest": "b96554ebe3ca2b48abd1f60ee09c531ae0b6bd962cd6552eb748493ee034f62a",
+        "experience_ids": [
+          62,
+          63,
+          64,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75
+        ],
+        "timeline_identity": {
+          "world_layer": "primary",
+          "boundary_chunk_id": 49,
+          "boundary_season": 1,
+          "boundary_episode": 2,
+          "boundary_scene": 45,
+          "scene_end_chunk_id": 48,
+          "scene_end_season": 1,
+          "scene_end_episode": 2,
+          "scene_end_scene": 44
+        }
+      }
+    ],
+    "generation_identity": {
+      "render_generation_ids": [],
+      "timeline": {
+        "world_layer": "primary",
+        "season": 1,
+        "episode": 2,
+        "scene": 46
+      }
+    }
+  },
+  "effective_config": {
+    "enabled": {
+      "knowledge": true,
+      "experiences": true,
+      "epistemics": true
+    },
+    "caps": {
+      "knowledge_max_entries": 12,
+      "recall_per_character_max_entries": 4,
+      "recall_mandatory_reserved_entries": 2,
+      "recall_trace_rows_per_character": 500,
+      "experience_max_seeds_per_render": 12,
+      "experience_max_jobs_per_drain": 2,
+      "prompt_max_rendered_proposals": 5,
+      "prompt_max_rendered_pressures": 5,
+      "prompt_max_rendered_recent_rulings": 5
+    },
+    "weights": {
+      "semantic_fit_weight": 0.35,
+      "event_severity_weight": 0.15,
+      "actor_involvement_weight": 0.15,
+      "emotional_salience_weight": 0.1,
+      "recency_weight": 0.15,
+      "place_match_weight": 0.1
+    },
+    "thresholds": {
+      "disclosure_minimum_score": 0.0,
+      "disclosure_private_claim_minimum_score": 0.2,
+      "recall_decay_half_life_hours": 720.0,
+      "recall_recency_horizon_hours": 2160.0
+    },
+    "producer_coverage": {
+      "claim_event_types": [
+        "compliance_alert",
+        "encoded_message",
+        "hunt_called_off",
+        "hunt_declared",
+        "informant_contact",
+        "intel_acquired",
+        "intel_acted_on",
+        "protective_intervention",
+        "pursue_romance_completed",
+        "recruit_ally_completed",
+        "relationship_drift_milestone",
+        "retaliation_attempted",
+        "retaliation_executed",
+        "rival_consulted",
+        "seek_redemption_completed",
+        "surveillance_performed",
+        "threat_issued",
+        "warning_delivered"
+      ],
+      "aware_roles": [
+        "actor",
+        "target",
+        "observer",
+        "witness"
+      ],
+      "experience_basis": [
+        "participant",
+        "witness",
+        "acquisition"
+      ]
+    }
+  },
+  "canonical_truth": {
+    "guarded": true,
+    "source_events": [
+      {
+        "event_id": 48,
+        "event_type": "surveillance_performed",
+        "severity": "minor",
+        "tick_chunk_id": 24,
+        "actor_entity_id": 4,
+        "target_entity_id": 6,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 4,
+            "target": 6
+          },
+          "proposal_id": "surveil:9bf7751734d4fe6f6b8c19f3e77cd99a8ec75a52c32235042732e4a3a833b4e2",
+          "template_id": "surveil",
+          "binding_hash": "9bf7751734d4fe6f6b8c19f3e77cd99a8ec75a52c32235042732e4a3a833b4e2",
+          "branch_label": "Keep tabs from a distance",
+          "narrative_stub": "Elian Rook keeps tabs on Ren Vale without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+        }
+      },
+      {
+        "event_id": 55,
+        "event_type": "hideout_maintained",
+        "severity": "minor",
+        "tick_chunk_id": 25,
+        "actor_entity_id": 4,
+        "target_entity_id": null,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 4
+          },
+          "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+          "template_id": "hide",
+          "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+          "branch_label": "Preserve the silence another day",
+          "narrative_stub": "Elian Rook does the unglamorous work of staying missing: small routines, smaller footprints, and the discipline not to reach toward the people who would make the silence easier to bear."
+        }
+      },
+      {
+        "event_id": 76,
+        "event_type": "contact_made",
+        "severity": "minor",
+        "tick_chunk_id": 27,
+        "actor_entity_id": 4,
+        "target_entity_id": 5,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 4,
+            "target": 5
+          },
+          "proposal_id": "make_acquaintance:ebc97c88b4cf0bdc1702f4be904d214de36d782432aac160837ce26ddf96a11f",
+          "template_id": "make_acquaintance",
+          "binding_hash": "ebc97c88b4cf0bdc1702f4be904d214de36d782432aac160837ce26ddf96a11f",
+          "branch_label": "Exchange names",
+          "narrative_stub": "Elian Rook and Niko Rell keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again."
+        }
+      },
+      {
+        "event_id": 83,
+        "event_type": "welfare_check",
+        "severity": "minor",
+        "tick_chunk_id": 28,
+        "actor_entity_id": 4,
+        "target_entity_id": 16,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 4,
+            "target": 16
+          },
+          "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "template_id": "check_on_dependent",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "branch_label": "Drop by in person when the moment allows",
+          "narrative_stub": "Elian Rook stops by \u2014 ostensibly for something else, the way these visits often are \u2014 and uses the small window to read Tam Oris's state: how they look, what they say without saying, what they decline to mention. It will be enough information for now."
+        }
+      },
+      {
+        "event_id": 89,
+        "event_type": "surveillance_performed",
+        "severity": "minor",
+        "tick_chunk_id": 30,
+        "actor_entity_id": 4,
+        "target_entity_id": 16,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 4,
+            "target": 16
+          },
+          "proposal_id": "surveil:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "template_id": "surveil",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "branch_label": "Keep tabs from a distance",
+          "narrative_stub": "Elian Rook keeps tabs on Tam Oris without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+        }
+      },
+      {
+        "event_id": 191,
+        "event_type": "surveillance_performed",
+        "severity": "minor",
+        "tick_chunk_id": 50,
+        "actor_entity_id": 4,
+        "target_entity_id": 35,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 4,
+            "target": 35
+          },
+          "proposal_id": "surveil:3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+          "template_id": "surveil",
+          "binding_hash": "3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+          "branch_label": "Keep tabs from a distance",
+          "narrative_stub": "Elian Rook keeps tabs on Dax Morrow without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+        }
+      }
+    ],
+    "unpossessed_sibling_accounts": [],
+    "latent_secrets": []
+  }
+}

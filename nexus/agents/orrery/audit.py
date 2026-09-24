@@ -1688,15 +1688,20 @@ def cognition_trace(
             /* orrery_audit:cognition_prompt_exposures */
             SELECT exposure.id, exposure.kind, exposure.proposal_id,
                    exposure.template_id, exposure.binding_hash,
-                   exposure.position, exposure.created_at,
+                   exposure.position, exposure.created_at, exposure.card,
                    resolution.actor_entity_id AS resolution_actor_entity_id,
                    resolution.brief, resolution.state_delta,
                    pressure.actor_entity_id AS pressure_actor_entity_id,
                    pressure.target_entity_id AS pressure_target_entity_id,
                    pressure.prompt_text, pressure.bindings
             FROM orrery_prompt_exposures exposure
+            JOIN narrative_chunks chunk ON chunk.id = exposure.tick_chunk_id
+            LEFT JOIN LATERAL jsonb_array_elements(NULLIF(chunk.orrery_proposal->'rendered_cards', 'null'::jsonb))
+                WITH ORDINALITY AS rendered(card_key, ordinal)
+              ON rendered.card_key->>'kind' = exposure.kind
+             AND rendered.card_key->>'proposal_id' = exposure.proposal_id
             LEFT JOIN orrery_resolutions resolution
-              ON exposure.kind = 'resolution'
+              ON exposure.kind IN ('resolution', 'joint_beat')
              AND resolution.tick_chunk_id = exposure.tick_chunk_id
              AND resolution.template_id = exposure.template_id
              AND resolution.binding_hash = exposure.binding_hash
@@ -1710,8 +1715,10 @@ def cognition_trace(
                   resolution.actor_entity_id = :entity_id
                   OR pressure.actor_entity_id = :entity_id
                   OR pressure.target_entity_id = :entity_id
+                  OR exposure.card->'bindings' @> jsonb_build_object('actor', :entity_id)
+                  OR exposure.card->'bindings' @> jsonb_build_object('target', :entity_id)
               )
-            ORDER BY exposure.kind, exposure.position, exposure.id
+            ORDER BY rendered.ordinal, exposure.id
             """
         ),
         {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},
@@ -1726,21 +1733,33 @@ def cognition_trace(
                 "position": int(row["position"]),
                 "created_at": _iso(row["created_at"]),
                 "actor_entity_id": (
-                    row["resolution_actor_entity_id"]
-                    if row["kind"] == "resolution"
-                    else row["pressure_actor_entity_id"]
+                    (row["card"] or {}).get("bindings", {}).get("actor")
+                    if row["card"] is not None
+                    else (
+                        row["resolution_actor_entity_id"]
+                        if row["kind"] in {"resolution", "joint_beat"}
+                        else row["pressure_actor_entity_id"]
+                    )
                 ),
-                "target_entity_id": row["pressure_target_entity_id"],
+                "target_entity_id": (
+                    (row["card"] or {}).get("bindings", {}).get("target")
+                    if row["card"] is not None
+                    else row["pressure_target_entity_id"]
+                ),
                 "payload": (
-                    {
-                        "brief": row["brief"],
-                        "state_delta": row["state_delta"],
-                    }
-                    if row["kind"] == "resolution"
-                    else {
-                        "prompt_text": row["prompt_text"],
-                        "bindings": row["bindings"],
-                    }
+                    row["card"]
+                    if row["card"] is not None
+                    else (
+                        {
+                            "brief": row["brief"],
+                            "state_delta": row["state_delta"],
+                        }
+                        if row["kind"] == "resolution"
+                        else {
+                            "prompt_text": row["prompt_text"],
+                            "bindings": row["bindings"],
+                        }
+                    )
                 ),
             }
         )

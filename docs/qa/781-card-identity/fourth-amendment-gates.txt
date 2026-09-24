@@ -1,0 +1,26 @@
+Fourth-amendment gate receipts; merge 75d971d5, origin/main 879841a3.
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2663 passed, 850 skipped, 9 warnings in 97.90s (0:01:37)
+```
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery tests/test_lore -k 'card or exposure or proposal or rank or joint or imminent or pressure'
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+49 passed, 1808 deselected, 7 warnings in 9.64s
+```
+
+```sh
+git diff --diff-filter=ACM --name-only -z origin/main -- '*.py' | xargs -0 /Users/pythagor/nexus/.venv/bin/python -m black --check
+```
+```text
+All done! ✨ 🍰 ✨
+17 files would be left unchanged.
+```
+

@@ -8,6 +8,7 @@ from nexus.database import connection_kwargs
 
 import asyncio
 import copy
+from datetime import datetime
 import json
 import logging
 import os
@@ -90,6 +91,12 @@ from nexus.memory.manager import (  # noqa: E402
     resolve_storyteller_context_window,
 )
 from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
+from nexus.agents.orrery.cards import (
+    card_key,
+    proposal_handles,
+    rendered_selection,
+    snapshot_from_context,
+)
 from nexus.util.clock_face import clock_face
 
 # Add scripts directory to path for API imports
@@ -131,6 +138,37 @@ def _prompt_one_line(value: Any) -> str:
     """Collapse a prompt data value to one whitespace-normalized line."""
 
     return " ".join(str(value).split())
+
+
+def _orrery_card_identity(card: Mapping[str, Any]) -> str:
+    """Render the actor and counterpart with only known, distinct places."""
+    names = card.get("binding_names") or {}
+    actor = _prompt_one_line(names.get("actor", ""))
+    place = names.get("place")
+    if place and place != "unknown":
+        actor += f" at {_prompt_one_line(place)}"
+    target = names.get("target") or names.get("counterpart") or names.get("faction")
+    if target:
+        actor += f" → {_prompt_one_line(target)}"
+        target_place = names.get("target_place")
+        if target_place and target_place != "unknown" and target_place != place:
+            actor += f" at {_prompt_one_line(target_place)}"
+    return actor
+
+
+def _orrery_card_line(
+    card: Mapping[str, Any],
+    handle: str,
+    *,
+    position: int,
+    description: str,
+    earlier_turn: bool = False,
+) -> str:
+    """Render one compact named card; durable identity stays in the snapshot."""
+    line = f"- [{position}] {handle} {_orrery_card_identity(card)}: {_prompt_one_line(description)}"
+    if earlier_turn and card.get("evaluated_at"):
+        line += f" · evaluated {clock_face(card['evaluated_at'])}"
+    return line
 
 
 _PROPOSAL_TAG_DELTA_KEYS = frozenset(
@@ -201,6 +239,10 @@ def _proposal_bindings_from_payload(
                 f"Duplicate Orrery proposal_id in generation context: {proposal_id!r}"
             )
         indexed[proposal_id] = normalized
+    selection = rendered_selection(snapshot_from_context(context_payload))
+    for key, handle in proposal_handles(selection).items():
+        if key in indexed:
+            indexed[handle] = indexed[key]
     return indexed
 
 
@@ -2667,8 +2709,6 @@ class LogonUtility:
 
         _prompt_cfg = (self.settings.get("orrery") or {}).get("prompt") or {}
         prompt_settings = OrreryPromptSettings.model_validate(_prompt_cfg)
-        max_rendered_proposals = prompt_settings.max_rendered_proposals
-        max_rendered_pressures = prompt_settings.max_rendered_pressures
 
         sections.kind = "recent orrery rulings"
         recent_rulings_section = context.get("orrery_recent_rulings_section")
@@ -2689,6 +2729,49 @@ class LogonUtility:
             sections.append("")
             sections.extend(recent_rulings_section)
 
+        card_snapshot = snapshot_from_context(context)
+        card_selection = rendered_selection(card_snapshot, prompt_settings)
+        handles = proposal_handles(card_selection)
+        proposal_cards = {card_key(card): card for card in card_snapshot["resolutions"]}
+        pressure_cards = {
+            card_key(card): card for card in card_snapshot["scene_pressures"]
+        }
+        proposal_positions = {key: index for index, key in enumerate(proposal_cards)}
+        pressure_positions = {key: index for index, key in enumerate(pressure_cards)}
+        ranked_anchor = context.get("orrery_anchor_chunk_id")
+        current_anchor = self._parent_chunk_id(context)
+
+        def card_line(card: Mapping[str, Any], *, pressure: bool = False) -> str:
+            key = card_key(card)
+            position = card.get("position")
+            if position is None:
+                position = (pressure_positions if pressure else proposal_positions)[key]
+            earlier = (
+                ranked_anchor is not None
+                and current_anchor is not None
+                and ranked_anchor < current_anchor
+            )
+            if (
+                ranked_anchor is None
+                and card.get("evaluated_at")
+                and intertitle.get("world_time")
+            ):
+                earlier = datetime.fromisoformat(
+                    card["evaluated_at"]
+                ) < datetime.fromisoformat(intertitle["world_time"])
+            description = (
+                card.get("prompt_text") or card.get("pressure_stub", "")
+                if pressure
+                else card.get("branch_label") or card["template_id"]
+            )
+            return _orrery_card_line(
+                card,
+                handles[key],
+                position=position,
+                description=description,
+                earlier_turn=earlier,
+            )
+
         sections.kind = "orrery imminent activity"
         imminent_activity = context.get("orrery_imminent_activity") or []
         if imminent_activity:
@@ -2700,15 +2783,11 @@ class LogonUtility:
                 "proposal is definitively false, and replace when your structured "
                 "updates or replacement_state_delta supersede it. A replacement "
                 "only emits a world_event if you provide replacement_event_type. "
-                "Refer only to proposal_id; do not rely on prose parsing."
+                "Reference each proposal by the id shown on its card."
             )
-            for proposal in imminent_activity[:max_rendered_proposals]:
-                if not isinstance(proposal, dict):
-                    continue
-                proposal_id = proposal.get("proposal_id")
-                label = proposal.get("branch_label") or proposal.get("template_id")
-                state_delta = proposal.get("state_delta") or {}
-                sections.append(f"- {proposal_id} [{label}]: state_delta={state_delta}")
+            for item in card_selection:
+                if item["kind"] == "resolution":
+                    sections.append(card_line(proposal_cards[item["proposal_id"]]))
 
         sections.kind = "orrery scene pressure"
         scene_pressures = context.get("orrery_scene_pressures") or []
@@ -2721,15 +2800,14 @@ class LogonUtility:
                 "adapt, delay, ignore, or incorporate them. Do not let Orrery "
                 "decide what present characters do."
             )
-            for pressure in scene_pressures[:max_rendered_pressures]:
-                if not isinstance(pressure, dict):
-                    continue
-                label = pressure.get("branch_label") or pressure.get("template_id")
-                prompt_text = pressure.get("prompt_text") or pressure.get(
-                    "pressure_stub", ""
-                )
-                if prompt_text:
-                    sections.append(f"- {label}: {prompt_text}")
+            for item in card_selection:
+                if (
+                    item["kind"] == "scene_pressure"
+                    and item["proposal_id"] in pressure_cards
+                ):
+                    sections.append(
+                        card_line(pressure_cards[item["proposal_id"]], pressure=True)
+                    )
 
         sections.kind = "orrery ambient scene seeds"
         ambient_scene_seeds = context.get("orrery_ambient_scene_seeds") or []
@@ -2782,20 +2860,9 @@ class LogonUtility:
                 "behaviors differ (tension you may spring). Adjudicate the "
                 "underlying proposals by proposal_id as usual."
             )
-            for beat in joint_beats[:max_rendered_proposals]:
-                if not isinstance(beat, dict):
-                    continue
-                names = beat.get("entity_names") or {}
-                pair = " & ".join(str(name) for name in names.values()) or (
-                    f"{beat.get('entity_a')} & {beat.get('entity_b')}"
-                )
-                sections.append(
-                    f"- [{beat.get('kind')}] {pair}: "
-                    f"{beat.get('forward_template_id')} <-> "
-                    f"{beat.get('reverse_template_id')} "
-                    f"({beat.get('forward_proposal_id')} / "
-                    f"{beat.get('reverse_proposal_id')})"
-                )
+            for item in card_selection:
+                if item["kind"] == "joint_beat":
+                    sections.append(card_line(proposal_cards[item["proposal_id"]]))
 
         sections.kind = "orrery ambient peripherals"
         bleed_menu = context.get("orrery_bleed_menu") or []

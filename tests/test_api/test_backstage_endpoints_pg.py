@@ -587,6 +587,10 @@ def test_payload_assembles_every_committed_stream(
             "branch_label": "danger closes in",
             "event_type": "threat_issued",
             "drive_band": "crisis_constraint",
+            "proposal_id": "evade_pursuers:resolution-binding",
+            "position": None,
+            "binding_names": {},
+            "evaluated_at": None,
         }
     ]
     assert [entry["turn_label"] for entry in orrery["history"]] == ["t.3", "t.2"]

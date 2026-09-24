@@ -7,7 +7,7 @@ only place that materializes those proposals into canonical Orrery tables.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from hashlib import sha256
@@ -20,6 +20,7 @@ from nexus.agents.orrery.relationship_provenance import (
     relationship_producer_async,
 )
 from nexus.agents.orrery.ambient import AMBIENT_EXPOSURE_TEMPLATE_ID
+from nexus.agents.orrery.cards import proposal_handles, rendered_selection
 from nexus.agents.orrery.db_rows import row_get as _row_get
 from nexus.agents.orrery.drift import (
     drain_relationship_drift_async,
@@ -730,7 +731,16 @@ def commit_orrery_tick_sync(
         effective_epistemics_settings = coerced.epistemics_settings
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
-    adjudication_map = validate_proposal_adjudications(coerced, adjudications)
+    if coerced is not None:
+        coerced = replace(
+            coerced,
+            rendered_cards=tuple(
+                rendered_selection(coerced.to_dict(), prompt_settings)
+            ),
+        )
+    adjudication_map = validate_proposal_adjudications(
+        coerced, normalize_proposal_adjudications(coerced, adjudications)
+    )
     if has_resolutions:
         need_tuning = coerce_need_tuning(sunhelm_settings)
 
@@ -744,6 +754,10 @@ def commit_orrery_tick_sync(
         scene_pressure_count = 0
         prompt_exposure_count = 0
         if coerced is not None:
+            cur.execute(
+                "UPDATE narrative_chunks SET orrery_proposal = %s::jsonb WHERE id = %s",
+                (json.dumps(coerced.to_dict()), tick_chunk_id),
+            )
             max_proposals, max_pressures = _coerce_prompt_limits(prompt_settings)
             scene_pressure_count = _insert_scene_pressures_sync(
                 cur, coerced, tick_chunk_id=tick_chunk_id
@@ -802,7 +816,7 @@ def commit_orrery_tick_sync(
         voided_count = 0
         replaced_count = 0
 
-        for draft in coerced.resolutions:
+        for draft in _commit_order(coerced):
             adjudicated = _adjudicate_draft(
                 draft,
                 adjudication_map,
@@ -1006,7 +1020,16 @@ async def commit_orrery_tick_async(
         effective_epistemics_settings = coerced.epistemics_settings
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
-    adjudication_map = validate_proposal_adjudications(coerced, adjudications)
+    if coerced is not None:
+        coerced = replace(
+            coerced,
+            rendered_cards=tuple(
+                rendered_selection(coerced.to_dict(), prompt_settings)
+            ),
+        )
+    adjudication_map = validate_proposal_adjudications(
+        coerced, normalize_proposal_adjudications(coerced, adjudications)
+    )
     if has_resolutions:
         need_tuning = coerce_need_tuning(sunhelm_settings)
 
@@ -1019,6 +1042,11 @@ async def commit_orrery_tick_async(
     scene_pressure_count = 0
     prompt_exposure_count = 0
     if coerced is not None:
+        await conn.execute(
+            "UPDATE narrative_chunks SET orrery_proposal = $1::jsonb WHERE id = $2",
+            json.dumps(coerced.to_dict()),
+            tick_chunk_id,
+        )
         max_proposals, max_pressures = _coerce_prompt_limits(prompt_settings)
         scene_pressure_count = await _insert_scene_pressures_async(
             conn, coerced, tick_chunk_id=tick_chunk_id
@@ -1079,7 +1107,7 @@ async def commit_orrery_tick_async(
     voided_count = 0
     replaced_count = 0
 
-    for draft in coerced.resolutions:
+    for draft in _commit_order(coerced):
         adjudicated = _adjudicate_draft(
             draft,
             adjudication_map,
@@ -1252,6 +1280,36 @@ def _validate_proposal(proposal: OrreryTickProposal) -> None:
                 "Unsupported Orrery state_delta keys for "
                 f"{draft.template_id}: {', '.join(sorted(unsupported))}"
             )
+
+
+def _commit_order(proposal: OrreryTickProposal) -> list[OrreryResolutionDraft]:
+    """Apply lower ranks first so the highest-ranked scalar write wins.
+
+    Position zero is the highest rank. Legacy unranked proposals preserve
+    their serialized commit order; Gaia replacements remain in their slot.
+    """
+    if all(card.position is None for card in proposal.resolutions):
+        return list(proposal.resolutions)
+    if any(card.position is None for card in proposal.resolutions):
+        raise ValueError("Cannot commit a partially ranked Orrery proposal")
+    return sorted(proposal.resolutions, key=lambda card: card.position, reverse=True)
+
+
+def normalize_proposal_adjudications(
+    proposal: Optional[OrreryTickProposal], adjudications: Any
+) -> list[dict[str, Any]]:
+    """Expand only this turn's rendered handles before canonical validation."""
+    decisions = coerce_adjudications(adjudications)
+    handles = (
+        proposal_handles(rendered_selection(proposal.to_dict()))
+        if proposal is not None
+        else {}
+    )
+    canonical_by_handle = {handle: key for key, handle in handles.items()}
+    return [
+        asdict(replace(decision, proposal_id=canonical_by_handle.get(key, key)))
+        for key, decision in decisions.items()
+    ]
 
 
 def validate_proposal_adjudications(
@@ -1789,20 +1847,34 @@ async def _insert_scene_pressures_async(
 
 
 def _prompt_exposure_rows(
-    proposal: Any, *, max_proposals: int, max_pressures: int
-) -> list[tuple[str, str, str, int]]:
-    """(kind, template_id, binding_hash, position) for the rendered slice.
+    proposal: OrreryTickProposal, *, max_proposals: int, max_pressures: int
+) -> list[tuple[str, str, str, int, dict[str, Any]]]:
+    """Return the rendered cards with their already-computed positions.
 
-    Mirrors the render slices in logon_utility's storyteller prompt: the
-    first N proposals and pressures, plus every already-bounded ambient seed.
+    Joint beats expose both parent identities even beyond the imminent cap.
+    Legacy drafts without positions retain their original serialized order.
     """
-
-    rows: list[tuple[str, str, str, int]] = []
-    for position, draft in enumerate(proposal.resolutions[:max_proposals]):
-        rows.append(("resolution", draft.template_id, draft.binding_hash, position))
-    for position, pressure in enumerate(proposal.scene_pressures[:max_pressures]):
+    rows: list[tuple[str, str, str, int, dict[str, Any]]] = []
+    for index, draft in enumerate(proposal.resolutions):
+        position = draft.position if draft.position is not None else index
         rows.append(
-            ("scene_pressure", pressure.template_id, pressure.binding_hash, position)
+            (
+                "resolution",
+                draft.template_id,
+                draft.binding_hash,
+                position,
+                draft.to_dict(),
+            )
+        )
+    for position, pressure in enumerate(proposal.scene_pressures):
+        rows.append(
+            (
+                "scene_pressure",
+                pressure.template_id,
+                pressure.binding_hash,
+                position,
+                pressure.to_dict(),
+            )
         )
     for position, seed in enumerate(proposal.ambient_scene_seeds):
         rows.append(
@@ -1811,9 +1883,37 @@ def _prompt_exposure_rows(
                 AMBIENT_EXPOSURE_TEMPLATE_ID,
                 seed.dedup_key,
                 position,
+                seed.model_dump(mode="json"),
             )
         )
-    return rows
+    drafts = {
+        draft.proposal_id: (index, draft)
+        for index, draft in enumerate(proposal.resolutions)
+    }
+    for beat_position, beat in enumerate(proposal.joint_beats):
+        for proposal_id in (beat.forward_proposal_id, beat.reverse_proposal_id):
+            index, draft = drafts[proposal_id]
+            position = draft.position if draft.position is not None else index
+            card = draft.to_dict()
+            card["joint_beat_position"] = beat_position
+            rows.append(
+                ("joint_beat", draft.template_id, draft.binding_hash, position, card)
+            )
+    by_key = {
+        (kind, f"{template}:{fingerprint}"): row
+        for row in rows
+        for kind, template, fingerprint, _, _ in [row]
+    }
+    return [
+        by_key[(item["kind"], item["proposal_id"])]
+        for item in rendered_selection(
+            proposal.to_dict(),
+            {
+                "max_rendered_proposals": max_proposals,
+                "max_rendered_pressures": max_pressures,
+            },
+        )
+    ]
 
 
 def _insert_prompt_exposures_sync(
@@ -1825,15 +1925,15 @@ def _insert_prompt_exposures_sync(
     max_pressures: int,
 ) -> int:
     count = 0
-    for kind, template_id, binding_hash, position in _prompt_exposure_rows(
+    for kind, template_id, binding_hash, position, card in _prompt_exposure_rows(
         proposal, max_proposals=max_proposals, max_pressures=max_pressures
     ):
         cur.execute(
             """
             INSERT INTO orrery_prompt_exposures (
                 tick_chunk_id, kind, proposal_id, template_id, binding_hash,
-                position
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+                position, card
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
             ON CONFLICT (tick_chunk_id, kind, template_id, binding_hash)
                 DO NOTHING
             RETURNING id
@@ -1845,6 +1945,7 @@ def _insert_prompt_exposures_sync(
                 template_id,
                 binding_hash,
                 position,
+                json.dumps(card),
             ),
         )
         if cur.fetchone():
@@ -1861,15 +1962,15 @@ async def _insert_prompt_exposures_async(
     max_pressures: int,
 ) -> int:
     count = 0
-    for kind, template_id, binding_hash, position in _prompt_exposure_rows(
+    for kind, template_id, binding_hash, position, card in _prompt_exposure_rows(
         proposal, max_proposals=max_proposals, max_pressures=max_pressures
     ):
         inserted = await conn.fetchval(
             """
             INSERT INTO orrery_prompt_exposures (
                 tick_chunk_id, kind, proposal_id, template_id, binding_hash,
-                position
-            ) VALUES ($1, $2, $3, $4, $5, $6)
+                position, card
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
             ON CONFLICT (tick_chunk_id, kind, template_id, binding_hash)
                 DO NOTHING
             RETURNING id
@@ -1880,6 +1981,7 @@ async def _insert_prompt_exposures_async(
             template_id,
             binding_hash,
             position,
+            json.dumps(card),
         )
         if inserted is not None:
             count += 1
