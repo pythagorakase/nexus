@@ -1,63 +1,67 @@
 # Work Order 800-B Verification
 
-Status: **STOP-REPORT — paid proof remains blocked; no push or PR.**
+Status: **STOP-REPORT — both renewed episode calls exhausted the 8,000-token allowance. No push or PR.**
 
-## Stop Reason and Paid Evidence
+## Implementation and Evidence
 
-The registry repair removed the temperature rejection. Both authorized episode attempts reached OpenAI with HTTP 200 but returned truncated JSON. The second response explicitly reports `status: incomplete` and `incomplete_details.reason: max_output_tokens`. The configured episode output allowance is 2,500 tokens (`nexus.toml:1222`); this is distinct from the separately deferred 30,000-token input/request budget at line 1224. Neither tunable was changed.
+The third issue continues the same branch, `claude/800-embedding-summaries`. `git fetch origin && git rebase origin/main` reported the branch already up to date at the start. The four earlier commits remain intact: `44db48d4`, `461de56f`, `dd466eae`, and `eff27e00`. The first two are the identities from the previously required rebase. The allowance/truncation implementation is committed as `00d45547`; the isolated gateway test correction is committed as `25af2c53`. Both pre-commit hooks passed on both commits; no hook was bypassed.
 
-Exact second-attempt error:
+- `nexus.toml:1222`: episode output allowance is 8,000; season allowance is 12,000. The comment explicitly includes reasoning tokens for `reasoning_accounting = "inside_output"`. The request budget stays 30,000 under #937. The config pre-commit validator passed.
+- `scripts/summarize_narrative.py:1349`: summary OpenAI providers install a mode- and allowance-specific response check. The generator preserves the dedicated exception in episode, season, and chunk-range paths.
+- `scripts/api_openai.py:598`: only callers with this response check use `responses.create` with the existing strict JSON schema. `scripts/api_openai.py:630` runs the check before `_extract_native_parsed_output`. The usual `finally` recorder at line 673 records usage with outcome `error` before an exception propagates to the caller. A `RuntimeError` does not enter the structured-validation retry loop.
+- `nexus/api/summary_errors.py:9`: `SummaryOutputTruncated(RuntimeError)` reports mode, configured allowance, `incomplete_details.reason`, and the complete SDK usage object. It rejects every incomplete status, including non-token reasons.
+- `nexus/jobs/narrative_jobs.py:114`: truncation is immediately terminal and retains `error_class=SummaryOutputTruncated`, even with attempts remaining. Lease fields clear; later drains do not select it.
+- `config/reachability_baseline.json`: records the new production-reachable error module. The initial reachability run correctly requested this addition (2 failed, 58 passed); the baseline repair adds that single path without creating an orphan exemption.
+
+The TEST endpoint always emits completed responses (`nexus/api/mock_openai.py:1052`), so it cannot reproduce incomplete output. Per the coordinator's permitted alternative, `tests/test_summary_triggers.py` builds a validated OpenAI SDK `Response` carrying malformed summary JSON and real response/usage field shapes; it covers episode/season and both `max_output_tokens` and `content_filter`. `tests/test_api/test_narrative_jobs_pg.py::test_summary_truncation_is_terminal_with_attempts_remaining` runs the classifier through the real PostgreSQL queue executor, proves state `failed`, attempts `1` with a budget of `3`, clears all lease fields, and proves no subsequent execution or completion callback.
+
+This response-before-JSON ordering follows the [official structured-output edge-case guidance](https://developers.openai.com/api/docs/guides/structured-outputs). General usage accounting when other consumers' SDK `responses.parse` raises remains deferred, as directed. Non-summary callers retain their existing parse path.
+
+## Preserved Queue Work
+
+Migration 125 adds durable narrative embedding and summary queues, with attempts, leases, nonce fences, and generation-session correlation. Every new table and column has a SQL comment. Plans are inserted inside acceptance transactions. Embedding execution uses the cached in-process SentenceTransformer and checks interactive preemption before model loading and encoding. Summaries use the provider client and keep reader-visible JSON in `episodes.summary` and `seasons.summary`. The scheduler, runtime status, CLI status/jobs, and QA non-terminal checks expose both queues.
+
+The TEST-provider PostgreSQL proofs exercise transition acceptance, embedding without process creation, cached-model reuse, lease recovery, nonce fencing, and single committed vector/summary writes. This is not a guarantee of exactly-once inference after a crash between generation and commit.
+
+The second amendment's provider registry repair, disposable acceptance fixtures, prologue-aware predecessor test, and legacy inspect-turn diagnostic remain. The RenderLimits fixture failure predates this branch, as ruled by the coordinator; the fixture now reads `load_settings().lore.render_limits`. See [second-issue verification](second-issue-verification.md) for the prior evidence and [first-issue verification](first-issue-verification.md) for the original stop.
+
+## Paid Proof
+
+The first renewed episode call returned HTTP 200 but was still incomplete at the fixed 8,000-token allowance. The new dedicated error propagated, the normal recorder wrote an error usage event, the episode job became terminal after one attempt, and no summary JSON was persisted. The season job stayed queued with zero attempts. The clone was `qa640_800b_paid_68b8f07afd60`, session `3a7859bd-58d7-40b1-8800-f4e68fffa960`.
+
+Exact error:
 
 ```text
-1 validation error for EpisodeSummaryModel
-  Invalid JSON: EOF while parsing a string at line 2 column 11268 [type=json_invalid, input_value='{\n  "summary": "OVERVIE...d an issuer. The worker', input_type=str]
-    For further information visit https://errors.pydantic.dev/2.11/v/json_invalid
+SummaryOutputTruncated: episode summary incomplete: configured allowance=8000 output tokens; incomplete_details.reason=max_output_tokens; usage={"input_tokens": 44386, "input_tokens_details": {"cache_write_tokens": 0, "cached_tokens": 44383}, "output_tokens": 8000, "output_tokens_details": {"reasoning_tokens": 348}, "total_tokens": 52386}
 ```
 
-Two episode calls were issued in this continuation: first on `qa640_800b_paid_d16edf822829`, then the authorized retry on `qa640_800b_paid_e8d6a492eed0`. No season request was issued. The episode retry allocation is exhausted; the two unused season calls do not authorize further episode calls. Both fixture-owned clones were dropped.
+[Attempt-one SQL and ledger evidence](third-paid-proof-attempt-1.json), [wire usage](third-paid-wire-attempt-1.json), and [test output](third-paid-proof-attempt-1.txt) are preserved. The authorized episode retry also returned HTTP 200, `status=incomplete`, and `reason=max_output_tokens`, with 8,000 output tokens. It used clone `qa640_800b_paid_6a00e86c125c` and session `b22aa1cd-0405-4638-87c4-c2235882b611`. Its exact exception differs from the one above only in the reasoning count: 174. [Retry SQL and ledger evidence](paid-proof.json) contains the persisted job states and empty summary result. Neither attempt wrote an episode or season summary. Both episode calls are consumed; zero season calls were made. Unused season authority does not permit more episode calls.
 
-The retry's real HTTP response metadata is preserved in [paid-wire-usage.json](paid-wire-usage.json):
+The consolidated [paid-wire-usage.json](paid-wire-usage.json) preserves both HTTP response IDs and the exact provider usage:
 
-| Measurement | Tokens |
-|---|---:|
-| Input | 44,386 |
-| Cached input | 44,383 |
-| Cache write | 0 |
-| Output | 2,500 |
-| Reasoning (within output) | 264 |
-| Total | 46,886 |
+| Cost-Relevant Count | Episode Attempt 1 | Episode Attempt 2 | Total |
+|---|---:|---:|---:|
+| Input | 44,386 | 44,386 | 88,772 |
+| Cached Input | 44,383 | 44,383 | 88,766 |
+| Uncached Input (Input Minus Cached) | 3 | 3 | 6 |
+| Cache Write | 0 | 0 | 0 |
+| Output (Includes Reasoning) | 8,000 | 8,000 | 16,000 |
+| Reasoning (Within Output) | 348 | 174 | 522 |
+| Total | 52,386 | 52,386 | 104,772 |
 
-The first call's usage is **unknown**, not zero. The SDK's `responses.parse` raises before assigning the response (`scripts/api_openai.py:596`); the existing recorder only runs when that assignment succeeded (`scripts/api_openai.py:666`). Thus the normal usage ledger is empty for these parse failures. The retry test observes the real HTTP response before parsing and saves metadata without issuing extra calls. Repairing production accounting for SDK parsing failures is deferred to the coordinator.
+Both normal usage events were checked against their wire response IDs, input/output/total counts, cached-input counts, and reasoning counts. Both have outcome `error`. The normal recorder's cache-creation field remains null; the separate wire cache-write count is explicitly zero. No currency estimate is substituted for the measured token counts.
 
-[paid-proof.json](paid-proof.json) contains SQL evidence captured before clone cleanup: episode state `failed`, attempts `1`; season state `queued`, attempts `0`; both correlated to generation session `c4556637-8f8f-4a74-898c-c18688d63787`. No episode or season summary was persisted by this proof. The clone had no reader rows for these targets, so the post-failure summary queries returned no rows. This is **not** successful paid-summary proof.
-
-## Completed Amendments
-
-- Rebased first onto `origin/main` at `e22cf5ff` (#936). The two original commits are retained in order as `44db48d4` and `461de56f` after the required rebase. Only the reachability baseline reason text conflicted; it now describes both main's and this branch's changes.
-- `OpenAIProvider.initialize` resolves the registered entry and reads `unsupported_params` and `reasoning_accounting` (`scripts/api_openai.py:398`). All four request paths remove prohibited kwargs, including merged `extra_body` keys (`scripts/api_openai.py:894`). No prefix heuristic or new registry field remains. Offline constructor/build tests cover Astra, TEST, and unknown IDs.
-- Retired the legacy fake acceptance cursor. A real `save_04` data clone carries migration 125 and the source's existing prologue marker (source prologue ID 1). The fixture places that marker at chunk 8 and proves accepting 9 queues exactly chunk 7 (`tests/test_orrery/test_playable_narrative_boundary.py:70`). Predicate unit tests remain.
-- Migrated the chunk-workflow integration module to disposable `save_04` clones; removed every `save_05` reference and obsolete dedupe-lock assertion. Migration runner output confirms migration 125 was applied only to clones. The singleton test also routes to its clone.
-- Repaired the RenderLimits fixture using `load_settings().lore.render_limits` (`tests/test_orrery/test_recall_disclosure_pg.py:2076`). The failure predates this branch, as ruled by the coordinator; inspection of `origin/main` also confirms the harness lacks `lore.render_limits`.
-- Legacy chunk inspection prints exactly one line and returns 1, with no traceback. Duplicate session bindings still raise (`nexus/cli.py:4235`, `nexus/telemetry/attempt_manifest.py:255`). Both cases run against real PostgreSQL in `tests/test_api/test_attempt_manifest_pg.py:452`. A read-only CLI invocation against actual slot 4 chunk 49 independently produced the requested line.
-- Updated existing provider test fixtures to registered model IDs; no new mocked provider behavior was introduced. The paid proof saves its failure state and raw usage before teardown.
-
-## Preserved Implementation and Scope
-
-Migration 125, durable queue execution, transaction-bound plans, runtime/CLI queue visibility, and QA non-terminal checks remain from the first issue. The embedding executor checks preemption before model loading and immediately before cached in-process encoding (`nexus/jobs/embeddings.py:67`, `:74`). The scheduler drains summaries and then embeddings after provider-capable work (`nexus/jobs/scheduler.py:497`, `:508`). Reader columns remain `episodes.summary` and `seasons.summary`.
-
-The existing TEST-provider PostgreSQL proof covers real acceptance, cached SentenceTransformer inference, no process creation on the embedding path, expired lease recovery, nonce fencing, and no duplicate committed vector/summary write. It does not promise exactly-once inference if a worker crashes after generating output but before committing it.
-
-No fleet/template migration, model download change, off-screen embedding change, or owner's gateway change was made. No paid configuration limit was changed. [First-issue verification](first-issue-verification.md) retains the earlier stop and historical gate results; current results below supersede them.
+The paid failure proves production truncation classification and accounting, but **does not satisfy the successful paid-summary proof**. The fixed allowance remains insufficient for this episode. The unchanged episode prompt asks for a granular timeline covering all significant beats (`prompts/summaries/episode_system.md:9`); the input contains 45 target chunks plus one context chunk. A different output allowance or bounded-length prompt is a coordinator decision, not an unapproved change here. Each paid-proof invocation permits at most one episode and one season call, with SDK retries and structured-output retries disabled. Only `qa640_*` data clones of `save_04` are used.
 
 ## Commands and Tails
 
-All commands ran from this worktree with:
+All commands run from this worktree, using:
 
 ```sh
 PY=/Users/pythagor/nexus/.venv/bin/python
 ```
 
-Import proof, before trusting tests:
+The import proof ran before testing:
 
 ```sh
 PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
@@ -67,48 +71,48 @@ PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
 /Users/pythagor/nexus/.claude/worktrees/800-embedding-summaries/nexus/__init__.py
 ```
 
-### Provider Construction and Structured Output
+### Focused Provider and Summary Tests
 
 ```sh
-PYTHONPATH=$PWD $PY -m pytest -q tests/test_openai_registry_capabilities.py tests/test_native_structured_output.py
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_summary_triggers.py tests/test_openai_registry_capabilities.py tests/test_native_structured_output.py
 ```
 
 ```text
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-120 passed, 5 warnings in 1.58s
+130 passed, 5 warnings in 2.21s
 ```
 
-[Full output](provider-gate.txt).
+[Full output](third-focused-gate.txt).
 
-### Remaining Registry Fixtures
+### PostgreSQL Truncation Classification
 
 ```sh
-PYTHONPATH=$PWD $PY -m pytest -q tests/test_orrery_tag_validation.py tests/test_usage_recorder.py
+NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_narrative_jobs_pg.py::test_summary_truncation_is_terminal_with_attempts_remaining
 ```
 
 ```text
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-65 passed, 5 warnings in 1.66s
-```
-
-[Full output](registry-fixture-gate.txt).
-
-### Focused PostgreSQL Amendments
-
-```sh
-NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_chunk_workflow_integration.py tests/test_orrery/test_playable_narrative_boundary.py tests/test_api/test_attempt_manifest_pg.py::test_inspect_turn_pre_session_chunk_and_duplicate_sessions tests/test_orrery/test_recall_disclosure_pg.py::test_turn_inputs_change_experience_ranking_via_shared_query_embedding
-```
-
-```text
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-16 passed, 7 warnings in 5.68s
+1 passed, 7 warnings in 1.37s
 sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
 
-[Full output](amendment-gate.txt).
+[Full output](third-truncation-pg.txt).
+
+### Offline Gate
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2724 passed, 909 skipped, 9 warnings in 124.32s (0:02:04)
+```
+
+[Full output](third-offline-gate.txt).
 
 ### Prompt Lint and Reachability
 
@@ -119,12 +123,38 @@ PYTHONPATH=$PWD $PY -m pytest -q tests/test_prompt_lint.py tests/test_reachabili
 ```text
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-60 passed, 5 warnings in 19.77s
+60 passed, 5 warnings in 20.39s
 ```
 
-[Full output](prompt-reachability-gate.txt).
+[Full output](third-prompt-reachability.txt).
 
-### Paid Attempt One
+### Black
+
+```sh
+git diff --name-only origin/main -- '*.py' > temp/800b-python-files.txt
+PYTHONPATH=$PWD $PY -m black --check $(cat temp/800b-python-files.txt)
+```
+
+```text
+All done! ✨ 🍰 ✨
+34 files would be left unchanged.
+```
+
+[Full output](third-black-gate.txt).
+
+### Actual Legacy Chunk CLI
+
+```sh
+NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 PYTHONPATH=$PWD $PY -m nexus.cli inspect-turn --slot 4 --chunk 49
+```
+
+```text
+chunk 49: no generation session (accepted before session binding)
+```
+
+Exit status 1, no traceback. [Full output](third-inspect-turn.txt).
+
+### Paid Episode Attempt One
 
 ```sh
 NEXUS_800B_PAID_PROOF=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/test_api/test_narrative_summary_paid_pg.py
@@ -135,10 +165,26 @@ NEXUS_800B_PAID_PROOF=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PW
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
 FAILED tests/test_api/test_narrative_summary_paid_pg.py::test_scheduler_paid_episode_and_season
-1 failed, 5 warnings in 54.04s
+1 failed, 5 warnings in 163.92s (0:02:43)
 ```
 
-[Full output](paid-proof-attempt-1.txt).
+[Full output](third-paid-proof-attempt-1.txt).
+
+### Initial Reachability Gate Before Baseline Repair
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_prompt_lint.py tests/test_reachability.py
+```
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_reachability.py::test_repository_reachability_ratchet - Ass...
+FAILED tests/test_reachability.py::test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app
+2 failed, 58 passed, 5 warnings in 18.91s
+```
+
+[Full output](third-prompt-reachability-initial.txt).
 
 ### Paid Episode Retry
 
@@ -151,82 +197,12 @@ NEXUS_800B_PAID_PROOF=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PW
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
 FAILED tests/test_api/test_narrative_summary_paid_pg.py::test_scheduler_paid_episode_and_season
-1 failed, 5 warnings in 56.87s
+1 failed, 5 warnings in 154.89s (0:02:34)
 ```
 
-[Full output](paid-proof-attempt-2.txt).
+[Full output](third-paid-proof.txt).
 
-### Initial Offline Gate Before Registry Fixture Repairs
-
-```sh
-PYTHONPATH=$PWD $PY -m pytest -q
-```
-
-```text
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_orrery_tag_validation.py::test_provider_repairs_invalid_declaration_inside_structured_retry_budget
-FAILED tests/test_orrery_tag_validation.py::test_openai_chat_transport_repairs_invalid_declaration
-FAILED tests/test_orrery_tag_validation.py::test_openai_chat_transport_async_repairs_invalid_declaration
-FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[character_applied_tags-updates.characters[0]-human]
-FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[faction_applied_tags-updates.factions[0]-None]
-FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[faction_identity-updates.factions[0]-Office of Civic Continuity]
-FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[tag_hints-new_entities[0].tag_hints-human]
-FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[pair_tag_hints-new_entities[0].pair_tag_hints[0].tag-protects]
-FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[replacement_event_type-orrery_adjudications[0].replacement_event_type-slept]
-FAILED tests/test_usage_recorder.py::test_single_responses_call_records_jsonl_log_and_cli_json
-FAILED tests/test_usage_recorder.py::test_two_provider_passes_keep_seats_models_and_sum
-FAILED tests/test_usage_recorder.py::test_repair_loop_records_rejected_then_accepted
-FAILED tests/test_usage_recorder.py::test_exhausted_repair_labels_final_attempt_rejected_validation
-FAILED tests/test_usage_recorder.py::test_missing_usage_stays_null_and_counts_unknown
-14 failed, 2706 passed, 908 skipped, 9 warnings in 121.98s (0:02:01)
-```
-
-[Full output](offline-initial.txt).
-
-### Formatting
-
-```sh
-git diff --name-only origin/main -- '*.py' > /tmp/nexus-800b-python-files.txt
-PYTHONPATH=$PWD $PY -m black --check $(cat /tmp/nexus-800b-python-files.txt)
-```
-
-```text
-All done! ✨ 🍰 ✨
-32 files would be left unchanged.
-```
-
-[Full output](black-gate.txt).
-
-### Actual Legacy Chunk CLI
-
-```sh
-NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 PYTHONPATH=$PWD $PY -m nexus.cli inspect-turn --slot 4 --chunk 49
-```
-
-```text
-chunk 49: no generation session (accepted before session binding)
-```
-
-[Full output](inspect-turn.txt).
-
-The actual legacy-chunk CLI exited with status 1. The first focused amendment run found fixture-routing and foreign-key cleanup errors (4 failed, 12 passed); those were repaired before the passing focused run. Initial provider tests also exposed unregistered fixture IDs (23 failed, 97 passed), corrected before the 120-pass run. The initial formatting check found one unformatted file; both changed proof tests were formatted before the clean 32-file check. No gate failure is classified under #885.
-
-### Final Offline Gate
-
-```sh
-PYTHONPATH=$PWD $PY -m pytest -q
-```
-
-```text
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-2720 passed, 908 skipped, 9 warnings in 118.90s (0:01:58)
-```
-
-[Full output](offline-gate.txt). Offline PostgreSQL/live-provider skips are intentional; the required PostgreSQL selection is recorded separately.
-
-### Expanded PostgreSQL Gate
+### Initial PostgreSQL Gate Before Lane Repair
 
 ```sh
 NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery tests/test_summary_triggers.py tests/test_qa_shift.py -k 'embed or summar or scheduler or job or queue or manifest or boundary or disclosure'
@@ -235,61 +211,90 @@ NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 NEXUS_RUN_POSTGRES=1
 ```text
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-187 passed, 1 skipped, 1857 deselected, 11 warnings in 266.34s (0:04:26)
+=========================== short test summary info ============================
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_gateway_sigkill_resumes_inflight_experience
+1 failed, 191 passed, 1 skipped, 1857 deselected, 11 warnings in 280.26s (0:04:40)
 ```
 
-[Full output](postgres-gate.txt). All selected PostgreSQL tests ran. The sole skip is the separately authorized paid-proof test, which failed in its two explicit runs above. No #885 exemptions were needed; no failing slot-5 test IDs occurred.
+[Full output](third-postgres-initial.txt).
 
-## Cleanup and Git State
+The initial PostgreSQL failure was not a #885 exemption. Exact preflight error:
 
-`git diff --check` is clean. The import-path proof was repeated after implementation and still resolved under this worktree. Both pre-commit hooks passed for commit `dd466eae`; no hook was bypassed. The remaining amendments and report are committed separately at closeout.
+```text
+AssertionError: COMMAND     PID     USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+python3.1 59092 pythagor   12u  IPv4 0x5dd53313ab3d9b65      0t0  TCP 127.0.0.1:8018 (LISTEN)
+python3.1 73754 pythagor    9u  IPv4 0x5dd53313ab3d9b65      0t0  TCP 127.0.0.1:8018 (LISTEN)
+python3.1 73754 pythagor   12u  IPv4 0x5dd53313ab3d9b65      0t0  TCP 127.0.0.1:8018 (LISTEN)
+```
 
-The lane-8016 listener check returned no listener after the gate. Fixture cleanup left no work-order disposable databases:
+The final PostgreSQL rerun was already running when the second paid failure triggered the stop. It finished with 192 passed, 1 skipped, and zero failures. All selected PostgreSQL tests ran; the sole skip is the separately executed paid proof. No #885 slot-5 failure IDs occurred and no exemption was needed. The offline gate predates the lane-only test correction; that PostgreSQL-marked test is skipped offline. Prompt lint and reachability also predate that test-only correction; production imports did not change. The final Black check includes it.
+
+
+### Final PostgreSQL Gate
+
+```sh
+NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery tests/test_summary_triggers.py tests/test_qa_shift.py -k 'embed or summar or scheduler or job or queue or manifest or boundary or disclosure'
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+192 passed, 1 skipped, 1857 deselected, 11 warnings in 259.88s (0:04:19)
+```
+
+[Full output](third-postgres-gate.txt).
+
+## Scope, Cleanup, and Coordinator Questions
+
+No fleet or template migrations, model downloads, off-screen narration embedding changes, main-checkout changes, or owner gateway changes. Gateway tests use lane 8016 and own listener startup/teardown. No automatic paid retry is authorized by the queue after truncation.
+
+Final cleanup checks:
 
 ```sh
 lsof -nP -iTCP:8016 -sTCP:LISTEN
 psql -d postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_800b_%' ORDER BY datname"
+git diff --check
 ```
 
-Both commands returned no rows/output (`lsof` exit 1, `psql` exit 0). No Postgres.app permission error occurred. No app was independently started; the gateway tests own their listeners and invoke `nexus down` with their same environment during teardown. No push, PR, merge, fleet migration, or template migration was performed.
+All returned no output (listener check exit 1; SQL and diff checks exit 0). No `qa640_800b_*` databases remain. Fixture-owned gateway processes shut down with their same environment. No foreign listener was stopped. The final import check still resolves to this worktree. No Postgres.app authentication-permission error occurred.
 
-## Coordinator Questions
+Deferred: #937's stale request budget; general SDK parse-failure usage accounting. The coordinator applies migration 125 fleet-wide at landing. Open question for the coordinator:
 
-1. Authorize a targeted episode/season output-budget or summary-length repair, then renew the exhausted episode proof allocation? The episode's 2,500-token output cap is the confirmed blocker; changing the separately deferred request budget alone cannot repair it.
-2. Route the usage-accounting hole for SDK parsing failures to this slice or a follow-up? The retry's HTTP metadata has exact usage, but the first call's usage remains unavailable and the normal ledger missed both parse failures.
-3. Apply migration 125 fleet-wide only after successful paid proof and review. All implementation and non-paid gates are now green; this branch remains unpushed under the stop rule.
+Authorize a bounded-length episode-summary prompt or another output-allowance change, and renew episode proof authority? Both authorized attempts still truncated at 8,000 output tokens. The season proof remains unexecuted because each scheduler pass stopped on the episode failure.
+
+The retained lane correction is in `tests/test_api/test_scheduler_recovery_pg.py:464`: the existing SIGKILL test hardcoded 8018 despite the assigned 8016 environment and collided with a foreign listener. The fix honors `NEXUS_GATEWAY_PORT` for its preflight check and bind, exactly as the other scheduler fixtures do. The listener was not stopped or modified.
+
+No push, PR, or merge is performed under this stop report.
 
 ## Files Changed in This Continuation
 
-| File | Change |
-|---|---|
-| `config/reachability_baseline.json` | Resolve the rebase's explanatory-text conflict without discarding either change. |
-| `scripts/api_openai.py` | Use registered capabilities and filter every request path. |
-| `nexus/cli.py` | Return the concise legacy-chunk diagnostic and exit 1. |
-| `nexus/telemetry/attempt_manifest.py` | Distinguish missing legacy bindings from ambiguous sessions. |
-| `tests/test_openai_registry_capabilities.py` | Exercise real offline provider construction and request builders. |
-| `tests/test_native_structured_output.py` | Use registered IDs in existing request tests. |
-| `tests/test_orrery_tag_validation.py` | Use registered TEST IDs in existing retry tests. |
-| `tests/test_usage_recorder.py` | Use registered IDs while retaining distinct model/seat accounting coverage. |
-| `tests/test_api/test_chunk_workflow_integration.py` | Replace slot-5 work and process dedupe assertions with disposable durable-queue coverage. |
-| `tests/test_orrery/test_playable_narrative_boundary.py` | Replace fake acceptance with a real prologue-aware database test. |
-| `tests/test_orrery/test_recall_disclosure_pg.py` | Load configured RenderLimits for the existing harness. |
-| `tests/test_api/test_attempt_manifest_pg.py` | Cover missing and duplicate generation sessions in PostgreSQL. |
-| `tests/test_api/test_narrative_summary_paid_pg.py` | Save real response metadata, queue states, and persisted summaries even when the proof fails. |
-| `docs/qa/800-embedding-summaries/verification.md` | Record current stop reason, repairs, exact gates, cleanup, and coordinator questions. |
-| `docs/qa/800-embedding-summaries/first-issue-verification.md` | Preserve the first issue's full verification and stop history. |
-| `docs/qa/800-embedding-summaries/provider-gate.txt` | Preserve 120 passing provider checks. |
-| `docs/qa/800-embedding-summaries/registry-fixture-gate.txt` | Preserve 65 passing registry-fixture checks. |
-| `docs/qa/800-embedding-summaries/amendment-gate.txt` | Preserve 16 passing PostgreSQL amendment checks. |
-| `docs/qa/800-embedding-summaries/prompt-reachability-gate.txt` | Preserve 60 passing lint/reachability checks. |
-| `docs/qa/800-embedding-summaries/offline-initial.txt` | Preserve the initial 14 registry-fixture failures for diagnosis. |
-| `docs/qa/800-embedding-summaries/offline-gate.txt` | Preserve the final 2,720-pass offline gate. |
-| `docs/qa/800-embedding-summaries/postgres-gate.txt` | Preserve the 187-pass expanded PostgreSQL gate. |
-| `docs/qa/800-embedding-summaries/black-gate.txt` | Preserve the clean 32-file formatting result. |
-| `docs/qa/800-embedding-summaries/inspect-turn.txt` | Preserve the exact real-slot legacy diagnostic. |
-| `docs/qa/800-embedding-summaries/paid-proof-attempt-1.txt` | Preserve the first HTTP-200 truncated episode response failure. |
-| `docs/qa/800-embedding-summaries/paid-proof-attempt-2.txt` | Preserve the authorized episode retry failure. |
-| `docs/qa/800-embedding-summaries/paid-proof.json` | Preserve SQL states and failed-proof metadata before clone cleanup. |
-| `docs/qa/800-embedding-summaries/paid-wire-usage.json` | Preserve exact provider usage and the output-limit reason. |
+- `config/reachability_baseline.json` — Add the summary-error module to production reachability.
+- `nexus.toml` — Set episode/season output allowances to 8,000/12,000, including reasoning.
+- `nexus/api/summary_errors.py` — Classify incomplete summary responses before JSON parsing.
+- `nexus/jobs/narrative_jobs.py` — Make summary truncation terminal regardless of remaining attempts.
+- `scripts/api_openai.py` — Let summaries inspect raw Responses results while retaining normal usage recording.
+- `scripts/summarize_narrative.py` — Install the mode/allowance check and preserve the dedicated exception.
+- `tests/test_summary_triggers.py` — Cover both summary modes and incomplete reasons with SDK response objects.
+- `tests/test_api/test_narrative_jobs_pg.py` — Prove failed state, cleared lease, and no retry after truncation in PostgreSQL.
+- `tests/test_api/test_scheduler_recovery_pg.py` — Honor the assigned gateway port during the SIGKILL recovery proof.
+- `docs/qa/800-embedding-summaries/verification.md` — Record this continuation, exact gates, paid failures, cleanup, and the coordinator question.
+- `docs/qa/800-embedding-summaries/paid-proof.json` — Retain the retry clone SQL state and normal usage ledger before cleanup.
+- `docs/qa/800-embedding-summaries/paid-wire-usage.json` — Retain both renewed calls and their exact wire usage.
+- `docs/qa/800-embedding-summaries/second-issue-verification.md` — Preserve the prior stop report.
+- `docs/qa/800-embedding-summaries/second-issue-paid-proof.json` — Preserve the prior paid-proof SQL evidence.
+- `docs/qa/800-embedding-summaries/second-issue-paid-wire-usage.json` — Preserve the prior 2,500-token wire usage.
+- `docs/qa/800-embedding-summaries/third-focused-gate.txt` — Record 130 passing focused tests.
+- `docs/qa/800-embedding-summaries/third-truncation-pg.txt` — Record the passing real PostgreSQL truncation test.
+- `docs/qa/800-embedding-summaries/third-offline-gate.txt` — Record the 2,724-pass offline gate.
+- `docs/qa/800-embedding-summaries/third-prompt-reachability-initial.txt` — Preserve the new-module baseline failure.
+- `docs/qa/800-embedding-summaries/third-prompt-reachability.txt` — Record 60 passing prompt/reachability tests after repair.
+- `docs/qa/800-embedding-summaries/third-black-gate.txt` — Record the clean 34-file Black check.
+- `docs/qa/800-embedding-summaries/third-inspect-turn.txt` — Record the exact real-slot legacy diagnostic.
+- `docs/qa/800-embedding-summaries/third-paid-proof-attempt-1.json` — Preserve the first renewed paid call SQL state and usage ledger.
+- `docs/qa/800-embedding-summaries/third-paid-wire-attempt-1.json` — Preserve the first renewed paid call wire usage.
+- `docs/qa/800-embedding-summaries/third-paid-proof-attempt-1.txt` — Preserve the first renewed paid call test failure.
+- `docs/qa/800-embedding-summaries/third-paid-proof.txt` — Preserve the authorized retry failure.
+- `docs/qa/800-embedding-summaries/third-postgres-initial.txt` — Preserve the initial gateway-port collision failure.
+- `docs/qa/800-embedding-summaries/third-postgres-gate.txt` — Record the final expanded PostgreSQL rerun.
 
 Reported by Codex — GPT-6 Astra (gpt-6-astra).

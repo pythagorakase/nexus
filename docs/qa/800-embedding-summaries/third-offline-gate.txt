@@ -1,0 +1,90 @@
+........................................................................ [  1%]
+............................sssssssssssssssssssssssssssssss.......ss.sss [  3%]
+....s....................................................sss............ [  5%]
+.........................ssssssss.......sssssss...sssssssssssss...ssssss [  7%]
+s............ssssssssssssssssssss.....sssssssssssssssssss..sss...sssssss [  9%]
+ssssssssssssss...ssssss................................................. [ 11%]
+........................................ssssss......ss.........s........ [ 13%]
+......................................s................................. [ 15%]
+........................................................................ [ 17%]
+ssssssssssssssssss..................s...s........................s...... [ 19%]
+................ss..............................s....s..........s..sssss [ 21%]
+ssssssssssssssssssssssssss.ssssssssssssss...........sssss............... [ 23%]
+.s...........sssssss..s..........................................ss..... [ 25%]
+.......ssssssss...............s......................................... [ 27%]
+.....................................ssssssss...sssss...s......ssss..... [ 29%]
+.sss.......s............................................................ [ 31%]
+.............................ssss...........s.....sss.............ss.... [ 33%]
+..........sss........................................................... [ 35%]
+.....................................................................ss. [ 37%]
+...............................ssssss...ssssss.......................... [ 39%]
+.......sss.......................sssss..........ss.........ssss.ss...sss [ 41%]
+s...................ssssssssssssssssssssssssssssssssssssssssssssssssssss [ 43%]
+sssssssssssssssssss.....ssssssss..............sssssssssssssssssss....... [ 45%]
+...........sssssssssssssssss........................................ss.. [ 47%]
+..............ssss....sssssssssssss........ssssssssss..s.sssssssssssss.. [ 49%]
+.s...................................................................... [ 51%]
+........................................................................ [ 53%]
+.............sssssssss.................................................. [ 55%]
+........ssssssssssssssssssssssssssssssssssssss.......................... [ 57%]
+.........................ssssssssssssssssssssssssssssssssssssssssssss... [ 59%]
+.................s........................sssssssssssssssssssssssssss..s [ 61%]
+.........sss...........ssss........................sssssssssssssssssssss [ 63%]
+ss......sssss..s...................sssssssssssssssssssssssssssssssssssss [ 65%]
+sss..................................................................... [ 67%]
+.......................................sssssss.......................... [ 69%]
+...................................................s...................s [ 71%]
+sss...s..........................................ssssssssssssssssssssss. [ 73%]
+................................................sssssssssssss.s......... [ 75%]
+s....ssssssssss.....ss...............ssss............................... [ 77%]
+.......ss....sssssssssss................................................ [ 79%]
+...............................ssssss........................sssssssssss [ 81%]
+s.............ssssss..........s......................................... [ 83%]
+............sssssssssssssssssssssssssssssss.....sssssssssssssssssss..... [ 85%]
+...s...ss.....................s..........................sssssssssssssss [ 87%]
+sssssssssss.........................................s................... [ 89%]
+..................................................................ssssss [ 91%]
+ss...........................................................sssssssssss [ 93%]
+s....................................................................... [ 95%]
+...............................s..s..................................... [ 97%]
+...............sssss.................................................... [ 99%]
+..........sssssssssssssssssssss                                          [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+nexus/api/storyteller.py:307
+  /Users/pythagor/nexus/.claude/worktrees/800-embedding-summaries/nexus/api/storyteller.py:307: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../../../.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2724 passed, 909 skipped, 9 warnings in 124.32s (0:02:04)
