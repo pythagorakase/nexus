@@ -133,6 +133,20 @@ def _prompt_one_line(value: Any) -> str:
     return " ".join(str(value).split())
 
 
+def _orrery_card_identity(card: Mapping[str, Any]) -> str:
+    """Render the snapshotted names, rank, and evaluation clock compactly."""
+    fields = []
+    if card.get("position") is not None:
+        fields.append(f"position={card['position']}")
+    fields.extend(
+        f"{slot}={_prompt_one_line(name)}"
+        for slot, name in sorted((card.get("binding_names") or {}).items())
+    )
+    if card.get("evaluated_at") is not None:
+        fields.append(f"evaluated_at={card['evaluated_at']}")
+    return "; ".join(fields)
+
+
 _PROPOSAL_TAG_DELTA_KEYS = frozenset(
     {
         "entity_tags.add",
@@ -2681,7 +2695,10 @@ class LogonUtility:
                 proposal_id = proposal.get("proposal_id")
                 label = proposal.get("branch_label") or proposal.get("template_id")
                 state_delta = proposal.get("state_delta") or {}
-                sections.append(f"- {proposal_id} [{label}]: state_delta={state_delta}")
+                sections.append(
+                    f"- {proposal_id} [{label}]: {_orrery_card_identity(proposal)}; "
+                    f"state_delta={state_delta}"
+                )
 
         sections.kind = "orrery scene pressure"
         scene_pressures = context.get("orrery_scene_pressures") or []
@@ -2702,7 +2719,12 @@ class LogonUtility:
                     "pressure_stub", ""
                 )
                 if prompt_text:
-                    sections.append(f"- {label}: {prompt_text}")
+                    identity = _orrery_card_identity(pressure)
+                    sections.append(
+                        f"- {label}: "
+                        + (f"{identity}; " if identity else "")
+                        + prompt_text
+                    )
 
         sections.kind = "orrery ambient scene seeds"
         ambient_scene_seeds = context.get("orrery_ambient_scene_seeds") or []
@@ -2746,6 +2768,7 @@ class LogonUtility:
         sections.kind = "orrery joint beats"
         joint_beats = context.get("orrery_joint_beats") or []
         if joint_beats:
+            cards_by_id = {card["proposal_id"]: card for card in imminent_activity}
             sections.append("\n=== ORRERY JOINT BEATS ===")
             sections.append(
                 "These proposal pairs have the same two characters acting "
@@ -2767,7 +2790,9 @@ class LogonUtility:
                     f"{beat.get('forward_template_id')} <-> "
                     f"{beat.get('reverse_template_id')} "
                     f"({beat.get('forward_proposal_id')} / "
-                    f"{beat.get('reverse_proposal_id')})"
+                    f"{beat.get('reverse_proposal_id')}); "
+                    f"forward: {_orrery_card_identity(cards_by_id[beat['forward_proposal_id']])}; "
+                    f"reverse: {_orrery_card_identity(cards_by_id[beat['reverse_proposal_id']])}"
                 )
 
         sections.kind = "orrery ambient peripherals"
