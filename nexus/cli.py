@@ -3266,7 +3266,7 @@ def _print_turn_inspection(turn: Dict[str, Any]) -> None:
     for row in turn["phases"]:
         print(f"{row['phase']}\t{row['recorded_at']}")
     print(
-        "Seat\tAttempt\tModel\tTokens\tWindow\tBlocks\tValidation Notes\tProvider Outcome\tOutcome"
+        "Seat\tAttempt\tModel\tTokens\tWindow\tBlocks\tValidation Notes\tRepair Codes\tProvider Outcome\tOutcome"
     )
     for row in turn["manifests"]:
         window = row["window_record"]
@@ -3282,6 +3282,12 @@ def _print_turn_inspection(turn: Dict[str, Any]) -> None:
                         window["effective_ceiling"],
                         len(row["blocks"]),
                         len(row["validation"]),
+                        ",".join(
+                            note["repair"]
+                            for note in row["validation"]
+                            if "repair" in note
+                        )
+                        or "-",
                         row["provider_outcome"] or "-",
                         row["outcome"] or "-",
                     ),

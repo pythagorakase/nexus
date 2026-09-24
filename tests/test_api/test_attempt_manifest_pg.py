@@ -2,6 +2,7 @@
 
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ import requests
 import tomlkit
 
 from nexus.telemetry.attempt_manifest import (
+    finish_attempt,
     identity_hash,
     inspect_turn,
     manifest_scope,
@@ -80,6 +82,13 @@ def test_manifest_reference_privacy_retention_and_readonly(monkeypatch):
                 )
                 record.validation_notes = [
                     {
+                        "repair": "active-extend-expiry",
+                        "entity_kind": "character",
+                        "entity_id": 42,
+                        "entity_name": "private name",
+                        "tag": "private tag",
+                    },
+                    {
                         "repair": "scene-reset-crossings",
                         "moved": ["private name"],
                         "dropped": [],
@@ -106,7 +115,7 @@ def test_manifest_reference_privacy_retention_and_readonly(monkeypatch):
             assert all("private" not in row[0] for row in cur.fetchall())
         with closing(connect(dbname)) as conn:
             result = inspect_turn(conn, session=sessions[0])
-            assert result["manifests"][0]["validation"][0]["moved_count"] == 1
+            assert result["manifests"][0]["validation"][1]["moved_count"] == 1
             with conn, conn.cursor() as cur:
                 cur.execute("SHOW transaction_read_only")
                 assert cur.fetchone()[0] == "on"
@@ -125,7 +134,37 @@ def test_manifest_reference_privacy_retention_and_readonly(monkeypatch):
                     (sessions,),
                 )
                 assert cur.fetchone()[0] == 3
-        run_cli(monkeypatch, "inspect-turn", "--slot", "4", "--session", sessions[1])
+        output = run_cli(
+            monkeypatch, "inspect-turn", "--slot", "4", "--session", sessions[1]
+        )
+        assert "active-extend-expiry" in output
+        repair = result["manifests"][0]["validation"][0]
+        assert repair == {
+            "sha256": identity_hash(record.validation_notes[0]),
+            "repair": "active-extend-expiry",
+            "entity_kind": "character",
+            "entity_id": 42,
+        }
+        # Cancel a session while its provider is between validation attempts.
+        from nexus.api.narrative_lease import discard_generation
+
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            discard_generation(cur, sessions[2])
+        record.attempt = 2
+        with manifest_scope(lambda: connect(dbname)):
+            start_attempt(
+                record,
+                blocks=[],
+                system_prompt="private",
+                prompt="private",
+                settings={},
+                wire_schema={},
+            )
+            finish_attempt(record, "accepted")
+        with closing(connect(dbname)) as conn:
+            late = inspect_turn(conn, session=sessions[2])["manifests"]
+        assert [row["outcome"] for row in late] == ["discarded", "discarded"]
+        assert late[1]["provider_outcome"] == "accepted"
 
 
 def test_manifest_real_test_turn_and_child_job_correlation(
@@ -139,7 +178,7 @@ def test_manifest_real_test_turn_and_child_job_correlation(
     doc = tomlkit.parse(config.read_text())
     doc["storyteller"]["correspondence"]["floor_turns"] = 1
     config.write_text(tomlkit.dumps(doc))
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8015")
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
     with disposable_slot_database(
         "qa640_764_turn", source_db="save_04", include_data=True
     ) as dbname:
@@ -190,7 +229,7 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                 cur.execute("SELECT session_id::text FROM incubator")
                 session = cur.fetchone()[0]
             response = requests.post(
-                f"http://127.0.0.1:8015/api/narrative/approve/{session}?slot=4&commit=true",
+                f"{os.environ['NEXUS_API_URL']}/api/narrative/approve/{session}?slot=4&commit=true",
                 timeout=120,
             )
             assert response.status_code == 200, response.text

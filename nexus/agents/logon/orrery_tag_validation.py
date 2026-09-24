@@ -1044,6 +1044,8 @@ def normalize_extend_expiry_reasserts(
                 "repair": "active-extend-expiry",
                 "path": candidate.path,
                 "entity_name": canonical_name,
+                "entity_kind": candidate.entity_kind,
+                "entity_id": verified_entity_id,
                 "tag": candidate.tag,
             }
         )
@@ -1241,6 +1243,7 @@ def normalize_replacement_tag_reasserts(
                             "repair": "active-extend-expiry",
                             "path": path,
                             "entity_id": entity_id,
+                            "entity_kind": kind,
                             "tag": tag,
                         }
                     )

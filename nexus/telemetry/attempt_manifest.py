@@ -74,11 +74,21 @@ def start_attempt(
                 "headroom",
             }
         )
+        # Serialize with terminal transitions so neither insertion order can
+        # leave a late retry without the owning session's decision.
+        cur.execute(
+            "SELECT terminal_outcome FROM narrative_generation_sessions "
+            "WHERE session_id=%s FOR UPDATE",
+            (record.generation_session,),
+        )
+        session = cur.fetchone()
+        if session is None:
+            raise RuntimeError("Attempt manifest requires a generation session")
         cur.execute(
             """INSERT INTO generation_attempt_manifests (
                 generation_session_id, seat, attempt, blocks, window_record,
-                model_id, story_pin, config_sha256, wire_schema_sha256, prompt_sha256
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                model_id, story_pin, config_sha256, wire_schema_sha256, prompt_sha256, outcome
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 record.generation_session,
                 record.seat,
@@ -90,6 +100,7 @@ def start_attempt(
                 identity_hash(settings),
                 identity_hash(wire_schema),
                 identity_hash({"system": system_prompt, "user": prompt}),
+                session[0],
             ),
         )
         _refresh_references(cur, record)
@@ -123,6 +134,11 @@ def _validation_metadata(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 moved_count=len(note.get("moved", [])),
                 dropped_count=len(note.get("dropped", [])),
             )
+        elif note.get("repair") == "active-extend-expiry":
+            item["repair"] = "active-extend-expiry"
+            if "entity_kind" in note and "entity_id" in note:
+                item["entity_kind"] = note["entity_kind"]
+                item["entity_id"] = note["entity_id"]
         elif note.get("rejection") == "wire-contract-violation":
             item["rejection"] = "wire-contract-violation"
         metadata.append(item)
