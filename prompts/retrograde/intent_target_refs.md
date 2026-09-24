@@ -1,0 +1,1 @@
+Use the same compact entity-ref language as mechanical_hints.

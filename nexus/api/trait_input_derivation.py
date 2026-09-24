@@ -131,7 +131,7 @@ def derived_input_issues(
     selected_set = set(selected)
 
     if inputs.reputation is not None:
-        issues.append("use the canonical 'fame' field, not 'reputation'")
+        issues.append(load(PromptId.WIZARD_CANONICAL_FAME))
 
     provided = {
         trait

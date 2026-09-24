@@ -18,6 +18,7 @@ Usage Examples:
 """
 
 from nexus.database import connection_kwargs
+from nexus.prompts.registry import PromptId, load
 
 import argparse
 import json
@@ -357,30 +358,23 @@ def create_faction_to_faction_messages(
     system_message = {
         "role": "system",
         "content": (
-            "You are an expert narrative designer creating rich, nuanced faction relationships "
-            "for the Night City Stories universe. Your task is to generate a detailed relationship "
-            "analysis between two factions based on their characteristics and the provided context.\n\n"
-            f"{roster_text}\n\n"
-            "Generate a comprehensive faction-to-faction relationship that:\n"
-            "1. Reflects the power dynamics and ideological tensions\n"
-            "2. Includes specific historical events and conflicts\n"
-            "3. Details both public and hidden aspects of the relationship\n"
-            "4. Provides narrative hooks for future story development\n"
-            "5. Considers economic, territorial, and strategic factors"
+            load(PromptId.OPERATORS_FACTION_RELATIONSHIP_SYSTEM, VALUE_1=roster_text)
         ),
     }
 
     user_message = {
         "role": "user",
         "content": (
-            f"Generate the relationship between:\n\n"
-            f"FACTION 1: {faction1_data['name']} (ID: {faction1_data['id']})\n"
-            f"{json.dumps(faction1_data, indent=2)}\n\n"
-            f"FACTION 2: {faction2_data['name']} (ID: {faction2_data['id']})\n"
-            f"{json.dumps(faction2_data, indent=2)}\n\n"
-            f"CONTEXT:\n{json.dumps(context, indent=2)}\n\n"
-            f"Create a detailed relationship analysis focusing on how these two factions "
-            f"interact, compete, cooperate, or conflict with each other."
+            load(
+                PromptId.OPERATORS_FACTION_RELATIONSHIP_USER,
+                VALUE_1=faction1_data["name"],
+                VALUE_2=faction1_data["id"],
+                VALUE_3=json.dumps(faction1_data, indent=2),
+                VALUE_4=faction2_data["name"],
+                VALUE_5=faction2_data["id"],
+                VALUE_6=json.dumps(faction2_data, indent=2),
+                VALUE_7=json.dumps(context, indent=2),
+            )
         ),
     }
 
@@ -399,30 +393,23 @@ def create_faction_to_character_messages(
     system_message = {
         "role": "system",
         "content": (
-            "You are an expert narrative designer creating rich character-faction relationships "
-            "for the Night City Stories universe. Your task is to generate a detailed relationship "
-            "between a faction and a character based on their characteristics and the provided context.\n\n"
-            f"{roster_text}\n\n"
-            "Generate a comprehensive faction-character relationship that:\n"
-            "1. Defines the character's role and standing within or against the faction\n"
-            "2. Details the history of their involvement\n"
-            "3. Explores both the faction's and character's perspectives\n"
-            "4. Includes operational details and active plots\n"
-            "5. Provides narrative potential for future developments"
+            load(PromptId.OPERATORS_FACTION_CHARACTER_SYSTEM, VALUE_1=roster_text)
         ),
     }
 
     user_message = {
         "role": "user",
         "content": (
-            f"Generate the relationship between:\n\n"
-            f"FACTION: {faction_data['name']} (ID: {faction_data['id']})\n"
-            f"{json.dumps(faction_data, indent=2)}\n\n"
-            f"CHARACTER: {character_data['name']} (ID: {character_data['id']})\n"
-            f"{json.dumps(character_data, indent=2)}\n\n"
-            f"CONTEXT:\n{json.dumps(context, indent=2)}\n\n"
-            f"Create a detailed relationship analysis focusing on how this character "
-            f"relates to, works with, or opposes this faction."
+            load(
+                PromptId.OPERATORS_FACTION_CHARACTER_USER,
+                VALUE_1=faction_data["name"],
+                VALUE_2=faction_data["id"],
+                VALUE_3=json.dumps(faction_data, indent=2),
+                VALUE_4=character_data["name"],
+                VALUE_5=character_data["id"],
+                VALUE_6=json.dumps(character_data, indent=2),
+                VALUE_7=json.dumps(context, indent=2),
+            )
         ),
     }
 

@@ -1,0 +1,1 @@
+{actor} may have mapped the public pattern around {target}. Use this only as Storyteller-controlled scene pressure or a future setup.

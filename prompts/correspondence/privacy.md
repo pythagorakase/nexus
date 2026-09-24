@@ -1,0 +1,1 @@
+This authorial correspondence is invisible to the player and is not canon.

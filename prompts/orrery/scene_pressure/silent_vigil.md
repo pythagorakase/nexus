@@ -1,0 +1,1 @@
+{actor} is keeping silent vigil over {target}. Use this as ambient presence — a witness who shapes the scene by being there, not by acting.

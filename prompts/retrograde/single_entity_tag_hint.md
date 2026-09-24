@@ -1,0 +1,1 @@
+Use only seed_eligible_vocabulary.registered_* tags and respect mechanical_tag_policy.

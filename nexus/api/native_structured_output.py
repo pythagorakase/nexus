@@ -6,7 +6,6 @@ schema and the boundary validation helpers in one place.
 """
 
 from __future__ import annotations
-
 from nexus.prompts.registry import PromptId, load
 
 import inspect
@@ -194,10 +193,7 @@ def anthropic_strict_tool(
 
     return {
         "name": name,
-        "description": (
-            "Return the complete structured response for the current NEXUS "
-            "generation request."
-        ),
+        "description": (load(PromptId.OUTPUT_STRUCTURED_TOOL)),
         "input_schema": anthropic_json_schema(schema_model),
         "strict": True,
     }

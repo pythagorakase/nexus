@@ -1,0 +1,2 @@
+submit_wildcard_trait rejected: orrery_tags failed registry validation. Use bare registered tag names from the Tag Reference (e.g. 'comfortable'), never 'category:name' composites. Issues:
+{{FORMATTED}}

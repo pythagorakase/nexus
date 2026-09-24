@@ -1,0 +1,491 @@
+{
+  "base": "8020a550bb39f582945c7781bdd35f27910640e1",
+  "renders": [
+    {
+      "prompt_id": "CORRESPONDENCE_PRIVACY",
+      "source": "nexus/memory/correspondence.py",
+      "base_line": 163,
+      "bytes": 74,
+      "before_sha256": "8e1407f291de30532ffa7a3e468592c5f20b4ddeedec39bb48cbe82aac22c90e",
+      "after_sha256": "8e1407f291de30532ffa7a3e468592c5f20b4ddeedec39bb48cbe82aac22c90e",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETRY_FACTION_DECLARATION_ALLOWED",
+      "source": "nexus/agents/logon/orrery_tag_validation.py",
+      "base_line": 1498,
+      "bytes": 52,
+      "before_sha256": "dbb6a9df1a1beb22e7dbfee506a56b505e849d14b9b42d9f25c8b25738999adc",
+      "after_sha256": "dbb6a9df1a1beb22e7dbfee506a56b505e849d14b9b42d9f25c8b25738999adc",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETRY_FACTION_DECLARATION_DISABLED",
+      "source": "nexus/agents/logon/orrery_tag_validation.py",
+      "base_line": 1501,
+      "bytes": 89,
+      "before_sha256": "b6e7543edee70e50ab885715caa6d3770e8507aa26f918d2cccc6d41e72d0776",
+      "after_sha256": "b6e7543edee70e50ab885715caa6d3770e8507aa26f918d2cccc6d41e72d0776",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_EVENT_TYPE_HINT",
+      "source": "nexus/agents/orrery/retrograde_packet.py",
+      "base_line": 267,
+      "bytes": 46,
+      "before_sha256": "5cce453da102029e719f45402091b0a87fafd7db106ceb490994ebc461ec5bee",
+      "after_sha256": "5cce453da102029e719f45402091b0a87fafd7db106ceb490994ebc461ec5bee",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_SINGLE_ENTITY_TAG_HINT",
+      "source": "nexus/agents/orrery/retrograde_packet.py",
+      "base_line": 269,
+      "bytes": 86,
+      "before_sha256": "46927b3d97b266186a55f87a6bbd04fbca610824978870cb7adf3b37ae154d2c",
+      "after_sha256": "46927b3d97b266186a55f87a6bbd04fbca610824978870cb7adf3b37ae154d2c",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_RELATIONSHIP_HINT",
+      "source": "nexus/agents/orrery/retrograde_packet.py",
+      "base_line": 274,
+      "bytes": 53,
+      "before_sha256": "9c7de5ffdba679f0eeb419600f26650807fd9b48aa2cac8cb2f114f92e2d9ce3",
+      "after_sha256": "9c7de5ffdba679f0eeb419600f26650807fd9b48aa2cac8cb2f114f92e2d9ce3",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OPERATORS_FACTION_RELATIONSHIP_SYSTEM",
+      "source": "scripts/faction_relationship_analyst.py",
+      "base_line": 360,
+      "bytes": 649,
+      "before_sha256": "1004a921eaf9eb13ac8a3e5b81563952f0e35092cd4586daec49a29f9c2c8de2",
+      "after_sha256": "1004a921eaf9eb13ac8a3e5b81563952f0e35092cd4586daec49a29f9c2c8de2",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OPERATORS_FACTION_RELATIONSHIP_USER",
+      "source": "scripts/faction_relationship_analyst.py",
+      "base_line": 376,
+      "bytes": 362,
+      "before_sha256": "9d4c1d9d7743cfa132fee271834cfe968bab9210318f6364d1470a7a70aaf434",
+      "after_sha256": "9d4c1d9d7743cfa132fee271834cfe968bab9210318f6364d1470a7a70aaf434",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OPERATORS_FACTION_CHARACTER_SYSTEM",
+      "source": "scripts/faction_relationship_analyst.py",
+      "base_line": 402,
+      "bytes": 651,
+      "before_sha256": "34c0358b83f30cf29e5d9f30a704362a502a7a3091f016eca0feb0cbf39bde09",
+      "after_sha256": "34c0358b83f30cf29e5d9f30a704362a502a7a3091f016eca0feb0cbf39bde09",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OPERATORS_FACTION_CHARACTER_USER",
+      "source": "scripts/faction_relationship_analyst.py",
+      "base_line": 418,
+      "bytes": 344,
+      "before_sha256": "4ac1d626904b40e196bf1c650ec09a7b72dc0754f2d95e5a1f2b0976a8706827",
+      "after_sha256": "4ac1d626904b40e196bf1c650ec09a7b72dc0754f2d95e5a1f2b0976a8706827",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETRY_FACTION_EXACT_NAME",
+      "source": "nexus/agents/logon/orrery_tag_validation.py",
+      "base_line": 477,
+      "bytes": 27,
+      "before_sha256": "d02e8e4b162d88cdbd6a4585cc45153994d0d46c6f6d42cc5b0abaa90e8e9405",
+      "after_sha256": "d02e8e4b162d88cdbd6a4585cc45153994d0d46c6f6d42cc5b0abaa90e8e9405",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETRY_FACTION_NEW_NAME",
+      "source": "nexus/agents/logon/orrery_tag_validation.py",
+      "base_line": 479,
+      "bytes": 51,
+      "before_sha256": "83895de0c542fcd2976a1b3a6d2ac09e96469b9311ae13f308bae8dfe0b49fff",
+      "after_sha256": "83895de0c542fcd2976a1b3a6d2ac09e96469b9311ae13f308bae8dfe0b49fff",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OUTPUT_FORMAT_GUIDE",
+      "source": "nexus/agents/logon/skald_wire.py",
+      "base_line": 921,
+      "bytes": 126,
+      "before_sha256": "5a5697927ab4be78c64f9d8b427b3d3cb0d66dc31f18cbc54e6e2a5daf3cda3f",
+      "after_sha256": "5a5697927ab4be78c64f9d8b427b3d3cb0d66dc31f18cbc54e6e2a5daf3cda3f",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_PRESSURE_SLEEP",
+      "source": "nexus/agents/orrery/resolver.py",
+      "base_line": 3328,
+      "bytes": 178,
+      "before_sha256": "5ab0a47ce5349b8295174942ab452f42dc6504fa74c037b514c9be9cdb40bd15",
+      "after_sha256": "5ab0a47ce5349b8295174942ab452f42dc6504fa74c037b514c9be9cdb40bd15",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_PRESSURE_HUNGER",
+      "source": "nexus/agents/orrery/resolver.py",
+      "base_line": 3335,
+      "bytes": 161,
+      "before_sha256": "c2b62aa342e5ff8097fbd5ff4f3c65d8fc7e2699c7664d208608b54edfddc513",
+      "after_sha256": "c2b62aa342e5ff8097fbd5ff4f3c65d8fc7e2699c7664d208608b54edfddc513",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_PRESSURE_THIRST",
+      "source": "nexus/agents/orrery/resolver.py",
+      "base_line": 3342,
+      "bytes": 158,
+      "before_sha256": "03cdb74acd24c162ab190d0fe97d238c5c3e0b9e0c28e2eb635e6f7bf21808c7",
+      "after_sha256": "03cdb74acd24c162ab190d0fe97d238c5c3e0b9e0c28e2eb635e6f7bf21808c7",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_PRESSURE_SOCIALIZE",
+      "source": "nexus/agents/orrery/resolver.py",
+      "base_line": 3349,
+      "bytes": 192,
+      "before_sha256": "a1a07847c7d2a5111b717caf70eb65f6a19018db74ac1b842a84368c08247315",
+      "after_sha256": "a1a07847c7d2a5111b717caf70eb65f6a19018db74ac1b842a84368c08247315",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_PRESSURE_INTIMACY",
+      "source": "nexus/agents/orrery/resolver.py",
+      "base_line": 3356,
+      "bytes": 211,
+      "before_sha256": "f9c1f80dda01b225676c33179af604262d965f1c2552633e4606408bba762bc9",
+      "after_sha256": "f9c1f80dda01b225676c33179af604262d965f1c2552633e4606408bba762bc9",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_UNUSED_PLAN_FIELDS",
+      "source": "nexus/agents/orrery/retrograde_expansion.py",
+      "base_line": 1808,
+      "bytes": 52,
+      "before_sha256": "c31e39114a8a3ee3cd527c7de42bee0886bf219fb73d96fb152f5b76e1f2f748",
+      "after_sha256": "c31e39114a8a3ee3cd527c7de42bee0886bf219fb73d96fb152f5b76e1f2f748",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_RELATIONSHIP_TYPE_RETRY",
+      "source": "nexus/agents/orrery/retrograde_expansion.py",
+      "base_line": 1095,
+      "bytes": 211,
+      "before_sha256": "d817ed3e5c7e6939f6bb6b8691607089e82a1b494dc1073b19971bbd710ac198",
+      "after_sha256": "d817ed3e5c7e6939f6bb6b8691607089e82a1b494dc1073b19971bbd710ac198",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_MATURATION_TARGET",
+      "source": "nexus/agents/orrery/retrograde_maturation.py",
+      "base_line": 1094,
+      "bytes": 140,
+      "before_sha256": "6d02c929feaf764086f9e610ff84931eb21f4d1c5d7b002cfc2570ffa99c1c92",
+      "after_sha256": "6d02c929feaf764086f9e610ff84931eb21f4d1c5d7b002cfc2570ffa99c1c92",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_MATURATION_DIRECTIVE",
+      "source": "nexus/agents/orrery/retrograde_maturation.py",
+      "base_line": 1104,
+      "bytes": 91,
+      "before_sha256": "58b9dba0e951531b87d85d4d34ad34adeab707a99cd610f1b617b245a44fb356",
+      "after_sha256": "58b9dba0e951531b87d85d4d34ad34adeab707a99cd610f1b617b245a44fb356",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_MATURATION_BUDGET",
+      "source": "nexus/agents/orrery/retrograde_maturation.py",
+      "base_line": 1109,
+      "bytes": 81,
+      "before_sha256": "868d03e77612ccd41835a9a8706be22fbb226b56167308518023088640693c79",
+      "after_sha256": "868d03e77612ccd41835a9a8706be22fbb226b56167308518023088640693c79",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_MATURATION_WEIGHT",
+      "source": "nexus/agents/orrery/retrograde_maturation.py",
+      "base_line": 1113,
+      "bytes": 86,
+      "before_sha256": "6f04551ce3c2746623b8d2564f9b8967e68e37739600b8e535232b76ccdff4e7",
+      "after_sha256": "6f04551ce3c2746623b8d2564f9b8967e68e37739600b8e535232b76ccdff4e7",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_ABSENT_SUPPORTING_FIELDS",
+      "source": "nexus/agents/orrery/retrograde_seed_candidates.py",
+      "base_line": 1298,
+      "bytes": 60,
+      "before_sha256": "6bec891a80933715f38c2ada66545db7964a54dc45c7de64b481be62a68238a4",
+      "after_sha256": "6bec891a80933715f38c2ada66545db7964a54dc45c7de64b481be62a68238a4",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "RETROGRADE_INTENT_TARGET_REFS",
+      "source": "nexus/agents/orrery/retrograde_seed_candidates.py",
+      "base_line": 558,
+      "bytes": 61,
+      "before_sha256": "9cff7c06c46009c6a25301b1c28c22b707d134d1086965d80f98acd9861bc09d",
+      "after_sha256": "9cff7c06c46009c6a25301b1c28c22b707d134d1086965d80f98acd9861bc09d",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_GRUDGE",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 806,
+      "bytes": 205,
+      "before_sha256": "e269c0cb3afee81dcc329747a9e60e83e744e033fe156ceafdb73388bb0cbc5d",
+      "after_sha256": "e269c0cb3afee81dcc329747a9e60e83e744e033fe156ceafdb73388bb0cbc5d",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_INTERVENE",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 949,
+      "bytes": 176,
+      "before_sha256": "fdad01509f3d39ab228fe70f76858405bf0464b76674c8aefaff7c9bc9989165",
+      "after_sha256": "fdad01509f3d39ab228fe70f76858405bf0464b76674c8aefaff7c9bc9989165",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_ARRIVAL",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 972,
+      "bytes": 171,
+      "before_sha256": "153f570c914b84fc333e967d4f0e0b98a221961c50390403a7cdbe503d172e72",
+      "after_sha256": "153f570c914b84fc333e967d4f0e0b98a221961c50390403a7cdbe503d172e72",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_SIGNALS",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1094,
+      "bytes": 166,
+      "before_sha256": "7e7bb69983c0bdcd6c9a55495b825d1669ba9d216f29600e18a516c09ad85951",
+      "after_sha256": "7e7bb69983c0bdcd6c9a55495b825d1669ba9d216f29600e18a516c09ad85951",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_SURVEILLANCE",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1114,
+      "bytes": 191,
+      "before_sha256": "f931d95a29486469c3f00541e460ae27e2e318695f24bf8a874217658c2ed76c",
+      "after_sha256": "f931d95a29486469c3f00541e460ae27e2e318695f24bf8a874217658c2ed76c",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_PUBLIC_PATTERN",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1188,
+      "bytes": 133,
+      "before_sha256": "140188d6b0b6a64b3d4979b14fd5c087e40053b47d223e3105942bc20b7d274a",
+      "after_sha256": "140188d6b0b6a64b3d4979b14fd5c087e40053b47d223e3105942bc20b7d274a",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_CONFRONTATION",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1285,
+      "bytes": 143,
+      "before_sha256": "4f17d00143cd0e1995e23ee18a74fd5f79b0dbd7e01e6eaf951f59959cddd366",
+      "after_sha256": "4f17d00143cd0e1995e23ee18a74fd5f79b0dbd7e01e6eaf951f59959cddd366",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_INTEL",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1378,
+      "bytes": 174,
+      "before_sha256": "b7426b7a779f29b2a70bb7e8f60888e4f59ee51877ad97362e088c4d97433930",
+      "after_sha256": "b7426b7a779f29b2a70bb7e8f60888e4f59ee51877ad97362e088c4d97433930",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_OVERTURE",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1424,
+      "bytes": 139,
+      "before_sha256": "c0abd8ecb632878af79f2e78d73204d703328190f8b10d7e1a3425d9b9e403b8",
+      "after_sha256": "c0abd8ecb632878af79f2e78d73204d703328190f8b10d7e1a3425d9b9e403b8",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_RESTORATION",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1515,
+      "bytes": 188,
+      "before_sha256": "afbbac3aaed1adb6c445010a819c9ca0518baba900a0ace1a991a05f9aa4ba20",
+      "after_sha256": "afbbac3aaed1adb6c445010a819c9ca0518baba900a0ace1a991a05f9aa4ba20",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_FIRST_AID",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1560,
+      "bytes": 149,
+      "before_sha256": "ff2bc96d272e4c13222aaac94ee4b5b50c1171c0aead61d71a44e7129b7a87f1",
+      "after_sha256": "ff2bc96d272e4c13222aaac94ee4b5b50c1171c0aead61d71a44e7129b7a87f1",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_ACCOMPANIMENT",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1580,
+      "bytes": 125,
+      "before_sha256": "ad9df4a68f331adff6e949a71f27c2a97ed9c343b692d446c60b255be7369442",
+      "after_sha256": "ad9df4a68f331adff6e949a71f27c2a97ed9c343b692d446c60b255be7369442",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_CONTEMPLATION",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1765,
+      "bytes": 129,
+      "before_sha256": "e5131c5a656bb1abf3e6d1c2d580b3c48b6bd6480e028190cb8ed4d44576dac6",
+      "after_sha256": "e5131c5a656bb1abf3e6d1c2d580b3c48b6bd6480e028190cb8ed4d44576dac6",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_SPEAKING_VIGIL",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1787,
+      "bytes": 143,
+      "before_sha256": "513168d7a788e51b12b2d568167f4ed9cffa81f881b15635ec5acc2da898c8e0",
+      "after_sha256": "513168d7a788e51b12b2d568167f4ed9cffa81f881b15635ec5acc2da898c8e0",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_SILENT_VIGIL",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 1809,
+      "bytes": 141,
+      "before_sha256": "3deeecc434cde9c3e074771fdd8391f53d6cb903fd910305dc8a080043105215",
+      "after_sha256": "3deeecc434cde9c3e074771fdd8391f53d6cb903fd910305dc8a080043105215",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_WELFARE",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 2723,
+      "bytes": 151,
+      "before_sha256": "4e3cb79249d6e2ceacc683651b4dad0f98f80c23257f1f13329bd9b86e9bd982",
+      "after_sha256": "4e3cb79249d6e2ceacc683651b4dad0f98f80c23257f1f13329bd9b86e9bd982",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_CONVERSATION",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 2824,
+      "bytes": 173,
+      "before_sha256": "a04352bc7c366160e4d6010406db1456ba5228329774a72aeb28bf9715e22e03",
+      "after_sha256": "a04352bc7c366160e4d6010406db1456ba5228329774a72aeb28bf9715e22e03",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_AFFECTION",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 2849,
+      "bytes": 161,
+      "before_sha256": "9d2dd167807f1c6ec565fc2061147879770a2c7fe46a4f54ca96dae9abf1daad",
+      "after_sha256": "9d2dd167807f1c6ec565fc2061147879770a2c7fe46a4f54ca96dae9abf1daad",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_HELD_CONTACT",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 2869,
+      "bytes": 159,
+      "before_sha256": "6ab2e39840781f511999874e9822c497767fe99260c6c0dbfd19aac26a91b695",
+      "after_sha256": "6ab2e39840781f511999874e9822c497767fe99260c6c0dbfd19aac26a91b695",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_NO_CONTACT",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 2889,
+      "bytes": 114,
+      "before_sha256": "67916b36dceb1511d362dc8c7d13e23d59b558a24d98dd37bd3cc4f7d995c407",
+      "after_sha256": "67916b36dceb1511d362dc8c7d13e23d59b558a24d98dd37bd3cc4f7d995c407",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_RIVAL_MEETING",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 2964,
+      "bytes": 192,
+      "before_sha256": "6fc356bb4301a21bf9fa8c3ad7b918bad9bd28bf60d27dba505c612cf9256497",
+      "after_sha256": "6fc356bb4301a21bf9fa8c3ad7b918bad9bd28bf60d27dba505c612cf9256497",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_INTERMEDIARY",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 2990,
+      "bytes": 174,
+      "before_sha256": "f70fedba7385d0e8b540991179d469ac68489755557b805f0f05c20da07458a1",
+      "after_sha256": "f70fedba7385d0e8b540991179d469ac68489755557b805f0f05c20da07458a1",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "ORRERY_SCENE_PRESSURE_PASSIVE_OVERTURE",
+      "source": "nexus/agents/orrery/templates.py",
+      "base_line": 3015,
+      "bytes": 135,
+      "before_sha256": "49801aa9de8aa52a4e773d9e919b1a3fdd4ac37593fe4cb20f05f19fed45a93e",
+      "after_sha256": "49801aa9de8aa52a4e773d9e919b1a3fdd4ac37593fe4cb20f05f19fed45a93e",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OUTPUT_STRUCTURED_TOOL",
+      "source": "nexus/api/native_structured_output.py",
+      "base_line": 198,
+      "bytes": 81,
+      "before_sha256": "cbd3796545a201534802b1ec4c040800fea66736a8754e1e73ea8e68a7f56806",
+      "after_sha256": "cbd3796545a201534802b1ec4c040800fea66736a8754e1e73ea8e68a7f56806",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "WIZARD_CANONICAL_FAME",
+      "source": "nexus/api/trait_input_derivation.py",
+      "base_line": 134,
+      "bytes": 48,
+      "before_sha256": "073ef4feb5e286173311c88de80b0218db22885adf65ee201cb8b12f8fb867f2",
+      "after_sha256": "073ef4feb5e286173311c88de80b0218db22885adf65ee201cb8b12f8fb867f2",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "WIZARD_WILDCARD_TAG_RETRY",
+      "source": "nexus/api/wizard_agent.py",
+      "base_line": 429,
+      "bytes": 221,
+      "before_sha256": "8b4d8eb5f74751b3d89cc39c17c0329232cd97a33042b22276645f94b9e88327",
+      "after_sha256": "8b4d8eb5f74751b3d89cc39c17c0329232cd97a33042b22276645f94b9e88327",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OPERATORS_MAP_BUILDER_JSON_REMINDER",
+      "source": "scripts/map_builder_legacy.py",
+      "base_line": 622,
+      "bytes": 178,
+      "before_sha256": "d9ba87598d9c25d3040cffe3d96b70bba1457a9eafd21ea0fc923a6cb55961f6",
+      "after_sha256": "d9ba87598d9c25d3040cffe3d96b70bba1457a9eafd21ea0fc923a6cb55961f6",
+      "static_fragments_equal": true
+    },
+    {
+      "prompt_id": "OPERATORS_RETRIEVAL_QUERY_SYSTEM",
+      "source": "scripts/retrieval_query_bakeoff.py",
+      "base_line": 1008,
+      "bytes": 104,
+      "before_sha256": "0bc1d4593238b9855be85eee3b1c39f91630690723508ed3c02da812bedab26f",
+      "after_sha256": "0bc1d4593238b9855be85eee3b1c39f91630690723508ed3c02da812bedab26f",
+      "static_fragments_equal": true
+    }
+  ]
+}

@@ -159,10 +159,7 @@ class CorrespondenceContext:
 
         parts = [
             load(PromptId.CORRESPONDENCE_HEADER),
-            (
-                "This authorial correspondence is invisible to the player "
-                "and is not canon."
-            ),
+            (load(PromptId.CORRESPONDENCE_PRIVACY)),
             "",
             "DIGEST",
             self.digest or "(No compacted correspondence yet.)",

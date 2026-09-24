@@ -1004,10 +1004,7 @@ def _init_skald_provider(model: str, *, reasoning_effort: str) -> Any:
         model=resolved_model,
         max_output_tokens=1200,
         reasoning_effort=reasoning_effort,
-        system_prompt=(
-            "You write concise retrieval directives for a narrative memory system. "
-            "Return only structured directives."
-        ),
+        system_prompt=(load(PromptId.OPERATORS_RETRIEVAL_QUERY_SYSTEM)),
     )
 
 

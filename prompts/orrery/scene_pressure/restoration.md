@@ -1,0 +1,1 @@
+{actor} may be close enough to attempt restorative work on {target}'s wound in the active scene. Treat as offered help the scene can accept, defer, or complicate, not as automatic healing.

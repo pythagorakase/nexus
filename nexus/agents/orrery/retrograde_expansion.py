@@ -1092,12 +1092,14 @@ def _planned_project_dependency_relationships(
             relationships.extend(planned_project_start_relationships([relationship]))
         except ValueError as exc:
             issues.append(
-                "seek_redemption project seed(s) "
-                f"{redemption_seed_ids!r} cannot classify "
-                f"relationship_plan[{index}].relationship_type "
-                f"{relationship.relationship_type!r}: {exc}. Use one of "
-                "seed_eligible_vocabulary.relationship_types "
-                f"{sorted(relationship_types)!r}"
+                load(
+                    PromptId.RETROGRADE_RELATIONSHIP_TYPE_RETRY,
+                    REDEMPTION_SEED_IDS=f"{redemption_seed_ids!r}",
+                    INDEX=f"{index}",
+                    RELATIONSHIP_RELATIONSHIP_TYPE=f"{relationship.relationship_type!r}",
+                    EXC=f"{exc}",
+                    SORTED_RELATIONSHIP_TYPES=f"{sorted(relationship_types)!r}",
+                )
             )
     return relationships, issues
 
@@ -1805,7 +1807,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             "pair_tag": ["tag", "object_ref", "object_kind"],
             "relationship": ["relationship_type", "object_ref", "object_kind"],
             "death": [],
-            "unused_fields": "Use empty strings for fields irrelevant to the plan.",
+            "unused_fields": load(PromptId.RETROGRADE_UNUSED_PLAN_FIELDS),
         },
         "deterministic_fields_filled_by_runtime": [
             "schema_version",

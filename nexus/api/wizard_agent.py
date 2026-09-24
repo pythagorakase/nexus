@@ -426,10 +426,7 @@ async def _submit_wildcard_impl(
         if tag_issues:
             formatted = "\n".join(f"- {issue}" for issue in tag_issues)
             raise ModelRetry(
-                "submit_wildcard_trait rejected: orrery_tags failed registry "
-                "validation. Use bare registered tag names from the Tag "
-                "Reference (e.g. 'comfortable'), never 'category:name' "
-                f"composites. Issues:\n{formatted}"
+                load(PromptId.WIZARD_WILDCARD_TAG_RETRY, FORMATTED=f"{formatted}")
             )
 
     updated_state = CharacterCreationState.model_validate(

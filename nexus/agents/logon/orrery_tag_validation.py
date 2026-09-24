@@ -474,9 +474,9 @@ def collect_faction_identity_issues(
             continue
         if faction_name in declared_names:
             continue
-        resolution = "use an exact persisted name"
+        resolution = load(PromptId.RETRY_FACTION_EXACT_NAME)
         if allow_same_turn_faction_declarations:
-            resolution += " or declare a genuinely new faction in new_entities"
+            resolution += load(PromptId.RETRY_FACTION_NEW_NAME)
         issue = f"{path}: Unknown canonical faction name {faction_name!r}; {resolution}"
         issues.append(
             _with_near_misses(
@@ -1495,12 +1495,9 @@ def build_storyteller_tag_validator(
         if issues:
             formatted = "\n".join(f"- {issue}" for issue in issues)
             declaration_guidance = (
-                "or declare a genuinely new faction in new_entities; "
+                load(PromptId.RETRY_FACTION_DECLARATION_ALLOWED)
                 if allow_same_turn_faction_declarations
-                else (
-                    "same-turn declarations cannot back faction updates while "
-                    "runtime maturation is disabled; "
-                )
+                else (load(PromptId.RETRY_FACTION_DECLARATION_DISABLED))
             )
             logger.info(
                 "Storyteller output failed registry validation "

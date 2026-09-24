@@ -1,0 +1,1 @@
+{actor} is carrying {{LABEL}} ({{DEBT_SCORE}}). You may render thirst, discomfort, or urgency around water, but Orrery does not decide what {actor} does in scene.

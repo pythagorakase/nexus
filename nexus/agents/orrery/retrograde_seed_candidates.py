@@ -554,9 +554,7 @@ def render_seed_generation_prompt(
                     "pursue_romance",
                     "recruit_ally",
                 ],
-                "target_refs": (
-                    "Use the same compact entity-ref language as mechanical_hints."
-                ),
+                "target_refs": (load(PromptId.RETROGRADE_INTENT_TARGET_REFS)),
             },
         ),
         "prompt_sections": seed_generation_request.get("prompt_sections", []),
@@ -1295,7 +1293,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             ),
             "claimed_edges": ("edge_id, open_endpoint_name, open_endpoint_kind"),
             "project_intent": "project_type, target_ref, rationale",
-            "absence": "Use empty strings for absent supporting_event_ref/rationale.",
+            "absence": load(PromptId.RETROGRADE_ABSENT_SUPPORTING_FIELDS),
         },
     }
 

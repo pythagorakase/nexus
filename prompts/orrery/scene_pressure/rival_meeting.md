@@ -1,0 +1,1 @@
+{actor} is in a tense face-to-face meeting with {target}, a known rival. Treat as charged co-presence — the scene can show this as observed truce, ambient discomfort, or delayed consequence.

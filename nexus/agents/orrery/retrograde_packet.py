@@ -264,15 +264,12 @@ def build_seed_generation_request(
                 "defer_or_reject_if",
             ],
             "mechanical_hints": {
-                "event_types": "Use only seed_eligible_vocabulary.event_types.",
+                "event_types": load(PromptId.RETROGRADE_EVENT_TYPE_HINT),
                 "single_entity_tags": (
-                    "Use only seed_eligible_vocabulary.registered_* tags and "
-                    "respect mechanical_tag_policy."
+                    load(PromptId.RETROGRADE_SINGLE_ENTITY_TAG_HINT)
                 ),
                 "pair_tags": (load(PromptId.RETROGRADE_PAIR_TAG_RULE)),
-                "relationships": (
-                    "Use only seed_eligible_vocabulary.relationship_types."
-                ),
+                "relationships": (load(PromptId.RETROGRADE_RELATIONSHIP_HINT)),
             },
         },
     }

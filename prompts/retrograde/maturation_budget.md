@@ -1,0 +1,1 @@
+This is a runtime pass with a tight budget; prefer few, sharp seeds over breadth.

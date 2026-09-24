@@ -1,0 +1,1 @@
+{actor} may be close enough to intervene around {target}'s current danger. Treat this as potential off-screen support or complication for the scene, not as an automatic rescue.

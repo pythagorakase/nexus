@@ -619,7 +619,9 @@ def get_llm_structured_response(
                                     {
                                         "role": "user",
                                         "content": user_prompt
-                                        + "\n\nIMPORTANT: Your thinking is extremely helpful, but you MUST provide a valid JSON response after your thinking. The JSON response is required and must follow the schema exactly.",
+                                        + load(
+                                            PromptId.OPERATORS_MAP_BUILDER_JSON_REMINDER
+                                        ),
                                     }
                                 ],
                             }

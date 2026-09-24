@@ -1,0 +1,1 @@
+{actor} has sent {target} a small affectionate message. Treat as ambient relationship-warmth — possibly an incoming notification, possibly not surfaced at all.

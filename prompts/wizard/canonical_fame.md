@@ -1,0 +1,1 @@
+use the canonical 'fame' field, not 'reputation'

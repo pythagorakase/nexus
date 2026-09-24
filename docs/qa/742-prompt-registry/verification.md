@@ -56,3 +56,59 @@ The initial clone carried a provisional draft with an obsolete Pass-2 fingerprin
 Exact commands and output tails are in [validation.txt](validation.txt). The offline skips are the repository's deliberate integration/live-provider gating; they are not used as PostgreSQL evidence. The separate required PostgreSQL prompt gate ran all 66 selected tests without skips. No #885 exemption was needed in that gate.
 
 Temporary probe scripts and captured story text remain under the ignored `temp/742*` paths in this worktree. The committed receipts contain hashes and counts rather than the story's full prompt contents.
+
+## PR #930 Completeness Amendments
+
+The amendment baseline is `8020a550bb39f582945c7781bdd35f27910640e1`.
+The correspondence privacy sentence, both faction-declaration policy variants,
+Retrograde mechanical hints, and the faction analyst's four system/user messages
+now load registered documents. The faction analyst remains a standalone operator;
+its executable CLI and `--test` mode are retained. No additional operator was
+retired in this amendment.
+
+The all-string lint also exposed model-facing output-format and tool guidance,
+Orrery scene-pressure instructions, Retrograde contract and maturation directions,
+validation retries, and two operator instructions. These were mechanically moved
+too, rather than exempted. There are 54 additional documents (142 total).
+The 129 `Field(description=...)` expressions in amended modules are unchanged.
+
+The lint examines string literals independent of quote style, implicit or explicit
+concatenation, and f-string literal parts. Its documented heuristic recognizes
+model-addressed phrases and sentence-opening imperatives. Ordinary Python
+docstrings and `Field(description=...)` remain outside the mechanical slice;
+SQL syntax does not match the natural-language imperative patterns. Exact
+(path, literal) exceptions document operator diagnostics, CLI help, deterministic
+player-facing TEST output, and Orrery branch labels or quoted in-world dialogue.
+The gate rejects stale exceptions and confirms that adjacent model instructions
+are still rejected. A subprocess test copies the source into a scratch directory
+and runs the real lint three times, injecting the review's phrases with different
+quote/concatenation styles. Each run must fail specifically at the injected file.
+
+### Additional Byte-Identity Evidence
+
+[Template evidence](amendment-template-proof.json) compares all 54 new documents
+with their actual AST expressions at the frozen amendment baseline, checks every
+static fragment, and evaluates the original expressions and current registry
+calls with identical substitution inputs. All rendered UTF-8 bytes match.
+
+[Complete-render evidence](amendment-rendered-hashes.json) compares ten full
+renders against the frozen baseline using real data from `qa640_742_amend`,
+a disposable `pg_dump`/`pg_restore` clone of `save_04`. Connections used
+`PGOPTIONS='-c default_transaction_read_only=on'`; the real registry validator
+queried the clone and raised real `ModelRetry` messages in both declaration-policy
+modes. The faction message builders used real faction and character rows.
+No provider transport was invoked for these amendment checks. The original
+real-turn TEST-provider proofs above remain the evidence for both turn seats.
+
+| Render | UTF-8 Bytes | Before SHA-256 = After SHA-256 |
+|---|---:|---|
+| accepted_correspondence | 27931 | `c3326b41dcece24f576e5387f4fa5a51386e79d7d08edfecfad579f142b807b4` |
+| retrograde_packet | 31870 | `d34ed5c0628dc39b79f9bd927f83eb0fd83ff9f665248e5009794a032169ff8f` |
+| retrograde_prompt | 85430 | `3afab2aaa1fb6794b69c413081da82b0f190dbb1a24dc815d5795a0e1845d241` |
+| create_faction_to_faction_messages_system | 880 | `159ec7599928ce7a219036188f989444d31eb234f4584d6d8d436eda12fcfd19` |
+| create_faction_to_faction_messages_user | 7319 | `3f2a61938643818185ee7643f23618156a334d1920124eebf1624c7375035136` |
+| create_faction_to_character_messages_system | 882 | `5adc1c3d28a969915469a0ef647cb53293bd5c181f2766242de25b23f7fe8895` |
+| create_faction_to_character_messages_user | 7216 | `af1c9ba078a81ebf7832caab274bd24edf4714863d6be3673dca6f69c47a731a` |
+| registry_retry_declarations_False | 1196 | `0aa6d99ed269f24cc9d480240fe710b07a5408e414a89206cf86063e241c4bb2` |
+| registry_retry_declarations_True | 1210 | `901a8ceb9ddcdb6fabcf7878d96a6139b519440527ea614c4031cb83fbf21aa1` |
+| skald_format_guide | 6231 | `5f9e31e2e492f025fc2e23f3800680ac080a7961df75e8b6670fb73aa5a05ee4` |

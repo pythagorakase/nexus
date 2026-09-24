@@ -1,0 +1,1 @@
+{actor} has sent {target} a carefully-routed message via intermediary. Treat as off-screen pressure — the scene may show {target} reacting to it, or it may resurface later.

@@ -1,0 +1,1 @@
+{actor} is carrying {{LABEL}} ({{DEBT_SCORE}}). You may render distraction, irritability, or interest in food, but Orrery does not decide what {actor} does in scene.

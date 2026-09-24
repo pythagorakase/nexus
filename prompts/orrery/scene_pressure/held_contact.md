@@ -1,0 +1,1 @@
+{actor} is holding back a loaded attempt to reach {target}. Use this as optional emotional pressure or a future story beat; Orrery has not made contact happen.
