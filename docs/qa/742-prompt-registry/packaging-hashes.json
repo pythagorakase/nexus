@@ -1,0 +1,199 @@
+{
+  "baseline": "afcbb05c",
+  "comparisons": [
+    {
+      "template": "protect_kin",
+      "branch": "Physically intervene at the target's location",
+      "before_sha256": "fdad01509f3d39ab228fe70f76858405bf0464b76674c8aefaff7c9bc9989165",
+      "after_sha256": "fdad01509f3d39ab228fe70f76858405bf0464b76674c8aefaff7c9bc9989165"
+    },
+    {
+      "template": "protect_kin",
+      "branch": "Travel toward the target's last known location",
+      "before_sha256": "153f570c914b84fc333e967d4f0e0b98a221961c50390403a7cdbe503d172e72",
+      "after_sha256": "153f570c914b84fc333e967d4f0e0b98a221961c50390403a7cdbe503d172e72"
+    },
+    {
+      "template": "extract_vengeance",
+      "branch": "Strike directly when opportunity opens",
+      "before_sha256": "e269c0cb3afee81dcc329747a9e60e83e744e033fe156ceafdb73388bb0cbc5d",
+      "after_sha256": "e269c0cb3afee81dcc329747a9e60e83e744e033fe156ceafdb73388bb0cbc5d"
+    },
+    {
+      "template": "tend_wounded",
+      "branch": "Channel restorative power through hands and voice",
+      "before_sha256": "afbbac3aaed1adb6c445010a819c9ca0518baba900a0ace1a991a05f9aa4ba20",
+      "after_sha256": "afbbac3aaed1adb6c445010a819c9ca0518baba900a0ace1a991a05f9aa4ba20"
+    },
+    {
+      "template": "tend_wounded",
+      "branch": "Apply what first-aid the moment allows",
+      "before_sha256": "ff2bc96d272e4c13222aaac94ee4b5b50c1171c0aead61d71a44e7129b7a87f1",
+      "after_sha256": "ff2bc96d272e4c13222aaac94ee4b5b50c1171c0aead61d71a44e7129b7a87f1"
+    },
+    {
+      "template": "tend_wounded",
+      "branch": "Stay with the wound and do what can be done",
+      "before_sha256": "ad9df4a68f331adff6e949a71f27c2a97ed9c343b692d446c60b255be7369442",
+      "after_sha256": "ad9df4a68f331adff6e949a71f27c2a97ed9c343b692d446c60b255be7369442"
+    },
+    {
+      "template": "surveil",
+      "branch": "Intercept signal traffic",
+      "before_sha256": "7e7bb69983c0bdcd6c9a55495b825d1669ba9d216f29600e18a516c09ad85951",
+      "after_sha256": "7e7bb69983c0bdcd6c9a55495b825d1669ba9d216f29600e18a516c09ad85951"
+    },
+    {
+      "template": "surveil",
+      "branch": "Keep tabs from a distance",
+      "before_sha256": "f931d95a29486469c3f00541e460ae27e2e318695f24bf8a874217658c2ed76c",
+      "after_sha256": "f931d95a29486469c3f00541e460ae27e2e318695f24bf8a874217658c2ed76c"
+    },
+    {
+      "template": "surveil",
+      "branch": "Follow the public pattern",
+      "before_sha256": "140188d6b0b6a64b3d4979b14fd5c087e40053b47d223e3105942bc20b7d274a",
+      "after_sha256": "140188d6b0b6a64b3d4979b14fd5c087e40053b47d223e3105942bc20b7d274a"
+    },
+    {
+      "template": "act_on_intel",
+      "branch": "Confront the subject with what they know",
+      "before_sha256": "4f17d00143cd0e1995e23ee18a74fd5f79b0dbd7e01e6eaf951f59959cddd366",
+      "after_sha256": "4f17d00143cd0e1995e23ee18a74fd5f79b0dbd7e01e6eaf951f59959cddd366"
+    },
+    {
+      "template": "check_on_dependent",
+      "branch": "Drop by in person when the moment allows",
+      "before_sha256": "4e3cb79249d6e2ceacc683651b4dad0f98f80c23257f1f13329bd9b86e9bd982",
+      "after_sha256": "4e3cb79249d6e2ceacc683651b4dad0f98f80c23257f1f13329bd9b86e9bd982"
+    },
+    {
+      "template": "cultivate_informant",
+      "branch": "Press for material intel when trust is sufficient",
+      "before_sha256": "b7426b7a779f29b2a70bb7e8f60888e4f59ee51877ad97362e088c4d97433930",
+      "after_sha256": "b7426b7a779f29b2a70bb7e8f60888e4f59ee51877ad97362e088c4d97433930"
+    },
+    {
+      "template": "cultivate_informant",
+      "branch": "Place a small overture from a distance",
+      "before_sha256": "c0abd8ecb632878af79f2e78d73204d703328190f8b10d7e1a3425d9b9e403b8",
+      "after_sha256": "c0abd8ecb632878af79f2e78d73204d703328190f8b10d7e1a3425d9b9e403b8"
+    },
+    {
+      "template": "keep_vigil",
+      "branch": "Maintain prayerful or meditative presence",
+      "before_sha256": "e5131c5a656bb1abf3e6d1c2d580b3c48b6bd6480e028190cb8ed4d44576dac6",
+      "after_sha256": "e5131c5a656bb1abf3e6d1c2d580b3c48b6bd6480e028190cb8ed4d44576dac6"
+    },
+    {
+      "template": "keep_vigil",
+      "branch": "Speak softly through the long hours",
+      "before_sha256": "513168d7a788e51b12b2d568167f4ed9cffa81f881b15635ec5acc2da898c8e0",
+      "after_sha256": "513168d7a788e51b12b2d568167f4ed9cffa81f881b15635ec5acc2da898c8e0"
+    },
+    {
+      "template": "keep_vigil",
+      "branch": "Stand watch with attention but without intervention",
+      "before_sha256": "3deeecc434cde9c3e074771fdd8391f53d6cb903fd910305dc8a080043105215",
+      "after_sha256": "3deeecc434cde9c3e074771fdd8391f53d6cb903fd910305dc8a080043105215"
+    },
+    {
+      "template": "reach_out",
+      "branch": "Find the moment for a real face-to-face conversation",
+      "before_sha256": "a04352bc7c366160e4d6010406db1456ba5228329774a72aeb28bf9715e22e03",
+      "after_sha256": "a04352bc7c366160e4d6010406db1456ba5228329774a72aeb28bf9715e22e03"
+    },
+    {
+      "template": "reach_out",
+      "branch": "Send a message that says less than it means",
+      "before_sha256": "9d2dd167807f1c6ec565fc2061147879770a2c7fe46a4f54ca96dae9abf1daad",
+      "after_sha256": "9d2dd167807f1c6ec565fc2061147879770a2c7fe46a4f54ca96dae9abf1daad"
+    },
+    {
+      "template": "reach_out",
+      "branch": "Draft the message and leave it unsent",
+      "before_sha256": "6ab2e39840781f511999874e9822c497767fe99260c6c0dbfd19aac26a91b695",
+      "after_sha256": "6ab2e39840781f511999874e9822c497767fe99260c6c0dbfd19aac26a91b695"
+    },
+    {
+      "template": "reach_out",
+      "branch": "Let the silence stand for now",
+      "before_sha256": "67916b36dceb1511d362dc8c7d13e23d59b558a24d98dd37bd3cc4f7d995c407",
+      "after_sha256": "67916b36dceb1511d362dc8c7d13e23d59b558a24d98dd37bd3cc4f7d995c407"
+    },
+    {
+      "template": "consult_rival",
+      "branch": "Meet face-to-face on neutral ground",
+      "before_sha256": "6fc356bb4301a21bf9fa8c3ad7b918bad9bd28bf60d27dba505c612cf9256497",
+      "after_sha256": "6fc356bb4301a21bf9fa8c3ad7b918bad9bd28bf60d27dba505c612cf9256497"
+    },
+    {
+      "template": "consult_rival",
+      "branch": "Send a carefully-worded message through indirect channels",
+      "before_sha256": "f70fedba7385d0e8b540991179d469ac68489755557b805f0f05c20da07458a1",
+      "after_sha256": "f70fedba7385d0e8b540991179d469ac68489755557b805f0f05c20da07458a1"
+    },
+    {
+      "template": "consult_rival",
+      "branch": "Leave a sign the rival will recognize and a door they can open",
+      "before_sha256": "49801aa9de8aa52a4e773d9e919b1a3fdd4ac37593fe4cb20f05f19fed45a93e",
+      "after_sha256": "49801aa9de8aa52a4e773d9e919b1a3fdd4ac37593fe4cb20f05f19fed45a93e"
+    },
+    {
+      "agent": "_setting_agent",
+      "tool": "submit_world_document",
+      "before_sha256": "2d2c28db613da10f61a413bfc77ac857239c03d261259930e746de6d94b8d884",
+      "after_sha256": "2d2c28db613da10f61a413bfc77ac857239c03d261259930e746de6d94b8d884"
+    },
+    {
+      "agent": "_setting_accept_agent",
+      "tool": "submit_world_document",
+      "before_sha256": "2d2c28db613da10f61a413bfc77ac857239c03d261259930e746de6d94b8d884",
+      "after_sha256": "2d2c28db613da10f61a413bfc77ac857239c03d261259930e746de6d94b8d884"
+    },
+    {
+      "agent": "_concept_agent",
+      "tool": "submit_character_concept",
+      "before_sha256": "27b3014c60701d85f6803eefe304aec907b34296173ac64f954547e935e9c1a1",
+      "after_sha256": "27b3014c60701d85f6803eefe304aec907b34296173ac64f954547e935e9c1a1"
+    },
+    {
+      "agent": "_concept_accept_agent",
+      "tool": "submit_character_concept",
+      "before_sha256": "27b3014c60701d85f6803eefe304aec907b34296173ac64f954547e935e9c1a1",
+      "after_sha256": "27b3014c60701d85f6803eefe304aec907b34296173ac64f954547e935e9c1a1"
+    },
+    {
+      "agent": "_traits_agent",
+      "tool": "submit_trait_selection",
+      "before_sha256": "4a079df29e35cf2747e6a508baeef19bf547c7722608d88f78476f6ce98272dd",
+      "after_sha256": "4a079df29e35cf2747e6a508baeef19bf547c7722608d88f78476f6ce98272dd"
+    },
+    {
+      "agent": "_wildcard_agent",
+      "tool": "submit_wildcard_trait",
+      "before_sha256": "675d2730e052df8e1fc50783ae846e0dd868a9a49c6d185dd52d3515f9de4978",
+      "after_sha256": "675d2730e052df8e1fc50783ae846e0dd868a9a49c6d185dd52d3515f9de4978"
+    },
+    {
+      "agent": "_wildcard_accept_agent",
+      "tool": "submit_wildcard_trait",
+      "before_sha256": "675d2730e052df8e1fc50783ae846e0dd868a9a49c6d185dd52d3515f9de4978",
+      "after_sha256": "675d2730e052df8e1fc50783ae846e0dd868a9a49c6d185dd52d3515f9de4978"
+    },
+    {
+      "agent": "_seed_agent",
+      "tool": "submit_starting_scenario",
+      "before_sha256": "e63b4142ca30062aa3d616df79435163bf841bee38d42def40bce0c13dc09f8f",
+      "after_sha256": "e63b4142ca30062aa3d616df79435163bf841bee38d42def40bce0c13dc09f8f"
+    },
+    {
+      "agent": "_seed_accept_agent",
+      "tool": "submit_starting_scenario",
+      "before_sha256": "e63b4142ca30062aa3d616df79435163bf841bee38d42def40bce0c13dc09f8f",
+      "after_sha256": "e63b4142ca30062aa3d616df79435163bf841bee38d42def40bce0c13dc09f8f"
+    }
+  ],
+  "wheel_prompt_count": 142,
+  "all_wheel_prompt_bytes_match_baseline": true
+}

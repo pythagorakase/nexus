@@ -138,15 +138,76 @@ whitespace reported by `git diff --check` in prompt documents is deliberately
 preserved original prompt whitespace, including the semicolon-space endings
 of the two declaration-policy fragments.
 
-### Coordinator Questions
+### Coordinator Decisions
 
-The separate automated review's wheel-packaging finding remains outside the
-frozen completeness amendments: top-level prompt documents are not included
-in the wheel. The coordinator should assign its packaging fix before treating
-wheel installation as verified. Source-checkout runtime behavior is what this
-work order and its gates exercise. The earlier player-facing TSX scope question
-also remains deferred.
+The third amendment authorizes the wheel-packaging fix below. The player-facing
+TSX trait introduction is confirmed UI copy and stays outside the model prompt
+registry; it is deferred without changing the UI.
 
 Exact amendment commands and verbatim tails are in [amendment validation](amendment-validation.txt). The [file inventory](amendment-files.md) gives one line per amendment file. `tests/test_skald_wire.py` now pins its format-guide assertion to the Markdown document. No #885 exemption was required.
 
 Final merged-tree gates: **2693 passed, 857 skipped** offline; **66 passed, 343 deselected, no skips** in the PostgreSQL selection; **21 passed** in prompt lint; **39 Python files** Black-clean. Reachability reports no new orphans, lost production paths, forbidden dependencies, tombstone violations, unresolved imports, or unregistered dynamic imports. All 301 `Field(description=...)` expressions in existing Python files changed by the complete PR match merged `origin/main`.
+
+
+## Wheel Packaging Amendment
+
+The baseline for this amendment is `afcbb05c`. `pyproject.toml` includes all
+`prompts/**/*.md` documents in both wheel and source distributions, retaining the
+top-level convention. The API also imports `scripts.api_openai`,
+`scripts.api_anthropic`, `scripts.new_story_setup`, and `scripts.summarize_narrative`;
+`scripts` is now an explicit wheel package alongside `nexus`. Without that
+addition the isolated import failed with `ModuleNotFoundError: No module named
+'scripts'` even after prompt inclusion.
+
+The registry explicitly resolves the sibling `prompts` directory and raises
+`FileNotFoundError` with that resolved path on the first uncached load when it is
+absent. Importing the registry does not inspect or read prompt files. Wizard
+accept-fate text loads during prompt composition; tool descriptions load in the
+Pydantic AI preparation hook. Orrery's 23 file-backed scene-pressure stubs are
+callables resolved during evaluation or catalog rendering. This removes all
+prompt file reads from API import while preserving rendered strings.
+
+[Packaging hashes](packaging-hashes.json) compare the 23 Orrery stubs and all nine
+wizard tool registrations against the pre-amendment baseline: all 32 rendered
+UTF-8 comparisons match. All 142 documents in the built wheel also match both
+the checkout and baseline bytes. [Wheel prompt listing](wheel-prompts.txt)
+records their archive paths. Existing real-turn, wizard, and Retrograde migration
+receipts above remain unchanged; this amendment changes no prompt text or order.
+
+The isolated installation uses a new virtual environment under this worktree's
+`temp/742-packaging/wheel-venv`, with dependency constraints extracted from
+`poetry.lock`. It does not inherit shared site packages. The import runs from
+`temp/742-packaging` with `PYTHONPATH` unset, and a copied `nexus.toml` supplies the
+application configuration. No application source is copied there. The printed
+module path must point into the wheel environment's `site-packages`, and the
+registry cache must report zero misses immediately after importing the API.
+
+An initial unconstrained installation exposed upstream dependency incompatibilities:
+new OpenTelemetry releases lack `opentelemetry._events`, required by the pinned
+Pydantic AI, and the latest Anthropic SDK no longer satisfies that adapter's
+imports. The clean final proof therefore uses the repository's locked dependency
+versions. This is evidence for the wheel with the supported locked environment,
+not a claim that unrestricted future dependency resolution works. Tightening
+transitive dependency bounds is a separate coordinator decision.
+
+`git fetch origin && git merge origin/main` reported `Already up to date.` at
+`12510525654c50ef4afeb1ff4efa4cee924176e8`. No database was manually created or
+written for this amendment; the PostgreSQL gate owns its fixtures. No services
+were started, no paid providers were called, and no UI files changed.
+
+Exact commands and verbatim output tails are in
+[packaging validation](packaging-validation.txt).
+
+
+The installed API also imports successfully with its actual prompt directory
+renamed out of the way. The first prompt load then raises with the resolved
+`site-packages/prompts` path. After restoring that directory, all 142 registered
+prompts render with their declared placeholder inputs. `pip check` reports
+`No broken requirements found.` The UI bundle warning is expected: this is the
+API import proof, and this amendment neither builds nor packages UI assets.
+
+Final packaging gates: **2694 passed, 857 skipped** offline; **66 passed,
+343 deselected, no skips** in the PostgreSQL selection; **231 passed** in the
+focused prompt/wizard/Orrery checks; **42 Python files** Black-clean. Reachability
+has no violations. No #885 exemption was needed. Both implementation commit hooks
+passed. The offline skips are not counted as PostgreSQL proof.
