@@ -2,10 +2,10 @@
 =================================== FAILURES ===================================
 _______ test_handle_user_input_writes_exact_coverage_and_empty_detection _______
 
-self = <sqlalchemy.engine.base.Connection object at 0x16c4ea450>
-dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x16c4ea990>
-context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x16ddc2dd0>
-statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x16ddc1e50>
+self = <sqlalchemy.engine.base.Connection object at 0x16ca90fd0>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x16ca93f90>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x16ca90d50>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x16ca91990>
 parameters = [{}]
 
     def _exec_single_context(
@@ -132,11 +132,11 @@ parameters = [{}]
 ../../../.venv/lib/python3.11/site-packages/sqlalchemy/engine/base.py:1964: 
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
 
-self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x16c4ea990>
-cursor = <cursor object at 0x16cc64b80; closed: -1>
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x16ca93f90>
+cursor = <cursor object at 0x16cac0b80; closed: -1>
 statement = '\n                    WITH entity_row AS (\n                        INSERT INTO entities (kind, is_active)\n         ...k_id\n                    FROM character_row cr\n                    CROSS JOIN reference_row rr\n                    '
 parameters = {}
-context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x16ddc2dd0>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x16ca90d50>
 
     def do_execute(self, cursor, statement, parameters, context=None):
 >       cursor.execute(statement, parameters)
@@ -207,11 +207,11 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     self.dialect.do_execute(
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
 
-self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x16c4ea990>
-cursor = <cursor object at 0x16cc64b80; closed: -1>
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x16ca93f90>
+cursor = <cursor object at 0x16cac0b80; closed: -1>
 statement = '\n                    WITH entity_row AS (\n                        INSERT INTO entities (kind, is_active)\n         ...k_id\n                    FROM character_row cr\n                    CROSS JOIN reference_row rr\n                    '
 parameters = {}
-context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x16ddc2dd0>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x16ca90d50>
 
     def do_execute(self, cursor, statement, parameters, context=None):
 >       cursor.execute(statement, parameters)
@@ -276,4 +276,4 @@ tests/test_lore/test_pass2_baseline_pg.py::test_story_settings_pinned_window_sur
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
 FAILED tests/test_lore/test_retrieval_coverage_live.py::test_handle_user_input_writes_exact_coverage_and_empty_detection
-1 failed, 58 passed, 254 deselected, 9 warnings in 15.52s
+1 failed, 58 passed, 254 deselected, 9 warnings in 15.26s

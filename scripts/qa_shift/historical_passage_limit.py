@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from decimal import Decimal
 import json
 from pathlib import Path
 import subprocess
@@ -17,6 +18,8 @@ from psycopg2.extensions import make_dsn
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+from nexus.api import slot_utils
+from nexus.api.db_pool import close_pool
 from nexus.config import load_settings_as_dict
 from nexus.config.story_model import StorySettings
 from nexus.database import connection_kwargs
@@ -63,6 +66,7 @@ def main() -> None:
     admin = psycopg2.connect(**connection_kwargs("postgres"))
     admin.autocommit = True
     created = False
+    original_dbnames = slot_utils.VALID_DBNAMES
     try:
         with admin.cursor() as cursor:
             cursor.execute(
@@ -101,6 +105,12 @@ def main() -> None:
         evidence["clone_frontier"] = read_rows(dbname, frontier_sql)
         assert evidence["clone_frontier"] == evidence["source_before"] == [(46, 49)]
         payload = json.loads(SOURCE.read_text())["payload"]
+        # Prompt capture serializes PostgreSQL Decimal values as JSON strings.
+        for relationship in payload["entity_data"]["relationships"]:
+            relationship["valence_current"] = Decimal(relationship["valence_current"])
+        evidence["replay_type_restoration"] = (
+            "Relationship valence strings restored to Decimal"
+        )
         text_sql = (
             "SELECT id, raw_text, storyteller_text FROM narrative_chunks ORDER BY id"
         )
@@ -124,6 +134,8 @@ def main() -> None:
         ]
         evidence["user_input"] = payload["user_input"]
         evidence["runs"] = []
+        # Process-local admission, as in #909; production validation is unchanged.
+        slot_utils.VALID_DBNAMES = {dbname}
         for cap in (5, 15):
             settings = load_settings_as_dict()
             settings["lore"]["render_limits"]["historical_passages"] = cap
@@ -184,6 +196,9 @@ def main() -> None:
         evidence["source_after"] = read_rows("save_04", frontier_sql)
         assert evidence["source_after"] == evidence["source_before"]
     finally:
+        if dbname in slot_utils.VALID_DBNAMES:
+            close_pool(dbname)
+        slot_utils.VALID_DBNAMES = original_dbnames
         if created:
             with admin.cursor() as cursor:
                 cursor.execute(
