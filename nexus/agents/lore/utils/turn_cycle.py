@@ -1282,10 +1282,19 @@ class TurnCycleManager:
             },
         }
 
-        chunks = (
-            payload["warm_slice"]["chunks"]
-            + payload["retrieved_passages"]["results"][:5]
-        )
+        rendered_sources = {
+            source
+            for index, source in writer.sources.items()
+            if index not in writer.removed
+        }
+        chunks = [
+            chunk
+            for chunk in (
+                payload["warm_slice"]["chunks"]
+                + payload["retrieved_passages"]["results"]
+            )
+            if id(chunk) in rendered_sources
+        ]
         identities = {id(chunk): memory_identity(chunk) for chunk in chunks}
         chunk_tokens: Dict[Any, int] = {}
         for index, source in writer.sources.items():

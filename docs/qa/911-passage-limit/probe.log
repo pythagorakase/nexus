@@ -1,0 +1,35 @@
+2026-09-24 15:34:34,162 - nexus.lore.logon - INFO - Model TEST: routing to base_url http://127.0.0.1:5102/v1
+2026-09-24 15:34:34,163 - nexus.lore.logon - INFO - Loaded storyteller core prompt (15064 chars)
+Traceback (most recent call last):
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/scripts/qa_shift/historical_passage_limit.py", line 200, in <module>
+    main()
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/scripts/qa_shift/historical_passage_limit.py", line 141, in main
+    before = utility.measure_turn_requests(context.context_payload, 75000)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/agents/lore/logon_utility.py", line 1748, in measure_turn_requests
+    self._ensure_provider(payload)
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/agents/lore/logon_utility.py", line 868, in _ensure_provider
+    self._initialize_provider(desired_bootstrap_mode)
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/agents/lore/logon_utility.py", line 719, in _initialize_provider
+    system_prompt = self._load_system_prompt(provider_bootstrap_mode)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/agents/lore/logon_utility.py", line 492, in _load_system_prompt
+    setting_content = self._load_setting_context()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/agents/lore/logon_utility.py", line 507, in _load_setting_context
+    self._setting_context = self._fetch_setting_context()
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/agents/lore/logon_utility.py", line 515, in _fetch_setting_context
+    with get_connection(dbname=self.dbname) as conn, conn.cursor() as cur:
+  File "/Users/pythagor/.pyenv/versions/3.11.12/lib/python3.11/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/api/db_pool.py", line 128, in get_connection
+    conn_pool = _get_pool(dbname, **overrides)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/api/db_pool.py", line 82, in _get_pool
+    db_key = require_slot_dbname(dbname=dbname)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pythagor/nexus/.claude/worktrees/911-passage-limit/nexus/api/slot_utils.py", line 118, in require_slot_dbname
+    raise ValueError(
+ValueError: Invalid database name: 'qa640_911_5c28149eb243'. Must be one of: save_01, save_02, save_03, save_04, save_05
