@@ -28,14 +28,14 @@ PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
 
 ## Final Gates
 
-Re-run after merging fetched `origin/main` (`607c393c`) in `b1a09dbd`.
+Re-run after the discarded-outcome fix and merging fetched `origin/main` (`879841a3`, including #927) in `f22893f7`.
 
 ```sh
 PYTHONPATH=$PWD $PY -m pytest -q
 ```
 
 ```text
-2659 passed, 827 skipped, 9 warnings in 94.59s (0:01:34)
+2659 passed, 848 skipped, 9 warnings in 97.63s (0:01:37)
 ```
 
 ```sh
@@ -43,7 +43,7 @@ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api -k 'session
 ```
 
 ```text
-63 passed, 323 deselected, 9 warnings in 76.80s (0:01:16)
+64 passed, 341 deselected, 9 warnings in 77.70s (0:01:17)
 sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
 
@@ -62,12 +62,11 @@ npm --prefix ui test
 ```
 
 ```text
-   ✓ CONTINUE > checks the most recently used slot and resumes its wizard directly 794ms
 
  Test Files  22 passed (22)
       Tests  239 passed (239)
-   Start at  15:08:20
-   Duration  2.04s (transform 1.30s, setup 1.31s, collect 5.07s, tests 2.62s, environment 8.25s, prepare 1.92s)
+   Start at  15:19:06
+   Duration  1.92s (transform 1.33s, setup 1.10s, collect 5.08s, tests 2.67s, environment 7.79s, prepare 1.31s)
 ```
 
 ```sh
@@ -76,11 +75,11 @@ npm --prefix ui run build
 
 ```text
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 2.48s
+✓ built in 2.36s
 
 PWA v1.0.3
 mode      generateSW
-precache  22 entries (2276.92 KiB)
+precache  22 entries (2277.01 KiB)
 files generated
   ../dist/public/sw.js
   ../dist/public/workbox-40c80ae4.js
@@ -91,10 +90,20 @@ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -s tests/proofs/proof_sess
 ```
 
 ```text
-1 passed, 9 warnings in 115.01s (0:01:55)
+1 passed, 12 warnings in 115.54s (0:01:55)
 ```
 
-The offline skips are opt-in PostgreSQL/live-provider markers. The required PostgreSQL selection has no skips. No #885 exemption was needed. Both pre-commit hooks passed.
+The offline skips are opt-in PostgreSQL/live-provider markers. The required PostgreSQL selection has no skips. No #885 exemption was needed. Both pre-commit hooks passed. The browser proof reports Playwright route teardown/unawaited-coroutine warnings in addition to dependency deprecations; all lifecycle assertions passed.
+
+## Discarded Draft Amendment
+
+- Migration 121 permits and documents `discarded`. Undo and incubator clear record `status=complete`, `terminal_outcome=discarded`, and NULL error fields in the draft-deletion transaction. Terminal protection also preserves a discarded result if a late finisher runs.
+- Discovery returns no active attempt when the latest session is discarded; direct status still exposes that durable disposition. It does not fall back to an older attempt.
+- The client treats a directly polled discard quietly, clears its error and receiving state, and refetches story queries. Discovery changing from a completed attempt to no active attempt also refetches once, without repeated idle reloads.
+- Real PostgreSQL undo and clear tests verify the outcome, NULL error fields, and empty discovery for a new client. The undo test is included in the required session selection.
+- The browser proof holds an actual discovery response across a real CLI undo, then checks the discarded status without a failure toast. Socket delivery is blocked only for this deterministic race probe so reconnect cannot cancel the held read. A separate fresh reader makes at least three successful discovery requests returning null, displays no failure, and sends no POST. No generation/status response is fabricated.
+- Source evidence: `migrations/121_generation_session_truth.sql:7`, `nexus/api/narrative_lease.py:409`, `nexus/api/narrative.py:1072`, `ui/client/src/hooks/useNarrativeEngine.ts:205`, `ui/client/src/hooks/useNarrativeEngine.ts:237`, `tests/test_api/test_acceptance_staging_pg.py:282`, and `tests/proofs/proof_session_truth.py:351`.
+- [Fresh reader after undo](discarded-reader.png) was visually inspected: no error toast or active generation telemetry.
 
 ## Review Amendments
 
@@ -143,15 +152,21 @@ The accepted ID is independently checked against `narrative_chunks.id`. Addition
 
 | Snapshot | Session | Phase | Outcome | Chunk | Replacement |
 | --- | --- | --- | --- | --- | --- |
-| Writer Active Before Disconnect | 3f232fe3-0b84-4311-a405-73a65f66c61e | writer | pending | — | — |
-| Complete While Client Absent | 3f232fe3-0b84-4311-a405-73a65f66c61e | complete | pending | — | — |
-| Recovered Draft Accepted With Inserted Chunk | 8a9ff221-e495-4232-9aac-780c93eb05cf | assembly | pending | — | — |
-| Recovered Draft Accepted With Inserted Chunk | 3f232fe3-0b84-4311-a405-73a65f66c61e | complete | accepted | 51 | — |
-| Regenerate Replacement Lineage | fb1b21ca-09c0-4224-903c-a1bd37e01995 | complete | pending | — | — |
-| Regenerate Replacement Lineage | 8a9ff221-e495-4232-9aac-780c93eb05cf | complete | superseded | — | fb1b21ca-09c0-4224-903c-a1bd37e01995 |
-| Regenerate Replacement Lineage | 3f232fe3-0b84-4311-a405-73a65f66c61e | complete | accepted | 51 | — |
+| Writer Active Before Disconnect | 4035447f-dd8b-455a-82c2-b2e7961b4525 | writer | pending | — | — |
+| Complete While Client Absent | 4035447f-dd8b-455a-82c2-b2e7961b4525 | complete | pending | — | — |
+| Recovered Draft Accepted With Inserted Chunk | c4ead5e7-4a6f-49ce-ae3f-208742c4d6d6 | assembly | pending | — | — |
+| Recovered Draft Accepted With Inserted Chunk | 4035447f-dd8b-455a-82c2-b2e7961b4525 | complete | accepted | 51 | — |
+| Regenerate Replacement Lineage | 97aee413-5929-4dae-b141-1732b9ffbd73 | complete | pending | — | — |
+| Regenerate Replacement Lineage | c4ead5e7-4a6f-49ce-ae3f-208742c4d6d6 | complete | superseded | — | 97aee413-5929-4dae-b141-1732b9ffbd73 |
+| Regenerate Replacement Lineage | 4035447f-dd8b-455a-82c2-b2e7961b4525 | complete | accepted | 51 | — |
+| Draft Discarded by Undo | 97aee413-5929-4dae-b141-1732b9ffbd73 | complete | discarded | — | — |
+| Draft Discarded by Undo | c4ead5e7-4a6f-49ce-ae3f-208742c4d6d6 | complete | superseded | — | 97aee413-5929-4dae-b141-1732b9ffbd73 |
+| Draft Discarded by Undo | 4035447f-dd8b-455a-82c2-b2e7961b4525 | complete | accepted | 51 | — |
 
 ## Earlier Attempts
+
+- This amendment's first offline run after #926 failed `tests/test_lore/test_two_pass_pipeline.py:1073`: `assert 753 < 700` (`1 failed, 2658 passed, 848 skipped, 9 warnings in 98.37s (0:01:38)`). Upstream #927 corrected the prompt to 680 words; merging it made the rerun pass without weakening the test.
+- The first added browser race probe timed out (`Timeout 30000ms exceeded while waiting for event "response"`; `1 failed, 12 warnings in 143.42s (0:02:23)`). The fresh page's reconnect could preempt the intentionally held discovery; blocking socket delivery only in that probe isolated the intended undo race. The final full lifecycle rerun passed.
 
 - An initial offline run overlapped edits to the TOML configuration after pytest imported the previous model definition, causing spurious `extra_forbidden` failures. It is not baseline evidence.
 - The next offline run found the required reachability-baseline entry for the new telemetry module missing; that entry was added.
@@ -187,4 +202,4 @@ sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 
 ## Cleanup
 
-After the final proof, lane 8014 has no listener, its fixture ran `nexus down` with the same lane environment, and the proof database `qa640_775_browser_429c7810ea26` is absent from `pg_database`. The provider evidence contains only TEST events. No saved-slot or template migration was applied; migration 121 remains the coordinator's landing task.
+After the final proof, lane 8014 has no listener, its fixture ran `nexus down` with the same lane environment, and the proof database `qa640_775_browser_0e6092ee98c7` is absent from `pg_database`. The provider evidence contains only TEST events. No saved-slot or template migration was applied; migration 121 remains the coordinator's landing task.

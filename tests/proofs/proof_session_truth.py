@@ -351,6 +351,9 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 # Undo the actual pending replacement, then mount a new reader.
                 recovered.close()
                 racing = context.new_page()
+                # Keep reconnect acceleration from cancelling the precise
+                # discovery/status race this transport probe is exercising.
+                racing.route_web_socket("**/ws/narrative?*", lambda socket: None)
 
                 def undo_after_discovery(route):
                     # Delay a real discovery response across undo so the next
