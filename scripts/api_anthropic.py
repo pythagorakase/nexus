@@ -370,7 +370,7 @@ class AnthropicProvider(LLMProvider):
         )
 
     def initialize(self) -> None:
-        """Initialize the Anthropic client."""
+        """Resolve registry identity without constructing a network client."""
         if not anthropic:
             raise ImportError(
                 "The 'anthropic' package is required for AnthropicProvider. "
@@ -379,13 +379,12 @@ class AnthropicProvider(LLMProvider):
 
         self.provider_name = "anthropic"
         self.model = self.model or self.DEFAULT_MODEL
-        from nexus.config.provider_guard import require_test_provider
+        from nexus.config import load_settings
 
-        require_test_provider(self.model)
-        self.api_key = self.api_key or self._get_api_key()
-
-        # Initialize the client
-        self.client = anthropic.Anthropic(api_key=self.api_key, timeout=self.timeout)
+        self._registry_settings = load_settings()
+        self._registry_settings.provider_for_model(self.model)
+        self._registry_model = self.model
+        self._client: Any = None
 
         # Log the model type and thinking status
         if self.thinking_enabled:
@@ -413,6 +412,26 @@ class AnthropicProvider(LLMProvider):
                     f"Using Anthropic model: {self.model} with temperature: "
                     f"{self.temperature}"
                 )
+
+    @property
+    def client(self) -> Any:
+        """Create the SDK client on first use, after the test-provider guard."""
+        if self._client is None:
+            from nexus.config.provider_guard import require_test_provider
+
+            require_test_provider(
+                self._registry_model, settings=self._registry_settings
+            )
+            self.api_key = self.api_key or self._get_api_key()
+            self._client = anthropic.Anthropic(
+                api_key=self.api_key, timeout=self.timeout
+            )
+        return self._client
+
+    @client.setter
+    def client(self, client: Any) -> None:
+        """Accept an explicitly supplied client without creating an SDK client."""
+        self._client = client
 
     def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
         """

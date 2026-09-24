@@ -385,7 +385,7 @@ class OpenAIProvider(LLMProvider):
         )
 
     def initialize(self) -> None:
-        """Initialize the OpenAI client."""
+        """Resolve registry capabilities without constructing a network client."""
         if not openai:
             raise ImportError(
                 "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
@@ -399,8 +399,6 @@ class OpenAIProvider(LLMProvider):
             from nexus.config.story_model import resolve_seat
 
             self.model = resolve_seat("ir_eval.judgment.model", settings=settings).model
-        from nexus.config.provider_guard import require_test_provider
-
         try:
             provider = settings.provider_for_model(self.model)
         except ValueError as exc:
@@ -408,7 +406,8 @@ class OpenAIProvider(LLMProvider):
                 f"Model {self.model!r} is not declared in nexus.toml's "
                 "[global.model.api_models] registry; add its parameter capabilities."
             ) from exc
-        require_test_provider(self.model, settings=settings)
+        self._registry_settings = settings
+        self._client: Any = None
         entry = next(
             entry
             for entry in settings.global_.model.api_models[provider].models
@@ -417,17 +416,6 @@ class OpenAIProvider(LLMProvider):
         self.unsupported_params = frozenset(entry.unsupported_params)
         self.is_reasoning_model = entry.reasoning_accounting != "none"
         self.supports_temperature = "temperature" not in self.unsupported_params
-
-        self.api_key = self.api_key or self._get_api_key()
-
-        # Create client with optional base_url for mock servers
-        client_kwargs: Dict[str, Any] = {"api_key": self.api_key}
-        if self.base_url:
-            client_kwargs["base_url"] = self.base_url
-            logger.info(f"Using custom base URL: {self.base_url}")
-        if self.request_timeout is not None:
-            client_kwargs["timeout"] = self.request_timeout
-        self.client = openai.OpenAI(**client_kwargs)
 
         # Log the model type
         if self.is_reasoning_model:
@@ -438,6 +426,31 @@ class OpenAIProvider(LLMProvider):
             logger.info(
                 f"Using standard model: {self.model} with temperature: {self.temperature}"
             )
+
+    @property
+    def client(self) -> Any:
+        """Create the SDK client on first use, after the test-provider guard."""
+        if self._client is None:
+            from nexus.config.provider_guard import require_test_provider
+
+            require_test_provider(self.model, settings=self._registry_settings)
+            self.api_key = self.api_key or self._get_api_key()
+
+            # Create client with optional base_url for mock servers
+            client_kwargs: Dict[str, Any] = {"api_key": self.api_key}
+            if self.base_url:
+                client_kwargs["base_url"] = self.base_url
+                logger.info(f"Using custom base URL: {self.base_url}")
+            if self.request_timeout is not None:
+                client_kwargs["timeout"] = self.request_timeout
+            self._client = openai.OpenAI(**client_kwargs)
+
+        return self._client
+
+    @client.setter
+    def client(self, client: Any) -> None:
+        """Accept an explicitly supplied client without creating an SDK client."""
+        self._client = client
 
     def get_completion(
         self, prompt: str, cache_key: Optional[str] = None

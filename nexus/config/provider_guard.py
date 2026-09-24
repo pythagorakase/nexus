@@ -1,4 +1,4 @@
-"""Fail closed before a test session can construct a non-TEST provider."""
+"""Fail closed before a test session can create a non-TEST network client."""
 
 import os
 
@@ -7,7 +7,7 @@ from nexus.config.settings_models import Settings
 
 
 class ProviderForbiddenInTests(RuntimeError):
-    """A test attempted to initialize a provider outside the TEST registry."""
+    """A test attempted to create a network client outside the TEST registry."""
 
 
 def require_test_provider(model: str, *, settings: Settings | None = None) -> None:
@@ -15,10 +15,7 @@ def require_test_provider(model: str, *, settings: Settings | None = None) -> No
     if os.environ.get("NEXUS_TEST_PROVIDER_ONLY") != "1":
         return
     settings = settings or load_settings()
-    try:
-        provider = settings.provider_for_model(model)
-    except ValueError:
-        provider = None
+    provider = settings.provider_for_model(model)
     if provider != "test":
         raise ProviderForbiddenInTests(
             f"Model {model!r} (provider={provider!r}) is forbidden by "
