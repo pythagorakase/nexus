@@ -30,6 +30,7 @@ def _queue_status(cur: Any, table: str, queue: str) -> dict[str, Any]:
             ) AS counts,
             coalesce(jsonb_agg(jsonb_build_object(
                 'id', id, 'queue', %s, 'state', state::text, 'attempts', attempts,
+                'generation_session_id', generation_session_id,
                 'available_at', available_at, 'lease_until', lease_until,
                 'last_error', last_error
             ) ORDER BY id) FILTER (WHERE state IN ('queued','leased')), '[]'::jsonb)
@@ -56,7 +57,7 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
             ),
         }
         cur.execute(
-            "SELECT version_id FROM relationship_milestone_queue WHERE event_id IS NULL ORDER BY version_id"
+            "SELECT version_id, generation_session_id::text FROM relationship_milestone_queue WHERE event_id IS NULL ORDER BY version_id"
         )
         pending = [dict(row) for row in cur.fetchall()]
         queues["relationship_milestone"] = {
@@ -64,6 +65,7 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
             "non_terminal_jobs": [
                 {
                     "id": row["version_id"],
+                    "generation_session_id": row["generation_session_id"],
                     "state": "pending",
                     "queue": "relationship_milestone",
                 }

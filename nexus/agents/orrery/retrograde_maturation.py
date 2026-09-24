@@ -1245,6 +1245,7 @@ def load_maturation_status_sync(cur: Any) -> dict[str, Any]:
                 jsonb_agg(
                     jsonb_build_object(
                         'id', id,
+                        'generation_session_id', generation_session_id,
                         'queue', 'retrograde_maturation',
                         'state', state::text,
                         'entity_kind', entity_kind,

@@ -124,6 +124,9 @@ def gateway_lane(monkeypatch):
     with socket.socket() as listener:
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind(("127.0.0.1", port))
+        port = listener.getsockname()[1]
+        monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(port))
+        monkeypatch.setenv("NEXUS_API_URL", f"http://127.0.0.1:{port}")
         listener.listen()
         thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]})
         thread.start()

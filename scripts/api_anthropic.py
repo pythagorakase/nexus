@@ -738,6 +738,9 @@ class AnthropicProvider(LLMProvider):
                         output_format=output_format,
                     )
                 )
+                response_recorder = getattr(self, "attempt_manifest_response", None)
+                if response_recorder is not None:
+                    response_recorder(response)
                 parsed_output = self._extract_native_parsed_output(
                     response, schema_model
                 )
@@ -780,6 +783,9 @@ class AnthropicProvider(LLMProvider):
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
+                result_recorder = getattr(self, "attempt_manifest_result", None)
+                if result_recorder is not None:
+                    result_recorder(usage_outcome)
                 if response is not None:
                     record_anthropic_response(
                         response,
@@ -828,6 +834,9 @@ class AnthropicProvider(LLMProvider):
                         input_schema=input_schema,
                     )
                 )
+                response_recorder = getattr(self, "attempt_manifest_response", None)
+                if response_recorder is not None:
+                    response_recorder(response)
                 parsed_output = self._extract_tool_envelope_parsed_output(
                     response,
                     schema_model,
@@ -874,6 +883,9 @@ class AnthropicProvider(LLMProvider):
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
+                result_recorder = getattr(self, "attempt_manifest_result", None)
+                if result_recorder is not None:
+                    result_recorder(usage_outcome)
                 if response is not None:
                     record_anthropic_response(
                         response,
@@ -916,6 +928,9 @@ class AnthropicProvider(LLMProvider):
                 response = self.client.beta.messages.create(
                     **self._build_prompted_structured_request_params(active_prompt)
                 )
+                response_recorder = getattr(self, "attempt_manifest_response", None)
+                if response_recorder is not None:
+                    response_recorder(response)
                 parsed_output = self._extract_prompted_parsed_output(
                     response,
                     schema_model,
@@ -962,6 +977,9 @@ class AnthropicProvider(LLMProvider):
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
+                result_recorder = getattr(self, "attempt_manifest_result", None)
+                if result_recorder is not None:
+                    result_recorder(usage_outcome)
                 if response is not None:
                     record_anthropic_response(
                         response,

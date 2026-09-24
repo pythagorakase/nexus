@@ -690,6 +690,11 @@ class UsageSettings(BaseModel):
             "repository root"
         ),
     )
+    manifest_retention_days: int = Field(
+        default=30,
+        ge=1,
+        description="Days of attempt manifests retained by explicit prune",
+    )
     daily_allowance: Dict[str, int] = Field(
         default_factory=dict,
         description=(

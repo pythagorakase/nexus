@@ -116,7 +116,18 @@ def _correlate_generation_usage(
                 finally:
                     conn.close()
 
-        with usage_context(run_id=session_id, slot=slot), generation_progress(report):
+        from nexus.telemetry.attempt_manifest import manifest_scope
+
+        factory = (
+            (lambda: kwargs["get_db_connection"](slot))
+            if kwargs.get("manage_generation_lease", True)
+            else None
+        )
+        with (
+            usage_context(run_id=session_id, slot=slot),
+            generation_progress(report),
+            manifest_scope(factory),
+        ):
             await function(
                 session_id,
                 parent_chunk_id,

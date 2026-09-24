@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import tomllib
 from typing import Any, Callable, Mapping, Sequence, cast
+from uuid import UUID
 
 import tomlkit
 
@@ -386,6 +387,7 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
         counts[state] = value
 
     common_fields = (
+        "generation_session_id",
         "id",
         "queue",
         "state",
@@ -411,9 +413,25 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
     def validate_job(raw_job: Any, *, queue_kind: str, location: str) -> dict[str, Any]:
         if not isinstance(raw_job, dict):
             raise ShiftError(f"Jobs payload row {location} is not an object")
+        if "generation_session_id" not in raw_job:
+            raise ShiftError(
+                f"Jobs payload row {location} is missing generation_session_id"
+            )
+        session = raw_job["generation_session_id"]
+        if session is not None:
+            if not isinstance(session, str):
+                raise ShiftError(
+                    f"Jobs payload row {location} has invalid generation_session_id"
+                )
+            try:
+                UUID(session)
+            except ValueError as exc:
+                raise ShiftError(
+                    f"Jobs payload row {location} has invalid generation_session_id"
+                ) from exc
         if queue_kind == "relationship_milestone":
             if (
-                set(raw_job) != {"id", "queue", "state"}
+                set(raw_job) != {"id", "queue", "state", "generation_session_id"}
                 or raw_job.get("state") != "pending"
             ):
                 raise ShiftError(

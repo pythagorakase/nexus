@@ -1,0 +1,21 @@
+$ nexus inspect-turn --slot 4 --session 3b4d8208-2c83-425a-a7b5-fa96f8c15afc
+Session	Phase	Outcome	Accepted Chunk	Replacement
+3b4d8208-2c83-425a-a7b5-fa96f8c15afc	complete	accepted	51	-
+Phase	Recorded At
+retrieval	2026-09-24 21:24:10.169962+00
+assembly	2026-09-24 21:24:54.044551+00
+writer	2026-09-24 21:24:55.0647+00
+gaia	2026-09-24 21:24:55.905872+00
+staging	2026-09-24 21:24:56.186239+00
+complete	2026-09-24 21:24:56.197384+00
+Seat	Attempt	Model	Tokens	Window	Blocks	Validation Notes	Provider Outcome	Outcome
+gaia	1	TEST	44205	71000	167	0	accepted	accepted
+skald_writer	1	TEST	46744	71000	167	0	accepted	accepted
+Seat	Attempt	Schema	Story Pin	Config SHA-256/12	Wire SHA-256/12	Prompt SHA-256/12	Response SHA-256/12
+gaia	1	1	{"apex_context_window": null, "gaia_model": "TEST", "model": "TEST"}	4bce67453ecc	c0a42c8bc77f	d6bb41714b41	e9efc304a9fe
+skald_writer	1	1	{"apex_context_window": null, "gaia_model": "TEST", "model": "TEST"}	4bce67453ecc	e80aa17fd14a	2bf3d4f16ec0	5bcce4b8f979
+Seat	Attempt	Retrieval IDs	Recall IDs	Exposure IDs	Block Tokens
+gaia	1	[51]	[162, 163, 164, 165]	[388, 389, 390, 391, 392, 393, 394, 395, 396, 397, 398, 399, 400]	{"system": 1900, "intertitle": 50, "user input": 26, "instructions": 30, "entity dossier": 2194, "request framing": -85, "world knowledge": 252, "recent narrative": 14031, "scene conditions": 17, "historical context": 14915, "orrery joint beats": 216, "orrery tag library": 3742, "orrery scene pressure": 319, "recent orrery rulings": 240, "finished writer output": 164, "orrery imminent activity": 263, "private storyteller correspondence": 5931}
+skald_writer	1	[51]	[162, 163, 164, 165]	[388, 389, 390, 391, 392, 393, 394, 395, 396, 397, 398, 399, 400]	{"system": 4580, "intertitle": 50, "user input": 26, "instructions": 30, "scene roster": 22, "entity dossier": 2194, "request framing": -84, "world knowledge": 252, "recent narrative": 14031, "scene conditions": 17, "historical context": 14915, "orrery joint beats": 216, "orrery tag library": 3742, "orrery scene pressure": 319, "recent orrery rulings": 240, "orrery imminent activity": 263, "private storyteller correspondence": 5931}
+Queue	Job ID	State	Generation Session
+correspondence_compaction	2	queued	3b4d8208-2c83-425a-a7b5-fa96f8c15afc

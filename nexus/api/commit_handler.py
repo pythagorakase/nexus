@@ -600,6 +600,9 @@ async def commit_incubator_to_database(
     async with conn.transaction():
         try:
             # Step 1: Get incubator data
+            await conn.execute(
+                "SELECT set_config('nexus.generation_session_id', $1, true)", session_id
+            )
             incubator = await fetch_incubator_data(conn, session_id)
             validate_staged_pass2_baseline(incubator["lore_pass_baseline"])
             logger.info("Processing incubator session %s", session_id)
@@ -906,6 +909,10 @@ async def commit_incubator_to_database(
                             playable_ordinal,
                             chunk_id,
                         )
+
+            from nexus.telemetry.attempt_manifest import bind_exposures
+
+            await bind_exposures(conn, session_id, chunk_id, asyncpg=True)
 
             # Step 10: Clear incubator
             await clear_incubator(conn, session_id)

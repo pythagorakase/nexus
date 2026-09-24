@@ -1244,6 +1244,7 @@ max_choice_text_length = 1000  # Maximum length of choice text
 
 [usage]
 enabled = true
+manifest_retention_days = 30 # only nexus prune-manifests deletes expired manifests
 usage_dir = ".nexus/runtime/usage"  # relative paths resolve against the repo root; shared by gateway/CLI/worker processes
 
 [usage.daily_allowance]
