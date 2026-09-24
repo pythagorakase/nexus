@@ -11,7 +11,6 @@ Or quick validation:
     python tests/test_wizard_live.py
 """
 
-
 import asyncio
 import logging
 import os

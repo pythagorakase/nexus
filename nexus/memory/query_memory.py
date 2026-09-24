@@ -24,7 +24,10 @@ class QueryMemory:
 
     def has_run(self, query: str) -> bool:
         query_normalized = query.strip().lower()
-        return any(query_normalized == existing.strip().lower() for existing in self.all_queries)
+        return any(
+            query_normalized == existing.strip().lower()
+            for existing in self.all_queries
+        )
 
     def record(self, pass_label: str, query: str) -> None:
         if pass_label not in self._history:

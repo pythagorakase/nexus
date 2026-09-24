@@ -22,7 +22,7 @@ from psycopg2 import OperationalError, InterfaceError
 
 logger = logging.getLogger("nexus.api.retry_handler")
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class RetryConfig:
@@ -109,8 +109,7 @@ def calculate_backoff_delay(
 ) -> float:
     """Calculate exponential backoff delay with optional jitter."""
     delay = min(
-        config.initial_delay * (config.exponential_base ** attempt),
-        config.max_delay
+        config.initial_delay * (config.exponential_base**attempt), config.max_delay
     )
 
     if config.jitter:
@@ -189,6 +188,7 @@ def retry_with_backoff(
                 raise RuntimeError(f"All retries failed for {func.__name__}")
 
         return wrapper
+
     return decorator
 
 
@@ -238,6 +238,7 @@ def async_retry_with_backoff(
                 raise RuntimeError(f"All retries failed for {func.__name__}")
 
         return wrapper
+
     return decorator
 
 
@@ -307,8 +308,8 @@ class CircuitBreaker:
     def _should_attempt_reset(self) -> bool:
         """Check if enough time has passed to attempt reset."""
         return (
-            self.last_failure_time and
-            datetime.now() >= self.last_failure_time + self.timeout_duration
+            self.last_failure_time
+            and datetime.now() >= self.last_failure_time + self.timeout_duration
         )
 
     def _on_success(self) -> None:
@@ -346,13 +347,16 @@ def with_timeout(timeout_seconds: float) -> Callable:
 
     Note: For async functions, use asyncio.wait_for directly.
     """
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
             import signal
 
             def timeout_handler(signum, frame):
-                raise TimeoutError(f"Function {func.__name__} timed out after {timeout_seconds}s")
+                raise TimeoutError(
+                    f"Function {func.__name__} timed out after {timeout_seconds}s"
+                )
 
             # Set up timeout
             old_handler = signal.signal(signal.SIGALRM, timeout_handler)
@@ -366,6 +370,7 @@ def with_timeout(timeout_seconds: float) -> Callable:
                 signal.signal(signal.SIGALRM, old_handler)
 
         return wrapper
+
     return decorator
 
 
@@ -389,7 +394,9 @@ class FallbackChain:
 
         for i, strategy in enumerate(self.strategies):
             try:
-                logger.info(f"Trying strategy {i + 1}/{len(self.strategies)}: {strategy.__name__}")
+                logger.info(
+                    f"Trying strategy {i + 1}/{len(self.strategies)}: {strategy.__name__}"
+                )
                 return strategy(*args, **kwargs)
             except Exception as e:
                 errors.append((strategy.__name__, str(e)))
@@ -397,8 +404,12 @@ class FallbackChain:
 
                 if i == len(self.strategies) - 1:
                     # All strategies failed
-                    error_summary = "; ".join([f"{name}: {err}" for name, err in errors])
-                    raise RuntimeError(f"All fallback strategies failed: {error_summary}")
+                    error_summary = "; ".join(
+                        [f"{name}: {err}" for name, err in errors]
+                    )
+                    raise RuntimeError(
+                        f"All fallback strategies failed: {error_summary}"
+                    )
 
     async def async_execute(self, *args, **kwargs) -> Any:
         """Async version of execute."""
@@ -406,7 +417,9 @@ class FallbackChain:
 
         for i, strategy in enumerate(self.strategies):
             try:
-                logger.info(f"Trying strategy {i + 1}/{len(self.strategies)}: {strategy.__name__}")
+                logger.info(
+                    f"Trying strategy {i + 1}/{len(self.strategies)}: {strategy.__name__}"
+                )
                 return await strategy(*args, **kwargs)
             except Exception as e:
                 errors.append((strategy.__name__, str(e)))
@@ -414,10 +427,16 @@ class FallbackChain:
 
                 if i == len(self.strategies) - 1:
                     # All strategies failed
-                    error_summary = "; ".join([f"{name}: {err}" for name, err in errors])
-                    raise RuntimeError(f"All fallback strategies failed: {error_summary}")
+                    error_summary = "; ".join(
+                        [f"{name}: {err}" for name, err in errors]
+                    )
+                    raise RuntimeError(
+                        f"All fallback strategies failed: {error_summary}"
+                    )
 
 
 def log_retry_attempt(exception: Exception, attempt: int) -> None:
     """Standard logging for retry attempts."""
-    logger.info(f"Retry attempt {attempt + 1} after error: {type(exception).__name__}: {exception}")
+    logger.info(
+        f"Retry attempt {attempt + 1} after error: {type(exception).__name__}: {exception}"
+    )

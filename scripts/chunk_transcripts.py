@@ -23,8 +23,9 @@ import glob
 from pathlib import Path
 
 # Regex patterns for episode and storyteller headings.
-EPISODE_REGEX = re.compile(r'^#\s*(S\d+E\d+):', re.IGNORECASE)
-STORYTELLER_REGEX = re.compile(r'^##\s*Storyteller', re.IGNORECASE)
+EPISODE_REGEX = re.compile(r"^#\s*(S\d+E\d+):", re.IGNORECASE)
+STORYTELLER_REGEX = re.compile(r"^##\s*Storyteller", re.IGNORECASE)
+
 
 def process_file(file_path: Path):
     with file_path.open("r", encoding="utf-8") as f:
@@ -33,7 +34,9 @@ def process_file(file_path: Path):
     current_episode = "UNKNOWN"
     scene_count = 0
     output_lines = []
-    skip_storyteller_marker = False  # Flag to avoid duplicating marker for initial storyteller headings
+    skip_storyteller_marker = (
+        False  # Flag to avoid duplicating marker for initial storyteller headings
+    )
 
     for line in lines:
         stripped_line = line.strip()
@@ -81,6 +84,7 @@ def process_file(file_path: Path):
 
     print(f"Processed '{file_path}' → '{output_path}'")
 
+
 def main():
     # Determine which files to process: use command-line arguments or all .md files in the directory.
     if len(sys.argv) > 1:
@@ -97,6 +101,7 @@ def main():
             process_file(file_path)
         else:
             print(f"Warning: {file_path} is not a valid file. Skipping.")
+
 
 if __name__ == "__main__":
     main()

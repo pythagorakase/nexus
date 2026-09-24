@@ -97,7 +97,8 @@ def test_complete_story_generation_flow(model: str):
         "place": place.model_dump(),
         "coordinates": [place.latitude, place.longitude],
         "validation": {
-            "coordinates_valid": -90 <= place.latitude <= 90 and -180 <= place.longitude <= 180,
+            "coordinates_valid": -90 <= place.latitude <= 90
+            and -180 <= place.longitude <= 180,
             "transition_ready": transition.ready_for_transition,
             "all_fields_complete": transition.validated,
         },

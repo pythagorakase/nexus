@@ -14,6 +14,7 @@ from enum import Enum
 
 class AgentType(str, Enum):
     """Types of AI agents in the NEXUS system"""
+
     LOGON = "LOGON"
     LORE = "LORE"
     GAIA = "GAIA"
@@ -25,6 +26,7 @@ class AgentType(str, Enum):
 
 class EmotionalValence(str, Enum):
     """Emotional valence scale for character relationships"""
+
     DEVOTED = "+5|devoted"
     ADMIRING = "+4|admiring"
     TRUSTING = "+3|trusting"
@@ -40,6 +42,7 @@ class EmotionalValence(str, Enum):
 
 class EntityType(str, Enum):
     """Types of entities that can be referenced in chunks"""
+
     CHARACTER = "character"
     FACTION = "faction"
     PLACE = "place"
@@ -48,6 +51,7 @@ class EntityType(str, Enum):
 
 class FactionMemberRole(str, Enum):
     """Roles that characters can have within factions"""
+
     LEADER = "leader"
     EMPLOYEE = "employee"
     MEMBER = "member"
@@ -61,6 +65,7 @@ class FactionMemberRole(str, Enum):
 
 class FactionRelationshipType(str, Enum):
     """Types of relationships between factions"""
+
     ALLIANCE = "alliance"
     TRADE_PARTNERS = "trade_partners"
     TRUCE = "truce"
@@ -77,6 +82,7 @@ class FactionRelationshipType(str, Enum):
 
 class ItemType(str, Enum):
     """Categories of items in the world"""
+
     CURRENCY = "currency"
     WEAPON = "weapon"
     CYBERNETIC = "cybernetic"
@@ -90,6 +96,7 @@ class ItemType(str, Enum):
 
 class LogLevel(str, Enum):
     """Logging levels for system operations"""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARNING = "WARNING"
@@ -99,6 +106,7 @@ class LogLevel(str, Enum):
 
 class ModelName(str, Enum):
     """Available LLM models"""
+
     GPT_5 = "gpt-5"
     GPT_4O = "gpt-4o"
     O3 = "o3"
@@ -113,13 +121,15 @@ class ModelName(str, Enum):
 
 class PlaceReferenceType(str, Enum):
     """How a place is referenced in a narrative chunk"""
-    SETTING = "setting"     # The primary location where action occurs
+
+    SETTING = "setting"  # The primary location where action occurs
     MENTIONED = "mentioned"  # Referenced but not visited
-    TRANSIT = "transit"      # Passed through briefly
+    TRANSIT = "transit"  # Passed through briefly
 
 
 class PlaceType(str, Enum):
     """Categories of places in the world"""
+
     FIXED_LOCATION = "fixed_location"
     VEHICLE = "vehicle"
     VIRTUAL = "virtual"
@@ -128,6 +138,7 @@ class PlaceType(str, Enum):
 
 class Provider(str, Enum):
     """LLM API providers"""
+
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     DEEPSEEK = "deepseek"
@@ -138,6 +149,7 @@ class Provider(str, Enum):
 
 class QueryCategory(str, Enum):
     """Categories for user queries"""
+
     CHARACTER = "character"
     EVENT = "event"
     GENERAL = "general"
@@ -148,6 +160,7 @@ class QueryCategory(str, Enum):
 
 class ReasoningEffort(str, Enum):
     """Level of reasoning effort for LLM operations"""
+
     MINIMAL = "minimal"
     LOW = "low"
     MEDIUM = "medium"
@@ -156,12 +169,14 @@ class ReasoningEffort(str, Enum):
 
 class ReferenceType(str, Enum):
     """How entities are referenced in chunks"""
-    PRESENT = "present"     # Entity is actively present/participating
+
+    PRESENT = "present"  # Entity is actively present/participating
     MENTIONED = "mentioned"  # Entity is referenced but not present
 
 
 class RelationshipType(str, Enum):
     """Types of relationships between characters"""
+
     FAMILY = "family"
     ROMANTIC = "romantic"
     FRIEND = "friend"
@@ -176,6 +191,7 @@ class RelationshipType(str, Enum):
 
 class ThreatDomain(str, Enum):
     """Domains in which threats operate"""
+
     PHYSICAL = "physical"
     PSYCHOLOGICAL = "psychological"
     SOCIAL = "social"
@@ -184,6 +200,7 @@ class ThreatDomain(str, Enum):
 
 class ThreatLifecycle(str, Enum):
     """Stages in a threat's lifecycle"""
+
     INCEPTION = "inception"
     GESTATION = "gestation"
     MANIFESTATION = "manifestation"
@@ -195,8 +212,9 @@ class ThreatLifecycle(str, Enum):
 
 class WorldLayerType(str, Enum):
     """Narrative layers for chunk categorization"""
-    PRIMARY = "primary"           # Main narrative timeline
-    FLASHBACK = "flashback"       # Past events
+
+    PRIMARY = "primary"  # Main narrative timeline
+    FLASHBACK = "flashback"  # Past events
     ATEMPORAL = (
         "atemporal"  # Dream/hallucination or time-abnormal realm (clock does not apply)
     )

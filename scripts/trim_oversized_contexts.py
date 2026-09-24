@@ -25,7 +25,9 @@ TARGET_TOKENS = 110_000  # Target to stay safely under 120k after API overhead
 MIN_WARM_CHUNKS = 3  # Keep at least this many chunks for continuity
 
 
-def load_context_package(chunk_id: int, context_dir: Path) -> tuple[Path, Dict[str, Any]]:
+def load_context_package(
+    chunk_id: int, context_dir: Path
+) -> tuple[Path, Dict[str, Any]]:
     """Load the most recent context package JSON for a chunk."""
     # Find the most recent file for this chunk
     matching_files = sorted(context_dir.glob(f"chunk_{chunk_id}_*.json"))
@@ -51,15 +53,11 @@ def calculate_tokens(package: Dict[str, Any]) -> Dict[str, int]:
 
     # Structured passages tokens
     structured = context_payload.get("structured_passages", [])
-    structured_tokens = sum(
-        s.get("token_count", 0) for s in structured
-    )
+    structured_tokens = sum(s.get("token_count", 0) for s in structured)
 
     # Retrieved passages tokens
     retrieved = context_payload.get("retrieved_passages", {}).get("results", [])
-    retrieved_tokens = sum(
-        r.get("token_count", 0) for r in retrieved
-    )
+    retrieved_tokens = sum(r.get("token_count", 0) for r in retrieved)
 
     total = warm_tokens + structured_tokens + retrieved_tokens
 
@@ -91,13 +89,20 @@ def trim_warm_slice(
     tokens_before = calculate_tokens(package)
 
     if tokens_before["total"] <= target_tokens:
-        LOGGER.info(f"  Already under target ({tokens_before['total']} <= {target_tokens})")
-        return package, {"before": tokens_before["total"], "after": tokens_before["total"]}
+        LOGGER.info(
+            f"  Already under target ({tokens_before['total']} <= {target_tokens})"
+        )
+        return package, {
+            "before": tokens_before["total"],
+            "after": tokens_before["total"],
+        }
 
     # Sort chunks by chunk_id (oldest first)
     warm_chunks.sort(key=lambda c: c.get("chunk_id", 0))
 
-    LOGGER.info(f"  Before: {tokens_before['total']} tokens, {tokens_before['warm_chunk_count']} warm chunks")
+    LOGGER.info(
+        f"  Before: {tokens_before['total']} tokens, {tokens_before['warm_chunk_count']} warm chunks"
+    )
     LOGGER.info(f"  Need to remove ~{tokens_before['total'] - target_tokens} tokens")
 
     # Remove oldest chunks until we're under target
@@ -110,7 +115,9 @@ def trim_warm_slice(
         # Remove oldest chunk
         removed = warm_chunks.pop(0)
         removed_chunks.append(removed["chunk_id"])
-        LOGGER.debug(f"    Removed chunk {removed['chunk_id']}: {removed.get('token_count', 0)} tokens")
+        LOGGER.debug(
+            f"    Removed chunk {removed['chunk_id']}: {removed.get('token_count', 0)} tokens"
+        )
 
     # Update the package
     warm_slice["chunks"] = warm_chunks
@@ -121,15 +128,19 @@ def trim_warm_slice(
     # Update metadata
     if "metadata" in package and "estimated_payload_tokens" in package["metadata"]:
         tokens_after = calculate_tokens(package)
-        package["metadata"]["estimated_payload_tokens"].update({
-            "total": tokens_after["total"],
-            "warm_slice": tokens_after["warm"],
-            "structured": tokens_after["structured"],
-            "retrieved": tokens_after["retrieved"],
-        })
+        package["metadata"]["estimated_payload_tokens"].update(
+            {
+                "total": tokens_after["total"],
+                "warm_slice": tokens_after["warm"],
+                "structured": tokens_after["structured"],
+                "retrieved": tokens_after["retrieved"],
+            }
+        )
 
     tokens_after = calculate_tokens(package)
-    LOGGER.info(f"  After: {tokens_after['total']} tokens, {len(warm_chunks)} warm chunks")
+    LOGGER.info(
+        f"  After: {tokens_after['total']} tokens, {len(warm_chunks)} warm chunks"
+    )
     LOGGER.info(f"  Removed {len(removed_chunks)} chunks: {removed_chunks}")
 
     return package, {"before": tokens_before["total"], "after": tokens_after["total"]}
@@ -149,7 +160,7 @@ def update_prompt_context(chunk_id: int, package: Dict[str, Any], engine):
     with engine.begin() as conn:
         result = conn.execute(
             text(update_query),
-            {"chunk_id": chunk_id, "context": json.dumps(context_payload)}
+            {"chunk_id": chunk_id, "context": json.dumps(context_payload)},
         )
         prompt_id = result.fetchone()[0]
         LOGGER.info(f"  Updated prompt {prompt_id} in database")
@@ -191,15 +202,14 @@ def main():
 
     # Setup logging
     level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(levelname)s: %(message)s"
-    )
+    logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
     # Initialize database connection
     engine = create_engine(resolved_database_url(None))
 
-    LOGGER.info(f"Trimming {len(args.chunks)} context packages to {args.target_tokens:,} tokens")
+    LOGGER.info(
+        f"Trimming {len(args.chunks)} context packages to {args.target_tokens:,} tokens"
+    )
     LOGGER.info(f"Target chunks: {args.chunks}")
     print()
 
@@ -228,21 +238,25 @@ def main():
                 # Update database
                 prompt_id = update_prompt_context(chunk_id, trimmed_package, engine)
 
-                results.append({
-                    "chunk_id": chunk_id,
-                    "prompt_id": prompt_id,
-                    "tokens_before": token_change["before"],
-                    "tokens_after": token_change["after"],
-                    "tokens_saved": token_change["before"] - token_change["after"],
-                })
+                results.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "prompt_id": prompt_id,
+                        "tokens_before": token_change["before"],
+                        "tokens_after": token_change["after"],
+                        "tokens_saved": token_change["before"] - token_change["after"],
+                    }
+                )
             else:
                 LOGGER.info("  [DRY RUN] Would save trimmed package")
-                results.append({
-                    "chunk_id": chunk_id,
-                    "tokens_before": token_change["before"],
-                    "tokens_after": token_change["after"],
-                    "tokens_saved": token_change["before"] - token_change["after"],
-                })
+                results.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "tokens_before": token_change["before"],
+                        "tokens_after": token_change["after"],
+                        "tokens_saved": token_change["before"] - token_change["after"],
+                    }
+                )
 
             print()
 

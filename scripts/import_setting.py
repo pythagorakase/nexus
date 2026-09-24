@@ -14,7 +14,7 @@ def main():
     # Read the backstory document
     backstory_path = Path(__file__).parent.parent / "temp" / "global_backstory.md"
 
-    with open(backstory_path, 'r') as f:
+    with open(backstory_path, "r") as f:
         content = f.read()
 
     # Create minimal JSON wrapper
@@ -25,8 +25,8 @@ def main():
         "metadata": {
             "era": "2025-2073",
             "medium": "found document, historical dossier",
-            "provenance": "compiled in 2073 from municipal archives, corporate white-books, and eyewitness logs"
-        }
+            "provenance": "compiled in 2073 from municipal archives, corporate white-books, and eyewitness logs",
+        },
     }
 
     # Connect to database
@@ -37,7 +37,7 @@ def main():
             # Update the single row in global_variables
             cur.execute(
                 "UPDATE global_variables SET setting = %s WHERE id = true",
-                (json.dumps(setting_data),)
+                (json.dumps(setting_data),),
             )
             conn.commit()
 
