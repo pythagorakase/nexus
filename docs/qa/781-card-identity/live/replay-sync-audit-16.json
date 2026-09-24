@@ -1,0 +1,749 @@
+{
+  "entity": {
+    "entity_id": 16,
+    "name": "Tam Oris"
+  },
+  "anchor": {
+    "chunk_id": 50,
+    "world_time": "2189-10-17T18:38:00-04:00",
+    "world_layer": "primary",
+    "season": 1,
+    "episode": 2,
+    "scene": 46
+  },
+  "actor_facing": {
+    "possessed_accounts": [
+      {
+        "awareness_id": 8,
+        "claim_id": 6,
+        "summary": "Surveillance performed: actor Tam Oris, target Elian Rook.",
+        "scope": "bounded",
+        "account_label": "canonical",
+        "account_payload": null,
+        "distorted_from_claim_id": null,
+        "distortion_min_depth": null,
+        "possession": {
+          "source_tier": "participant",
+          "channel": null,
+          "acquisition_chunk_id": 50,
+          "acquired_at_world_time": "2189-10-17T18:38:00-04:00",
+          "propagation_depth": null,
+          "source_chain": [
+            {
+              "kind": "possession",
+              "entity_id": 16,
+              "name": "Tam Oris"
+            }
+          ]
+        },
+        "source_event": {
+          "event_id": 192
+        }
+      }
+    ],
+    "experiences": [
+      {
+        "experience_id": 12,
+        "anchor_chunk_id": 19,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:07:00-04:00",
+        "seed_summary": "Tam Oris participated in the accepted scene at 2189-10-17T16:07:00-04:00. contact_made: Ivo Senn affected Tam Oris at Lantern Quay Memorial Hall (Ivo Senn and Tam Oris keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.048,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "3959919984b70d7aa2547904e12a69b906eb0a32d495bd9c60d13cd53d0e9e15",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          30
+        ]
+      },
+      {
+        "experience_id": 23,
+        "anchor_chunk_id": 24,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:32:00-04:00",
+        "seed_summary": "Tam Oris participated in the accepted scene at 2189-10-17T16:32:00-04:00. stroll_taken: Tam Oris at Lantern Quay Memorial Hall (Tam Oris takes the long way through streets they know by wear rather than by name, registering the small changes \u2014 a new face at a stall, a repaired door \u2014 that a neighborhood shows only to its regulars.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.084,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "ced947da4f0c83f56704d650b237aa7ed460ecef6228fc3aa34813db8359fccb",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          46
+        ]
+      },
+      {
+        "experience_id": 37,
+        "anchor_chunk_id": 25,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:35:00-04:00",
+        "seed_summary": "Tam Oris participated in the accepted scene at 2189-10-17T16:35:00-04:00. upkeep_done: Tam Oris at Lantern Quay Memorial Hall (Tam Oris tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.048,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "8e4aaeca8aeb13c462afc7aa555b8e25225791f6072ea587ca636f33695afa83",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          60
+        ]
+      },
+      {
+        "experience_id": 44,
+        "anchor_chunk_id": 26,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:40:00-04:00",
+        "seed_summary": "Tam Oris participated in the accepted scene at 2189-10-17T16:40:00-04:00. recreation_taken: Tam Oris at Lantern Quay Memorial Hall (Tam Oris claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.06,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "275dafbb31a59c3b35c9238570e831dbef9e6511719b927e407a8f3e62b92506",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          69
+        ]
+      },
+      {
+        "experience_id": 54,
+        "anchor_chunk_id": 27,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:42:00-04:00",
+        "seed_summary": "Tam Oris participated in the accepted scene at 2189-10-17T16:42:00-04:00. contact_made: Vela Nash affected Tam Oris at Lantern Quay Memorial Hall (Vela Nash and Tam Oris keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.048,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "400b3d1e4e835fcbf0b4d57b3930b1a9c0785f6b11bab6351c0f81b59459a3f5",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          78
+        ]
+      },
+      {
+        "experience_id": 59,
+        "anchor_chunk_id": 28,
+        "basis": "participant",
+        "claim_id": null,
+        "claim_awareness_id": null,
+        "location_id": 1,
+        "world_time": "2189-10-17T16:44:00-04:00",
+        "seed_summary": "Tam Oris participated in the accepted scene at 2189-10-17T16:44:00-04:00. welfare_check: Elian Rook affected Tam Oris at Lantern Quay Memorial Hall (Elian Rook stops by \u2014 ostensibly for something else, the way these visits often are \u2014 and uses the small window to read Tam Oris's state: how they look, what they say without saying, what they decline to mention. It will be enough information for now.). surveillance_performed: Tam Oris affected Elian Rook at Lantern Quay Memorial Hall (Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.).",
+        "experience_text": null,
+        "emotion": null,
+        "salience": 0.264,
+        "render_status": "unrendered",
+        "render_model": null,
+        "renderer_version": null,
+        "render_generation_id": null,
+        "source_digest": "a1f6121c339e03b9ac72ce1fb991dac2c8db2c04e834fe2f89c654aa31788295",
+        "world_layer": "primary",
+        "invalidated_at": null,
+        "source_event_ids": [
+          83,
+          86
+        ]
+      }
+    ],
+    "recall_candidates": [],
+    "recall_truncated": false,
+    "disclosure_results": [],
+    "prompt_exposure": {
+      "orrery_proposals": [
+        {
+          "kind": "resolution",
+          "exposure_id": 380,
+          "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "template_id": "check_on_dependent",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "position": 2,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 4,
+          "target_entity_id": 16,
+          "payload": {
+            "bindings": {
+              "actor": 4,
+              "target": 16
+            },
+            "position": 2,
+            "priority": 55,
+            "magnitude": 0.22,
+            "event_type": "contact_made",
+            "promotable": true,
+            "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "state_delta": {
+              "character.current_activity": "checking in on a dependent"
+            },
+            "template_id": "check_on_dependent",
+            "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "branch_label": "Reach out through customary channels",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Elian Rook",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Tam Oris",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+            "signal_event_type": null,
+            "effective_priority": 52.0
+          }
+        },
+        {
+          "kind": "scene_pressure",
+          "exposure_id": 386,
+          "proposal_id": "surveil:1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+          "template_id": "surveil",
+          "binding_hash": "1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+          "position": 3,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 16,
+          "target_entity_id": 1,
+          "payload": {
+            "bindings": {
+              "actor": 16,
+              "target": 1
+            },
+            "priority": 48,
+            "magnitude": 0.38,
+            "prompt_text": "Tam Oris has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.",
+            "template_id": "surveil",
+            "binding_hash": "1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45",
+            "branch_label": "Collect a proxy watcher report",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Tam Oris",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Mara Vey",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "pressure_stub": "{actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all."
+          }
+        },
+        {
+          "kind": "joint_beat",
+          "exposure_id": 387,
+          "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "template_id": "check_on_dependent",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "position": 2,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 4,
+          "target_entity_id": 16,
+          "payload": {
+            "bindings": {
+              "actor": 4,
+              "target": 16
+            },
+            "position": 2,
+            "priority": 55,
+            "magnitude": 0.22,
+            "event_type": "contact_made",
+            "promotable": true,
+            "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "state_delta": {
+              "character.current_activity": "checking in on a dependent"
+            },
+            "template_id": "check_on_dependent",
+            "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+            "branch_label": "Reach out through customary channels",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Elian Rook",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Tam Oris",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Elian Rook sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Tam Oris to say something real if they want to \u2014 and watches for what comes back.",
+            "signal_event_type": null,
+            "effective_priority": 52.0,
+            "joint_beat_position": 0
+          }
+        },
+        {
+          "kind": "joint_beat",
+          "exposure_id": 388,
+          "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "template_id": "surveil",
+          "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "position": 10,
+          "created_at": "2026-09-24T15:11:36.151850-04:00",
+          "actor_entity_id": 16,
+          "target_entity_id": 4,
+          "payload": {
+            "bindings": {
+              "actor": 16,
+              "target": 4
+            },
+            "position": 10,
+            "priority": 48,
+            "magnitude": 0.38,
+            "event_type": "surveillance_performed",
+            "promotable": true,
+            "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+            "state_delta": {
+              "character.current_activity": "collecting a proxy watcher report"
+            },
+            "template_id": "surveil",
+            "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+            "branch_label": "Collect a proxy watcher report",
+            "evaluated_at": "2189-10-17T22:37:00+00:00",
+            "binding_names": {
+              "actor": "Tam Oris",
+              "place": "Lantern Quay Memorial Hall",
+              "target": "Elian Rook",
+              "target_place": "Lantern Quay Memorial Hall"
+            },
+            "changed_fields": [
+              "character.current_activity"
+            ],
+            "narrative_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+            "signal_event_type": null,
+            "effective_priority": 45.0,
+            "joint_beat_position": 0
+          }
+        }
+      ],
+      "knowledge_surfacing": []
+    },
+    "experience_jobs": [
+      {
+        "job_id": 1,
+        "state": "queued",
+        "attempts": 1,
+        "available_at": "2026-08-21T00:56:48.606455-04:00",
+        "lease_until": null,
+        "locked_by": null,
+        "lease_nonce": null,
+        "last_error": "Experience 16 names entities absent from its source scene: ['Sitting']",
+        "requested_model": "gpt-5.6-terra",
+        "source_digest": "8e6eda4536f9e0c9a178aec581593f2679caaabc729f877fba1256b396a7e981",
+        "experience_ids": [
+          11,
+          12,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24
+        ],
+        "timeline_identity": {
+          "world_layer": "primary",
+          "boundary_chunk_id": 49,
+          "boundary_season": 1,
+          "boundary_episode": 2,
+          "boundary_scene": 45,
+          "scene_end_chunk_id": 48,
+          "scene_end_season": 1,
+          "scene_end_episode": 2,
+          "scene_end_scene": 44
+        }
+      },
+      {
+        "job_id": 2,
+        "state": "queued",
+        "attempts": 1,
+        "available_at": "2026-08-21T00:56:55.882001-04:00",
+        "lease_until": null,
+        "locked_by": null,
+        "lease_nonce": null,
+        "last_error": "Experience 26 names entities absent from its source scene: ['Dr', 'Sera Vey']",
+        "requested_model": "gpt-5.6-terra",
+        "source_digest": "d8398dd9eeddbb44e6749f12f1bbdec997b52b1bfbd4843d474fde7c52568b62",
+        "experience_ids": [
+          25,
+          26,
+          27,
+          28,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37
+        ],
+        "timeline_identity": {
+          "world_layer": "primary",
+          "boundary_chunk_id": 49,
+          "boundary_season": 1,
+          "boundary_episode": 2,
+          "boundary_scene": 45,
+          "scene_end_chunk_id": 48,
+          "scene_end_season": 1,
+          "scene_end_episode": 2,
+          "scene_end_scene": 44
+        }
+      },
+      {
+        "job_id": 3,
+        "state": "queued",
+        "attempts": 0,
+        "available_at": "2026-08-21T00:51:41.719029-04:00",
+        "lease_until": null,
+        "locked_by": null,
+        "lease_nonce": null,
+        "last_error": null,
+        "requested_model": "gpt-5.6-terra",
+        "source_digest": "67665516fae19c5dd0e59d7e6873bd61c26341a712d835b9526c5e327997c424",
+        "experience_ids": [
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49
+        ],
+        "timeline_identity": {
+          "world_layer": "primary",
+          "boundary_chunk_id": 49,
+          "boundary_season": 1,
+          "boundary_episode": 2,
+          "boundary_scene": 45,
+          "scene_end_chunk_id": 48,
+          "scene_end_season": 1,
+          "scene_end_episode": 2,
+          "scene_end_scene": 44
+        }
+      },
+      {
+        "job_id": 4,
+        "state": "queued",
+        "attempts": 0,
+        "available_at": "2026-08-21T00:51:41.719029-04:00",
+        "lease_until": null,
+        "locked_by": null,
+        "lease_nonce": null,
+        "last_error": null,
+        "requested_model": "gpt-5.6-terra",
+        "source_digest": "1c6b3659d1da27755efec13df311462988c9bff9b64defc14d7bc96323a03f7d",
+        "experience_ids": [
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61
+        ],
+        "timeline_identity": {
+          "world_layer": "primary",
+          "boundary_chunk_id": 49,
+          "boundary_season": 1,
+          "boundary_episode": 2,
+          "boundary_scene": 45,
+          "scene_end_chunk_id": 48,
+          "scene_end_season": 1,
+          "scene_end_episode": 2,
+          "scene_end_scene": 44
+        }
+      }
+    ],
+    "generation_identity": {
+      "render_generation_ids": [],
+      "timeline": {
+        "world_layer": "primary",
+        "season": 1,
+        "episode": 2,
+        "scene": 46
+      }
+    }
+  },
+  "effective_config": {
+    "enabled": {
+      "knowledge": true,
+      "experiences": true,
+      "epistemics": true
+    },
+    "caps": {
+      "knowledge_max_entries": 12,
+      "recall_per_character_max_entries": 4,
+      "recall_mandatory_reserved_entries": 2,
+      "recall_trace_rows_per_character": 500,
+      "experience_max_seeds_per_render": 12,
+      "experience_max_jobs_per_drain": 2,
+      "prompt_max_rendered_proposals": 5,
+      "prompt_max_rendered_pressures": 5,
+      "prompt_max_rendered_recent_rulings": 5
+    },
+    "weights": {
+      "semantic_fit_weight": 0.35,
+      "event_severity_weight": 0.15,
+      "actor_involvement_weight": 0.15,
+      "emotional_salience_weight": 0.1,
+      "recency_weight": 0.15,
+      "place_match_weight": 0.1
+    },
+    "thresholds": {
+      "disclosure_minimum_score": 0.0,
+      "disclosure_private_claim_minimum_score": 0.2,
+      "recall_decay_half_life_hours": 720.0,
+      "recall_recency_horizon_hours": 2160.0
+    },
+    "producer_coverage": {
+      "claim_event_types": [
+        "compliance_alert",
+        "encoded_message",
+        "hunt_called_off",
+        "hunt_declared",
+        "informant_contact",
+        "intel_acquired",
+        "intel_acted_on",
+        "protective_intervention",
+        "pursue_romance_completed",
+        "recruit_ally_completed",
+        "relationship_drift_milestone",
+        "retaliation_attempted",
+        "retaliation_executed",
+        "rival_consulted",
+        "seek_redemption_completed",
+        "surveillance_performed",
+        "threat_issued",
+        "warning_delivered"
+      ],
+      "aware_roles": [
+        "actor",
+        "target",
+        "observer",
+        "witness"
+      ],
+      "experience_basis": [
+        "participant",
+        "witness",
+        "acquisition"
+      ]
+    }
+  },
+  "canonical_truth": {
+    "guarded": true,
+    "source_events": [
+      {
+        "event_id": 30,
+        "event_type": "contact_made",
+        "severity": "minor",
+        "tick_chunk_id": 19,
+        "actor_entity_id": 3,
+        "target_entity_id": 16,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 3,
+            "target": 16
+          },
+          "proposal_id": "make_acquaintance:b8f069f4ae937bcac73322812c20c42d8bf257e48d364dab630dc55f2afadba8",
+          "template_id": "make_acquaintance",
+          "binding_hash": "b8f069f4ae937bcac73322812c20c42d8bf257e48d364dab630dc55f2afadba8",
+          "branch_label": "Exchange names",
+          "narrative_stub": "Ivo Senn and Tam Oris keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again."
+        }
+      },
+      {
+        "event_id": 46,
+        "event_type": "stroll_taken",
+        "severity": "minor",
+        "tick_chunk_id": 24,
+        "actor_entity_id": 16,
+        "target_entity_id": null,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 16
+          },
+          "proposal_id": "stroll:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "template_id": "stroll",
+          "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "branch_label": "Walk the familiar streets",
+          "narrative_stub": "Tam Oris takes the long way through streets they know by wear rather than by name, registering the small changes \u2014 a new face at a stall, a repaired door \u2014 that a neighborhood shows only to its regulars."
+        }
+      },
+      {
+        "event_id": 60,
+        "event_type": "upkeep_done",
+        "severity": "minor",
+        "tick_chunk_id": 25,
+        "actor_entity_id": 16,
+        "target_entity_id": null,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 16
+          },
+          "proposal_id": "upkeep:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "template_id": "upkeep",
+          "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "branch_label": "Tidy what is theirs",
+          "narrative_stub": "Tam Oris tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up."
+        }
+      },
+      {
+        "event_id": 69,
+        "event_type": "recreation_taken",
+        "severity": "minor",
+        "tick_chunk_id": 26,
+        "actor_entity_id": 16,
+        "target_entity_id": null,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 16
+          },
+          "proposal_id": "recreate:b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "template_id": "recreate",
+          "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+          "branch_label": "Watch the world go by",
+          "narrative_stub": "Tam Oris claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment."
+        }
+      },
+      {
+        "event_id": 78,
+        "event_type": "contact_made",
+        "severity": "minor",
+        "tick_chunk_id": 27,
+        "actor_entity_id": 11,
+        "target_entity_id": 16,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 11,
+            "target": 16
+          },
+          "proposal_id": "make_acquaintance:d649a8e875790525efa2b57a1122b8b5a4d20f5668ac366ec236cda4b8ec54e0",
+          "template_id": "make_acquaintance",
+          "binding_hash": "d649a8e875790525efa2b57a1122b8b5a4d20f5668ac366ec236cda4b8ec54e0",
+          "branch_label": "Exchange names",
+          "narrative_stub": "Vela Nash and Tam Oris keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again."
+        }
+      },
+      {
+        "event_id": 83,
+        "event_type": "welfare_check",
+        "severity": "minor",
+        "tick_chunk_id": 28,
+        "actor_entity_id": 4,
+        "target_entity_id": 16,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 4,
+            "target": 16
+          },
+          "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "template_id": "check_on_dependent",
+          "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+          "branch_label": "Drop by in person when the moment allows",
+          "narrative_stub": "Elian Rook stops by \u2014 ostensibly for something else, the way these visits often are \u2014 and uses the small window to read Tam Oris's state: how they look, what they say without saying, what they decline to mention. It will be enough information for now."
+        }
+      },
+      {
+        "event_id": 86,
+        "event_type": "surveillance_performed",
+        "severity": "minor",
+        "tick_chunk_id": 28,
+        "actor_entity_id": 16,
+        "target_entity_id": 4,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 16,
+            "target": 4
+          },
+          "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "template_id": "surveil",
+          "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "branch_label": "Collect a proxy watcher report",
+          "narrative_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+        }
+      },
+      {
+        "event_id": 192,
+        "event_type": "surveillance_performed",
+        "severity": "minor",
+        "tick_chunk_id": 50,
+        "actor_entity_id": 16,
+        "target_entity_id": 4,
+        "location_id": 1,
+        "world_time": null,
+        "payload": {
+          "bindings": {
+            "actor": 16,
+            "target": 4
+          },
+          "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "template_id": "surveil",
+          "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+          "branch_label": "Collect a proxy watcher report",
+          "narrative_stub": "Tam Oris does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+        }
+      }
+    ],
+    "unpossessed_sibling_accounts": [],
+    "latent_secrets": []
+  }
+}

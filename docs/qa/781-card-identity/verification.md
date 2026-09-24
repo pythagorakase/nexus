@@ -1,20 +1,68 @@
 # Card Identity Verification — Work Order 781
 
-Both authorized two-pass turns were accepted as chunk **50** on `qa640_781_card_identity`, with the clone restored from the same original dump between runs. The configured writer and Gaia both used **gpt-5.6-terra**. There were exactly **two writer requests and two Gaia requests**, with provider/structured-output retries disabled. No additional paid seat was permitted.
+The second and third coordinator amendments are implemented. The saved real two-pass turn replays through both PostgreSQL commit paths without new provider calls. Eleven exposure rows follow the actual prompt order; both joint actors' audit traces preserve that order. Backstage's primary proposal sequence is **0, 1, 2, 3, 4, 2, 10**; its separate, collapsed inventory is **0–22**.
 
-**Result:** the same 23 proposal identities were produced before and after. Afterward, all 23 have persisted positions and canonical binding names, including recorded places. The first five ranked cards appear in both prompts; four scene-pressure cards and one joint beat also appear. All 11 exposure rows match both actual prompts, and Backstage lists all 23 proposals in the persisted sequence. The audit traces for both joint actors contain both parent exposures, including the deferred parent.
+Ren Vale's saved Gaia replacement now wins over lower-ranked `surveil` and `upkeep` scalar writes. Four PostgreSQL regressions cover both commit paths with ratification and with Gaia's replacement; the full saved-turn replay additionally uses the original structured state updates. The canonical key remains `template_id:binding_hash` everywhere durable.
 
-## Scope and Clock Semantics
+## Reference Mapping and Card Format
 
-The implementation stamps the existing effective-priority policy once, descending, with stable composition-order ties. Positions are zero-based. Identity remains `template_id:binding_hash`; adding display-only places does not alter bindings or hashes. Joint beats refer back to those same ranked parent cards. No presence or `co_located` guards were added.
+Cards show `<template_id>:<first 8 hash characters>`, deterministically lengthened only for collisions within the rendered selection. Both seats use the same mapping. Runtime staging and both commits normalize rendered handles before canonical validation; canonical IDs remain accepted. Unknown handles, unrendered handles, and duplicate canonical/handle decisions raise errors. Replacement-tag validation sees the same handle-to-binding mapping.
 
-Migration **122** adds an accepted proposal snapshot on `narrative_chunks` and rendered card data on `orrery_prompt_exposures`, and admits the `joint_beat` exposure kind. These are accepted-turn audit records; there is no pending-proposal ledger or rearm machinery. Only the disposable QA clone and test-owned disposable databases were migrated. The coordinator must apply 122 at land time.
+```text
+- [0] hide:85dcc9f3 Elian Rook at Lantern Quay Memorial Hall: Go dark and reduce signal exposure
+- [3] check_on_dependent:02e54df4 Ren Vale at Lantern Quay Memorial Hall → Dr. Sera Vey: Reach out through customary channels
+```
 
-Cards show **evaluated_at**, the diegetic evaluation time, not an invented pre-acceptance occurrence time. Both runs evaluated the original anchor at `2189-10-17T22:37:00+00:00` (the same instant as `18:37:00-04:00` in database sessions). `generated_at` remains wall-clock provenance.
+Unknown places are omitted; a target's place appears only when known and different from the actor's. A card evaluated on an earlier turn appends ` · evaluated <clock face>` through `nexus/util/clock_face.py`. Current-turn cards omit the timestamp; durable records keep `evaluated_at` (not an invented occurrence time). Joint parents each use the same card shape and their existing rank.
 
-Some actors have no stored location. The cards explicitly show `place=unknown` or `target_place=unknown` for those records. They do not infer location from presence or prose. For example, the source has NULL current_location for Tomas Quill, Ora Pell, Kessa Brin, and Ressa Morn. Thus this slice renders all available canonical place names; it cannot supply names absent from the corpus.
+| #903 Rendered Block Accounting | Original | Amended |
+|---|---:|---:|
+| Imminent Activity | 657 | 264 |
+| Scene Pressure | 431 | 316 |
+| Joint Beats | 306 | 148 |
+| **Total Per Seat** | **1,394** | **728** |
 
-## Matched Inputs and Isolation
+This is a **666-token reduction per seat (47.8%)**, using `local_text_counter` and `measure_blocks` with the saved model's declared tokenizer. The original formatter at `67bf8527` and current formatter receive the same saved card payload. This measures renderer-owned blocks, including their instructions and separators; it does not claim provider usage or system/schema framing. [Token receipt](live/replay-token-counts.json), [reference mapping and replayed Gaia rulings](live/replay-reference-mapping.json), [writer cards](after-writer-cards.txt), [Gaia cards](after-gaia-cards.txt).
+
+## Persistence, Audit, and Commit Precedence
+
+- `nexus/agents/orrery/cards.py:16` selects the existing ranked cards and joint parents. `turn_cycle.py` freezes the ordered `(kind, proposal_id)` keys before rendering and stages that exact selection. Changed acceptance-time caps cannot change it.
+- `events.py` persists the selection inside migration 122's existing proposal JSONB and writes exposures in the selected order. No additional schema column or tunable is required. Migration 122's comment documents the selection.
+- `audit.py` joins the saved selection with ordinality, so a repeated joint parent stays at its actual prompt occurrence. Tests compare ordered sequences, not sets.
+- `backstage.py` returns the rendered proposal sequence as `rows` and the full ranked inventory separately as `inventory`. The existing drawer uses the primary list and a native disclosure for the secondary list, without a new visible label. Canonical keys and evaluation times remain available on row hover and in the response.
+- `events.py:_commit_order` applies descending position (ascending effective rank): lower-priority proposals first, highest-ranked scalar write last. Each replacement executes in its proposal's slot. Unranked historical drafts retain their serialized commit order.
+
+| Replay Evidence | Sync | Async |
+|---|---|---|
+| Ordered Exposure Rows | [11 rows](live/replay-sync-exposures.json) | [11 rows](live/replay-async-exposures.json) |
+| Elian's Audit Response | [actor 4](live/replay-sync-audit-4.json) | [actor 4](live/replay-async-audit-4.json) |
+| Tam's Audit Response | [actor 16](live/replay-sync-audit-16.json) | [actor 16](live/replay-async-audit-16.json) |
+| Backstage Sequence and Inventory | [response](live/replay-sync-backstage.json) | [response](live/replay-async-backstage.json) |
+| Canonical Adjudication Log | [rows](live/replay-sync-adjudications.json) | [rows](live/replay-async-adjudications.json) |
+| Ren's Final Activity | [SQL result](live/replay-sync-ren.json) | [SQL result](live/replay-async-ren.json) |
+
+Both Ren receipts read `preparing a qualified status inquiry regarding Dr. Sera Vey`. The saved paid after-turn fixture is [after-draft.json](live/after-draft.json). The old `comparison.json` and original audit responses are historical: their original membership checks did **not** prove the ordered parity now required.
+
+Visual QA renders the actual `BackstageDrawer` with the real replay response, using React server rendering and the built stylesheet. Chromium confirms seven primary rows and 23 rows behind the native disclosure. This is component QA, not a live gameplay UI run. The temporary static server used free lane 8015 and was stopped; no gateway or provider was started during this amendment.
+
+![Rendered Sequence](backstage-rendered.png)
+![Expanded Inventory](backstage-inventory.png)
+
+## Isolation Receipts
+
+Every replay target was a disposable `qa640_781_replay_*` clone of `save_04`. Each write path first proved `SELECT current_database()`; test fixtures owned their disposable databases. All replay databases were dropped by their context managers. Source counts were read with `default_transaction_read_only=on` before and after; both show **46 narrative chunks, max ID 49, 23 characters**.
+
+```sql
+SELECT current_database(),
+       (SELECT count(*) FROM narrative_chunks) AS narrative_chunks,
+       (SELECT max(id) FROM narrative_chunks) AS max_chunk_id,
+       (SELECT count(*) FROM characters) AS characters;
+SELECT entity_id, name, current_activity FROM characters WHERE name='Ren Vale';
+```
+
+[Before source receipt](live/replay-source-before.json), [after source receipt](live/replay-source-after.json), [exact SQL and target identities](live/sql.jsonl). The following historical proof records the two paid turns authorized in the original order; the amendment made **zero** new paid calls.
+
+## Original Paid Turns (Historical)
 
 | Item | Before | After |
 |---|---|---|
@@ -28,9 +76,9 @@ Some actors have no stored location. The cards explicitly show `place=unknown` o
 
 The inherited pending draft and selected frontier choice were archived and cleared on the clone before each continuation. The original save was read-only. `SELECT current_database()` verified each evidence connection and each paid dispatch; gameplay routing rejected every database except the clone, with maintenance `postgres` read-only. The isolated gateway used **8015**. It is stopped, and the hand-created clone has been dropped. `save_04` still has **46 narrative chunks, max ID 49, and 23 characters**. These counts are the requested safeguard, not a claim of byte-for-byte equality.
 
-## Rendered Cards Side by Side
+## Original Rendered Cards Side by Side
 
-These are the actual rendered data lines; only hashes are abbreviated below. The writer and Gaia card sections were byte-equal within each run. Full data lines are in [before-cards.txt](before-cards.txt) and [after-cards.txt](after-cards.txt). Complete prompts, system prompts, assembly payloads, approvals, and raw SQL receipts are retained in [evidence.zip](evidence.zip).
+These are the actual rendered data lines; only hashes are abbreviated below. The writer and Gaia card sections were byte-equal within each run. The original complete card blocks are preserved for [before writer](before-skald_writer-original-cards.txt), [before Gaia](before-gaia-original-cards.txt), [after writer](after-skald_writer-original-cards.txt), and [after Gaia](after-gaia-original-cards.txt). These historical prompts precede the amendments. Current replay rendering is [after-cards.txt](after-cards.txt); no new paid adjudication was requested.
 
 ### Orrery Imminent Activity
 
@@ -57,7 +105,7 @@ These are the actual rendered data lines; only hashes are abbreviated below. The
 |---|---|
 | - [crossed] Elian Rook &amp; Tam Oris: check_on_dependent &lt;-&gt; surveil (check_on_dependent:b141c5fd… / surveil:31b0006f…) | - [crossed] Elian Rook &amp; Tam Oris: check_on_dependent &lt;-&gt; surveil (check_on_dependent:b141c5fd… / surveil:31b0006f…); forward: position=2; actor=Elian Rook; place=Lantern Quay Memorial Hall; target=Tam Oris; target_place=Lantern Quay Memorial Hall; evaluated_at=2189-10-17T22:37:00+00:00; reverse: position=10; actor=Tam Oris; place=Lantern Quay Memorial Hall; target=Elian Rook; target_place=Lantern Quay Memorial Hall; evaluated_at=2189-10-17T22:37:00+00:00 |
 
-## Exposure Rows Side by Side
+## Original Exposure Rows Side by Side
 
 Positions for main and joint proposal exposures are the persisted global proposal ranks. `joint_beat_position` separately records the beat’s position in its section. A parent shown in both sections has two exposure kinds; this is not two separate proposals. There are six distinct exposed proposal identities after the change.
 
@@ -77,7 +125,7 @@ Positions for main and joint proposal exposures are the persisted global proposa
 
 Before, the Elian→Tam `check_on_dependent` and Tam→Elian `surveil` IDs were rendered in the joint-beat block, and Gaia explicitly deferred both, but neither had an exposure row. Afterward, the joint records have parent positions **2** and **10**, with the same names and evaluation time as the rendered card. Position 2 is also shown among the five main cards; position 10 is exposed only through the joint beat.
 
-## Gaia Adjudications Side by Side
+## Original Gaia Adjudications Side by Side
 
 | Before | After |
 |---|---|
@@ -89,114 +137,91 @@ Before, the Elian→Tam `check_on_dependent` and Tam→Elian `surveil` IDs were 
 
 Before, the debt card was misattributed to Mara’s Wickglass obligation. Afterward, Gaia identified **Ivo’s debt to Ressa** and voided the unsuitable dead-drop proposal. Gaia also replaced Ren’s proposed dependent check with a qualified inquiry about Dr. Sera Vey. It still deferred Elian’s outreach; Tam’s joint-beat surveillance was ratified by omission. These are observations from one matched before/after pair, not evidence of a general acceptance-rate improvement.
 
-## Read-Side and Persistence Proof
+## Final Gates and Stop-Report
 
-- `resolver.py:2740` computes the sole effective-priority sequence; `resolver.py:2772` resolves display names and places without changing identity.
-- `logon_utility.py:136` renders stable identity fields; the imminent, pressure, and joint blocks use it at lines 2699, 2722, and 2794. JSONB key order cannot change the rendered name order.
-- `events.py:748` and `events.py:1027` persist the accepted snapshot on the sync and async paths. `events.py:1800` logs the same ranked drafts, including each displayed joint parent.
-- `audit.py:1688` includes joint exposures and reads snapshotted bindings even if Gaia deferred or voided the proposal and no resolution row exists.
-- `backstage.py:582` reads the accepted snapshot without re-ranking. The existing `BackstageDrawer.tsx:238` maps the returned rows in that order. No `ui/` source changed.
+Merged `origin/main` at `794e5a85` in `ba7e7b2e`. PostgreSQL, Backstage, Black, replay, TypeScript, and the UI build pass. The offline gate has **one non-exempt failure**, so this branch is **not gate-green and was not pushed**. No merge or paid provider call followed.
 
-The live checks read both complete `cognition_trace` results and `build_backstage_turn` from the accepted after turn under a read-only transaction. Assertions compared every logged card’s formatted identity against **both saved seat prompts**, compared main-card IDs against the first five persisted positions, compared all Backstage IDs/positions against the full snapshot, and confirmed both joint parents in both actors’ audit traces. All passed; [comparison.json](comparison.json) contains the parity receipt and the structured comparison.
+`tests/test_lore/test_two_pass_pipeline.py:1073` asserts `len(prompt.split()) < 700`; the merged `prompts/storyteller_gaia.md` has 753 words. Both files are byte-identical to `origin/main`, proved in [main-gate-receipt.txt](main-gate-receipt.txt). Neither the prompt nor the gate was changed by this amendment. The frozen order forbids edits to `prompts/`; weakening the independent concision gate is not an implementation fix. This is outside #885, and no #885 exemption was needed in the passing PostgreSQL selection.
 
-```sql
-SELECT current_database();
-SELECT c.entity_id, c.name, c.current_location, p.name AS place_name
-FROM characters c LEFT JOIN places p ON p.id=c.current_location
-ORDER BY c.entity_id;
-
-SELECT kind, proposal_id, position, card
-FROM orrery_prompt_exposures
-WHERE tick_chunk_id = 50
-ORDER BY kind, position;
-
-SELECT current_database(),
-       (SELECT count(*) FROM narrative_chunks) AS narrative_chunks,
-       (SELECT max(id) FROM narrative_chunks) AS max_chunk_id,
-       (SELECT count(*) FROM characters) AS characters;
-```
-
-## Exact Test Commands and Output
-
-All commands ran from this worktree with the shared interpreter. Import proof printed `/Users/pythagor/nexus/.claude/worktrees/781-card-identity/nexus/__init__.py`. Full final logs are in [test-results.txt](test-results.txt). The targeted PostgreSQL gate actually ran its tests with **no skips**. No #885 exemptions were needed. The offline suite’s 821 skips are its normal PostgreSQL/live-inference gates.
+Before the final runs, the first offline attempt caught incomplete legacy card fixtures and the new module missing from the reachability registry; those were corrected. The first post-merge PostgreSQL selection found one more placeholder proposal in the recall fixture; it now uses a real `OrreryTickProposal`. Both hooks passed on the implementation commit after historical model pins were annotated in two pre-existing, ignored `.nexus/` report helpers. All final commands below ran from this worktree with the proven shared interpreter. Offline skips are the normal database/provider gates, not evidence for PostgreSQL.
 
 ```sh
 env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
 ```
 ```text
-2656 passed, 821 skipped, 9 warnings in 101.91s (0:01:41)
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_two_pass_pipeline.py::test_gaia_prompt_is_concise_and_self_contained
+1 failed, 2662 passed, 850 skipped, 9 warnings in 103.08s (0:01:43)
 ```
 
 ```sh
 env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery tests/test_lore -k 'card or exposure or proposal or rank or joint or imminent or pressure'
 ```
 ```text
-41 passed, 1808 deselected, 7 warnings in 6.82s
-```
-
-```sh
-NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_card_identity.py
-```
-```text
-3 passed, 5 warnings in 2.76s
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+49 passed, 1808 deselected, 7 warnings in 10.97s
 ```
 
 ```sh
 env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api/test_backstage_endpoints_pg.py
 ```
 ```text
-8 passed, 7 warnings in 3.28s
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 7 warnings in 2.66s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
 
 ```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_resolver.py tests/test_orrery/test_catalog.py
-```
-```text
-121 passed in 0.84s
-```
-
-```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery tests/test_lore -k 'card or exposure or proposal or rank or joint or imminent or pressure'
-```
-```text
-35 passed, 6 skipped, 1808 deselected, 7 warnings in 3.85s
-```
-
-```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py
-```
-```text
-37 passed in 6.87s
-```
-
-The initial offline run caught the new QA script missing from the reachability operator registry. A later run caught legacy fixture name expectations and the generated catalog needing migration 122 listed. Those were corrected; the full final offline run above has zero failures. The new tests use the real resolver, both PostgreSQL commit paths, prompt formatter, audit, and Backstage; no new mocks or paid test calls were added.
-
-```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/lore/logon_utility.py nexus/agents/orrery/{audit,backstage,events,history,resolver}.py tests/test_api/test_backstage_endpoints_pg.py tests/test_orrery/{test_ambient,test_card_identity,test_resolver}.py scripts/qa_shift/card_identity_probe.py
+git diff --diff-filter=ACM --name-only -z origin/main -- '*.py' | xargs -0 /Users/pythagor/nexus/.venv/bin/python -m black --check
 ```
 ```text
 All done! ✨ 🍰 ✨
-11 files would be left unchanged.
+17 files would be left unchanged.
 ```
-
-Both implementation pre-commit hooks passed: `Regenerate Orrery package catalog` and `Validate NEXUS config and model-ID drift`. No frontend build was run because no `ui/` files changed.
-
-## Live Commands
 
 ```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/qa_shift/card_identity_probe.py clone
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/qa_shift/card_identity_probe.py up
-PYTHONPATH=$PWD NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 /Users/pythagor/nexus/.venv/bin/python -m nexus.cli continue --slot 4 --user-text 'I remain quiet for a moment, giving Calyx the space I promised.'
-PYTHONPATH=$PWD NEXUS_GATEWAY_PORT=8015 NEXUS_API_URL=http://127.0.0.1:8015 /Users/pythagor/nexus/.venv/bin/python -m nexus.cli down
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/qa_shift/card_identity_probe.py replay
+```
+```text
+sync: canonical adjudications accepted; 11 ordered exposures; Backstage [0, 1, 2, 3, 4, 2, 10]; Ren replacement wins
+async: canonical adjudications accepted; 11 ordered exposures; Backstage [0, 1, 2, 3, 4, 2, 10]; Ren replacement wins
+Card blocks: 1394 -> 728 tokens per seat
+save_04 unchanged: 46 chunks, max 49, 23 characters; disposable replay databases dropped; no provider calls
 ```
 
-The up/continue/down sequence ran once before and once after implementation; the clone was restored between them and migration 122 was applied directly to the restored clone. Each generated draft was accepted through `POST /api/narrative/approve` with logical slot 4, its captured session ID, and `commit=true`. Full CLI text and approval responses are in the archive.
+```sh
+npm --prefix ui run check
+```
+```text
 
-## Limits and Coordinator Questions
+> nexus-ui@1.0.0 check
+> tsc
 
-- `prompts/*.md` is untouched. The coordinator may want one sentence clarifying that these are off-screen proposals and `evaluated_at` is not a committed occurrence timestamp.
-- Who will supply missing canonical locations? This slice displays unknown locations explicitly and does not infer them or repair the corpus.
-- The pending-proposal ledger and rearm predicates remain deferred as ordered. Migration 122 still needs coordinator deployment.
-- Auxiliary experience-renderer requests were deliberately blocked before payment by the QA authorization guard. This limit does not affect the four completed writer/Gaia requests or the accepted card/exposure evidence, and this run does not validate background experience rendering or incremental embedding.
+```
+
+```sh
+npm --prefix ui run build
+```
+```text
+✓ built in 2.48s
+
+PWA v1.0.3
+mode      generateSW
+precache  22 entries (2274.42 KiB)
+files generated
+  ../dist/public/sw.js
+  ../dist/public/workbox-40c80ae4.js
+```
+
+## Coordinator Questions and Deferred Work
+
+1. Resolve the inherited Gaia prompt concision failure: the coordinator owns prompt prose and must reconcile the 753-word prompt with the existing `<700` gate. Then rerun the offline gate before pushing this branch to [PR #924](https://github.com/pythagorakase/nexus/pull/924).
+2. Apply migration 122 at landing. No fleet or template migration was performed. Every new column remains commented.
+3. Add the planned Gaia explanatory sentence at landing if still wanted; `prompts/` and `nexus.toml` have no branch diff against merged main.
+
+The durable pending-proposal ledger, rearm predicates, corpus location repair, and roster presence are outside this slice. No `co_located` guards were added. The two original paid turns remain the only paid proof; this amendment is deterministic replay, not new inference-quality evidence.
 
 Authored by Codex (GPT-6 Astra).

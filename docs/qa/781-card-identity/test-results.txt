@@ -193,3 +193,394 @@ $ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test
 $ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_reachability.py
 .....................................                                    [100%]
 37 passed in 6.87s
+
+=== Coordinator Amendments ===
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_card_identity.py tests/test_lore/test_turn_cycle.py
+.ss......................                                                [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+23 passed, 2 skipped, 5 warnings in 0.91s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_card_identity.py
+..........                                                               [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+10 passed, 5 warnings in 5.88s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_logon_prompt_formatting.py
+.........................................                                [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+41 passed, 5 warnings in 0.63s
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_bleed.py tests/test_reachability.py
+............................................................             [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+60 passed, 5 warnings in 7.45s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_card_identity.py tests/test_api/test_backstage_endpoints_pg.py
+...................                                                      [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+tests/test_api/test_backstage_endpoints_pg.py::test_backstage_gate_both_arms
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_api/test_backstage_endpoints_pg.py::test_backstage_gate_both_arms
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+19 passed, 7 warnings in 8.46s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+$ npm --prefix ui ci
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+npm warn deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead
+npm warn deprecated source-map@0.8.0-beta.0: The work that was done in this beta branch won't be included in future versions
+
+added 957 packages, and audited 958 packages in 3s
+
+27 vulnerabilities (2 low, 8 moderate, 16 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
+........................................................................ [  2%]
+............................ssssssssssssssssssssssssss.......ss.sss....s [  4%]
+....................................................sss................. [  6%]
+....................ssssssss......s...ssssssssssss...sssssss............ [  8%]
+ssssssssssssssssssss.....sssssssssssssssssss..sss...ssssssssssssssssssss [ 10%]
+s...ss.................................................................. [ 12%]
+.......................ssssss......ss.........s......................... [ 14%]
+.......s................................................................ [ 16%]
+.........................................ssssssssssssssssss............. [ 18%]
+.....s...s........................s......................ss............. [ 20%]
+.................s....s..........s..sssssssssssssssssssssssssssssss.ssss [ 22%]
+ssssssssss...........sssss................s.........ssssss..s........... [ 24%]
+...............................ss....ssssssss...............s........... [ 26%]
+.................................................................sssssss [ 28%]
+s...sssss...s......ssss................................................. [ 30%]
+........................F...............s...........s.....sss........... [ 32%]
+..ss..............sss................................................... [ 34%]
+........................................................................ [ 36%]
+.....ss................................ssssssssssss..................... [ 38%]
+............sss.......................sssss..........ss.........ssss.ss. [ 41%]
+..ssss...................sssssssssssssssssssssssssssssssssssssssssssssss [ 43%]
+ssssssssssss.....ssssssss..............sssssssssssssssssss.............. [ 45%]
+....sssssssssssssssss........................................ss......... [ 47%]
+.......ssss....sssssssssssss........ssssssssss..s.sssssssssssss...s..... [ 49%]
+........................................................................ [ 51%]
+........................................................................ [ 53%]
+......sssssssss......................................................... [ 55%]
+.sssssssssssssssssssssssssssss.......................................... [ 57%]
+.........ssssssssssssssssssssssssssssssssssssssssssss................... [ 59%]
+.s........................sssssssssssssssssssssssssss............sss.... [ 61%]
+.......ssss........................sssssssssssssssssssssss......sssss..s [ 63%]
+...................ssssssssssssssssssssssssssssssssssssssss............. [ 65%]
+........................................................................ [ 67%]
+.......................sssssss.......................................... [ 69%]
+...................................s...................ssss...s......... [ 71%]
+.................................ssssssssssssssssssssss................. [ 73%]
+................................sssssssssssss.s.........s....ssssssssss. [ 75%]
+....ss...............ssss......................................ss....sss [ 77%]
+ssssssss................................................................ [ 79%]
+...............ssssss........................ssssssssssss.............ss [ 82%]
+ssss..........s.....................................................ssss [ 84%]
+sssssssssssssssssssssssssss.....sssssssssssssssssss........s...ss....... [ 86%]
+..............s..........................ssssssssssss................... [ 88%]
+s....................................................................... [ 90%]
+.............ssssssss................................................... [ 92%]
+........ssssssssssss.................................................... [ 94%]
+..................................................s..s.................. [ 96%]
+...s...................................sssss............................ [ 98%]
+..................................sssssssssssssssssssss                  [100%]
+=================================== FAILURES ===================================
+________________ test_gaia_prompt_is_concise_and_self_contained ________________
+
+    def test_gaia_prompt_is_concise_and_self_contained() -> None:
+        prompt_path = Path(__file__).parents[2] / "prompts" / "storyteller_gaia.md"
+        prompt = prompt_path.read_text()
+        normalized_prompt = " ".join(prompt.split())
+
+        # Word count, not line count: the file keeps one line per paragraph, so
+        # line count no longer measures concision (currently ~500 words).
+>       assert len(prompt.split()) < 700
+E       assert 753 < 700
+E        +  where 753 = len(['##', 'Gaia', 'You', 'are', 'Gaia.', 'Two', ...])
+E        +    where ['##', 'Gaia', 'You', 'are', 'Gaia.', 'Two', ...] = <built-in method split of str object at 0x77471d3000>()
+E        +      where <built-in method split of str object at 0x77471d3000> = "## Gaia\n\nYou are Gaia.\n\nTwo dungeon masters run this table. Skald is the face — the voice at the table, the autho...t in the player's hands. The scene Gaia was handed is the freshest canon of all: she riffs off it, never against it.\n".split
+
+tests/test_lore/test_two_pass_pipeline.py:1073: AssertionError
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+nexus/api/storyteller.py:307
+  /Users/pythagor/nexus/.claude/worktrees/781-card-identity/nexus/api/storyteller.py:307: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+../../../.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_two_pass_pipeline.py::test_gaia_prompt_is_concise_and_self_contained
+1 failed, 2662 passed, 850 skipped, 9 warnings in 103.08s (0:01:43)
+
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery tests/test_lore -k 'card or exposure or proposal or rank or joint or imminent or pressure'
+.................................................                        [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+49 passed, 1808 deselected, 7 warnings in 10.97s
+
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api/test_backstage_endpoints_pg.py
+........                                                                 [100%]
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+tests/test_api/test_backstage_endpoints_pg.py::test_backstage_gate_both_arms
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_api/test_backstage_endpoints_pg.py::test_backstage_gate_both_arms
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 7 warnings in 2.66s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+$ git diff --diff-filter=ACM --name-only -z origin/main -- '*.py' | xargs -0 /Users/pythagor/nexus/.venv/bin/python -m black --check
+All done! ✨ 🍰 ✨
+17 files would be left unchanged.
+
+$ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/qa_shift/card_identity_probe.py replay
+2026-09-24 15:11:36,074 - nexus.migrate - INFO - Migrating qa640_781_replay_0e1b3dc9f277...
+2026-09-24 15:11:36,095 - nexus.migrate - INFO -   Applied: 122_orrery_card_identity
+2026-09-24 15:11:37,102 - nexus.migrate - INFO - Migrating qa640_781_replay_f2cd6fa807ee...
+2026-09-24 15:11:37,122 - nexus.migrate - INFO -   Applied: 122_orrery_card_identity
+sync: canonical adjudications accepted; 11 ordered exposures; Backstage [0, 1, 2, 3, 4, 2, 10]; Ren replacement wins
+async: canonical adjudications accepted; 11 ordered exposures; Backstage [0, 1, 2, 3, 4, 2, 10]; Ren replacement wins
+Card blocks: 1394 -> 728 tokens per seat
+save_04 unchanged: 46 chunks, max 49, 23 characters; disposable replay databases dropped; no provider calls
+
+$ npm --prefix ui run check
+
+> nexus-ui@1.0.0 check
+> tsc
+
+
+$ npm --prefix ui run build
+
+> nexus-ui@1.0.0 build
+> vite build
+
+vite v5.4.20 building for production...
+transforming...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 11 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js (9:18): Use of eval in "node_modules/@arwes/frames/build/esm/internal/formatFrameDimension.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+✓ 2810 modules transformed.
+rendering chunks...
+computing gzip size...
+../dist/public/registerSW.js                                        0.13 kB
+../dist/public/manifest.webmanifest                                 0.53 kB
+../dist/public/index.html                                           2.65 kB │ gzip:   1.18 kB
+../dist/public/assets/KaTeX_Size3-Regular-CTq5MqoE.woff             4.42 kB
+../dist/public/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2            4.93 kB
+../dist/public/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2            5.21 kB
+../dist/public/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2            5.47 kB
+../dist/public/assets/KaTeX_Size4-Regular-BF-4gkZK.woff             5.98 kB
+../dist/public/assets/KaTeX_Size2-Regular-oD1tc_U0.woff             6.19 kB
+../dist/public/assets/KaTeX_Size1-Regular-C195tn64.woff             6.50 kB
+../dist/public/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2      6.91 kB
+../dist/public/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2         6.91 kB
+../dist/public/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf              7.59 kB
+../dist/public/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff       7.66 kB
+../dist/public/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff          7.72 kB
+../dist/public/assets/KaTeX_Script-Regular-D3wIWfF6.woff2           9.64 kB
+../dist/public/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2       10.34 kB
+../dist/public/assets/KaTeX_Size4-Regular-DWFBv043.ttf             10.36 kB
+../dist/public/assets/KaTeX_Script-Regular-D5yQViql.woff           10.59 kB
+../dist/public/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2         11.32 kB
+../dist/public/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2            11.35 kB
+../dist/public/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf             11.51 kB
+../dist/public/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2        12.03 kB
+../dist/public/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2          12.22 kB
+../dist/public/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf             12.23 kB
+../dist/public/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff        12.32 kB
+../dist/public/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf       12.34 kB
+../dist/public/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf          12.37 kB
+../dist/public/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff          13.21 kB
+../dist/public/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff             13.30 kB
+../dist/public/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2      13.57 kB
+../dist/public/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff         14.11 kB
+../dist/public/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff           14.41 kB
+../dist/public/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff       16.03 kB
+../dist/public/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2         16.40 kB
+../dist/public/assets/KaTeX_Math-Italic-t53AETM-.woff2             16.44 kB
+../dist/public/assets/KaTeX_Script-Regular-C5JkGWo-.ttf            16.65 kB
+../dist/public/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2         16.78 kB
+../dist/public/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2             16.99 kB
+../dist/public/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff          18.67 kB
+../dist/public/assets/KaTeX_Math-Italic-DA0__PXp.woff              18.75 kB
+../dist/public/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff          19.41 kB
+../dist/public/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf         19.44 kB
+../dist/public/assets/KaTeX_Fraktur-Regular-CB_wures.ttf           19.57 kB
+../dist/public/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf              19.58 kB
+../dist/public/assets/KaTeX_Main-Italic-BMLOBm91.woff              19.68 kB
+../dist/public/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf          22.36 kB
+../dist/public/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf            24.50 kB
+../dist/public/assets/KaTeX_Main-Bold-Cx986IdX.woff2               25.32 kB
+../dist/public/assets/KaTeX_Main-Regular-B22Nviop.woff2            26.27 kB
+../dist/public/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf        27.56 kB
+../dist/public/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2             28.08 kB
+../dist/public/assets/KaTeX_Main-Bold-Jm3AIy58.woff                29.91 kB
+../dist/public/assets/KaTeX_Main-Regular-Dr94JaBh.woff             30.77 kB
+../dist/public/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf           31.20 kB
+../dist/public/assets/KaTeX_Math-Italic-flOr_0UB.ttf               31.31 kB
+../dist/public/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf           32.97 kB
+../dist/public/assets/KaTeX_AMS-Regular-DMm9YOAa.woff              33.52 kB
+../dist/public/assets/KaTeX_Main-Italic-3WenGoN9.ttf               33.58 kB
+../dist/public/assets/KaTeX_Main-Bold-waoOVXN0.ttf                 51.34 kB
+../dist/public/assets/KaTeX_Main-Regular-ypZvNtVU.ttf              53.58 kB
+../dist/public/assets/KaTeX_AMS-Regular-DRggAlZN.ttf               63.63 kB
+../dist/public/assets/r1c1-CzjRNMRW.png                            95.61 kB
+../dist/public/assets/index-CHWKKh0I.css                          195.66 kB │ gzip:  35.85 kB
+../dist/public/assets/index-BsdzhpXQ.js                         1,732.70 kB │ gzip: 517.75 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.48s
+
+PWA v1.0.3
+mode      generateSW
+precache  22 entries (2274.42 KiB)
+files generated
+  ../dist/public/sw.js
+  ../dist/public/workbox-40c80ae4.js

@@ -1,0 +1,89 @@
+{
+  "handles": {
+    "check_on_dependent:02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490": "check_on_dependent:02e54df4",
+    "check_on_dependent:19cf0e8cced5d13a0a1d5cecf4b68ffa82e9c8bcb34f6224366667719d789ee0": "check_on_dependent:19cf0e8c",
+    "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e": "check_on_dependent:b141c5fd",
+    "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8": "hide:85dcc9f3",
+    "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b": "honor_debt:ff450d8c",
+    "surveil:1e994ef50899a52b1d3be1f8d04e75f844f38506517bb0047439ad8073365c45": "surveil:1e994ef5",
+    "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2": "surveil:31b0006f",
+    "surveil:5c8f9b44c7db6d471b98e007d3b1e3a1ea5e9813311970f8e3b36e6940197841": "surveil:5c8f9b44",
+    "surveil:92cf3d4abbbd0623849b8c73c3af3820b0426fde855eeb6fe7e32ca2d83ddac6": "surveil:92cf3d4a",
+    "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838": "surveil:93626842"
+  },
+  "rendered_adjudications": [
+    {
+      "note": "Elian\u2019s exposure remains real, but she has not chosen a withdrawal move; her present boundary and Tam\u2019s paused process should not be spent off-screen.",
+      "action": "defer",
+      "proposal_id": "hide:85dcc9f3"
+    },
+    {
+      "note": "Ivo\u2019s debt cannot be serviced by dead-drop: he owes Ressa an in-person, public-to-her accounting before dawn.",
+      "action": "void",
+      "proposal_id": "honor_debt:ff450d8c"
+    },
+    {
+      "note": "Elian may choose to offer Tam contact, but Tam\u2019s need for quiet and their suspended shelter decision make an automatic outreach premature.",
+      "action": "defer",
+      "proposal_id": "check_on_dependent:b141c5fd"
+    },
+    {
+      "note": "Ren begins a qualified inquiry into Dr. Sera Vey\u2019s present status, without treating her as a dependent or assuming a location or culpability.",
+      "action": "replace",
+      "proposal_id": "check_on_dependent:02e54df4",
+      "replacement_event_type": "intel_reviewed",
+      "replacement_state_delta": {
+        "entity_tags_add": [],
+        "entity_tags_remove": [],
+        "entity_tags_target_add": [],
+        "entity_tags_target_remove": [],
+        "character_current_activity": "preparing a qualified status inquiry regarding Dr. Sera Vey",
+        "entity_pair_tags_target_clear_inbound": []
+      }
+    },
+    {
+      "note": "Ivo will not convert his remorse or proximity into surveillance of Elian; he remains responsible for his own dawn accounting.",
+      "action": "void",
+      "proposal_id": "surveil:93626842"
+    }
+  ],
+  "canonical_adjudications": [
+    {
+      "proposal_id": "hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+      "action": "defer",
+      "note": "Elian\u2019s exposure remains real, but she has not chosen a withdrawal move; her present boundary and Tam\u2019s paused process should not be spent off-screen.",
+      "replacement_state_delta": null,
+      "replacement_event_type": null
+    },
+    {
+      "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+      "action": "void",
+      "note": "Ivo\u2019s debt cannot be serviced by dead-drop: he owes Ressa an in-person, public-to-her accounting before dawn.",
+      "replacement_state_delta": null,
+      "replacement_event_type": null
+    },
+    {
+      "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+      "action": "defer",
+      "note": "Elian may choose to offer Tam contact, but Tam\u2019s need for quiet and their suspended shelter decision make an automatic outreach premature.",
+      "replacement_state_delta": null,
+      "replacement_event_type": null
+    },
+    {
+      "proposal_id": "check_on_dependent:02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+      "action": "replace",
+      "note": "Ren begins a qualified inquiry into Dr. Sera Vey\u2019s present status, without treating her as a dependent or assuming a location or culpability.",
+      "replacement_state_delta": {
+        "character.current_activity": "preparing a qualified status inquiry regarding Dr. Sera Vey"
+      },
+      "replacement_event_type": "intel_reviewed"
+    },
+    {
+      "proposal_id": "surveil:93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+      "action": "void",
+      "note": "Ivo will not convert his remorse or proximity into surveillance of Elian; he remains responsible for his own dawn accounting.",
+      "replacement_state_delta": null,
+      "replacement_event_type": null
+    }
+  ]
+}

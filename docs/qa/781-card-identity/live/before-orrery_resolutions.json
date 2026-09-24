@@ -1,0 +1,770 @@
+[
+  {
+    "id": 105,
+    "tick_chunk_id": 50,
+    "template_id": "hide",
+    "binding_hash": "85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8",
+    "actor_entity_id": 4,
+    "priority": 84,
+    "magnitude": "0.360",
+    "state_delta": {
+      "character.current_activity": "reducing signal exposure"
+    },
+    "brief": "Elian Rook trims their signal down to almost nothing \u2014 no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there.",
+    "event_ids": [
+      180
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 84/30, magnitude 0.36/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Elian Rook trims their signal down to almost nothing \u2014 no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 108,
+    "tick_chunk_id": 50,
+    "template_id": "drink",
+    "binding_hash": "850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208",
+    "actor_entity_id": 8,
+    "priority": 24,
+    "magnitude": "0.100",
+    "state_delta": {
+      "need.fulfill": {
+        "type": "thirst",
+        "quality": "routine",
+        "discharge_debt": 9999
+      },
+      "character.current_activity": "drinking routinely"
+    },
+    "brief": "Sister Calyx drinks because the body has been quietly asking, then returns to the shape of the hour.",
+    "event_ids": [
+      183
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 24/30, magnitude 0.1/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 109,
+    "tick_chunk_id": 50,
+    "template_id": "drink",
+    "binding_hash": "9b2c010e4a4c1537cafa7e7f2373fa55ff656698e537bc3ee8e2efdbf76a87e1",
+    "actor_entity_id": 11,
+    "priority": 24,
+    "magnitude": "0.100",
+    "state_delta": {
+      "need.fulfill": {
+        "type": "thirst",
+        "quality": "routine",
+        "discharge_debt": 9999
+      },
+      "character.current_activity": "drinking routinely"
+    },
+    "brief": "Vela Nash drinks because the body has been quietly asking, then returns to the shape of the hour.",
+    "event_ids": [
+      184
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 24/30, magnitude 0.1/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 106,
+    "tick_chunk_id": 50,
+    "template_id": "stroll",
+    "binding_hash": "a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68",
+    "actor_entity_id": 5,
+    "priority": 12,
+    "magnitude": "0.080",
+    "state_delta": {
+      "character.current_activity": "pacing the near ground"
+    },
+    "brief": "Niko Rell moves through whatever ground is nearest \u2014 corridors, courtyard, the length of a deck or a lane \u2014 walking off the restlessness that sitting still breeds.",
+    "event_ids": [
+      181
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 12/30, magnitude 0.08/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 114,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "93626842f6a068b8dd938f29dc37571caf342204b7ff22142e501dacc4271838",
+    "actor_entity_id": 3,
+    "priority": 48,
+    "magnitude": "0.240",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 4,
+              "claim_awareness_ids": [
+                6
+              ]
+            }
+          ],
+          "claim_id": 4,
+          "claim_awareness_ids": [
+            6
+          ]
+        }
+      },
+      "character.current_activity": "surveilling without contact"
+    },
+    "brief": "Ivo Senn keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+    "event_ids": [
+      189
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.24/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Ivo Senn keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 115,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "19b8dd6dbf3d6d7fa7307036406c3a1688bdaef1e43e0bb0e9cfdd6e70aef67e",
+    "actor_entity_id": 3,
+    "priority": 48,
+    "magnitude": "0.240",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 5,
+              "claim_awareness_ids": [
+                7
+              ]
+            }
+          ],
+          "claim_id": 5,
+          "claim_awareness_ids": [
+            7
+          ]
+        }
+      },
+      "character.current_activity": "surveilling without contact"
+    },
+    "brief": "Ivo Senn keeps Ressa Morn in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+    "event_ids": [
+      190
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.24/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Ivo Senn keeps Ressa Morn in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 116,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "3f6253bda91dae1d364d3b02ff94faf52e70e1b097469d7f27d659d7c1e1592f",
+    "actor_entity_id": 4,
+    "priority": 48,
+    "magnitude": "0.440",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 6,
+              "claim_awareness_ids": [
+                8
+              ]
+            }
+          ],
+          "claim_id": 6,
+          "claim_awareness_ids": [
+            8
+          ]
+        }
+      },
+      "character.current_activity": "keeping tabs from a distance"
+    },
+    "brief": "Elian Rook keeps tabs on Dax Morrow without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact.",
+    "event_ids": [
+      191
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.44/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Elian Rook keeps tabs on Dax Morrow without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 117,
+    "tick_chunk_id": 50,
+    "template_id": "make_acquaintance",
+    "binding_hash": "9e8a4f8844a26f4aa0a8d416c053d415740b02f031bf934a5a9c4a9ac4cbe4e2",
+    "actor_entity_id": 5,
+    "priority": 5,
+    "magnitude": "0.080",
+    "state_delta": {
+      "entity_pair_tags.add_inbound": [
+        "contact:social"
+      ],
+      "entity_pair_tags.add_outbound": [
+        "contact:social"
+      ]
+    },
+    "brief": "Niko Rell and Ren Vale keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.",
+    "event_ids": [
+      192
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": null,
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 111,
+    "tick_chunk_id": 50,
+    "template_id": "drink",
+    "binding_hash": "b299bdd9b2bab66a667ba0b960db27a76b88a0b5e95f6546da63074b9bef07f4",
+    "actor_entity_id": 16,
+    "priority": 24,
+    "magnitude": "0.100",
+    "state_delta": {
+      "need.fulfill": {
+        "type": "thirst",
+        "quality": "routine",
+        "discharge_debt": 9999
+      },
+      "character.current_activity": "drinking routinely"
+    },
+    "brief": "Tam Oris drinks because the body has been quietly asking, then returns to the shape of the hour.",
+    "event_ids": [
+      186
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 24/30, magnitude 0.1/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 113,
+    "tick_chunk_id": 50,
+    "template_id": "stroll",
+    "binding_hash": "cc4ec56ad20ed592eb0840c4c193cba78bc89b94d3df20830753723d19e1d564",
+    "actor_entity_id": 26,
+    "priority": 12,
+    "magnitude": "0.120",
+    "state_delta": {
+      "character.current_activity": "taking the night air"
+    },
+    "brief": "Ressa Morn steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves.",
+    "event_ids": [
+      188
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 12/30, magnitude 0.12/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 119,
+    "tick_chunk_id": 50,
+    "template_id": "check_on_dependent",
+    "binding_hash": "02e54df4fee2653f36739601b5332d1edbbbe1afc26fce645819bad95a386490",
+    "actor_entity_id": 6,
+    "priority": 55,
+    "magnitude": "0.220",
+    "state_delta": {
+      "character.current_activity": "checking in on a dependent"
+    },
+    "brief": "Ren Vale sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Dr. Sera Vey to say something real if they want to \u2014 and watches for what comes back.",
+    "event_ids": [
+      194
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 55/30, magnitude 0.22/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Ren Vale sends the kind of message they always send \u2014 brief, light in tone, asking nothing real but leaving the door open for Dr. Sera Vey to say something real if they want to \u2014 and watches for what comes back."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 118,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "b3cc725b505ed36ac637a7ff5f0a4dc9b0a5a1129d0379dca27b401778885fdf",
+    "actor_entity_id": 6,
+    "priority": 48,
+    "magnitude": "0.240",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 7,
+              "claim_awareness_ids": [
+                9
+              ]
+            }
+          ],
+          "claim_id": 7,
+          "claim_awareness_ids": [
+            9
+          ]
+        }
+      },
+      "character.current_activity": "surveilling without contact"
+    },
+    "brief": "Ren Vale keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+    "event_ids": [
+      193
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.24/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Ren Vale keeps Elian Rook in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 120,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "30591ec27f31a3af94c815de9c750da4a3bad83453c70797285598655f0162a1",
+    "actor_entity_id": 8,
+    "priority": 48,
+    "magnitude": "0.380",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 8,
+              "claim_awareness_ids": [
+                10
+              ]
+            }
+          ],
+          "claim_id": 8,
+          "claim_awareness_ids": [
+            10
+          ]
+        }
+      },
+      "character.current_activity": "collecting a proxy watcher report"
+    },
+    "brief": "Sister Calyx does not go near Ione Varr. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+    "event_ids": [
+      195
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.38/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Sister Calyx does not go near Ione Varr. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 121,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "969c007f9fdf7c44c49a29f895886b59c7acc8a3979783859a483358e847e300",
+    "actor_entity_id": 8,
+    "priority": 48,
+    "magnitude": "0.380",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 9,
+              "claim_awareness_ids": [
+                11
+              ]
+            }
+          ],
+          "claim_id": 9,
+          "claim_awareness_ids": [
+            11
+          ]
+        }
+      },
+      "character.current_activity": "collecting a proxy watcher report"
+    },
+    "brief": "Sister Calyx does not go near Orris Vale. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+    "event_ids": [
+      196
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.38/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Sister Calyx does not go near Orris Vale. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 122,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "a11016364c36ce81aad032b93d3190dafd3beb372652543a71cae61f47c50cca",
+    "actor_entity_id": 11,
+    "priority": 48,
+    "magnitude": "0.380",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 10,
+              "claim_awareness_ids": [
+                12
+              ]
+            }
+          ],
+          "claim_id": 10,
+          "claim_awareness_ids": [
+            12
+          ]
+        }
+      },
+      "character.current_activity": "collecting a proxy watcher report"
+    },
+    "brief": "Vela Nash does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.",
+    "event_ids": [
+      197
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.38/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Vela Nash does not go near Elian Rook. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 124,
+    "tick_chunk_id": 50,
+    "template_id": "make_acquaintance",
+    "binding_hash": "cd68bd64333450c04ac110444f74402b2a745cc56fe95056619e76ad1e55ce05",
+    "actor_entity_id": 16,
+    "priority": 5,
+    "magnitude": "0.080",
+    "state_delta": {
+      "entity_pair_tags.add_inbound": [
+        "contact:social"
+      ],
+      "entity_pair_tags.add_outbound": [
+        "contact:social"
+      ]
+    },
+    "brief": "Tam Oris and Len Aster keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.",
+    "event_ids": [
+      199
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": null,
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 123,
+    "tick_chunk_id": 50,
+    "template_id": "surveil",
+    "binding_hash": "7d2f5339743b75a1847811cb28c9c80ed4a72554493ac9c48bbc60886e24394e",
+    "actor_entity_id": 11,
+    "priority": 48,
+    "magnitude": "0.240",
+    "state_delta": {
+      "applied": {
+        "epistemics": {
+          "claims": [
+            {
+              "claim_id": 11,
+              "claim_awareness_ids": [
+                13
+              ]
+            }
+          ],
+          "claim_id": 11,
+          "claim_awareness_ids": [
+            13
+          ]
+        }
+      },
+      "character.current_activity": "surveilling without contact"
+    },
+    "brief": "Vela Nash keeps Tarin Quell in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.",
+    "event_ids": [
+      198
+    ],
+    "promotion_status": "promoted",
+    "promotion_verdict": {
+      "reason": "Deterministic promotion: priority 48/30, magnitude 0.24/0.35, state_delta=True, event_ids=1.",
+      "promote": true,
+      "perceptual_channel": null,
+      "perceptual_summary": "Vela Nash keeps Tarin Quell in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible."
+    },
+    "narration_status": "queued",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 110,
+    "tick_chunk_id": 50,
+    "template_id": "drink",
+    "binding_hash": "cbeef034c5cd3df5670c14327b2cc158b8ad86764fa9a95f42506ba71abf72d2",
+    "actor_entity_id": 15,
+    "priority": 24,
+    "magnitude": "0.100",
+    "state_delta": {
+      "need.fulfill": {
+        "type": "thirst",
+        "quality": "routine",
+        "discharge_debt": 9999
+      },
+      "character.current_activity": "drinking routinely"
+    },
+    "brief": "Unknown municipal-gray stranger drinks because the body has been quietly asking, then returns to the shape of the hour.",
+    "event_ids": [
+      185
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 24/30, magnitude 0.1/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 107,
+    "tick_chunk_id": 50,
+    "template_id": "upkeep",
+    "binding_hash": "f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f",
+    "actor_entity_id": 6,
+    "priority": 11,
+    "magnitude": "0.080",
+    "state_delta": {
+      "character.current_activity": "tidying their own space"
+    },
+    "brief": "Ren Vale tends whatever corner of the world is currently theirs \u2014 folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.",
+    "event_ids": [
+      182
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 11/30, magnitude 0.08/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  },
+  {
+    "id": 112,
+    "tick_chunk_id": 50,
+    "template_id": "recreate",
+    "binding_hash": "e7c73792cd250957e5c3917787fd0e8f7321c91bf41cc6ddc0e94eaf28176743",
+    "actor_entity_id": 19,
+    "priority": 9,
+    "magnitude": "0.080",
+    "state_delta": {
+      "character.current_activity": "taking a small pleasure"
+    },
+    "brief": "Ora Pell gives themselves a modest hour \u2014 a familiar comfort, an idle game, a stretch of doing nothing in particular \u2014 and does not apologize for it.",
+    "event_ids": [
+      187
+    ],
+    "promotion_status": "skipped",
+    "promotion_verdict": {
+      "reason": "Deterministic skip: resolution lacks content or salience threshold (priority 9/30, magnitude 0.08/0.35).",
+      "promote": false,
+      "perceptual_channel": null,
+      "perceptual_summary": null
+    },
+    "narration_status": "none",
+    "narration_chunk_id": null,
+    "last_offered_chunk_id": null,
+    "offer_count": 0,
+    "first_surfaced_chunk_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "used_chunk_id": null,
+    "use_count": 0
+  }
+]

@@ -1,0 +1,18 @@
+=== ORRERY IMMINENT ACTIVITY ===
+These are current-tick Orrery proposals. If you omit a proposal from orrery_adjudications, commit will ratify it. You remain sovereign: use defer to leave pressure unresolved, void when a proposal is definitively false, and replace when your structured updates or replacement_state_delta supersede it. A replacement only emits a world_event if you provide replacement_event_type. Refer only to proposal_id; do not rely on prose parsing.
+- honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b [Fulfill obligation through a dead-drop]: state_delta={'character.current_activity': 'servicing an old debt'}
+- hide:85dcc9f3819171e3e0ba0de152d371151c3b51cc44f39eb6803227245e505db8 [Go dark and reduce signal exposure]: state_delta={'character.current_activity': 'reducing signal exposure'}
+- stroll:a339b89d4d913c763526bd612c4b3b2b567321e0aa43e1db0523d256f4f8bd68 [Pace the near ground]: state_delta={'character.current_activity': 'pacing the near ground'}
+- upkeep:f0d332a17697376889d58e07ecd49fe80011da3efe965a306a33e4a8184f474f [Tidy what is theirs]: state_delta={'character.current_activity': 'tidying their own space'}
+- drink:850b31cf78d19363dab4022fe809fcf7fbcd12cdf2186153da90e1414b8df208 [Drink routinely from what is at hand]: state_delta={'character.current_activity': 'drinking routinely', 'need.fulfill': {'type': 'thirst', 'quality': 'routine', 'discharge_debt': 9999}}
+
+=== ORRERY SCENE PRESSURE ===
+These are Storyteller-mediated pressures involving current on-screen characters. Some may originate from off-screen actors; some may be present-character need pressure. You may adapt, delay, ignore, or incorporate them. Do not let Orrery decide what present characters do.
+- Follow the public pattern: Ivo Senn may have mapped the public pattern around Mara Vey. Use this only as Storyteller-controlled scene pressure or a future setup.
+- Reach out through customary channels: Ivo Senn has sent Kessa Brin a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for Kessa Brin's decisions.
+- Collect a proxy watcher report: Niko Rell has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.
+- Collect a proxy watcher report: Tam Oris has someone off-screen watching for signs around Mara Vey. This can surface as a watcher, rumor, false alarm, or nothing at all.
+
+=== ORRERY JOINT BEATS ===
+These proposal pairs have the same two characters acting toward each other in this tick. Treat each pair as one scene if you wish: 'reciprocal' means both chose the same behavior (a meeting of intent); 'crossed' means their behaviors differ (tension you may spring). Adjudicate the underlying proposals by proposal_id as usual.
+- [crossed] Elian Rook & Tam Oris: check_on_dependent <-> surveil (check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e / surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2)

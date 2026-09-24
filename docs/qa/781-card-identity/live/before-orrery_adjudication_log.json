@@ -1,0 +1,67 @@
+[
+  {
+    "id": 133,
+    "tick_chunk_id": 50,
+    "proposal_id": "honor_debt:ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+    "template_id": "honor_debt",
+    "binding_hash": "ff450d8c71cd75a76aec92c5afd481e2255cbe01e41c61b718119e11871e591b",
+    "action": "defer",
+    "adjudication_source": "explicit",
+    "skald_note": "The Wickglass obligation has reached its actual choice, but Mara has not signed the dead-book sentence or fulfilled anything; it must not resolve through an off-screen dead-drop.",
+    "original_state_delta": {
+      "character.current_activity": "servicing an old debt"
+    },
+    "replacement_state_delta": null,
+    "replacement_event_type": null,
+    "applied_resolution_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "actor_entity_id": 3,
+    "bindings": {
+      "actor": 3
+    }
+  },
+  {
+    "id": 134,
+    "tick_chunk_id": 50,
+    "proposal_id": "check_on_dependent:b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+    "template_id": "check_on_dependent",
+    "binding_hash": "b141c5fd516f7d4baefd87daef69903692a70e4142f0b44a1f66af79b04f3b0e",
+    "action": "defer",
+    "adjudication_source": "explicit",
+    "skald_note": "Elian's choices around Tam's safety remain hers; no autonomous check-in is settled while Mara's Guild conversation holds the camera.",
+    "original_state_delta": {
+      "character.current_activity": "checking in on a dependent"
+    },
+    "replacement_state_delta": null,
+    "replacement_event_type": null,
+    "applied_resolution_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "actor_entity_id": 4,
+    "bindings": {
+      "actor": 4,
+      "target": 16
+    }
+  },
+  {
+    "id": 135,
+    "tick_chunk_id": 50,
+    "proposal_id": "surveil:31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+    "template_id": "surveil",
+    "binding_hash": "31b0006f94b07d440078d2cd3dd52a5a5885317eb11cbe089d00b5f370911bf2",
+    "action": "defer",
+    "adjudication_source": "explicit",
+    "skald_note": "Tam's fear does not authorize an off-screen surveillance act; the hall must let Tam define any boundary around Mara directly.",
+    "original_state_delta": {
+      "character.current_activity": "collecting a proxy watcher report"
+    },
+    "replacement_state_delta": null,
+    "replacement_event_type": null,
+    "applied_resolution_id": null,
+    "created_at": "2026-09-24 18:39:46.798950+00:00",
+    "actor_entity_id": 16,
+    "bindings": {
+      "actor": 16,
+      "target": 4
+    }
+  }
+]

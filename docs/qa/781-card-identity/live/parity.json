@@ -1,0 +1,13 @@
+{
+  "database": "qa640_781_card_identity",
+  "accepted_chunk": 50,
+  "card_count": 23,
+  "main_cards": 5,
+  "scene_pressures": 4,
+  "joint_beats": 1,
+  "exposure_rows": 11,
+  "identical_proposal_identity_set": true,
+  "both_seat_prompt_exposure_parity": true,
+  "backstage_sequence_parity": true,
+  "joint_actor_audit_parity": true
+}
