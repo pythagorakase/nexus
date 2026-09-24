@@ -111,6 +111,25 @@ def test_dossier_omits_unknown_location_and_formats_decimal_valence(seat: str) -
                             "current_location_name": None,
                             "current_activity": "Waiting.",
                         },
+                        {
+                            "name": "Nera",
+                            "current_location": None,
+                            "current_location_name": None,
+                            "current_activity": None,
+                        },
+                        {
+                            "name": "Iona",
+                            "current_location": 1,
+                            "current_location_name": "Hall",
+                            "current_activity": None,
+                            "orrery_tag_summary": "capacity:perceptive",
+                        },
+                        {
+                            "name": "Ren",
+                            "current_location_name": None,
+                            "current_activity": None,
+                            "orrery_tag_summary": "disposition:cautious",
+                        },
                     ]
                 },
                 "relationships": [
@@ -126,7 +145,12 @@ def test_dossier_omits_unknown_location_and_formats_decimal_valence(seat: str) -
         },
         seat=seat,
     )
-    assert "- Hale: Waiting." in prompt
+    lines = prompt.splitlines()
+    assert "- Hale: Waiting." in lines
+    assert "- Nera" in lines
+    assert "- Iona: at Hall Tags: capacity:perceptive" in lines
+    assert "- Ren Tags: disposition:cautious" in lines
+    assert "status unknown" not in prompt
     assert "at None" not in prompt
     for value in ("+0.00", "-0.18", "+0.12"):
         assert f"- Hale → Iona: complex (valence {value})" in prompt

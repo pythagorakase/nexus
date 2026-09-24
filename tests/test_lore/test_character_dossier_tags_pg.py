@@ -241,12 +241,22 @@ def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
                 )
             ).scalar_one()
             session.execute(
-                text("UPDATE characters SET current_location = :place WHERE id = :id"),
+                text(
+                    "UPDATE characters SET current_location = :place, "
+                    "current_activity = NULL WHERE id = :id"
+                ),
                 {"place": place_id, "id": character_id},
             )
             other_id = session.execute(
                 text("SELECT id FROM characters WHERE name = 'Untagged Observer'")
             ).scalar_one()
+            session.execute(
+                text(
+                    "UPDATE characters SET current_location = NULL, "
+                    "current_activity = NULL WHERE id = :id"
+                ),
+                {"id": other_id},
+            )
             session.execute(
                 text(
                     """INSERT INTO character_relationships
@@ -285,7 +295,12 @@ def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
                     },
                     seat=seat,
                 )
-                assert f"- {baseline['name']}: at Dossier Hall, " in prompt
+                lines = prompt.splitlines()
+                assert (
+                    f"- {baseline['name']}: at Dossier Hall Tags: "
+                    "capacity:dossier_alpha, capacity:dossier_zeta, state:dossier_live"
+                ) in lines
+                assert "- Untagged Observer" in lines
                 assert (
                     f"- {baseline['name']} → Untagged Observer: complex (valence -0.18)"
                     in prompt

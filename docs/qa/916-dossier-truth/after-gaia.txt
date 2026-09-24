@@ -20,7 +20,7 @@ All Characters (brief status):
 - Kessa Brin: tidying their own space Tags: bodyform.lineage:human, orrery_travel:route_familiar, orrery_travel:travel_ready
 - Len Aster: at Lantern Quay Memorial Hall, taking the night air
 - Mara Vey: at Lantern Quay Memorial Hall, meeting Kessa Brin alone in the Wickglass Dispatch House, weighing a wet-ink admission for the Guild dead-book Tags: bodyform.lineage:human, capacity:educated, capacity:perceptive, disposition:cautious, disposition:compassionate, orrery_signal:debt_pulse_active, role.function:investigator, state:reputation_compromised
-- Nera Voss: None
+- Nera Voss
 - Niko Rell: at Lantern Quay Memorial Hall, watching the world go by
 - Ora Pell: tidying their own space Tags: capacity:resourceful, disposition:cautious
 - Orris Vale: latent in generated backstory

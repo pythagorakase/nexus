@@ -2507,17 +2507,23 @@ class LogonUtility:
                     for char in baseline_chars:
                         name = char.get("name", "Unknown")
                         location = char.get("current_location_name")
-                        location_detail = f"at {location}, " if location else ""
-                        activity = char.get("current_activity", "status unknown")
+                        activity = char.get("current_activity")
+                        status = ", ".join(
+                            part
+                            for part in (
+                                f"at {location}" if location else None,
+                                activity,
+                            )
+                            if part
+                        )
+                        status_detail = f": {status}" if status else ""
                         tags = ", ".join(
                             (char.get("orrery_tag_summary") or "").split(", ")[
                                 : render_limits.character_tags
                             ]
                         )
                         tag_detail = f" Tags: {tags}" if tags else ""
-                        sections.append(
-                            f"- {name}: {location_detail}{activity}{tag_detail}"
-                        )
+                        sections.append(f"- {name}{status_detail}{tag_detail}")
 
                 # Featured characters (full details)
                 featured_chars = characters.get("featured", [])

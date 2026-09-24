@@ -1,6 +1,6 @@
 # Dossier Truth Verification
 
-Work Order 916-B; branch `claude/916-dossier-truth`. No schema or configuration changes.
+Work Order 916-B; branch `claude/916-dossier-truth`. Coordinator amendment: omit absent activity as well as absent location, without placeholder text. No schema or configuration changes.
 
 ## Frontier Proof
 
@@ -18,15 +18,16 @@ Both seats have byte-identical dossiers within each capture. See `before-*-dossi
 | --- | --- |
 | `Davin Sol: at 1, …` | `Davin Sol: at Lantern Quay Memorial Hall, …` |
 | `Hale Morrow: at None, pacing the near ground` | `Hale Morrow: pacing the near ground` |
+| `Nera Voss: at None, None` | `Nera Voss` |
 | `Unknown → Unknown: spouse (valence +0e-20)` | `Ren Vale → Elian Rook: spouse (valence +0.00)` |
 | `Unknown → Unknown: complex (valence -0.18181818181818181818)` | `Ivo Senn → Ressa Morn: complex (valence -0.18)` |
 
 | Seat | Dossier Before | Dossier After | Request Before | Request After |
 | --- | ---: | ---: | ---: | ---: |
-| Writer | 2182 | 2184 | 37284 | 37286 |
-| Gaia | 2182 | 2184 | 34676 | 34678 |
+| Writer | 2182 | 2182 | 37284 | 37284 |
+| Gaia | 2182 | 2182 | 34676 | 34676 |
 
-These are TEST token-counter measurements. `before.json` and `after.json` contain every block count. All other block counts and block kinds are unchanged. Featured-character details and the following place/faction details are byte-identical. The relationship cap remains configured and the captured five relationship types retain their original order.
+These are TEST token-counter measurements. `before.json` and `after.json` contain every block count. All block counts and block kinds are unchanged from the original before-capture. The amendment removes two dossier tokens per seat relative to the accepted first implementation. Featured-character details and the following place/faction details are byte-identical. The relationship cap remains configured and the captured five relationship types retain their original order.
 
 Both restores and both live configuration fingerprint computations agree:
 
@@ -39,8 +40,9 @@ a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7
 - `nexus/agents/lore/utils/entity_queries.py:103`: left join resolves baseline `current_location_name`; featured query retains the existing location field and details.
 - `nexus/agents/lore/utils/entity_queries.py:393`: canonical character names resolve through scalar subqueries, preserving the relationship scan rather than introducing join-order effects into the existing cap. A relationship touching a featured character with an absent counterpart is also fetched, logged, and excluded. Defect identity is the table's composite primary key `(character1_id, character2_id)`.
 - `nexus/agents/lore/utils/turn_cycle.py:621`: shared assembly resolves and filters relationships once before either seat renders.
-- `nexus/agents/lore/logon_utility.py:2509`: absent location segments are omitted.
-- `nexus/agents/lore/logon_utility.py:2615`: existing render cap and signed `.2f` valence formatting apply to both seats.
+- `nexus/agents/lore/logon_utility.py:2509`: only present location/activity segments contribute to the status; absent status omits the colon while retaining tags. `after-skald_writer-dossier.txt:17` and `after-gaia-dossier.txt:17` both contain exactly `- Nera Voss`.
+- `tests/test_lore/test_character_dossier_render.py:148` and `tests/test_lore/test_character_dossier_tags_pg.py:298`: exact-line assertions cover NULL activity with and without a location in both seats; offline coverage also checks tags without any status.
+- `nexus/agents/lore/logon_utility.py:2621`: existing render cap and signed `.2f` valence formatting apply to both seats.
 - The real PostgreSQL regression test uses template schema, `characters`, `places`, `character_relationships`, entity/tag views, roster and provenance tables. All mutations occur in disposable fixture databases. A deliberately removed FK inside an uncommitted disposable transaction allows an absent endpoint to exercise the defect path; its ID is logged once, with no relationship line in either seat.
 
 ## Validation
@@ -49,17 +51,16 @@ Commands run from the worktree root. `$PY` denotes `/Users/pythagor/nexus/.venv/
 
 ```sh
 PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
-PYTHONPATH=$PWD $PY docs/qa/916-dossier-truth/probe.py --phase before
 PYTHONPATH=$PWD $PY docs/qa/916-dossier-truth/probe.py --phase after
 ```
 
-Each capture ends with:
+Only `--phase after` was rerun for the amendment; the original before-captures are untouched. The refreshed capture ends with:
 
 ```text
 PASS: restored fingerprint; both seats have identical dossiers; TEST only
 ```
 
-Initial test fixture failures were corrected: the new place needed `type='fixed_location'`, and relationship writes needed transaction-local `nexus.write_producer='manual'`. Neither required runtime or schema changes. The focused fixture retry passed. The initial offline gate passed (2716 passed, 900 skipped); the final run includes two additional seat parameterizations. Offline skips are not treated as PostgreSQL proof. The explicit PostgreSQL gate below actually runs those tests.
+The following gates were rerun after the amendment. Offline skips are not PostgreSQL proof; the explicit PostgreSQL gate actually runs the selected tests.
 
 ```sh
 $PY -m pytest -q
@@ -67,7 +68,7 @@ $PY -m pytest -q
 
 ```text
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-2718 passed, 900 skipped, 9 warnings in 129.81s (0:02:09)
+2718 passed, 900 skipped, 9 warnings in 121.40s (0:02:01)
 ```
 
 ```sh
@@ -76,16 +77,7 @@ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_lore -k 'dossier or entity or r
 
 ```text
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-95 passed, 232 deselected, 5 warnings in 27.02s
-```
-
-```sh
-NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_lore/test_character_dossier_tags_pg.py::test_dossier_place_and_relationship_names --tb=short
-```
-
-```text
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-1 passed, 5 warnings in 2.35s
+95 passed, 232 deselected, 5 warnings in 26.24s
 ```
 
 ```sh
@@ -97,7 +89,7 @@ All done! ✨ 🍰 ✨
 7 files would be left unchanged.
 ```
 
-`git diff --check` passed with no output. Both implementation commit hooks passed. No #885 exemptions were needed.
+`git diff --check` passed with no output. The accepted implementation commits remain intact; amendment commit runs the standard hooks. No #885 exemptions were needed.
 
 ## Cleanup and Coordinator Questions
 

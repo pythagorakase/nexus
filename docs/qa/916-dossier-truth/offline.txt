@@ -87,4 +87,4 @@ nexus/api/storyteller.py:307
     return self.router.on_event(event_type)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-2718 passed, 900 skipped, 9 warnings in 129.81s (0:02:09)
+2718 passed, 900 skipped, 9 warnings in 121.40s (0:02:01)

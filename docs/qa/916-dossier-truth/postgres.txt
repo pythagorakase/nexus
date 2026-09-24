@@ -14,4 +14,4 @@
     _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-95 passed, 232 deselected, 5 warnings in 27.02s
+95 passed, 232 deselected, 5 warnings in 26.24s
