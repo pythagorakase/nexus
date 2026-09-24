@@ -38,14 +38,16 @@ After a deliberate configuration-shape change that leaves Pass-2 semantics
 unchanged (such as removing an unused memory setting), run:
 
 ```sh
-PYTHONPATH=$PWD python scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --slot N
+PYTHONPATH=$PWD python scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --slot N --write-locked-slot
 # Disposable/reference database alternative:
 PYTHONPATH=$PWD python scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --dbname qa640_example
 ```
 
 Run with turns stopped for that target. This explicit compatibility operation
 uses the current settings projected through the target story's context-window
-pin. It prints the old and new hashes and updates only `config_fingerprint` in
+pin. For a locked target, `--write-locked-slot` overrides read-only policy only in
+the maintenance session; leave the database locked throughout. It prints the old
+and new hashes and updates only `config_fingerprint` in
 the accepted tail's existing baseline payload. Memory identities, accounting,
 budget, historical rows, and provisional drafts remain unchanged. Missing or
 malformed baselines are errors; refresh never stamps an empty replacement.
