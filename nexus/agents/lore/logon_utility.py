@@ -75,6 +75,7 @@ from nexus.config.loader import get_provider_for_model  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
     OrreryRetrogradeMaturationSettings,
+    RenderLimits,
 )
 from nexus.config.story_model import StorySettings, read_story_settings
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
@@ -2443,6 +2444,11 @@ class LogonUtility:
             )
 
             if is_hierarchical:
+                render_limits = RenderLimits.model_validate(
+                    self.settings.get("Agent Settings", {})
+                    .get("LORE", {})
+                    .get("render_limits", {})
+                )
                 # New hierarchical format
                 # Baseline characters (minimal 1-line summaries)
                 baseline_chars = characters.get("baseline", [])
@@ -2452,7 +2458,11 @@ class LogonUtility:
                         name = char.get("name", "Unknown")
                         location = char.get("current_location", "unknown location")
                         activity = char.get("current_activity", "status unknown")
-                        tags = char.get("orrery_tag_summary") or ""
+                        tags = ", ".join(
+                            (char.get("orrery_tag_summary") or "").split(", ")[
+                                : render_limits.character_tags
+                            ]
+                        )
                         tag_detail = f" Tags: {tags}" if tags else ""
                         sections.append(
                             f"- {name}: at {location}, {activity}{tag_detail}"
@@ -2466,7 +2476,11 @@ class LogonUtility:
                         name = char.get("name", "Unknown")
                         ref_type = char.get("reference_type", "")
                         summary = char.get("summary", "")
-                        tags = char.get("orrery_tag_summary") or ""
+                        tags = ", ".join(
+                            (char.get("orrery_tag_summary") or "").split(", ")[
+                                : render_limits.character_tags
+                            ]
+                        )
                         tag_detail = f"Tags: {tags}" if tags else ""
                         detail = " ".join(
                             part for part in (summary, tag_detail) if part

@@ -53,3 +53,39 @@ def test_character_dossier_tags_preserve_featured_details(seat: str) -> None:
     assert "- Ren: at Garden, Reading.\n" in prompt
     assert f"- Guild: {tags}" in prompt
     assert f"- Guild: A guild. Tags: {tags}" in prompt
+
+
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+@pytest.mark.parametrize("limit", [1, 8, 12])
+def test_character_dossier_tag_cap_preserves_order(seat: str, limit: int) -> None:
+    """Configured caps apply to both tiers without changing source attribution."""
+    from nexus.config import load_settings_as_dict
+
+    settings = load_settings_as_dict()
+    settings["Agent Settings"]["LORE"]["render_limits"]["character_tags"] = limit
+    utility = window_logon(settings)
+    tags = [f"capacity:tag_{index:02}" for index in range(10)]
+    character = {"name": "Iona", "orrery_tag_summary": ", ".join(tags)}
+    prompt = utility._format_context_prompt(
+        {
+            "entity_data": {
+                "characters": {"baseline": [character], "featured": [character]}
+            }
+        },
+        seat=seat,
+    )
+    assert prompt.count("Tags: " + ", ".join(tags[:limit]) + "\n") == 2
+    for tag in tags[limit:]:
+        assert tag not in prompt
+    assert character["orrery_tag_summary"] == ", ".join(tags)
+
+
+def test_character_tag_limit_validation() -> None:
+    """The shared typed render limit defaults to eight and rejects zero."""
+    from pydantic import ValidationError
+
+    from nexus.config.settings_models import RenderLimits
+
+    assert RenderLimits().character_tags == 8
+    with pytest.raises(ValidationError):
+        RenderLimits(character_tags=0)

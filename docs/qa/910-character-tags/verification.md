@@ -1,6 +1,6 @@
 # Character Dossier Tag Verification
 
-## Scope and Pending Contract
+## Scope and Cap Contract
 
 Work order #910 extends the faction dossier's shared tag query to characters.
 The baseline and featured rows retain `characters.id`; their tag join uses
@@ -15,13 +15,11 @@ library and all `prompts/*.md` files are unchanged. The existing description at
 `prompts/storyteller_core.md:130` already says the dossier carries character state;
 no additional prose sentence is required for this change.
 
-**Pending:** #908's exact shared cap key/default. At inspection, `origin/main`
-was `20e2c07b`, #908 had no published branch or PR, and the faction renderer was
-uncapped. Its issue specifies configured relationship/event/threat/Bleed limits,
-but does not name the keys or establish a per-character tag limit. This proof
-therefore measures the uncapped implementation; it is not proof that the cap
-requirement is complete. The coordinator must supply the contract before that
-part can be implemented and the final gates/cost comparison repeated.
+The coordinator amendment is implemented as `[lore.render_limits].character_tags`,
+default 8 and validated `ge=1` by `RenderLimits` on `LORESettings`. It caps
+attributed tags on each baseline and featured character line in query order.
+Tests exercise limits 1, 8, and 12 through both writer and Gaia renderers.
+Work order #908 adds its separate limits to this same typed table.
 
 ## Real Frontier Cost
 
@@ -196,4 +194,32 @@ SELECT datname FROM pg_database WHERE datname LIKE 'qa640_910_%';
  datname
 ---------
 (0 rows)
+```
+
+## Capped Frontier Measurement
+
+The frozen chunk-49 payload was rendered again against a fresh read-only-source
+clone using the real TEST per-attempt guard. The uncapped comparison uses a
+render limit of 10,000; the shipped comparison uses the configured eight.
+
+| Measurement | Before Tags | Uncapped Tags | Capped at Eight |
+|---|---:|---:|---:|
+| Entity dossier | 1,791 | 2,137 | 2,137 |
+| Complete TEST request | 38,883 | 39,237 | 39,237 |
+
+No character in this frontier exceeds eight tags, so the cap does not reduce
+this payload. The configured-cap tests establish truncation on longer lists.
+`capped-frontier-proof.json` records all three attempts. No generation or paid
+call ran, and the disposable clone was dropped.
+
+```sh
+PYTHONPATH=$PWD $PY temp/910-proof/capped_compare.py
+```
+
+```text
+BEFORE ENTITY_DOSSIER 1791 TOTAL 38883
+UNCAPPED ENTITY_DOSSIER 2137 TOTAL 39237
+CAPPED ENTITY_DOSSIER 2137 TOTAL 39237
+UNCHANGED_RENDERER_BASELINE_MATCHED b720f576-753a-4d82-a456-f2f5b084099d
+OWNED_CLONE_DROPPED qa640_910_compare_134bd282fae8
 ```

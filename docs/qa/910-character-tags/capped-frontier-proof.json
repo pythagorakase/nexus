@@ -1,0 +1,227 @@
+{
+  "source": "save_04",
+  "frontier": 49,
+  "original_before_record": {
+    "generation_session": "b720f576-753a-4d82-a456-f2f5b084099d",
+    "seat": "skald_writer",
+    "attempt": 1,
+    "model": "TEST",
+    "block_tokens": {
+      "system": 4580,
+      "intertitle": 50,
+      "scene conditions": 17,
+      "private storyteller correspondence": 5667,
+      "recent narrative": 17205,
+      "scene roster": 22,
+      "user input": 8,
+      "entity dossier": 1791,
+      "historical context": 4583,
+      "world knowledge": 252,
+      "orrery tag library": 3702,
+      "recent orrery rulings": 210,
+      "orrery imminent activity": 431,
+      "orrery scene pressure": 229,
+      "orrery joint beats": 191,
+      "instructions": 30,
+      "request framing": -85
+    },
+    "input_tokens": 38883,
+    "effective_ceiling": 71000,
+    "policy_headroom": 4000,
+    "headroom": 32117,
+    "trimming": {
+      "tokens_before": 38968,
+      "tokens_after": 38968,
+      "tokens_recovered": 0,
+      "dropped_chunk_ids": [],
+      "dropped_blocks": {
+        "recent narrative": 0,
+        "historical context": 0
+      },
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 38968,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 36360,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      }
+    }
+  },
+  "before": {
+    "generation_session": "3c63fe00-053e-484d-a1fc-0c38ba55bb19",
+    "seat": "skald_writer",
+    "attempt": 1,
+    "model": "TEST",
+    "block_tokens": {
+      "system": 4580,
+      "intertitle": 50,
+      "scene conditions": 17,
+      "private storyteller correspondence": 5667,
+      "recent narrative": 17205,
+      "scene roster": 22,
+      "user input": 8,
+      "entity dossier": 1791,
+      "historical context": 4583,
+      "world knowledge": 252,
+      "orrery tag library": 3702,
+      "recent orrery rulings": 210,
+      "orrery imminent activity": 431,
+      "orrery scene pressure": 229,
+      "orrery joint beats": 191,
+      "instructions": 30,
+      "request framing": -85
+    },
+    "input_tokens": 38883,
+    "effective_ceiling": 71000,
+    "policy_headroom": 4000,
+    "headroom": 32117,
+    "trimming": {
+      "tokens_before": 38968,
+      "tokens_after": 38968,
+      "tokens_recovered": 0,
+      "dropped_chunk_ids": [],
+      "dropped_blocks": {
+        "recent narrative": 0,
+        "historical context": 0
+      },
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 38968,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 36360,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      }
+    }
+  },
+  "uncapped": {
+    "generation_session": "3c63fe00-053e-484d-a1fc-0c38ba55bb19",
+    "seat": "skald_writer",
+    "attempt": 2,
+    "model": "TEST",
+    "block_tokens": {
+      "system": 4580,
+      "intertitle": 50,
+      "scene conditions": 17,
+      "private storyteller correspondence": 5667,
+      "recent narrative": 17205,
+      "scene roster": 22,
+      "user input": 8,
+      "entity dossier": 2137,
+      "historical context": 4583,
+      "world knowledge": 252,
+      "orrery tag library": 3702,
+      "recent orrery rulings": 210,
+      "orrery imminent activity": 431,
+      "orrery scene pressure": 229,
+      "orrery joint beats": 191,
+      "instructions": 30,
+      "request framing": -77
+    },
+    "input_tokens": 39237,
+    "effective_ceiling": 71000,
+    "policy_headroom": 4000,
+    "headroom": 31763,
+    "trimming": {
+      "tokens_before": 38968,
+      "tokens_after": 38968,
+      "tokens_recovered": 0,
+      "dropped_chunk_ids": [],
+      "dropped_blocks": {
+        "recent narrative": 0,
+        "historical context": 0
+      },
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 38968,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 36360,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      }
+    }
+  },
+  "capped": {
+    "generation_session": "3c63fe00-053e-484d-a1fc-0c38ba55bb19",
+    "seat": "skald_writer",
+    "attempt": 3,
+    "model": "TEST",
+    "block_tokens": {
+      "system": 4580,
+      "intertitle": 50,
+      "scene conditions": 17,
+      "private storyteller correspondence": 5667,
+      "recent narrative": 17205,
+      "scene roster": 22,
+      "user input": 8,
+      "entity dossier": 2137,
+      "historical context": 4583,
+      "world knowledge": 252,
+      "orrery tag library": 3702,
+      "recent orrery rulings": 210,
+      "orrery imminent activity": 431,
+      "orrery scene pressure": 229,
+      "orrery joint beats": 191,
+      "instructions": 30,
+      "request framing": -77
+    },
+    "input_tokens": 39237,
+    "effective_ceiling": 71000,
+    "policy_headroom": 4000,
+    "headroom": 31763,
+    "trimming": {
+      "tokens_before": 38968,
+      "tokens_after": 38968,
+      "tokens_recovered": 0,
+      "dropped_chunk_ids": [],
+      "dropped_blocks": {
+        "recent narrative": 0,
+        "historical context": 0
+      },
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 38968,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 36360,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      }
+    }
+  },
+  "run_id": "3c63fe00-053e-484d-a1fc-0c38ba55bb19",
+  "day": "2026-09-24",
+  "clone": "qa640_910_compare_134bd282fae8"
+}

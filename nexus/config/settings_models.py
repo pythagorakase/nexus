@@ -950,6 +950,18 @@ class PresenceAuditSettings(BaseModel):
     )
 
 
+class RenderLimits(BaseModel):
+    """Limits for items rendered in the LORE dossier."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    character_tags: int = Field(
+        default=8,
+        ge=1,
+        description="Cap attributed tags per character line in the dossier",
+    )
+
+
 class LORESettings(BaseModel):
     """LORE agent configuration."""
 
@@ -960,6 +972,7 @@ class LORESettings(BaseModel):
     token_budget: TokenBudgetConfig
     payload_percent_budget: PayloadPercentBudget
     entity_inclusion: EntityInclusionConfig
+    render_limits: RenderLimits = Field(default_factory=RenderLimits)
     retrieval: LORERetrievalSettings = Field(default_factory=LORERetrievalSettings)
     presence_audit: PresenceAuditSettings = Field(default_factory=PresenceAuditSettings)
 
