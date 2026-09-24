@@ -10,17 +10,6 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from sentence_transformers import SentenceTransformer
 
-# Assumes MEMNON_SETTINGS is accessible or passed during initialization
-# For standalone testing, provide a default or load manually
-# REMOVED try...except block for top-level import
-# try:
-#     from ..memnon import MEMNON_SETTINGS
-# except ImportError:
-#     # Fallback for direct execution or testing
-#     # In a real scenario, settings should be loaded more robustly
-#     MEMNON_SETTINGS = {}
-#     print("Warning: Could not import MEMNON_SETTINGS. Using empty defaults.")
-
 logger = logging.getLogger("nexus.memnon.embedding_manager")
 
 # Process-level cache of loaded SentenceTransformer models, keyed by resolved
