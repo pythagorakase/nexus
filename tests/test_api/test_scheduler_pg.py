@@ -104,6 +104,8 @@ def test_scheduler_idle_drain_waits_for_generation(offline_gate_db):
             "retrograde_maturation",
             "correspondence_compaction",
             "relationship_milestone",
+            "narrative_embedding",
+            "narrative_summary",
         }
     finally:
         scheduler.stop()

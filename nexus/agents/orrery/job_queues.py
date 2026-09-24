@@ -55,6 +55,12 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
             "correspondence_compaction": _queue_status(
                 cur, "correspondence_compaction_jobs", "correspondence_compaction"
             ),
+            "narrative_embedding": _queue_status(
+                cur, "narrative_embedding_jobs", "narrative_embedding"
+            ),
+            "narrative_summary": _queue_status(
+                cur, "narrative_summary_jobs", "narrative_summary"
+            ),
         }
         cur.execute(
             "SELECT version_id, generation_session_id::text FROM relationship_milestone_queue WHERE event_id IS NULL ORDER BY version_id"

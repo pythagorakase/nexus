@@ -194,6 +194,9 @@ def claim_parent_embedding(conn: Any, *, session_id: str, parent_chunk_id: int) 
                 (parent_chunk_id, session_id),
             )
             claimed = cur.rowcount == 1
+            from nexus.jobs.embeddings import enqueue_locked_embeddings
+
+            enqueue_locked_embeddings(cur, parent_chunk_id, session_id)
         commit_transaction(conn)
         return claimed
     except AmbiguousCommit:

@@ -1298,6 +1298,18 @@ compaction_max_attempts = 3
 compaction_retry_delay_seconds = 300
 compaction_lease_duration_seconds = 300
 
+[runtime.scheduler.embeddings]
+max_jobs_per_drain = 2
+max_attempts = 3
+retry_delay_seconds = 300
+lease_duration_seconds = 900
+
+[runtime.scheduler.summaries]
+max_jobs_per_drain = 2
+max_attempts = 3
+retry_delay_seconds = 300
+lease_duration_seconds = 900
+
 [runtime.health]
 timeout_seconds = 2.0            # per HTTP health probe
 startup_deadline_seconds = 30.0  # nexus up waits this long per service

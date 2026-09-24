@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Track shared character identity normalization and the prompt registry plus seat block manifests; retain the prompt migration retirements.",
+  "reason": "Track character identity, prompt registry and seat block manifests; route durable narrative embedding and summary queues through the slot scheduler.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -233,8 +233,11 @@
     "nexus/database.py",
     "nexus/jobs/__init__.py",
     "nexus/jobs/compaction.py",
+    "nexus/jobs/embeddings.py",
     "nexus/jobs/gate.py",
+    "nexus/jobs/narrative_jobs.py",
     "nexus/jobs/scheduler.py",
+    "nexus/jobs/summaries.py",
     "nexus/memory/__init__.py",
     "nexus/memory/context_state.py",
     "nexus/memory/correspondence.py",

@@ -247,6 +247,8 @@ JOB_TABLES = {
     "retrograde_maturation": "orrery_maturation_jobs",
     "correspondence_compaction": "correspondence_compaction_jobs",
     "narration": "orrery_narration_jobs",
+    "narrative_embedding": "narrative_embedding_jobs",
+    "narrative_summary": "narrative_summary_jobs",
 }
 
 

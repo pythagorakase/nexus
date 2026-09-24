@@ -137,38 +137,38 @@ def embedding_table_exists(connection: Connection, table_name: str) -> bool:
     return bool(exists)
 
 
-def ensure_embedding_table(connection: Connection, dimensions: int) -> str:
-    """
-    Ensure the embedding table for ``dimensions`` exists.
-
-    Embedding tables are created lazily by write paths. Read/retrieval paths
-    should inspect existing tables instead of calling this helper. The pgvector
-    extension is a database setup prerequisite and must already exist.
-    """
+def ensure_embedding_table(connection: Any, dimensions: int) -> str:
+    """Create a dimension table atomically through SQLAlchemy or a DBAPI cursor."""
     table_name = table_name_for_dimensions(dimensions)
-
-    connection.execute(
-        text(
-            f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                chunk_id BIGINT NOT NULL
-                    REFERENCES narrative_chunks(id) ON DELETE CASCADE,
-                model TEXT NOT NULL,
-                embedding vector({dimensions}) NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (chunk_id, model)
-            )
-            """
+    _execute_ddl(
+        connection,
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            chunk_id BIGINT NOT NULL REFERENCES narrative_chunks(id) ON DELETE CASCADE,
+            model TEXT NOT NULL,
+            embedding vector({dimensions}) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (chunk_id, model)
         )
+    """,
     )
-    connection.execute(
-        text(
-            f"""
-            CREATE INDEX IF NOT EXISTS {table_name}_model_idx
-            ON {table_name} (model)
-            """
+    _execute_ddl(
+        connection,
+        f"CREATE INDEX IF NOT EXISTS {table_name}_model_idx ON {table_name} (model)",
+    )
+    _execute_ddl(
+        connection,
+        f"COMMENT ON TABLE {table_name} IS 'Narrative chunk vectors partitioned by embedding dimensions.'",
+    )
+    for column, description in {
+        "chunk_id": "Narrative chunk represented by this vector.",
+        "model": "Configured embedding model identity.",
+        "embedding": "Dense narrative text embedding.",
+        "created_at": "Embedding write timestamp.",
+    }.items():
+        _execute_ddl(
+            connection, f"COMMENT ON COLUMN {table_name}.{column} IS '{description}'"
         )
-    )
     return table_name
 
 

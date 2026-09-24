@@ -1138,6 +1138,13 @@ async def responses_create(request: ResponsesRequest):
         )
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
+        if output_fields == {"summary"}:
+            return _responses_payload(
+                {
+                    "summary": "The characters pursue their immediate goals while unresolved tensions carry into the next interval."
+                },
+                final_result_tool=final_result_tool,
+            )
         if output_fields == {"recollections"}:
             delay = load_settings().api.test_provider.experience_response_delay_seconds
             logger.info("[MOCK] Experience render received; response delay=%s", delay)

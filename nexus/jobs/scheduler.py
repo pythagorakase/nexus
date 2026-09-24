@@ -435,6 +435,8 @@ class SlotScheduler:
         from nexus.agents.orrery import worker
         from nexus.agents.orrery.retrograde_maturation import drain_maturation_jobs_sync
         from nexus.jobs.compaction import drain_compaction
+        from nexus.jobs.embeddings import drain_embedding, enqueue_locked_embeddings
+        from nexus.jobs.summaries import drain_summary
 
         result: dict[str, Any] = {"owner": True, "drained": True}
         conn = self.connect()
@@ -509,6 +511,51 @@ class SlotScheduler:
                             self._job = None
                     if not count:
                         break
+                # Recover historical predicate claims as well as newly enqueued work.
+                with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT parent_chunk_id, session_id FROM narrative_parent_embedding_claims ORDER BY parent_chunk_id DESC LIMIT 1"
+                    )
+                    claim = cur.fetchone()
+                    if claim:
+                        enqueue_locked_embeddings(
+                            cur, claim["parent_chunk_id"], str(claim["session_id"])
+                        )
+                for name, cfg, drain in (
+                    (
+                        "narrative_summary_jobs",
+                        self.cfg.summaries,
+                        lambda: drain_summary(
+                            conn,
+                            dbname=self.dbname,
+                            slot=self.slot,
+                            cfg=self.cfg.summaries,
+                            owner=self.owner,
+                        ),
+                    ),
+                    (
+                        "narrative_embedding_jobs",
+                        self.cfg.embeddings,
+                        lambda: drain_embedding(
+                            conn,
+                            settings=self.settings,
+                            cfg=self.cfg.embeddings,
+                            owner=self.owner,
+                        ),
+                    ),
+                ):
+                    result[name] = 0
+                    for _ in range(cfg.max_jobs_per_drain):
+                        self.checkpoint()
+                        self._report(name)
+                        try:
+                            count = drain()
+                        finally:
+                            with self._job_lock:
+                                self._job = None
+                        result[name] += count
+                        if not count:
+                            break
             self._report(None)
             return result
         finally:

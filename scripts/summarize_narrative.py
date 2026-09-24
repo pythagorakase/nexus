@@ -43,7 +43,6 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field
@@ -91,7 +90,6 @@ DEFAULT_MODEL = None  # type: ignore[assignment]  # resolved at argparse time
 FALLBACK_MODEL = None  # type: ignore[assignment]
 CONTEXT_CHUNK_BEFORE = 1  # Number of chunks to include before target for context
 CONTEXT_CHUNK_AFTER = 1  # Number of chunks to include after target for context
-SUMMARY_FAILURE_STATUS = "error"
 
 # Database connection using SQLAlchemy
 import sqlalchemy as sa
@@ -712,14 +710,13 @@ class DatabaseManager:
                 FROM public.seasons 
                 WHERE id < :season
                   AND summary IS NOT NULL
-                  AND COALESCE(summary->>'status', '') <> :failure_status
                 ORDER BY id ASC
                 """
                 )
 
                 result = conn.execute(
                     query,
-                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                    {"season": season},
                 )
 
                 for row in result:
@@ -754,7 +751,6 @@ class DatabaseManager:
                 WHERE season = :season
                   AND episode < :episode
                   AND summary IS NOT NULL
-                  AND COALESCE(summary->>'status', '') <> :failure_status
                 ORDER BY episode ASC
                 """
                 )
@@ -764,7 +760,6 @@ class DatabaseManager:
                     {
                         "season": season,
                         "episode": episode,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
                     },
                 )
 
@@ -804,14 +799,12 @@ class DatabaseManager:
                         WHERE season = :season
                           AND episode = :episode
                           AND summary IS NOT NULL
-                          AND COALESCE(summary->>'status', '') <> :failure_status
                         LIMIT 1
                         """
                     ),
                     {
                         "season": season,
                         "episode": episode,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
                     },
                 ).scalar()
                 return result is not None
@@ -839,13 +832,12 @@ class DatabaseManager:
                 FROM public.seasons 
                 WHERE id = :season
                   AND summary IS NOT NULL
-                  AND COALESCE(summary->>'status', '') <> :failure_status
                 """
                 )
 
                 result = conn.execute(
                     query,
-                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                    {"season": season},
                 ).fetchone()
 
                 if result:
@@ -874,11 +866,10 @@ class DatabaseManager:
                         FROM public.seasons
                         WHERE id = :season
                           AND summary IS NOT NULL
-                          AND COALESCE(summary->>'status', '') <> :failure_status
                         LIMIT 1
                         """
                     ),
-                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                    {"season": season},
                 ).scalar()
                 return result is not None
         except Exception as e:
@@ -920,12 +911,7 @@ class DatabaseManager:
                 )
                 existing = conn.execute(check_query, {"season": season}).fetchone()
 
-                if (
-                    existing
-                    and existing.summary
-                    and not self._is_failure_summary(existing.summary)
-                    and not overwrite
-                ):
+                if existing and existing.summary and not overwrite:
                     if not prompt_on_conflict:
                         logger.info(
                             f"Existing summary found for Season {season}; skipping (overwrite disabled)"
@@ -1071,12 +1057,7 @@ class DatabaseManager:
                     check_query, {"season": season, "episode": episode}
                 ).fetchone()
 
-                if (
-                    existing
-                    and existing.summary
-                    and not self._is_failure_summary(existing.summary)
-                    and not overwrite
-                ):
+                if existing and existing.summary and not overwrite:
                     if not prompt_on_conflict:
                         logger.info(
                             f"Existing summary found for S{season:02d}E{episode:02d}; skipping (overwrite disabled)"
@@ -1173,115 +1154,6 @@ class DatabaseManager:
 
         except Exception as e:
             logger.error(f"Error saving episode summary: {e}")
-            return False
-
-    @staticmethod
-    def _is_failure_summary(summary: Any) -> bool:
-        """Return whether a JSONB summary value is a retryable failure marker."""
-        if isinstance(summary, str):
-            try:
-                summary = json.loads(summary)
-            except json.JSONDecodeError:
-                return False
-        return (
-            isinstance(summary, dict)
-            and summary.get("status") == SUMMARY_FAILURE_STATUS
-        )
-
-    def record_summary_failure(
-        self,
-        *,
-        kind: str,
-        season: int,
-        episode: Optional[int],
-        error: str,
-        model_candidates: List[str],
-    ) -> bool:
-        """Persist a retryable failure marker on the existing summary record.
-
-        The episodes/seasons JSONB summary columns are the established durable
-        operator surface. A marker remains visible there but is excluded by the
-        summary existence/context queries, so a later transition can refire and
-        replace it without requiring ``overwrite=True``.
-        """
-        failure = json.dumps(
-            {
-                "status": SUMMARY_FAILURE_STATUS,
-                "error": error,
-                "model_candidates": model_candidates,
-                "failed_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-        try:
-            with self.engine.connect() as conn:
-                if kind == "episode":
-                    if episode is None:
-                        raise ValueError(
-                            "episode is required when recording an episode failure"
-                        )
-                    # Never clobber a real summary: a slower failing job can
-                    # land after a concurrent success. Only fill NULLs or
-                    # replace an earlier error marker.
-                    query = text(
-                        """
-                        INSERT INTO public.episodes (season, episode, summary)
-                        VALUES (:season, :episode, CAST(:summary AS jsonb))
-                        ON CONFLICT (season, episode) DO UPDATE
-                        SET summary = EXCLUDED.summary
-                        WHERE public.episodes.summary IS NULL
-                           OR public.episodes.summary->>'status' = :failure_status
-                        """
-                    )
-                    params = {
-                        "season": season,
-                        "episode": episode,
-                        "summary": failure,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
-                    }
-                elif kind == "season":
-                    query = text(
-                        """
-                        INSERT INTO public.seasons (id, summary)
-                        VALUES (:season, CAST(:summary AS jsonb))
-                        ON CONFLICT (id) DO UPDATE
-                        SET summary = EXCLUDED.summary
-                        WHERE public.seasons.summary IS NULL
-                           OR public.seasons.summary->>'status' = :failure_status
-                        """
-                    )
-                    params = {
-                        "season": season,
-                        "summary": failure,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
-                    }
-                else:
-                    raise ValueError(f"Unknown summary failure kind: {kind!r}")
-
-                result = conn.execute(query, params)
-                conn.commit()
-                if result.rowcount == 0:
-                    # The no-clobber guard blocked the write: a real summary
-                    # already occupies the row (overwrite=True regeneration
-                    # that failed). Report honestly instead of claiming the
-                    # marker landed.
-                    logger.warning(
-                        "Not recording %s summary failure for season=%s "
-                        "episode=%s: a non-error summary already exists and "
-                        "is preserved",
-                        kind,
-                        season,
-                        episode,
-                    )
-                    return False
-            return True
-        except Exception as exc:
-            logger.error(
-                "Unable to persist %s summary failure for season=%s episode=%s: %s",
-                kind,
-                season,
-                episode,
-                exc,
-            )
             return False
 
     def get_episode_chunk_span(
