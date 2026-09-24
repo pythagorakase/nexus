@@ -1,0 +1,622 @@
+{
+  "base": "c341d7d4d80e36273ace0041fe5b5632289b2bf5",
+  "comparison": "Original static fragments and ordered rule lists, with placeholder names normalized; five tool descriptions use the original cleaned docstrings. Existing Markdown is compared to the base unchanged.",
+  "prompts": [
+    {
+      "prompt_id": "AMBIENT_SCENE_SEEDS",
+      "path": "prompts/ambient_scene_seeds.md",
+      "base_source": "prompts/ambient_scene_seeds.md",
+      "static_bytes_equal": true,
+      "template_sha256": "e155fb73e2151fb20ae867efe54f1d3865e7874c91628a7a4aea56b1784694fa"
+    },
+    {
+      "prompt_id": "CORRESPONDENCE_COMPACTION",
+      "path": "prompts/correspondence_compaction.md",
+      "base_source": "prompts/correspondence_compaction.md",
+      "static_bytes_equal": true,
+      "template_sha256": "80b5fdb7c5eebc46902b2ea952b1f7665b1011fb3617376a18e1a643ddeb9ecc"
+    },
+    {
+      "prompt_id": "CORRESPONDENCE_DIGEST_RETRY",
+      "path": "prompts/correspondence/digest_retry.md",
+      "base_source": "nexus/memory/correspondence.py:112",
+      "static_bytes_equal": true,
+      "template_sha256": "de27a58bffcfcff00c114d6ca1320aeb898c908af5b537dab7fb1f151a2dec91"
+    },
+    {
+      "prompt_id": "CORRESPONDENCE_HEADER",
+      "path": "prompts/correspondence/header.md",
+      "base_source": "nexus/memory/correspondence.py:158",
+      "static_bytes_equal": true,
+      "template_sha256": "766336f666a15b3b02818ccfc1ebf311b81d5b3b90bdfddb8765561280e213cb"
+    },
+    {
+      "prompt_id": "CORRESPONDENCE_LETTER_RETRY",
+      "path": "prompts/correspondence/letter_retry.md",
+      "base_source": "nexus/memory/correspondence.py:66",
+      "static_bytes_equal": true,
+      "template_sha256": "ac43c521e8655f573e9793ac0f4c39bafc388e2d104a2a86bfdb2d3c9d9a052c"
+    },
+    {
+      "prompt_id": "EXPERIENCE_RENDERER",
+      "path": "prompts/experience_renderer.md",
+      "base_source": "prompts/experience_renderer.md",
+      "static_bytes_equal": true,
+      "template_sha256": "632dd282d34e216a8a0519bb8cf93611102dc7171a1d05cda2590b2d0a8caeda"
+    },
+    {
+      "prompt_id": "GEO_AUTHORING",
+      "path": "prompts/orrery/geo_authoring.md",
+      "base_source": "prompts/orrery/geo_authoring.md",
+      "static_bytes_equal": true,
+      "template_sha256": "f4435a6f61d1c6c040475c90d190a54f43616716844df35cdb9777c9ea6c3cb9"
+    },
+    {
+      "prompt_id": "OPERATORS_ESTIMATE_TIME_DELTA_SYSTEM",
+      "path": "prompts/operators/estimate_time_delta_system.md",
+      "base_source": "scripts/estimate_time_delta.py:843",
+      "static_bytes_equal": true,
+      "template_sha256": "6d57399b274d3d08ddb5357d10e322808701675863253be80e3e18caf599eeaf"
+    },
+    {
+      "prompt_id": "OPERATORS_ESTIMATE_TIME_DELTA_USER",
+      "path": "prompts/operators/estimate_time_delta_user.md",
+      "base_source": "scripts/estimate_time_delta.py:881",
+      "static_bytes_equal": true,
+      "template_sha256": "eb580d4c5942f8a9f78ade6eb233445c3425ef9255b2093bbc0ec14b58223c07"
+    },
+    {
+      "prompt_id": "OPERATORS_FREESTYLE_SYSTEM",
+      "path": "prompts/operators/freestyle_system.md",
+      "base_source": "scripts/freestyle_api_query.py:897",
+      "static_bytes_equal": true,
+      "template_sha256": "370da8c7a4393ad7f7249d9d5e1cc27b272dd60ed2f166eecacc17f60c069dfd"
+    },
+    {
+      "prompt_id": "OPERATORS_FREESTYLE_USER",
+      "path": "prompts/operators/freestyle_user.md",
+      "base_source": "scripts/freestyle_api_query.py:902",
+      "static_bytes_equal": true,
+      "template_sha256": "276a0332bf6581f0cee8bcc796bb18bd41b0d98e838bfc76d52e92acdbbd9520"
+    },
+    {
+      "prompt_id": "OPERATORS_MAP_BUILDER",
+      "path": "prompts/operators/map_builder.md",
+      "base_source": "scripts/map_builder_legacy.py:400",
+      "static_bytes_equal": true,
+      "template_sha256": "414d53b8eb2bf26084f2bb8a560e83575fb90f2a620d943cbfb5483414a46112"
+    },
+    {
+      "prompt_id": "OPERATORS_MAP_BUILDER_SCHEMA",
+      "path": "prompts/operators/map_builder_schema.md",
+      "base_source": "scripts/map_builder_legacy.py:443",
+      "static_bytes_equal": true,
+      "template_sha256": "7af598660a799effef70ca3769914ddfcb6dfec87bf3272f8b85836d14f8734a"
+    },
+    {
+      "prompt_id": "OPERATORS_PROCESS_CHARACTERS",
+      "path": "prompts/operators/process_characters.md",
+      "base_source": "scripts/process_characters.py:278",
+      "static_bytes_equal": true,
+      "template_sha256": "8f24c835ac9bf58c885530677a6ccbc0018c6effe99e56a9fe87676d31d38c22"
+    },
+    {
+      "prompt_id": "OPERATORS_PROCESS_FACTIONS",
+      "path": "prompts/operators/process_factions.md",
+      "base_source": "scripts/process_factions.py:223",
+      "static_bytes_equal": true,
+      "template_sha256": "6d1678a5967b1fd3a28278c077d4fdfd7eb4365d00b60dd007cbcf6ae6410a7c"
+    },
+    {
+      "prompt_id": "OPERATORS_RETRIEVAL_QUERY_BAKEOFF",
+      "path": "prompts/operators/retrieval_query_bakeoff.md",
+      "base_source": "scripts/retrieval_query_bakeoff.py:362",
+      "static_bytes_equal": true,
+      "template_sha256": "8b2d6ed38175f78876aeba8b1c6a735a163093a30d6d2fecf8386be2c8415379"
+    },
+    {
+      "prompt_id": "RETROGRADE_EXPANSION",
+      "path": "prompts/retrograde/expansion.md",
+      "base_source": "nexus/agents/orrery/retrograde_expansion.py:665",
+      "static_bytes_equal": true,
+      "template_sha256": "c4b5116787e92a2cc5de8815f4cd2dce88defc4ba1f98e55daaa623e463a20a5"
+    },
+    {
+      "prompt_id": "RETROGRADE_EXPANSION_CONSTRAINTS",
+      "path": "prompts/retrograde/expansion_constraints.md",
+      "base_source": "nexus/agents/orrery/retrograde_expansion.py:1805",
+      "static_bytes_equal": true,
+      "template_sha256": "ec06e959fd359d11898fea520a21a210beee17b0fc49bf527fde66164877d73f"
+    },
+    {
+      "prompt_id": "RETROGRADE_EXPANSION_RETRY",
+      "path": "prompts/retrograde/expansion_retry.md",
+      "base_source": "nexus/agents/orrery/retrograde_expansion.py:811",
+      "static_bytes_equal": true,
+      "template_sha256": "6b5edb623c29f90c948d035d64736ac544d43be13cc0bde679a971118bd33c8e"
+    },
+    {
+      "prompt_id": "RETROGRADE_EXPANSION_SYSTEM",
+      "path": "prompts/retrograde/expansion_system.md",
+      "base_source": "nexus/agents/orrery/retrograde_expansion.py:792",
+      "static_bytes_equal": true,
+      "template_sha256": "07f8f6a1fa20e8cef97faa9f9c4c89ce779c169fbb74f12ebb1b8ad16b95cbf1"
+    },
+    {
+      "prompt_id": "RETROGRADE_EXPANSION_TASK",
+      "path": "prompts/retrograde/expansion_task.md",
+      "base_source": "nexus/agents/orrery/retrograde_expansion.py:637",
+      "static_bytes_equal": true,
+      "template_sha256": "81fa189be7c50bd1bc351978a7812c5fbdf4ef7d45361df5432b825040cc96dc"
+    },
+    {
+      "prompt_id": "RETROGRADE_GENERATION_CONSTRAINTS",
+      "path": "prompts/retrograde/generation_constraints.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:1330",
+      "static_bytes_equal": true,
+      "template_sha256": "fd124f0d8a0f746e58b38007f5ec1ab69188eadd035d639ddf06c9aea2f5fe43"
+    },
+    {
+      "prompt_id": "RETROGRADE_GENERATION_RETRY",
+      "path": "prompts/retrograde/generation_retry.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:673",
+      "static_bytes_equal": true,
+      "template_sha256": "cda4c2bd6703df03cdc08006a8ab04bd84516e075b9c0e67f7897057d0ffc721"
+    },
+    {
+      "prompt_id": "RETROGRADE_GENERATION_SYSTEM",
+      "path": "prompts/retrograde/generation_system.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:649",
+      "static_bytes_equal": true,
+      "template_sha256": "57f449d5066e6589dc8c826b6d074e21e44edbcb7a598a8096eb9c6c3214b33a"
+    },
+    {
+      "prompt_id": "RETROGRADE_GENERATION_TASK",
+      "path": "prompts/retrograde/generation_task.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:531",
+      "static_bytes_equal": true,
+      "template_sha256": "43e4d4e9598e41d550f6f5632a780f73e7d99909b72b3aa2250d8f6fdc20a563"
+    },
+    {
+      "prompt_id": "RETROGRADE_MECHANICAL_TAG_RULES",
+      "path": "prompts/retrograde/mechanical_tag_rules.md",
+      "base_source": "nexus/agents/orrery/retrograde_packet.py:362",
+      "static_bytes_equal": true,
+      "template_sha256": "49dd6c3f48e8d11e21477fc3aeaa0a64191942255e9f646a9d256bd91be61dd4"
+    },
+    {
+      "prompt_id": "RETROGRADE_PAIR_TAG_RULE",
+      "path": "prompts/retrograde/pair_tag_rule.md",
+      "base_source": "nexus/agents/orrery/retrograde_packet.py:276",
+      "static_bytes_equal": true,
+      "template_sha256": "ee59054211da11c4980bd73b20e51859b80ef6836259c544eb59b636db7bf480"
+    },
+    {
+      "prompt_id": "RETROGRADE_REVIEW_CONTRACT",
+      "path": "prompts/retrograde/review_contract.md",
+      "base_source": "nexus/agents/orrery/retrograde_packet.py:143",
+      "static_bytes_equal": true,
+      "template_sha256": "1569b2876d36876bc4a13e1ba4ff87184d14b87cdee6657ba683a703da0b6a5e"
+    },
+    {
+      "prompt_id": "RETROGRADE_SEED_GENERATION",
+      "path": "prompts/retrograde/seed_generation.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:567",
+      "static_bytes_equal": true,
+      "template_sha256": "20e67babf8a5f36cf43e0dd584b474814abaa183fea0452a2ba6e8117df1d34e"
+    },
+    {
+      "prompt_id": "RETROGRADE_SEED_SELECTION",
+      "path": "prompts/retrograde/seed_selection.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:1535",
+      "static_bytes_equal": true,
+      "template_sha256": "f403949d4888bc87ebd7b16d2ed188e7c8441c6cf83fab557d09b52c4e460408"
+    },
+    {
+      "prompt_id": "RETROGRADE_SELECTION_PRIORITIES",
+      "path": "prompts/retrograde/selection_priorities.md",
+      "base_source": "nexus/agents/orrery/retrograde_packet.py:401",
+      "static_bytes_equal": true,
+      "template_sha256": "1b800f2cf5c58b0497701366b7bdfb3693ea964d55a79822ad4757e8b442781a"
+    },
+    {
+      "prompt_id": "RETROGRADE_SELECTION_SYSTEM",
+      "path": "prompts/retrograde/selection_system.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:1611",
+      "static_bytes_equal": true,
+      "template_sha256": "e21b4b2f68d3c523a0be1fd8bca22d0f0a09c0a9aee24639e7eb46cc9f91e63c"
+    },
+    {
+      "prompt_id": "RETROGRADE_SELECTION_TASK",
+      "path": "prompts/retrograde/selection_task.md",
+      "base_source": "nexus/agents/orrery/retrograde_seed_candidates.py:1512",
+      "static_bytes_equal": true,
+      "template_sha256": "65b4144a8b25cd5fb2bc2832da8e729e6f63a2ed8e0e7a46a2bda66a2ed9832f"
+    },
+    {
+      "prompt_id": "RETROGRADE_WEAVER_INSTRUCTIONS",
+      "path": "prompts/retrograde/weaver_instructions.md",
+      "base_source": "nexus/agents/orrery/retrograde_packet.py:625",
+      "static_bytes_equal": true,
+      "template_sha256": "d34726aa1503001e08446e8f187958b09b930735885e44ea504e4b8442e86c7c"
+    },
+    {
+      "prompt_id": "RETRY_CLOSED_REGISTRY",
+      "path": "prompts/retry/closed_registry.md",
+      "base_source": "nexus/agents/logon/orrery_tag_validation.py:1510",
+      "static_bytes_equal": true,
+      "template_sha256": "00ddf8fda29cba7e74b3527b0b91c4dfb641db5b9341c846c9727e66a99d0f77"
+    },
+    {
+      "prompt_id": "RETRY_STRUCTURED_OUTPUT",
+      "path": "prompts/retry/structured_output.md",
+      "base_source": "nexus/api/native_structured_output.py:278",
+      "static_bytes_equal": true,
+      "template_sha256": "fb0b07859ac8b7f8a662fc25e7bc54efab426141df22421544691646a96e9c2e"
+    },
+    {
+      "prompt_id": "STORYTELLER_BOOTSTRAP",
+      "path": "prompts/storyteller_bootstrap.md",
+      "base_source": "prompts/storyteller_bootstrap.md",
+      "static_bytes_equal": true,
+      "template_sha256": "bdd5afb507dc5a60e0b604d6e36f3c2f7ce559fd1afe6b733b8a598cdf6dd47e"
+    },
+    {
+      "prompt_id": "STORYTELLER_CORE",
+      "path": "prompts/storyteller_core.md",
+      "base_source": "prompts/storyteller_core.md",
+      "static_bytes_equal": true,
+      "template_sha256": "844bd9f509341841aa0db8792af9f04fc7c513aeee4cccb165d95f2025a24139"
+    },
+    {
+      "prompt_id": "STORYTELLER_GAIA",
+      "path": "prompts/storyteller_gaia.md",
+      "base_source": "prompts/storyteller_gaia.md",
+      "static_bytes_equal": true,
+      "template_sha256": "ece734a9cd7149c64fbd810a21ed8f3affe7fda0d4a72ab494d7b169e4227f56"
+    },
+    {
+      "prompt_id": "STORYTELLER_NEW",
+      "path": "prompts/storyteller_new.md",
+      "base_source": "prompts/storyteller_new.md",
+      "static_bytes_equal": true,
+      "template_sha256": "63436b9d9304751c8f2ca0252b62ca68c29913b726b544ace8dfb7fba8a69e9c"
+    },
+    {
+      "prompt_id": "STORYTELLER_SET_DESIGNER",
+      "path": "prompts/storyteller_set_designer.md",
+      "base_source": "prompts/storyteller_set_designer.md",
+      "static_bytes_equal": true,
+      "template_sha256": "343cd2d69c0c6f7311439596079269d5d0f11033a4597b8d5ef992eb44f424fd"
+    },
+    {
+      "prompt_id": "STORYTELLER_SINGLE_PASS",
+      "path": "prompts/storyteller_single_pass.md",
+      "base_source": "prompts/storyteller_single_pass.md",
+      "static_bytes_equal": true,
+      "template_sha256": "b27bd4f4fcb965ea93e6b4d9835dfe17c374f5088068fec6e13a9c7a09e54b30"
+    },
+    {
+      "prompt_id": "STORYTELLER_WRITER_PASS",
+      "path": "prompts/storyteller_writer_pass.md",
+      "base_source": "prompts/storyteller_writer_pass.md",
+      "static_bytes_equal": true,
+      "template_sha256": "f4792348a3148a02ba3edfdc0491533e50ace8db2d0952d509688086fe8312fd"
+    },
+    {
+      "prompt_id": "SUMMARIES_DEFAULT_SYSTEM",
+      "path": "prompts/summaries/default_system.md",
+      "base_source": "scripts/summarize_narrative.py:1549",
+      "static_bytes_equal": true,
+      "template_sha256": "f546e9947aae7c84f4ef0e2fb92ed0acab1d80140aa562d93a464e1bbb455a2a"
+    },
+    {
+      "prompt_id": "SUMMARIES_EPISODE_RANGE_USER",
+      "path": "prompts/summaries/episode_range_user.md",
+      "base_source": "scripts/summarize_narrative.py:2245",
+      "static_bytes_equal": true,
+      "template_sha256": "dc517947a96bb134db8582cc794e35fdc0955b272af17af39e71d897db87e3c8"
+    },
+    {
+      "prompt_id": "SUMMARIES_EPISODE_SYSTEM",
+      "path": "prompts/summaries/episode_system.md",
+      "base_source": "scripts/summarize_narrative.py:1530",
+      "static_bytes_equal": true,
+      "template_sha256": "3381bde34206f0327d889a543656665a2e796b4fda22e1b6b57f00790bb401bf"
+    },
+    {
+      "prompt_id": "SUMMARIES_EPISODE_USER",
+      "path": "prompts/summaries/episode_user.md",
+      "base_source": "scripts/summarize_narrative.py:1900",
+      "static_bytes_equal": true,
+      "template_sha256": "5a821c032ccda7c769899db2f88f074ad9607a45e0b7c77f405dd9867d16a012"
+    },
+    {
+      "prompt_id": "SUMMARIES_SEASON_RANGE_USER",
+      "path": "prompts/summaries/season_range_user.md",
+      "base_source": "scripts/summarize_narrative.py:2229",
+      "static_bytes_equal": true,
+      "template_sha256": "80fd87bac43bd5b2e28de233c7171421b350be658146df36c9323e4e6ef01998"
+    },
+    {
+      "prompt_id": "SUMMARIES_SEASON_SYSTEM",
+      "path": "prompts/summaries/season_system.md",
+      "base_source": "scripts/summarize_narrative.py:1512",
+      "static_bytes_equal": true,
+      "template_sha256": "41bf674fb3501663caa03082cd95502ad4f101cea1f92feb9c68aa23d955f21f"
+    },
+    {
+      "prompt_id": "SUMMARIES_SEASON_USER",
+      "path": "prompts/summaries/season_user.md",
+      "base_source": "scripts/summarize_narrative.py:1704",
+      "static_bytes_equal": true,
+      "template_sha256": "23401abf0bd23d5526a0a99b0e2f7d13a12dfd0d5c01d1041fcf7e893c84ece3"
+    },
+    {
+      "prompt_id": "TAG_LIBRARY_ACTIVE_TAG",
+      "path": "prompts/tag_library/active_tag.md",
+      "base_source": "nexus/agents/orrery/tag_library.py:496",
+      "static_bytes_equal": true,
+      "template_sha256": "1a59901b94f536b70413de9807fb15c170040ba29cc85dda72619ab2b946d4c0"
+    },
+    {
+      "prompt_id": "TAG_LIBRARY_CONTEXTUAL_INDEX",
+      "path": "prompts/tag_library/contextual_index.md",
+      "base_source": "nexus/agents/orrery/tag_library.py:407",
+      "static_bytes_equal": true,
+      "template_sha256": "a600ee4717519591e6dc9db0eb998d81f9c80f22b77f8e2699facfdbde3b7ee3"
+    },
+    {
+      "prompt_id": "TAG_LIBRARY_EMPTY",
+      "path": "prompts/tag_library/empty.md",
+      "base_source": "nexus/agents/orrery/tag_library.py:322",
+      "static_bytes_equal": true,
+      "template_sha256": "d859be916fd1c996c956f3c674cd89bbc869978e11ad7eff7e86c5ff85a499db"
+    },
+    {
+      "prompt_id": "TAG_LIBRARY_HEADER",
+      "path": "prompts/tag_library/header.md",
+      "base_source": "nexus/agents/orrery/tag_library.py:337",
+      "static_bytes_equal": true,
+      "template_sha256": "20ecb7c7a63ed5348ba5006a1a7a15d9c012fb8510decc8a63a3f251c6afc139"
+    },
+    {
+      "prompt_id": "TRAIT_INPUT_DERIVER",
+      "path": "prompts/trait_input_deriver.md",
+      "base_source": "prompts/trait_input_deriver.md",
+      "static_bytes_equal": true,
+      "template_sha256": "ada4549823ed8df26b367adef27388a692d5976d1993394f4330d4cf1629d32c"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_AMBIENT_PERIPHERALS",
+      "path": "prompts/turn_blocks/ambient_peripherals.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2875",
+      "static_bytes_equal": true,
+      "template_sha256": "c5dc81e4c9449c9210a36590c6bd66fcf095d25fdd4ee9188efb2db57d3afb77"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_AUTHORS_NOTE",
+      "path": "prompts/turn_blocks/authors_note.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2899",
+      "static_bytes_equal": true,
+      "template_sha256": "49b1d69d753128fe569a199a4c599653cdec814ac6366974b9f864107274c20e"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_BOOTSTRAP_INTRO",
+      "path": "prompts/turn_blocks/bootstrap_intro.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2990",
+      "static_bytes_equal": true,
+      "template_sha256": "dba0bd206c6a303acdad552736b80d82bcc61cf4f478aa46e5cf9a85c2e88bb2"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_BOOTSTRAP_SECRETS",
+      "path": "prompts/turn_blocks/bootstrap_secrets.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:3070",
+      "static_bytes_equal": true,
+      "template_sha256": "c28ba7835db0fe074501a08c8125089e3e85140029a054bf9b43ee839ebea69e"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_CONTINUE_NARRATIVE",
+      "path": "prompts/turn_blocks/continue_narrative.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2910",
+      "static_bytes_equal": true,
+      "template_sha256": "cdfa60d29de25926cb5c7a4bf9657f5b090333b8ba41b1944bf48ceb74ff646b"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_IMMINENT_ACTIVITY",
+      "path": "prompts/turn_blocks/imminent_activity.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2783",
+      "static_bytes_equal": true,
+      "template_sha256": "59ab8f031387d7fcc67c5a19e72e1d3fc12c3c70befc05c4540f3bab9b1af3a4"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_JOINT_BEATS",
+      "path": "prompts/turn_blocks/joint_beats.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2859",
+      "static_bytes_equal": true,
+      "template_sha256": "57dd70dcd5f90a16ca8795cbf7ee869c012f752f9056a2ce1499b019da29d073"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_MAINTAIN_CONSISTENCY",
+      "path": "prompts/turn_blocks/maintain_consistency.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2913",
+      "static_bytes_equal": true,
+      "template_sha256": "f32928dceba6f546ae8d5c3481cc8b428ac5216ecbe16704b23bb6697c119686"
+    },
+    {
+      "prompt_id": "TURN_BLOCKS_SCENE_PRESSURE",
+      "path": "prompts/turn_blocks/scene_pressure.md",
+      "base_source": "nexus/agents/lore/logon_utility.py:2800",
+      "static_bytes_equal": true,
+      "template_sha256": "c1202e10a69ec3f715a47af9351f8aee8f77485f15319394e19e92366b179469"
+    },
+    {
+      "prompt_id": "WIZARD_ACCEPT_FATE",
+      "path": "prompts/wizard/accept_fate.md",
+      "base_source": "nexus/api/wizard_agent.py:45",
+      "static_bytes_equal": true,
+      "template_sha256": "e0cf02e6e0ce2b93569e268c40f863a834f82508f62e0fdc5006d3b38ca56a75"
+    },
+    {
+      "prompt_id": "WIZARD_ACCEPT_FATE_RETRY",
+      "path": "prompts/wizard/accept_fate_retry.md",
+      "base_source": "nexus/api/wizard_agent.py:614",
+      "static_bytes_equal": true,
+      "template_sha256": "e8efefd95de70d1b7e3313544d52ea0b366710ac2ed495b25c852af2bec20d9d"
+    },
+    {
+      "prompt_id": "WIZARD_CHARACTER_PHASE",
+      "path": "prompts/wizard/character_phase.md",
+      "base_source": "nexus/api/wizard_agent.py:162",
+      "static_bytes_equal": true,
+      "template_sha256": "2db847b6b3ce5e6bc4ddaeae6f282191c72211663239b5cfe2e6ae68f14f3e87"
+    },
+    {
+      "prompt_id": "WIZARD_CHOICES_INSTRUCTION",
+      "path": "prompts/wizard/choices_instruction.md",
+      "base_source": "nexus/api/wizard_agent.py:220",
+      "static_bytes_equal": true,
+      "template_sha256": "a3e5ac6ab52b86f5eb7b7e20770bf53bc40d311084ed0bf10f518f78feca5aff"
+    },
+    {
+      "prompt_id": "WIZARD_DEV_PREAMBLE",
+      "path": "prompts/wizard/dev_preamble.md",
+      "base_source": "nexus/api/wizard_agent.py:230",
+      "static_bytes_equal": true,
+      "template_sha256": "9b84c774b0962e67b00fbecefa0ed91c8a9c2dfca327bd544b8a9f07a66916ed"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_CHARACTER_SYSTEM",
+      "path": "prompts/wizard/legacy_character_system.md",
+      "base_source": "nexus/api/new_story_generator.py:154",
+      "static_bytes_equal": true,
+      "template_sha256": "aa5aba0a396a72c328a77df8932be542d4b8f2b7a89e7b36f0fe8777cc3ac476"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_CHARACTER_USER",
+      "path": "prompts/wizard/legacy_character_user.md",
+      "base_source": "nexus/api/new_story_generator.py:170",
+      "static_bytes_equal": true,
+      "template_sha256": "1a78fa96b734f536a42b49799e01ce846b2d45be118897856d66f1ee27fa5c87"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_LOCATION_SYSTEM",
+      "path": "prompts/wizard/legacy_location_system.md",
+      "base_source": "nexus/api/new_story_generator.py:296",
+      "static_bytes_equal": true,
+      "template_sha256": "3c6f027605a995f289e5eddbb2ebc4d498428e6e91ff52cf3794420c0e17a927"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_LOCATION_USER",
+      "path": "prompts/wizard/legacy_location_user.md",
+      "base_source": "nexus/api/new_story_generator.py:301",
+      "static_bytes_equal": true,
+      "template_sha256": "83a3cf0bfacbff2ed18c6c30865e570a0e0f5d55a03aac495efa17e0c9e1b01f"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_SEED_SYSTEM",
+      "path": "prompts/wizard/legacy_seed_system.md",
+      "base_source": "nexus/api/new_story_generator.py:233",
+      "static_bytes_equal": true,
+      "template_sha256": "737d71bf765f5844538ebdc64e5d8c5446dcfe0a6afe3d383ece9d3dacc40c40"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_SEED_USER",
+      "path": "prompts/wizard/legacy_seed_user.md",
+      "base_source": "nexus/api/new_story_generator.py:238",
+      "static_bytes_equal": true,
+      "template_sha256": "3570a574a4c52da8ae6b7493323a7bed7a2af08f36d84f97ca062e3a91408c6f"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_SETTING_SYSTEM",
+      "path": "prompts/wizard/legacy_setting_system.md",
+      "base_source": "nexus/api/new_story_generator.py:111",
+      "static_bytes_equal": true,
+      "template_sha256": "f4afcf0b672b542f49633457ca41d73983c50d1b285daa334b5f56b290b20b26"
+    },
+    {
+      "prompt_id": "WIZARD_LEGACY_SETTING_USER",
+      "path": "prompts/wizard/legacy_setting_user.md",
+      "base_source": "nexus/api/new_story_generator.py:116",
+      "static_bytes_equal": true,
+      "template_sha256": "ec83e2ed3b5df756cd2b01ba127b1e87b7feec7c95aaafe3647e94d4e1071b2b"
+    },
+    {
+      "prompt_id": "WIZARD_SEED_PHASE",
+      "path": "prompts/wizard/seed_phase.md",
+      "base_source": "nexus/api/wizard_agent.py:198",
+      "static_bytes_equal": true,
+      "template_sha256": "bd127510795fd1248132ee867b3a4112816fb22b1315c7c57fddd9621c01ceeb"
+    },
+    {
+      "prompt_id": "WIZARD_SET_DESIGNER_USER",
+      "path": "prompts/wizard/set_designer_user.md",
+      "base_source": "nexus/api/new_story_generator.py:580",
+      "static_bytes_equal": true,
+      "template_sha256": "399f1cd9451535c23cef3e634edf803105aaaa844fe8dd064accc1cbcfffe355"
+    },
+    {
+      "prompt_id": "WIZARD_SUBMIT_INSTRUCTION",
+      "path": "prompts/wizard/submit_instruction.md",
+      "base_source": "nexus/api/wizard_agent.py:213",
+      "static_bytes_equal": true,
+      "template_sha256": "5aa397a03d2b51f0bb02e71474b9f96ba3cf5bd3684e9ab145266d26604f1fda"
+    },
+    {
+      "prompt_id": "WIZARD_SUGGESTED_TRAITS_INSTRUCTION",
+      "path": "prompts/wizard/suggested_traits_instruction.md",
+      "base_source": "nexus/api/wizard_agent.py:192",
+      "static_bytes_equal": true,
+      "template_sha256": "8d45942666b7cb0c24877bd99254721caf872b6714676ef03f3dd36f9601d52a"
+    },
+    {
+      "prompt_id": "WIZARD_SUGGESTED_TRAITS_INTRO",
+      "path": "prompts/wizard/suggested_traits_intro.md",
+      "base_source": "nexus/api/wizard_agent.py:182",
+      "static_bytes_equal": true,
+      "template_sha256": "0ca99001f9d4211fec31fdde7dfea707eb502848ffa29e599cca9c57d246c75e"
+    },
+    {
+      "prompt_id": "WIZARD_TOOL_SUBMIT_CHARACTER_CONCEPT",
+      "path": "prompts/wizard/tools/submit_character_concept.md",
+      "base_source": "nexus/api/wizard_agent.py:338",
+      "static_bytes_equal": true,
+      "template_sha256": "27b3014c60701d85f6803eefe304aec907b34296173ac64f954547e935e9c1a1"
+    },
+    {
+      "prompt_id": "WIZARD_TOOL_SUBMIT_STARTING_SCENARIO",
+      "path": "prompts/wizard/tools/submit_starting_scenario.md",
+      "base_source": "nexus/api/wizard_agent.py:497",
+      "static_bytes_equal": true,
+      "template_sha256": "e63b4142ca30062aa3d616df79435163bf841bee38d42def40bce0c13dc09f8f"
+    },
+    {
+      "prompt_id": "WIZARD_TOOL_SUBMIT_TRAIT_SELECTION",
+      "path": "prompts/wizard/tools/submit_trait_selection.md",
+      "base_source": "nexus/api/wizard_agent.py:406",
+      "static_bytes_equal": true,
+      "template_sha256": "4a079df29e35cf2747e6a508baeef19bf547c7722608d88f78476f6ce98272dd"
+    },
+    {
+      "prompt_id": "WIZARD_TOOL_SUBMIT_WILDCARD_TRAIT",
+      "path": "prompts/wizard/tools/submit_wildcard_trait.md",
+      "base_source": "nexus/api/wizard_agent.py:439",
+      "static_bytes_equal": true,
+      "template_sha256": "675d2730e052df8e1fc50783ae846e0dd868a9a49c6d185dd52d3515f9de4978"
+    },
+    {
+      "prompt_id": "WIZARD_TOOL_SUBMIT_WORLD_DOCUMENT",
+      "path": "prompts/wizard/tools/submit_world_document.md",
+      "base_source": "nexus/api/wizard_agent.py:317",
+      "static_bytes_equal": true,
+      "template_sha256": "2d2c28db613da10f61a413bfc77ac857239c03d261259930e746de6d94b8d884"
+    },
+    {
+      "prompt_id": "WIZARD_TRAIT_DERIVER_SYSTEM",
+      "path": "prompts/wizard/trait_deriver_system.md",
+      "base_source": "nexus/api/trait_input_derivation.py:307",
+      "static_bytes_equal": true,
+      "template_sha256": "31ae36db93ab82ca16c73746dd99b33a04450e07f0704805f0e458fb2dc15e79"
+    }
+  ]
+}
