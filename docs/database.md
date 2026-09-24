@@ -27,7 +27,9 @@ try another fallback strategy, or requeue a job in response. Direct transaction
 owners can use `commit_transaction()` or `transaction()` to preserve this contract.
 Generic retries cover provider rate limits/timeouts only. Where a caller cannot
 identify the commit phase, even a raw (or wrapped) database connection error is
-terminal. The scheduler stops dispatch and reports `failed`; operators must
+terminal. Heartbeats may recover only when their commit-aware context proves
+commit was not attempted. Otherwise the scheduler stops dispatch and reports
+`failed`; operators must
 reconcile durable state before restarting it. This policy does not infer success
 or failure, and does not create an automatic recovery migration.
 
