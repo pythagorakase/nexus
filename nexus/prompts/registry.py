@@ -50,6 +50,7 @@ class PromptId(str, Enum):
     CORRESPONDENCE_LETTER_RETRY = "correspondence/letter_retry"
     CORRESPONDENCE_PRIVACY = "correspondence/privacy"
     EXPERIENCE_RENDERER = "experience_renderer"
+    GAIA_CLOSER = "gaia_closer"
     GEO_AUTHORING = "orrery/geo_authoring"
     OPERATORS_ESTIMATE_TIME_DELTA_SYSTEM = "operators/estimate_time_delta_system"
     OPERATORS_ESTIMATE_TIME_DELTA_USER = "operators/estimate_time_delta_user"
@@ -185,6 +186,7 @@ class PromptId(str, Enum):
     WIZARD_TOOL_SUBMIT_WORLD_DOCUMENT = "wizard/tools/submit_world_document"
     WIZARD_TRAIT_DERIVER_SYSTEM = "wizard/trait_deriver_system"
     WIZARD_WILDCARD_TAG_RETRY = "wizard/wildcard_tag_retry"
+    WRITER_CLOSER = "writer_closer"
 
 
 @dataclass(frozen=True)
@@ -228,6 +230,7 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
         PromptId.EXPERIENCE_RENDERER: PromptSpec(
             "experience_renderer.md", ("experience_renderer",)
         ),
+        PromptId.GAIA_CLOSER: PromptSpec("storyteller_gaia_closer.md", ("gaia",)),
         PromptId.GEO_AUTHORING: PromptSpec(
             "orrery/geo_authoring.md",
             ("geo_authoring",),
@@ -699,20 +702,20 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
         ),
         PromptId.TAG_LIBRARY_ACTIVE_TAG: PromptSpec(
             "tag_library/active_tag.md",
-            ("skald_writer", "gaia", "skald_single_pass", "wizard"),
+            ("gaia", "skald_single_pass", "wizard"),
             frozenset(("STATUS",)),
         ),
         PromptId.TAG_LIBRARY_CONTEXTUAL_INDEX: PromptSpec(
             "tag_library/contextual_index.md",
-            ("skald_writer", "gaia", "skald_single_pass", "wizard"),
+            ("gaia", "skald_single_pass", "wizard"),
         ),
         PromptId.TAG_LIBRARY_EMPTY: PromptSpec(
             "tag_library/empty.md",
-            ("skald_writer", "gaia", "skald_single_pass", "wizard"),
+            ("gaia", "skald_single_pass", "wizard"),
         ),
         PromptId.TAG_LIBRARY_HEADER: PromptSpec(
             "tag_library/header.md",
-            ("skald_writer", "gaia", "skald_single_pass", "wizard"),
+            ("gaia", "skald_single_pass", "wizard"),
         ),
         PromptId.TRAIT_INPUT_DERIVER: PromptSpec(
             "trait_input_deriver.md", ("trait_input_derivation",)
@@ -734,22 +737,22 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
         ),
         PromptId.TURN_BLOCKS_CONTINUE_NARRATIVE: PromptSpec(
             "turn_blocks/continue_narrative.md",
-            ("skald_writer", "gaia", "skald_single_pass"),
+            ("skald_single_pass",),
         ),
         PromptId.TURN_BLOCKS_IMMINENT_ACTIVITY: PromptSpec(
             "turn_blocks/imminent_activity.md",
-            ("skald_writer", "gaia", "skald_single_pass"),
+            ("gaia", "skald_single_pass"),
         ),
         PromptId.TURN_BLOCKS_JOINT_BEATS: PromptSpec(
-            "turn_blocks/joint_beats.md", ("skald_writer", "gaia", "skald_single_pass")
+            "turn_blocks/joint_beats.md", ("gaia", "skald_single_pass")
         ),
         PromptId.TURN_BLOCKS_MAINTAIN_CONSISTENCY: PromptSpec(
             "turn_blocks/maintain_consistency.md",
-            ("skald_writer", "gaia", "skald_single_pass"),
+            ("skald_single_pass",),
         ),
         PromptId.TURN_BLOCKS_SCENE_PRESSURE: PromptSpec(
             "turn_blocks/scene_pressure.md",
-            ("skald_writer", "gaia", "skald_single_pass"),
+            ("gaia", "skald_single_pass"),
         ),
         PromptId.WIZARD_ACCEPT_FATE: PromptSpec(
             "wizard/accept_fate.md", ("wizard", "wizard_wildcard", "wizard_debug")
@@ -899,6 +902,9 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
             "wizard/wildcard_tag_retry.md",
             ("wizard", "wizard_wildcard", "wizard_debug"),
             frozenset(("FORMATTED",)),
+        ),
+        PromptId.WRITER_CLOSER: PromptSpec(
+            "storyteller_writer_closer.md", ("skald_writer",)
         ),
     }
 )

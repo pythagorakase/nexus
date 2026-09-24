@@ -308,6 +308,7 @@ def test_context_prompt_renders_bootstrap_data() -> None:
     prompt = LogonUtility({})._format_context_prompt(
         {
             "user_input": "Begin the story.",
+            "is_bootstrap": True,
             "bootstrap_data": {
                 "setting": {
                     "world_name": "Veyra",
@@ -354,15 +355,14 @@ def test_context_prompt_renders_bootstrap_data() -> None:
 
 
 def test_context_prompt_without_bootstrap_data_keeps_standard_shape() -> None:
-    """Non-bootstrap calls are unchanged when no bootstrap data is present."""
+    """The writer ends at its registered closer without legacy instructions."""
 
     prompt = LogonUtility({})._format_context_prompt({"user_input": "Continue."})
 
     assert "=== BOOTSTRAP CONTEXT ===" not in prompt
     assert "\n=== USER INPUT ===\nContinue." in prompt
-    assert "\n=== INSTRUCTIONS ===" in prompt
-    assert load(PromptId.TURN_BLOCKS_CONTINUE_NARRATIVE) in prompt
-    assert load(PromptId.TURN_BLOCKS_MAINTAIN_CONSISTENCY) in prompt
+    assert "=== INSTRUCTIONS ===" not in prompt
+    assert prompt.endswith(load(PromptId.WRITER_CLOSER))
 
 
 def test_context_prompt_rejects_nonpositive_recent_rulings_cap() -> None:
@@ -420,7 +420,8 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
                     "prompt_text": "Mara is moving toward Vale.",
                 }
             ],
-        }
+        },
+        seat="gaia",
     )
 
     assert "=== ORRERY SCENE PRESSURE ===" in prompt
@@ -449,7 +450,8 @@ def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
                     },
                 }
             ],
-        }
+        },
+        seat="gaia",
     )
 
     assert "=== ORRERY IMMINENT ACTIVITY ===" in prompt
@@ -665,6 +667,7 @@ def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
             ],
         },
         presence_baseline=baseline,
+        seat="gaia",
     )
 
     assert "=== ORRERY TAG LIBRARY ===\nCONTEXTUAL LIBRARY" in prompt
@@ -727,7 +730,7 @@ def test_contextual_false_restores_full_library(monkeypatch) -> None:
     prompt = LogonUtility(
         {"apex": {"tag_library": {"contextual": False}}},
         dbname="save_05",
-    )._format_context_prompt({"user_input": "Continue."})
+    )._format_context_prompt({"user_input": "Continue."}, seat="gaia")
 
     assert "=== ORRERY TAG LIBRARY ===\nFULL TAG LIBRARY" in prompt
 
