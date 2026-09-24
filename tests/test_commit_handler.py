@@ -139,6 +139,21 @@ class AsyncCommitConnection:
                 {"id": character_id, "name": name, "summary": None}
                 for name, character_id in sorted(self.characters.items())
             ]
+        if (
+            normalized
+            == "SELECT id, name, entity_id, summary, current_location FROM characters WHERE name IS NOT NULL"
+        ):
+            return [
+                {
+                    "id": character_id,
+                    "name": name,
+                    "entity_id": character_id + 1000,
+                    "summary": None,
+                }
+                for name, character_id in self.characters.items()
+            ]
+        if "SELECT 'place' AS kind" in normalized:
+            return []
         if normalized == "SELECT character_id, alias FROM character_aliases":
             return []
         if "SELECT id FROM characters WHERE name" in normalized:

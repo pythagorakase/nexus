@@ -45,6 +45,14 @@ from nexus.agents.orrery.retrograde_vocabulary import (
 from nexus.agents.orrery.status_family import STATUS_TAGS, level_from_status_tag
 from nexus.agents.orrery.substrate import ProjectPolicy, coerce_project_policy
 from nexus.agents.orrery.tag_writer import apply_status_pair_tag_bestowal
+from nexus.presence.roster import IdentityIndex, RosterEntry
+from nexus.presence.identity import (
+    CharacterIdentityAmbiguity,
+    resolve_character_declaration,
+    require_character_identity,
+    refresh_generated_aliases,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +261,9 @@ def build_retrograde_persistence_plan(
         entity_stub_rows=manifest["entity_stub_rows"],
         create_missing_entities=create_missing_entities,
     )
-    if inserted_stub_keys:
+    if create_missing_entities:
+        # A concurrent mint may have resolved an initially novel declaration.
+        # Reload even when this transaction did not insert any row.
         entity_index = _load_entity_index(cur)
 
     prologue_was_inserted = existing_prologue_id is None
@@ -2715,6 +2725,19 @@ def _load_entity_index(cur: Any) -> dict[tuple[str, str], list[_EntityRecord]]:
             (record.entity_kind, normalize_entity_ref(record.name)),
             [],
         ).append(record)
+    cur.execute("SELECT character_id, alias FROM character_aliases")
+    records = {
+        record.character_id: record
+        for values in index.values()
+        for record in values
+        if record.character_id is not None
+    }
+    for row in cur.fetchall():
+        record = records.get(int(_row_value(row, "character_id", 0)))
+        if record is not None:
+            key = ("character", normalize_entity_ref(str(_row_value(row, "alias", 1))))
+            if record not in index.setdefault(key, []):
+                index[key].append(record)
     return index
 
 
@@ -2868,9 +2891,32 @@ def _plan_entity_stubs(
         expansion,
         project_ref_decisions=project_ref_decisions,
     )
+    identities = {
+        record.entity_id: record
+        for values in entity_index.values()
+        for record in values
+    }
+    identity_catalog = IdentityIndex(
+        [
+            RosterEntry(kind=record.entity_kind, id=record.subtype_id, name=record.name)
+            for record in identities.values()
+        ],
+        [
+            {"character_id": record.character_id, "alias": label}
+            for (kind, label), values in entity_index.items()
+            if kind == "character"
+            for record in values
+        ],
+    )
     rows = []
     for key, ref in sorted(refs.items()):
         matches = list(entity_index.get(key, []))
+        if ref["entity_kind"] == "character":
+            resolution = resolve_character_declaration(
+                {"name": ref["entity_ref"]}, identity_catalog
+            )
+            if resolution.status == "ambiguous":
+                raise CharacterIdentityAmbiguity(ref["entity_ref"], resolution)
         if key in inserted_stub_keys:
             status = "inserted"
         elif len(matches) == 1:
@@ -3091,7 +3137,10 @@ def _insert_missing_entity_stubs(
         entity_ref = str(row["entity_ref"])
         entity_kind = str(row["entity_kind"])
         if entity_kind == "character":
-            _insert_character_stub(cur, entity_ref=entity_ref, sources=row["sources"])
+            if not _insert_character_stub(
+                cur, entity_ref=entity_ref, sources=row["sources"]
+            ):
+                continue
         elif entity_kind == "place":
             _insert_place_stub(cur, entity_ref=entity_ref, sources=row["sources"])
         elif entity_kind == "faction":
@@ -3099,6 +3148,8 @@ def _insert_missing_entity_stubs(
         else:
             raise ValueError(f"Unsupported Retrograde stub entity kind {entity_kind!r}")
         inserted.add((entity_kind, normalize_entity_ref(entity_ref)))
+    if any(kind == "character" for kind, _ in inserted):
+        refresh_generated_aliases(cur)
     return frozenset(inserted)
 
 
@@ -3107,7 +3158,9 @@ def _insert_character_stub(
     *,
     entity_ref: str,
     sources: Any,
-) -> None:
+) -> bool:
+    if require_character_identity(cur, entity_ref) is not None:
+        return False
     cur.execute(
         """
         /* orrery:retrograde:insert_character_stub */
@@ -3124,6 +3177,7 @@ def _insert_character_stub(
             json.dumps(_stub_extra_data(sources)),
         ),
     )
+    return True
 
 
 def _insert_place_stub(

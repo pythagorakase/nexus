@@ -23,6 +23,10 @@ from nexus.agents.orrery.geo import (
     story_active_zone_async,
 )
 from nexus.presence.roster import resolve_reference_async
+from nexus.presence.identity import (
+    require_character_identity_async,
+    refresh_generated_aliases_async,
+)
 
 
 logger = logging.getLogger("nexus.api.db_converters")
@@ -169,6 +173,12 @@ async def create_declared_entity_stubs(
     created = 0
 
     for declaration in parsed:
+        if declaration.kind == "character":
+            existing = await require_character_identity_async(
+                conn, declaration.name, descriptors=declaration.summary
+            )
+            if existing is not None:
+                continue
         table = {
             "character": "characters",
             "place": "places",
@@ -250,6 +260,8 @@ async def create_declared_entity_stubs(
             )
         created += 1
 
+    if any(declaration.kind == "character" for declaration in parsed):
+        await refresh_generated_aliases_async(conn)
     return created
 
 

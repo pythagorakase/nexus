@@ -19,6 +19,10 @@ script_only_versions = ["008"]
 reason = "scripts/migrate.py discovers managed Python migrations and invokes run(conn); SQL migrations contain no Python imports."
 
 [[operators]]
+target = "scripts/character_identity_census.py:main"
+reason = "Read-only identity census documented in docs/qa/799-identity-before-minting/verification.md."
+
+[[operators]]
 target = "scripts/migrate.py:main"
 reason = "CLAUDE.md schema migration workflow."
 [[operators]]

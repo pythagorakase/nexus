@@ -704,3 +704,84 @@ def test_experience_metadata_retains_all_historical_settings(
             {"id": hall, "name": "Hall"},
             {"id": garden, "name": "Garden"},
         ]
+
+
+@pytest.mark.parametrize("declared", ["Remote Friend", "Fox", "Juniper Moss"])
+def test_identity_declaration_binds_or_mints_once(roster_database, declared):
+    """Real hydration, staging, and acceptance reuse canonical and alias IDs."""
+    from nexus.agents.logon.apex_schema import NewEntityDeclaration
+
+    dbname, ids, _ = roster_database
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO character_aliases (character_id, alias) VALUES (%s, 'Fox')",
+            (ids["Remote Friend"],),
+        )
+        cur.execute("SELECT count(*) FROM characters")
+        before = cur.fetchone()[0]
+    parent = 0
+    for _ in range(2):
+        parent = commit_wire(
+            dbname,
+            parent,
+            wire(
+                f"{declared} waits by the door.",
+                new_entities=[
+                    NewEntityDeclaration(
+                        kind="character", name=declared, summary="A patient observer."
+                    )
+                ],
+                presence=PresenceDelta(
+                    enter=[CharacterRef(kind="character", name=declared)]
+                ),
+            ),
+        )
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM characters")
+        assert cur.fetchone()[0] == before + int(declared == "Juniper Moss")
+        resolved = resolve_reference(conn, kind="character", id=None, name=declared)
+        assert resolved.id in read_roster(conn, parent).present_character_ids
+        if declared != "Juniper Moss":
+            assert resolved.id == ids["Remote Friend"]
+        else:
+            cur.execute(
+                "SELECT alias, provenance FROM character_aliases WHERE character_id = %s",
+                (resolved.id,),
+            )
+            assert ("Juniper", "identity799") in cur.fetchall()
+
+
+def test_identity_shared_surname_blocks_before_staging(roster_database):
+    """An unstored shared surname is terminal before staging writes."""
+    from nexus.agents.logon.apex_schema import NewEntityDeclaration
+    from nexus.presence.identity import CharacterIdentityAmbiguity
+
+    dbname, ids, _ = roster_database
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE characters SET name = 'Silas Wren' WHERE id = %s",
+            (ids["Remote Friend"],),
+        )
+        cur.execute(
+            "INSERT INTO characters (name, summary) VALUES ('Ada Wren', 'A traveler.')"
+        )
+        cur.execute("SELECT count(*) FROM incubator")
+        before = cur.fetchone()[0]
+    with pytest.raises(CharacterIdentityAmbiguity, match="Silas Wren.*Ada Wren"):
+        commit_wire(
+            dbname,
+            0,
+            wire(
+                "Wren arrives.",
+                new_entities=[
+                    NewEntityDeclaration(
+                        kind="character", name="Wren", summary="A visitor."
+                    )
+                ],
+            ),
+        )
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM incubator")
+        assert cur.fetchone()[0] == before
+        cur.execute("SELECT count(*) FROM characters WHERE name = 'Wren'")
+        assert cur.fetchone()[0] == 0

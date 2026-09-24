@@ -17,6 +17,7 @@ from psycopg2.extras import RealDictCursor
 from pydantic import ValidationError
 
 import nexus.agents.orrery.retrograde_maturation as retrograde_maturation
+from nexus.presence.identity import CharacterIdentityAmbiguity
 from nexus.agents.logon.apex_schema import (
     NewEntityDeclaration,
     StorytellerResponseExtended,
@@ -182,10 +183,27 @@ class _RecordingCursor:
             self._fetchall = [("bodyform",), ("disposition",)]
         elif "FROM tags" in normalized:
             self._fetchone = None
+        elif (
+            "SELECT id, name, entity_id, summary, current_location FROM characters"
+            in normalized
+        ):
+            self._fetchall = [
+                {
+                    "id": row[0],
+                    "entity_id": row[1],
+                    "name": "Sister Anechka",
+                    "summary": None,
+                }
+                for row in self.existing_entity_rows
+            ]
         elif "FROM characters WHERE name" in normalized:
             self._fetchall = self.existing_entity_rows
         elif "INSERT INTO orrery_maturation_jobs" in normalized:
             self._fetchone = self.job_insert_returns.pop(0)
+
+    @property
+    def description(self):
+        return [(name,) for name in self._fetchall[0]] if self._fetchall else []
 
     def fetchall(self) -> list[Any]:
         return self._fetchall
@@ -305,7 +323,7 @@ def test_enqueue_rejects_ambiguous_names() -> None:
         job_insert_returns=[],
     )
     conn = _RecordingConnection(cursor)
-    with pytest.raises(ValueError, match="ambiguous"):
+    with pytest.raises(CharacterIdentityAmbiguity, match="Ambiguous"):
         enqueue_declared_entity_maturations(
             conn,
             declarations=[_DECLARATION],

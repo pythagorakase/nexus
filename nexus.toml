@@ -1357,3 +1357,10 @@ base_url = "https://nexus.pythagora.net"
 [runtime.remote.cloudflare_access]
 client_id_secret = "cloudflare_access_client_id"
 client_secret_secret = "cloudflare_access_client_secret"
+
+[character_identity]
+case_folding = true
+strip_diacritics = false
+strip_titles = true
+titles = ["mr", "mrs", "ms", "dr", "captain", "sir", "lady", "lord"]
+fuzzy_threshold = 0.9

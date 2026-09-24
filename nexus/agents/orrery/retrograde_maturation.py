@@ -66,6 +66,11 @@ from nexus.config.settings_models import (
     Settings,
 )
 from nexus.presence.roster import read_roster
+from nexus.presence.identity import (
+    CharacterIdentityAmbiguity,
+    require_character_identity,
+    refresh_generated_aliases,
+)
 from nexus.telemetry.usage import usage_context
 
 
@@ -185,6 +190,9 @@ def enqueue_declared_entity_maturations(
             if record.created:
                 result.stubs_created += 1
 
+        if any(declaration.kind == "character" for declaration in parsed):
+            refresh_generated_aliases(cur)
+
         for declaration, record in declaration_records:
             if not declaration.pair_tag_hints:
                 continue
@@ -243,6 +251,12 @@ def _resolve_or_create_stub(
     kind-incompatible names raise ``ValueError``).
     """
 
+    if declaration.kind == "character":
+        existing = require_character_identity(
+            cur, declaration.name, descriptors=declaration.summary
+        )
+        if existing is not None:
+            declaration = declaration.model_copy(update={"name": existing.name})
     table = _SUBTYPE_TABLES[declaration.kind]
     cur.execute(
         f"SELECT id, entity_id FROM {table} WHERE name = %s ORDER BY id",
@@ -362,7 +376,7 @@ def _resolve_pair_hint_entity(cur: Any, name: str) -> _DeclaredEntityRecord:
         SELECT entity_kind, subtype_id, entity_id
         FROM (
             SELECT 'character' AS entity_kind, id AS subtype_id, entity_id
-            FROM characters WHERE name = %s
+            FROM characters WHERE name = %s OR id IN (SELECT character_id FROM character_aliases WHERE alias = %s)
             UNION ALL
             SELECT 'place' AS entity_kind, id AS subtype_id, entity_id
             FROM places WHERE name = %s
@@ -372,7 +386,7 @@ def _resolve_pair_hint_entity(cur: Any, name: str) -> _DeclaredEntityRecord:
         ) AS matches
         ORDER BY entity_kind, subtype_id
         """,
-        (name, name, name),
+        (name, name, name, name),
     )
     rows = cur.fetchall()
     if not rows:
@@ -668,7 +682,11 @@ def drain_maturation_jobs_sync(
                             cur,
                             row=row,
                             error=str(exc),
-                            max_attempts=cfg.max_attempts,
+                            max_attempts=(
+                                1
+                                if isinstance(exc, CharacterIdentityAmbiguity)
+                                else cfg.max_attempts
+                            ),
                             retry_delay_seconds=cfg.retry_delay_seconds,
                         )
                 logger.exception(

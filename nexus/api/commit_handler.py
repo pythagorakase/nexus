@@ -70,6 +70,8 @@ from nexus.presence.roster import (
     write_roster_async,
 )
 
+from nexus.presence.identity import require_character_identity_async
+
 
 logger = logging.getLogger("nexus.api.commit_handler")
 
@@ -643,6 +645,14 @@ async def commit_incubator_to_database(
 
             # Get world_layer
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
+
+            for declaration in incubator.get("new_entities") or []:
+                if declaration["kind"] == "character":
+                    await require_character_identity_async(
+                        conn,
+                        declaration["name"],
+                        descriptors=declaration.get("summary"),
+                    )
 
             # Step 4: Insert narrative chunk
             choice_object = incubator.get("choice_object")

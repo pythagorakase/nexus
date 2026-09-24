@@ -1869,6 +1869,25 @@ class LogonUtility:
             from nexus.telemetry.usage import validation_attempt
 
             with validation_attempt(attempt_record):
+                declarations = getattr(output, "new_entities", None)
+                if (
+                    any(
+                        declaration.kind == "character"
+                        for declaration in declarations or []
+                    )
+                    and self._validation_dbname is not None
+                ):
+                    from nexus.api.presence_reconciliation import (
+                        validate_character_declarations,
+                    )
+
+                    from nexus.presence.identity import read_identity_index
+
+                    with get_connection(self._validation_dbname) as conn:
+                        identity_catalog = read_identity_index(conn)
+                    validate_character_declarations(
+                        declarations, index=identity_catalog
+                    )
                 presence = getattr(output, "presence", None)
                 if presence is not None and presence._reset_repair is not None:
                     index = None

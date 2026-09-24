@@ -163,6 +163,26 @@ class TraitCompilerCursor:
         params = params or ()
         normalized = " ".join(sql.strip().upper().split())
 
+        if (
+            "SELECT ID, NAME, ENTITY_ID, SUMMARY, CURRENT_LOCATION FROM CHARACTERS"
+            in normalized
+        ):
+            self._next_rows = [
+                {
+                    "id": key,
+                    "name": row["name"],
+                    "entity_id": row["entity_id"],
+                    "summary": None,
+                }
+                for key, row in self.characters.items()
+            ]
+            return
+        if "PG_ADVISORY_XACT_LOCK" in normalized or "CHARACTER_ALIASES" in normalized:
+            self._next_rows = []
+            return
+        if "SELECT 'PLACE' AS KIND" in normalized:
+            self._next_rows = []
+            return
         if "CURRENT_SETTING('NEXUS.WRITE_PRODUCER'" in normalized:
             self._next_row = ("",)
             return
@@ -605,6 +625,10 @@ class TraitCompilerCursor:
         row = self._next_row
         self._next_row = None
         return row
+
+    @property
+    def description(self):
+        return [(name,) for name in self._next_rows[0]] if self._next_rows else []
 
     def fetchall(self):
         rows = self._next_rows

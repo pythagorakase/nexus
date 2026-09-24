@@ -29,6 +29,11 @@ from nexus.api.trait_compiler import (
     persist_trait_compile_result,
 )
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal
+from nexus.presence.identity import (
+    require_character_identity,
+    refresh_generated_aliases,
+)
+
 
 logger = logging.getLogger("nexus.api.new_story_db_mapper")
 
@@ -292,98 +297,44 @@ class NewStoryDatabaseMapper:
             current_activity=current_activity,
         )
 
-        if cursor:
-            # Use provided cursor (part of larger transaction)
-            try:
-                cursor.execute(
-                    """
-                    INSERT INTO characters (
-                        name, summary, appearance, background, personality,
-                        emotional_state, current_activity, extra_data
-                    ) VALUES (
-                        %(name)s, %(summary)s, %(appearance)s, %(background)s,
-                        %(personality)s, %(emotional_state)s, %(current_activity)s,
-                        %(extra_data)s::jsonb
-                    )
-                    RETURNING id, entity_id
+        if cursor is None:
+            with get_connection(self.dbname) as conn, conn.cursor() as cur:
+                return self.create_protagonist(
+                    character,
+                    cursor=cur,
+                    emotional_state=emotional_state,
+                    current_activity=current_activity,
+                )
+        existing = require_character_identity(
+            cursor, character.name, descriptors=db_record["summary"]
+        )
+        if existing is None:
+            cursor.execute(
+                """
+                INSERT INTO characters (name, summary, appearance, background, personality,
+                    emotional_state, current_activity, extra_data)
+                VALUES (%(name)s, %(summary)s, %(appearance)s, %(background)s,
+                    %(personality)s, %(emotional_state)s, %(current_activity)s, %(extra_data)s::jsonb)
+                RETURNING id, entity_id
                 """,
-                    db_record,
-                )
-
-                character_id, entity_id = cursor.fetchone()
-
-                # Update global_variables to point to this character
-                cursor.execute(
-                    "UPDATE global_variables SET user_character = %s WHERE id = true",
-                    (character_id,),
-                )
-
-                tag_counters = apply_tag_bestowal(
-                    cursor,
-                    entity_id=entity_id,
-                    entity_kind="character",
-                    bestowal=character.orrery_tags,
-                    source_kind="skald_inline",
-                )
-                if any(tag_counters.values()):
-                    logger.info(f"Tag bestowal for {character.name}: {tag_counters}")
-
-                logger.info(
-                    f"Created protagonist: {character.name} (ID: {character_id})"
-                )
-                return character_id
-
-            except Exception as e:
-                logger.error(f"Failed to create protagonist {character.name}: {e}")
-                raise
+                db_record,
+            )
+            character_id, entity_id = cursor.fetchone()
         else:
-            # Standalone operation - create own connection
-            with get_connection(self.dbname) as conn:
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            INSERT INTO characters (
-                                name, summary, appearance, background, personality,
-                                emotional_state, current_activity, extra_data
-                            ) VALUES (
-                                %(name)s, %(summary)s, %(appearance)s, %(background)s,
-                                %(personality)s, %(emotional_state)s, %(current_activity)s,
-                                %(extra_data)s::jsonb
-                            )
-                            RETURNING id, entity_id
-                        """,
-                            db_record,
-                        )
-
-                        character_id, entity_id = cur.fetchone()
-
-                        # Update global_variables to point to this character
-                        cur.execute(
-                            "UPDATE global_variables SET user_character = %s WHERE id = true",
-                            (character_id,),
-                        )
-
-                        tag_counters = apply_tag_bestowal(
-                            cur,
-                            entity_id=entity_id,
-                            entity_kind="character",
-                            bestowal=character.orrery_tags,
-                            source_kind="skald_inline",
-                        )
-                        if any(tag_counters.values()):
-                            logger.info(
-                                f"Tag bestowal for {character.name}: {tag_counters}"
-                            )
-
-                    logger.info(
-                        f"Created protagonist: {character.name} (ID: {character_id})"
-                    )
-                    return character_id
-
-                except Exception as e:
-                    logger.error(f"Failed to create protagonist {character.name}: {e}")
-                    raise
+            character_id, entity_id = existing.id, existing.entity_id
+        refresh_generated_aliases(cursor)
+        cursor.execute(
+            "UPDATE global_variables SET user_character = %s WHERE id = true",
+            (character_id,),
+        )
+        apply_tag_bestowal(
+            cursor,
+            entity_id=entity_id,
+            entity_kind="character",
+            bestowal=character.orrery_tags,
+            source_kind="skald_inline",
+        )
+        return character_id
 
     def create_location_hierarchy(
         self,

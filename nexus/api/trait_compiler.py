@@ -51,6 +51,10 @@ from nexus.api.trait_compiler_schemas import (
     canonical_trait_name,
     suppress_cold_start_relationship_inputs,
 )
+from nexus.presence.identity import (
+    require_character_identity,
+    refresh_generated_aliases,
+)
 
 
 RESOURCE_TAGS = frozenset({"destitute", "poor", "comfortable", "wealthy", "magnate"})
@@ -1784,6 +1788,9 @@ def _create_target_stub(
 def _insert_character_stub(
     cur: Any, *, name: str, trait: str, role: str
 ) -> tuple[int, int]:
+    existing = require_character_identity(cur, name, descriptors=role)
+    if existing is not None:
+        return existing.id, existing.entity_id
     cur.execute(
         """
         /* trait_compiler:insert_character_stub */
@@ -1804,6 +1811,7 @@ def _insert_character_stub(
     row = cur.fetchone()
     if row is None:
         raise RuntimeError(f"Character stub insert for {name!r} returned no row.")
+    refresh_generated_aliases(cur)
     return _row_value(row, "id", 0), _row_value(row, "entity_id", 1)
 
 

@@ -277,17 +277,25 @@ class IdentityIndex:
     """Resolve canonical names and stored aliases without choosing an ambiguity."""
 
     def __init__(
-        self, entries: Iterable[RosterEntry], aliases: Iterable[Mapping[str, Any]] = ()
+        self,
+        entries: Iterable[RosterEntry],
+        aliases: Iterable[Mapping[str, Any]] = (),
+        *,
+        evidence: Mapping[RosterKey, Mapping[str, Any]] | None = None,
     ) -> None:
         self.by_id = {entry.key: entry for entry in entries}
+        self.evidence = dict(evidence or {})
         self.by_name: dict[tuple[str, str], set[RosterKey]] = {}
+        self.labels: list[tuple[str, str, RosterKey]] = []
         for entry in self.by_id.values():
+            self.labels.append((entry.kind, entry.name, entry.key))
             self.by_name.setdefault((entry.kind, entry.name.casefold()), set()).add(
                 entry.key
             )
         for alias in aliases:
             key: RosterKey = ("character", int(alias["character_id"]))
             if key in self.by_id:
+                self.labels.append(("character", str(alias["alias"]), key))
                 self.by_name.setdefault(
                     ("character", str(alias["alias"]).casefold()), set()
                 ).add(key)
@@ -308,12 +316,14 @@ def character_identity_index(
     character_rows: Iterable[Mapping[str, Any]], alias_rows: Iterable[Mapping[str, Any]]
 ) -> IdentityIndex:
     """Build the character resolver from the turn's already-prefetched catalog."""
+    characters = list(character_rows)
     return IdentityIndex(
         (
             RosterEntry(kind="character", id=int(row["id"]), name=row["name"])
-            for row in character_rows
+            for row in characters
         ),
         alias_rows,
+        evidence={("character", int(row["id"])): row for row in characters},
     )
 
 

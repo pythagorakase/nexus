@@ -256,6 +256,7 @@
     "nexus/memory/user_confirmation.py",
     "nexus/presence/__init__.py",
     "nexus/presence/cues.py",
+    "nexus/presence/identity.py",
     "nexus/presence/roster.py",
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",
