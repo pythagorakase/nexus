@@ -1,0 +1,118 @@
+{
+  "method": "Recorded 1A assembly replay; real TEST renderer; no generation or ranking intervention",
+  "database": "qa640_911_c9e62560dcc1",
+  "frontier_sql": "SELECT count(*), max(id) FROM narrative_chunks",
+  "source_before": [
+    [
+      46,
+      49
+    ]
+  ],
+  "source_payload": "docs/qa/909-long-absence-probe/live/79b4e65e-39ab-4e90-a28d-86756688ac02-skald_writer-prompt.json",
+  "clone_frontier": [
+    [
+      46,
+      49
+    ]
+  ],
+  "replay_type_restoration": "Relationship valence strings restored to Decimal",
+  "passage_sql": "SELECT id, raw_text, storyteller_text FROM narrative_chunks ORDER BY id",
+  "frontier_input_note": "Chunk 49 storyteller text verified; archived 1A player input retained instead of the source pending choice. All other retrieved texts match exactly.",
+  "verified_retrieval_ids": [
+    49,
+    48,
+    36,
+    47,
+    28,
+    37,
+    46,
+    27,
+    35,
+    42,
+    26,
+    21,
+    24,
+    25,
+    22
+  ],
+  "user_input": "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\"",
+  "runs": [
+    {
+      "cap": 5,
+      "provider_model": "TEST",
+      "printed_ids": [
+        49,
+        48,
+        36,
+        47,
+        28
+      ],
+      "historical_tokens_before_trim": 4095,
+      "historical_tokens_after_trim": 4095,
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 35079,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 32471,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      },
+      "dropped_ids": []
+    },
+    {
+      "cap": 15,
+      "provider_model": "TEST",
+      "printed_ids": [
+        49,
+        48,
+        36,
+        47,
+        28,
+        37,
+        46,
+        27,
+        35,
+        42,
+        26,
+        21,
+        24,
+        25,
+        22
+      ],
+      "historical_tokens_before_trim": 14355,
+      "historical_tokens_after_trim": 14355,
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 45339,
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 42731,
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      },
+      "dropped_ids": []
+    }
+  ],
+  "source_after": [
+    [
+      46,
+      49
+    ]
+  ],
+  "clone_dropped": true
+}

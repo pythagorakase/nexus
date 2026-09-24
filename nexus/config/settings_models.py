@@ -966,6 +966,7 @@ class RenderLimits(BaseModel):
     events: int = Field(..., ge=1)
     threats: int = Field(..., ge=1)
     bleed_menu: int = Field(..., ge=1)
+    historical_passages: int = Field(default=15, ge=1)
     character_tags: int = Field(
         default=8,
         ge=1,

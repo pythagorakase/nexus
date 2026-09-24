@@ -230,6 +230,8 @@ agentic_sql = true  # Enable agent to generate SQL queries dynamically
 
 # Per-block item caps; seat-window token budgets still apply.
 [lore.render_limits]
+# Maximum retrieved passages before subtractive seat-window trimming.
+historical_passages = 15
 relationships = 5
 events = 5
 threats = 5
