@@ -1,6 +1,117 @@
 # Work Order 800-B Verification
 
-Status: **PASS — successful paid episode and season summaries; all required gates pass on the rebased tree.**
+Status: **PASS — all five PR #940 review findings fixed; fifth-issue gates pass. No additional paid calls. The fourth-issue paid proof stands.**
+
+## Fifth-Issue Review Fixes
+
+Continuation of PR #940 from `b321f2c0`, using ordinary fix commits without rewriting history. Implementation commit: `974a71ea`; archive-redaction commit: `05a4af59`. No paid calls were made in this continuation; the fourth-issue persisted proof and every cost-relevant count below stand. No prompts, allowances, configuration fields, or migration files were changed.
+
+- **Lease renewal:** `nexus/jobs/scheduler.py:377` renews the tracked nonce throughout preparation, including inference, until the drain writes completion/failure and clears tracking. The existing lost-lease flag stops the next checkpoint loudly. `tests/test_api/test_narrative_jobs_pg.py:335` uses a real disposable database, a 0.5-second job lease, and 1.5-second preparation. It observes the original nonce still live with attempts=1 and commits under that nonce. Its second case replaces the nonce and proves the next checkpoint raises `SchedulerStopped` without writing a summary.
+- **Registry defaults:** `scripts/api_openai.py:397`, `ir_eval/scripts/auto_judge.py:101`, and `ir_eval/ir_eval.py:2196` resolve `ir_eval.judgment.model` through Pydantic settings. The common CLI defers its omitted model to that runtime lookup. The same change covers the creative-character CLI and legacy character-batch default. `tests/test_openai_registry_capabilities.py:46` and `:58` construct the actual default wrapper and judge without inference. No retired model was registered.
+- **Chat truncation:** `nexus/api/summary_errors.py:13` recognizes `finish_reason=length`, including syntactically valid cut JSON. `scripts/api_openai.py:767` invokes the classifier before parsing; its existing `finally` recorder records the in-hand Chat response with outcome `error`, without a validation retry (`:813`). `SummaryOutputTruncated` remains terminal in the durable queue. TEST's Chat endpoint hardcodes `finish_reason=tool_calls` (`nexus/api/mock_openai.py:750`) and cannot emit length, so the authorized alternative uses validated `openai.types.chat.ChatCompletion` objects (`tests/test_summary_triggers.py:213`). The real PostgreSQL terminal-state test covers both transports (`tests/test_api/test_narrative_jobs_pg.py:220`).
+- **Database failures:** `scripts/summarize_narrative.py:1162` no longer catches span-query failures. A genuinely empty episode raises a distinct descriptive `RuntimeError` in `nexus/jobs/summaries.py:38`. `tests/test_api/test_narrative_jobs_pg.py:424` takes a real exclusive lock on `chunk_metadata` and applies a 100ms lock timeout only to its disposable database. The actual summary drain records `failed`, attempts=1, `OperationalError`, with no summary. The empty-span case records `RuntimeError` and likewise never succeeds. An initial test setup blocked an earlier scheduler milestone query; the final test calls the scheduler's actual summary drain directly to isolate the reviewed failure path.
+- **Archived evidence redaction:** All Pydantic `input_value` response excerpts were redacted because they echoed generated narrative into error logs. The successful summaries' prose was also redacted in `paid-proof.json` and the duplicate `fourth-paid-proof.txt` payload. Their SHA-256 hashes, character counts, word counts, per-section counts, job states, response statuses, error classes/reasons, and exact usage remain. Six archived files changed. [Redaction audit](fifth-redaction-audit.txt) compares the retained SQL/usage fields with `b321f2c0` and verifies hashes/counts against the original summaries. These are ordinary commits, as required; no history was rewritten.
+
+### Literal-Model Audit
+
+Ran `rg -n 'gpt-4|gpt-5|o3' ir_eval scripts nexus --glob '*.py'` and traced callers of the shared `scripts.api_openai.OpenAIProvider`. All literal defaults reaching that wrapper were removed. Remaining matches are tokenizer names/prefixes, documentation, unused `ModelName` enum values, OpenRouter's separate provider mapping, direct SDK utilities (`freestyle_api_query.py`, `process_factions.py`, `faction_relationship_analyst.py`), or `estimate_time_delta.py`'s separate legacy provider implementation. They do not reach the changed shared wrapper. `process_characters.py` references the retired, absent `api_batch` module; its model default was nevertheless migrated without expanding this order into repairing that historical utility.
+
+### Fifth-Issue Gates
+
+All gates below exited 0. `$PY` is `/Users/pythagor/nexus/.venv/bin/python`; every test runs with `PYTHONPATH=$PWD` from this worktree. Each gate redirected stdout and stderr with `> docs/qa/800-embedding-summaries/<log-name> 2>&1`. The tails are verbatim. No UI build applies.
+
+#### Focused Offline Regressions
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_summary_triggers.py tests/test_openai_registry_capabilities.py
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+19 passed, 5 warnings in 4.27s
+```
+
+[Full output](fifth-focused-offline.txt).
+
+#### Focused PostgreSQL Regressions
+
+```sh
+NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api/test_narrative_jobs_pg.py -k 'renews or span_failure or truncation'
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+6 passed, 5 deselected, 7 warnings in 11.01s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+[Full output](fifth-focused-postgres.txt).
+
+#### Offline Suite
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2732 passed, 928 skipped, 9 warnings in 129.68s (0:02:09)
+```
+
+[Full output](fifth-offline-gate.txt).
+
+#### Prompt Lint and Reachability
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_prompt_lint.py tests/test_reachability.py
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+60 passed, 5 warnings in 19.77s
+```
+
+[Full output](fifth-prompt-reachability.txt).
+
+#### PostgreSQL Selection
+
+```sh
+NEXUS_GATEWAY_PORT=8016 NEXUS_API_URL=http://127.0.0.1:8016 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_api tests/test_orrery tests/test_summary_triggers.py tests/test_qa_shift.py -k 'embed or summar or scheduler or job or queue or manifest or boundary or disclosure'
+```
+
+```text
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+205 passed, 1 skipped, 1867 deselected, 11 warnings in 373.94s (0:06:13)
+```
+
+[Full output](fifth-postgres-gate.txt).
+
+#### Black
+
+```sh
+git diff --name-only origin/main -- '*.py' > temp/800b-python-files.txt
+PYTHONPATH=$PWD $PY -m black --check $(cat temp/800b-python-files.txt)
+```
+
+```text
+All done! ✨ 🍰 ✨
+39 files would be left unchanged.
+```
+
+[Full output](fifth-black-gate.txt).
+
+The offline suite has zero failures. Its skips are opt-in tests and do not substitute for the PostgreSQL gate. The PostgreSQL selection has zero failures and one skipped paid-proof test: no further paid calls were authorized. No #885 IDs failed; no exemption was used. Prompt lint and reachability both passed. Black checked all 39 Python files changed against origin/main.
+
+Import resolution was rechecked after the fixes and still points to this worktree. Gateway fixtures use lane 8016, stop only their own server, and call `nexus down` under the same isolated environment in teardown (`tests/scheduler_helpers.py:145`). Disposable database fixtures own migration and cleanup. No owner save or fleet/template migration was performed. Both implementation and redaction commits passed their applicable pre-commit hooks without bypass. Prompts, nexus.toml, and migration files are unchanged from b321f2c0; that commit remains an ancestor.
+
+Open questions for the coordinator: none. Fleet application of migration 125, #937's request budget, general SDK parse-validation accounting, model downloads, and off-screen narration embeddings remain the previously agreed deferrals.
+
+The rest of this document records the fourth issue's previously completed paid proof and gates.
 
 ## Rebase and Scope
 
