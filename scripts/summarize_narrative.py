@@ -55,12 +55,15 @@ if parent_dir not in sys.path:
 
 # Import shared API utilities
 from nexus.api.native_structured_output import build_native_structured_provider
-from nexus.api.summary_errors import SummaryOutputTruncated, check_summary_response
+from nexus.api.summary_errors import (
+    SummaryInputTooLong,
+    SummaryOutputTruncated,
+    check_summary_response,
+)
 from nexus.prompts.registry import PromptId, load
 from scripts.api_openai import (
     LLMResponse,
     OpenAIProvider,
-    get_token_count,
     is_abort_requested,
     setup_abort_handler,
 )
@@ -1270,7 +1273,16 @@ class SummaryGenerator:
         """
         from nexus.config import load_settings
 
-        summary_settings = load_settings().summaries
+        settings = load_settings()
+        summary_settings = settings.summaries
+        self._settings = settings.model_dump()
+        self._model_entry = next(
+            entry
+            for entry in settings.global_.model.api_models[
+                settings.provider_for_model(model)
+            ].models
+            if entry.id == model
+        ).require_window_capabilities()
         self.model = model
         self.temperature = (
             summary_settings.temperature if temperature is None else temperature
@@ -1280,7 +1292,6 @@ class SummaryGenerator:
             "episode": summary_settings.episode_max_output_tokens,
             "season": summary_settings.season_max_output_tokens,
         }
-        self._request_token_budget = summary_settings.request_token_budget
         self._structured_output_retries = summary_settings.structured_output_retries
         self.is_reasoning_model = self._model_rejects_temperature(model)
         self.db_manager = db_manager or DatabaseManager()
@@ -1371,7 +1382,14 @@ class SummaryGenerator:
     ) -> Tuple[Any, LLMResponse]:
         """Generate one summary through the provider's native transport."""
 
+        self._token_check(prompt, mode, schema_model)
         provider = self._provider_for_mode(mode)
+
+        def guard(active_prompt: str, attempt: int, **kwargs: Any) -> None:
+            # Provider repair retries append validation feedback to the prompt.
+            self._token_check(active_prompt, mode, schema_model)
+
+        provider.prompt_window_guard = guard
         return provider.get_structured_completion(prompt, schema_model)
 
     def _get_system_prompt(self, mode: str) -> str:
@@ -1434,36 +1452,36 @@ class SummaryGenerator:
         # Join all chunks with newlines
         return "\n\n".join(formatted_chunks)
 
-    def _token_check(self, text: str, mode: str) -> bool:
-        """
-        Check if the text is within token limits for the model.
+    def _token_check(
+        self, text: str, mode: str, schema_model: Optional[Type[BaseModel]] = None
+    ) -> bool:
+        """Reject assembled system, user, and schema input before provider dispatch."""
+        from nexus.api.native_structured_output import openai_response_text_format
+        from nexus.config.seat_window import resolve_summary_window
+        from nexus.telemetry.prompt_window import local_text_counter
 
-        Args:
-            text: The text to check
-            mode: Either 'season' or 'episode'
-
-        Returns:
-            True if within limits, False otherwise
-        """
-        token_count = get_token_count(text, self.model)
-
-        # Set output token limit based on mode
-        expected_output_tokens = self._max_output_tokens[mode]
-
-        # Calculate max input tokens (with a small buffer)
-        max_input_tokens = self._request_token_budget - expected_output_tokens
-
-        if token_count > max_input_tokens:
-            logger.warning(
-                f"Input too long: {token_count} tokens (limit: {max_input_tokens}). "
-                f"Try using fewer chunks or a smaller range."
+        budget = resolve_summary_window(self._settings, self.model, mode=mode)
+        count = local_text_counter(self._model_entry)
+        token_count = count(text) + count(self._get_system_prompt(mode))
+        if schema_model is not None:
+            token_count += count(
+                json.dumps(
+                    openai_response_text_format(schema_model), ensure_ascii=False
+                )
             )
-            return False
-
+        if token_count > budget.input_ceiling:
+            raise SummaryInputTooLong(
+                f"{mode} summary input too long for model {self.model!r}: "
+                f"input_tokens={token_count}, input_budget={budget.input_ceiling}, "
+                f"output_allowance={budget.max_output_tokens}, "
+                f"policy_headroom={budget.policy_headroom}, "
+                f"token_count_safety_margin={self._model_entry.token_count_safety_margin}"
+            )
         logger.info(
-            "Token count: %s (under configured input limit of %s)",
+            "Summary model %s input tokens: %s (budget: %s)",
+            self.model,
             token_count,
-            max_input_tokens,
+            budget.input_ceiling,
         )
         return True
 
@@ -1551,11 +1569,6 @@ class SummaryGenerator:
             CHUNKS_TEXT=f"{chunks_text}",
         )
 
-        # Token check
-        if not self._token_check(prompt, "season"):
-            logger.warning("Token check failed - input may be too long")
-            # Proceed anyway - the API will truncate if needed
-
         # Save prompt if requested
         self._save_prompt_to_file(prompt, f"season_{season}")
 
@@ -1606,7 +1619,7 @@ class SummaryGenerator:
                 logger.error(f"Failed to save summary for Season {season}")
                 return None
 
-        except SummaryOutputTruncated:
+        except (SummaryInputTooLong, SummaryOutputTruncated):
             raise
         except Exception as e:
             self.last_error = str(e)
@@ -1740,11 +1753,6 @@ class SummaryGenerator:
             CHUNKS_TEXT=f"{chunks_text}",
         )
 
-        # Token check
-        if not self._token_check(prompt, "episode"):
-            logger.warning("Token check failed - input may be too long")
-            # Proceed anyway - the API will truncate if needed
-
         # Save prompt if requested
         self._save_prompt_to_file(prompt, f"s{season:02d}e{episode:02d}")
 
@@ -1799,7 +1807,7 @@ class SummaryGenerator:
                 logger.error(f"Failed to save summary for S{season:02d}E{episode:02d}")
                 return None
 
-        except SummaryOutputTruncated:
+        except (SummaryInputTooLong, SummaryOutputTruncated):
             raise
         except Exception as e:
             self.last_error = str(e)
@@ -2059,11 +2067,6 @@ class SummaryGenerator:
                 CHUNKS_TEXT=f"{chunks_text}",
             )
 
-        # Token check
-        if not self._token_check(prompt, mode):
-            logger.warning("Token check failed - input may be too long")
-            # Proceed anyway - the API will truncate if needed
-
         # Save prompt if requested
         self._save_prompt_to_file(prompt, f"chunks_{start_id}_{end_id}")
 
@@ -2149,7 +2152,7 @@ class SummaryGenerator:
 
             return summary_dict
 
-        except SummaryOutputTruncated:
+        except (SummaryInputTooLong, SummaryOutputTruncated):
             raise
         except Exception as e:
             self.last_error = str(e)

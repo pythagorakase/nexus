@@ -6,6 +6,10 @@ import json
 from typing import Any
 
 
+class SummaryInputTooLong(RuntimeError):
+    """The assembled summary input exceeds the configured model's capacity."""
+
+
 class SummaryOutputTruncated(RuntimeError):
     """The provider exhausted or interrupted a summary's output allowance."""
 

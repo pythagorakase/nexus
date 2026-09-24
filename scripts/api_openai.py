@@ -595,17 +595,12 @@ class OpenAIProvider(LLMProvider):
                     request_params = self._build_native_structured_request_params(
                         active_prompt,
                         schema_model,
-                        text_format=(
-                            text_format or openai_response_text_format(schema_model)
-                            if self.response_check is not None
-                            else text_format
-                        ),
+                        text_format=text_format,
                         prompt_cache_key=prompt_cache_key,
                     )
-                    if self.response_check is not None:
-                        response = self.client.responses.create(**request_params)
-                    else:
-                        response = self.client.responses.parse(**request_params)
+                    # Keep the successful exchange in hand before local validation.
+                    # SDK parse can raise before returning its usage and response ID.
+                    response = self.client.responses.create(**request_params)
                 except Exception as exc:
                     if not self._should_fallback_to_chat_completions(exc):
                         raise
@@ -668,19 +663,23 @@ class OpenAIProvider(LLMProvider):
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
-                result_recorder = getattr(self, "attempt_manifest_result", None)
-                if result_recorder is not None and not handed_off:
-                    result_recorder(usage_outcome)
-                if response is not None:
-                    record_openai_response(
-                        response,
-                        provider=self.usage_provider_name,
-                        model=cast(str, self.model),
-                        seat=self.usage_seat,
-                        attempt=attempt + 1,
-                        outcome=usage_outcome,
-                        transport="responses",
-                    )
+                try:
+                    result_recorder = getattr(self, "attempt_manifest_result", None)
+                    if result_recorder is not None and not handed_off:
+                        result_recorder(usage_outcome)
+                finally:
+                    # One ledger event with the final outcome, even when the
+                    # manifest callback or local validation itself fails.
+                    if response is not None:
+                        record_openai_response(
+                            response,
+                            provider=self.usage_provider_name,
+                            model=cast(str, self.model),
+                            seat=self.usage_seat,
+                            attempt=attempt + 1,
+                            outcome=usage_outcome,
+                            transport="responses",
+                        )
 
         raise RuntimeError("Structured completion failed") from last_error
 
@@ -857,10 +856,9 @@ class OpenAIProvider(LLMProvider):
             "input": input_messages,
             "max_output_tokens": self.max_output_tokens,
         }
-        if text_format is None:
-            request_params["text_format"] = schema_model
-        else:
-            request_params["text"] = {"format": text_format}
+        request_params["text"] = {
+            "format": text_format or openai_response_text_format(schema_model)
+        }
         if self.supports_temperature and self.temperature is not None:
             request_params["temperature"] = self.temperature
         if self.is_reasoning_model and self.reasoning_effort:

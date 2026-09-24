@@ -119,7 +119,7 @@ def test_single_responses_call_records_jsonl_log_and_cli_json(
     )
 
     class FakeResponses:
-        def parse(self, **_kwargs: object) -> SimpleNamespace:
+        def create(self, **_kwargs: object) -> SimpleNamespace:
             return response
 
     provider = OpenAIProvider(
@@ -174,7 +174,7 @@ def test_two_provider_passes_keep_seats_models_and_sum(tmp_path: Path) -> None:
     )
 
     class FakeResponses:
-        def parse(self, **_kwargs: object) -> SimpleNamespace:
+        def create(self, **_kwargs: object) -> SimpleNamespace:
             return next(responses)
 
     writer = OpenAIProvider(
@@ -226,7 +226,7 @@ def test_repair_loop_records_rejected_then_accepted(tmp_path: Path) -> None:
     )
 
     class FakeResponses:
-        def parse(self, **_kwargs: object) -> SimpleNamespace:
+        def create(self, **_kwargs: object) -> SimpleNamespace:
             return next(responses)
 
     provider = OpenAIProvider(
@@ -265,7 +265,7 @@ def test_exhausted_repair_labels_final_attempt_rejected_validation(
     )
 
     class FakeResponses:
-        def parse(self, **_kwargs: object) -> SimpleNamespace:
+        def create(self, **_kwargs: object) -> SimpleNamespace:
             return bad
 
     provider = OpenAIProvider(
@@ -356,7 +356,7 @@ def test_missing_usage_stays_null_and_counts_unknown(tmp_path: Path) -> None:
     response.usage = None
 
     class FakeResponses:
-        def parse(self, **_kwargs: object) -> SimpleNamespace:
+        def create(self, **_kwargs: object) -> SimpleNamespace:
             return response
 
     provider = OpenAIProvider(

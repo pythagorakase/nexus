@@ -3277,6 +3277,15 @@ class APEXSettings(SeatWindowPolicy):
 # =============================================================================
 
 
+class SummaryWindowPolicy(BaseModel):
+    """Explicit input headroom and outside-output reasoning for summaries."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    response_reserve_tokens: int = Field(default=0, ge=0, strict=True)
+    reasoning_reserve_tokens: int = Field(default=0, ge=0, strict=True)
+
+
 class SummariesSettings(BaseModel):
     """Episode/season summary generation configuration."""
 
@@ -3311,33 +3320,12 @@ class SummariesSettings(BaseModel):
         gt=0,
         description="Maximum output tokens for season summaries.",
     )
-    request_token_budget: int = Field(
-        default=30000,
-        gt=0,
-        description=(
-            "Conservative combined input/output token budget for one summary request."
-        ),
-    )
+    window: SummaryWindowPolicy = Field(default_factory=SummaryWindowPolicy)
     structured_output_retries: int = Field(
         default=0,
         ge=0,
         description="Validation retry budget for structured summary output.",
     )
-
-    @model_validator(mode="after")
-    def _validate_request_budget(self) -> "SummariesSettings":
-        """Keep each output allowance below the combined request budget."""
-
-        largest_output = max(
-            self.episode_max_output_tokens,
-            self.season_max_output_tokens,
-        )
-        if self.request_token_budget <= largest_output:
-            raise ValueError(
-                "summaries.request_token_budget must exceed both summary "
-                "max-output-token settings"
-            )
-        return self
 
 
 # =============================================================================
