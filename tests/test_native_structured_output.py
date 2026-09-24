@@ -851,7 +851,7 @@ def test_openai_provider_forwards_only_configured_request_timeout(
 
 
 def test_openai_provider_uses_responses_create_strict_format() -> None:
-    """OpenAI provider should call native parse with the Pydantic model."""
+    """OpenAI provider sends the Pydantic strict schema through Responses create."""
 
     expected = _bootstrap_response()
     captured = {}

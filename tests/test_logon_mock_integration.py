@@ -233,7 +233,7 @@ def test_logon_real_entrypoint_records_registry_provider_and_single_pass_seat(
         ),
     )
     utility.provider.client = SimpleNamespace(
-        responses=SimpleNamespace(parse=lambda **_kwargs: raw_response)
+        responses=SimpleNamespace(create=lambda **_kwargs: raw_response)
     )
 
     response = utility.generate_narrative(
