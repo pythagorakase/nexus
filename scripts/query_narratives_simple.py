@@ -21,7 +21,7 @@ def main():
     args = parser.parse_args()
 
     # Connect to the database
-    engine = sa.create_slot_engine(None)
+    engine = create_slot_engine(None)
 
     try:
         # Simple text search using ILIKE

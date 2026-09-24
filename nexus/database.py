@@ -83,16 +83,23 @@ _engines: dict[str, WeakSet] = {}
 _engines_lock = threading.RLock()
 
 
-def create_slot_engine(dbname_or_url: str | URL, **overrides: Any) -> Engine:
-    """Create a registered SQLAlchemy engine with checkout and session policy."""
+def create_slot_engine(
+    dbname_or_url: str | URL | None = None, **overrides: Any
+) -> Engine:
+    """Create a registered SQLAlchemy engine with checkout and session policy.
+
+    ``None`` (or an empty string) selects the active slot, exactly as the
+    retired ``resolved_database_url(None)`` did for script callers.
+    """
     from sqlalchemy import create_engine
 
     config = load_settings().api.database
-    params = (
-        url_connection_kwargs(dbname_or_url)
-        if isinstance(dbname_or_url, URL) or "://" in dbname_or_url
-        else connection_kwargs(dbname_or_url)
-    )
+    if not dbname_or_url:
+        params = connection_kwargs(None)
+    elif isinstance(dbname_or_url, URL) or "://" in dbname_or_url:
+        params = url_connection_kwargs(dbname_or_url)
+    else:
+        params = connection_kwargs(dbname_or_url)
     params.update(overrides.pop("connect_args", {}))
     params["options"] = _session_options(params.get("options"), config.session_timezone)
     params["application_name"] = application_name("sqlalchemy")
