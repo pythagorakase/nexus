@@ -1532,7 +1532,6 @@ def _retry_boundary_response(
     ("boundary", "failure_path", "expected_suggestion"),
     [
         ("character_applied_tags", "updates.characters[0]", "human"),
-        ("place_tags_to_clear", "updates.places[0]", None),
         ("faction_applied_tags", "updates.factions[0]", None),
         (
             "faction_identity",

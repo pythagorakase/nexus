@@ -35,6 +35,7 @@ from nexus.agents.orrery.tag_writer import (
     validate_pair_tag_endpoint,
     validate_tag_bestowal,
 )
+from nexus.telemetry.usage import record_wire_repair
 from nexus.util.log_safety import quote_log_value
 
 logger = logging.getLogger("nexus.logon.orrery_tag_validation")
@@ -1036,6 +1037,14 @@ def normalize_extend_expiry_reasserts(
             candidate.array_name,
             candidate.update_index,
         )
+        record_wire_repair(
+            {
+                "repair": "active-extend-expiry",
+                "path": candidate.path,
+                "entity_name": canonical_name,
+                "tag": candidate.tag,
+            }
+        )
         normalized += 1
 
     handled_candidates: List[_ExtendExpiryCandidate] = []
@@ -1178,6 +1187,98 @@ def _annotate_matching_issue(
             )
             break
     return annotated
+
+
+def normalize_replacement_tag_reasserts(
+    response: Any,
+    cur: Any,
+    *,
+    vocabulary: StorytellerVocabulary,
+    proposal_bindings: Optional[Mapping[str, Mapping[str, Any]]],
+    anchor_world_time: Optional[datetime],
+    handled_sites: MutableSet[Tuple[str, int]],
+) -> None:
+    """Repair active actor/target reassertions using proposal spine identities."""
+    kinds, _ = _replacement_entity_kinds(
+        response, cur, proposal_bindings=proposal_bindings
+    )
+    activity = active_entity_tag_at_world_time_sql(
+        entity_tag_alias="et", world_time_sql="%s::timestamptz"
+    )
+    for index, adjudication in enumerate(
+        getattr(response, "orrery_adjudications", None) or []
+    ):
+        delta = adjudication.replacement_state_delta
+        if delta is None:
+            continue
+        for endpoint_index, (endpoint, field_name) in enumerate(
+            (("actor", "entity_tags_add"), ("target", "entity_tags_target_add"))
+        ):
+            kind = kinds.get(index, (None, None))[endpoint_index]
+            values = getattr(delta, field_name, None)
+            if kind is None or not values:
+                continue
+            entity_id = proposal_bindings[adjudication.proposal_id][endpoint]
+            path = f"orrery_adjudications[{index}].replacement_state_delta.{field_name}"
+            retained = []
+            for tag in values:
+                if (
+                    vocabulary.tag_reapplication_policies_by_kind.get(kind, {}).get(tag)
+                    != "extend_expiry"
+                ):
+                    retained.append(tag)
+                    continue
+                cur.execute(
+                    f"SELECT EXISTS (SELECT 1 FROM entity_tags et JOIN tags t ON t.id = et.tag_id "
+                    f"WHERE et.entity_id = %s AND t.tag = %s AND et.cleared_at IS NULL AND {activity})",
+                    (entity_id, tag, anchor_world_time, anchor_world_time),
+                )
+                if bool(_row_value(cur.fetchone(), "exists", 0)):
+                    record_wire_repair(
+                        {
+                            "repair": "active-extend-expiry",
+                            "path": path,
+                            "entity_id": entity_id,
+                            "tag": tag,
+                        }
+                    )
+                    continue
+                clearance = vocabulary.tag_clearance_kinds_by_kind.get(kind, {}).get(
+                    tag
+                )
+                duration = vocabulary.tag_default_durations_by_kind.get(kind, {}).get(
+                    tag
+                )
+                if clearance in {"semantic", "event"} and duration is not None:
+                    raise RuntimeError(
+                        f"Semantic/event extend-expiry tag unexpectedly carries default_duration: {tag!r}"
+                    )
+                if clearance in {"semantic", "event"} or (
+                    clearance == "time"
+                    and duration is not None
+                    and anchor_world_time is not None
+                ):
+                    handled_sites.add((path, len(retained)))
+                retained.append(tag)
+            setattr(delta, field_name, retained)
+
+
+def resolve_place_updates(response: Any, cur: Any, *, allow_declarations: bool) -> None:
+    """Reject unknown Gaia places before any staging write and canonicalize aliases."""
+    from nexus.presence.roster import resolve_place_update
+
+    updates = getattr(response, "updates", None)
+    if updates is None:
+        return
+    pending = frozenset(
+        item.name
+        for item in (getattr(response, "new_entities", None) or [])
+        if item.kind == "place" and allow_declarations
+    )
+    for update in updates.places:
+        update.id, update.name = resolve_place_update(
+            cur, identifier=update.id, name=update.name, pending_names=pending
+        )
 
 
 def collect_orrery_tag_issues(
@@ -1344,6 +1445,11 @@ def build_storyteller_tag_validator(
                                 "Storyteller tag validation anchor world_time has "
                                 f"an unexpected type: chunk_id={anchor_chunk_id}"
                             )
+                resolve_place_updates(
+                    output,
+                    cur,
+                    allow_declarations=allow_same_turn_faction_declarations,
+                )
                 boundary_issues: List[str] = []
                 handled_extend_expiry_sites: set[Tuple[str, int]] = set()
                 normalize_extend_expiry_reasserts(
@@ -1354,6 +1460,14 @@ def build_storyteller_tag_validator(
                     allow_same_turn_declarations=(allow_same_turn_faction_declarations),
                     boundary_issues=boundary_issues,
                     handled_extend_expiry_sites=handled_extend_expiry_sites,
+                )
+                normalize_replacement_tag_reasserts(
+                    output,
+                    cur,
+                    vocabulary=vocabulary,
+                    proposal_bindings=proposal_bindings,
+                    anchor_world_time=anchor_world_time,
+                    handled_sites=handled_extend_expiry_sites,
                 )
                 issues = boundary_issues + collect_orrery_tag_issues(
                     output,

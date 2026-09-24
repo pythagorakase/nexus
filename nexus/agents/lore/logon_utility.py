@@ -1810,6 +1810,33 @@ class LogonUtility:
             or str(uuid4())
         )
 
+        attempt_record = None
+        delegate = getattr(provider, "output_validator", None)
+        delegate = getattr(delegate, "_wire_validation_delegate", delegate)
+
+        async def validate_attempt(ctx: Any, output: Any) -> Any:
+            from nexus.agents.logon.skald_wire import finalize_scene_reset_repair
+            from nexus.api.db_pool import get_connection
+            from nexus.api.presence_reconciliation import (
+                read_character_roster_from_connection,
+            )
+            from nexus.presence.roster import character_identity_index
+            from nexus.telemetry.usage import validation_attempt
+
+            with validation_attempt(attempt_record):
+                presence = getattr(output, "presence", None)
+                if presence is not None and presence._reset_repair is not None:
+                    index = None
+                    if self._validation_dbname is not None:
+                        with get_connection(self._validation_dbname) as conn:
+                            rows = read_character_roster_from_connection(conn)
+                        index = character_identity_index(rows.characters, rows.aliases)
+                    finalize_scene_reset_repair(output, index)
+                return await delegate(ctx, output) if delegate is not None else output
+
+        validate_attempt._wire_validation_delegate = delegate
+        provider.output_validator = validate_attempt
+
         def guard(
             active_prompt: str,
             attempt: int,
@@ -1817,6 +1844,7 @@ class LogonUtility:
             text_format: Optional[Dict[str, Any]] = None,
             anthropic_request: Optional[Dict[str, Any]] = None,
         ) -> None:
+            nonlocal attempt_record
             if window is None:
                 resolved_window = resolve_storyteller_context_window(
                     self.settings, self._provider_wire_type, self._provider_type_name
@@ -1870,20 +1898,19 @@ class LogonUtility:
             )
             tokens = count(active_prompt)
             counts, _ = measure_blocks(active_blocks, local_count, exact_total=tokens)
-            record_prompt_window(
-                PromptWindowRecord(
-                    generation_session=generation_session,
-                    seat=seat,
-                    attempt=attempt,
-                    model=provider.model,
-                    block_tokens=counts,
-                    input_tokens=tokens,
-                    effective_ceiling=budget.input_ceiling,
-                    policy_headroom=budget.policy_headroom,
-                    headroom=budget.input_ceiling - tokens,
-                    trimming=payload.get("window_trimming", {}),
-                )
+            attempt_record = PromptWindowRecord(
+                generation_session=generation_session,
+                seat=seat,
+                attempt=attempt,
+                model=provider.model,
+                block_tokens=counts,
+                input_tokens=tokens,
+                effective_ceiling=budget.input_ceiling,
+                policy_headroom=budget.policy_headroom,
+                headroom=budget.input_ceiling - tokens,
+                trimming=payload.get("window_trimming", {}),
             )
+            record_prompt_window(attempt_record)
             self._enforce_final_prompt_window(
                 active_prompt,
                 effective_context_window=budget.input_ceiling,

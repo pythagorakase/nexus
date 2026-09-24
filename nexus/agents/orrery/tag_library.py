@@ -486,6 +486,15 @@ def format_contextual_tag_library(
             lines.append(
                 f"- {entry.entity_kind}/{entry.category}: {_format_tag_entry(entry)}"
             )
+            if (
+                entry.tag in active_tag_names
+                and entry.reapplication_policy == "extend_expiry"
+            ):
+                lines.append(
+                    f"  `{entry.tag}` is active in this context: omit it from tags_add "
+                    "and replacement-state entity tag additions on entities where it is "
+                    "already active; the wire cannot express duration_override."
+                )
     else:
         lines.append(
             "No present entity or pending proposal currently selects a full tag entry."

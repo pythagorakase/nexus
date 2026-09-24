@@ -1,0 +1,1 @@
+{"narrative":"The player returns to the hall.","choices":["Wait.","Continue."],"letter":"Continue the return scene.","presence":{"scene_reset":{"place":{"kind":"place","name":"Hall"},"present":[{"kind":"character","name":"Fixture Player"}]},"enter":[{"kind":"character","name":"Player Alias"}],"exit":[{"kind":"character","name":"Fixture Player"}]}}

@@ -215,6 +215,14 @@ def _require_state_update_id_sync(
 ) -> Optional[int]:
     """Resolve one synchronous state-update identity or fail the transaction."""
 
+    if kind == "place":
+        from nexus.presence.roster import resolve_place_update
+
+        with conn.cursor() as cur:
+            identifier, _ = resolve_place_update(
+                cur, identifier=current_id, name=name, pending_names=pending_names
+            )
+        return identifier
     if current_id is not None:
         with conn.cursor() as cur:
             cur.execute(
