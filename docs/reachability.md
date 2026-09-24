@@ -26,6 +26,14 @@ as graph nodes separately, within the configured pytest test paths. Archived tes
 excluded according to `pytest.ini`. Rust, TypeScript, shell, and skill-local scripts are
 outside this gate.
 
+Inside a git checkout the scope is git's view of the tree: tracked files plus untracked
+files that the ignore rules do not exclude (`git ls-files --cached --others
+--exclude-standard`). Ignored files, such as downloaded model weights under
+`nexus/models/`, are not source and cannot fail the gate; an untracked new module still
+counts so its findings appear before it is committed. The prompt-prose lint in
+`tests/test_prompt_lint.py` scans the same view. A directory without `.git` has no ignore
+rules, so every file on disk is scanned there.
+
 - **Production:** exact CLI symbols from `[project.scripts]` in `pyproject.toml`, and exact
   ASGI symbols in the configured Python/uvicorn runtime service commands in `nexus.toml`.
   Unknown Python service command forms fail instead of silently acquiring a broad root.
