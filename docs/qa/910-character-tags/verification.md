@@ -207,7 +207,7 @@ render limit of 10,000; the shipped comparison uses the configured eight.
 | Entity dossier | 1,791 | 2,137 | 2,137 |
 | Complete TEST request | 38,883 | 39,237 | 39,237 |
 
-No character in this frontier exceeds eight tags, so the cap does not reduce
+The maximum character tag count in this frontier is eight, so the cap does not reduce
 this payload. The configured-cap tests establish truncation on longer lists.
 `capped-frontier-proof.json` records all three attempts. No generation or paid
 call ran, and the disposable clone was dropped.
@@ -223,3 +223,62 @@ CAPPED ENTITY_DOSSIER 2137 TOTAL 39237
 UNCHANGED_RENDERER_BASELINE_MATCHED b720f576-753a-4d82-a456-f2f5b084099d
 OWNED_CLONE_DROPPED qa640_910_compare_134bd282fae8
 ```
+
+## Amendment Validation Against Main
+
+`git fetch origin && git merge origin/main` reported `Already up to date.`;
+main is `20e2c07b`. #908 has not landed, so this branch adds only
+`character_tags` to the shared table/model. The second branch to land must merge
+the fields. No prompt prose, schema, or tag-library change is deferred.
+
+The capped rendering reproduced the Kessa excerpt above. A read-only query of
+`save_04.chunk_metadata` confirmed frontier 49 and world time
+`2189-10-17 18:37:00-04`. A final `pg_database` query returned no
+`qa640_910_%` databases.
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_lore/test_character_dossier_render.py
+```
+
+```text
+9 passed, 5 warnings in 0.51s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_lore -k 'dossier or entity or tag or render'
+```
+
+```text
+65 passed, 219 deselected, 5 warnings in 8.45s
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_presence_roster.py tests/test_presence_roster_pg.py
+```
+
+```text
+33 passed, 5 warnings in 8.00s
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m black --check nexus/agents/lore/utils/entity_queries.py nexus/agents/lore/logon_utility.py nexus/config/settings_models.py tests/test_lore/test_character_dossier_tags_pg.py tests/test_lore/test_character_dossier_render.py
+```
+
+```text
+All done! ✨ 🍰 ✨
+5 files would be left unchanged.
+```
+
+No #885 failures appeared. PostgreSQL gates ran without skips. No gateway was
+started, no paid provider was called, and no migration was added.
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q
+```
+
+```text
+2647 passed, 804 skipped, 9 warnings in 95.67s (0:01:35)
+```
+
+The offline skips are not counted as PostgreSQL proof; the two opted-in gates
+above ran independently. All requested gates pass.
