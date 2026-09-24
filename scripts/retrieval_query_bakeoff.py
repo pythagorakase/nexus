@@ -23,6 +23,7 @@ check for MEMNON retrieval quality. They are not a fourth contestant.
 
 from __future__ import annotations
 
+
 from nexus.database import url_connection_kwargs
 
 import argparse
@@ -45,6 +46,7 @@ from pydantic import BaseModel, Field, field_validator
 from nexus.agents.memnon.memnon import MEMNON
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings
+from nexus.prompts.registry import PromptId, load
 
 
 QUIET_LOGGERS = [
@@ -359,27 +361,14 @@ def generate_skald_directives(
     if cached:
         return dedupe_queries(cached)
 
-    prompt = f"""You are writing Storyteller authorial retrieval directives for the next narrative turn.
-
-Given the completed source chunk and the player's selected/available choice text,
-write 3-5 concise retrieval directives that would help LORE fetch useful prior
-continuity before generating the next chunk.
-
-Each directive should be a search instruction, not prose continuity, and should
-begin with a verb such as Retrieve. Prefer concrete names, places, relationships,
-objects, factions, injuries, promises, unresolved threats, and layout affordances.
-
-Source chunk:
-{sample.source_text[:8000]}
-
-Choice text:
-{sample.choice_text}
-
-Source references:
-- Characters: {', '.join(sample.source_refs.characters) or 'none'}
-- Places: {', '.join(sample.source_refs.places) or 'none'}
-- Factions: {', '.join(sample.source_refs.factions) or 'none'}
-"""
+    prompt = load(
+        PromptId.OPERATORS_RETRIEVAL_QUERY_BAKEOFF,
+        SAMPLE_SOURCE_TEXT_8000=f"{sample.source_text[:8000]}",
+        SAMPLE_CHOICE_TEXT=f"{sample.choice_text}",
+        JOIN_SAMPLE_SOURCE_REFS_CHARACTERS_OR_NONE=f"{', '.join(sample.source_refs.characters) or 'none'}",
+        JOIN_SAMPLE_SOURCE_REFS_PLACES_OR_NONE=f"{', '.join(sample.source_refs.places) or 'none'}",
+        JOIN_SAMPLE_SOURCE_REFS_FACTIONS_OR_NONE=f"{', '.join(sample.source_refs.factions) or 'none'}",
+    )
     result, _ = provider.get_structured_completion(prompt, DirectiveSet)
     directives = result.authorial_directives
     cache.set(cache_key, directives)

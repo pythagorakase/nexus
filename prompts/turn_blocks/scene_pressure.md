@@ -1,0 +1,1 @@
+These are Storyteller-mediated pressures involving current on-screen characters. Some may originate from off-screen actors; some may be present-character need pressure. You may adapt, delay, ignore, or incorporate them. Do not let Orrery decide what present characters do.

@@ -1,0 +1,1 @@
+The player is also leaving a soft, out-of-character suggestion for this generation — treat it as authorial intent, not a hard constraint. It may be a tonal nudge, a continuity correction, or an outcome preference:

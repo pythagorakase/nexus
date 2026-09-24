@@ -1,0 +1,1 @@
+Respond using the WizardResponse output tool for every reply. Provide your narrative message plus 2-4 actionable choice strings (no numbering/markdown). Do not repeat choices inside the message body. Call a submission tool only when you are ready to commit that artifact.

@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
+
 from html import escape
-from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from nexus.agents.logon.apex_schema import Coordinates
-
-
-_PROMPT_PATH = (
-    Path(__file__).resolve().parents[3] / "prompts" / "orrery" / "geo_authoring.md"
-)
+from nexus.prompts.registry import PromptId, load
 
 
 class GeoAuthoringResponse(BaseModel):
@@ -33,22 +29,14 @@ def render_geo_authoring_prompt(
     zone_name: str,
     zone_summary: Optional[str],
 ) -> str:
-    """Render the single prompt shape used by maturation and backfill."""
-
-    prompt = _PROMPT_PATH.read_text(encoding="utf-8")
-    replacements = {
-        "{{PLACE_NAME}}": escape(place_name, quote=False),
-        "{{PLACE_SUMMARY}}": escape(
-            place_summary or "(no summary supplied)", quote=False
-        ),
-        "{{ZONE_NAME}}": escape(zone_name, quote=False),
-        "{{ZONE_SUMMARY}}": escape(
-            zone_summary or "(no zone summary supplied)", quote=False
-        ),
-    }
-    for marker, value in replacements.items():
-        prompt = prompt.replace(marker, value)
-    return prompt.strip()
+    """Render the shared place-coordinate prompt with escaped values."""
+    return load(
+        PromptId.GEO_AUTHORING,
+        PLACE_NAME=escape(place_name, quote=False),
+        PLACE_SUMMARY=escape(place_summary or "(no summary supplied)", quote=False),
+        ZONE_NAME=escape(zone_name, quote=False),
+        ZONE_SUMMARY=escape(zone_summary or "(no zone summary supplied)", quote=False),
+    ).strip()
 
 
 def geo_prompt_from_context(context: Mapping[str, Any]) -> Optional[str]:

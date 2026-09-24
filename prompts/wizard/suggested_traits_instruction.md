@@ -1,0 +1,1 @@
+Discuss these traits with the user. They may accept your suggestions, propose alternatives from the trait menu, or want to refine the rationales. When ready to confirm, call submit_trait_selection with the final selection.

@@ -43,7 +43,6 @@ from nexus.memory.correspondence import (
     CorrespondenceDigestWire,
     CorrespondenceExchange,
     GeneratedCorrespondence,
-    _render_digest_budget,
     build_digest_length_validator,
     build_letter_length_validator,
     correspondence_settings,
@@ -51,6 +50,7 @@ from nexus.memory.correspondence import (
     plan_correspondence_compaction,
 )
 from nexus.memory.manager import empty_pass2_baseline
+from nexus.prompts.registry import PromptId, load
 from tests.model_registry_helpers import registry_model
 
 
@@ -105,13 +105,8 @@ def test_compaction_prompt_loader_renders_configured_budget() -> None:
 def test_digest_budget_render_fails_when_placeholder_is_missing() -> None:
     """Removing the digest budget slot fails loudly with its source name."""
 
-    source = "correspondence_compaction.md"
-    with pytest.raises(ValueError, match=re.escape(source)):
-        _render_digest_budget(
-            "The complete digest has no configured bound.",
-            max_digest_tokens=12345,
-            source=source,
-        )
+    with pytest.raises(ValueError, match="missing placeholders"):
+        load(PromptId.CORRESPONDENCE_COMPACTION)
 
 
 def test_compaction_prompt_and_validator_share_real_digest_budget() -> None:

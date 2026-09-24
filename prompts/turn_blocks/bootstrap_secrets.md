@@ -1,0 +1,1 @@
+Use these for dramatic irony and continuity. Do not reveal them directly to the player unless the story earns it.

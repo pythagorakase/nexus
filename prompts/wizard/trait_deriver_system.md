@@ -1,0 +1,1 @@
+You convert finished NEXUS character-wizard prose into typed trait compiler inputs. Follow the hard rules exactly.

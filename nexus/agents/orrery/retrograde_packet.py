@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
@@ -12,6 +13,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
 from nexus.agents.orrery.retrograde_graph import build_candidate_graph
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 from nexus.config.settings_models import Settings
+from nexus.prompts.registry import PromptId, load
 
 PACKET_SCHEMA_VERSION = "orrery_retrograde_dry_run_packet.v0"
 SEED_REQUEST_SCHEMA_VERSION = "orrery_retrograde_seed_request.v0"
@@ -139,12 +141,7 @@ def build_retrograde_dry_run_packet(
         "dry_run": True,
         "mutation_policy": {
             "writes": "none",
-            "review_contract": (
-                "Retrograde A0 only assembles candidate prompt material. No "
-                "world_events, entity_tags, relationships, or wizard cache rows "
-                "are written. A later Skald-as-weaver pass must select, reject, "
-                "or connect candidate seeds before any bootstrap persistence."
-            ),
+            "review_contract": (load(PromptId.RETROGRADE_REVIEW_CONTRACT)),
         },
         "slot": slot,
         "dbname": dbname,
@@ -272,10 +269,7 @@ def build_seed_generation_request(
                     "Use only seed_eligible_vocabulary.registered_* tags and "
                     "respect mechanical_tag_policy."
                 ),
-                "pair_tags": (
-                    "Use only seed_eligible_vocabulary.multi_entity_tag_definitions "
-                    "with matching subject/object kinds."
-                ),
+                "pair_tags": (load(PromptId.RETROGRADE_PAIR_TAG_RULE)),
                 "relationships": (
                     "Use only seed_eligible_vocabulary.relationship_types."
                 ),
@@ -380,21 +374,7 @@ def _mechanical_tag_policy(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]
         "registered_tags_by_seed_policy": vocabulary.get(
             "registered_tags_by_seed_policy", {}
         ),
-        "rules": [
-            (
-                "Stable seed categories may be proposed as present-state tags "
-                "when supported by the seed."
-            ),
-            (
-                "Event-anchored categories may be proposed only with an explicit "
-                "event that caused or recently refreshed the current state."
-            ),
-            (
-                "Prompt-visible-only categories may guide prose but must not be "
-                "proposed as mechanical writes in this stage."
-            ),
-            "Unknown tag names are invalid; omit marginal mechanics instead.",
-        ],
+        "rules": load(PromptId.RETROGRADE_MECHANICAL_TAG_RULES).splitlines(),
     }
 
 
@@ -403,21 +383,7 @@ def _selection_rubric(level: str) -> dict[str, Any]:
 
     return {
         "coverage_is_checklist_not_scaffold": True,
-        "priorities": [
-            "Keep seeds with strong leaf anchors to core entities.",
-            "Keep seeds that can be made substrate-legal with registered vocabulary.",
-            (
-                "Reject seeds that require unregistered tags, recursive entity "
-                "expansion, or timeline contortions."
-            ),
-            (
-                "Reject candidates whose relationship or pair-tag mechanical_hints "
-                "appear in a forbidden constraint's explicit blocked sets and "
-                "involve the protagonist. Backstory events without those rows "
-                "remain allowed."
-            ),
-            "Prefer fewer, sharper surviving seeds over a busy history web.",
-        ],
+        "priorities": load(PromptId.RETROGRADE_SELECTION_PRIORITIES).splitlines(),
         "weird_level_adjustment": {
             "low": "coverage function service is a strong positive prior",
             "medium": "coverage service and origin surprise should be balanced",
@@ -625,16 +591,7 @@ def _vocabulary_summary(vocabulary: SeedEligibleVocabulary) -> dict[str, int]:
 def _skald_weaver_instructions() -> list[str]:
     """Return the non-mutating prompt contract for the next Retrograde stage."""
 
-    return [
-        "Generate candidate deep-history seeds, not canonical history.",
-        "Use only seed_eligible_vocabulary primitives for mechanical tags/events.",
-        "Over-generate; later selection must be allowed to discard weak seeds.",
-        (
-            "Prefer surprise at the seed origin, but require leaf anchoring "
-            "to present canon."
-        ),
-        "Do not write rows. Persistence belongs to a later reviewed expansion pass.",
-    ]
+    return load(PromptId.RETROGRADE_WEAVER_INSTRUCTIONS).splitlines()
 
 
 def _select_genre(

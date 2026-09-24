@@ -1,0 +1,1 @@
+Accept-fate is active. You must call {{TOOL_NAME}} immediately to commit your creative choices. Do not present options.

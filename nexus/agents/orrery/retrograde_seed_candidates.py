@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 from types import GenericAlias
 from typing import Annotated, Any, Literal, Mapping, Optional, Sequence, cast
@@ -13,6 +14,7 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     ENTITY_REF_MAX_LENGTH,
     SeedEligibleVocabulary,
 )
+from nexus.prompts.registry import PromptId, load
 
 EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
 """Prompt-local entity ref: a proper name, never a description.
@@ -527,10 +529,7 @@ def render_seed_generation_prompt(
     """Render a deterministic Skald prompt for non-mutating seed generation."""
 
     prompt_payload = {
-        "task": (
-            "Generate and select Retrograde deep-history seed candidates. "
-            "Do not write canon. Return JSON only. Keep every candidate concise."
-        ),
+        "task": (load(PromptId.RETROGRADE_GENERATION_TASK)),
         "mutation_policy": seed_generation_request.get("mutation_policy", {}),
         "budget": seed_generation_request.get("budget", {}),
         "weird_policy": seed_generation_request.get("weird_policy", {}),
@@ -563,28 +562,9 @@ def render_seed_generation_prompt(
         "prompt_sections": seed_generation_request.get("prompt_sections", []),
         "response_contract": _prompt_response_contract(),
     }
-    return (
-        "You are Skald-as-weaver for a Retrograde seed-generation pass.\n"
-        "Generate surprising candidate history seeds and leave all "
-        "persistence to a later reviewed expansion pass. Do NOT select in "
-        "this pass: return selected_seed_ids and rejected_seed_ids as empty "
-        "lists — selection happens in a separate, decoupled call.\n"
-        "candidate_graph.dangling_edges are rolled ingredients you did not "
-        "choose: every candidate must claim 1-2 edge_ids via claimed_edges, "
-        "name each claimed edge's open endpoint, and make the edge_type "
-        "true in the seed's story. Reconcile the roll; do not ignore it.\n"
-        "candidate_graph.junctions are mandatory shared-entity constraints: "
-        "each junction's two edge_ids must be claimed exactly once by two "
-        "different candidates, and both claims must use the same endpoint "
-        "name and required kind.\n"
-        "Keep summaries, rationales, and rejection conditions compact.\n"
-        "If a mechanical hint cannot satisfy the hard validation rules, omit it.\n"
-        "Project intent is optional and rare: propose it only for a seed serving "
-        "the listed unresolved_ledger or trait_bound_hook functions, and use it "
-        "on at most two candidates in the cast.\n"
-        "Return JSON only. Unknown mechanical primitives are invalid.\n\n"
-        "RETROGRADE_SEED_GENERATION_REQUEST:\n"
-        f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}"
+    return load(
+        PromptId.RETROGRADE_SEED_GENERATION,
+        REQUEST_JSON=f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}",
     )
 
 
@@ -645,12 +625,7 @@ def generate_seed_candidates_with_skald(
     provider = build_native_structured_provider(
         model=selected_model,
         max_tokens=max_tokens or get_wizard_max_tokens(),
-        system_prompt=(
-            "You are Skald-as-weaver for a NEXUS Retrograde seed pass. "
-            "Generate candidate history seeds only — selection happens in a "
-            "separate call — and do not claim any canonical write has "
-            "occurred."
-        ),
+        system_prompt=(load(PromptId.RETROGRADE_GENERATION_SYSTEM)),
         structured_output_retries=get_wizard_retry_budget(),
         seat="retrograde_seed_candidates",
     )
@@ -670,9 +645,7 @@ def generate_seed_candidates_with_skald(
             )
         except RetrogradeSeedCandidateValidationError as exc:
             raise ModelRetry(
-                "Retrograde seed candidate mechanics failed validation. "
-                "Repair the JSON by omitting invalid mechanical hints or adding "
-                f"the required refs:\n{exc}"
+                load(PromptId.RETROGRADE_GENERATION_RETRY, EXC=f"{exc}")
             ) from exc
 
     provider.output_validator = _validate_output
@@ -1330,50 +1303,10 @@ def _prompt_response_contract() -> dict[str, Any]:
 def _hard_validation_rules() -> list[str]:
     """Return concise Skald-facing rules mirrored by local validation."""
 
-    return [
-        (
-            "Every event_anchored single_entity_tag must include "
-            "supporting_event_ref that matches a mechanical_hints.events event_ref "
-            "inside the same candidate."
-        ),
-        (
-            "single_entity_tags use tag_ref values from "
-            "allowed_vocabulary.single_entity_tag_refs; this encodes the legal "
-            "entity_kind|tag pair."
-        ),
-        (
-            "Prompt-visible-only tags may influence prose but must not appear in "
-            "mechanical_hints.single_entity_tags."
-        ),
-        (
-            "Pair tags use tag_ref values from allowed_vocabulary.pair_tag_refs; "
-            "relationships use relationship_ref values from "
-            "allowed_vocabulary.relationship_refs."
-        ),
-        (
-            "Single-entity tags must be registered for the tagged entity_kind "
-            "in registered_tags_by_entity_kind; a tag listed only under another "
-            "kind is illegal."
-        ),
-        (
-            "selected_seed_ids and rejected_seed_ids must reference returned "
-            "candidate seed_id values, and a seed cannot be both selected and "
-            "rejected."
-        ),
-        (
-            "Every candidate_graph.junctions entry has exactly two edge legs. "
-            "Those legs must be claimed exactly once by two different "
-            "candidates using the same endpoint kind and normalized name."
-        ),
-        (
-            "Entity refs (entity_ref, subject_ref, object_ref, "
-            "participating_entities) are proper names of at most "
-            f"{ENTITY_REF_MAX_LENGTH} characters -- never sentences or "
-            "descriptive phrases. Implied new entities get a short invented "
-            "name, not a description."
-        ),
-        "If a hint is marginal or cannot satisfy these rules, omit the hint.",
-    ]
+    return load(
+        PromptId.RETROGRADE_GENERATION_CONSTRAINTS,
+        ENTITY_REF_MAX_LENGTH=ENTITY_REF_MAX_LENGTH,
+    ).splitlines()
 
 
 def _optional_positive_int(value: Any) -> Optional[int]:
@@ -1508,11 +1441,7 @@ def render_seed_selection_prompt(
         candidates_payload=candidates_payload,
     )
     prompt_payload = {
-        "task": (
-            "Select the strongest subset of the candidate seeds below. "
-            "You did not write these; judge them on the rubric alone. "
-            "Return JSON only."
-        ),
+        "task": (load(PromptId.RETROGRADE_SELECTION_TASK)),
         "budget": seed_generation_request.get("budget", {}),
         "selection_rubric": seed_generation_request.get("selection_rubric", {}),
         "trait_constraints": seed_generation_request.get("trait_constraints", []),
@@ -1531,22 +1460,9 @@ def render_seed_selection_prompt(
         "junction_resolution_issues": junction_issues,
         "candidates": candidates_payload.get("candidates", []),
     }
-    return (
-        "You are the Retrograde selection judge for a NEXUS seed pass.\n"
-        "Choose up to budget.select_target seeds. Prefer seeds that serve "
-        "coverage functions, honor their claimed dangling edges with "
-        "conviction rather than lip service, and would take real creative "
-        "work to weave into the story — merge-difficulty is value, not "
-        "risk. Reject seeds that ignore their claimed edges or whose mechanical "
-        "hints violate a trait constraint: specifically, relationship or pair-tag "
-        "hints in a forbidden trait's explicit blocked sets that involve the "
-        "protagonist or an alias. A backstory event alone does not violate a "
-        "relationship constraint.\n"
-        "Resolved junction seed pairs are atomic: select both member seeds "
-        "or reject both. A pair consumes two ordinary selection slots.\n"
-        "Every non-selected candidate must appear in rejected_seed_ids.\n\n"
-        "RETROGRADE_SEED_SELECTION_REQUEST:\n"
-        f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}"
+    return load(
+        PromptId.RETROGRADE_SEED_SELECTION,
+        REQUEST_JSON=f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}",
     )
 
 
@@ -1607,11 +1523,7 @@ def select_seed_candidates_with_skald(
     provider = build_native_structured_provider(
         model=selected_model,
         max_tokens=max_tokens or get_wizard_max_tokens(),
-        system_prompt=(
-            "You are the Retrograde selection judge for a NEXUS seed pass. "
-            "Judge the provided candidates on the rubric; you did not write "
-            "them. No canonical writes occur at this stage."
-        ),
+        system_prompt=(load(PromptId.RETROGRADE_SELECTION_SYSTEM)),
         structured_output_retries=get_wizard_retry_budget(),
         seat="retrograde_seed_selection",
     )

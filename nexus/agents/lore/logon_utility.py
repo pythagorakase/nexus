@@ -98,6 +98,7 @@ from nexus.agents.orrery.cards import (
     snapshot_from_context,
 )
 from nexus.util.clock_face import clock_face
+from nexus.prompts.registry import PromptId, load
 
 # Add scripts directory to path for API imports
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
@@ -116,22 +117,6 @@ StorytellerRoute = tuple[
     Optional[Dict[str, Any]],
     Literal["openai", "anthropic", "local"],
 ]
-
-
-def _render_letter_budget(
-    text: str,
-    *,
-    max_letter_tokens: int,
-    source: str,
-) -> str:
-    """Render the configured private-letter budget into a prompt."""
-
-    placeholder = "{{MAX_LETTER_TOKENS}}"
-    if placeholder not in text:
-        raise ValueError(
-            f"Letter token budget placeholder {placeholder} is missing from {source}"
-        )
-    return text.replace(placeholder, str(int(max_letter_tokens)))
 
 
 def _prompt_one_line(value: Any) -> str:
@@ -443,52 +428,15 @@ class LogonUtility:
         return APEXTagLibrarySettings.model_validate(raw_settings)
 
     def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
-        """Load and combine storyteller instructions with live slot context."""
-
+        """Load storyteller instructions in their original composition order."""
         is_bootstrap = self.bootstrap_mode if is_bootstrap is None else is_bootstrap
-
-        # Load storyteller core prompt
-        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
-        core_prompt_path = prompts_dir / "storyteller_core.md"
-
-        try:
-            core_prompt = core_prompt_path.read_text()
-            logger.info(f"Loaded storyteller core prompt ({len(core_prompt)} chars)")
-        except FileNotFoundError:
-            logger.warning(
-                f"Core prompt not found at {core_prompt_path}, using minimal fallback"
-            )
-            core_prompt = (
-                "You are a narrative intelligence system generating interactive "
-                "fiction."
-            )
-
-        system_prompt = core_prompt
-        # Core is the writer-scoped Skald document. When one mind holds both
-        # chairs on an ongoing turn — single-pass mode — append the
-        # state-authorship supplement carrying Gaia's portfolio. Bootstrap
-        # never gets it: the bootstrap schema is prose and choices only.
+        system_prompt = load(PromptId.STORYTELLER_CORE)
         if not is_bootstrap and self._turn_pipeline() == "single_pass":
-            supplement = (prompts_dir / "storyteller_single_pass.md").read_text()
+            supplement = load(PromptId.STORYTELLER_SINGLE_PASS)
             system_prompt = f"{system_prompt}\n\n---\n\n{supplement}"
-            logger.info(
-                "Appended single-pass state supplement (%s chars)", len(supplement)
-            )
         if is_bootstrap:
-            bootstrap_path = prompts_dir / "storyteller_bootstrap.md"
-            try:
-                bootstrap_content = bootstrap_path.read_text()
-                system_prompt = f"{system_prompt}\n\n---\n\n{bootstrap_content}"
-                logger.info(
-                    "Appended storyteller bootstrap supplement (%s chars)",
-                    len(bootstrap_content),
-                )
-            except FileNotFoundError:
-                logger.warning(
-                    "Bootstrap supplement not found at %s, using core prompt only",
-                    bootstrap_path,
-                )
-
+            bootstrap_content = load(PromptId.STORYTELLER_BOOTSTRAP)
+            system_prompt = f"{system_prompt}\n\n---\n\n{bootstrap_content}"
         setting_content = self._load_setting_context()
         if setting_content:
             return f"{system_prompt}\n\n{setting_content}"
@@ -533,47 +481,20 @@ class LogonUtility:
 
     @staticmethod
     def _load_gaia_system_prompt(max_letter_tokens: int) -> str:
-        """Load the dedicated gaia instructions without per-turn material."""
-
-        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
-        gaia_prompt_path = prompts_dir / "storyteller_gaia.md"
-        gaia_prompt = gaia_prompt_path.read_text()
-        if not gaia_prompt.strip():
-            raise ValueError(f"Gaia prompt is empty: {gaia_prompt_path}")
-        gaia_prompt = _render_letter_budget(
-            gaia_prompt,
-            max_letter_tokens=max_letter_tokens,
-            source=str(gaia_prompt_path),
-        )
-        logger.info("Loaded storyteller Gaia prompt (%s chars)", len(gaia_prompt))
-        return gaia_prompt
+        """Load the seat document with its configured letter budget."""
+        return load(PromptId.STORYTELLER_GAIA, MAX_LETTER_TOKENS=int(max_letter_tokens))
 
     @staticmethod
     def _load_writer_pass_note(max_letter_tokens: int) -> str:
-        """Load the writer-pass scope note appended in two-pass mode."""
-
-        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
-        note_path = prompts_dir / "storyteller_writer_pass.md"
-        note = note_path.read_text()
-        if not note.strip():
-            raise ValueError(f"Writer pass note is empty: {note_path}")
-        note = _render_letter_budget(
-            note,
-            max_letter_tokens=max_letter_tokens,
-            source=str(note_path),
+        """Load the seat document with its configured letter budget."""
+        return load(
+            PromptId.STORYTELLER_WRITER_PASS, MAX_LETTER_TOKENS=int(max_letter_tokens)
         )
-        return note
 
     @staticmethod
     def _load_ambient_scene_instruction() -> str:
-        """Load the coordinator-authored ambient-scene instruction."""
-
-        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
-        instruction_path = prompts_dir / "ambient_scene_seeds.md"
-        instruction = instruction_path.read_text().strip()
-        if not instruction:
-            raise ValueError(f"Ambient-scene instruction is empty: {instruction_path}")
-        return instruction
+        """Load the ambient-scene instruction."""
+        return load(PromptId.AMBIENT_SCENE_SEEDS).strip()
 
     @staticmethod
     def _format_setting_context(setting_data: Any) -> str:
@@ -2779,15 +2700,7 @@ class LogonUtility:
         imminent_activity = context.get("orrery_imminent_activity") or []
         if imminent_activity:
             sections.append("\n=== ORRERY IMMINENT ACTIVITY ===")
-            sections.append(
-                "These are current-tick Orrery proposals. If you omit a proposal "
-                "from orrery_adjudications, commit will ratify it. You remain "
-                "sovereign: use defer to leave pressure unresolved, void when a "
-                "proposal is definitively false, and replace when your structured "
-                "updates or replacement_state_delta supersede it. A replacement "
-                "only emits a world_event if you provide replacement_event_type. "
-                "Reference each proposal by the id shown on its card."
-            )
+            sections.append(load(PromptId.TURN_BLOCKS_IMMINENT_ACTIVITY))
             for item in card_selection:
                 if item["kind"] == "resolution":
                     sections.append(card_line(proposal_cards[item["proposal_id"]]))
@@ -2796,13 +2709,7 @@ class LogonUtility:
         scene_pressures = context.get("orrery_scene_pressures") or []
         if scene_pressures:
             sections.append("\n=== ORRERY SCENE PRESSURE ===")
-            sections.append(
-                "These are Storyteller-mediated pressures involving current "
-                "on-screen characters. Some may originate from off-screen "
-                "actors; some may be present-character need pressure. You may "
-                "adapt, delay, ignore, or incorporate them. Do not let Orrery "
-                "decide what present characters do."
-            )
+            sections.append(load(PromptId.TURN_BLOCKS_SCENE_PRESSURE))
             for item in card_selection:
                 if (
                     item["kind"] == "scene_pressure"
@@ -2855,14 +2762,7 @@ class LogonUtility:
         joint_beats = context.get("orrery_joint_beats") or []
         if joint_beats:
             sections.append("\n=== ORRERY JOINT BEATS ===")
-            sections.append(
-                "These proposal pairs have the same two characters acting "
-                "toward each other in this tick. Treat each pair as one "
-                "scene if you wish: 'reciprocal' means both chose the same "
-                "behavior (a meeting of intent); 'crossed' means their "
-                "behaviors differ (tension you may spring). Adjudicate the "
-                "underlying proposals by proposal_id as usual."
-            )
+            sections.append(load(PromptId.TURN_BLOCKS_JOINT_BEATS))
             for item in card_selection:
                 if item["kind"] == "joint_beat":
                     sections.append(card_line(proposal_cards[item["proposal_id"]]))
@@ -2871,14 +2771,7 @@ class LogonUtility:
         bleed_menu = context.get("orrery_bleed_menu") or []
         if bleed_menu:
             sections.append("\n=== ORRERY AMBIENT PERIPHERALS ===")
-            sections.append(
-                "These are optional ambient peripherals from off-screen events. "
-                "Ignore freely, render subtly, or use them at any density that "
-                "fits the current scene. If you use one with an actor name, "
-                "include that exact name at least once in the prose — uptake is "
-                "detected by matching that exact name. Do not "
-                "explain Orrery."
-            )
+            sections.append(load(PromptId.TURN_BLOCKS_AMBIENT_PERIPHERALS))
             for item in bleed_menu[: render_limits.bleed_menu]:
                 channel = item.get("channel") or "ambient"
                 summary = item.get("summary") or item.get("template_id")
@@ -2895,23 +2788,14 @@ class LogonUtility:
         note = context.get("note")
         if note:
             sections.append("\n=== AUTHOR'S NOTE ===")
-            sections.append(
-                "The player is also leaving a soft, out-of-character suggestion "
-                "for this generation — treat it as authorial intent, not a hard "
-                "constraint. It may "
-                "be a tonal nudge, a continuity correction, or an outcome preference:"
-            )
+            sections.append(load(PromptId.TURN_BLOCKS_AUTHORS_NOTE))
             sections.append(note)
 
         sections.kind = "instructions"
         # Add instructions
         sections.append("\n=== INSTRUCTIONS ===")
-        sections.append(
-            "Continue the narrative based on the provided context and user input."
-        )
-        sections.append(
-            "Maintain consistency with established characters, locations, and plot."
-        )
+        sections.append(load(PromptId.TURN_BLOCKS_CONTINUE_NARRATIVE))
+        sections.append(load(PromptId.TURN_BLOCKS_MAINTAIN_CONSISTENCY))
 
         self._last_rendered_blocks = sections.blocks()
         self._last_rendered_block_sources = sections.sources
@@ -2987,8 +2871,7 @@ class LogonUtility:
 
         sections = [
             "\n=== BOOTSTRAP CONTEXT ===",
-            "Use this new-story context to write chunk #1. It is authoritative "
-            "for the opening scene.",
+            load(PromptId.TURN_BLOCKS_BOOTSTRAP_INTRO),
         ]
 
         setting = _coerce_mapping(data.get("setting"))
@@ -3067,8 +2950,7 @@ class LogonUtility:
             sections.extend(
                 [
                     "\n### LLM-Internal Secrets",
-                    "Use these for dramatic irony and continuity. Do not reveal "
-                    "them directly to the player unless the story earns it.",
+                    load(PromptId.TURN_BLOCKS_BOOTSTRAP_SECRETS),
                     seed_secrets,
                 ]
             )

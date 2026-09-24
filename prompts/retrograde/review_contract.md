@@ -1,0 +1,1 @@
+Retrograde A0 only assembles candidate prompt material. No world_events, entity_tags, relationships, or wizard cache rows are written. A later Skald-as-weaver pass must select, reject, or connect candidate seeds before any bootstrap persistence.

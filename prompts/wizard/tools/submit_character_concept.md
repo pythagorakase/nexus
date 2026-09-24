@@ -1,0 +1,1 @@
+Shared implementation for submit_character_concept tool.
