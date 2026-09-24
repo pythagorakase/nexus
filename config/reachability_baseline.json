@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register shared seat-window accounting, the gateway scheduler, and durable correspondence compaction as production-reachable modules.",
+  "reason": "Track shared character identity normalization used by minting and reference consumers.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -257,6 +257,7 @@
     "nexus/presence/__init__.py",
     "nexus/presence/cues.py",
     "nexus/presence/identity.py",
+    "nexus/presence/normalization.py",
     "nexus/presence/roster.py",
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",

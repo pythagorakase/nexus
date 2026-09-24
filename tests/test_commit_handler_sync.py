@@ -193,6 +193,19 @@ class CommitCursor:
                 for name, character_id in sorted(self.connection.characters.items())
             ]
             self.result = None
+        elif normalized == (
+            "SELECT c.id, c.name, c.entity_id, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
+        ):
+            self.rows = [
+                {
+                    "id": character_id,
+                    "name": name,
+                    "entity_id": character_id + 1000,
+                    "summary": None,
+                }
+                for name, character_id in sorted(self.connection.characters.items())
+            ]
+            self.result = None
         elif normalized == "SELECT character_id, alias FROM character_aliases":
             self.rows = []
             self.result = None

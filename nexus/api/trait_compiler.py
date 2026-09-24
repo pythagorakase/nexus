@@ -40,6 +40,7 @@ from nexus.api.trait_compiler_schemas import (
     ObligationTargetInput,
     PatronTraitInput,
     RelationshipTargetInput,
+    ReusedEntity,
     SingleEntityTraitInput,
     StatusTraitInput,
     TraitCompileCounters,
@@ -571,6 +572,20 @@ def _pre_resolve_named_targets(
         "faction": "factions",
     }
     for key, candidate in candidates.items():
+        if candidate.entity_kind == "character":
+            resolved = _create_target_stub(
+                cur,
+                result=result,
+                trait=candidate.trait,
+                entity_kind=candidate.entity_kind,
+                name=candidate.name,
+                role=candidate.role,
+                dry_run=dry_run,
+            )
+            resolved_targets[key] = replace(
+                resolved, relationship_owner_trait=candidate.trait
+            )
+            continue
         table = table_by_kind[candidate.entity_kind]
         cur.execute(
             f"SELECT id, entity_id, name FROM {table} WHERE name = %s ORDER BY id",
@@ -1485,35 +1500,27 @@ def _resolve_character_target(
     resolved: Optional[_ResolvedTarget]
     if pre_resolved is not None:
         resolved = pre_resolved
+    elif target_character_id is None and target_character_entity_id is None and name:
+        resolved = _create_target_stub(
+            cur,
+            result=result,
+            trait=trait,
+            entity_kind="character",
+            name=name,
+            role=role,
+            dry_run=dry_run,
+        )
     else:
         if target_character_id is not None:
             cur.execute(
                 "SELECT id, entity_id, name FROM characters WHERE id = %s",
                 (target_character_id,),
             )
-            rows = cur.fetchall()
         elif target_character_entity_id is not None:
             cur.execute(
                 "SELECT id, entity_id, name FROM characters WHERE entity_id = %s",
                 (target_character_entity_id,),
             )
-            rows = cur.fetchall()
-        elif name:
-            cur.execute(
-                "SELECT id, entity_id, name FROM characters WHERE name = %s ORDER BY id",
-                (name,),
-            )
-            rows = cur.fetchall()
-            if not rows:
-                return _create_target_stub(
-                    cur,
-                    result=result,
-                    trait=trait,
-                    entity_kind="character",
-                    name=name,
-                    role=role,
-                    dry_run=dry_run,
-                )
         else:
             _add_remainder(
                 result,
@@ -1522,11 +1529,10 @@ def _resolve_character_target(
                 message=f"{trait} target requires a character id, entity id, or name.",
             )
             return None
-
         resolved = _single_row_target(
             result,
             trait=trait,
-            rows=rows,
+            rows=cur.fetchall(),
             lookup={
                 "character_id": target_character_id,
                 "character_entity_id": target_character_entity_id,
@@ -1735,6 +1741,27 @@ def _create_target_stub(
     for stubs.
     """
 
+    if entity_kind == "character":
+        existing = require_character_identity(cur, name, descriptors=role)
+        if existing is not None:
+            if not any(
+                item.entity_kind == entity_kind and item.row_id == existing.id
+                for item in [*result.created_entities, *result.reused_entities]
+            ):
+                result.reused_entities.append(
+                    ReusedEntity(
+                        trait=trait,
+                        entity_kind=entity_kind,
+                        entity_id=existing.entity_id,
+                        row_id=existing.id,
+                        name=existing.name,
+                        dry_run=dry_run,
+                    )
+                )
+            return _ResolvedTarget(
+                row_id=existing.id, entity_id=existing.entity_id, name=existing.name
+            )
+
     if dry_run:
         # Coalesce repeated references to one absent target: apply mode
         # creates the stub once and resolves later same-name lookups to that
@@ -1788,9 +1815,7 @@ def _create_target_stub(
 def _insert_character_stub(
     cur: Any, *, name: str, trait: str, role: str
 ) -> tuple[int, int]:
-    existing = require_character_identity(cur, name, descriptors=role)
-    if existing is not None:
-        return existing.id, existing.entity_id
+    """Insert a novel character after the caller acquires the identity lock."""
     cur.execute(
         """
         /* trait_compiler:insert_character_stub */
@@ -2054,6 +2079,7 @@ def _refresh_counters(result: TraitCompileResult) -> None:
         applied_single_entity_tags=len(result.applied_single_entity_tags),
         applied_pair_tags=len(result.applied_pair_tags),
         created_entities=len(result.created_entities),
+        reused_entities=len(result.reused_entities),
         created_relationships=len(result.created_relationships),
         prose_only_remainders=len(result.prose_only_remainders),
     )
@@ -2069,6 +2095,7 @@ def _canonicalize_result(result: TraitCompileResult) -> None:
     result.applied_single_entity_tags.sort(key=sort_key)
     result.applied_pair_tags.sort(key=sort_key)
     result.created_entities.sort(key=sort_key)
+    result.reused_entities.sort(key=sort_key)
     result.created_relationships.sort(key=sort_key)
     result.prose_only_remainders.sort(key=sort_key)
 

@@ -382,6 +382,17 @@ class CreatedEntity(BaseModel):
     dry_run: bool = False
 
 
+class ReusedEntity(BaseModel):
+    """Existing identity bound to a trait target without inserting an entity."""
+
+    trait: str
+    entity_kind: str
+    entity_id: int
+    row_id: int
+    name: str
+    dry_run: bool = False
+
+
 class CreatedRelationship(BaseModel):
     """character_relationships row that was or would be written.
 
@@ -415,6 +426,7 @@ class TraitCompileCounters(BaseModel):
     applied_single_entity_tags: int = 0
     applied_pair_tags: int = 0
     created_entities: int = 0
+    reused_entities: int = 0
     created_relationships: int = 0
     prose_only_remainders: int = 0
 
@@ -428,6 +440,7 @@ class TraitCompileResult(BaseModel):
     applied_single_entity_tags: List[AppliedTag] = Field(default_factory=list)
     applied_pair_tags: List[AppliedPairTag] = Field(default_factory=list)
     created_entities: List[CreatedEntity] = Field(default_factory=list)
+    reused_entities: List[ReusedEntity] = Field(default_factory=list)
     created_relationships: List[CreatedRelationship] = Field(default_factory=list)
     prose_only_remainders: List[UnresolvedTrait] = Field(default_factory=list)
     counters: TraitCompileCounters = Field(default_factory=TraitCompileCounters)

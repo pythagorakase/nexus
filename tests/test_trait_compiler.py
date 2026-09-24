@@ -1450,27 +1450,22 @@ def test_dependent_target_resolving_to_protagonist_is_remainder() -> None:
     assert cur.character_relationships == []
 
 
-def test_ambiguous_target_name_is_structured_remainder() -> None:
+def test_ambiguous_target_name_requires_identity_review() -> None:
+    from nexus.presence.identity import CharacterIdentityAmbiguity
+
     cur = TraitCompilerCursor()
     cur.characters[4] = {"entity_id": 504, "name": "Bren"}
     inputs = TraitCompileInputs(
         dependents=DependentsTraitInput(targets=[DependentTargetInput(name="Bren")])
     )
-
-    result = compile_character_traits(
-        cur,
-        character=_character("dependents", "resources", "allies", inputs=inputs),
-        character_id=1,
-        character_entity_id=501,
-        dry_run=True,
-    )
-
-    remainder = next(
-        item for item in result.prose_only_remainders if item.trait == "dependents"
-    )
-    assert remainder.trait == "dependents"
-    assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
-    assert remainder.details["match_count"] == 2
+    with pytest.raises(CharacterIdentityAmbiguity, match="Bren"):
+        compile_character_traits(
+            cur,
+            character=_character("dependents", "resources", "allies", inputs=inputs),
+            character_id=1,
+            character_entity_id=501,
+            dry_run=True,
+        )
 
 
 def test_obligation_character_counterparty_writes_edge_and_relationship() -> None:

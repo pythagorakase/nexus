@@ -69,6 +69,7 @@ from nexus.presence.roster import read_roster
 from nexus.presence.identity import (
     CharacterIdentityAmbiguity,
     require_character_identity,
+    read_identity_index,
     refresh_generated_aliases,
 )
 from nexus.telemetry.usage import usage_context
@@ -378,42 +379,24 @@ def _require_accepting_world_time(cur: Any, chunk_id: int) -> datetime:
 def _resolve_pair_hint_entity(cur: Any, name: str) -> _DeclaredEntityRecord:
     """Resolve one exact, globally unambiguous declaration-hint endpoint."""
 
-    cur.execute(
-        """
-        SELECT entity_kind, subtype_id, entity_id
-        FROM (
-            SELECT 'character' AS entity_kind, id AS subtype_id, entity_id
-            FROM characters WHERE name = %s OR id IN (SELECT character_id FROM character_aliases WHERE alias = %s)
-            UNION ALL
-            SELECT 'place' AS entity_kind, id AS subtype_id, entity_id
-            FROM places WHERE name = %s
-            UNION ALL
-            SELECT 'faction' AS entity_kind, id AS subtype_id, entity_id
-            FROM factions WHERE name = %s
-        ) AS matches
-        ORDER BY entity_kind, subtype_id
-        """,
-        (name, name, name, name),
-    )
-    rows = cur.fetchall()
-    if not rows:
+    index = read_identity_index(cur)
+    keys = index.matching_keys(name)
+    if not keys:
         raise ValueError(
             f"Pair-tag hint endpoint {name!r} does not resolve to an entity"
         )
-    if len(rows) > 1:
+    if len(keys) > 1:
         raise ValueError(
-            f"Pair-tag hint endpoint {name!r} is ambiguous: "
-            f"{len(rows)} entities match"
+            f"Pair-tag hint endpoint {name!r} is ambiguous: {len(keys)} entities match"
         )
-    row = rows[0]
-    entity_id = _row_value(row, "entity_id", 2)
-    if entity_id is None:
+    entry = index.by_id[next(iter(keys))]
+    if entry.entity_id is None:
         raise ValueError(f"Pair-tag hint endpoint {name!r} has no entity spine id")
     return _DeclaredEntityRecord(
-        entity_kind=str(_row_value(row, "entity_kind", 0)),
-        subtype_id=int(_row_value(row, "subtype_id", 1)),
-        entity_id=int(entity_id),
-        name=name,
+        entity_kind=entry.kind,
+        subtype_id=entry.id,
+        entity_id=entry.entity_id,
+        name=entry.name,
         created=False,
     )
 

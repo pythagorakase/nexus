@@ -248,6 +248,7 @@ def _print_trait_audit(payload: Dict[str, Any]) -> None:
         "applied_single_entity_tags",
         "applied_pair_tags",
         "created_entities",
+        "reused_entities",
         "created_relationships",
         "prose_only_remainders",
     ):
@@ -280,19 +281,23 @@ def _print_trait_audit(payload: Dict[str, Any]) -> None:
             obj = _endpoint_label(item.get("object_entity_id"), item.get("object_name"))
             print(f"  - {item['trait']}: {item['tag']} {subject} -> {obj}")
 
-    created_entities = audit.get("created_entities") or []
-    if created_entities:
-        print()
-        print("Created entities:")
-        for item in created_entities:
-            name = f" ({item['name']})" if item.get("name") else ""
-            entity_id = item.get("entity_id")
-            entity_label = entity_id if entity_id is not None else "pending"
-            print(
-                "  - "
-                f"{item['trait']}: {item['entity_kind']} "
-                f"entity {entity_label}{name}"
-            )
+    for key, heading in (
+        ("created_entities", "Created Entities"),
+        ("reused_entities", "Reused Entities"),
+    ):
+        entities = audit.get(key) or []
+        if entities:
+            print()
+            print(f"{heading}:")
+            for item in entities:
+                name = f" ({item['name']})" if item.get("name") else ""
+                entity_id = item.get("entity_id")
+                entity_label = entity_id if entity_id is not None else "pending"
+                print(
+                    "  - "
+                    f"{item['trait']}: {item['entity_kind']} "
+                    f"entity {entity_label}{name}"
+                )
 
     created_relationships = audit.get("created_relationships") or []
     if created_relationships:

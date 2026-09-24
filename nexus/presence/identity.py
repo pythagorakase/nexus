@@ -5,12 +5,15 @@ from __future__ import annotations
 from copy import copy
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-import unicodedata
 from typing import Any, Literal, Mapping, Sequence
 
 from nexus.api.native_structured_output import WireContractViolation
 from nexus.config import load_settings
 from nexus.config.settings_models import CharacterIdentitySettings
+from nexus.presence.normalization import (
+    normalize_identity_name as _normalized_name,
+    normalize_identity_text as _normalize,
+)
 from nexus.presence.roster import IdentityIndex, RosterEntry, _rows
 
 
@@ -38,35 +41,15 @@ class CharacterIdentityAmbiguity(WireContractViolation):
         )
 
 
-def _normalize(name: str, cfg: CharacterIdentitySettings) -> str:
-    value = " ".join(name.split())
-    if cfg.case_folding:
-        value = value.casefold()
-    if cfg.strip_diacritics:
-        value = "".join(
-            char
-            for char in unicodedata.normalize("NFKD", value)
-            if not unicodedata.combining(char)
-        )
-    return value
-
-
-def _normalized_name(name: str, cfg: CharacterIdentitySettings) -> str:
-    """Apply the same configured title normalization to either side of a match."""
-    parts = _normalize(name, cfg).split()
-    titles = {_normalize(title, cfg).rstrip(".") for title in cfg.titles}
-    if cfg.strip_titles and parts and parts[0].rstrip(".") in titles:
-        parts = parts[1:]
-    return " ".join(parts)
-
-
 def alias_forms(name: str, cfg: CharacterIdentitySettings) -> set[str]:
     """Return deterministic first, surname, and authored-title forms."""
     parts = name.split()
     if not parts:
         return set()
     title = None
-    if cfg.strip_titles and parts[0].rstrip(".").casefold() in cfg.titles:
+    if cfg.strip_titles and _normalize(parts[0].rstrip("."), cfg) in {
+        _normalize(title, cfg).rstrip(".") for title in cfg.titles
+    }:
         title, parts = parts[0], parts[1:]
     if not parts:
         return set()
@@ -321,12 +304,10 @@ def generated_aliases(index: IdentityIndex) -> list[tuple[int, str]]:
         forms[entry.id] = alias_forms(entry.name, cfg)
         for label in forms[entry.id] | {entry.name}:
             owners.setdefault(_normalize(label, cfg), set()).add(entry.id)
-    for (kind, label), keys in index.by_name.items():
+    for kind, label, key in index.labels:
         if kind != "character":
             continue
-        owners.setdefault(_normalize(label, cfg), set()).update(
-            int(key[1]) for key in keys
-        )
+        owners.setdefault(_normalize(label, cfg), set()).add(int(key[1]))
     return sorted(
         (character_id, alias)
         for character_id, labels in forms.items()
