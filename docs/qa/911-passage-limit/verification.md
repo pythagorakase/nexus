@@ -103,7 +103,7 @@ All done! ✨ 🍰 ✨
 1 file reformatted.
 ```
 
-Black scope follows the coordinator amendment: changed Python files only. The retained `black.log` and `focused.log` are historical artifacts from the initial attempt, not current gates. `git diff --check` passes. No UI/build work was required.
+Black scope follows the coordinator amendment: changed Python files only. The retained `black.log` and `focused.log` are historical artifacts from the initial attempt, not current gates. `git diff --check HEAD~2 HEAD -- '.' ':(exclude)*.log'` passes; verbatim pytest logs retain upstream trailing whitespace. No UI/build work was required.
 
 ## Deferred Work and Coordinator Questions
 
