@@ -118,7 +118,7 @@ def test_summary_generator_routes_test_model_to_registry_base_url():
     assert str(provider.client.base_url).rstrip("/") == expected
 
 
-def test_summary_token_check_uses_configured_request_budget():
+def test_summary_token_check_uses_registry_window():
     """The retired legacy TPM dictionary is not a prerequisite for summaries."""
     from scripts.summarize_narrative import SummaryGenerator
 

@@ -412,14 +412,22 @@ def test_summaries_model_accepts_anthropic_literal():
     assert settings.provider_for_model(anthropic_id) == "anthropic"
 
 
-def test_summaries_request_budget_must_exceed_output_budgets():
-    """A typo cannot leave the input allowance zero or negative."""
+@pytest.mark.parametrize(
+    "field", ["response_reserve_tokens", "reasoning_reserve_tokens"]
+)
+def test_summaries_window_rejects_negative_headroom(field):
+    """Summary window policy is typed and rejects negative reserves."""
     raw = _nexus_toml_dict()
-    raw["summaries"]["request_token_budget"] = raw["summaries"][
-        "season_max_output_tokens"
-    ]
+    raw["summaries"]["window"][field] = -1
+    with pytest.raises(ValidationError, match=field):
+        Settings(**raw)
 
-    with pytest.raises(ValidationError, match="request_token_budget must exceed"):
+
+def test_summaries_rejects_retired_request_budget():
+    """Old request budgets cannot silently constrain a registry window."""
+    raw = _nexus_toml_dict()
+    raw["summaries"]["request_token_budget"] = 30000
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         Settings(**raw)
 
 

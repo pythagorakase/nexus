@@ -22,6 +22,25 @@ def resolve_seat_window(
     settings: Mapping[str, Any], model: str, *, seat: str, window: int
 ) -> SeatWindow:
     """Apply a seat policy to an owner's prompt spend without double reserving."""
+    apex = settings["apex"]
+    raw = apex["gaia"] if seat == "gaia" else apex
+    policy = SeatWindowPolicy.model_validate(
+        {key: raw[key] for key in SeatWindowPolicy.model_fields}
+    )
+    return resolve_model_window(
+        settings, model, seat=seat, window=window, policy=policy
+    )
+
+
+def resolve_model_window(
+    settings: Mapping[str, Any],
+    model: str,
+    *,
+    seat: str,
+    window: int | None,
+    policy: SeatWindowPolicy,
+) -> SeatWindow:
+    """Apply the shared registry limits and headroom to a consumer policy."""
     registry = settings["global"]["model"]["api_models"]
     entries = [
         (name, entry)
@@ -33,11 +52,6 @@ def resolve_seat_window(
         raise ValueError(f"Model {model!r} must have one registry entry")
     provider_name, declaration = entries[0]
     entry = APIModelEntry.model_validate(declaration).require_window_capabilities()
-    apex = settings["apex"]
-    raw = apex["gaia"] if seat == "gaia" else apex
-    policy = SeatWindowPolicy.model_validate(
-        {key: raw[key] for key in SeatWindowPolicy.model_fields}
-    )
     assert entry.max_output_tokens is not None
     assert entry.context_window is not None
     if policy.max_output_tokens > entry.max_output_tokens:
@@ -71,7 +85,7 @@ def resolve_seat_window(
         if entry.max_input_tokens is not None
         else available_input
     )
-    ceiling = min(window, maximum_input)
+    ceiling = min(window, maximum_input) if window is not None else maximum_input
     headroom = policy.response_reserve_tokens
     if ceiling <= headroom:
         raise ValueError(
@@ -84,3 +98,33 @@ def resolve_seat_window(
         policy_headroom=headroom,
         max_output_tokens=policy.max_output_tokens,
     )
+
+
+def resolve_summary_window(
+    settings: Mapping[str, Any], model: str, *, mode: str
+) -> SeatWindow:
+    """Resolve a summary input budget, including the registry safety margin."""
+    from nexus.config.settings_models import SummariesSettings
+
+    if mode not in {"episode", "season"}:
+        raise ValueError(f"Unsupported summary mode: {mode!r}")
+    summaries = SummariesSettings.model_validate(settings["summaries"])
+    policy = SeatWindowPolicy(
+        max_output_tokens=getattr(summaries, f"{mode}_max_output_tokens"),
+        **summaries.window.model_dump(),
+    )
+    budget = resolve_model_window(
+        settings, model, seat="summaries", window=None, policy=policy
+    )
+    entry = next(
+        entry
+        for provider in settings["global"]["model"]["api_models"].values()
+        for entry in provider["models"]
+        if entry["id"] == model
+    )
+    margin = APIModelEntry.model_validate(entry).token_count_safety_margin
+    if budget.input_ceiling <= margin:
+        raise ValueError(
+            f"Summary model {model!r} has no input budget after safety margin {margin}"
+        )
+    return budget.model_copy(update={"input_ceiling": budget.input_ceiling - margin})

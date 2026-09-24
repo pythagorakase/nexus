@@ -1122,6 +1122,8 @@ async def responses_create(request: ResponsesRequest):
         )
 
     input_text = _collect_text(request.input)
+    if "[TEST:SCHEMA_INVALID]" in input_text:
+        return _responses_payload({"schema_invalid": True})
     proposal_ids = _extract_orrery_proposal_ids(input_text)
 
     # Exact routing: the structured-output tool's schema says which

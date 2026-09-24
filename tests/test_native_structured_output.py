@@ -850,14 +850,14 @@ def test_openai_provider_forwards_only_configured_request_timeout(
         assert captured["timeout"] == expected_timeout
 
 
-def test_openai_provider_uses_responses_parse_text_format() -> None:
-    """OpenAI provider should call native parse with the Pydantic model."""
+def test_openai_provider_uses_responses_create_strict_format() -> None:
+    """OpenAI provider sends the Pydantic strict schema through Responses create."""
 
     expected = _bootstrap_response()
     captured = {}
 
     class FakeResponses:
-        def parse(self, **kwargs):
+        def create(self, **kwargs):
             captured.update(kwargs)
             return SimpleNamespace(
                 output_parsed=expected,
@@ -880,7 +880,9 @@ def test_openai_provider_uses_responses_parse_text_format() -> None:
     assert parsed == expected
     assert llm_response.input_tokens == 11
     assert llm_response.output_tokens == 22
-    assert captured["text_format"] is StorytellerResponseBootstrap
+    assert captured["text"]["format"] == openai_response_text_format(
+        StorytellerResponseBootstrap
+    )
     assert "tools" not in captured
     assert captured["input"][0] == {"role": "system", "content": "System prompt"}
     assert captured["max_output_tokens"] == 1234
@@ -923,7 +925,7 @@ async def test_openai_rejection_logs_cover_every_transport_branch_without_input_
     prompts: list[str] = []
 
     class FakeResponses:
-        def parse(self, **kwargs: Any) -> Any:
+        def create(self, **kwargs: Any) -> Any:
             prompts.append(kwargs["input"][-1]["content"])
             return SimpleNamespace(
                 output_parsed=expected,
@@ -1016,7 +1018,7 @@ async def test_logon_terminal_validation_propagation_logs_no_payload_prose(
     prompts: list[str] = []
 
     class FakeResponses:
-        def parse(self, **kwargs: Any) -> Any:
+        def create(self, **kwargs: Any) -> Any:
             prompts.append(kwargs["input"][-1]["content"])
             return SimpleNamespace(
                 output_parsed=None,
@@ -1097,7 +1099,7 @@ def test_openai_provider_accepts_native_text_format_override() -> None:
     }
 
     class FakeResponses:
-        def parse(self, **kwargs):
+        def create(self, **kwargs):
             captured.update(kwargs)
             return SimpleNamespace(
                 output_parsed=None,
@@ -1136,7 +1138,7 @@ def test_openai_base_url_falls_back_to_chat_response_format() -> None:
             return "Input should be 'text' or 'json_object'; " "input: 'json_schema'"
 
     class FakeResponses:
-        def parse(self, **kwargs):
+        def create(self, **kwargs):
             captured["responses_called"] = True
             captured["responses_kwargs"] = kwargs
             raise UnsupportedJsonSchema()
@@ -1200,7 +1202,7 @@ def test_openai_chat_transport_dispatches_without_responses_attempt() -> None:
     provider._get_structured_completion_chat_completions_sync = Mock(
         return_value=expected
     )
-    provider.client.responses.parse = Mock(
+    provider.client.responses.create = Mock(
         side_effect=AssertionError("Responses must not be called")
     )
 
@@ -1212,7 +1214,7 @@ def test_openai_chat_transport_dispatches_without_responses_attempt() -> None:
     provider._get_structured_completion_chat_completions_sync.assert_called_once_with(
         "Prompt", StorytellerResponseBootstrap, text_format=None
     )
-    provider.client.responses.parse.assert_not_called()
+    provider.client.responses.create.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1232,7 +1234,7 @@ async def test_openai_chat_transport_dispatches_async_without_responses_attempt(
     provider._get_structured_completion_chat_completions_async = AsyncMock(
         return_value=expected
     )
-    provider.client.responses.parse = Mock(
+    provider.client.responses.create = Mock(
         side_effect=AssertionError("Responses must not be called")
     )
 
@@ -1244,7 +1246,7 @@ async def test_openai_chat_transport_dispatches_async_without_responses_attempt(
     provider._get_structured_completion_chat_completions_async.assert_awaited_once_with(
         "Prompt", StorytellerResponseBootstrap, text_format=None
     )
-    provider.client.responses.parse.assert_not_called()
+    provider.client.responses.create.assert_not_called()
 
 
 def test_anthropic_provider_uses_native_output_format() -> None:

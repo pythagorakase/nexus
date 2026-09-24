@@ -1249,7 +1249,7 @@ def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
     outputs = [invalid, repaired]
 
     class FakeResponses:
-        def parse(self, **kwargs: Any) -> Any:
+        def create(self, **kwargs: Any) -> Any:
             prompts.append(kwargs["input"][-1]["content"])
             output = outputs.pop(0)
             return SimpleNamespace(
@@ -1569,7 +1569,7 @@ def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged
     prompts: list[str] = []
 
     class FakeResponses:
-        def parse(self, **kwargs: Any) -> Any:
+        def create(self, **kwargs: Any) -> Any:
             prompts.append(kwargs["input"][-1]["content"])
             output = outputs.pop(0)
             return SimpleNamespace(
