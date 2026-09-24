@@ -2452,7 +2452,11 @@ class LogonUtility:
                         name = char.get("name", "Unknown")
                         location = char.get("current_location", "unknown location")
                         activity = char.get("current_activity", "status unknown")
-                        sections.append(f"- {name}: at {location}, {activity}")
+                        tags = char.get("orrery_tag_summary") or ""
+                        tag_detail = f" Tags: {tags}" if tags else ""
+                        sections.append(
+                            f"- {name}: at {location}, {activity}{tag_detail}"
+                        )
 
                 # Featured characters (full details)
                 featured_chars = characters.get("featured", [])
@@ -2462,7 +2466,12 @@ class LogonUtility:
                         name = char.get("name", "Unknown")
                         ref_type = char.get("reference_type", "")
                         summary = char.get("summary", "")
-                        sections.append(f"- {name} [{ref_type}]: {summary}")
+                        tags = char.get("orrery_tag_summary") or ""
+                        tag_detail = f"Tags: {tags}" if tags else ""
+                        detail = " ".join(
+                            part for part in (summary, tag_detail) if part
+                        )
+                        sections.append(f"- {name} [{ref_type}]: {detail}")
 
                         # Add detailed fields if present
                         if char.get("personality"):
