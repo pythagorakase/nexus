@@ -244,9 +244,9 @@ def test_hybrid_search():
     
     # Example queries to test
     test_queries = [
-        "What happened when Alex and Emilia were in the corporate district?",
-        "Alex's neural implant malfunction",
-        "Emilia's feelings about the mission"
+        "What happened when the protagonist and the pilot were in the corporate district?",
+        "the protagonist's neural implant malfunction",
+        "the pilot's feelings about the mission"
     ]
     
     # Test each query

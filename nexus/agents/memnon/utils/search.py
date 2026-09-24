@@ -63,7 +63,7 @@ class SearchManager:
         self.retrieval_settings = retrieval_settings
 
         # Initialize the query analyzer
-        self.query_analyzer = QueryAnalyzer(settings)
+        self.query_analyzer = QueryAnalyzer(db_url=db_url, settings=settings)
 
         # Flag for testing
         self.force_text_first = False

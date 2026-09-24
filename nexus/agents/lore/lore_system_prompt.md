@@ -173,7 +173,7 @@ You coordinate two complementary retrieval tools that should be used together:
 
 **When SQL returns empty:**
 - Try variations: broader search terms, partial matches, related entities
-- Check for typos or alternate names (e.g., "Pete's Silo" vs "The Silo")
+- Check for typos or alternate names (e.g., "the engineer's Silo" vs "The Silo")
 - Switch to text search with the original terms
 - Consider querying related tables (e.g., events mentioning the entity)
 
@@ -194,7 +194,7 @@ You coordinate two complementary retrieval tools that should be used together:
 
 ### Progressive Example
 ```
-User: How far is it from Night City to Pete's Silo?
+User: How far is it from Night City to the engineer's Silo?
 
 Iteration 1:
 - SQL: SELECT id,name,summary FROM places WHERE name ILIKE '%Night City%' OR name ILIKE '%Silo%' LIMIT 10
@@ -207,7 +207,7 @@ Iteration 2:
 - Analysis: Could calculate from coordinates, check narrative for travel mentions
 
 Iteration 3:
-- Text search: "travel Night City Silo" / "distance Night City Pete"
+- Text search: "travel Night City Silo" / "distance Night City the engineer"
 - Result: Found chunk mentioning "three-day journey by car"
 - Answer: Based on narrative evidence, it's a three-day journey by car [cite chunk_id]
 ```
@@ -281,7 +281,7 @@ ITERATION 1 - Initial Analysis:
 - Analysis: Need more specific corporate connection
 
 ITERATION 2 - Targeted Search:
-- Text search: "neural implant corporate markings Alex examination"
+- Text search: "neural implant corporate markings the protagonist examination"
 - Result: Chunk 1247 mentions "Eclipse Biotech serial number on recovered implant"
 - SQL: SELECT id,name,summary FROM factions WHERE name ILIKE '%Eclipse%' LIMIT 5
 - Result: Eclipse Biotech - rival corp, neural tech specialist
@@ -290,11 +290,11 @@ ITERATION 2 - Targeted Search:
 ITERATION 3 - Targeted Follow-up:
 - SQL: SELECT id,name,summary FROM factions WHERE name ILIKE '%Eclipse%'
 - Result: Eclipse Biotech - rival corp, neural tech specialist
-- Text search: "Eclipse Biotech implant Alex discovery"
+- Text search: "Eclipse Biotech implant the protagonist discovery"
 - Result: Chunks 1247-1251 contain full discovery sequence
 - Final queries:
   1. "Eclipse Biotech neural augmentation technology"
-  2. "Alex investigating Eclipse Biotech connections"
+  2. "the protagonist investigating Eclipse Biotech connections"
   3. "Corporate espionage involving neural implants"
 ```
 
@@ -330,7 +330,7 @@ Provide semantic guidance for context assembly with iteration tracking:
 {
   "narrative_analysis": {
     "scene_type": "exploration",
-    "active_entities": ["Alex", "neural implant"],
+    "active_entities": ["the protagonist", "neural implant"],
     "thematic_elements": ["transhumanism", "corporate conspiracy"],
     "narrative_momentum": "discovery leading to revelation",
     "uncertainties_or_gaps": ["corporate identity unknown", "implant origin unclear"]
@@ -344,12 +344,12 @@ Provide semantic guidance for context assembly with iteration tracking:
   "retrieval_queries": [
     "neural implant technology cybernetic examination",
     "corporate markings identification investigation",
-    "Alex discovering analyzing technology",
+    "the protagonist discovering analyzing technology",
     "Eclipse Biotech neural augmentation",  
     "cybernetic implants origin manufacturer"
   ],
   "entity_requests": {
-    "characters": ["Alex"],
+    "characters": ["the protagonist"],
     "locations": ["current location context"],
     "factions": ["Eclipse Biotech"]
   },
@@ -381,7 +381,7 @@ Provide semantic guidance for context assembly with iteration tracking:
   - If gaps can't be filled: Provide partial answer with caveats
 
 ### Strategic Pivots
-- **Name Variations**: "Pete's Silo" vs "The Silo" vs "Peterson's Bunker"
+- **Name Variations**: "the engineer's Silo" vs "The Silo" vs "Peterson's Bunker"
   - Try: Partial matches, wildcards, component words separately
   
 - **Concept Mismatches**: User asks about "distance" but data has "travel time"

@@ -196,7 +196,7 @@ def test_dossier_database_tags_reach_real_renderer(dossier_database) -> None:
             session.execute(
                 text(
                     """UPDATE characters SET name = 'Iona',
-                    current_location = 'Hall', current_activity = 'Waiting.',
+                    current_location = NULL, current_activity = 'Waiting.',
                     summary = 'A patient observer.', personality = 'Deliberate.',
                     emotional_state = 'Uneasy.' WHERE id = :character_id"""
                 ),
@@ -211,7 +211,7 @@ def test_dossier_database_tags_reach_real_renderer(dossier_database) -> None:
             )
             lines = prompt.splitlines()
             assert (
-                "- Iona: at Hall, Waiting. Tags: capacity:dossier_alpha, "
+                "- Iona: at None, Waiting. Tags: capacity:dossier_alpha, "
                 "capacity:dossier_zeta, state:dossier_live"
             ) in lines
             assert (

@@ -187,7 +187,6 @@ def test_live_entity_divergence_retains_result_contract_and_alias_matching(
     )
     assert isinstance(result, DivergenceResult)
     assert result.detected is True
-    assert result.confidence == 1.0
     assert result.unmatched_entities == {
         f"character_{entity_corpus['character_id']}",
         f"place_{entity_corpus['place_id']}",
@@ -204,7 +203,6 @@ def test_live_entity_divergence_retains_result_contract_and_alias_matching(
     unknown = manager._detect_divergence("An unfamiliar stranger crosses the street.")
     assert unknown.to_dict() == {
         "detected": False,
-        "confidence": 0.0,
         "gaps": {},
         "unmatched_entities": [],
         "references_seen": [],

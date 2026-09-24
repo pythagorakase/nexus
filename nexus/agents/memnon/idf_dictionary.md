@@ -2,7 +2,7 @@
 
 ## Overview
 
-Create a custom Inverse Document Frequency (IDF) dictionary to improve text search by giving rare terms like "gender" higher weight than common terms like "Alex" in your narrative retrieval system.
+Create a custom Inverse Document Frequency (IDF) dictionary to improve text search by giving rare terms like "gender" higher weight than frequently repeated character names in your narrative retrieval system.
 
 ## Key Concepts
 
@@ -298,7 +298,7 @@ def perform_hybrid_search(self, query_text: str, filters: Dict[str, Any] = None,
 ## Expected Improvements
 
 - Terms like "gender" (4/1425 docs) will get weight class A
-- Terms like "Alex" (3500/1425 docs) will get weight class D
+- Frequently repeated character names receive lower weights
 - Queries with rare terms will return more relevant results
 - Text scores will better reflect term importance
 

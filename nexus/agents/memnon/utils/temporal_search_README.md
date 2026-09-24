@@ -67,16 +67,16 @@ Options:
 
 ### Early Temporal Queries
 
-- "What was the first encounter between Alex and Emilia?"
+- "What was the first encounter between the protagonist and the pilot?"
 - "How did the story begin?"
-- "Tell me about the initial meeting with Dr. Nyati"
+- "Tell me about the initial meeting with the researcher"
 - "What are the origins of the cybernetics program?"
 
 ### Recent Temporal Queries
 
 - "What's the current status of the project?"
-- "What has Alex been doing recently?"
-- "Tell me about the latest developments with Emilia"
+- "What has the protagonist been doing recently?"
+- "Tell me about the latest developments with the pilot"
 - "What's happening now with the cybernetics program?"
 
 ## Future Improvements

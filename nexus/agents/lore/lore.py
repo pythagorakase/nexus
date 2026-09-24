@@ -13,10 +13,10 @@ Key Responsibilities:
 Usage Examples:
 --------------
 # Single retrieval directive for a specific chunk:
-python -m nexus.agents.lore.lore "What happened to Victor?" --chunk 100
+python -m nexus.agents.lore.lore "What happened to the captain?" --chunk 100
 
 # Multiple retrieval directives for the same chunk:
-python -m nexus.agents.lore.lore "Alex and Emilia relationship" "What happened to Victor?" "Information about The Silo" --chunk 100
+python -m nexus.agents.lore.lore "The captain and pilot relationship" "What happened to the captain?" "Information about The Silo" --chunk 100
 
 # Debug mode to see SQL reasoning between queries:
 python -m nexus.agents.lore.lore "Victor's current status" --chunk 888 --debug
@@ -492,7 +492,7 @@ class LORE:
 
         Args:
             retrieval_directives: One or more continuity elements/context requests
-                                  (e.g., ["Alex & Emilia's relationship history", "What happened to Victor?"])
+                                  (e.g., ["The captain and pilot relationship history", "What happened to the captain?"])
             chunk_id: The narrative chunk this context is being assembled for
 
         Returns dict with:

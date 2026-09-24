@@ -2,7 +2,7 @@
 Alias-aware search utilities for MEMNON
 
 This module provides functionality to enhance search with character alias awareness,
-especially for handling cases where 'You' and 'Alex' are equivalent in 2nd-person POV.
+including second-person pronouns for the database-selected player character.
 """
 
 import logging
@@ -17,17 +17,8 @@ from .embedding_tables import embedding_table_exists, table_name_for_dimensions
 
 logger = logging.getLogger("nexus.memnon.alias_search")
 
-# Define a mapping of canonical character names to their aliases
-# This will be populated from the database
-ALIAS_LOOKUP: Dict[str, List[str]] = {
-    "alex": ["Alex", "You"],
-    "emilia": ["Emilia", "Em"],
-    "pete": ["Pete", "Peter"],
-    # Add more characters as needed
-}
 
-
-def load_aliases_from_db(conn) -> Dict[str, List[str]]:
+def load_aliases_from_db(conn: Any) -> Dict[str, List[str]]:
     """
     Load character aliases from the database.
 
@@ -49,62 +40,53 @@ def load_aliases_from_db(conn) -> Dict[str, List[str]]:
     player_character_name = str(character_row[0])
 
     alias_lookup = {}
-    try:
-        # Query all characters with their aliases from the normalized table
-        result = conn.execute(
-            text(
-                """
-            SELECT c.name, array_agg(DISTINCT ca.alias) as aliases
-            FROM characters c
-            LEFT JOIN character_aliases ca ON c.id = ca.character_id
-            GROUP BY c.id, c.name
-            HAVING array_agg(DISTINCT ca.alias) IS NOT NULL
-        """
-            )
+    # Query all characters with their aliases from the normalized table
+    result = conn.execute(
+        text(
+            """
+        SELECT c.name, array_agg(DISTINCT ca.alias) as aliases
+        FROM characters c
+        LEFT JOIN character_aliases ca ON c.id = ca.character_id
+        GROUP BY c.id, c.name
+    """
         )
+    )
 
-        for row in result:
-            name = row[0]
-            aliases = row[1] if isinstance(row[1], list) else []
-            # Filter out None values that might come from the LEFT JOIN
-            aliases = [a for a in aliases if a is not None]
-            # Add the character's own name to their aliases if not already there
-            if name not in aliases:
-                aliases.append(name)
-            # Use lowercase name as the key
-            alias_lookup[name.lower()] = aliases
+    for row in result:
+        name = row[0]
+        aliases = row[1] if isinstance(row[1], list) else []
+        # Filter out None values that might come from the LEFT JOIN
+        aliases = [a.strip() for a in aliases if a and a.strip()]
+        # Add the character's own name to their aliases if not already there
+        if name not in aliases:
+            aliases.append(name)
+        # Use lowercase name as the key
+        alias_lookup[name.lower()] = aliases
 
-        logger.info(f"Loaded aliases for {len(alias_lookup)} characters from database")
+    logger.info(f"Loaded aliases for {len(alias_lookup)} characters from database")
 
-        # Ensure the POV character carries second-person aliases.
-        canonical = player_character_name.lower()
-        alias_lookup.setdefault(canonical, [player_character_name])
-        second_person_aliases = ["You", "Your", "Yours", "Yourself"]
-        for alias in second_person_aliases:
-            if alias not in alias_lookup[canonical]:
-                alias_lookup[canonical].append(alias)
-        logger.info(
-            "Mapped second-person pronouns to user character '%s'",
-            player_character_name,
-        )
+    # Ensure the POV character carries second-person aliases.
+    canonical = player_character_name.lower()
+    alias_lookup.setdefault(canonical, [player_character_name])
+    second_person_aliases = ["You", "Your", "Yours", "Yourself"]
+    for alias in second_person_aliases:
+        if alias not in alias_lookup[canonical]:
+            alias_lookup[canonical].append(alias)
+    logger.info(
+        "Mapped second-person pronouns to user character '%s'",
+        player_character_name,
+    )
 
-    except Exception as e:
-        logger.error(f"Error loading aliases from database: {e}")
-        # Fall back to default ALIAS_LOOKUP
-        return ALIAS_LOOKUP
-
-    return alias_lookup if alias_lookup else ALIAS_LOOKUP
+    return alias_lookup
 
 
-def alias_terms(
-    query: str, alias_lookup: Optional[Dict[str, List[str]]] = None
-) -> List[str]:
+def alias_terms(query: str, alias_lookup: Dict[str, List[str]]) -> List[str]:
     """
     Extract character alias terms from a query.
 
     Args:
         query: The search query text
-        alias_lookup: Optional dictionary of character aliases. If None, uses the module's ALIAS_LOOKUP.
+        alias_lookup: Database-derived dictionary of character aliases.
 
     Returns:
         List of alias terms to include in the search
@@ -112,18 +94,8 @@ def alias_terms(
     if not query or not isinstance(query, str):
         return []
 
-    if alias_lookup is None:
-        alias_lookup = ALIAS_LOOKUP
-
     lowered_query = query.lower()
     all_aliases = []
-
-    # Special case for possessive forms like "your" -> "Alex"
-    if any(term in lowered_query for term in ["your", "yours", "yourself"]):
-        # Add Alex and all her aliases when "your" is detected
-        if "alex" in alias_lookup:
-            all_aliases.extend(alias_lookup["alex"])
-            logger.debug("Added Alex's aliases due to 'your' in query")
 
     # Look for character names in the query
     for name, variants in alias_lookup.items():
@@ -262,6 +234,8 @@ def hybrid_alias_search(
         List of search results
     """
     # Get alias terms from the query
+    if alias_lookup is None:
+        alias_lookup = load_aliases_from_db(conn)
     terms = alias_terms(query_text, alias_lookup)
     logger.info(f"Query '{query_text}' contains character references: {terms}")
 

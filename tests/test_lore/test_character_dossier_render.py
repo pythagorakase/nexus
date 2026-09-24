@@ -62,7 +62,7 @@ def test_character_dossier_tag_cap_preserves_order(seat: str, limit: int) -> Non
     from nexus.config import load_settings_as_dict
 
     settings = load_settings_as_dict()
-    settings["Agent Settings"]["LORE"]["render_limits"]["character_tags"] = limit
+    settings["lore"]["render_limits"]["character_tags"] = limit
     utility = window_logon(settings)
     tags = [f"capacity:tag_{index:02}" for index in range(10)]
     character = {"name": "Iona", "orrery_tag_summary": ", ".join(tags)}
@@ -86,6 +86,7 @@ def test_character_tag_limit_validation() -> None:
 
     from nexus.config.settings_models import RenderLimits
 
-    assert RenderLimits().character_tags == 8
+    limits = dict(relationships=5, events=5, threats=5, bleed_menu=5)
+    assert RenderLimits(**limits).character_tags == 8
     with pytest.raises(ValidationError):
-        RenderLimits(character_tags=0)
+        RenderLimits(**limits, character_tags=0)

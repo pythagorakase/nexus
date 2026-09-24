@@ -104,7 +104,7 @@ def test_pass_state_keeps_and_deduplicates_typed_summary_memories() -> None:
 
 def test_chunk_id_status_excludes_retrograde_summaries() -> None:
     update = Pass2Update(
-        divergence=DivergenceResult(False, 0.0, {}, set(), set()),
+        divergence=DivergenceResult(False, {}, set(), set()),
         retrieved_chunks=[
             _summary(9),
             {"id": "9", "text": "A narrative retrieval."},

@@ -28,7 +28,6 @@ def minimal_settings() -> Dict[str, object]:
         },
         "memory": {
             "pass2_budget_reserve": 0.25,
-            "divergence_threshold": 0.4,
             "warm_slice_default": True,
             "max_sql_iterations": 3,
         },
@@ -494,7 +493,6 @@ def test_augment_warm_slice_merges_incremental_additions(
 
     manager._detect_divergence = lambda *args, **kwargs: DivergenceResult(
         detected=True,
-        confidence=1.0,
         gaps={"Data Shard": "Reference not present"},
         unmatched_entities={"Data Shard"},
         references_seen={"Data Shard"},
@@ -531,7 +529,6 @@ def test_get_memory_summary_reports_state(
 
     manager._detect_divergence = lambda *args, **kwargs: DivergenceResult(
         detected=True,
-        confidence=0.9,
         gaps={"Dynacorp": "Reference not present"},
         unmatched_entities={"Dynacorp"},
         references_seen={"Dynacorp"},

@@ -811,3 +811,43 @@ def test_context_prompt_omits_intertitle_when_unknown() -> None:
     prompt = LogonUtility({})._format_context_prompt({"user_input": "Continue."})
 
     assert prompt.startswith("\n=== USER INPUT ===") or prompt.startswith("=== ")
+
+
+@pytest.mark.parametrize("limits", [(1, 2, 3, 4), (7, 6, 8, 9)])
+def test_render_limits_and_signed_relationship_valence(limits: tuple[int, ...]) -> None:
+    """Each cap changes its own block, including limits beyond the old five."""
+    names = ("relationships", "events", "threats", "bleed_menu")
+    settings = {"lore": {"render_limits": dict(zip(names, limits))}}
+    context = {
+        "entity_data": {
+            "relationships": [
+                {
+                    "character1_name": f"Person{i}",
+                    "character2_name": "Mira",
+                    "relationship_type": "ally",
+                    "valence_current": (-2, 0, 3)[i % 3],
+                }
+                for i in range(10)
+            ],
+            "events": [{"name": f"Event{i}"} for i in range(10)],
+            "threats": [{"name": f"Threat{i}"} for i in range(10)],
+        },
+        "orrery_bleed_menu": [{"summary": f"Peripheral{i}"} for i in range(10)],
+    }
+    rendered = LogonUtility(settings)._format_context_prompt(context)
+    for label, limit in zip(("Person", "Event", "Threat", "Peripheral"), limits):
+        for i in range(10):
+            assert (f"{label}{i}" in rendered) is (i < limit)
+    assert "ally (valence -2)" in rendered
+    if limits[0] >= 3:
+        assert "ally (valence +0)" in rendered
+        assert "ally (valence +3)" in rendered
+
+
+@pytest.mark.parametrize("key", ["relationships", "events", "threats", "bleed_menu"])
+def test_render_limits_reject_nonpositive_caps(key: str) -> None:
+    """Invalid limits fail validation instead of silently truncating blocks."""
+    settings = load_settings_as_dict()
+    settings["lore"]["render_limits"][key] = 0
+    with pytest.raises(ValueError, match=key):
+        LogonUtility(settings)._format_context_prompt({})
