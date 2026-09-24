@@ -54,6 +54,11 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
 from nexus.agents.lore.utils.chunk_operations import (  # noqa: E402
     calculate_chunk_tokens,
 )
+from nexus.agents.lore.utils.scene_order import (  # noqa: E402
+    is_recalled,
+    recalled_clock_label,
+    scene_order,
+)
 from nexus.agents.orrery.player_identity import (  # noqa: E402
     canonical_player_character_id,
 )
@@ -2421,43 +2426,6 @@ class LogonUtility:
                 )
             sections.extend([correspondence, ""])
 
-        sections.kind = "recent narrative"
-        # Add warm slice
-        if context.get("warm_slice"):
-            sections.append("=== RECENT NARRATIVE ===")
-            for chunk in context["warm_slice"]["chunks"]:
-                chunk_text = chunk.get("text", "")
-                if is_retrograde_summary(chunk):
-                    sections.append_chunk(
-                        f"[{_retrieval_source_label(chunk)}] {chunk_text}", chunk
-                    )
-                else:
-                    sections.append_chunk(chunk_text, chunk)
-
-        sections.kind = "bootstrap context"
-        bootstrap_sections = self._format_bootstrap_context(
-            context.get("bootstrap_data")
-        )
-        if bootstrap_sections:
-            sections.extend(bootstrap_sections)
-
-        sections.kind = "scene roster"
-        # The writer authors sparse changes against this exact parent roster.
-        if seat == "writer" and presence_baseline is not None:
-            from nexus.presence.roster import render_roster, roster_from_baseline
-
-            sections.append(
-                render_roster(
-                    roster_from_baseline(presence_baseline),
-                    player_character_id=presence_baseline.player_character_id,
-                )
-            )
-
-        sections.kind = "user input"
-        # Add user input
-        sections.append("\n=== USER INPUT ===")
-        sections.append(context.get("user_input", ""))
-
         sections.kind = "entity dossier"
         # Add entity data with hierarchical support
         entity_data = context.get("entity_data", {})
@@ -2608,6 +2576,12 @@ class LogonUtility:
                     description = threat.get("description", "")
                     sections.append(f"- {name}: {description}")
 
+        recalled = [
+            (chunk, False)
+            for chunk in (context.get("warm_slice") or {}).get("chunks", [])
+            if is_recalled(chunk)
+        ]
+        # Preserve the ranked selection cap before splitting rendering lanes.
         # Add retrieved passages
         sections.kind = "historical context"
         if context.get("retrieved_passages"):
@@ -2615,12 +2589,58 @@ class LogonUtility:
             for passage in context["retrieved_passages"]["results"][
                 : render_limits.historical_passages
             ]:
+                if is_recalled(passage):
+                    recalled.append((passage, True))
+                    continue
                 sections.append_chunk(
                     f"[{_retrieval_source_label(passage)} | "
                     f"Score: {passage.get('score', 0):.2f}] "
                     f"{passage.get('text', '')}",
                     passage,
                 )
+
+        sections.kind = "recalled scenes"
+        if recalled:
+            sections.append("\n=== RECALLED SCENES ===")
+            for memory, historical in sorted(
+                recalled, key=lambda item: scene_order(item[0])
+            ):
+                label = recalled_clock_label(memory)
+                if historical:
+                    label += f" | Score: {memory.get('score', 0):.2f}"
+                sections.append_chunk(f"[{label}] {memory.get('text', '')}", memory)
+
+        sections.kind = "recent narrative"
+        # Add warm slice
+        if context.get("warm_slice"):
+            sections.append("=== RECENT NARRATIVE ===")
+            for chunk in sorted(context["warm_slice"]["chunks"], key=scene_order):
+                if not is_recalled(chunk):
+                    sections.append_chunk(chunk.get("text", ""), chunk)
+
+        sections.kind = "bootstrap context"
+        bootstrap_sections = self._format_bootstrap_context(
+            context.get("bootstrap_data")
+        )
+        if bootstrap_sections:
+            sections.extend(bootstrap_sections)
+
+        sections.kind = "scene roster"
+        # The writer authors sparse changes against this exact parent roster.
+        if seat == "writer" and presence_baseline is not None:
+            from nexus.presence.roster import render_roster, roster_from_baseline
+
+            sections.append(
+                render_roster(
+                    roster_from_baseline(presence_baseline),
+                    player_character_id=presence_baseline.player_character_id,
+                )
+            )
+
+        sections.kind = "user input"
+        # Add user input
+        sections.append("\n=== USER INPUT ===")
+        sections.append(context.get("user_input", ""))
 
         sections.kind = "world knowledge"
         world_knowledge = context.get("world_knowledge") or []

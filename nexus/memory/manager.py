@@ -1081,7 +1081,7 @@ class ContextMemoryManager:
             identity = self._memory_identity(chunk)
             if identity is None or identity in known_ids:
                 continue
-            warm_slice.append(chunk)
+            warm_slice.append({**chunk, "is_recalled": True})
             known_ids.add(identity)
 
         return warm_slice

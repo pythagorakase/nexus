@@ -119,6 +119,7 @@ def test_chunk_id_status_excludes_retrograde_summaries() -> None:
 
 def test_prompts_label_each_retrieval_corpus_without_fake_chunk_ids() -> None:
     summary = _summary(9)
+    summary["metadata"]["recorded_at_world_time"] = "2189-10-17T22:23:00+00:00"
     narrative = {"id": "9", "text": "A narrative retrieval.", "score": 0.7}
 
     prompt = LogonUtility({})._format_context_prompt(
@@ -128,7 +129,13 @@ def test_prompts_label_each_retrieval_corpus_without_fake_chunk_ids() -> None:
         }
     )
 
-    assert "[Retrograde summary 9 | Score: 0.80]" in prompt
+    assert (
+        "[Retrograde summary 9 · recorded at chunk 12 · 17 Oct 2189 · 22:23 | Score: 0.80]"
+        in prompt
+    )
+    assert prompt.index("=== HISTORICAL CONTEXT ===") < prompt.index(
+        "=== RECALLED SCENES ==="
+    )
     assert "[Chunk 9 | Score: 0.70]" in prompt
     assert "Chunk retrograde_summary:9" not in prompt
     assert _direct_retrieval_source_label(summary) == "Retrograde summary 9"

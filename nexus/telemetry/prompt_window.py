@@ -153,6 +153,16 @@ class AssemblyRequest:
             ):
                 self.removed.add(index)
                 break
+        if kind == "recalled scenes" and not any(
+            self.blocks[index][0] == kind and index not in self.removed
+            for index in self.sources
+        ):
+            # This optional lane disappears entirely when its last entry drops.
+            self.removed.update(
+                index
+                for index, (block_kind, _) in enumerate(self.blocks)
+                if block_kind == kind
+            )
 
 
 class PromptWindowRecord(BaseModel):
