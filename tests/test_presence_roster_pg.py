@@ -65,6 +65,19 @@ def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:
     """Hydrate and stage a wire, then drive the genuine commit transaction."""
     from nexus.agents.logon.skald_wire import PresenceBaseline
 
+    if not parent_id and (wire.presence is None or wire.presence.scene_reset is None):
+        with connect(dbname) as conn, conn.cursor() as cur:
+            cur.execute("SELECT id FROM places WHERE name = 'Hall'")
+            hall = cur.fetchone()[0]
+        presence = wire.presence or PresenceDelta()
+        wire.presence = presence.model_copy(
+            update={
+                "scene_reset": SceneReset(
+                    place=PlaceRef(kind="place", id=hall, name="Hall"),
+                    present=presence.enter,
+                )
+            }
+        )
     baseline = (
         read_presence_baseline(dbname, parent_id) if parent_id else PresenceBaseline()
     )
@@ -464,3 +477,43 @@ def test_roster_operator_provenance_includes_historical_presence(
             assert "chunk-ref" in sources[entity_id]
     finally:
         engine.dispose()
+
+
+def test_historical_settings_are_ordered_but_frontier_is_rejected(
+    roster_database,
+) -> None:
+    """Historical reads retain every place; continuation names both conflicts."""
+    from nexus.presence.roster import render_roster
+
+    dbname, ids, hall = roster_database
+    first = commit_wire(
+        dbname,
+        0,
+        wire(
+            "The hall is quiet.",
+            presence=PresenceDelta(
+                scene_reset=SceneReset(
+                    place=PlaceRef(kind="place", id=hall, name="Hall"), present=[]
+                )
+            ),
+        ),
+    )
+    with connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+            )
+            garden = cur.fetchone()[0]
+            cur.execute(
+                "DELETE FROM place_chunk_references WHERE chunk_id = %s", (first,)
+            )
+            for place in (garden, hall):
+                cur.execute(
+                    "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) VALUES (%s, %s, 'setting')",
+                    (first, place),
+                )
+        roster = read_roster(conn, first)
+        assert [entry.name for entry in roster.setting.values()] == ["Hall", "Garden"]
+        assert "SETTING: Hall, Garden" in render_roster(roster)
+    with pytest.raises(ValueError, match=rf"Chunk {first}.*Hall.*Garden"):
+        read_presence_baseline(dbname, first)

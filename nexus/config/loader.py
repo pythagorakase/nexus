@@ -9,6 +9,10 @@ to nexus.toml; explicitly passed .json paths remain supported only for
 legacy ir_eval V1 tooling that synthesizes temporary settings files.
 """
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from collections.abc import Iterator
+
 import os
 import sys
 from pathlib import Path
@@ -33,6 +37,19 @@ from .settings_models import LocalModelsSettings, Settings
 logger = logging.getLogger("nexus.config.loader")
 
 RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
+_SETTINGS_PATH: ContextVar[Path | None] = ContextVar(
+    "nexus_settings_path", default=None
+)
+
+
+@contextmanager
+def settings_path_scope(path: Union[str, Path]) -> Iterator[None]:
+    """Propagate an owner's explicit config to nested component construction."""
+    token = _SETTINGS_PATH.set(Path(path))
+    try:
+        yield
+    finally:
+        _SETTINGS_PATH.reset(token)
 
 
 def save_settings(
@@ -241,7 +258,7 @@ def load_settings(path: Union[str, Path, None] = None) -> Settings:
         >>> # registry (e.g. whatever openai.default points at).
     """
     if path is None:
-        path = os.environ.get(RUNTIME_CONFIG_ENV, "nexus.toml")
+        path = _SETTINGS_PATH.get() or os.environ.get(RUNTIME_CONFIG_ENV, "nexus.toml")
     path = Path(path)
 
     if not path.exists():
