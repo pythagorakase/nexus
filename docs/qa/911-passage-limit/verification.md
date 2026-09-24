@@ -13,7 +13,7 @@ The real TEST renderer replayed the recorded #909 turn-1A assembly against a dis
 
 Neither run needed trimming. These are current-code replay counts, not the older #909 total. Budget-pressure tests separately prove lowest-ranked historical passages are removed first and PostgreSQL coverage records exactly the surviving rendered prefix and token count.
 
-Evidence: [evidence.json](evidence.json), [five-passage prompt](cap-5-prompt.txt), [15-passage prompt](cap-15-prompt.txt) (chunk 25 at line 2011), and [probe log](probe.log). The archived turn-1A input is recorded verbatim in the evidence JSON. The probe checks every historical passage against clone text; chunk 49 checks its storyteller prefix and archived player-input suffix separately. Archived relationship valences are restored from JSON strings to Decimal before rendering.
+Evidence: [evidence.json](evidence.json), [five-passage historical block](cap-5-prompt.txt) and [15-passage historical block](cap-15-prompt.txt) (chunk 25 at line 851). The archived turn-1A input is recorded verbatim in the evidence JSON. The probe checks every historical passage against clone text; chunk 49 checks its storyteller prefix and archived player-input suffix separately. Archived relationship valences are restored from JSON strings to Decimal before rendering.
 
 `SELECT count(*), max(id) FROM narrative_chunks` returned `(46, 49)` for save_04 before/after and for the clone. Source SQL and pg_dump are read-only. Process-local `slot_utils.VALID_DBNAMES` admission matches the authorized #909 method; production validation is unchanged. The clone pool closes before DROP DATABASE, the allowlist is restored, and the dump is removed. Final cleanup:
 
@@ -88,7 +88,7 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python scripts/qa_shift/historic
 }
 ```
 
-The offline suite includes the final new tests. PostgreSQL ran with no skips; its sole failure is the explicitly exempt #885 empty-slot-5 test `test_handle_user_input_writes_exact_coverage_and_empty_detection`. It hardwires `LIVE_SLOT = 5` at `tests/test_lore/test_retrieval_coverage_live.py:17` and fails with `need-clock anchor unavailable: no canonical world time or base_timestamp` (postgres.log:143). All 58 other selected tests passed.
+The offline suite includes the final new tests. PostgreSQL ran with no skips; its sole failure is the explicitly exempt #885 empty-slot-5 test `test_handle_user_input_writes_exact_coverage_and_empty_detection`. It hardwires `LIVE_SLOT = 5` at `tests/test_lore/test_retrieval_coverage_live.py:17` and fails with `need-clock anchor unavailable: no canonical world time or base_timestamp` (recorded PostgreSQL run). All 58 other selected tests passed.
 
 Formatting performed in this continuation:
 
@@ -103,7 +103,16 @@ All done! ✨ 🍰 ✨
 1 file reformatted.
 ```
 
-Black scope follows the coordinator amendment: changed Python files only. The retained `black.log` and `focused.log` are historical artifacts from the initial attempt, not current gates. `git diff --check HEAD~2 HEAD -- '.' ':(exclude)*.log'` passes; verbatim pytest logs retain upstream trailing whitespace. No UI/build work was required.
+Black scope follows the coordinator amendment: changed Python files only. Raw logs were removed in the docs-only evidence cleanup; the recorded gate tails above are retained. No UI/build work was required.
+
+## Evidence Artifact Scope
+
+The two `cap-*-prompt.txt` files contain only their verbatim HISTORICAL CONTEXT blocks. Private correspondence, dossiers, and all other prompt sections are omitted. SHA-256 digests below identify the original full prompt file bytes before extraction, not the retained excerpts. `evidence.json` is unchanged. Raw `*.log` files were deleted; validation commands and tails above describe the earlier implementation run and were not rerun for this docs-only amendment.
+
+| Original Full Prompt | SHA-256 |
+| --- | --- |
+| `cap-5-prompt.txt` | `fe53d052b4d44f51431d243bd2dd444df11acab6e5d6fa3770308d8fc9afdcb3` |
+| `cap-15-prompt.txt` | `b4329197dae86f45a21a222085021b72f938c92afaa31167706f0c417c3a4a04` |
 
 ## Deferred Work and Coordinator Questions
 
