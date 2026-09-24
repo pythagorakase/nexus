@@ -57,6 +57,7 @@ from typing import (
     TypeVar,
     Literal,
     cast,
+    Callable,
 )
 from datetime import datetime, timedelta
 
@@ -284,8 +285,6 @@ class LLMProvider(abc.ABC):
 class OpenAIProvider(LLMProvider):
     """OpenAI provider implementation."""
 
-    # Default model if none specified
-    DEFAULT_MODEL = "gpt-4.1"
     STRUCTURED_OUTPUT_RETRIES = 1
 
     # Valid reasoning effort levels (model-specific)
@@ -364,6 +363,8 @@ class OpenAIProvider(LLMProvider):
             else self.STRUCTURED_OUTPUT_RETRIES
         )
         self.output_validator = output_validator
+        # Summary consumers inspect completion status before any JSON parsing.
+        self.response_check: Optional[Callable[[Any], None]] = None
 
         # Validate reasoning effort if provided
         if (
@@ -391,17 +392,27 @@ class OpenAIProvider(LLMProvider):
             )
 
         self.provider_name = "openai"
-        self.api_key = self.api_key or self._get_api_key()
-        self.model = self.model or self.DEFAULT_MODEL
+        from nexus.config import load_settings
 
-        # Detect model type
-        model_lower = self.model.lower()
-        self.is_reasoning_model = (
-            "gpt-5" in model_lower  # pin: family-prefix feature detection
-            or model_lower == "o3"
-            or model_lower.startswith("o3-")
+        settings = load_settings()
+        self.model = self.model or settings.ir_eval.judgment.model
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+            raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+        entry = next(
+            entry
+            for entry in settings.global_.model.api_models[provider].models
+            if entry.id == self.model
         )
-        self.supports_temperature = not self.is_reasoning_model
+        self.unsupported_params = frozenset(entry.unsupported_params)
+        self.is_reasoning_model = entry.reasoning_accounting != "none"
+        self.supports_temperature = "temperature" not in self.unsupported_params
+
+        self.api_key = self.api_key or self._get_api_key()
 
         # Create client with optional base_url for mock servers
         client_kwargs: Dict[str, Any] = {"api_key": self.api_key}
@@ -415,7 +426,7 @@ class OpenAIProvider(LLMProvider):
         # Log the model type
         if self.is_reasoning_model:
             logger.info(
-                f"Using reasoning model: {self.model} with effort: {self.reasoning_effort} (temperature NOT supported)"
+                f"Using reasoning model: {self.model} with effort: {self.reasoning_effort}"
             )
         else:
             logger.info(
@@ -462,7 +473,7 @@ class OpenAIProvider(LLMProvider):
                 score: float = Field(description="Confidence score (0-1)")
 
             # Get structured completion
-            provider = OpenAIProvider(model="gpt-4o")
+            provider = OpenAIProvider()  # Uses ir_eval.judgment.model
             result, response = provider.get_structured_completion(
                 "Analyze this text: 'I love this product!'",
                 SentimentAnalysis
@@ -581,14 +592,20 @@ class OpenAIProvider(LLMProvider):
                     from nexus.jobs.gate import before_provider_call
 
                     before_provider_call()
-                    response = self.client.responses.parse(
-                        **self._build_native_structured_request_params(
-                            active_prompt,
-                            schema_model,
-                            text_format=text_format,
-                            prompt_cache_key=prompt_cache_key,
-                        )
+                    request_params = self._build_native_structured_request_params(
+                        active_prompt,
+                        schema_model,
+                        text_format=(
+                            text_format or openai_response_text_format(schema_model)
+                            if self.response_check is not None
+                            else text_format
+                        ),
+                        prompt_cache_key=prompt_cache_key,
                     )
+                    if self.response_check is not None:
+                        response = self.client.responses.create(**request_params)
+                    else:
+                        response = self.client.responses.parse(**request_params)
                 except Exception as exc:
                     if not self._should_fallback_to_chat_completions(exc):
                         raise
@@ -607,6 +624,8 @@ class OpenAIProvider(LLMProvider):
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
+                if self.response_check is not None:
+                    self.response_check(response)
                 parsed_output = self._extract_native_parsed_output(
                     response, schema_model
                 )
@@ -745,6 +764,8 @@ class OpenAIProvider(LLMProvider):
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
+                if self.response_check is not None:
+                    self.response_check(response)
                 parsed_output = self._extract_chat_parsed_output(response, schema_model)
                 parsed_output = asyncio.run(
                     run_output_validator(
@@ -842,11 +863,11 @@ class OpenAIProvider(LLMProvider):
             request_params["text"] = {"format": text_format}
         if self.supports_temperature and self.temperature is not None:
             request_params["temperature"] = self.temperature
-        if self.reasoning_effort:
+        if self.is_reasoning_model and self.reasoning_effort:
             request_params["reasoning"] = {"effort": self.reasoning_effort}
         if prompt_cache_key:
             request_params["prompt_cache_key"] = prompt_cache_key
-        return request_params
+        return self._filter_request_params(request_params)
 
     def _build_chat_structured_request_params(
         self,
@@ -878,7 +899,22 @@ class OpenAIProvider(LLMProvider):
             # Structural keys are reserved at config load. Deep copy so a
             # caller mutating the built request cannot corrupt provider state.
             request_params["extra_body"] = copy.deepcopy(self.request_params)
-        return request_params
+        return self._filter_request_params(request_params)
+
+    def _filter_request_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Omit registry-prohibited parameters from SDK kwargs and merged bodies."""
+        filtered = {
+            key: value
+            for key, value in params.items()
+            if key not in self.unsupported_params
+        }
+        if "extra_body" in filtered:
+            filtered["extra_body"] = {
+                key: value
+                for key, value in filtered["extra_body"].items()
+                if key not in self.unsupported_params
+            }
+        return filtered
 
     @staticmethod
     def _chat_response_format(
@@ -1012,7 +1048,7 @@ class OpenAIProvider(LLMProvider):
             request_params["temperature"] = self.temperature
 
         # Add reasoning effort if provided (GPT-5, o3)
-        if self.reasoning_effort:
+        if self.is_reasoning_model and self.reasoning_effort:
             request_params["reasoning"] = {"effort": self.reasoning_effort}
             logger.info(
                 f"Using OpenAI responses API with model {self.model} and reasoning effort: {self.reasoning_effort}, cache_key: {cache_key}"
@@ -1024,6 +1060,8 @@ class OpenAIProvider(LLMProvider):
 
         if extra_body:
             request_params["extra_body"] = extra_body
+
+        request_params = self._filter_request_params(request_params)
 
         # Create the response
         try:
@@ -1086,6 +1124,7 @@ class OpenAIProvider(LLMProvider):
         from nexus.jobs.gate import before_provider_call
 
         before_provider_call()
+        request_params = self._filter_request_params(request_params)
         response = self.client.chat.completions.create(**request_params)
         usage_outcome: Literal["accepted", "error"] = "error"
         try:
@@ -1159,8 +1198,8 @@ def get_default_llm_argument_parser():
     llm_group = parser.add_argument_group("OpenAI API Options")
     llm_group.add_argument(
         "--model",
-        default=OpenAIProvider.DEFAULT_MODEL,
-        help=f"Model name to use (default: {OpenAIProvider.DEFAULT_MODEL})",
+        default=None,
+        help="Model name to use (default: ir_eval.judgment.model in nexus.toml)",
     )
     llm_group.add_argument("--api-key", help="API key (optional)")
     llm_group.add_argument(

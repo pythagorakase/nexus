@@ -247,7 +247,13 @@ JOB_TABLES = {
     "retrograde_maturation": "orrery_maturation_jobs",
     "correspondence_compaction": "correspondence_compaction_jobs",
     "narration": "orrery_narration_jobs",
+    "narrative_embedding": "narrative_embedding_jobs",
+    "narrative_summary": "narrative_summary_jobs",
 }
+
+
+class NoGenerationSessionError(ValueError):
+    """An accepted legacy chunk predates durable session binding."""
 
 
 def inspect_turn(
@@ -267,6 +273,10 @@ def inspect_turn(
             (session, chunk),
         )
         sessions = cur.fetchall()
+        if not sessions and chunk is not None:
+            raise NoGenerationSessionError(
+                f"chunk {chunk}: no generation session (accepted before session binding)"
+            )
         if len(sessions) != 1:
             raise ValueError(f"Expected one generation session; found {len(sessions)}")
         summary = dict(sessions[0])

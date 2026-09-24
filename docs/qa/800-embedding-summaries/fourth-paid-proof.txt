@@ -1,0 +1,47 @@
+2026-09-24 18:43:50,542 - nexus.migrate - INFO - Migrating qa640_800b_paid_7f70d372be95...
+2026-09-24 18:43:50,579 - nexus.migrate - INFO -   Applied: 125_embedding_summary_jobs
+2026-09-24 18:43:50,985 - nexus.summarize_narrative - INFO - Chunks for S01E02: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+2026-09-24 18:43:50,985 - nexus.summarize_narrative - INFO - Chunk span for S01E02: 2 to 49
+2026-09-24 18:43:50,997 - nexus.summarize_narrative - INFO - Generating summary for S01E02
+2026-09-24 18:43:50,997 - nexus.summarize_narrative - INFO - Chunks for S01E02: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
+2026-09-24 18:43:50,998 - nexus.summarize_narrative - INFO - Chunk span for S01E02: 2 to 49
+2026-09-24 18:43:50,998 - nexus.summarize_narrative - INFO - Found chunk span for S01E02: (2, 49)
+2026-09-24 18:43:50,999 - nexus.summarize_narrative - INFO - Actual chunk IDs for S01E02: 2-49
+2026-09-24 18:43:50,999 - nexus.summarize_narrative - INFO - Found 45 chunks for S01E02 (plus 1 context chunks)
+2026-09-24 18:43:51,062 - nexus.summarize_narrative - WARNING - Input too long: 44200 tokens (limit: 22000). Try using fewer chunks or a smaller range.
+2026-09-24 18:43:51,063 - nexus.summarize_narrative - WARNING - Token check failed - input may be too long
+2026-09-24 18:43:51,206 - nexus.metadata - INFO - Using reasoning model: gpt-6-astra with effort: medium
+2026-09-24 18:43:51,206 - nexus.summarize_narrative - INFO - Initialized openai summary provider for episode using gpt-6-astra
+2026-09-24 18:44:48,065 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-24 18:44:48,190 - nexus.usage - INFO - USAGE provider=openai model=gpt-6-astra seat=summaries slot=4 run=97611d92-4abb-4b57-8624-67964d1783a2 attempt=1 outcome=accepted in=44478 out=2390 total=46868 cached=0 reasoning=213 tier=default
+2026-09-24 18:44:48,190 - nexus.summarize_narrative - INFO - Generated episode summary with 44478 input tokens and 2390 output tokens
+2026-09-24 18:44:48,190 - nexus.summarize_narrative - INFO - [DRY RUN] Would save summary for S01E02
+2026-09-24 18:44:48,190 - nexus.summarize_narrative - INFO - Successfully saved summary for S01E02
+2026-09-24 18:44:48,338 - nexus.summarize_narrative - INFO - Generating summary for Season 1
+2026-09-24 18:44:48,340 - nexus.summarize_narrative - INFO - Found 45 chunks for Season 1
+2026-09-24 18:44:48,349 - nexus.summarize_narrative - WARNING - Input too long: 44151 tokens (limit: 18000). Try using fewer chunks or a smaller range.
+2026-09-24 18:44:48,349 - nexus.summarize_narrative - WARNING - Token check failed - input may be too long
+2026-09-24 18:44:48,374 - nexus.metadata - INFO - Using reasoning model: gpt-6-astra with effort: medium
+2026-09-24 18:44:48,374 - nexus.summarize_narrative - INFO - Initialized openai summary provider for season using gpt-6-astra
+2026-09-24 18:45:47,692 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+2026-09-24 18:45:47,771 - nexus.usage - INFO - USAGE provider=openai model=gpt-6-astra seat=summaries slot=4 run=97611d92-4abb-4b57-8624-67964d1783a2 attempt=1 outcome=accepted in=44419 out=2766 total=47185 cached=0 reasoning=146 tier=default
+2026-09-24 18:45:47,771 - nexus.summarize_narrative - INFO - Generated season summary with 44419 input tokens and 2766 output tokens
+2026-09-24 18:45:47,771 - nexus.summarize_narrative - INFO - [DRY RUN] Would save summary for season 1
+2026-09-24 18:45:47,771 - nexus.summarize_narrative - INFO - Successfully saved summary for Season 1
+PAID PROOF {"database": "qa640_800b_paid_7f70d372be95", "error": null, "jobs": [["episode", "succeeded", 1, "97611d92-4abb-4b57-8624-67964d1783a2"], ["season", "succeeded", 1, "97611d92-4abb-4b57-8624-67964d1783a2"]], "persisted_summaries": {"episode": {"summary": "[REDACTED generated response; persisted counts retained]", "summary_characters": 10522, "summary_sha256": "4df2bd3149f47123ecf3182124bb0971f6e3d49e97601fb343f7d1103a04d69f", "summary_words": 1435}, "season": {"summary": "[REDACTED generated response; persisted counts retained]", "summary_characters": 12970, "summary_sha256": "1a6d58737d485b70b79d491d015573092ac308d2231c2a40a52bf121e73545b5", "summary_words": 1782}}, "summary_lengths": [10522, 12970], "usage": [{"aggregate": false, "attempt": 1, "cache_creation_tokens": null, "cached_input_tokens": 0, "input_tokens": 44478, "model": "gpt-6-astra", "outcome": "accepted", "output_tokens": 2390, "provider": "openai", "quota_day": "2026-09-24", "reasoning_tokens": 213, "request_id": "resp_04e0dd4d721effe0006ab5a7a8441887d2a82b36582d773831", "requests": null, "run_id": "97611d92-4abb-4b57-8624-67964d1783a2", "seat": "summaries", "service_tier": "default", "slot": 4, "total_tokens": 46868, "transport": "responses", "ts": "2026-09-24T22:44:48.190000Z"}, {"aggregate": false, "attempt": 1, "cache_creation_tokens": null, "cached_input_tokens": 0, "input_tokens": 44419, "model": "gpt-6-astra", "outcome": "accepted", "output_tokens": 2766, "provider": "openai", "quota_day": "2026-09-24", "reasoning_tokens": 146, "request_id": "resp_004f12f3b4cf1a16006ab5a7e0ac0487d2a385cb372d32d198", "requests": null, "run_id": "97611d92-4abb-4b57-8624-67964d1783a2", "seat": "summaries", "service_tier": "default", "slot": 4, "total_tokens": 47185, "transport": "responses", "ts": "2026-09-24T22:45:47.771019Z"}], "wire_usage": [{"id": "resp_04e0dd4d721effe0006ab5a7a8441887d2a82b36582d773831", "incomplete_details": null, "mode": "episode", "status": "completed", "usage": {"input_tokens": 44478, "input_tokens_details": {"cache_write_tokens": 44475, "cached_tokens": 0}, "output_tokens": 2390, "output_tokens_details": {"reasoning_tokens": 213}, "total_tokens": 46868}}, {"id": "resp_004f12f3b4cf1a16006ab5a7e0ac0487d2a385cb372d32d198", "incomplete_details": null, "mode": "season", "status": "completed", "usage": {"input_tokens": 44419, "input_tokens_details": {"cache_write_tokens": 44416, "cached_tokens": 0}, "output_tokens": 2766, "output_tokens_details": {"reasoning_tokens": 146}, "total_tokens": 47185}}]}
+.
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 5 warnings in 118.45s (0:01:58)

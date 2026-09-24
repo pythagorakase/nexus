@@ -36,7 +36,7 @@ Usage Examples:
 
 Supported Arguments:
     --provider TEXT         LLM provider ('openai', 'anthropic', etc.) [default: openai]
-    --model TEXT            LLM model name [default: gpt-4.1-mini]
+    --model TEXT            LLM model name [default: ir_eval.judgment.model]
     --api-key TEXT          API key (optional)
     --temperature FLOAT     Sampling temperature [default: 0.1]
     --max-tokens INTEGER    Maximum output tokens (optional)
@@ -102,8 +102,10 @@ except ImportError as e:
     print(e)
     sys.exit(1)
 
-# Default model if not specified via CLI - use gpt-4.1-mini as a capable default for structured output
-DEFAULT_MODEL_FOR_SCRIPT = "gpt-4.1-mini"
+from nexus.config import load_settings
+
+# Legacy batch entry point shares the configured judgment model.
+DEFAULT_MODEL_FOR_SCRIPT = load_settings().ir_eval.judgment.model
 
 # --- Database Schema Constants ---
 NARRATIVE_CHUNKS_TABLE = "narrative_chunks"

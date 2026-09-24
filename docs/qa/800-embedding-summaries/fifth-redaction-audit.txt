@@ -1,0 +1,3 @@
+PASS: Every archived input_value excerpt is redacted.
+PASS: Original wire usage, recorded usage, job rows, and summary lengths are unchanged.
+PASS: Redacted persisted summaries retain verified SHA-256, character counts, and word counts.

@@ -1,0 +1,120 @@
+{
+  "database": "qa640_800b_paid_7f70d372be95",
+  "error": null,
+  "wire_usage": [
+    {
+      "mode": "episode",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 44478,
+        "input_tokens_details": {
+          "cache_write_tokens": 44475,
+          "cached_tokens": 0
+        },
+        "output_tokens": 2390,
+        "output_tokens_details": {
+          "reasoning_tokens": 213
+        },
+        "total_tokens": 46868
+      },
+      "id": "resp_04e0dd4d721effe0006ab5a7a8441887d2a82b36582d773831"
+    },
+    {
+      "mode": "season",
+      "status": "completed",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 44419,
+        "input_tokens_details": {
+          "cache_write_tokens": 44416,
+          "cached_tokens": 0
+        },
+        "output_tokens": 2766,
+        "output_tokens_details": {
+          "reasoning_tokens": 146
+        },
+        "total_tokens": 47185
+      },
+      "id": "resp_004f12f3b4cf1a16006ab5a7e0ac0487d2a385cb372d32d198"
+    }
+  ],
+  "jobs": [
+    [
+      "episode",
+      "succeeded",
+      1,
+      "97611d92-4abb-4b57-8624-67964d1783a2"
+    ],
+    [
+      "season",
+      "succeeded",
+      1,
+      "97611d92-4abb-4b57-8624-67964d1783a2"
+    ]
+  ],
+  "summary_lengths": [
+    10522,
+    12970
+  ],
+  "persisted_summaries": {
+    "episode": {
+      "summary": "[REDACTED generated response; persisted counts retained]",
+      "summary_sha256": "4df2bd3149f47123ecf3182124bb0971f6e3d49e97601fb343f7d1103a04d69f",
+      "summary_characters": 10522,
+      "summary_words": 1435
+    },
+    "season": {
+      "summary": "[REDACTED generated response; persisted counts retained]",
+      "summary_sha256": "1a6d58737d485b70b79d491d015573092ac308d2231c2a40a52bf121e73545b5",
+      "summary_characters": 12970,
+      "summary_words": 1782
+    }
+  },
+  "usage": [
+    {
+      "ts": "2026-09-24T22:44:48.190000Z",
+      "quota_day": "2026-09-24",
+      "provider": "openai",
+      "model": "gpt-6-astra",
+      "seat": "summaries",
+      "slot": 4,
+      "run_id": "97611d92-4abb-4b57-8624-67964d1783a2",
+      "attempt": 1,
+      "outcome": "accepted",
+      "transport": "responses",
+      "request_id": "resp_04e0dd4d721effe0006ab5a7a8441887d2a82b36582d773831",
+      "input_tokens": 44478,
+      "output_tokens": 2390,
+      "total_tokens": 46868,
+      "cached_input_tokens": 0,
+      "cache_creation_tokens": null,
+      "reasoning_tokens": 213,
+      "service_tier": "default",
+      "aggregate": false,
+      "requests": null
+    },
+    {
+      "ts": "2026-09-24T22:45:47.771019Z",
+      "quota_day": "2026-09-24",
+      "provider": "openai",
+      "model": "gpt-6-astra",
+      "seat": "summaries",
+      "slot": 4,
+      "run_id": "97611d92-4abb-4b57-8624-67964d1783a2",
+      "attempt": 1,
+      "outcome": "accepted",
+      "transport": "responses",
+      "request_id": "resp_004f12f3b4cf1a16006ab5a7e0ac0487d2a385cb372d32d198",
+      "input_tokens": 44419,
+      "output_tokens": 2766,
+      "total_tokens": 47185,
+      "cached_input_tokens": 0,
+      "cache_creation_tokens": null,
+      "reasoning_tokens": 146,
+      "service_tier": "default",
+      "aggregate": false,
+      "requests": null
+    }
+  ]
+}

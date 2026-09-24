@@ -43,7 +43,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field
@@ -55,9 +55,11 @@ if parent_dir not in sys.path:
 
 # Import shared API utilities
 from nexus.api.native_structured_output import build_native_structured_provider
+from nexus.api.summary_errors import SummaryOutputTruncated, check_summary_response
 from nexus.prompts.registry import PromptId, load
 from scripts.api_openai import (
     LLMResponse,
+    OpenAIProvider,
     get_token_count,
     is_abort_requested,
     setup_abort_handler,
@@ -91,7 +93,6 @@ DEFAULT_MODEL = None  # type: ignore[assignment]  # resolved at argparse time
 FALLBACK_MODEL = None  # type: ignore[assignment]
 CONTEXT_CHUNK_BEFORE = 1  # Number of chunks to include before target for context
 CONTEXT_CHUNK_AFTER = 1  # Number of chunks to include after target for context
-SUMMARY_FAILURE_STATUS = "error"
 
 # Database connection using SQLAlchemy
 import sqlalchemy as sa
@@ -712,14 +713,13 @@ class DatabaseManager:
                 FROM public.seasons 
                 WHERE id < :season
                   AND summary IS NOT NULL
-                  AND COALESCE(summary->>'status', '') <> :failure_status
                 ORDER BY id ASC
                 """
                 )
 
                 result = conn.execute(
                     query,
-                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                    {"season": season},
                 )
 
                 for row in result:
@@ -754,7 +754,6 @@ class DatabaseManager:
                 WHERE season = :season
                   AND episode < :episode
                   AND summary IS NOT NULL
-                  AND COALESCE(summary->>'status', '') <> :failure_status
                 ORDER BY episode ASC
                 """
                 )
@@ -764,7 +763,6 @@ class DatabaseManager:
                     {
                         "season": season,
                         "episode": episode,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
                     },
                 )
 
@@ -804,14 +802,12 @@ class DatabaseManager:
                         WHERE season = :season
                           AND episode = :episode
                           AND summary IS NOT NULL
-                          AND COALESCE(summary->>'status', '') <> :failure_status
                         LIMIT 1
                         """
                     ),
                     {
                         "season": season,
                         "episode": episode,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
                     },
                 ).scalar()
                 return result is not None
@@ -839,13 +835,12 @@ class DatabaseManager:
                 FROM public.seasons 
                 WHERE id = :season
                   AND summary IS NOT NULL
-                  AND COALESCE(summary->>'status', '') <> :failure_status
                 """
                 )
 
                 result = conn.execute(
                     query,
-                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                    {"season": season},
                 ).fetchone()
 
                 if result:
@@ -874,11 +869,10 @@ class DatabaseManager:
                         FROM public.seasons
                         WHERE id = :season
                           AND summary IS NOT NULL
-                          AND COALESCE(summary->>'status', '') <> :failure_status
                         LIMIT 1
                         """
                     ),
-                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                    {"season": season},
                 ).scalar()
                 return result is not None
         except Exception as e:
@@ -920,12 +914,7 @@ class DatabaseManager:
                 )
                 existing = conn.execute(check_query, {"season": season}).fetchone()
 
-                if (
-                    existing
-                    and existing.summary
-                    and not self._is_failure_summary(existing.summary)
-                    and not overwrite
-                ):
+                if existing and existing.summary and not overwrite:
                     if not prompt_on_conflict:
                         logger.info(
                             f"Existing summary found for Season {season}; skipping (overwrite disabled)"
@@ -1071,12 +1060,7 @@ class DatabaseManager:
                     check_query, {"season": season, "episode": episode}
                 ).fetchone()
 
-                if (
-                    existing
-                    and existing.summary
-                    and not self._is_failure_summary(existing.summary)
-                    and not overwrite
-                ):
+                if existing and existing.summary and not overwrite:
                     if not prompt_on_conflict:
                         logger.info(
                             f"Existing summary found for S{season:02d}E{episode:02d}; skipping (overwrite disabled)"
@@ -1175,115 +1159,6 @@ class DatabaseManager:
             logger.error(f"Error saving episode summary: {e}")
             return False
 
-    @staticmethod
-    def _is_failure_summary(summary: Any) -> bool:
-        """Return whether a JSONB summary value is a retryable failure marker."""
-        if isinstance(summary, str):
-            try:
-                summary = json.loads(summary)
-            except json.JSONDecodeError:
-                return False
-        return (
-            isinstance(summary, dict)
-            and summary.get("status") == SUMMARY_FAILURE_STATUS
-        )
-
-    def record_summary_failure(
-        self,
-        *,
-        kind: str,
-        season: int,
-        episode: Optional[int],
-        error: str,
-        model_candidates: List[str],
-    ) -> bool:
-        """Persist a retryable failure marker on the existing summary record.
-
-        The episodes/seasons JSONB summary columns are the established durable
-        operator surface. A marker remains visible there but is excluded by the
-        summary existence/context queries, so a later transition can refire and
-        replace it without requiring ``overwrite=True``.
-        """
-        failure = json.dumps(
-            {
-                "status": SUMMARY_FAILURE_STATUS,
-                "error": error,
-                "model_candidates": model_candidates,
-                "failed_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-        try:
-            with self.engine.connect() as conn:
-                if kind == "episode":
-                    if episode is None:
-                        raise ValueError(
-                            "episode is required when recording an episode failure"
-                        )
-                    # Never clobber a real summary: a slower failing job can
-                    # land after a concurrent success. Only fill NULLs or
-                    # replace an earlier error marker.
-                    query = text(
-                        """
-                        INSERT INTO public.episodes (season, episode, summary)
-                        VALUES (:season, :episode, CAST(:summary AS jsonb))
-                        ON CONFLICT (season, episode) DO UPDATE
-                        SET summary = EXCLUDED.summary
-                        WHERE public.episodes.summary IS NULL
-                           OR public.episodes.summary->>'status' = :failure_status
-                        """
-                    )
-                    params = {
-                        "season": season,
-                        "episode": episode,
-                        "summary": failure,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
-                    }
-                elif kind == "season":
-                    query = text(
-                        """
-                        INSERT INTO public.seasons (id, summary)
-                        VALUES (:season, CAST(:summary AS jsonb))
-                        ON CONFLICT (id) DO UPDATE
-                        SET summary = EXCLUDED.summary
-                        WHERE public.seasons.summary IS NULL
-                           OR public.seasons.summary->>'status' = :failure_status
-                        """
-                    )
-                    params = {
-                        "season": season,
-                        "summary": failure,
-                        "failure_status": SUMMARY_FAILURE_STATUS,
-                    }
-                else:
-                    raise ValueError(f"Unknown summary failure kind: {kind!r}")
-
-                result = conn.execute(query, params)
-                conn.commit()
-                if result.rowcount == 0:
-                    # The no-clobber guard blocked the write: a real summary
-                    # already occupies the row (overwrite=True regeneration
-                    # that failed). Report honestly instead of claiming the
-                    # marker landed.
-                    logger.warning(
-                        "Not recording %s summary failure for season=%s "
-                        "episode=%s: a non-error summary already exists and "
-                        "is preserved",
-                        kind,
-                        season,
-                        episode,
-                    )
-                    return False
-            return True
-        except Exception as exc:
-            logger.error(
-                "Unable to persist %s summary failure for season=%s episode=%s: %s",
-                kind,
-                season,
-                episode,
-                exc,
-            )
-            return False
-
     def get_episode_chunk_span(
         self, season: int, episode: int
     ) -> Optional[Tuple[int, int]]:
@@ -1297,76 +1172,69 @@ class DatabaseManager:
         Returns:
             Tuple of (min_id, max_id) or None if no chunks found
         """
-        try:
-            with self.engine.connect() as conn:
-                # First, get all chunk IDs for this episode with metadata
-                chunk_details_query = text(
-                    """
-                SELECT 
-                    nc.id as chunk_id, cm.season, cm.episode, cm.scene
-                FROM 
-                    public.narrative_chunks nc
-                JOIN 
-                    public.chunk_metadata cm ON nc.id = cm.chunk_id
-                WHERE 
-                    cm.season = :season AND cm.episode = :episode
-                ORDER BY 
-                    nc.id ASC
+        with self.engine.connect() as conn:
+            # First, get all chunk IDs for this episode with metadata
+            chunk_details_query = text(
                 """
-                )
+            SELECT
+                nc.id as chunk_id, cm.season, cm.episode, cm.scene
+            FROM
+                public.narrative_chunks nc
+            JOIN
+                public.chunk_metadata cm ON nc.id = cm.chunk_id
+            WHERE
+                cm.season = :season AND cm.episode = :episode
+            ORDER BY
+                nc.id ASC
+            """
+            )
 
-                chunk_details = list(
-                    conn.execute(
-                        chunk_details_query, {"season": season, "episode": episode}
+            chunk_details = list(
+                conn.execute(
+                    chunk_details_query, {"season": season, "episode": episode}
+                )
+            )
+
+            if not chunk_details:
+                logger.warning(f"No chunks found for S{season:02d}E{episode:02d}")
+                return None
+
+            # Get min and max IDs
+            min_id = chunk_details[0].chunk_id
+            max_id = chunk_details[-1].chunk_id
+
+            # Log all chunks for debugging
+            chunks_str = ", ".join([str(row.chunk_id) for row in chunk_details])
+            logger.info(f"Chunks for S{season:02d}E{episode:02d}: [{chunks_str}]")
+            logger.info(
+                f"Chunk span for S{season:02d}E{episode:02d}: {min_id} to {max_id}"
+            )
+
+            # Verify the boundaries to ensure they don't include other episodes
+            verify_query = text(
+                """
+            SELECT
+                cm.season, cm.episode, cm.scene
+            FROM
+                public.chunk_metadata cm
+            WHERE
+                cm.chunk_id = :min_id OR cm.chunk_id = :max_id
+            """
+            )
+
+            boundaries = list(
+                conn.execute(verify_query, {"min_id": min_id, "max_id": max_id})
+            )
+
+            for row in boundaries:
+                if row.season != season or row.episode != episode:
+                    logger.error(
+                        f"Boundary issue: Chunk ID belonging to S{row.season:02d}E{row.episode:02d} included in S{season:02d}E{episode:02d} span"
                     )
-                )
-
-                if not chunk_details:
-                    logger.warning(f"No chunks found for S{season:02d}E{episode:02d}")
+                    # Don't return wrong boundaries
                     return None
 
-                # Get min and max IDs
-                min_id = chunk_details[0].chunk_id
-                max_id = chunk_details[-1].chunk_id
-
-                # Log all chunks for debugging
-                chunks_str = ", ".join([str(row.chunk_id) for row in chunk_details])
-                logger.info(f"Chunks for S{season:02d}E{episode:02d}: [{chunks_str}]")
-                logger.info(
-                    f"Chunk span for S{season:02d}E{episode:02d}: {min_id} to {max_id}"
-                )
-
-                # Verify the boundaries to ensure they don't include other episodes
-                verify_query = text(
-                    """
-                SELECT 
-                    cm.season, cm.episode, cm.scene
-                FROM 
-                    public.chunk_metadata cm
-                WHERE 
-                    cm.chunk_id = :min_id OR cm.chunk_id = :max_id
-                """
-                )
-
-                boundaries = list(
-                    conn.execute(verify_query, {"min_id": min_id, "max_id": max_id})
-                )
-
-                for row in boundaries:
-                    if row.season != season or row.episode != episode:
-                        logger.error(
-                            f"Boundary issue: Chunk ID belonging to S{row.season:02d}E{row.episode:02d} included in S{season:02d}E{episode:02d} span"
-                        )
-                        # Don't return wrong boundaries
-                        return None
-
-                return (min_id, max_id)
-
-        except Exception as e:
-            logger.error(
-                f"Error getting chunk span for S{season:02d}E{episode:02d}: {e}"
-            )
-            return None
+            return (min_id, max_id)
 
 
 class SummaryGenerator:
@@ -1471,6 +1339,12 @@ class SummaryGenerator:
                 reasoning_effort=(self.effort if self.is_reasoning_model else None),
                 seat="summaries",
             )
+            if isinstance(provider, OpenAIProvider):
+                provider.response_check = partial(
+                    check_summary_response,
+                    mode=mode,
+                    max_output_tokens=self._max_output_tokens[mode],
+                )
             logger.info(
                 "Initialized %s summary provider for %s using %s",
                 provider.provider_name,
@@ -1732,6 +1606,8 @@ class SummaryGenerator:
                 logger.error(f"Failed to save summary for Season {season}")
                 return None
 
+        except SummaryOutputTruncated:
+            raise
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"Error generating season summary: {e}")
@@ -1923,6 +1799,8 @@ class SummaryGenerator:
                 logger.error(f"Failed to save summary for S{season:02d}E{episode:02d}")
                 return None
 
+        except SummaryOutputTruncated:
+            raise
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"Error generating episode summary: {e}")
@@ -2271,6 +2149,8 @@ class SummaryGenerator:
 
             return summary_dict
 
+        except SummaryOutputTruncated:
+            raise
         except Exception as e:
             self.last_error = str(e)
             logger.error(f"Error generating chunk range summary: {e}")

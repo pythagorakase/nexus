@@ -1,0 +1,1785 @@
+........................................................................ [  1%]
+............................sssssssssssssssssssssssssssssss.......ss.sss [  3%]
+....s....................................................sss............ [  5%]
+.........................ssssssss.......ssssss...sssssssssssss...sssssss [  7%]
+............ssssssssssssssssssss.....sssssssssssssssssss..sss...ssssssss [  9%]
+sssssssssssss...ssssss.................................................. [ 11%]
+.......................................ssssss......ss.........s......... [ 13%]
+.....................................s.................................. [ 15%]
+.......................................................................s [ 17%]
+sssssssssssssssss..................s...s........................s....... [ 19%]
+...............ss..............................s....s..........s..ssssss [ 21%]
+sssssssssssssssssssssssss.ssssssssssssss...........sssss................ [ 23%]
+s...........sssssss..s..........................................ss...... [ 25%]
+......ssssssss...............s.......................................... [ 27%]
+....................................ssssssss...sssss...s......ssss...... [ 29%]
+sss.......s............................................................. [ 31%]
+............................ssss...........s.....sss.............ss..... [ 33%]
+.........sss............................................................ [ 35%]
+....................................................................ss.. [ 37%]
+..............................ssssss...ssssss........................... [ 39%]
+......sss.......................sssss..........ss.........ssss.ss...ssss [ 41%]
+...................sssssssssssssssssssssssssssssssssssssssssssssssssssss [ 43%]
+ssssssssssssssssss.....ssssssss..............sssssssssssssssssss........ [ 45%]
+..........sssssssssssssssss........................................ss... [ 47%]
+.............ssss....sssssssssssss........ssssssssss..s.sssssssssssss... [ 49%]
+s....................................................................... [ 51%]
+........................................................................ [ 53%]
+............sssssssss................................................... [ 55%]
+.......ssssssssssssssssssssssssssssssssssssss........................... [ 57%]
+........................ssssssssssssssssssssssssssssssssssssssssssss.... [ 59%]
+................s........................sssssssssssssssssssssssssss..s. [ 61%]
+........sss...........ssss........................ssssssssssssssssssssss [ 63%]
+s......sssss..s...................ssssssssssssssssssssssssssssssssssssss [ 65%]
+ss...................................................................... [ 67%]
+......................................sssssss........................... [ 69%]
+..................................................s...................ss [ 71%]
+ss...s..........................................ssssssssssssssssssssss.. [ 73%]
+...............................................sssssssssssss.s.........s [ 75%]
+....ssssssssss.....ss...............ssss................................ [ 77%]
+......ss....sssssssssss................................................. [ 79%]
+..............................ssssss........................ssssssssssss [ 81%]
+.............ssssss..........s.........................................F [ 83%]
+F.FFFFFFF..sssssssssssssssssssssssssssssss.....sssssssssssssssssss...... [ 85%]
+..s...ss.....................s..........................ssssssssssssssss [ 87%]
+ssssssssss.........................................s.................... [ 89%]
+.................................................................sssssss [ 91%]
+s...........................................................ssssssssssss [ 93%]
+........................................................................ [ 95%]
+..............................s..s...................................... [ 97%]
+..........sssss.................FFFF..F................................. [ 99%]
+.....sssssssssssssssssssss                                               [100%]
+=================================== FAILURES ===================================
+___ test_provider_repairs_invalid_declaration_inside_structured_retry_budget ___
+
+self = <scripts.api_openai.OpenAIProvider object at 0x16a23a0d0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-4.1'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-4.1' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x16a238d50>
+
+    def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Only the repaired response can escape LOGON's provider boundary."""
+    
+        from nexus.api import db_pool
+    
+        cursor = FakeRegistryCursor()
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(cursor),
+        )
+    
+        invalid = _storyteller_response(tag_hints=["invented:tag"])
+        repaired = _storyteller_response(tag_hints=["human"])
+        prompts: list[str] = []
+        outputs = [invalid, repaired]
+    
+        class FakeResponses:
+            def parse(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["input"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    output_parsed=output,
+                    output_text=output.model_dump_json(),
+                    usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="gpt-4.1",
+            api_key="test-key",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1261: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x16a23a0d0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-4.1' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+____________ test_openai_chat_transport_repairs_invalid_declaration ____________
+
+self = <scripts.api_openai.OpenAIProvider object at 0x169d31b10>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'local-test-model'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'local-test-model' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x169d32f10>
+
+    def test_openai_chat_transport_repairs_invalid_declaration(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The local-model Chat transport enforces catalog validation and repair."""
+    
+        from nexus.api import db_pool
+    
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+        )
+        invalid = _storyteller_response(tag_hints=["invented:tag"])
+        repaired = _storyteller_response(tag_hints=["human"])
+        outputs = [invalid, repaired]
+        prompts: list[str] = []
+    
+        class FakeChatCompletions:
+            def create(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["messages"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(content=output.model_dump_json())
+                        )
+                    ],
+                    usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="local-test-model",
+            api_key="test-key",
+            base_url="http://127.0.0.1:8012/v1",
+            structured_transport="chat_completions",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1310: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x169d31b10>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'local-test-model' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_________ test_openai_chat_transport_async_repairs_invalid_declaration _________
+
+self = <scripts.api_openai.OpenAIProvider object at 0x176fda7d0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'local-test-model'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'local-test-model' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x176fdbdd0>
+
+    @pytest.mark.asyncio
+    async def test_openai_chat_transport_async_repairs_invalid_declaration(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The real async Chat entry point reaches the same catalog validator."""
+    
+        from nexus.api import db_pool
+    
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+        )
+        invalid = _storyteller_response(tag_hints=["invented:tag"])
+        repaired = _storyteller_response(tag_hints=["human"])
+        outputs = [invalid, repaired]
+        prompts: list[str] = []
+    
+        class FakeChatCompletions:
+            def create(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["messages"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(content=output.model_dump_json())
+                        )
+                    ],
+                    usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="local-test-model",
+            api_key="test-key",
+            base_url="http://127.0.0.1:8012/v1",
+            structured_transport="chat_completions",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1423: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x176fda7d0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'local-test-model' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_ test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[character_applied_tags-updates.characters[0]-human] _
+
+self = <scripts.api_openai.OpenAIProvider object at 0x176fc2a50>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-4.1'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-4.1' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x176fc3b50>
+boundary = 'character_applied_tags', failure_path = 'updates.characters[0]'
+expected_suggestion = 'human'
+
+    @pytest.mark.parametrize(
+        ("boundary", "failure_path", "expected_suggestion"),
+        [
+            ("character_applied_tags", "updates.characters[0]", "human"),
+            ("faction_applied_tags", "updates.factions[0]", None),
+            (
+                "faction_identity",
+                "updates.factions[0]",
+                "Office of Civic Continuity",
+            ),
+            ("tag_hints", "new_entities[0].tag_hints", "human"),
+            ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
+            (
+                "replacement_event_type",
+                "orrery_adjudications[0].replacement_event_type",
+                "slept",
+            ),
+        ],
+    )
+    def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged(
+        monkeypatch: pytest.MonkeyPatch,
+        boundary: str,
+        failure_path: str,
+        expected_suggestion: Optional[str],
+    ) -> None:
+        """Every moved catalog is enforced inside the bounded provider retry."""
+    
+        from nexus.api import db_pool
+    
+        cursor = FakeRegistryCursor()
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(cursor),
+        )
+        invalid = _retry_boundary_response(boundary, valid=False)
+        valid = _retry_boundary_response(boundary, valid=True)
+        outputs = [invalid, valid]
+        prompts: list[str] = []
+    
+        class FakeResponses:
+            def parse(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["input"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    output_parsed=output,
+                    output_text=output.model_dump_json(),
+                    usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="gpt-4.1",
+            api_key="test-key",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1581: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x176fc2a50>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-4.1' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_ test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[faction_applied_tags-updates.factions[0]-None] _
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1692aced0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-4.1'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-4.1' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1692ae990>
+boundary = 'faction_applied_tags', failure_path = 'updates.factions[0]'
+expected_suggestion = None
+
+    @pytest.mark.parametrize(
+        ("boundary", "failure_path", "expected_suggestion"),
+        [
+            ("character_applied_tags", "updates.characters[0]", "human"),
+            ("faction_applied_tags", "updates.factions[0]", None),
+            (
+                "faction_identity",
+                "updates.factions[0]",
+                "Office of Civic Continuity",
+            ),
+            ("tag_hints", "new_entities[0].tag_hints", "human"),
+            ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
+            (
+                "replacement_event_type",
+                "orrery_adjudications[0].replacement_event_type",
+                "slept",
+            ),
+        ],
+    )
+    def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged(
+        monkeypatch: pytest.MonkeyPatch,
+        boundary: str,
+        failure_path: str,
+        expected_suggestion: Optional[str],
+    ) -> None:
+        """Every moved catalog is enforced inside the bounded provider retry."""
+    
+        from nexus.api import db_pool
+    
+        cursor = FakeRegistryCursor()
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(cursor),
+        )
+        invalid = _retry_boundary_response(boundary, valid=False)
+        valid = _retry_boundary_response(boundary, valid=True)
+        outputs = [invalid, valid]
+        prompts: list[str] = []
+    
+        class FakeResponses:
+            def parse(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["input"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    output_parsed=output,
+                    output_text=output.model_dump_json(),
+                    usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="gpt-4.1",
+            api_key="test-key",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1581: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1692aced0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-4.1' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_ test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[faction_identity-updates.factions[0]-Office of Civic Continuity] _
+
+self = <scripts.api_openai.OpenAIProvider object at 0x17700fb90>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-4.1'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-4.1' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x17700db90>
+boundary = 'faction_identity', failure_path = 'updates.factions[0]'
+expected_suggestion = 'Office of Civic Continuity'
+
+    @pytest.mark.parametrize(
+        ("boundary", "failure_path", "expected_suggestion"),
+        [
+            ("character_applied_tags", "updates.characters[0]", "human"),
+            ("faction_applied_tags", "updates.factions[0]", None),
+            (
+                "faction_identity",
+                "updates.factions[0]",
+                "Office of Civic Continuity",
+            ),
+            ("tag_hints", "new_entities[0].tag_hints", "human"),
+            ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
+            (
+                "replacement_event_type",
+                "orrery_adjudications[0].replacement_event_type",
+                "slept",
+            ),
+        ],
+    )
+    def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged(
+        monkeypatch: pytest.MonkeyPatch,
+        boundary: str,
+        failure_path: str,
+        expected_suggestion: Optional[str],
+    ) -> None:
+        """Every moved catalog is enforced inside the bounded provider retry."""
+    
+        from nexus.api import db_pool
+    
+        cursor = FakeRegistryCursor()
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(cursor),
+        )
+        invalid = _retry_boundary_response(boundary, valid=False)
+        valid = _retry_boundary_response(boundary, valid=True)
+        outputs = [invalid, valid]
+        prompts: list[str] = []
+    
+        class FakeResponses:
+            def parse(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["input"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    output_parsed=output,
+                    output_text=output.model_dump_json(),
+                    usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="gpt-4.1",
+            api_key="test-key",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1581: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x17700fb90>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-4.1' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_ test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[tag_hints-new_entities[0].tag_hints-human] _
+
+self = <scripts.api_openai.OpenAIProvider object at 0x168ff7b10>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-4.1'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-4.1' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x168ff5390>
+boundary = 'tag_hints', failure_path = 'new_entities[0].tag_hints'
+expected_suggestion = 'human'
+
+    @pytest.mark.parametrize(
+        ("boundary", "failure_path", "expected_suggestion"),
+        [
+            ("character_applied_tags", "updates.characters[0]", "human"),
+            ("faction_applied_tags", "updates.factions[0]", None),
+            (
+                "faction_identity",
+                "updates.factions[0]",
+                "Office of Civic Continuity",
+            ),
+            ("tag_hints", "new_entities[0].tag_hints", "human"),
+            ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
+            (
+                "replacement_event_type",
+                "orrery_adjudications[0].replacement_event_type",
+                "slept",
+            ),
+        ],
+    )
+    def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged(
+        monkeypatch: pytest.MonkeyPatch,
+        boundary: str,
+        failure_path: str,
+        expected_suggestion: Optional[str],
+    ) -> None:
+        """Every moved catalog is enforced inside the bounded provider retry."""
+    
+        from nexus.api import db_pool
+    
+        cursor = FakeRegistryCursor()
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(cursor),
+        )
+        invalid = _retry_boundary_response(boundary, valid=False)
+        valid = _retry_boundary_response(boundary, valid=True)
+        outputs = [invalid, valid]
+        prompts: list[str] = []
+    
+        class FakeResponses:
+            def parse(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["input"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    output_parsed=output,
+                    output_text=output.model_dump_json(),
+                    usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="gpt-4.1",
+            api_key="test-key",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1581: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x168ff7b10>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-4.1' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_ test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[pair_tag_hints-new_entities[0].pair_tag_hints[0].tag-protects] _
+
+self = <scripts.api_openai.OpenAIProvider object at 0x176eacc50>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-4.1'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-4.1' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x176eaf490>
+boundary = 'pair_tag_hints'
+failure_path = 'new_entities[0].pair_tag_hints[0].tag'
+expected_suggestion = 'protects'
+
+    @pytest.mark.parametrize(
+        ("boundary", "failure_path", "expected_suggestion"),
+        [
+            ("character_applied_tags", "updates.characters[0]", "human"),
+            ("faction_applied_tags", "updates.factions[0]", None),
+            (
+                "faction_identity",
+                "updates.factions[0]",
+                "Office of Civic Continuity",
+            ),
+            ("tag_hints", "new_entities[0].tag_hints", "human"),
+            ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
+            (
+                "replacement_event_type",
+                "orrery_adjudications[0].replacement_event_type",
+                "slept",
+            ),
+        ],
+    )
+    def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged(
+        monkeypatch: pytest.MonkeyPatch,
+        boundary: str,
+        failure_path: str,
+        expected_suggestion: Optional[str],
+    ) -> None:
+        """Every moved catalog is enforced inside the bounded provider retry."""
+    
+        from nexus.api import db_pool
+    
+        cursor = FakeRegistryCursor()
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(cursor),
+        )
+        invalid = _retry_boundary_response(boundary, valid=False)
+        valid = _retry_boundary_response(boundary, valid=True)
+        outputs = [invalid, valid]
+        prompts: list[str] = []
+    
+        class FakeResponses:
+            def parse(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["input"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    output_parsed=output,
+                    output_text=output.model_dump_json(),
+                    usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="gpt-4.1",
+            api_key="test-key",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1581: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x176eacc50>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-4.1' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_ test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[replacement_event_type-orrery_adjudications[0].replacement_event_type-slept] _
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1770da810>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-4.1'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-4.1' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1770dbb10>
+boundary = 'replacement_event_type'
+failure_path = 'orrery_adjudications[0].replacement_event_type'
+expected_suggestion = 'slept'
+
+    @pytest.mark.parametrize(
+        ("boundary", "failure_path", "expected_suggestion"),
+        [
+            ("character_applied_tags", "updates.characters[0]", "human"),
+            ("faction_applied_tags", "updates.factions[0]", None),
+            (
+                "faction_identity",
+                "updates.factions[0]",
+                "Office of Civic Continuity",
+            ),
+            ("tag_hints", "new_entities[0].tag_hints", "human"),
+            ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
+            (
+                "replacement_event_type",
+                "orrery_adjudications[0].replacement_event_type",
+                "slept",
+            ),
+        ],
+    )
+    def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged(
+        monkeypatch: pytest.MonkeyPatch,
+        boundary: str,
+        failure_path: str,
+        expected_suggestion: Optional[str],
+    ) -> None:
+        """Every moved catalog is enforced inside the bounded provider retry."""
+    
+        from nexus.api import db_pool
+    
+        cursor = FakeRegistryCursor()
+        monkeypatch.setattr(
+            db_pool,
+            "get_connection",
+            lambda _dbname: FakeRegistryConnection(cursor),
+        )
+        invalid = _retry_boundary_response(boundary, valid=False)
+        valid = _retry_boundary_response(boundary, valid=True)
+        outputs = [invalid, valid]
+        prompts: list[str] = []
+    
+        class FakeResponses:
+            def parse(self, **kwargs: Any) -> Any:
+                prompts.append(kwargs["input"][-1]["content"])
+                output = outputs.pop(0)
+                return SimpleNamespace(
+                    output_parsed=output,
+                    output_text=output.model_dump_json(),
+                    usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+                )
+    
+>       provider = OpenAIProvider(
+            model="gpt-4.1",
+            api_key="test-key",
+            structured_output_retries=1,
+            output_validator=build_storyteller_tag_validator("test_slot"),
+        )
+
+tests/test_orrery_tag_validation.py:1581: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1770da810>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-4.1' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+__________ test_single_responses_call_records_jsonl_log_and_cli_json ___________
+
+self = <scripts.api_openai.OpenAIProvider object at 0x169261450>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'gpt-test'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'gpt-test' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-772/test_single_responses_call_rec0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x176f39f50>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x176f3af50>
+capsys = <_pytest.capture.CaptureFixture object at 0x169260050>
+
+    def test_single_responses_call_records_jsonl_log_and_cli_json(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        response = _response(
+            "done",
+            input_tokens=123,
+            output_tokens=45,
+            response_id="resp_single",
+        )
+    
+        class FakeResponses:
+            def parse(self, **_kwargs: object) -> SimpleNamespace:
+                return response
+    
+>       provider = OpenAIProvider(
+            model="gpt-test",
+            api_key="test-key",
+            usage_provider_name="openai",
+            usage_seat="skald_single_pass",
+        )
+
+tests/test_usage_recorder.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x169261450>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'gpt-test' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+______________ test_two_provider_passes_keep_seats_models_and_sum ______________
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1772c0c50>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'writer-model'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'writer-model' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-772/test_two_provider_passes_keep_0')
+
+    def test_two_provider_passes_keep_seats_models_and_sum(tmp_path: Path) -> None:
+        responses = iter(
+            [
+                _response(
+                    "writer",
+                    input_tokens=10,
+                    output_tokens=4,
+                    response_id="resp_writer",
+                ),
+                _response(
+                    "gaia",
+                    input_tokens=8,
+                    output_tokens=3,
+                    response_id="resp_gaia",
+                ),
+            ]
+        )
+    
+        class FakeResponses:
+            def parse(self, **_kwargs: object) -> SimpleNamespace:
+                return next(responses)
+    
+>       writer = OpenAIProvider(
+            model="writer-model",
+            api_key="test-key",
+            usage_provider_name="openai",
+            usage_seat="skald_writer",
+        )
+
+tests/test_usage_recorder.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1772c0c50>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'writer-model' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_______________ test_repair_loop_records_rejected_then_accepted ________________
+
+self = <scripts.api_openai.OpenAIProvider object at 0x169550a10>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'repair-model'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'repair-model' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-772/test_repair_loop_records_rejec0')
+
+    def test_repair_loop_records_rejected_then_accepted(tmp_path: Path) -> None:
+        responses = iter(
+            [
+                SimpleNamespace(
+                    id="resp_rejected",
+                    output_parsed=None,
+                    output_text='{"wrong":"shape"}',
+                    usage=_usage(20, 5),
+                ),
+                _response(
+                    "repaired",
+                    input_tokens=24,
+                    output_tokens=6,
+                    response_id="resp_accepted",
+                ),
+            ]
+        )
+    
+        class FakeResponses:
+            def parse(self, **_kwargs: object) -> SimpleNamespace:
+                return next(responses)
+    
+>       provider = OpenAIProvider(
+            model="repair-model",
+            api_key="test-key",
+            structured_output_retries=1,
+            usage_provider_name="openai",
+            usage_seat="geo_authoring",
+        )
+
+tests/test_usage_recorder.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x169550a10>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'repair-model' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+________ test_exhausted_repair_labels_final_attempt_rejected_validation ________
+
+self = <scripts.api_openai.OpenAIProvider object at 0x16a29db90>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'exhaust-model'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'exhaust-model' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-772/test_exhausted_repair_labels_f0')
+
+    def test_exhausted_repair_labels_final_attempt_rejected_validation(
+        tmp_path: Path,
+    ) -> None:
+        """An exhausted repair attempt records what happened to IT, not the loop."""
+    
+        bad = SimpleNamespace(
+            id="resp_bad",
+            output_parsed=None,
+            output_text='{"wrong":"shape"}',
+            usage=_usage(9, 2),
+        )
+    
+        class FakeResponses:
+            def parse(self, **_kwargs: object) -> SimpleNamespace:
+                return bad
+    
+>       provider = OpenAIProvider(
+            model="exhaust-model",
+            api_key="test-key",
+            structured_output_retries=1,
+            usage_provider_name="openai",
+            usage_seat="trait_input_derivation",
+        )
+
+tests/test_usage_recorder.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x16a29db90>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'exhaust-model' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+_______________ test_missing_usage_stays_null_and_counts_unknown _______________
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1773627d0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+>           provider = settings.provider_for_model(self.model)
+
+scripts/api_openai.py:400: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(global_=GlobalSettings(model=ModelConfig(default_model='gpt-5.6-terra', default_slot_model='TEST', api_models...ings(enabled=True, usage_dir='.nexus/runtime/usage', manifest_retention_days=30, daily_allowance={'openai': 10000000}))
+model_id = 'unknown-model'
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+>       raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+E       ValueError: Model ID 'unknown-model' is not declared in [global.model.api_models.*].models
+
+nexus/config/settings_models.py:3962: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-772/test_missing_usage_stays_null_0')
+
+    def test_missing_usage_stays_null_and_counts_unknown(tmp_path: Path) -> None:
+        response = _response(
+            "done",
+            input_tokens=1,
+            output_tokens=1,
+            response_id="resp_unknown",
+        )
+        response.usage = None
+    
+        class FakeResponses:
+            def parse(self, **_kwargs: object) -> SimpleNamespace:
+                return response
+    
+>       provider = OpenAIProvider(
+            model="unknown-model",
+            api_key="test-key",
+            usage_provider_name="openai",
+            usage_seat="skald_single_pass",
+        )
+
+tests/test_usage_recorder.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/api_openai.py:378: in __init__
+    super().__init__(
+scripts/api_openai.py:220: in __init__
+    self.initialize()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <scripts.api_openai.OpenAIProvider object at 0x1773627d0>
+
+    def initialize(self) -> None:
+        """Initialize the OpenAI client."""
+        if not openai:
+            raise ImportError(
+                "The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'."
+            )
+    
+        self.provider_name = "openai"
+        self.model = self.model or self.DEFAULT_MODEL
+    
+        from nexus.config import load_settings
+    
+        settings = load_settings()
+        try:
+            provider = settings.provider_for_model(self.model)
+        except ValueError as exc:
+>           raise ValueError(
+                f"Model {self.model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry; add its parameter capabilities."
+            ) from exc
+E           ValueError: Model 'unknown-model' is not declared in nexus.toml's [global.model.api_models] registry; add its parameter capabilities.
+
+scripts/api_openai.py:402: ValueError
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+nexus/api/storyteller.py:307
+  /Users/pythagor/nexus/.claude/worktrees/800-embedding-summaries/nexus/api/storyteller.py:307: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../../../.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_orrery_tag_validation.py::test_provider_repairs_invalid_declaration_inside_structured_retry_budget
+FAILED tests/test_orrery_tag_validation.py::test_openai_chat_transport_repairs_invalid_declaration
+FAILED tests/test_orrery_tag_validation.py::test_openai_chat_transport_async_repairs_invalid_declaration
+FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[character_applied_tags-updates.characters[0]-human]
+FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[faction_applied_tags-updates.factions[0]-None]
+FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[faction_identity-updates.factions[0]-Office of Civic Continuity]
+FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[tag_hints-new_entities[0].tag_hints-human]
+FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[pair_tag_hints-new_entities[0].pair_tag_hints[0].tag-protects]
+FAILED tests/test_orrery_tag_validation.py::test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged[replacement_event_type-orrery_adjudications[0].replacement_event_type-slept]
+FAILED tests/test_usage_recorder.py::test_single_responses_call_records_jsonl_log_and_cli_json
+FAILED tests/test_usage_recorder.py::test_two_provider_passes_keep_seats_models_and_sum
+FAILED tests/test_usage_recorder.py::test_repair_loop_records_rejected_then_accepted
+FAILED tests/test_usage_recorder.py::test_exhausted_repair_labels_final_attempt_rejected_validation
+FAILED tests/test_usage_recorder.py::test_missing_usage_stays_null_and_counts_unknown
+14 failed, 2706 passed, 908 skipped, 9 warnings in 121.98s (0:02:01)

@@ -721,6 +721,17 @@ class UsageSettings(BaseModel):
         return value
 
 
+class NarrativeJobSettings(BaseModel):
+    """Bounded scheduler execution for one durable narrative queue."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_jobs_per_drain: int = Field(default=2, ge=1)
+    max_attempts: int = Field(default=3, ge=1)
+    retry_delay_seconds: float = Field(default=300, ge=0)
+    lease_duration_seconds: float = Field(default=900, gt=0)
+
+
 class DeferredWorkSettings(BaseModel):
     """Timing and bounded work for the per-slot recovery owner."""
 
@@ -742,6 +753,8 @@ class DeferredWorkSettings(BaseModel):
     compaction_max_attempts: int = Field(default=3, ge=1)
     compaction_retry_delay_seconds: float = Field(default=300, ge=0)
     compaction_lease_duration_seconds: float = Field(default=300, gt=0)
+    embeddings: NarrativeJobSettings = Field(default_factory=NarrativeJobSettings)
+    summaries: NarrativeJobSettings = Field(default_factory=NarrativeJobSettings)
 
     @model_validator(mode="after")
     def validate_heartbeat(self) -> "DeferredWorkSettings":

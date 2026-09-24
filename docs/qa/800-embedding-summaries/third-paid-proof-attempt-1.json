@@ -1,0 +1,66 @@
+{
+  "database": "qa640_800b_paid_68b8f07afd60",
+  "error": "episode summary incomplete: configured allowance=8000 output tokens; incomplete_details.reason=max_output_tokens; usage={\"input_tokens\": 44386, \"input_tokens_details\": {\"cache_write_tokens\": 0, \"cached_tokens\": 44383}, \"output_tokens\": 8000, \"output_tokens_details\": {\"reasoning_tokens\": 348}, \"total_tokens\": 52386}",
+  "wire_usage": [
+    {
+      "mode": "episode",
+      "status": "incomplete",
+      "incomplete_details": {
+        "reason": "max_output_tokens"
+      },
+      "usage": {
+        "input_tokens": 44386,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 44383
+        },
+        "output_tokens": 8000,
+        "output_tokens_details": {
+          "reasoning_tokens": 348
+        },
+        "total_tokens": 52386
+      },
+      "id": "resp_0a73ee34fb627869006ab5a429d2e487d2b7b244bfac47ca52"
+    }
+  ],
+  "jobs": [
+    [
+      "episode",
+      "failed",
+      1,
+      "3a7859bd-58d7-40b1-8800-f4e68fffa960"
+    ],
+    [
+      "season",
+      "queued",
+      0,
+      "3a7859bd-58d7-40b1-8800-f4e68fffa960"
+    ]
+  ],
+  "summary_lengths": [],
+  "persisted_summaries": {},
+  "usage": [
+    {
+      "ts": "2026-09-24T22:31:39.316044Z",
+      "quota_day": "2026-09-24",
+      "provider": "openai",
+      "model": "gpt-6-astra",
+      "seat": "summaries",
+      "slot": 4,
+      "run_id": "3a7859bd-58d7-40b1-8800-f4e68fffa960",
+      "attempt": 1,
+      "outcome": "error",
+      "transport": "responses",
+      "request_id": "resp_0a73ee34fb627869006ab5a429d2e487d2b7b244bfac47ca52",
+      "input_tokens": 44386,
+      "output_tokens": 8000,
+      "total_tokens": 52386,
+      "cached_input_tokens": 44383,
+      "cache_creation_tokens": null,
+      "reasoning_tokens": 348,
+      "service_tier": "default",
+      "aggregate": false,
+      "requests": null
+    }
+  ]
+}

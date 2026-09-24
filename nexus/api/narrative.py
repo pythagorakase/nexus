@@ -568,92 +568,6 @@ def _record_player_response_for_chunk(
             conn.close()
 
 
-def _trigger_locked_chunk_embedding(
-    *, slot: Optional[int], parent_chunk_id: int
-) -> None:
-    """
-    Embed every locked chunk older than parent_chunk_id.
-
-    Continuing from chunk N creates a provisional successor, leaving chunk N
-    undoable while every committed chunk before it is locked and must be
-    embedded ("embedded == ironman"). Chunk ids are NOT contiguous: failed commits
-    historically consumed ids, and migration 078 preserves gaps left by retired
-    Retrograde summary rows. The old single-id ``parent - 1`` arithmetic
-    therefore silently skipped playable chunks across those gaps.
-    This catch-up form embeds every unembedded locked chunk except the
-    intentionally unembedded Retrograde prologue anchor, healing any
-    previously skipped chunk on the next turn.
-    """
-    if parent_chunk_id <= 1:
-        return
-
-    try:
-        dbname = require_slot_dbname(slot=slot)
-    except Exception as exc:
-        logger.warning(
-            "Skipping locked chunk embedding before chunk %s: %s",
-            parent_chunk_id,
-            exc,
-        )
-        return
-
-    try:
-        from nexus.agents.orrery.retrograde_markers import (
-            RETROGRADE_PROLOGUE_MARKER,
-        )
-
-        with get_connection(dbname, dict_cursor=True) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id
-                    FROM narrative_chunks
-                    WHERE id < %s
-                      AND embedding_generated_at IS NULL
-                      AND NOT (
-                          COALESCE(authorial_directives, '[]'::jsonb)
-                          @> %s::jsonb
-                      )
-                    ORDER BY id
-                    """,
-                    (parent_chunk_id, json.dumps([RETROGRADE_PROLOGUE_MARKER])),
-                )
-                locked_chunk_ids = [row["id"] for row in cur.fetchall()]
-
-        if not locked_chunk_ids:
-            logger.info(
-                "No locked chunks pending embedding before chunk %s in %s",
-                parent_chunk_id,
-                dbname,
-            )
-            return
-
-        workflow = ChunkWorkflow(dbname)
-        for locked_chunk_id in locked_chunk_ids:
-            job_id = workflow.trigger_embedding_generation(locked_chunk_id)
-            if job_id:
-                logger.info(
-                    "Generated embeddings for locked chunk %s in %s (%s)",
-                    locked_chunk_id,
-                    dbname,
-                    job_id,
-                )
-            else:
-                logger.warning(
-                    "Embedding generation did not complete for locked chunk %s "
-                    "in %s",
-                    locked_chunk_id,
-                    dbname,
-                )
-    except Exception as exc:
-        logger.error(
-            "Error embedding locked chunks before %s for slot %s: %s",
-            parent_chunk_id,
-            slot,
-            exc,
-        )
-
-
 def _acquire_generation_owner(
     *, slot: Optional[int], session_id: str, operation: str
 ) -> None:
@@ -987,7 +901,7 @@ async def continue_narrative(
 
         parent_chunk_id = request.chunk_id if request.chunk_id else 0
         is_bootstrap = parent_chunk_id == 0
-        embedding_claimed = _bind_generation_owner(
+        _bind_generation_owner(
             slot=request.slot,
             session_id=session_id,
             parent_chunk_id=parent_chunk_id,
@@ -1024,12 +938,6 @@ async def continue_narrative(
             manage_generation_lease=True,
             model_override=request.model,
         )
-        if embedding_claimed:
-            background_tasks.add_task(
-                _trigger_locked_chunk_embedding,
-                slot=request.slot,
-                parent_chunk_id=parent_chunk_id,
-            )
         scheduled = True
 
         message = (

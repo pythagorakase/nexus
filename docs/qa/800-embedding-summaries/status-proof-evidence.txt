@@ -1,0 +1,10 @@
+$ nexus jobs --slot 4
+narrative_embedding: failed=0, leased=0, queued=1, succeeded=0, stale_rejected=0
+narrative_summary: failed=0, leased=0, queued=1, succeeded=0, stale_rejected=0
+$ nexus status --json
+$ nexus down
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 7 warnings in 3.61s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

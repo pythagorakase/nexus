@@ -837,7 +837,7 @@ def test_openai_provider_forwards_only_configured_request_timeout(
     monkeypatch.setattr(api_openai.openai, "OpenAI", fake_openai)
 
     provider = OpenAIProvider(
-        model="local-test-model",
+        model="TEST",
         api_key="test-key",
         base_url="http://127.0.0.1:1234/v1",
         request_timeout=request_timeout,
@@ -866,7 +866,7 @@ def test_openai_provider_uses_responses_parse_text_format() -> None:
             )
 
     provider = OpenAIProvider(
-        model="gpt-4.1",
+        model="TEST",
         api_key="test-key",
         system_prompt="System prompt",
         max_output_tokens=1234,
@@ -944,7 +944,7 @@ async def test_openai_rejection_logs_cover_every_transport_branch_without_input_
             )
 
     provider = OpenAIProvider(
-        model="openai-log-test-model",
+        model="TEST",
         api_key="test-key",
         base_url=(
             "https://structured-output.invalid/v1"
@@ -987,7 +987,7 @@ async def test_openai_rejection_logs_cover_every_transport_branch_without_input_
     assert len(rejection_logs) == 1
     rejection_log = rejection_logs[0]
     assert f"transport={transport}" in rejection_log
-    assert "model=openai-log-test-model" in rejection_log
+    assert "model=TEST" in rejection_log
     assert "seat=writer" in rejection_log
     assert "attempt=1" in rejection_log
     assert f"exception={exception_name}" in rejection_log
@@ -1106,7 +1106,7 @@ def test_openai_provider_accepts_native_text_format_override() -> None:
             )
 
     provider = OpenAIProvider(
-        model="gpt-4.1",
+        model="TEST",
         api_key="test-key",
         system_prompt="System prompt",
         max_output_tokens=1234,
@@ -1154,7 +1154,7 @@ def test_openai_base_url_falls_back_to_chat_response_format() -> None:
             )
 
     provider = OpenAIProvider(
-        model="local-test-model",
+        model="TEST",
         api_key="test-key",
         base_url="http://127.0.0.1:8012/v1",
         system_prompt="System prompt",
@@ -1978,7 +1978,7 @@ def test_native_structured_request_forwards_prompt_cache_key() -> None:
     """OpenAI Responses receives the slot-qualified storyteller seat key."""
 
     provider = OpenAIProvider(
-        model="gpt-5.6",
+        model="TEST",
         api_key="test-key",
     )
 
@@ -1995,7 +1995,7 @@ def test_chat_request_without_request_params_omits_extra_body() -> None:
     """Models without registry params keep the pre-#580 request shape."""
 
     provider = OpenAIProvider(
-        model="local-model",
+        model="TEST",
         api_key="test-key",
         base_url="http://127.0.0.1:1234/v1",
         structured_transport="chat_completions",

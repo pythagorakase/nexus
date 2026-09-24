@@ -447,3 +447,42 @@ def test_child_job_enqueue_correlation_and_transaction_reset(monkeypatch):
                 )
                 assert cur.fetchone()[0] is None
             print("Correlated enqueue paths: " + json.dumps(correlated, default=str))
+
+
+def test_inspect_turn_pre_session_chunk_and_duplicate_sessions(monkeypatch, capsys):
+    """Legacy chunks get a concise CLI failure; ambiguous bindings stay loud."""
+    import sys
+    from nexus import cli
+
+    with disposable_slot_database(
+        "qa640_800b_inspect", source_db="save_04", include_data=True
+    ) as dbname:
+        route_slot(monkeypatch, dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT id FROM narrative_chunks WHERE id=49")
+            assert cur.fetchone() == (49,)
+            cur.execute(
+                "UPDATE narrative_generation_sessions SET chunk_id=NULL WHERE chunk_id=49"
+            )
+        monkeypatch.setattr(
+            sys, "argv", ["nexus", "inspect-turn", "--slot", "4", "--chunk", "49"]
+        )
+        assert cli.main() == 1
+        captured = capsys.readouterr()
+        assert (
+            captured.out
+            == "chunk 49: no generation session (accepted before session binding)\n"
+        )
+        assert captured.err == ""
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            for _ in range(2):
+                cur.execute(
+                    "INSERT INTO narrative_generation_sessions "
+                    "(session_id, operation, status, chunk_id, terminal_outcome) "
+                    "VALUES (%s, 'continue', 'complete', 49, 'accepted')",
+                    (str(uuid4()),),
+                )
+        with pytest.raises(
+            ValueError, match="Expected one generation session; found 2"
+        ):
+            cli.main()

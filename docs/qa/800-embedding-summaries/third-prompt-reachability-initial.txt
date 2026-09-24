@@ -1,0 +1,86 @@
+.........................................................FF.             [100%]
+=================================== FAILURES ===================================
+_____________________ test_repository_reachability_ratchet _____________________
+
+    def test_repository_reachability_ratchet() -> None:
+        """The ordinary pytest gate enforces the checked-in repository baseline."""
+        config = tomllib.loads((REPO_ROOT / "config/reachability.toml").read_text())
+        report = analyze_repository(REPO_ROOT, config)
+        baseline = json.loads((REPO_ROOT / config["baseline"]).read_text())
+>       assert not any(baseline_findings(report, baseline).values())
+E       AssertionError: assert not True
+E        +  where True = any(dict_values([[], [], ['nexus/api/summary_errors.py'], [], []]))
+E        +    where dict_values([[], [], ['nexus/api/summary_errors.py'], [], []]) = <built-in method values of dict object at 0x10f355bc0>()
+E        +      where <built-in method values of dict object at 0x10f355bc0> = {'baseline_add_production_paths': ['nexus/api/summary_errors.py'], 'baseline_remove_deleted_production_paths': [], 'baseline_remove_orphan_exemptions': [], 'lost_production_reachability': [], ...}.values
+E        +        where {'baseline_add_production_paths': ['nexus/api/summary_errors.py'], 'baseline_remove_deleted_production_paths': [], 'baseline_remove_orphan_exemptions': [], 'lost_production_reachability': [], ...} = baseline_findings({'declared_dynamic_edges': [{'expression': 'import_module(module_name)', 'reason': 'The event-source PostgreSQL proof ....py', ...}, {'kind': 'import', 'line': 3, 'scope': '<module>', 'source': 'ir_eval/engine/__init__.py', ...}, ...], ...}, {'production_reachable': ['migrations/043_orrery_category_refactor_phase1.py', 'nexus/__init__.py', 'nexus/agents/__in..._classifier.py', 'ir_eval/improved_analyzer_implementation.py', 'ir_eval/ir_eval.py', 'ir_eval/ir_eval_debug.py', ...]})
+
+tests/test_reachability.py:673: AssertionError
+__ test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app ___
+
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-793/test_checker_cli_is_stdlib_onl0')
+
+    def test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app(
+        tmp_path,
+    ) -> None:
+        """A fresh Python process runs the real CLI without any site packages."""
+        report_path = tmp_path / "report.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-S",
+                str(REPO_ROOT / "scripts/check_reachability.py"),
+                "--report",
+                str(report_path),
+            ],
+            cwd=tmp_path,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: {
+E           "maintained": 362,
+E           "reachable_by_kind": {
+E             "production": 198,
+E             "operator": 184,
+E             "migration": 179,
+E             "test": 243
+E           },
+E           "test_only": 34,
+E           "existing_unreachable": 75,
+E           "newly_unreachable": [],
+E           "lost_production_reachability": [],
+E           "baseline_add_production_paths": [
+E             "nexus/api/summary_errors.py"
+E           ],
+E           "baseline_remove_orphan_exemptions": [],
+E           "baseline_remove_deleted_production_paths": [],
+E           "forbidden_dependencies": [],
+E           "tombstone_violations": [],
+E           "unresolved_internal_imports": [],
+E           "unregistered_dynamic_import_sites": [],
+E           "route_reachability": "not_proven"
+E         }
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/Users/pythagor/nexus/.venv/bin/python', '-S', '/Users/pythagor/nexus/.claude/worktrees/800-em...ernal_imports": [],\n  "unregistered_dynamic_import_sites": [],\n  "route_reachability": "not_proven"\n}\n', stderr='').returncode
+
+tests/test_reachability.py:700: AssertionError
+=============================== warnings summary ===============================
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_reachability.py::test_repository_reachability_ratchet - Ass...
+FAILED tests/test_reachability.py::test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app
+2 failed, 58 passed, 5 warnings in 18.91s

@@ -1,0 +1,152 @@
+...................s...........................F........................ [ 37%]
+........................................................................ [ 74%]
+.................................................                        [100%]
+=================================== FAILURES ===================================
+__________ test_scheduler_gateway_sigkill_resumes_inflight_experience __________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7004b94250>
+tmp_path = PosixPath('/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-795/test_scheduler_gateway_sigkill0')
+request = <FixtureRequest for <Function test_scheduler_gateway_sigkill_resumes_inflight_experience>>
+
+    def test_scheduler_gateway_sigkill_resumes_inflight_experience(
+        monkeypatch, tmp_path, request
+    ):
+        """SIGKILL the real gateway during TEST HTTP; a new process finishes once."""
+        import json
+        import os
+        from pathlib import Path
+        import subprocess
+        import sys
+        import requests
+        import tomlkit
+        from nexus.config import load_settings
+        from nexus.agents.orrery.experiences import (
+            _complete_render,
+            ExperienceLeaseLostError,
+        )
+        from tests.pg_fixtures import disposable_slot_database
+        from tests.scheduler_helpers import test_provider_config
+    
+        # Configure before spawning TEST so its process inherits the same file.
+        path = test_provider_config(
+            tmp_path, load_settings().global_.model.api_models["test"].base_url, monkeypatch
+        )
+        doc = tomlkit.parse(path.read_text())
+        doc["api"]["test_provider"]["experience_response_delay_seconds"] = 4
+        doc["orrery"]["experiences"]["lease_duration_seconds"] = 8
+        path.write_text(tomlkit.dumps(doc))
+        mock_url = request.getfixturevalue("delayed_mock_openai_server")
+        from urllib.parse import urlsplit
+    
+        doc["global"]["model"]["api_models"]["test"]["base_url"] = mock_url
+        doc["runtime"]["services"]["mock_openai"]["port"] = urlsplit(mock_url).port
+        path.write_text(tomlkit.dumps(doc))
+    
+        with disposable_slot_database(
+            "qa640_800_kill", source_db="save_04", include_data=True
+        ) as dbname:
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE character_experience_jobs SET available_at=clock_timestamp()+interval '1 hour' WHERE state='queued'"
+                )
+                cur.execute(
+                    "UPDATE character_experience_jobs SET available_at=clock_timestamp() WHERE id=3"
+                )
+                cur.execute(
+                    """CREATE TABLE scheduler_completion_proof (job_id bigint NOT NULL);
+                    COMMENT ON TABLE scheduler_completion_proof IS 'Test-only audit of successful job transitions';
+                    COMMENT ON COLUMN scheduler_completion_proof.job_id IS 'Job reaching succeeded in the interruption proof';
+                    CREATE FUNCTION scheduler_record_completion() RETURNS trigger LANGUAGE plpgsql AS $$
+                    BEGIN INSERT INTO scheduler_completion_proof VALUES (NEW.id); RETURN NEW; END $$;
+                    CREATE TRIGGER scheduler_record_completion AFTER UPDATE ON character_experience_jobs
+                    FOR EACH ROW WHEN (OLD.state <> 'succeeded' AND NEW.state = 'succeeded')
+                    EXECUTE FUNCTION scheduler_record_completion();"""
+                )
+            import socket
+    
+            check = subprocess.run(
+                ["lsof", "-nP", "-iTCP:8018", "-sTCP:LISTEN"],
+                capture_output=True,
+                text=True,
+            )
+>           assert check.returncode == 1, check.stdout + check.stderr
+E           AssertionError: COMMAND     PID     USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+E             python3.1 59092 pythagor   12u  IPv4 0x5dd53313ab3d9b65      0t0  TCP 127.0.0.1:8018 (LISTEN)
+E             python3.1 73754 pythagor    9u  IPv4 0x5dd53313ab3d9b65      0t0  TCP 127.0.0.1:8018 (LISTEN)
+E             python3.1 73754 pythagor   12u  IPv4 0x5dd53313ab3d9b65      0t0  TCP 127.0.0.1:8018 (LISTEN)
+E             
+E           assert 0 == 1
+E            +  where 0 = CompletedProcess(args=['lsof', '-nP', '-iTCP:8018', '-sTCP:LISTEN'], returncode=0, stdout='COMMAND     PID     USER   ... (LISTEN)\npython3.1 73754 pythagor   12u  IPv4 0x5dd53313ab3d9b65      0t0  TCP 127.0.0.1:8018 (LISTEN)\n', stderr='').returncode
+
+tests/test_api/test_scheduler_recovery_pg.py:470: AssertionError
+----------------------------- Captured stderr call -----------------------------
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+2026-09-24 18:33:04,273 - nexus.migrate - INFO - Migrating qa640_800_kill_a2eb3ff3a7f0...
+2026-09-24 18:33:04,296 - nexus.migrate - INFO -   Applied: 125_embedding_summary_jobs
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+------------------------------ Captured log call -------------------------------
+INFO     nexus.migrate:migrate.py:296 Migrating qa640_800_kill_a2eb3ff3a7f0...
+INFO     nexus.migrate:migrate.py:267   Applied: 125_embedding_summary_jobs
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+nexus/api/storyteller.py:307
+  /Users/pythagor/nexus/.claude/worktrees/800-embedding-summaries/nexus/api/storyteller.py:307: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+../../../.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+tests/test_api/test_attempt_manifest_pg.py::test_manifest_real_test_turn_and_child_job_correlation[sync]
+  /Users/pythagor/nexus/.claude/worktrees/800-embedding-summaries/nexus/agents/memnon/utils/cross_encoder.py:54: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+    elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+
+tests/test_api/test_attempt_manifest_pg.py::test_manifest_real_test_turn_and_child_job_correlation[sync]
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/transformers/convert_slow_tokenizer.py:559: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_gateway_sigkill_resumes_inflight_experience
+1 failed, 191 passed, 1 skipped, 1857 deselected, 11 warnings in 280.26s (0:04:40)

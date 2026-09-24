@@ -1,0 +1,133 @@
+[
+  {
+    "issue": 1,
+    "attempt": 1,
+    "mode": "episode",
+    "status": null,
+    "http_status": 400,
+    "usage": null,
+    "id": null,
+    "note": "Unsupported temperature request; provider returned no usage. Unknown is not zero."
+  },
+  {
+    "issue": 2,
+    "attempt": 1,
+    "mode": "episode",
+    "status": null,
+    "http_status": 200,
+    "usage": null,
+    "id": null,
+    "note": "SDK parse validation failed on truncated JSON before normal usage recording; no wire capture exists for this attempt."
+  },
+  {
+    "issue": 2,
+    "attempt": 2,
+    "http_status": 200,
+    "mode": "episode",
+    "status": "incomplete",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "usage": {
+      "input_tokens": 44386,
+      "input_tokens_details": {
+        "cache_write_tokens": 0,
+        "cached_tokens": 44383
+      },
+      "output_tokens": 2500,
+      "output_tokens_details": {
+        "reasoning_tokens": 264
+      },
+      "total_tokens": 46886
+    },
+    "id": "resp_09fa0154c03f1494006ab5a25c0d9887d297e87a063d67a225"
+  },
+  {
+    "issue": 3,
+    "attempt": 1,
+    "http_status": 200,
+    "mode": "episode",
+    "status": "incomplete",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "usage": {
+      "input_tokens": 44386,
+      "input_tokens_details": {
+        "cache_write_tokens": 0,
+        "cached_tokens": 44383
+      },
+      "output_tokens": 8000,
+      "output_tokens_details": {
+        "reasoning_tokens": 348
+      },
+      "total_tokens": 52386
+    },
+    "id": "resp_0a73ee34fb627869006ab5a429d2e487d2b7b244bfac47ca52"
+  },
+  {
+    "issue": 3,
+    "attempt": 2,
+    "http_status": 200,
+    "mode": "episode",
+    "status": "incomplete",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "usage": {
+      "input_tokens": 44386,
+      "input_tokens_details": {
+        "cache_write_tokens": 0,
+        "cached_tokens": 44383
+      },
+      "output_tokens": 8000,
+      "output_tokens_details": {
+        "reasoning_tokens": 174
+      },
+      "total_tokens": 52386
+    },
+    "id": "resp_05005b9c0c6650c1006ab5a4e3d59887d2a66fec2d24e3c322"
+  },
+  {
+    "issue": 4,
+    "attempt": 1,
+    "http_status": 200,
+    "mode": "episode",
+    "status": "completed",
+    "incomplete_details": null,
+    "usage": {
+      "input_tokens": 44478,
+      "input_tokens_details": {
+        "cache_write_tokens": 44475,
+        "cached_tokens": 0
+      },
+      "output_tokens": 2390,
+      "output_tokens_details": {
+        "reasoning_tokens": 213
+      },
+      "total_tokens": 46868
+    },
+    "id": "resp_04e0dd4d721effe0006ab5a7a8441887d2a82b36582d773831"
+  },
+  {
+    "issue": 4,
+    "attempt": 1,
+    "http_status": 200,
+    "mode": "season",
+    "status": "completed",
+    "incomplete_details": null,
+    "usage": {
+      "input_tokens": 44419,
+      "input_tokens_details": {
+        "cache_write_tokens": 44416,
+        "cached_tokens": 0
+      },
+      "output_tokens": 2766,
+      "output_tokens_details": {
+        "reasoning_tokens": 146
+      },
+      "total_tokens": 47185
+    },
+    "id": "resp_004f12f3b4cf1a16006ab5a7e0ac0487d2a385cb372d32d198"
+  }
+]

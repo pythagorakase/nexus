@@ -22,6 +22,8 @@ import argparse
 from typing import Dict, List, Any, Tuple, Optional, Set
 from pathlib import Path
 
+from nexus.config import load_settings
+
 # Add parent directory to path
 parent_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, parent_dir)
@@ -2191,9 +2193,12 @@ class IREvalPGCLI:
                 return
 
             # Get model and configuration
+            default_model = load_settings().ir_eval.judgment.model
             model = (
-                input("\nEnter OpenAI model to use (default: gpt-4.1): ").strip()
-                or "gpt-4.1"
+                input(
+                    f"\nEnter OpenAI model to use (default: {default_model}): "
+                ).strip()
+                or default_model
             )
             temp_input = input("Enter temperature (0.0-1.0, default: 0.2): ").strip()
             temperature = float(temp_input) if temp_input else 0.2

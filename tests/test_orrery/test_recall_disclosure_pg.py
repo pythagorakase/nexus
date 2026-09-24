@@ -40,7 +40,7 @@ from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
 from nexus.api import db_pool, narrative, orrery_dev_endpoints
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings, load_settings_as_dict
 from scripts import new_story_setup
 from tests.model_registry_helpers import registry_model
 
@@ -2072,6 +2072,9 @@ def test_turn_inputs_change_experience_ranking_via_shared_query_embedding(
         {"fire": fire_experience, "harbor": harbor_experience},
     )
     lore = _TurnLoreHarness(session)
+    lore.settings["lore"] = {
+        "render_limits": load_settings().lore.render_limits.model_dump()
+    }
     manager = TurnCycleManager(lore)
 
     selected: list[int] = []

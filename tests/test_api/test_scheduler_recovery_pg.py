@@ -462,15 +462,16 @@ def test_scheduler_gateway_sigkill_resumes_inflight_experience(
             )
         import socket
 
+        port = int(os.environ.get("NEXUS_GATEWAY_PORT", "8018"))
         check = subprocess.run(
-            ["lsof", "-nP", "-iTCP:8018", "-sTCP:LISTEN"],
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
             capture_output=True,
             text=True,
         )
         assert check.returncode == 1, check.stdout + check.stderr
         with socket.socket() as listener:
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            listener.bind(("127.0.0.1", 8018))
+            listener.bind(("127.0.0.1", port))
             listener.listen(128)
             listener.set_inheritable(True)
             port = listener.getsockname()[1]

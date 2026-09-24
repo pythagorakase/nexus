@@ -12,14 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
 import threading
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
-from pathlib import Path
-import subprocess
-import re
 
 import psycopg2
 from pydantic import BaseModel
@@ -32,55 +28,14 @@ logger = logging.getLogger("nexus.api.chunk_workflow")
 # Security: Valid database names (command injection prevention)
 VALID_DATABASES = {"save_01", "save_02", "save_03", "save_04", "save_05"}
 
-# Security: Valid model name pattern (alphanumeric, hyphens, dots, underscores only)
-VALID_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
-
 EmbeddingScheduler = Callable[[int], Optional[str]]
-
-# BackgroundTasks are intentionally in-process for issue #206's minimum viable
-# async handoff. This guard prevents duplicate queueing inside one API worker;
-# a durable cross-process queue remains follow-up scope.
-_queued_embedding_jobs: set[tuple[str, int]] = set()
-_queued_embedding_jobs_lock = threading.Lock()
 
 
 def build_embedding_scheduler(
     workflow: "ChunkWorkflow", add_task: Callable[..., Any]
 ) -> EmbeddingScheduler:
-    """Create a scheduler that queues embedding generation in a background runner."""
-
-    def schedule_embedding(chunk_id: int) -> Optional[str]:
-        job_key = (workflow.dbname, chunk_id)
-        with _queued_embedding_jobs_lock:
-            if job_key in _queued_embedding_jobs:
-                logger.info(
-                    "Embedding generation already queued or running for chunk %s in %s",
-                    chunk_id,
-                    workflow.dbname,
-                )
-                return None
-            _queued_embedding_jobs.add(job_key)
-
-        job_id = workflow.create_embedding_job_id(chunk_id)
-        try:
-            add_task(_run_scheduled_embedding, workflow, chunk_id, job_id, job_key)
-        except Exception:
-            with _queued_embedding_jobs_lock:
-                _queued_embedding_jobs.discard(job_key)
-            raise
-        return job_id
-
-    return schedule_embedding
-
-
-def _run_scheduled_embedding(
-    workflow: "ChunkWorkflow", chunk_id: int, job_id: str, job_key: tuple[str, int]
-) -> None:
-    try:
-        workflow.trigger_embedding_generation(chunk_id, job_id)
-    finally:
-        with _queued_embedding_jobs_lock:
-            _queued_embedding_jobs.discard(job_key)
+    """Return the durable enqueue entry point for legacy route callers."""
+    return workflow.trigger_embedding_generation
 
 
 class ChunkState(str, Enum):
@@ -272,12 +227,9 @@ class ChunkWorkflow:
                     # state=='embedded' value was a redundant proxy for this
                     # same signal and has been retired.
                     if prev_embedded_at is None:
-                        if embedding_scheduler:
-                            embedding_job_id = embedding_scheduler(prev_id)
-                        else:
-                            embedding_job_id = self.trigger_embedding_generation(
-                                prev_id
-                            )
+                        from nexus.jobs.embeddings import enqueue_embedding
+
+                        embedding_job_id = enqueue_embedding(cur, prev_id)
                         embedding_triggered = embedding_job_id is not None
 
                 logger.info(
@@ -436,108 +388,14 @@ class ChunkWorkflow:
 
         clear_parent_choice(cur, parent_chunk_id)
 
-    def create_embedding_job_id(self, chunk_id: int) -> str:
-        """Create a client-visible identifier for an embedding generation job."""
-
-        return f"embed_{chunk_id}_{datetime.now(timezone.utc).timestamp()}"
-
     def trigger_embedding_generation(
         self, chunk_id: int, job_id: Optional[str] = None
-    ) -> Optional[str]:
-        """Trigger embedding generation for a finalized chunk.
+    ) -> str:
+        """Persist a plan for the slot scheduler; never execute a model here."""
+        from nexus.jobs.embeddings import enqueue_embedding
 
-        Args:
-            chunk_id: The chunk to generate embeddings for
-            job_id: Optional preassigned job identifier
-
-        Returns:
-            Job ID string on success, None on failure.
-        """
-        try:
-            # Load settings to get embedding configuration
-            from nexus.config import load_settings_as_dict
-
-            settings = load_settings_as_dict()
-
-            # Get the appropriate embedding model from settings
-            memnon_config = settings.get("Agent Settings", {}).get("MEMNON", {})
-            models = memnon_config.get("models") or memnon_config.get(
-                "embedding", {}
-            ).get("models", {})
-
-            # Find active model
-            active_model = None
-            for model_name, model_config in models.items():
-                if model_config.get("is_active", False):
-                    active_model = model_name
-                    break
-
-            if not active_model:
-                logger.warning(
-                    "No active embedding model found in settings - using default"
-                )
-                active_model = (
-                    "Octen-Embedding-4B"  # Production embedder from IR testing
-                )
-
-            # Security: Validate inputs before subprocess call
-            if not isinstance(chunk_id, int) or chunk_id <= 0:
-                raise ValueError(f"Invalid chunk_id: {chunk_id}")
-
-            if not VALID_MODEL_PATTERN.match(active_model):
-                raise ValueError(
-                    f"Invalid model name: {active_model}. "
-                    f"Model names must contain only alphanumeric characters, hyphens, dots, and underscores."
-                )
-
-            # Security: dbname already validated in __init__
-
-            # Run embedding generation script. API routes should schedule this method
-            # through FastAPI BackgroundTasks so accept calls can return immediately.
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "scripts/regenerate_embeddings.py",
-                    "--chunk",
-                    str(chunk_id),  # Safe: validated as positive int
-                    "--model",
-                    active_model,  # Safe: validated with regex
-                    "--database",
-                    self.dbname,  # Safe: validated in __init__
-                ],
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )  # 5 min timeout
-
-            if result.returncode == 0:
-                # Stamp the embedded-at timestamp. state stays FINALIZED —
-                # embedding_generated_at IS NOT NULL is the ironman predicate.
-                with get_connection(self.dbname) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            UPDATE narrative_chunks
-                            SET embedding_generated_at = %s
-                            WHERE id = %s
-                        """,
-                            (datetime.now(timezone.utc), chunk_id),
-                        )
-
-                logger.info(f"Successfully generated embeddings for chunk {chunk_id}")
-                return job_id or self.create_embedding_job_id(chunk_id)
-            else:
-                logger.error(
-                    "Embedding generation failed for chunk %s; "
-                    "embedding_generated_at remains NULL for retry. stderr: %s",
-                    chunk_id,
-                    result.stderr,
-                )
-                return None
-
-        except Exception as e:
-            logger.exception("Error triggering embedding generation: %s", e)
-            return None
+        with get_connection(self.dbname) as conn, conn.cursor() as cur:
+            return enqueue_embedding(cur, chunk_id)
 
     def get_chunk_states(
         self, start_chunk: int, end_chunk: int

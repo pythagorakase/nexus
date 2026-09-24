@@ -10,7 +10,7 @@ Usage:
     python auto_judge.py --run-ids 5,7,9 [options]
 
 Options:
-    --model MODEL           OpenAI model to use (default: gpt-4.1)
+    --model MODEL           OpenAI model to use (default: ir_eval.judgment.model in nexus.toml)
     --dry-run               Show what would be judged but don't update database
     --debug                 Print detailed debug information
     --temperature FLOAT     Model temperature (default: 0.2)
@@ -33,6 +33,8 @@ from typing import Dict, List, Any, Optional, Set, Tuple, Literal
 
 # Import Pydantic for structured output
 from pydantic import BaseModel, Field
+
+from nexus.config import load_settings
 
 # Make sure we can import from parent directories
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -69,7 +71,6 @@ logging.basicConfig(
 logger = logging.getLogger("nexus.ir_eval.auto_judge")
 
 # Constants
-DEFAULT_MODEL = "gpt-4.1"
 DEFAULT_TEMPERATURE = 0.2
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
@@ -83,7 +84,7 @@ class AIJudge:
 
     def __init__(
         self,
-        model: str = DEFAULT_MODEL,
+        model: Optional[str] = None,
         temperature: float = DEFAULT_TEMPERATURE,
         dry_run: bool = False,
         debug: bool = False,
@@ -97,7 +98,7 @@ class AIJudge:
             dry_run: If True, don't save judgments to database
             debug: If True, print detailed debug information
         """
-        self.model = model
+        self.model = model or load_settings().ir_eval.judgment.model
         self.temperature = temperature
         self.dry_run = dry_run
         self.debug = debug
@@ -560,8 +561,8 @@ def main():
     # OpenAI options
     parser.add_argument(
         "--model",
-        default=DEFAULT_MODEL,
-        help=f"OpenAI model to use (default: {DEFAULT_MODEL})",
+        default=None,
+        help="OpenAI model to use (default: ir_eval.judgment.model in nexus.toml)",
     )
     parser.add_argument(
         "--temperature",

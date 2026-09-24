@@ -1,0 +1,11 @@
+['lsof', '-nP', '-iTCP:8016', '-sTCP:LISTEN']
+exit 1; stdout empty; stderr empty
+
+['psql', '-d', 'postgres', '-Atc', "SELECT datname FROM pg_database WHERE datname LIKE 'qa640_800b_%' ORDER BY datname"]
+exit 0; stdout empty; stderr empty
+
+['git', 'diff', '--check']
+exit 0; stdout empty; stderr empty
+
+['git', 'diff', 'f296ba89', '--', 'prompts/']
+exit 0; stdout empty; stderr empty

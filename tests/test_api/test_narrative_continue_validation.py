@@ -289,11 +289,6 @@ def test_choice_free_empty_continue_passes_override_without_repinning(
         generation_calls.append((args, kwargs))
 
     monkeypatch.setattr(narrative, "generate_narrative_async", capture_generation)
-    monkeypatch.setattr(
-        narrative,
-        "_trigger_locked_chunk_embedding",
-        lambda **_kwargs: None,
-    )
 
     response = TestClient(narrative.app).post(
         "/api/narrative/continue",
@@ -368,11 +363,6 @@ def test_explicit_choice_free_chunk_keeps_empty_continue(
         generation_calls.append((args, kwargs))
 
     monkeypatch.setattr(narrative, "generate_narrative_async", capture_generation)
-    monkeypatch.setattr(
-        narrative,
-        "_trigger_locked_chunk_embedding",
-        lambda **_kwargs: None,
-    )
 
     response = TestClient(narrative.app).post(
         "/api/narrative/continue",
@@ -514,7 +504,6 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
     _route_clone_to_slot(monkeypatch, dbname)
     entered_generation = threading.Event()
     release_generation = threading.Event()
-    embedding_calls: list[int] = []
 
     class BlockingLore:
         """Frontier-only double; route, DB reads, adapter, and writer stay real."""
@@ -549,11 +538,6 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
             return None
 
     monkeypatch.setattr(narrative_generation, "LORE", BlockingLore)
-    monkeypatch.setattr(
-        narrative,
-        "_trigger_locked_chunk_embedding",
-        lambda *, slot, parent_chunk_id: embedding_calls.append(parent_chunk_id),
-    )
     original_send_progress = narrative.manager.send_progress
 
     async def fail_completed_broadcast(
@@ -592,7 +576,6 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
         "message": "Another narrative generation owns this slot.",
         "active_session_id": owner_session_id,
     }
-    assert embedding_calls == [parent_chunk_id]
 
     with _clone_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
@@ -733,19 +716,12 @@ def test_errored_embedding_claim_is_reclaimed_and_scheduled(
 
     _route_clone_to_slot(monkeypatch, dbname)
     monkeypatch.setattr(narrative_generation, "LORE", ImmediateLore)
-    embedding_calls: list[int] = []
-    monkeypatch.setattr(
-        narrative,
-        "_trigger_locked_chunk_embedding",
-        lambda *, slot, parent_chunk_id: embedding_calls.append(parent_chunk_id),
-    )
 
     with TestClient(narrative.app) as client:
         response = client.post("/api/narrative/continue", json={"slot": 3})
 
     assert response.status_code == 200
     retry_session_id = response.json()["session_id"]
-    assert embedding_calls == [parent_chunk_id]
     with _clone_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -802,18 +778,11 @@ def test_live_embedding_claim_cannot_be_stolen(
 
     _route_clone_to_slot(monkeypatch, dbname)
     monkeypatch.setattr(narrative_generation, "LORE", ImmediateLore)
-    embedding_calls: list[int] = []
-    monkeypatch.setattr(
-        narrative,
-        "_trigger_locked_chunk_embedding",
-        lambda *, slot, parent_chunk_id: embedding_calls.append(parent_chunk_id),
-    )
 
     with TestClient(narrative.app) as client:
         response = client.post("/api/narrative/continue", json={"slot": 3})
 
     assert response.status_code == 200
-    assert embedding_calls == []
     with _clone_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             cur.execute(

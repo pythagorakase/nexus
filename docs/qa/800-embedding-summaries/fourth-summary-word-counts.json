@@ -1,0 +1,64 @@
+{
+  "episode": {
+    "total_words_including_headings": 1435,
+    "section_body_words": 1430,
+    "sections": {
+      "OVERVIEW": {
+        "words": 104,
+        "lines": 1,
+        "max_line_words": 104
+      },
+      "TIMELINE": {
+        "words": 727,
+        "lines": 30,
+        "max_line_words": 27
+      },
+      "CHARACTERS": {
+        "words": 257,
+        "lines": 12,
+        "max_line_words": 24
+      },
+      "PLOT_THREADS": {
+        "words": 148,
+        "lines": 7,
+        "max_line_words": 24
+      },
+      "CONTINUITY_ELEMENTS": {
+        "words": 194,
+        "lines": 10,
+        "max_line_words": 24
+      }
+    }
+  },
+  "season": {
+    "total_words_including_headings": 1782,
+    "section_body_words": 1772,
+    "sections": {
+      "OVERVIEW": {
+        "words": 128,
+        "lines": 1,
+        "max_line_words": 128
+      },
+      "CHARACTER_EVOLUTION": {
+        "words": 655,
+        "lines": 10,
+        "max_line_words": 74
+      },
+      "NARRATIVE_ARCS": {
+        "words": 414,
+        "lines": 8,
+        "max_line_words": 56
+      },
+      "WORLD_DEVELOPMENT": {
+        "words": 242,
+        "lines": 12,
+        "max_line_words": 24
+      },
+      "CONTINUITY_ANCHORS": {
+        "words": 333,
+        "lines": 15,
+        "max_line_words": 36
+      }
+    }
+  }
+}

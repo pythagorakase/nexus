@@ -55,6 +55,14 @@ QUEUE_STATES = {
         "stale_rejected",
     ),
     "relationship_milestone": ("pending",),
+    "narrative_embedding": (
+        "queued",
+        "leased",
+        "succeeded",
+        "failed",
+        "stale_rejected",
+    ),
+    "narrative_summary": ("queued", "leased", "succeeded", "failed", "stale_rejected"),
 }
 SHARED_QUEUE_STATES = (
     "queued",
@@ -1166,6 +1174,8 @@ def evaluate_check(
         "experience_render": "experience_job_failed",
         "narration": "narration_job_failed",
         "correspondence_compaction": "compaction_job_failed",
+        "narrative_embedding": "embedding_job_failed",
+        "narrative_summary": "summary_job_failed",
     }
     for queue_kind, reason in failure_reasons.items():
         if current_failed_jobs[queue_kind] > baseline_failed_jobs[queue_kind]:

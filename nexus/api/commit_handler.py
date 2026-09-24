@@ -57,7 +57,6 @@ from nexus.api.presence_reconciliation import (
 from nexus.api.summary_triggers import (
     SummaryTask,
     plan_summary_tasks,
-    schedule_summary_generation,
 )
 from nexus.memory.context_state import (
     bind_pass2_baseline,
@@ -914,20 +913,24 @@ async def commit_incubator_to_database(
 
             await bind_exposures(conn, session_id, chunk_id, asyncpg=True)
 
+            for task in summary_tasks:
+                await conn.execute(
+                    """INSERT INTO narrative_summary_jobs
+                    (kind, season, episode, generation_session_id)
+                    VALUES ($1, $2, $3, $4::uuid)
+                    ON CONFLICT (kind, season, episode) DO NOTHING""",
+                    task.kind,
+                    task.season,
+                    task.episode,
+                    session_id,
+                )
+
             # Step 10: Clear incubator
             await clear_incubator(conn, session_id)
 
         except Exception as e:
             logger.error("Failed to commit incubator session %s: %s", session_id, e)
             raise
-
-    if summary_tasks:
-        try:
-            schedule_summary_generation(summary_tasks)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(
-                "Failed to schedule summaries for session %s: %s", session_id, exc
-            )
 
     # Post-commit presence-roster drift audit (issue #567): read-only
     # diagnostics over the committed chunk, outside the transaction.

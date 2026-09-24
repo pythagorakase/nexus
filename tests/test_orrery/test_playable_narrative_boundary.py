@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from typing import Any
+
+from tests.pg_fixtures import connect, disposable_slot_database
 
 import pytest
 
@@ -12,7 +15,7 @@ from nexus.agents.orrery.reconstruction import (
     playable_narrative_predicate,
 )
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
-from nexus.api import chunk_workflow
+from nexus.api import chunk_workflow, slot_utils
 from nexus.api.chunk_workflow import ChunkState, ChunkWorkflow
 from nexus.api.orrery_dev_endpoints import _default_anchor_chunk_id
 
@@ -46,47 +49,6 @@ class _CapturingSession:
         return self.result
 
 
-class _AcceptCursor:
-    def __init__(self) -> None:
-        self.row: tuple[Any, ...] | None = None
-        self.executed: list[str] = []
-
-    def __enter__(self) -> "_AcceptCursor":
-        return self
-
-    def __exit__(self, *_args: Any) -> bool:
-        return False
-
-    def execute(self, statement: str, _params: Any = None) -> None:
-        self.executed.append(statement)
-        if "UPDATE narrative_chunks" in statement:
-            self.row = (9,)
-        elif "SELECT nc.id, nc.embedding_generated_at" in statement:
-            # Model the database returning the real predecessor only when the
-            # query carries the canonical prologue exclusion.
-            predecessor = 7 if RETROGRADE_PROLOGUE_MARKER in statement else 8
-            self.row = (predecessor, None)
-        else:
-            raise AssertionError(f"Unexpected SQL: {statement}")
-
-    def fetchone(self) -> tuple[Any, ...] | None:
-        return self.row
-
-
-class _AcceptConnection:
-    def __init__(self, cursor: _AcceptCursor):
-        self._cursor = cursor
-
-    def __enter__(self) -> "_AcceptConnection":
-        return self
-
-    def __exit__(self, *_args: Any) -> bool:
-        return False
-
-    def cursor(self) -> _AcceptCursor:
-        return self._cursor
-
-
 def test_playable_predicate_excludes_only_the_synthetic_prologue() -> None:
     """Summary-marker compatibility does not survive the storage migration."""
 
@@ -104,31 +66,40 @@ def test_playable_predicate_rejects_an_unsafe_alias() -> None:
         playable_narrative_predicate("nc; DELETE FROM narrative_chunks")
 
 
+@pytest.mark.requires_postgres
 def test_legacy_accept_embeds_the_previous_playable_chunk(monkeypatch) -> None:
-    cursor = _AcceptCursor()
-    connection = _AcceptConnection(cursor)
-    monkeypatch.setattr(chunk_workflow, "get_connection", lambda _dbname: connection)
-    workflow = object.__new__(ChunkWorkflow)
-    workflow.dbname = "save_01"
-    scheduled: list[int] = []
+    """Real acceptance queues predecessor 7, excluding the synthetic row at 8."""
+    with disposable_slot_database(
+        "qa640_800b_boundary", source_db="save_04", include_data=True
+    ) as dbname:
+        monkeypatch.setattr(chunk_workflow, "VALID_DATABASES", {dbname})
+        monkeypatch.setattr(slot_utils, "VALID_DBNAMES", {dbname})
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM narrative_embedding_jobs")
+            cur.execute(
+                "SELECT authorial_directives FROM narrative_chunks "
+                "WHERE authorial_directives @> %s::jsonb LIMIT 1",
+                ('["' + RETROGRADE_PROLOGUE_MARKER + '"]',),
+            )
+            prologue_directives = cur.fetchone()[0]
+            import json
 
-    response = workflow.accept_chunk(
-        chunk_id=9,
-        session_id="boundary-test",
-        embedding_scheduler=lambda chunk_id: (
-            scheduled.append(chunk_id) or f"embedding-{chunk_id}"
-        ),
-    )
-
-    assert scheduled == [7]
-    assert response.state is ChunkState.FINALIZED
-    assert response.embedding_job_id == "embedding-7"
-    predecessor_sql = next(
-        sql
-        for sql in cursor.executed
-        if "SELECT nc.id, nc.embedding_generated_at" in sql
-    )
-    assert RETROGRADE_PROLOGUE_MARKER in predecessor_sql
+            cur.execute(
+                "UPDATE narrative_chunks SET authorial_directives=%s::jsonb WHERE id=8",
+                (json.dumps(prologue_directives),),
+            )
+            cur.execute(
+                "UPDATE narrative_chunks SET authorial_directives='[]', "
+                "embedding_generated_at=NULL, state='finalized' WHERE id=7"
+            )
+            cur.execute("UPDATE narrative_chunks SET state='pending_review' WHERE id=9")
+        response = ChunkWorkflow(dbname).accept_chunk(9, "boundary-test")
+        assert response.state is ChunkState.FINALIZED
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, chunk_id, state::text FROM narrative_embedding_jobs"
+            )
+            assert cur.fetchall() == [(int(response.embedding_job_id), 7, "queued")]
 
 
 def test_coverage_samples_only_playable_narrative_anchors() -> None:

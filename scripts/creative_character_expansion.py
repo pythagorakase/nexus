@@ -17,8 +17,7 @@ Options:
                        the database. This is useful for characters with extensive
                        narrative presence that would exceed API token limits.
 
-    --model MODEL      OpenAI model to use. (Default: o3)
-                       - Examples: o3, gpt-4o, gpt-4.1, gpt-3.5-turbo
+    --model MODEL      OpenAI model to use (default: ir_eval.judgment.model in nexus.toml)
                        - For reasoning models (starting with 'o'), the --effort parameter applies
 
     --temperature VAL  Temperature for standard models (0.0-1.0). (Default: 0.7)
@@ -94,6 +93,7 @@ Examples:
     python creative_character_expansion.py --input creative_character_expansion_id_042.json
 """
 
+from nexus.config import load_settings
 from nexus.database import create_slot_engine
 
 import os
@@ -213,7 +213,11 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     # LLM options
-    parser.add_argument("--model", default="o3", help="Model to use (default: o3)")
+    parser.add_argument(
+        "--model",
+        default=load_settings().ir_eval.judgment.model,
+        help="Model to use (default: ir_eval.judgment.model in nexus.toml)",
+    )
     parser.add_argument(
         "--temperature",
         type=float,

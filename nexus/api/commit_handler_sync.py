@@ -821,6 +821,11 @@ def commit_incubator_to_database_sync(
             with conn.cursor() as cur:
                 bind_exposures(cur, session_id, chunk_id)
 
+            with conn.cursor() as cur:
+                schedule_summary_generation(
+                    summary_tasks, cur=cur, session_id=session_id
+                )
+
             # Step 10: Clear incubator
             with conn.cursor() as cur:
                 cur.execute(
@@ -837,14 +842,6 @@ def commit_incubator_to_database_sync(
         logger.error("Failed to commit incubator session %s: %s", session_id, e)
         conn.rollback()  # Explicit rollback on error
         raise
-
-    if summary_tasks:
-        try:
-            schedule_summary_generation(summary_tasks, slot=slot)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(
-                "Failed to schedule summaries for session %s: %s", session_id, exc
-            )
 
     # Post-commit presence-roster drift audit (issue #567): read-only
     # diagnostics over the committed chunk, outside the transaction.
