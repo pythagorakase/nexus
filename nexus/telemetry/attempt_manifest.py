@@ -213,14 +213,17 @@ def finish_attempt(record: PromptWindowRecord, outcome: str) -> None:
         _refresh_references(cur, record)
 
 
-def bind_exposures(cur: Any, session: str, chunk: int) -> None:
-    """Bind accepted exposure references in the same transaction as the chunk."""
-    cur.execute(
-        """UPDATE generation_attempt_manifests SET exposure_ids=ARRAY(
-        SELECT id FROM orrery_prompt_exposures WHERE tick_chunk_id=%s ORDER BY id
-        ), updated_at=now() WHERE generation_session_id=%s""",
-        (chunk, session),
-    )
+def bind_exposures(
+    executor: Any, session: str, chunk: int, *, asyncpg: bool = False
+) -> Any:
+    """Bind exposures in the accepting transaction; await the asyncpg result."""
+    chunk_param, session_param = ("$1", "$2") if asyncpg else ("%s", "%s")
+    query = f"""UPDATE generation_attempt_manifests SET exposure_ids=ARRAY(
+        SELECT id FROM orrery_prompt_exposures WHERE tick_chunk_id={chunk_param} ORDER BY id
+        ), updated_at=now() WHERE generation_session_id={session_param}"""
+    if asyncpg:
+        return executor.execute(query, chunk, session)
+    return executor.execute(query, (chunk, session))
 
 
 def prune_manifests(conn: Any, days: int) -> int:

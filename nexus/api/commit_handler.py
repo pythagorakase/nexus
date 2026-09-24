@@ -910,6 +910,10 @@ async def commit_incubator_to_database(
                             chunk_id,
                         )
 
+            from nexus.telemetry.attempt_manifest import bind_exposures
+
+            await bind_exposures(conn, session_id, chunk_id, asyncpg=True)
+
             # Step 10: Clear incubator
             await clear_incubator(conn, session_id)
 
