@@ -220,7 +220,12 @@ class TestWorldReads:
     def test_current_place(self, client: TestClient) -> None:
         response = client.get(f"/api/current-place?slot={READ_SLOT}")
         assert response.status_code == 200
-        assert set(response.json().keys()) == {"placeId", "name", "chunkId"}
+        places = response.json()
+        assert isinstance(places, list) and places
+        assert all(set(place) == {"placeId", "name", "chunkId"} for place in places)
+        assert [place["placeId"] for place in places] == sorted(
+            place["placeId"] for place in places
+        )
 
     def test_relationships_and_psychology(self, client: TestClient) -> None:
         characters = client.get(f"/api/characters?slot={READ_SLOT}").json()

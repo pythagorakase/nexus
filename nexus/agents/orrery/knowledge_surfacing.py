@@ -129,15 +129,13 @@ def _eligible_rows(
         WITH current_meta AS (
             SELECT cm.chunk_id, cm.world_time, cm.world_layer::text AS world_layer,
                    cm.season, cm.episode, cm.scene,
-                   setting.place_id AS setting_place_id
+                   setting.place_ids AS setting_place_ids
             FROM chunk_metadata cm
             LEFT JOIN LATERAL (
-                SELECT pcr.place_id
+                SELECT ARRAY_AGG(pcr.place_id ORDER BY pcr.place_id) AS place_ids
                 FROM place_chunk_references pcr
                 WHERE pcr.chunk_id = cm.chunk_id
                   AND pcr.reference_type::text = 'setting'
-                ORDER BY pcr.place_id
-                LIMIT 1
             ) setting ON TRUE
             WHERE cm.chunk_id = :anchor_chunk_id
         ),
@@ -196,7 +194,7 @@ def _eligible_rows(
                    AND source_meta.scene = current_meta.scene
                    AS current_scene_acquisition,
                current_meta.world_time AS current_world_time,
-               current_meta.setting_place_id
+               current_meta.setting_place_ids
         FROM claim_awareness awareness
         JOIN claims claim ON claim.id = awareness.claim_id
         JOIN world_events incident ON incident.id = claim.world_event_id
@@ -258,7 +256,7 @@ def _eligible_rows(
                false AS freshly_revealed,
                false AS current_scene_acquisition,
                current_meta.world_time AS current_world_time,
-               current_meta.setting_place_id
+               current_meta.setting_place_ids
         FROM character_experiences experience
         JOIN characters present_character
           ON present_character.entity_id = experience.character_entity_id
@@ -480,6 +478,7 @@ def _score_candidates(
     query_embeddings: Mapping[str, Sequence[float]] | None,
     settings: OrreryRecallSettings,
 ) -> list[_Candidate]:
+    """Score location fit with any-of semantics across all anchor settings."""
     candidates = [_candidate(row) for row in rows]
     semantics = _semantic_scores(
         session_or_cur,
@@ -505,11 +504,10 @@ def _score_candidates(
             decay = 1.0
         severity = settings.severity_scores.get(candidate.severity or "", 0.0)
         involvement = settings.involvement_scores[candidate.source_tier]
-        setting_place_id = row.get("setting_place_id")
+        setting_place_ids = row.get("setting_place_ids") or []
         place_match = float(
-            setting_place_id is not None
-            and candidate.location_id is not None
-            and int(setting_place_id) == candidate.location_id
+            candidate.location_id is not None
+            and candidate.location_id in setting_place_ids
         )
         if candidate.kind == "experience":
             semantic, semantic_status = semantics[candidate.candidate_id]

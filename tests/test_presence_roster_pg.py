@@ -517,3 +517,125 @@ def test_historical_settings_are_ordered_but_frontier_is_rejected(
         assert "SETTING: Hall, Garden" in render_roster(roster)
     with pytest.raises(ValueError, match=rf"Chunk {first}.*Hall.*Garden"):
         read_presence_baseline(dbname, first)
+
+
+@pytest.fixture
+def historical_settings(roster_database):
+    """Give a committed chunk two settings in reverse insertion order."""
+    dbname, ids, hall = roster_database
+    chunk_id = commit_wire(dbname, 0, wire("The hall opens onto a garden."))
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+        )
+        garden = cur.fetchone()[0]
+        cur.execute(
+            "DELETE FROM place_chunk_references WHERE chunk_id = %s", (chunk_id,)
+        )
+        for place in (garden, hall):
+            cur.execute(
+                "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) VALUES (%s, %s, 'setting')",
+                (chunk_id, place),
+            )
+    return dbname, ids, chunk_id, hall, garden
+
+
+def test_current_place_returns_all_committed_settings(
+    historical_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real HTTP/SQL returns every setting and excludes a later draft."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from nexus.api import reader_endpoints
+
+    dbname, _, chunk_id, hall, garden = historical_settings
+    # Redirect only slot routing; the endpoint and pool execute genuine SQL.
+    monkeypatch.setattr(reader_endpoints, "resolve_dbname", lambda slot: dbname)
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO narrative_chunks (raw_text) VALUES ('Draft') RETURNING id"
+        )
+        draft_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO place_chunk_references (chunk_id, place_id, reference_type) VALUES (%s, %s, 'setting')",
+            (draft_id, garden),
+        )
+    app = FastAPI()
+    app.include_router(reader_endpoints.router)
+    with TestClient(app) as client:
+        response = client.get("/api/current-place?slot=5")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"placeId": hall, "name": "Hall", "chunkId": chunk_id},
+        {"placeId": garden, "name": "Garden", "chunkId": chunk_id},
+    ]
+
+
+def test_recall_scores_any_historical_setting(historical_settings) -> None:
+    """Both historical settings earn location fit; a third place does not."""
+    dbname, ids, chunk_id, hall, garden = historical_settings
+    engine = create_engine(sqlalchemy_url(dbname))
+    try:
+        with Session(engine) as session:
+            owner = session.execute(
+                text("SELECT entity_id FROM characters WHERE id = :id"),
+                {"id": ids["Remote Friend"]},
+            ).scalar_one()
+            anchor_time = session.execute(
+                text("SELECT world_time FROM chunk_metadata WHERE chunk_id = :id"),
+                {"id": chunk_id},
+            ).scalar_one()
+            outside = session.execute(
+                text(
+                    "INSERT INTO places (name, type) VALUES ('Outside', 'fixed_location') RETURNING id"
+                )
+            ).scalar_one()
+            expected = {}
+            for place in (hall, garden, outside):
+                claim, event = _insert_claim(
+                    session,
+                    anchor_chunk_id=chunk_id,
+                    summary=f"A memory of place {place}.",
+                )
+                session.execute(
+                    text(
+                        "UPDATE world_events SET location_id = :place WHERE id = :event"
+                    ),
+                    {"place": place, "event": event},
+                )
+                _grant_awareness(
+                    session,
+                    claim_id=claim,
+                    knower_entity_id=owner,
+                    source_tier="participant",
+                    source_entity_id=None,
+                    acquired_at=anchor_time,
+                    source_chunk_id=chunk_id,
+                )
+                expected[claim] = float(place in (hall, garden))
+            cfg = load_settings().orrery
+            digest = build_knowledge_digest_sync(
+                session,
+                present_entity_ids=(owner,),
+                anchor_chunk_id=chunk_id,
+                settings=cfg.knowledge,
+                include_player_character=True,
+                recall_settings=cfg.recall,
+                disclosure_settings=cfg.disclosure,
+                turn_id="historical-settings",
+            )
+            assert digest
+            rows = (
+                session.execute(
+                    text(
+                        "SELECT claim_id, score_components FROM orrery_recall_trace WHERE turn_id = 'historical-settings'"
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            assert {
+                row["claim_id"]: row["score_components"]["place_match"] for row in rows
+            } == expected
+    finally:
+        engine.dispose()

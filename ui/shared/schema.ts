@@ -191,9 +191,8 @@ export type Place = typeof places.$inferSelect & {
   geometry?: any | null; // GeoJSON geometry object from ST_AsGeoJSON
 };
 
-// Where the narrative currently "is": the place attached to the latest
-// committed chunk via a 'setting'-type place_chunk_references row.
-// Served by GET /api/current-place.
+// One of the settings attached to the latest committed chunk.
+// GET /api/current-place serves these in place-ID order.
 export interface CurrentPlace {
   placeId: number;
   name: string;
