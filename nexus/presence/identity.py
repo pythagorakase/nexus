@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 import unicodedata
@@ -50,6 +51,15 @@ def _normalize(name: str, cfg: CharacterIdentitySettings) -> str:
     return value
 
 
+def _normalized_name(name: str, cfg: CharacterIdentitySettings) -> str:
+    """Apply the same configured title normalization to either side of a match."""
+    parts = _normalize(name, cfg).split()
+    titles = {_normalize(title, cfg).rstrip(".") for title in cfg.titles}
+    if cfg.strip_titles and parts and parts[0].rstrip(".") in titles:
+        parts = parts[1:]
+    return " ".join(parts)
+
+
 def alias_forms(name: str, cfg: CharacterIdentitySettings) -> set[str]:
     """Return deterministic first, surname, and authored-title forms."""
     parts = name.split()
@@ -83,36 +93,44 @@ def resolve_character_declaration(
     cfg = settings or load_settings().character_identity
     name = str(declaration["name"])
     kind = str(declaration.get("kind", "character"))
-    normalized = _normalize(name, cfg)
+    normalized = _normalized_name(name, cfg)
     descriptors = descriptors or declaration.get("descriptors")
     role = role or declaration.get("role")
-    scene_location = scene_location or declaration.get("scene_location")
+    declared_location = declaration.get("scene_location")
+    locations = list(
+        dict.fromkeys(value for value in (scene_location, declared_location) if value)
+    )
     exact: set[tuple] = set()
     near: set[tuple] = set()
     for candidate_kind, label, key in index.labels:
-        if _normalize(label, cfg) == normalized:
-            (exact if candidate_kind == kind else near).add(key)
+        if _normalized_name(label, cfg) == normalized:
+            is_exact = candidate_kind == kind and _normalize(label, cfg) == _normalize(
+                name, cfg
+            )
+            (exact if is_exact else near).add(key)
     if not exact:
         for _, label, key in index.labels:
             if (
-                SequenceMatcher(None, normalized, _normalize(label, cfg)).ratio()
+                SequenceMatcher(None, normalized, _normalized_name(label, cfg)).ratio()
                 >= cfg.fuzzy_threshold
             ):
                 near.add(key)
     # Detect shared surnames even when collision avoidance withheld that alias.
     for key, candidate in index.by_id.items():
         forms = alias_forms(candidate.name, cfg)
-        if any(_normalize(form, cfg) == normalized for form in forms):
+        if any(_normalized_name(form, cfg) == normalized for form in forms):
             near.add(key)
     location_conflict = False
     if len(exact) == 1 and not (near - exact):
         key = next(iter(exact))
         existing_location = index.evidence.get(key, {}).get("current_location")
         location_conflict = bool(
-            scene_location
-            and existing_location
-            and _normalize(str(existing_location), cfg)
-            != _normalize(str(scene_location), cfg)
+            existing_location
+            and any(
+                _normalize(str(existing_location), cfg)
+                != _normalize(str(location), cfg)
+                for location in locations
+            )
         )
         if not location_conflict:
             return IdentityResolution("resolved", existing_id=index.by_id[key].id)
@@ -123,13 +141,11 @@ def resolve_character_declaration(
             if location_conflict
             else ("name or alias collision" if exact else "partial or fuzzy name match")
         )
-        evidence = [
-            str(value) for value in (descriptors, role, scene_location) if value
-        ]
+        evidence = [str(value) for value in (descriptors, role, *locations) if value]
         for field, value in (
             ("summary", descriptors),
             ("role", role),
-            ("current_location", scene_location),
+            *(("current_location", location) for location in locations),
         ):
             if not value:
                 continue
@@ -151,7 +167,48 @@ def resolve_character_declaration(
     return IdentityResolution("novel")
 
 
-_CHARACTER_SQL = "SELECT id, name, entity_id, summary, current_location FROM characters WHERE name IS NOT NULL"
+def validate_character_batch(
+    declarations: Sequence[Mapping[str, Any]],
+    index: IdentityIndex,
+    *,
+    scene_location: str | None = None,
+) -> None:
+    """Validate against catalog plus earlier novel declarations before any writes."""
+    # Copy mutable index containers; database row records are read-only evidence.
+    index = copy(index)
+    index.by_id = dict(index.by_id)
+    index.by_name = {key: set(keys) for key, keys in index.by_name.items()}
+    index.labels = list(index.labels)
+    index.evidence = dict(index.evidence)
+    provisional_id = min([0, *(entry.id for entry in index.by_id.values())]) - 1
+    for declaration in declarations:
+        if declaration.get("kind", "character") != "character":
+            continue
+        result = resolve_character_declaration(
+            declaration,
+            index,
+            descriptors=declaration.get("summary"),
+            scene_location=scene_location,
+        )
+        if result.status == "ambiguous":
+            raise CharacterIdentityAmbiguity(str(declaration["name"]), result)
+        if result.status == "novel":
+            entry = RosterEntry(
+                kind="character", id=provisional_id, name=str(declaration["name"])
+            )
+            provisional_id -= 1
+            index.by_id[entry.key] = entry
+            index.labels.append((entry.kind, entry.name, entry.key))
+            index.by_name.setdefault((entry.kind, entry.name.casefold()), set()).add(
+                entry.key
+            )
+            index.evidence[entry.key] = {
+                **declaration,
+                "current_location": declaration.get("scene_location") or scene_location,
+            }
+
+
+_CHARACTER_SQL = "SELECT c.id, c.name, c.entity_id, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
 _ALIAS_SQL = "SELECT character_id, alias FROM character_aliases"
 _OTHER_SQL = "SELECT 'place' AS kind, id, name, entity_id, summary FROM places UNION ALL SELECT 'faction' AS kind, id, name, entity_id, summary FROM factions"
 
@@ -187,12 +244,21 @@ def read_identity_index(conn: Any) -> IdentityIndex:
     )
 
 
+async def read_identity_index_async(conn: Any) -> IdentityIndex:
+    """Read the same identity catalog through an async acceptance transaction."""
+    return identity_index(
+        list(await conn.fetch(_CHARACTER_SQL)) + list(await conn.fetch(_OTHER_SQL)),
+        await conn.fetch(_ALIAS_SQL),
+    )
+
+
 def require_character_identity(
     conn: Any,
     name: str,
     *,
     descriptors: str | None = None,
     scene_location: str | None = None,
+    declared_location: str | None = None,
 ) -> RosterEntry | None:
     """Serialize pre-insert resolution and return the exact existing binding."""
     _rows(
@@ -202,7 +268,10 @@ def require_character_identity(
     )
     index = read_identity_index(conn)
     result = resolve_character_declaration(
-        {"name": name}, index, descriptors=descriptors, scene_location=scene_location
+        {"name": name, "scene_location": declared_location},
+        index,
+        descriptors=descriptors,
+        scene_location=scene_location,
     )
     if result.status == "ambiguous":
         raise CharacterIdentityAmbiguity(name, result)
@@ -219,17 +288,18 @@ async def require_character_identity_async(
     *,
     descriptors: str | None = None,
     scene_location: str | None = None,
+    declared_location: str | None = None,
 ) -> RosterEntry | None:
     """Apply the same resolver within an asyncpg acceptance transaction."""
     await conn.execute(
         "SELECT pg_advisory_xact_lock(hashtext(current_database()), hashtext('character-identity'))"
     )
-    index = identity_index(
-        list(await conn.fetch(_CHARACTER_SQL)) + list(await conn.fetch(_OTHER_SQL)),
-        await conn.fetch(_ALIAS_SQL),
-    )
+    index = await read_identity_index_async(conn)
     result = resolve_character_declaration(
-        {"name": name}, index, descriptors=descriptors, scene_location=scene_location
+        {"name": name, "scene_location": declared_location},
+        index,
+        descriptors=descriptors,
+        scene_location=scene_location,
     )
     if result.status == "ambiguous":
         raise CharacterIdentityAmbiguity(name, result)
@@ -269,27 +339,27 @@ def refresh_generated_aliases(conn: Any) -> None:
     """Recompute collision-free generated aliases, preserving authored aliases."""
     _rows(
         conn,
-        "DELETE FROM character_aliases WHERE provenance = 'identity799' RETURNING character_id",
+        "DELETE FROM character_aliases WHERE provenance = 'generated' RETURNING character_id",
         {},
     )
     for character_id, alias in generated_aliases(read_identity_index(conn)):
         _rows(
             conn,
-            "INSERT INTO character_aliases (character_id, alias, provenance) VALUES (:id, :alias, 'identity799') ON CONFLICT DO NOTHING RETURNING character_id",
+            "INSERT INTO character_aliases (character_id, alias, provenance) VALUES (:id, :alias, 'generated') ON CONFLICT DO NOTHING RETURNING character_id",
             {"id": character_id, "alias": alias},
         )
 
 
 async def refresh_generated_aliases_async(conn: Any) -> None:
     """Recompute generated aliases through the async acceptance transaction."""
-    await conn.execute("DELETE FROM character_aliases WHERE provenance = 'identity799'")
+    await conn.execute("DELETE FROM character_aliases WHERE provenance = 'generated'")
     index = identity_index(
         list(await conn.fetch(_CHARACTER_SQL)) + list(await conn.fetch(_OTHER_SQL)),
         await conn.fetch(_ALIAS_SQL),
     )
     for character_id, alias in generated_aliases(index):
         await conn.execute(
-            "INSERT INTO character_aliases (character_id, alias, provenance) VALUES ($1, $2, 'identity799') ON CONFLICT DO NOTHING",
+            "INSERT INTO character_aliases (character_id, alias, provenance) VALUES ($1, $2, 'generated') ON CONFLICT DO NOTHING",
             character_id,
             alias,
         )

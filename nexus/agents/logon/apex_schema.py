@@ -143,6 +143,10 @@ class NewEntityDeclaration(BaseModel):
         max_length=500,
         description="One-line summary used for the entity's stub row.",
     )
+    scene_location: Optional[str] = Field(
+        default=None,
+        description="Character place name; identity review evidence only.",
+    )
     coordinates: Optional[Coordinates] = Field(
         default=None,
         description="Optional real-Earth coordinates for a declared place.",

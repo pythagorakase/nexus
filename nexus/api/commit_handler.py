@@ -63,14 +63,18 @@ from nexus.memory.context_state import (
     bind_pass2_baseline,
     validate_staged_pass2_baseline,
 )
+from nexus.presence.identity import (
+    read_identity_index_async,
+    require_character_identity_async,
+    validate_character_batch,
+)
 from nexus.presence.cues import promote_in_scene_characters
 from nexus.presence.roster import (
+    continuation_setting,
     read_roster_async,
     roster_from_resolved_references,
     write_roster_async,
 )
-
-from nexus.presence.identity import require_character_identity_async
 
 
 logger = logging.getLogger("nexus.api.commit_handler")
@@ -646,13 +650,27 @@ async def commit_incubator_to_database(
             # Get world_layer
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
 
-            for declaration in incubator.get("new_entities") or []:
-                if declaration["kind"] == "character":
-                    await require_character_identity_async(
-                        conn,
-                        declaration["name"],
-                        descriptors=declaration.get("summary"),
-                    )
+            scene_location = None
+            declarations = incubator.get("new_entities") or []
+            if any(declaration["kind"] == "character" for declaration in declarations):
+                parent_id = incubator["parent_chunk_id"]
+                if parent_id:
+                    frontier = await read_roster_async(conn, parent_id)
+                    scene_location = continuation_setting(frontier, parent_id).name
+                for declaration in declarations:
+                    if declaration["kind"] == "character":
+                        await require_character_identity_async(
+                            conn,
+                            declaration["name"],
+                            descriptors=declaration.get("summary"),
+                            scene_location=scene_location,
+                            declared_location=declaration.get("scene_location"),
+                        )
+                validate_character_batch(
+                    declarations,
+                    await read_identity_index_async(conn),
+                    scene_location=scene_location,
+                )
 
             # Step 4: Insert narrative chunk
             choice_object = incubator.get("choice_object")
@@ -708,7 +726,9 @@ async def commit_incubator_to_database(
 
             # Step 6: Create declaration stubs before name-reference resolution.
             declarations = incubator.get("new_entities") or []
-            await create_declared_entity_stubs(declarations, conn)
+            await create_declared_entity_stubs(
+                declarations, conn, scene_location=scene_location
+            )
 
             # Step 7: Resolve entity references, including same-turn declarations.
             ref_entities = ReferencedEntities(**incubator["reference_updates"])
@@ -723,6 +743,7 @@ async def commit_incubator_to_database(
                 conn,
                 declared_prose_parts,
                 declarations=declarations,
+                scene_location=scene_location,
                 accounted_character_ids={
                     int(reference["character_id"]) for reference in character_refs
                 },

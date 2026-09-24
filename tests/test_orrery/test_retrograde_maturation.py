@@ -184,7 +184,7 @@ class _RecordingCursor:
         elif "FROM tags" in normalized:
             self._fetchone = None
         elif (
-            "SELECT id, name, entity_id, summary, current_location FROM characters"
+            "SELECT c.id, c.name, c.entity_id, c.summary, p.name AS current_location FROM characters"
             in normalized
         ):
             self._fetchall = [

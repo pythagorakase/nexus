@@ -186,7 +186,7 @@ class CommitCursor:
         elif "FROM chunk_metadata" in normalized:
             self.result = self.connection.parent_metadata
         elif normalized == (
-            "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+            "SELECT c.id, c.name, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
         ):
             self.rows = [
                 {"id": character_id, "name": name, "summary": None}
@@ -383,6 +383,8 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
     """The real sync commit resolves references after declaration stub creation."""
 
     conn = CommitConnection()
+    conn.places["Hall"] = 99
+    conn.place_junctions.append((99, 44, "setting", None))
     declaration_clock = {}
 
     def create_stub(connection, **kwargs):

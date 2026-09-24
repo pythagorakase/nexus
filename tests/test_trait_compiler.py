@@ -164,7 +164,7 @@ class TraitCompilerCursor:
         normalized = " ".join(sql.strip().upper().split())
 
         if (
-            "SELECT ID, NAME, ENTITY_ID, SUMMARY, CURRENT_LOCATION FROM CHARACTERS"
+            "SELECT C.ID, C.NAME, C.ENTITY_ID, C.SUMMARY, P.NAME AS CURRENT_LOCATION FROM CHARACTERS"
             in normalized
         ):
             self._next_rows = [

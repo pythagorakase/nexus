@@ -815,7 +815,7 @@ class FakeRetrogradePersistenceCursor:
         elif "SELECT character_id, alias FROM character_aliases" in sql:
             self._result = []
         elif (
-            "SELECT id, name, entity_id, summary, current_location FROM characters"
+            "SELECT c.id, c.name, c.entity_id, c.summary, p.name AS current_location FROM characters"
             in sql
         ):
             self._result = [

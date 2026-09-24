@@ -111,3 +111,28 @@ def test_identity_same_name_different_kind_needs_review():
         ).status
         == "ambiguous"
     )
+
+
+@pytest.mark.parametrize(
+    "catalog_name,declared", [("Ada", "Lady Ada"), ("Lady Ada", "Ada")]
+)
+def test_identity_title_normalization_is_symmetric(catalog_name, declared):
+    result = resolve_character_declaration({"name": declared}, catalog(catalog_name))
+    assert result.status == "ambiguous"
+    assert result.candidates[0].name == catalog_name
+
+
+def test_identity_title_alias_and_diacritic_normalization():
+    cfg = load_settings().character_identity.model_copy(
+        update={"strip_diacritics": True}
+    )
+    index = catalog("Ada Lovelace", aliases=[{"character_id": 1, "alias": "Áda"}])
+    assert (
+        resolve_character_declaration({"name": "Lady Ada"}, index, settings=cfg).status
+        == "ambiguous"
+    )
+    cfg = cfg.model_copy(update={"strip_titles": False})
+    assert (
+        resolve_character_declaration({"name": "Lady Ada"}, index, settings=cfg).status
+        == "novel"
+    )

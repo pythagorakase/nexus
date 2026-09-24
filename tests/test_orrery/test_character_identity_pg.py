@@ -112,8 +112,9 @@ def test_async_identity_declaration_alias_and_novel(roster_database):
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("case", ["surname", "title", "location", "batch"])
 def test_identity_ambiguity_never_retries_test_provider(
-    roster_database, monkeypatch, capsys
+    roster_database, monkeypatch, capsys, case
 ):
     """Real SDK, loopback TEST response, PG resolver, and durable attempt ledger."""
     import json
@@ -134,11 +135,32 @@ def test_identity_ambiguity_never_retries_test_provider(
             (ids["Remote Friend"],),
         )
         cur.execute("INSERT INTO characters (name) VALUES ('Ada Wren')")
+    from tests.test_presence_roster_pg import commit_wire, wire
+
+    parent = commit_wire(dbname, 0, wire("The hall is quiet."))
+    names = ["Wren"]
+    if case == "title":
+        names = ["Lady Ada"]
+        with connect(dbname) as conn, conn.cursor() as cur:
+            cur.execute("INSERT INTO characters (name) VALUES ('Ada')")
+    elif case == "location":
+        names = ["Silas Wren"]
+        with connect(dbname) as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+            )
+            cur.execute(
+                "UPDATE characters SET current_location = %s WHERE id = %s",
+                (cur.fetchone()[0], ids["Remote Friend"]),
+            )
+    elif case == "batch":
+        names = ["Juniper Moss", "Juniper Mosss"]
     requests = []
     body = {
         "letter": "Keep the scene quiet.",
         "new_entities": [
-            {"kind": "character", "name": "Wren", "summary": "A visitor."}
+            {"kind": "character", "name": name, "summary": "A visitor."}
+            for name in names
         ],
     }
 
@@ -188,13 +210,14 @@ def test_identity_ambiguity_never_retries_test_provider(
         try:
             utility = window_logon()
             utility._validation_dbname = dbname
+            utility._active_anchor_chunk_id = parent
             utility._gaia_window_blocks = [("user input", "Wait.")]
             session = str(uuid4())
             utility._window_payload = {"metadata": {"turn_id": session}}
             utility._attach_prompt_window_guard(
                 provider, "Wait.", seat="gaia", window=75000
             )
-            with pytest.raises(CharacterIdentityAmbiguity, match="Wren"):
+            with pytest.raises(CharacterIdentityAmbiguity):
                 provider.get_structured_completion("Wait.", SkaldGaiaWire)
             assert len(requests) == 1
             attempts = read_prompt_windows(
@@ -268,3 +291,53 @@ def test_identity_declared_character_colliding_with_place_needs_review(roster_da
     with connect(dbname) as conn:
         with pytest.raises(CharacterIdentityAmbiguity, match="Hall.*place"):
             require_character_identity(conn, "Hall")
+
+
+def test_identity_maturation_failure_class_is_durable_and_terminal(roster_database):
+    from uuid import uuid4
+
+    from nexus.agents.logon.apex_schema import NewEntityDeclaration
+    from nexus.agents.orrery.retrograde_maturation import _mark_maturation_failed
+    from tests.test_presence_roster_pg import commit_wire, wire
+
+    dbname, _, _ = roster_database
+    commit_wire(
+        dbname,
+        0,
+        wire(
+            "Juniper Moss waits.",
+            new_entities=[
+                NewEntityDeclaration(
+                    kind="character", name="Juniper Moss", summary="A visitor."
+                )
+            ],
+        ),
+    )
+    nonce = str(uuid4())
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE orrery_maturation_jobs SET state='leased', locked_by='identity-proof',
+                    lease_nonce=%s, lease_until=now() + interval '1 hour'
+                    WHERE entity_name='Juniper Moss' RETURNING id""",
+            (nonce,),
+        )
+        job = cur.fetchone()[0]
+        _mark_maturation_failed(
+            cur,
+            row={
+                "job_id": job,
+                "locked_by": "identity-proof",
+                "lease_nonce": nonce,
+                "attempts": 0,
+            },
+            error="Ambiguous character declaration",
+            failure_class=CharacterIdentityAmbiguity.__name__,
+            max_attempts=3,
+            retry_delay_seconds=1,
+        )
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT state, result_manifest->>'failure_class', lease_nonce FROM orrery_maturation_jobs WHERE id=%s",
+            (job,),
+        )
+        assert cur.fetchone() == ("failed", "CharacterIdentityAmbiguity", None)

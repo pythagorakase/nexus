@@ -163,7 +163,10 @@ async def lookup_place_by_name(conn: asyncpg.Connection, name: str) -> Optional[
 
 
 async def create_declared_entity_stubs(
-    declarations: Sequence[Mapping[str, object]], conn: asyncpg.Connection
+    declarations: Sequence[Mapping[str, object]],
+    conn: asyncpg.Connection,
+    *,
+    scene_location: str | None = None,
 ) -> int:
     """Create missing async-commit entity stubs before resolving references."""
 
@@ -175,7 +178,11 @@ async def create_declared_entity_stubs(
     for declaration in parsed:
         if declaration.kind == "character":
             existing = await require_character_identity_async(
-                conn, declaration.name, descriptors=declaration.summary
+                conn,
+                declaration.name,
+                descriptors=declaration.summary,
+                scene_location=scene_location,
+                declared_location=declaration.scene_location,
             )
             if existing is not None:
                 continue

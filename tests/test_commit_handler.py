@@ -127,13 +127,26 @@ class AsyncCommitConnection:
                 )
             ]
         if "/* presence:roster */" in normalized:
-            return [{"chunk_id": chunk_id, "kind": None} for chunk_id in args[0]]
+            return [
+                {
+                    "chunk_id": chunk_id,
+                    "kind": "place",
+                    "id": 99,
+                    "name": "Hall",
+                    "summary": None,
+                    "entity_id": 1099,
+                    "evidence": None,
+                    "is_active": True,
+                    "reference": "setting",
+                }
+                for chunk_id in args[0]
+            ]
         if "FROM relationship_milestone_queue" in normalized:
             return []
         if "/* orrery:bleed_uptake_candidates */" in normalized:
             return [offer for offer in self.bleed_offers if offer["id"] in args[0]]
         if normalized == (
-            "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+            "SELECT c.id, c.name, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
         ):
             return [
                 {"id": character_id, "name": name, "summary": None}
@@ -141,7 +154,7 @@ class AsyncCommitConnection:
             ]
         if (
             normalized
-            == "SELECT id, name, entity_id, summary, current_location FROM characters WHERE name IS NOT NULL"
+            == "SELECT c.id, c.name, c.entity_id, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
         ):
             return [
                 {

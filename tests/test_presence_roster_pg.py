@@ -61,7 +61,9 @@ def roster_database() -> Iterator[tuple[str, dict[str, int], int]]:
             VALID_DBNAMES.discard(dbname)
 
 
-def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:
+def commit_wire(
+    dbname: str, parent_id: int, wire: SkaldTurnWire, *, commit_async: bool = False
+) -> int:
     """Hydrate and stage a wire, then drive the genuine commit transaction."""
     from nexus.agents.logon.skald_wire import PresenceBaseline
 
@@ -106,6 +108,19 @@ def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:
                 entity_updates=data["entity_updates"],
                 new_entities=data["new_entities"],
             )
+    if commit_async:
+        import asyncio
+        from nexus.api.commit_handler import commit_incubator_to_database
+        from tests.test_commit_choice_presence_pg import _connect_async
+
+        async def accept() -> int:
+            conn = await _connect_async(dbname)
+            try:
+                return await commit_incubator_to_database(conn, session_id, slot=5)
+            finally:
+                await conn.close()
+
+        return asyncio.run(accept())
     conn = connect(dbname)
     try:
         # Slot is job provenance only; every write uses this disposable connection.
@@ -707,7 +722,10 @@ def test_experience_metadata_retains_all_historical_settings(
 
 
 @pytest.mark.parametrize("declared", ["Remote Friend", "Fox", "Juniper Moss"])
-def test_identity_declaration_binds_or_mints_once(roster_database, declared):
+@pytest.mark.parametrize("commit_async", [False, True])
+def test_identity_declaration_binds_or_mints_once(
+    roster_database, declared, commit_async
+):
     """Real hydration, staging, and acceptance reuse canonical and alias IDs."""
     from nexus.agents.logon.apex_schema import NewEntityDeclaration
 
@@ -735,6 +753,7 @@ def test_identity_declaration_binds_or_mints_once(roster_database, declared):
                     enter=[CharacterRef(kind="character", name=declared)]
                 ),
             ),
+            commit_async=commit_async,
         )
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM characters")
@@ -748,7 +767,7 @@ def test_identity_declaration_binds_or_mints_once(roster_database, declared):
                 "SELECT alias, provenance FROM character_aliases WHERE character_id = %s",
                 (resolved.id,),
             )
-            assert ("Juniper", "identity799") in cur.fetchall()
+            assert ("Juniper", "generated") in cur.fetchall()
 
 
 def test_identity_shared_surname_blocks_before_staging(roster_database):
@@ -784,4 +803,153 @@ def test_identity_shared_surname_blocks_before_staging(roster_database):
         cur.execute("SELECT count(*) FROM incubator")
         assert cur.fetchone()[0] == before
         cur.execute("SELECT count(*) FROM characters WHERE name = 'Wren'")
+        assert cur.fetchone()[0] == 0
+
+
+@pytest.mark.parametrize(
+    "existing,declared",
+    [("Ada", "Lady Ada"), ("Lady Ada", "Ada"), ("Ada Lovelace", "Lady Ada")],
+)
+def test_identity_title_collision_blocks_reconciliation_and_hydration(
+    roster_database, existing, declared
+):
+    from nexus.agents.logon.apex_schema import NewEntityDeclaration
+    from nexus.presence.identity import CharacterIdentityAmbiguity
+
+    dbname, ids, _ = roster_database
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE characters SET name = %s WHERE id = %s",
+            (existing, ids["Remote Friend"]),
+        )
+        if existing == "Ada Lovelace":
+            cur.execute(
+                "INSERT INTO character_aliases (character_id, alias) VALUES (%s, 'Ada')",
+                (ids["Remote Friend"],),
+            )
+        cur.execute("SELECT count(*) FROM characters")
+        before = cur.fetchone()[0]
+    with pytest.raises(CharacterIdentityAmbiguity) as caught:
+        commit_wire(
+            dbname,
+            0,
+            wire(
+                f"{declared} waits.",
+                new_entities=[
+                    NewEntityDeclaration(
+                        kind="character", name=declared, summary="A visitor."
+                    )
+                ],
+            ),
+        )
+    assert [c.id for c in caught.value.candidates] == [ids["Remote Friend"]]
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM incubator")
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT count(*) FROM characters")
+        assert cur.fetchone()[0] == before
+
+
+@pytest.mark.parametrize("declared_location", [None, "Garden"])
+def test_identity_location_conflict_blocks_before_staging(
+    roster_database, declared_location
+):
+    from nexus.agents.logon.apex_schema import NewEntityDeclaration
+    from nexus.presence.identity import CharacterIdentityAmbiguity
+
+    dbname, ids, hall = roster_database
+    parent = commit_wire(dbname, 0, wire("The hall is quiet."))
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+        )
+        garden = cur.fetchone()[0]
+        cur.execute(
+            "UPDATE characters SET current_location = %s WHERE id = %s",
+            (garden if declared_location is None else hall, ids["Remote Friend"]),
+        )
+        cur.execute("SELECT count(*) FROM incubator")
+        before = cur.fetchone()[0]
+    with pytest.raises(CharacterIdentityAmbiguity, match="location conflict"):
+        commit_wire(
+            dbname,
+            parent,
+            wire(
+                "Remote Friend waits.",
+                new_entities=[
+                    NewEntityDeclaration(
+                        kind="character",
+                        name="Remote Friend",
+                        summary="A visitor.",
+                        scene_location=declared_location,
+                    )
+                ],
+            ),
+        )
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM incubator")
+        assert cur.fetchone()[0] == before
+        cur.execute("SELECT count(*) FROM characters WHERE name='Remote Friend'")
+        assert cur.fetchone()[0] == 1
+
+
+def test_identity_frontier_location_narrows_without_resolving(roster_database):
+    from nexus.agents.logon.apex_schema import NewEntityDeclaration
+    from nexus.presence.identity import CharacterIdentityAmbiguity
+
+    dbname, ids, hall = roster_database
+    parent = commit_wire(dbname, 0, wire("The hall is quiet."))
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE characters SET name='Silas Wren', current_location=%s WHERE id=%s",
+            (hall, ids["Remote Friend"]),
+        )
+        cur.execute(
+            "INSERT INTO places (name, type) VALUES ('Garden', 'fixed_location') RETURNING id"
+        )
+        garden = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO characters (name, current_location) VALUES ('Ada Wren', %s)",
+            (garden,),
+        )
+    with pytest.raises(CharacterIdentityAmbiguity) as caught:
+        commit_wire(
+            dbname,
+            parent,
+            wire(
+                "Wren waits.",
+                new_entities=[
+                    NewEntityDeclaration(
+                        kind="character", name="Wren", summary="A visitor."
+                    )
+                ],
+            ),
+        )
+    assert [c.id for c in caught.value.candidates] == [ids["Remote Friend"]]
+    assert "Hall" in caught.value.reason
+
+
+def test_identity_batch_fuzzy_collision_blocks_before_staging(roster_database):
+    from nexus.agents.logon.apex_schema import NewEntityDeclaration
+    from nexus.presence.identity import CharacterIdentityAmbiguity
+
+    dbname, _, _ = roster_database
+    with pytest.raises(CharacterIdentityAmbiguity, match="Silas Wrenn.*Silas Wren"):
+        commit_wire(
+            dbname,
+            0,
+            wire(
+                "Silas Wren and Silas Wrenn wait.",
+                new_entities=[
+                    NewEntityDeclaration(
+                        kind="character", name=name, summary="A visitor."
+                    )
+                    for name in ("Silas Wren", "Silas Wrenn")
+                ],
+            ),
+        )
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM incubator")
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT count(*) FROM characters WHERE name LIKE 'Silas Wren%'")
         assert cur.fetchone()[0] == 0

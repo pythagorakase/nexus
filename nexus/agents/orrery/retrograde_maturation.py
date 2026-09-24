@@ -127,6 +127,7 @@ def enqueue_declared_entity_maturations(
     slot: Optional[int] = None,
     settings: Optional[Mapping[str, Any]] = None,
     accepting_world_time: Optional[datetime] = None,
+    scene_location: str | None = None,
 ) -> MaturationEnqueueResult:
     """Process Skald new-entity declarations inside the commit transaction.
 
@@ -183,6 +184,7 @@ def enqueue_declared_entity_maturations(
             record = _resolve_or_create_stub(
                 cur,
                 declaration,
+                scene_location=scene_location,
                 source_chunk_id=chunk_id,
                 accepting_world_time=accepting_world_time,
             )
@@ -243,6 +245,7 @@ def _resolve_or_create_stub(
     *,
     source_chunk_id: int,
     accepting_world_time: Optional[datetime],
+    scene_location: str | None = None,
 ) -> _DeclaredEntityRecord:
     """Resolve a declared entity by exact name, creating a stub when absent.
 
@@ -253,7 +256,11 @@ def _resolve_or_create_stub(
 
     if declaration.kind == "character":
         existing = require_character_identity(
-            cur, declaration.name, descriptors=declaration.summary
+            cur,
+            declaration.name,
+            descriptors=declaration.summary,
+            scene_location=scene_location,
+            declared_location=declaration.scene_location,
         )
         if existing is not None:
             declaration = declaration.model_copy(update={"name": existing.name})
@@ -682,11 +689,8 @@ def drain_maturation_jobs_sync(
                             cur,
                             row=row,
                             error=str(exc),
-                            max_attempts=(
-                                1
-                                if isinstance(exc, CharacterIdentityAmbiguity)
-                                else cfg.max_attempts
-                            ),
+                            failure_class=type(exc).__name__,
+                            max_attempts=cfg.max_attempts,
                             retry_delay_seconds=cfg.retry_delay_seconds,
                         )
                 logger.exception(
@@ -1589,6 +1593,7 @@ def _mark_maturation_failed(
     error: str,
     max_attempts: int,
     retry_delay_seconds: int,
+    failure_class: str | None = None,
 ) -> None:
     _require_maturation_lease(cur, row)
     attempt_count = int(row.get("attempts") or 0) + 1
@@ -1598,13 +1603,24 @@ def _mark_maturation_failed(
         SET state = %s::orrery_job_state,
             available_at = now() + (%s * interval '1 second'),
             lease_until = NULL, locked_by = NULL, lease_nonce = NULL,
-            last_error = %s, updated_at = now()
+            last_error = %s,
+            result_manifest = jsonb_build_object('schema_version', %s::text)
+                || COALESCE(result_manifest, '{}'::jsonb)
+                || jsonb_build_object('failure_class', %s::text),
+            updated_at = now()
         WHERE id = %s
         """,
         (
-            "queued" if attempt_count < max_attempts else "failed",
+            (
+                "queued"
+                if attempt_count < max_attempts
+                and failure_class != CharacterIdentityAmbiguity.__name__
+                else "failed"
+            ),
             retry_delay_seconds,
             error,
+            MATURATION_MANIFEST_SCHEMA_VERSION,
+            failure_class,
             row["job_id"],
         ),
     )

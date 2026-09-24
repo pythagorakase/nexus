@@ -69,15 +69,19 @@ from nexus.memory.correspondence import (
     persist_staged_correspondence,
     plan_correspondence_compaction,
 )
+from nexus.presence.identity import (
+    read_identity_index,
+    require_character_identity,
+    validate_character_batch,
+)
 from nexus.presence.cues import promote_in_scene_characters
 from nexus.presence.roster import (
+    continuation_setting,
     read_roster,
     roster_from_resolved_references,
     write_roster,
 )
 from nexus.presence.roster import resolve_reference
-
-from nexus.presence.identity import require_character_identity
 
 
 logger = logging.getLogger("nexus.api.commit_handler_sync")
@@ -429,13 +433,27 @@ def commit_incubator_to_database_sync(
             # Get world_layer
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
 
-            for declaration in incubator.get("new_entities") or []:
-                if declaration["kind"] == "character":
-                    require_character_identity(
-                        conn,
-                        declaration["name"],
-                        descriptors=declaration.get("summary"),
-                    )
+            scene_location = None
+            declarations = incubator.get("new_entities") or []
+            if any(declaration["kind"] == "character" for declaration in declarations):
+                parent_id = incubator["parent_chunk_id"]
+                if parent_id:
+                    frontier = read_roster(conn, parent_id)
+                    scene_location = continuation_setting(frontier, parent_id).name
+                for declaration in declarations:
+                    if declaration["kind"] == "character":
+                        require_character_identity(
+                            conn,
+                            declaration["name"],
+                            descriptors=declaration.get("summary"),
+                            scene_location=scene_location,
+                            declared_location=declaration.get("scene_location"),
+                        )
+                validate_character_batch(
+                    declarations,
+                    read_identity_index(conn),
+                    scene_location=scene_location,
+                )
 
             # Step 4: Insert narrative chunk
             # Compute finalized text based on any choice selection made in the incubator
@@ -541,6 +559,7 @@ def commit_incubator_to_database_sync(
             maturation_result = enqueue_declared_entity_maturations(
                 conn,
                 declarations=declarations,
+                scene_location=scene_location,
                 chunk_id=chunk_id,
                 raw_text=raw_text,
                 slot=slot,
@@ -573,6 +592,7 @@ def commit_incubator_to_database_sync(
                 conn,
                 declared_prose_parts,
                 declarations=declarations,
+                scene_location=scene_location,
                 accounted_character_ids={
                     int(reference["character_id"]) for reference in character_refs
                 },

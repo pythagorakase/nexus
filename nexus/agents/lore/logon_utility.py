@@ -1885,8 +1885,21 @@ class LogonUtility:
 
                     with get_connection(self._validation_dbname) as conn:
                         identity_catalog = read_identity_index(conn)
+                        from nexus.presence.roster import (
+                            continuation_setting,
+                            read_roster,
+                        )
+
+                        anchor = self._active_anchor_chunk_id
+                        scene_location = (
+                            continuation_setting(read_roster(conn, anchor), anchor).name
+                            if anchor
+                            else None
+                        )
                     validate_character_declarations(
-                        declarations, index=identity_catalog
+                        declarations,
+                        index=identity_catalog,
+                        scene_location=scene_location,
                     )
                 presence = getattr(output, "presence", None)
                 if presence is not None and presence._reset_repair is not None:
