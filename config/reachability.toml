@@ -32,13 +32,6 @@ target = "scripts/qa_shift/prose_metrics.py:main"
 reason = "Read-only reference-corpus metrics CLI documented in scripts/qa_shift/README.md; issue 765."
 
 [[operators]]
-target = "scripts/qa_shift/long_absence_probe.py:main"
-reason = "Issue 909 disposable long-absence measurement operator."
-[[operators]]
-target = "scripts/qa_shift/long_absence_turn.py:main"
-reason = "Issue 909 isolated continuation measurement operator."
-
-[[operators]]
 target = "scripts/qa_shift/world_clock.py:main"
 reason = "Read-only clock identity QA family documented in scripts/qa_shift/README.md; issue 778."
 [[operators]]
