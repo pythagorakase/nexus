@@ -1,0 +1,12 @@
+FINGERPRINT_RESTORE_PASSED a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7
+IDENTITIES_AND_PROSE_UNCHANGED
+
+Verbatim final eight lines:
+        "covering_chunk_ids": [
+          47
+        ]
+      }
+    ],
+    "gap_entities": []
+  }
+}

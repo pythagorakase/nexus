@@ -1,132 +1,222 @@
-# Scene Order Stop Report
+# Scene Order Verification
 
-Work order 742-B stopped before production edits. Base: `53ac8fa2` on
-`claude/742-scene-order`. The frozen order requires every recalled entry,
-including Retrograde summaries, to have a chunk id and story clock face. The
-actual frontier contains summaries without an event timestamp. Choosing a
-recording-time clock instead would introduce temporal semantics that the
-coordinator has not specified. No timestamp was invented and no fallback added.
+Baseline captured on `7b70ee63`; implementation commit `e4a0d454`.
 
-## Blocking Evidence
+Work order 742-B implements chronological scene rendering and the coordinator's
+recalled-lane amendments. No prompt prose, configuration defaults, fingerprint
+projection, schema, roster wording, or render caps changed.
 
-The unmodified real LORE path restored save_04 frontier 49 on disposable clone
-`qa640_742_scene_2142d8d55237`. Input: `Ask Kessa Brin what she remembers.`
-Pass-2 added narrative chunks 8, 9, 11, 12, 15, and 17, plus
-`retrograde_summary:27` and `retrograde_summary:21`.
+## Rendering and Accounting
 
-`nexus/agents/memnon/utils/db_access.py:77` constructs summary retrieval rows
-with a typed summary identity, `recorded_at_chunk_id`, categorical `chronology`,
-and wall-clock `created_at`. It supplies neither a narrative `chunk_id` nor a
-story timestamp. `nexus/memory/retrieval_coverage.py:64` explicitly distinguishes
-recording anchors from narrative identities. The live source confirms the data
-gap; it is not merely a missing field in the retrieval projection:
+Both seats now use the same narrative order: historical passages, recalled
+scenes, recent scene. The recent scene is sorted by numeric chunk id, ending at
+the parent; the writer's existing roster line and the user input follow it.
+Pass-2 additions are marked only when added to the warm list, preserving
+selection, deduplication, and memory identities. Retrograde summaries from
+either source list enter the recalled lane. The historical cap still selects
+the ranked prefix before lane partitioning.
 
-```sql
-BEGIN READ ONLY;
-SELECT rs.id, rs.recorded_at_chunk_id, rs.chronology,
-       we.world_time AS event_time, nv.world_time AS recorded_at_time
-FROM retrograde_summaries rs
-JOIN world_events we ON we.id = rs.world_event_id
-LEFT JOIN narrative_view nv ON nv.id = rs.recorded_at_chunk_id
-WHERE rs.id IN (21, 27)
-ORDER BY rs.id;
-COMMIT;
-```
+Recalled narrative labels carry their own story clocks. Summary labels explicitly
+say `recorded at chunk` and use that anchor's clock; unanchored summaries remain
+undated. Clock hydration reads `narrative_view` in one query, fails loudly on an
+anchored memory without a clock, and formats every face with `clock_face`.
 
-```text
- id | recorded_at_chunk_id | chronology  | event_time |    recorded_at_time
-----+----------------------+-------------+------------+------------------------
- 21 |                   46 | recent_past |            | 2189-10-17 18:23:00-04
- 27 |                   49 | recent_past |            | 2189-10-17 18:37:00-04
-```
+The prompt-window kind is `recalled scenes`. Trimming preserves the existing
+selection policy and subtracts from the actual lane; dropping its last entry
+also subtracts its heading. Coverage identities and entity coverage stay the
+same; `kept_tokens` includes the rendered labels.
 
-Across all 27 summary rows, zero joined world events have `world_time`; all 27
-have recording anchors. Exact psql output is in [summary-clocks.txt](summary-clocks.txt).
-`created_at` is a 2026 storage timestamp, not the 2189 story clock.
-`clock_face()` formats an existing aware timestamp; it does not resolve a
-relative chronology such as `recent_past` (`nexus/util/clock_face.py:21`).
+## Frontier Proof
 
-There is also a proof-condition discrepancy to resolve: the six narrative
-entries currently render without id/time labels. Adding the required labels in
-the existing bracket style costs 17 TEST tokens per entry, or 102 tokens, before
-the eight-token recalled heading or any summary labels. See
-[label-costs.json](label-costs.json). This is a label-only calculation against
-actual retrieved text, not a claim that an after-render was implemented. The
-requested total change of only a few heading tokens cannot describe this label
-format. Coverage `kept_tokens` currently counts rendered chunk contributions
-(`nexus/memory/manager.py:1026`), so it would also change with added labels even
-if retained identities and coverage content remain equal.
+The baseline and after probes use disposable `qa640_742_scene_*` clones of
+save_04, `LORE.process_turn` with generation disabled, and both real TEST seat
+renderers. The source save is read only. No gateway or paid provider is used.
+This is an assembly diagnostic: private correspondence is omitted when generation
+is disabled, and Gaia includes finished-writer framing without a generated writer
+response. These totals are local block estimates, not provider usage.
 
-## Completed Baseline Probe
-
-The probe cloned save_04 through the repository's `disposable_slot_database`,
-restored its existing baseline without restamping, assembled context through
-`LORE.process_turn` with generation disabled, and measured both seats through
-the real `LogonUtility` TEST route. No paid generation or counting request ran.
-Local embedding and reranking models did run.
-
-The stored fingerprint restored successfully:
+The stored frontier baseline restores without restamping. Its fingerprint is:
 
 ```text
-FINGERPRINT_RESTORE_PASSED a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7
+a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7
 ```
 
-No configuration or fingerprint projection was changed. This proves the
-starting baseline only; there is no implemented after-state.
+The after probe asserts equality with the current fingerprint function and the
+before artifact, equality of selected identities and narrative text, and equality
+of historical rank order. Incremental additions originate in a set, so their
+pre-render insertion order may differ across Python processes; the new renderer
+sorts deterministically. The probe writes before/after coverage rows on the clone
+using the same pending retrieval and compares all captured fields except the
+accurately changed token count. The before coverage replay counts the archived
+old rendered entry format.
 
-The old RECENT NARRATIVE order was:
+Before RECENT NARRATIVE ids (fresh baseline capture):
 
 ```text
 49, 48, 47, 46, 45, 44, 43, 42, 41, 40,
-8, 9, 11, 12, 15, 17, retrograde_summary:27, retrograde_summary:21
+8, retrograde_summary:27, 9, 11, retrograde_summary:21, 12, 15, 17
 ```
 
-The following are local block estimates from the unchanged renderer. This is
-an assembly diagnostic: generation-disabled LORE omits private storyteller
-correspondence, and Gaia has only finished-writer framing, not a generated
-writer response. These are not full production request totals or provider
-usage. Exact payload, rendered seat text, and counts are preserved in the
-adjacent `before-*` files and `before.json`.
+After RECENT NARRATIVE ids in both seats:
 
-| Block | Writer | Gaia |
-|---|---:|---:|
-| system | 4580 | 1900 |
-| intertitle | 50 | 50 |
-| scene conditions | 17 | 17 |
-| recent narrative | 15797 | 15797 |
-| scene roster | 22 | 0 |
-| user input | 15 | 15 |
-| entity dossier | 2182 | 2182 |
-| historical context | 15171 | 15171 |
-| world knowledge | 252 | 252 |
-| orrery tag library | 3742 | 3742 |
-| recent orrery rulings | 210 | 210 |
-| orrery imminent activity | 264 | 264 |
-| orrery scene pressure | 316 | 316 |
-| orrery joint beats | 148 | 148 |
-| instructions | 30 | 30 |
-| finished writer framing | 0 | 94 |
-| Total | 42796 | 40188 |
-
-## Commands and Actual Output
-
-All commands ran from this worktree. No gateway was started. No save or template
-was written. The disposable clone was removed by the fixture; [cleanup.txt](cleanup.txt)
-records the zero-row database check.
-
-```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;print(nexus.__file__)'
+```text
+40, 41, 42, 43, 44, 45, 46, 47, 48, 49
 ```
+
+Recalled entries in both seats:
+
+```text
+chunk 8 · 17 Oct 2189 · 19:27
+chunk 9 · 17 Oct 2189 · 19:29
+chunk 11 · 17 Oct 2189 · 19:36
+chunk 12 · 17 Oct 2189 · 19:40
+chunk 15 · 17 Oct 2189 · 19:53
+chunk 17 · 17 Oct 2189 · 19:58
+Retrograde summary 21 · recorded at chunk 46 · 17 Oct 2189 · 22:23
+Retrograde summary 27 · recorded at chunk 49 · 17 Oct 2189 · 22:37
+```
+
+The exact payloads and writer/Gaia text are in `before-*` and `after-*` artifacts;
+`before.json` and `after.json` contain the per-block counts. The after artifact also
+records lane identities and the two coverage rows.
+
+| Block | Writer Before | Writer After | Gaia Before | Gaia After |
+|---|---:|---:|---:|---:|
+| system | 4580 | 4580 | 1900 | 1900 |
+| intertitle | 50 | 50 | 50 | 50 |
+| scene conditions | 17 | 17 | 17 | 17 |
+| recent narrative | 15797 | 9782 | 15797 | 9782 |
+| scene roster | 22 | 22 | 0 | 0 |
+| user input | 15 | 15 | 15 | 15 |
+| entity dossier | 2182 | 2182 | 2182 | 2182 |
+| historical context | 15171 | 15171 | 15171 | 15171 |
+| recalled scenes | 0 | 6161 | 0 | 6161 |
+| world knowledge | 252 | 252 | 252 | 252 |
+| orrery tag library | 3742 | 3742 | 3742 | 3742 |
+| recent orrery rulings | 210 | 210 | 210 | 210 |
+| orrery imminent activity | 264 | 264 | 264 | 264 |
+| orrery scene pressure | 316 | 316 | 316 | 316 |
+| orrery joint beats | 148 | 148 | 148 | 148 |
+| instructions | 30 | 30 | 30 | 30 |
+| finished writer framing | 0 | 0 | 94 | 94 |
+| Total | 42796 | 42942 | 40188 | 40334 |
+
+Both seat totals rise by **146 TEST tokens**: 138 tokens of identity/clock labels
+and eight for the recalled heading. Replayed coverage `kept_tokens` rises from
+8252 to 8390; its identities, raw-result count, entity coverage, and gaps are identical.
+
+## Validation
+
+All commands run from this worktree with `PYTHONPATH=$PWD` and the shared
+`/Users/pythagor/nexus/.venv/bin/python`. The import check printed:
 
 ```text
 /Users/pythagor/nexus/.claude/worktrees/742-scene-order/nexus/__init__.py
 ```
 
+The PostgreSQL subset ran rather than skipping. Its sole failure is the
+coordinator's #885 exemption:
+`tests/test_lore/test_retrieval_coverage_live.py::test_handle_user_input_writes_exact_coverage_and_empty_detection`.
+That test hardwires `LIVE_SLOT = 5` at `tests/test_lore/test_retrieval_coverage_live.py:17`
+and fails while inserting a character, before rendering, with:
+
+```text
+psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp
+```
+
+Read-only SQL (`slot5.txt`) confirms zero chunks and zero characters in save_05.
+No exemption was applied to any other failure.
+
+The initial offline run found an obsolete mocked retrieval test, the new-module
+reachability registration, and two prompt-lint failures caused by #931 removing
+blank-line whitespace in a docstring while its exact allowlist retained it. The
+trimming regression now uses real memory-state registration and TEST rendering
+without mocked retrieval. The production path was added to the reachability
+ratchet. Only the lint allowlist's whitespace changed; the actual docstring and
+all prompt prose remain untouched. All five initially failing tests passed on
+focused rerun (`gate-fixes.txt`).
+
+The first after-probe compared set-derived insertion order across processes and
+failed its diagnostic assertion; selected ids and prose were identical. The probe
+now compares those by identity, preserves the rank-order assertion for historical
+passages, and records the renderer's deterministic lane order. The final probe
+also counts repeated appearances in historical context when replaying the old
+coverage token count.
+
+No UI/build work, gateway, CLI continuation, or paid inference was needed for this
+assembly slice. Disposable fixture clones were removed; `cleanup.txt` records
+zero remaining scene-proof databases. Existing repository fixtures own their
+PostgreSQL test targets. No fleet/template migration or save reset was performed.
+
+## Commands and Verbatim Tails
+
+The before command used the preimplementation probe. The final after probe exited 0.
+All test commands below completed; the PostgreSQL subset exited 1 only for the
+explicitly exempt test named above. Offline skips are the repository default
+PostgreSQL/live-provider gates, not PostgreSQL proof.
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q > docs/qa/742-scene-order/offline.txt 2>&1
+```
+
+```text
+2712 passed, 893 skipped, 9 warnings in 131.24s (0:02:11)
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore -k 'render or format or window or coverage or warm or recent' > docs/qa/742-scene-order/postgres.txt 2>&1
+```
+
+```text
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_retrieval_coverage_live.py::test_handle_user_input_writes_exact_coverage_and_empty_detection
+1 failed, 105 passed, 212 deselected, 9 warnings in 32.73s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check . > docs/qa/742-scene-order/black.txt 2>&1
+```
+
+```text
+All done! ✨ 🍰 ✨
+667 files would be left unchanged.
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_typed_memory_identity.py tests/test_lore/test_seat_window.py tests/test_lore/test_historical_render.py > docs/qa/742-scene-order/focused.txt 2>&1
+```
+
+```text
+26 passed, 5 warnings in 1.24s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_scene_order_render.py > docs/qa/742-scene-order/scene-tests.txt 2>&1
+```
+
+```text
+4 passed, 5 warnings in 0.97s
+```
+
+```sh
+PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_scene_order_render.py > docs/qa/742-scene-order/scene-postgres.txt 2>&1
+```
+
+```text
+5 passed, 5 warnings in 2.09s
+```
+
+```sh
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_lore/test_turn_cycle.py::test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable tests/test_prompt_lint.py::test_python_has_no_embedded_prompt_prose tests/test_prompt_lint.py::test_allowlist_is_exact_and_has_no_stale_entries tests/test_reachability.py::test_repository_reachability_ratchet tests/test_reachability.py::test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app > docs/qa/742-scene-order/gate-fixes.txt 2>&1
+```
+
+```text
+5 passed, 5 warnings in 12.17s
+```
+
 ```sh
 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python docs/qa/742-scene-order/probe.py > docs/qa/742-scene-order/before-probe.log 2>&1
 ```
-
-Exit 0. Verbatim last eight lines:
 
 ```text
         "orrery joint beats": 148,
@@ -140,43 +230,23 @@ Exit 0. Verbatim last eight lines:
 ```
 
 ```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black docs/qa/742-scene-order/probe.py
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python docs/qa/742-scene-order/probe.py --phase after > docs/qa/742-scene-order/after-probe.log 2>&1
 ```
 
 ```text
-reformatted docs/qa/742-scene-order/probe.py
-
-All done! ✨ 🍰 ✨
-1 file reformatted.
+        "covering_chunk_ids": [
+          47
+        ]
+      }
+    ],
+    "gap_entities": []
+  }
+}
 ```
-
-```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m black --check docs/qa/742-scene-order/probe.py > docs/qa/742-scene-order/black.txt 2>&1
-```
-
-```text
-All done! ✨ 🍰 ✨
-1 file would be left unchanged.
-```
-
-No pytest suite, gateway/CLI continuation, build, or after-render was run. The
-requested offline and PostgreSQL proof gates remain unrun, not passed. There
-was no authentication hazard or runtime exception causing this stop. The stop
-is a data/semantics conflict with the frozen requirements.
 
 ## Coordinator Questions
 
-1. Should Retrograde entries keep their typed summary identity and explicitly
-   display the **recorded-at chunk and its clock**, while retaining their
-   categorical chronology? Alternatively, define an undated form or supply an
-   authoritative event-time source. A recording clock must not silently become
-   an event clock.
-2. May the total increase by the measured id/time label costs as well as the
-   heading? Does unchanged coverage mean identical retained ids/entity coverage
-   with accurately updated rendered `kept_tokens`?
-
-All runtime changes, regressions, §06.3 changes, and after-state proof are
-pending. No PR was opened or merged because the implementation gates were not
-reached.
+None. The only deferred item is the already exempt #885 slot-5 fixture failure.
+The branch is for coordinator review; this run does not merge or wait for review bots.
 
 Codex, running GPT-6 Astra.

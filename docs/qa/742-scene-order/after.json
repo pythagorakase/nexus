@@ -1,0 +1,185 @@
+{
+  "database": "qa640_742_scene_a9020d337cb8",
+  "parent": 49,
+  "fingerprint": "a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7",
+  "seats": {
+    "skald_writer": {
+      "blocks": {
+        "system": 4580,
+        "intertitle": 50,
+        "scene conditions": 17,
+        "entity dossier": 2182,
+        "historical context": 15171,
+        "recalled scenes": 6161,
+        "recent narrative": 9782,
+        "scene roster": 22,
+        "user input": 15,
+        "world knowledge": 252,
+        "orrery tag library": 3742,
+        "recent orrery rulings": 210,
+        "orrery imminent activity": 264,
+        "orrery scene pressure": 316,
+        "orrery joint beats": 148,
+        "instructions": 30
+      },
+      "total": 42942,
+      "lane_ids": {
+        "historical context": [
+          49,
+          48,
+          34,
+          36,
+          47,
+          28,
+          37,
+          43,
+          46,
+          42,
+          27,
+          35,
+          26,
+          33,
+          21
+        ],
+        "recalled scenes": [
+          8,
+          9,
+          11,
+          12,
+          15,
+          17,
+          "retrograde_summary:21",
+          "retrograde_summary:27"
+        ],
+        "recent narrative": [
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49
+        ]
+      },
+      "total_delta": 146
+    },
+    "gaia": {
+      "blocks": {
+        "system": 1900,
+        "intertitle": 50,
+        "scene conditions": 17,
+        "entity dossier": 2182,
+        "historical context": 15171,
+        "recalled scenes": 6161,
+        "recent narrative": 9782,
+        "user input": 15,
+        "world knowledge": 252,
+        "orrery tag library": 3742,
+        "recent orrery rulings": 210,
+        "orrery imminent activity": 264,
+        "orrery scene pressure": 316,
+        "orrery joint beats": 148,
+        "instructions": 30,
+        "finished writer framing": 94
+      },
+      "total": 40334,
+      "lane_ids": {
+        "historical context": [
+          49,
+          48,
+          34,
+          36,
+          47,
+          28,
+          37,
+          43,
+          46,
+          42,
+          27,
+          35,
+          26,
+          33,
+          21
+        ],
+        "recalled scenes": [
+          8,
+          9,
+          11,
+          12,
+          15,
+          17,
+          "retrograde_summary:21",
+          "retrograde_summary:27"
+        ],
+        "recent narrative": [
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49
+        ]
+      },
+      "total_delta": 146
+    }
+  },
+  "coverage": {
+    "kept_chunk_ids": [
+      47,
+      11,
+      9,
+      8,
+      17,
+      45,
+      12,
+      15
+    ],
+    "kept_tokens": 8390,
+    "raw_result_count": 10,
+    "coverage": [
+      {
+        "id": 18,
+        "kind": "character",
+        "name": "Kessa Brin",
+        "covered": true,
+        "covering_chunk_ids": [
+          47
+        ]
+      }
+    ],
+    "gap_entities": []
+  },
+  "before_coverage": {
+    "kept_chunk_ids": [
+      47,
+      11,
+      9,
+      8,
+      17,
+      45,
+      12,
+      15
+    ],
+    "kept_tokens": 8252,
+    "raw_result_count": 10,
+    "coverage": [
+      {
+        "id": 18,
+        "kind": "character",
+        "name": "Kessa Brin",
+        "covered": true,
+        "covering_chunk_ids": [
+          47
+        ]
+      }
+    ],
+    "gap_entities": []
+  }
+}

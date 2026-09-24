@@ -710,6 +710,7 @@ Calyx’s copies have made the memorial hall a witness. They have also made ever
 What do you make public next?
 
 Read the changed recording from your anchor book aloud, making its accusation impossible to contain but exposing its most private wound.
+[Retrograde summary 27] In the weeks following the Wickglass review, Ivo Senn intervened to protect Kessa Brin from the first recorded threats concerning her route-slate fragment.
 You take the anchor book from beneath your coat.
 
 Ren’s expression changes before you open it. Not fear exactly. Recognition—the kind a careful man reserves for a fire behind a sealed door.
@@ -880,6 +881,7 @@ Elian turns her face slightly toward you, not asking permission.
 The key is hers. The decision about the ledger is not yet anyone’s alone.
 
 Ask Vela Nash to explain her connection to Tomas Quill before anyone touches the ledger wheel.
+[Retrograde summary 21] In the recent past, at Lantern Quay Memorial Hall, Kessa Brin delivered a sealed reconciliation packet between Vela Nash and Tarin Quell; their renewed courtship was subsequently entered in the private registry as a marriage, and Tarin's diverted Guild registry favor was recorded against Kessa's route record.
 You do not look at the wheel.
 
 “Before anyone touches it,” you say, “tell us what Tomas Quill was to you.”
@@ -1099,8 +1101,6 @@ The rain thickens on the arcade roof, loud enough to make secrets briefly expens
 What do you press first?
 
 Ask the stranger to state their name and repeat the vanished service log exactly while Calyx records it in wet ink.
-[Retrograde summary 27] In the weeks following the Wickglass review, Ivo Senn intervened to protect Kessa Brin from the first recorded threats concerning her route-slate fragment.
-[Retrograde summary 21] In the recent past, at Lantern Quay Memorial Hall, Kessa Brin delivered a sealed reconciliation packet between Vela Nash and Tarin Quell; their renewed courtship was subsequently entered in the private registry as a marriage, and Tarin's diverted Guild registry favor was recorded against Kessa's route record.
 PRESENT: Mara Vey (player), Kessa Brin · SETTING: Wickglass Dispatch House
 
 === USER INPUT ===

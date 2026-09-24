@@ -1,0 +1,7 @@
+BEGIN
+ chunks | characters 
+--------+------------
+      0 |          0
+(1 row)
+
+COMMIT

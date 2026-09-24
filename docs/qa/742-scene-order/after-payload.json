@@ -118,6 +118,32 @@
         "source": "recent_chunks"
       },
       {
+        "id": "retrograde_summary:21",
+        "memory_id": "retrograde_summary:21",
+        "summary_id": 21,
+        "world_event_id": 158,
+        "text": "In the recent past, at Lantern Quay Memorial Hall, Kessa Brin delivered a sealed reconciliation packet between Vela Nash and Tarin Quell; their renewed courtship was subsequently entered in the private registry as a marriage, and Tarin's diverted Guild registry favor was recorded against Kessa's route record.",
+        "content_type": "retrograde_summary",
+        "metadata": {
+          "summary_id": 21,
+          "world_event_id": 158,
+          "recorded_at_chunk_id": 46,
+          "chronology": "recent_past",
+          "created_at": "2026-08-21T04:44:21.498937+00:00",
+          "recorded_at_world_time": "2189-10-17T22:23:00+00:00"
+        },
+        "model_scores": {
+          "Octen-Embedding-4B": 0.46323376674853445
+        },
+        "text_score": 0.0,
+        "vector_score": 0.46323376674853445,
+        "score": 0.11479227874918922,
+        "source": "multi_model_hybrid_search",
+        "original_score": 0.3705870133988276,
+        "reranker_score": 0.005165963899344206,
+        "is_recalled": true
+      },
+      {
         "id": "8",
         "chunk_id": "8",
         "text": "You turn back toward the hall.\n\nElian catches the movement first. Her fingers tighten around the Blackwake channel.\n\n\u201cWhere are you going?\u201d\n\n\u201cTo make it harder to erase us,\u201d you say.\n\nIt is not reassurance. It is the closest thing the moment will permit.\n\nYou cross the wet arcade with the brass key closed in one hand and the anchor book held beneath your coat. Behind you, Niko does not follow. He remains beside the maintenance gate, yellow shell bright against the concrete, watching its red filament pulse as though it has developed a heartbeat. Elian comes as far as the doors, then stops beneath the viaduct\u2019s dripping lip\u2014visible enough to be counted, close enough to run.\n\nInside, the memorial has changed shape. Grief has become an assembly.\n\nMourners crowd the narrow aisle among the paper lanterns. The union steward who tried to reach Elian stands with both hands locked around the back of a chair, his face ruined by hope and anger. Ren Vale is near the threshold, warrant lowered now, his officers behind him and visibly uncomfortable with the number of witnesses. Sister Calyx waits beside the old tea urn, three folded sheets tucked inside the breast of her black coat.\n\nWhen she sees you, she does not ask permission. She takes one copy out and lays it on the lectern where Elian\u2019s eulogy still waits.\n\nThe paper makes a tiny, unmistakable sound.\n\n\u201cTomas Quill,\u201d Calyx says.\n\nThe name does not mean anything to most of the room. That is what gives it force. It is not a slogan they have learned to applaud or fear; it is a name entering the air before anyone has prepared its approved meaning.\n\nCalyx opens the sheet with the care of a surgeon unwrapping an instrument.\n\n\u201cAn escrow receipt recovered among the memorial donations,\u201d she says. \u201cCivic format, physical duplication. It records a temporary custodianship transfer associated with Elian Rook\u2019s certification. It bears the continuity seal of Tomas Quill.\u201d\n\nRen\u2019s face goes still.\n\n\u201cAnd Quill?\u201d asks the lift steward, his voice catching. \u201cWho\u2019s Quill?\u201d\n\nYou feel the old iron taste at the back of your mouth. The rain, the empty hours, the ache of a body that has been kept moving too long: all of it narrows down to the simple fact that you once handled this chain without seeing it.\n\n\u201cRecorded dead,\u201d you say. \u201cEight months before the transfer.\u201d\n\nThe hall absorbs that. Somewhere beneath the viaduct, a transit car screams through a curve, and the building shudders around its lanterns.\n\nRen comes forward one measured pace. \u201cA continuity seal may be misused,\u201d he says. His voice is calm, but its calm now has an audience. \u201cIt may be inherited by a compromised system. That receipt establishes a reason for review, not a conclusion.\u201d\n\n\u201cNo,\u201d Calyx says. \u201cIt establishes a reason the review cannot occur in a sealed room.\u201d\n\nShe places the second copy in your hand. The third remains inside her coat, already elsewhere in spirit\u2014given to a dockmother, carried into a life that does not know it has become part of a case.\n\nAt the doorway, Elian lifts the channel.\n\n\u201cIvo Senn says he carried a sealed cradle through an old relay the night I was certified,\u201d she says. Her voice is raw, yet it reaches every corner of the hall. \u201cHe says the payment cleared under Quill\u2019s seal.\u201d\n\nThe union steward makes a sound like someone has struck him.\n\nRen looks at Elian then\u2014not at the seal, not at the book under your coat. At her. Whatever he had intended to say next dies behind his teeth. When he speaks, it is directed to the room.\n\n\u201cMs. Rook has no confirmed legal status,\u201d he says. \u201cThat is not an accusation. It is the precise danger. If this becomes spectacle before we establish what was done to her, every authority on the station will have an excuse to claim her.\u201d\n\n\u201cThen establish it,\u201d Elian says. \u201cIn front of people who remember I existed.\u201d\n\nA low murmur rises. Not consent. Not yet. But the sound of people discovering that procedure may be something they are allowed to witness.\n\nFrom the arcade, metal gives a blunt internal knock.\n\nNiko\u2019s voice carries through the rain. \u201cMara.\u201d\n\nThe maintenance gate\u2019s red filament has gone steady.\n\nThe ledger has not opened. But someone on the other side has stopped asking.\n\nRen hears it too. His eyes find the key in your fist. For the first time, the careful arrangement of his restraint slips enough to reveal fear.\n\n\u201cWhatever is at that relay,\u201d he says, quietly, \u201cwe cannot let it choose the record alone.\u201d\n\nCalyx\u2019s copies have made the memorial hall a witness. They have also made every person in it a possible target of someone else\u2019s cleanup. Beyond the doors, the gate waits under rain; Elian stands between the hall and flight; Ren\u2019s public promise now has the shape of a trap he may be trying to prevent.\n\nWhat do you make public next?\n\nRead the changed recording from your anchor book aloud, making its accusation impossible to contain but exposing its most private wound.",
@@ -126,7 +152,7 @@
           "season": 1,
           "episode": 2,
           "scene_number": 6,
-          "world_time": "2189-10-17 19:27:00+00:00"
+          "world_time": "2189-10-17T19:27:00+00:00"
         },
         "model_scores": {
           "Octen-Embedding-4B": 0.3717891665636539
@@ -136,7 +162,118 @@
         "score": 0.11882727679034179,
         "source": "multi_model_hybrid_search",
         "original_score": 0.39474657706625904,
-        "reranker_score": 0.0005761481006629765
+        "reranker_score": 0.0005761481006629765,
+        "is_recalled": true
+      },
+      {
+        "id": "9",
+        "chunk_id": "9",
+        "text": "You take the anchor book from beneath your coat.\n\nRen\u2019s expression changes before you open it. Not fear exactly. Recognition\u2014the kind a careful man reserves for a fire behind a sealed door.\n\n\u201cMara,\u201d he says.\n\nYou set the book on the memorial lectern, beside Calyx\u2019s unfolded receipt. The old cover is swollen at the corners from rain it has survived with you. Your thumb finds the false seam in the rear binding.\n\n\u201cThis was altered,\u201d you say, and your voice goes farther than you expect. \u201cSomeone changed a recording I have kept because I believed it was proof of my own life.\u201d\n\nElian stands in the doorway, rain gathering in the dark folds of her jacket. Niko has one hand hovering near the maintenance gate but does not touch it. Across the hall, nobody moves. Even the tea urn seems to have stopped steaming.\n\nYou press play.\n\nStatic rasps from the dead speaker. Then comes a kitchen from a life you have spent years defending: a spoon against a glass; sunlight striking a metal rail; the dry snap of orange peel beneath a thumbnail.\n\nYour mother laughs.\n\nThe sound hits you below language. It is exactly right. That is what makes it monstrous.\n\nThen her voice says, warmly, intimately, in the cadence that taught you your own name:\n\n\u201cGood work, Mara. The subject has accepted the continuity prompt.\u201d\n\nThe hall seems to contract around the little machine.\n\nA man answers her. Older, clipped, carrying the antiseptic patience of a recorded instruction.\n\n\u201cVey\u2019s sensory anchors are holding. Remove the pre-collapse variance. Preserve the maternal affect. She will require it for certification work.\u201d\n\nThe next voice is yours.\n\nNot the voice you own now\u2014too young, frightened past the point of tears.\n\n\u201cWho is Elian Rook?\u201d\n\nA pause. Paper turned somewhere near the microphone.\n\nThen the man again:\n\n\u201cNot the first certification, Auditor Vey. The first one was you.\u201d\n\nThe speaker coughs static. For one terrible second your mother is there again, humming under her breath as though nothing has been said.\n\nThen Elian\u2019s voice breaks through the recording, ragged and close to panic.\n\n\u201cThey put me in the cradle because I remembered her. Mara\u2014find the body they could not reconcile.\u201d\n\nThe sound dies.\n\nNo one in Lantern Quay has been given the mercy of pretending they misheard it.\n\nA woman by the lantern rack puts both hands over her mouth. The lift steward stares at you as if the floor has shifted beneath the hall. Sister Calyx does not look away; her face has gone pale, but she reaches into her coat and produces a pencil, writing on the margin of the Quill receipt in fast, deliberate strokes.\n\nRen has not moved. Rainwater tracks from his hairline to his jaw.\n\n\u201cThat recording is not admissible as it stands,\u201d he says, though the phrase has lost its old smoothness. \u201cIt may be fabricated. It may be a hostile reconstruction.\u201d\n\n\u201cOf course it may,\u201d Calyx says. \u201cSo is every memory you have taught us to surrender.\u201d\n\nElian comes one step inside. Her eyes stay on you, not the speaker.\n\n\u201cThey used you,\u201d she says. It is not absolution. It is worse: a fact with room for all the harm still inside it.\n\nFrom the arcade, the maintenance gate gives a hard mechanical clack.\n\nNiko turns. The dead access light has awakened into a narrow, unwavering red.\n\n\u201cSomeone has keyed the other side,\u201d he says. \u201cThey have the relay awake now.\u201d\n\nA voice leaks through the gate\u2019s ancient intercom, distorted by water and age.\n\n\u201cDo not open that ledger,\u201d it says. \u201cTomas Quill did not die. He was made reusable.\u201d\n\nThe line cuts.\n\nRen\u2019s gaze snaps to the brass key in your hand. For an instant, his control breaks cleanly enough for you to see what lies beneath it: not merely institutional alarm, but recognition.\n\nThe public record now holds three intolerable things: Elian Rook alive; Tomas Quill\u2019s dead seal in motion; and Mara Vey\u2019s most private memory possibly built as a tool. Beyond the hall, the relay is no longer waiting for permission.\n\nWhat do you do with the truth while it is still yours to carry?\n\nAsk Ren what he knows about a reusable Tomas Quill identity, forcing him to answer before the memorial witnesses.",
+        "content_type": "narrative",
+        "metadata": {
+          "season": 1,
+          "episode": 2,
+          "scene_number": 7,
+          "world_time": "2189-10-17T19:29:00+00:00"
+        },
+        "model_scores": {
+          "Octen-Embedding-4B": 0.40348223686500284
+        },
+        "text_score": 0.41215868846226106,
+        "vector_score": 0.40348223686500284,
+        "score": 0.12213276604469095,
+        "source": "multi_model_hybrid_search",
+        "original_score": 0.40521752718445453,
+        "reranker_score": 0.0008107255562208593,
+        "is_recalled": true
+      },
+      {
+        "id": "11",
+        "chunk_id": "11",
+        "text": "You put the brass key in Elian\u2019s palm.\n\nFor a moment neither of you moves.\n\nThe key looks almost indecently small between her wet, work-worn fingers\u2014too little metal to carry a woman\u2019s stolen life, a dead auditor\u2019s signature, your mother\u2019s voice rearranged into an instrument. Elian closes her hand around it. Her eyes lift to yours.\n\n\u201cYou don\u2019t get to decide this one,\u201d she says.\n\nIt is not cruelty. It is the boundary of a country you helped burn.\n\nThen she turns toward the maintenance gate.\n\nRen takes half a step after her before stopping himself. Whatever his officers are hearing through their discreet earpieces, whatever the sealed petition expects him to do, he does not give it the satisfaction of a chase. Sister Calyx gathers her coat at the throat and comes out from the memorial\u2019s lanternlight, pencil still tucked behind one ear.\n\n\u201cElian,\u201d Ren says. \u201cThe access notice\u2014\u201d\n\n\u201cYou said Calyx comes,\u201d Elian answers without looking back. \u201cYou said I come.\u201d\n\nThe rain sharpens, drumming on the arcade roof until the world becomes a narrow room of water and iron.\n\n\u201cAnd Mara?\u201d Calyx asks.\n\nElian\u2019s grip tightens around the key.\n\n\u201cMara comes,\u201d she says. \u201cShe sees what her name did.\u201d\n\nThe sentence lands without raising its voice.\n\nRen\u2019s face empties of everything but calculation. \u201cAnd me?\u201d\n\nElian finally looks at him. \u201cYou made your offer in front of witnesses. Stand where they can remember whether you keep it.\u201d\n\nBehind him, the memorial hall holds its breath. The lift steward has moved into the doorway; two mourners stand close beside him, not brave exactly, but unwilling now to leave the official alone with the story. Calyx reaches for the paper receipt inside her coat, then thinks better of it and leaves it where it is.\n\n\u201cYou are a witness from there,\u201d she tells Ren. \u201cBe one.\u201d\n\nNiko has already knelt beside the gate\u2019s old lock housing. He watches Elian approach with the wary attention of someone observing a live wire choose whom to strike.\n\n\u201cIt won\u2019t need force,\u201d he says. \u201cIt recognizes that key.\u201d\n\n\u201cI hope it remembers better than people do,\u201d Elian says.\n\nShe sets the brass into the lock.\n\nThe mechanism takes it with a soft, intimate click.\n\nFor one suspended second, nothing changes. Then somewhere inside the wall, gears begin to turn. Not simulated sound, not a clean electronic acknowledgment: actual teeth finding actual teeth under decades of civic dust. The gate folds inward on a pair of reluctant hinges.\n\nBeyond it lies no escape route.\n\nA narrow relay chamber has been waiting behind the wall: tiled in old municipal green, threaded with obsolete fiber conduits, its floor shining with rain tracked in from another entrance. At its center stands a waist-high steel cabinet crowned by a mechanical ledger wheel, each page sealed beneath cloudy glass.\n\nAnd beside it stands a woman in a soaked silver transit coat.\n\nShe has no weapon raised. Her hands are visible, though one is pressed flat against the ledger cabinet as if she has been feeling its pulse. Her hair is cut close enough to show a fine crescent of old surgical scarring behind her right ear.\n\nNiko goes still.\n\n\u201cVela Nash,\u201d he says.\n\nThe woman\u2019s gaze passes over him without surprise and settles on Elian\u2019s hand around the key.\n\n\u201cI told you not to open it,\u201d she says through the rain-noise.\n\nHer voice is the voice from the intercom: less distorted now, older than it sounded through the speaker, exhausted in a way that has had years to become structural.\n\nElian does not retreat. \u201cYou told us Tomas Quill was made reusable.\u201d\n\n\u201cI told you the smallest true thing I could say through an exposed line.\u201d Vela\u2019s eyes travel to Mara, and something in her expression contracts\u2014not recognition, not quite, but the pain of encountering a document she had hoped was lost. \u201cQuill died. The envelope did not. And it was not supposed to be answering anyone anymore.\u201d\n\nRen\u2019s voice comes from the open gate, controlled and carrying. \u201cMs. Nash, identify your authority to access a restricted civic relay.\u201d\n\nVela laughs once, softly. \u201cThere it is.\u201d\n\nShe looks at Elian again.\n\n\u201cI can show you the first page,\u201d Vela says. \u201cThe one that tells you who ordered the cradle moved. But if we turn that wheel, every name after it becomes vulnerable\u2014yours, Ivo Senn\u2019s, Mara Vey\u2019s, people who thought Quill\u2019s dead seal was a place to hide. And someone has already armed the relay to transmit when it opens.\u201d\n\nThe ledger wheel waits under its smeared glass. Elian holds the key. Vela holds the chamber by sheer prior claim. Behind you, Ren remains in public view exactly as Elian commanded\u2014and the memorial witnesses can see every person who tries to cross that line.\n\nElian turns her face slightly toward you, not asking permission.\n\n\u201cTell me what kind of truth you came here for,\u201d she says.\n\nThe key is hers. The decision about the ledger is not yet anyone\u2019s alone.\n\nAsk Vela Nash to explain her connection to Tomas Quill before anyone touches the ledger wheel.",
+        "content_type": "narrative",
+        "metadata": {
+          "season": 1,
+          "episode": 2,
+          "scene_number": 9,
+          "world_time": "2189-10-17T19:36:00+00:00"
+        },
+        "model_scores": {
+          "Octen-Embedding-4B": 0.3965714717593217
+        },
+        "text_score": 0.5380960364901808,
+        "vector_score": 0.3965714717593217,
+        "score": 0.1278438174854598,
+        "source": "multi_model_hybrid_search",
+        "original_score": 0.42487638470549355,
+        "reranker_score": 0.0005441458197310567,
+        "is_recalled": true
+      },
+      {
+        "id": "12",
+        "chunk_id": "12",
+        "text": "You do not look at the wheel.\n\n\u201cBefore anyone touches it,\u201d you say, \u201ctell us what Tomas Quill was to you.\u201d\n\nThe question strikes Vela more cleanly than an accusation would have. Her palm remains on the steel cabinet, but the tendons stand beneath her wet skin. For a few seconds the relay gives you only its old noises: rain finding a loose conduit, current whispering in dead insulation, the small clockwork tick of the wheel holding itself still.\n\nThen Vela says, \u201cHe was my co-signatory.\u201d\n\nNiko\u2019s face changes.\n\n\u201cNot his assistant,\u201d Vela adds, looking at him. \u201cNot his subordinate. We built the continuity envelope together.\u201d\n\nFrom the threshold, Ren goes very quiet.\n\nVela takes her hand from the cabinet. The absence of it feels like a door opening.\n\n\u201cQuill handled field audits. I built legacy relays\u2014systems that could preserve an incomplete case when the current system was compromised or an auditor was removed.\u201d Her mouth twists around the last word. \u201cIt was supposed to be a brake. A way to keep one person\u2019s testimony from vanishing because the office around them had decided it was inconvenient.\u201d\n\n\u201cA dead man\u2019s signature,\u201d Elian says, \u201cwas your brake?\u201d\n\n\u201cNo.\u201d Vela meets her stare. She does not flinch, which is not the same as innocence. \u201cA temporary envelope was. Two living signatories, a short expiry, a physical chain of custody. Quill and I designed it to die with the case.\u201d\n\nShe turns toward the cloudy glass over the ledger.\n\n\u201cAfter the pressure incident, someone retained his half of the architecture and severed mine. On paper, Quill was dead and I had resigned. In practice, the envelope kept accepting Quill\u2019s authority. It became useful. A dead auditor cannot refuse a transfer. Cannot report an anomaly. Cannot remember that someone used his name.\u201d\n\nThe rain intensifies beyond the chamber, turning the memorial\u2019s lamps into trembling amber wounds. Sister Calyx has come as far as the open gate permits, pencil held against her thumb, listening with the hard stillness of a person committing every syllable to paper.\n\n\u201cAnd Elian?\u201d you ask.\n\nVela\u2019s gaze drops\u2014not to Elian\u2019s key, but to the old scar behind Elian\u2019s left ear. Her own scar, on the opposite side, whitens under the chamber light.\n\n\u201cI knew a cradle was being prepared,\u201d she says. \u201cI knew it had been routed under Quill\u2019s seal. I did not know whose body they meant to certify until I saw the first relay request. By then I had no access left that could not be watched.\u201d\n\n\u201cThat is not an answer,\u201d Elian says.\n\n\u201cNo.\u201d Vela\u2019s voice is low. \u201cIt is the reason I have spent three years trying to find the ledger before the people who took the envelope learned how much of themselves it remembers.\u201d\n\nRen speaks from outside the line Elian drew for him. \u201cYou could have reported it.\u201d\n\nVela looks at him with a tired contempt that seems older than the room. \u201cTo whom? The Office that sealed Quill\u2019s quarantine request? The same Office that placed a preservation order on Mara Vey before anyone had heard what was in her book?\u201d\n\nRen\u2019s jaw tightens. He does not cross the threshold.\n\nVela\u2019s attention returns to you. \u201cThere is one thing more. The first page will name the order that moved Elian\u2019s cradle. But the wheel was armed to transmit every later page once it turns. Those pages include people who used Quill\u2019s seal to get medicine past Helix holds, to move children out of custody blocks, to disappear from violent homes. Some are guilty. Some are alive because the envelope was abused.\u201d\n\nHer eyes flick toward Mara\u2019s coat, where the anchor book rests like a second heart.\n\n\u201cAnd somewhere in that chain is the authorization for your first certification. I saw the phrase *pre-collapse variance* in an internal relay request. I never saw the originating file. Quill did. He told me it frightened him.\u201d\n\nElian closes her fingers more firmly around the brass key. Not trust. Not yet. But Vela has placed herself inside the crime instead of above it.\n\nThe ledger wheel waits between all of you: an answer that may expose the people it cannot save. Calyx\u2019s pencil is ready. Ren is still outside, publicly held to his word. And in the rain-muted hall beyond, the witnesses have begun to understand that the first page is not the whole truth\u2014it is only the first thing truth will cost.\n\n\u201cWhat do we do?\u201d Elian asks.\n\nThis time, she asks no one in particular.\n\nThe key remains in her hand. The choice remains painfully shared.\n\nRequire Vela to admit Sister Calyx into the chamber and give her testimony again with a durable witness present.",
+        "content_type": "narrative",
+        "metadata": {
+          "season": 1,
+          "episode": 2,
+          "scene_number": 10,
+          "world_time": "2189-10-17T19:40:00+00:00"
+        },
+        "model_scores": {
+          "Octen-Embedding-4B": 0.32071895529444516
+        },
+        "text_score": 0.5380960364901808,
+        "vector_score": 0.32071895529444516,
+        "score": 0.10968414210067495,
+        "source": "multi_model_hybrid_search",
+        "original_score": 0.3641943715335923,
+        "reranker_score": 0.0006083294865675271,
+        "is_recalled": true
+      },
+      {
+        "id": "15",
+        "chunk_id": "15",
+        "text": "You nod once.\n\n\u201cDo it.\u201d\n\nVela\u2019s eyes close\u2014not in relief, but in acceptance of a sentence she helped write years ago.\n\n\u201cElian,\u201d she says.\n\nElian braces the brass key in the wheel\u2019s throat. Her knuckles whiten. You come to her other side without touching her, close enough that she can feel you there if she chooses to. Calyx stands behind the cabinet with her pencil ready. Niko watches the chamber door, one shoulder angled toward the rain-dark arcade.\n\nVela kneels and slides two fingers beneath the cabinet\u2019s brass collar.\n\nFor an instant, nothing happens.\n\nThen the relay wakes in earnest.\n\nA buried motor turns somewhere below the tiles. Blue-white current threads through the old conduits, chasing itself under the green glaze. The cloudy glass over the ledger clears from its center outward, not cleanly but in widening rings, as though a drowned eye were opening.\n\n\u201cHold it,\u201d Vela says.\n\nElian holds.\n\nVela finds a filament no thicker than a hair. It glows a dull red between her fingers.\n\n\u201cThis is the part nobody gets to call mercy afterward,\u201d she says.\n\nShe pulls.\n\nThe sound is small.\n\nA sharp metallic snap, almost lost beneath the rain.\n\nEvery light in the relay chamber dies.\n\nFor one black second, Vesper Station seems to have stopped breathing.\n\nThen emergency strips flare along the floor. The ledger wheel jerks once under Elian\u2019s hand and releases its first sealed leaf. It rises beneath the glass, old paper preserved in a skin of polymer, its typewritten lines dark and merciless.\n\nAt the same moment, somewhere beyond the room, something answers.\n\nNot an alarm. A single descending tone passes through the building\u2019s bones\u2014a breach pulse, sent outward into the wet dark toward whoever armed the relay.\n\nNiko swears under his breath. \u201cThat got out.\u201d\n\nVela does not look away from the page. \u201cYes.\u201d\n\nCalyx leans close enough to read without touching the glass. Her pencil begins to move.\n\nThe order is brief. Old civic language, before the Office learned to make its cruelties sound kind.\n\n**EMERGENCY MORTUARY TRANSFER: ELIAN ROOK.**\n\n**Disposition: Continuity removal pending containment review.**\n\n**Rationale: Witness retains unharmonized proximity to protected subject M. Vey, designated pre-collapse variance. Direct reconciliation contraindicated.**\n\nBelow it, beneath the authorization field, sits a name.\n\n**DR. SERA VEY**\n\nThe chamber narrows around it.\n\nYour mouth has gone dry enough that breathing hurts.\n\nThe recording in your anchor book comes back all at once: your mother\u2019s laugh, the orange peel, her warm voice saying *good work* to a terrified child. Not an invented voice. Not necessarily. But a voice now standing at the foot of a document that ordered Elian Rook removed from the world rather than allowed near you.\n\nElian reads the name twice.\n\nWhen she speaks, her voice has no edge left in it. That is worse.\n\n\u201cYour mother signed it.\u201d\n\nVela looks at you, then down. \u201cShe authorized the transfer order. This page does not say whether she originated it, whether she was compelled, or what she was told about the cradle. The rest of the chain might have.\u201d\n\n*Might have.* The word lies in the severed spine like a shard.\n\nFrom beyond the gate, Ren says, \u201cSera Vey was not a mortuary authority.\u201d\n\nNobody has invited him in. He remains where Elian made him stand, framed by memorial light and rain.\n\n\u201cShe was Early Continuity,\u201d he continues. His face has lost the careful neutrality he wore into the hall. \u201cA child-certification specialist. Her name should not be on a removal order.\u201d\n\n\u201cYet it is,\u201d Calyx says. She copies every line, then marks beneath them: *Seen directly through local ledger display after spine severance. Chain subsequently uncertifiable.* Her handwriting does not tremble.\n\nThe service door in the arcade opens.\n\nThis time no one closes it gently.\n\nA strip of rain-pale light falls across the far wall. Niko shifts toward the threshold, every line of him listening. Out in the hall, someone murmurs; then the memorial crowd falls silent as it realizes the breach tone came from inside their walls.\n\nElian\u2019s hand remains on the key. She is looking at the name, not at you.\n\n\u201cI was put in a cradle because I remembered you,\u201d she says. \u201cAnd your mother signed the order.\u201d\n\nThe first page is yours now\u2014real enough to wound, fragile enough to be attacked from every direction. Behind it, the rest of the ledger has become a locked country of uncertifiable ghosts. Beyond the chamber, whoever received the breach pulse is no longer merely listening.\n\nNiko glances back at you. \u201cWe have seconds before whoever used that service door decides whether they came for the paper, the people, or the cabinet.\u201d\n\nWhat do you make visible first?\n\nStay with Elian and ask what she needs from you now that the first page has named your mother.",
+        "content_type": "narrative",
+        "metadata": {
+          "season": 1,
+          "episode": 2,
+          "scene_number": 13,
+          "world_time": "2189-10-17T19:53:00+00:00"
+        },
+        "model_scores": {
+          "Octen-Embedding-4B": 0.3457795910826036
+        },
+        "text_score": 0.41215868846226106,
+        "vector_score": 0.3457795910826036,
+        "score": 0.10933996682060611,
+        "source": "multi_model_hybrid_search",
+        "original_score": 0.35905541055853507,
+        "reranker_score": 0.0023190623614937067,
+        "is_recalled": true
+      },
+      {
+        "id": "17",
+        "chunk_id": "17",
+        "text": "You let the exhaustion stay where it is\u2014in your mouth, in the small sway of the tiles beneath your shoes\u2014and make your voice carry anyway.\n\n\u201cCalyx\u2019s testimony is not for surrender.\u201d\n\nThe stranger\u2019s raised hand trembles once. Rain ticks from their cuff onto the arcade concrete.\n\n\u201cNo one moves,\u201d you say. \u201cYou tell us who sent you.\u201d\n\nFor a moment the hall seems to listen with its walls. The old lanterns beyond the gate burn through wet air; the mourners do not come closer, but neither do they disperse. Calyx has one hand inside her coat, not touching the copy so much as reminding herself it is there.\n\nThe stranger looks past you toward the cabinet glass, toward Sera Vey\u2019s name trapped beneath it. Then, unexpectedly, they look at Ren.\n\n\u201cAsk him,\u201d they say.\n\nRen\u2019s face does not change. Only the sealed petition at his side makes a minute crackle beneath his grip.\n\n\u201cI did not send this person,\u201d he says.\n\n\u201cNot directly,\u201d the stranger answers. Their hidden hand comes out slowly. Empty. A thin civic access wafer lies between two fingers, its authorization face scorched blank. \u201cRecords Integrity sent a retrieval notice to my terminal forty-three minutes ago. It bore Vale\u2019s containment reference. The notice said a compromised relay had generated unlicensed physical derivatives.\u201d\n\nCalyx\u2019s expression hardens. \u201cPaper,\u201d she says.\n\n\u201cPaper,\u201d the stranger agrees. \u201cAnd a location. This hall. A preservation directive was attached: recover the newest derivative, identify all prior copies, hold the site until search authority arrives.\u201d\n\nRen steps as far as the threshold permits and no farther. Rain stitches dark lines down his hair and collar.\n\n\u201cMy containment reference was used?\u201d\n\nThe stranger gives a short, frightened laugh. \u201cYou tell me. The seal parsed. My supervisor said it had been escalated above her access. Then the service log disappeared.\u201d\n\nVela turns from the ruined transmit spine. Her eyes settle on the scorched wafer with a recognition that is not relief.\n\n\u201cA borrowed chain,\u201d she says. \u201cSomeone is making the Office look like it has already chosen a side.\u201d\n\nThe stranger flinches at that\u2014not because it is false, but because it is larger than whatever job they thought they had accepted. \u201cI don\u2019t care who is making it look like anything,\u201d they say. \u201cIf I return without a copy, they will run my memory for the missing log. If a search team comes here, they will not ask politely what the hall remembers. They will reconcile the discrepancy and call it civic hygiene.\u201d\n\nThe words leave a silence behind them.\n\nOutside, one of the mourners touches a thumb to her temple. Another sees and does the same. A small, stubborn motion passing through the hall: memory offered in good faith.\n\nNiko shifts his weight near the service door, keeping his body angled between the stranger and Elian. \u201cSo you came to buy your way out with her paper.\u201d\n\n\u201cI came to keep them from taking all of it,\u201d the stranger says. \u201cThere is a difference.\u201d\n\n\u201cSometimes,\u201d Ren says quietly.\n\nThat earns him the stranger\u2019s eyes again. \u201cThen prove it, Vale. Your name is on the order. Either revoke it in front of the people who heard the threat, or tell them whose authority can write through yours.\u201d\n\nElian says nothing. Her hand stays locked around the brass key. But she looks at you, then at Calyx\u2014not asking Mara to decide what happens to the testimony, only measuring who will let it remain hers.\n\nThe stranger has given you something: not a sponsor, but a fault line. Ren can disclaim the order, invoke his blind audit, or refuse and let his procedural promise rot in public. And somewhere behind the erased log, someone knows enough about Calyx\u2019s sheets to turn a frightened municipal worker into a knife.\n\nThe rain thickens on the arcade roof, loud enough to make secrets briefly expensive.\n\nWhat do you press first?\n\nAsk the stranger to state their name and repeat the vanished service log exactly while Calyx records it in wet ink.",
+        "content_type": "narrative",
+        "metadata": {
+          "season": 1,
+          "episode": 2,
+          "scene_number": 15,
+          "world_time": "2189-10-17T19:58:00+00:00"
+        },
+        "model_scores": {
+          "Octen-Embedding-4B": 0.34561702169765474
+        },
+        "text_score": 0.4994561632604469,
+        "vector_score": 0.34561702169765474,
+        "score": 0.11356078058623689,
+        "source": "multi_model_hybrid_search",
+        "original_score": 0.37638485001021316,
+        "reranker_score": 0.0009218936902470887,
+        "is_recalled": true
       },
       {
         "id": "retrograde_summary:27",
@@ -150,7 +287,8 @@
           "world_event_id": 177,
           "recorded_at_chunk_id": 49,
           "chronology": "recent_past",
-          "created_at": "2026-08-21T04:52:48.234363+00:00"
+          "created_at": "2026-08-21T04:52:48.234363+00:00",
+          "recorded_at_world_time": "2189-10-17T22:37:00+00:00"
         },
         "model_scores": {
           "Octen-Embedding-4B": 0.5356342750031658
@@ -160,136 +298,8 @@
         "score": 0.12972653717763355,
         "source": "multi_model_hybrid_search",
         "original_score": 0.4285074200025327,
-        "reranker_score": 0.0016775873955339193
-      },
-      {
-        "id": "9",
-        "chunk_id": "9",
-        "text": "You take the anchor book from beneath your coat.\n\nRen\u2019s expression changes before you open it. Not fear exactly. Recognition\u2014the kind a careful man reserves for a fire behind a sealed door.\n\n\u201cMara,\u201d he says.\n\nYou set the book on the memorial lectern, beside Calyx\u2019s unfolded receipt. The old cover is swollen at the corners from rain it has survived with you. Your thumb finds the false seam in the rear binding.\n\n\u201cThis was altered,\u201d you say, and your voice goes farther than you expect. \u201cSomeone changed a recording I have kept because I believed it was proof of my own life.\u201d\n\nElian stands in the doorway, rain gathering in the dark folds of her jacket. Niko has one hand hovering near the maintenance gate but does not touch it. Across the hall, nobody moves. Even the tea urn seems to have stopped steaming.\n\nYou press play.\n\nStatic rasps from the dead speaker. Then comes a kitchen from a life you have spent years defending: a spoon against a glass; sunlight striking a metal rail; the dry snap of orange peel beneath a thumbnail.\n\nYour mother laughs.\n\nThe sound hits you below language. It is exactly right. That is what makes it monstrous.\n\nThen her voice says, warmly, intimately, in the cadence that taught you your own name:\n\n\u201cGood work, Mara. The subject has accepted the continuity prompt.\u201d\n\nThe hall seems to contract around the little machine.\n\nA man answers her. Older, clipped, carrying the antiseptic patience of a recorded instruction.\n\n\u201cVey\u2019s sensory anchors are holding. Remove the pre-collapse variance. Preserve the maternal affect. She will require it for certification work.\u201d\n\nThe next voice is yours.\n\nNot the voice you own now\u2014too young, frightened past the point of tears.\n\n\u201cWho is Elian Rook?\u201d\n\nA pause. Paper turned somewhere near the microphone.\n\nThen the man again:\n\n\u201cNot the first certification, Auditor Vey. The first one was you.\u201d\n\nThe speaker coughs static. For one terrible second your mother is there again, humming under her breath as though nothing has been said.\n\nThen Elian\u2019s voice breaks through the recording, ragged and close to panic.\n\n\u201cThey put me in the cradle because I remembered her. Mara\u2014find the body they could not reconcile.\u201d\n\nThe sound dies.\n\nNo one in Lantern Quay has been given the mercy of pretending they misheard it.\n\nA woman by the lantern rack puts both hands over her mouth. The lift steward stares at you as if the floor has shifted beneath the hall. Sister Calyx does not look away; her face has gone pale, but she reaches into her coat and produces a pencil, writing on the margin of the Quill receipt in fast, deliberate strokes.\n\nRen has not moved. Rainwater tracks from his hairline to his jaw.\n\n\u201cThat recording is not admissible as it stands,\u201d he says, though the phrase has lost its old smoothness. \u201cIt may be fabricated. It may be a hostile reconstruction.\u201d\n\n\u201cOf course it may,\u201d Calyx says. \u201cSo is every memory you have taught us to surrender.\u201d\n\nElian comes one step inside. Her eyes stay on you, not the speaker.\n\n\u201cThey used you,\u201d she says. It is not absolution. It is worse: a fact with room for all the harm still inside it.\n\nFrom the arcade, the maintenance gate gives a hard mechanical clack.\n\nNiko turns. The dead access light has awakened into a narrow, unwavering red.\n\n\u201cSomeone has keyed the other side,\u201d he says. \u201cThey have the relay awake now.\u201d\n\nA voice leaks through the gate\u2019s ancient intercom, distorted by water and age.\n\n\u201cDo not open that ledger,\u201d it says. \u201cTomas Quill did not die. He was made reusable.\u201d\n\nThe line cuts.\n\nRen\u2019s gaze snaps to the brass key in your hand. For an instant, his control breaks cleanly enough for you to see what lies beneath it: not merely institutional alarm, but recognition.\n\nThe public record now holds three intolerable things: Elian Rook alive; Tomas Quill\u2019s dead seal in motion; and Mara Vey\u2019s most private memory possibly built as a tool. Beyond the hall, the relay is no longer waiting for permission.\n\nWhat do you do with the truth while it is still yours to carry?\n\nAsk Ren what he knows about a reusable Tomas Quill identity, forcing him to answer before the memorial witnesses.",
-        "content_type": "narrative",
-        "metadata": {
-          "season": 1,
-          "episode": 2,
-          "scene_number": 7,
-          "world_time": "2189-10-17 19:29:00+00:00"
-        },
-        "model_scores": {
-          "Octen-Embedding-4B": 0.40348223686500284
-        },
-        "text_score": 0.41215868846226106,
-        "vector_score": 0.40348223686500284,
-        "score": 0.12213276604469095,
-        "source": "multi_model_hybrid_search",
-        "original_score": 0.40521752718445453,
-        "reranker_score": 0.0008107255562208593
-      },
-      {
-        "id": "11",
-        "chunk_id": "11",
-        "text": "You put the brass key in Elian\u2019s palm.\n\nFor a moment neither of you moves.\n\nThe key looks almost indecently small between her wet, work-worn fingers\u2014too little metal to carry a woman\u2019s stolen life, a dead auditor\u2019s signature, your mother\u2019s voice rearranged into an instrument. Elian closes her hand around it. Her eyes lift to yours.\n\n\u201cYou don\u2019t get to decide this one,\u201d she says.\n\nIt is not cruelty. It is the boundary of a country you helped burn.\n\nThen she turns toward the maintenance gate.\n\nRen takes half a step after her before stopping himself. Whatever his officers are hearing through their discreet earpieces, whatever the sealed petition expects him to do, he does not give it the satisfaction of a chase. Sister Calyx gathers her coat at the throat and comes out from the memorial\u2019s lanternlight, pencil still tucked behind one ear.\n\n\u201cElian,\u201d Ren says. \u201cThe access notice\u2014\u201d\n\n\u201cYou said Calyx comes,\u201d Elian answers without looking back. \u201cYou said I come.\u201d\n\nThe rain sharpens, drumming on the arcade roof until the world becomes a narrow room of water and iron.\n\n\u201cAnd Mara?\u201d Calyx asks.\n\nElian\u2019s grip tightens around the key.\n\n\u201cMara comes,\u201d she says. \u201cShe sees what her name did.\u201d\n\nThe sentence lands without raising its voice.\n\nRen\u2019s face empties of everything but calculation. \u201cAnd me?\u201d\n\nElian finally looks at him. \u201cYou made your offer in front of witnesses. Stand where they can remember whether you keep it.\u201d\n\nBehind him, the memorial hall holds its breath. The lift steward has moved into the doorway; two mourners stand close beside him, not brave exactly, but unwilling now to leave the official alone with the story. Calyx reaches for the paper receipt inside her coat, then thinks better of it and leaves it where it is.\n\n\u201cYou are a witness from there,\u201d she tells Ren. \u201cBe one.\u201d\n\nNiko has already knelt beside the gate\u2019s old lock housing. He watches Elian approach with the wary attention of someone observing a live wire choose whom to strike.\n\n\u201cIt won\u2019t need force,\u201d he says. \u201cIt recognizes that key.\u201d\n\n\u201cI hope it remembers better than people do,\u201d Elian says.\n\nShe sets the brass into the lock.\n\nThe mechanism takes it with a soft, intimate click.\n\nFor one suspended second, nothing changes. Then somewhere inside the wall, gears begin to turn. Not simulated sound, not a clean electronic acknowledgment: actual teeth finding actual teeth under decades of civic dust. The gate folds inward on a pair of reluctant hinges.\n\nBeyond it lies no escape route.\n\nA narrow relay chamber has been waiting behind the wall: tiled in old municipal green, threaded with obsolete fiber conduits, its floor shining with rain tracked in from another entrance. At its center stands a waist-high steel cabinet crowned by a mechanical ledger wheel, each page sealed beneath cloudy glass.\n\nAnd beside it stands a woman in a soaked silver transit coat.\n\nShe has no weapon raised. Her hands are visible, though one is pressed flat against the ledger cabinet as if she has been feeling its pulse. Her hair is cut close enough to show a fine crescent of old surgical scarring behind her right ear.\n\nNiko goes still.\n\n\u201cVela Nash,\u201d he says.\n\nThe woman\u2019s gaze passes over him without surprise and settles on Elian\u2019s hand around the key.\n\n\u201cI told you not to open it,\u201d she says through the rain-noise.\n\nHer voice is the voice from the intercom: less distorted now, older than it sounded through the speaker, exhausted in a way that has had years to become structural.\n\nElian does not retreat. \u201cYou told us Tomas Quill was made reusable.\u201d\n\n\u201cI told you the smallest true thing I could say through an exposed line.\u201d Vela\u2019s eyes travel to Mara, and something in her expression contracts\u2014not recognition, not quite, but the pain of encountering a document she had hoped was lost. \u201cQuill died. The envelope did not. And it was not supposed to be answering anyone anymore.\u201d\n\nRen\u2019s voice comes from the open gate, controlled and carrying. \u201cMs. Nash, identify your authority to access a restricted civic relay.\u201d\n\nVela laughs once, softly. \u201cThere it is.\u201d\n\nShe looks at Elian again.\n\n\u201cI can show you the first page,\u201d Vela says. \u201cThe one that tells you who ordered the cradle moved. But if we turn that wheel, every name after it becomes vulnerable\u2014yours, Ivo Senn\u2019s, Mara Vey\u2019s, people who thought Quill\u2019s dead seal was a place to hide. And someone has already armed the relay to transmit when it opens.\u201d\n\nThe ledger wheel waits under its smeared glass. Elian holds the key. Vela holds the chamber by sheer prior claim. Behind you, Ren remains in public view exactly as Elian commanded\u2014and the memorial witnesses can see every person who tries to cross that line.\n\nElian turns her face slightly toward you, not asking permission.\n\n\u201cTell me what kind of truth you came here for,\u201d she says.\n\nThe key is hers. The decision about the ledger is not yet anyone\u2019s alone.\n\nAsk Vela Nash to explain her connection to Tomas Quill before anyone touches the ledger wheel.",
-        "content_type": "narrative",
-        "metadata": {
-          "season": 1,
-          "episode": 2,
-          "scene_number": 9,
-          "world_time": "2189-10-17 19:36:00+00:00"
-        },
-        "model_scores": {
-          "Octen-Embedding-4B": 0.3965714717593217
-        },
-        "text_score": 0.5380960364901808,
-        "vector_score": 0.3965714717593217,
-        "score": 0.1278438174854598,
-        "source": "multi_model_hybrid_search",
-        "original_score": 0.42487638470549355,
-        "reranker_score": 0.0005441458197310567
-      },
-      {
-        "id": "retrograde_summary:21",
-        "memory_id": "retrograde_summary:21",
-        "summary_id": 21,
-        "world_event_id": 158,
-        "text": "In the recent past, at Lantern Quay Memorial Hall, Kessa Brin delivered a sealed reconciliation packet between Vela Nash and Tarin Quell; their renewed courtship was subsequently entered in the private registry as a marriage, and Tarin's diverted Guild registry favor was recorded against Kessa's route record.",
-        "content_type": "retrograde_summary",
-        "metadata": {
-          "summary_id": 21,
-          "world_event_id": 158,
-          "recorded_at_chunk_id": 46,
-          "chronology": "recent_past",
-          "created_at": "2026-08-21T04:44:21.498937+00:00"
-        },
-        "model_scores": {
-          "Octen-Embedding-4B": 0.46323376674853445
-        },
-        "text_score": 0.0,
-        "vector_score": 0.46323376674853445,
-        "score": 0.11479227874918922,
-        "source": "multi_model_hybrid_search",
-        "original_score": 0.3705870133988276,
-        "reranker_score": 0.005165963899344206
-      },
-      {
-        "id": "12",
-        "chunk_id": "12",
-        "text": "You do not look at the wheel.\n\n\u201cBefore anyone touches it,\u201d you say, \u201ctell us what Tomas Quill was to you.\u201d\n\nThe question strikes Vela more cleanly than an accusation would have. Her palm remains on the steel cabinet, but the tendons stand beneath her wet skin. For a few seconds the relay gives you only its old noises: rain finding a loose conduit, current whispering in dead insulation, the small clockwork tick of the wheel holding itself still.\n\nThen Vela says, \u201cHe was my co-signatory.\u201d\n\nNiko\u2019s face changes.\n\n\u201cNot his assistant,\u201d Vela adds, looking at him. \u201cNot his subordinate. We built the continuity envelope together.\u201d\n\nFrom the threshold, Ren goes very quiet.\n\nVela takes her hand from the cabinet. The absence of it feels like a door opening.\n\n\u201cQuill handled field audits. I built legacy relays\u2014systems that could preserve an incomplete case when the current system was compromised or an auditor was removed.\u201d Her mouth twists around the last word. \u201cIt was supposed to be a brake. A way to keep one person\u2019s testimony from vanishing because the office around them had decided it was inconvenient.\u201d\n\n\u201cA dead man\u2019s signature,\u201d Elian says, \u201cwas your brake?\u201d\n\n\u201cNo.\u201d Vela meets her stare. She does not flinch, which is not the same as innocence. \u201cA temporary envelope was. Two living signatories, a short expiry, a physical chain of custody. Quill and I designed it to die with the case.\u201d\n\nShe turns toward the cloudy glass over the ledger.\n\n\u201cAfter the pressure incident, someone retained his half of the architecture and severed mine. On paper, Quill was dead and I had resigned. In practice, the envelope kept accepting Quill\u2019s authority. It became useful. A dead auditor cannot refuse a transfer. Cannot report an anomaly. Cannot remember that someone used his name.\u201d\n\nThe rain intensifies beyond the chamber, turning the memorial\u2019s lamps into trembling amber wounds. Sister Calyx has come as far as the open gate permits, pencil held against her thumb, listening with the hard stillness of a person committing every syllable to paper.\n\n\u201cAnd Elian?\u201d you ask.\n\nVela\u2019s gaze drops\u2014not to Elian\u2019s key, but to the old scar behind Elian\u2019s left ear. Her own scar, on the opposite side, whitens under the chamber light.\n\n\u201cI knew a cradle was being prepared,\u201d she says. \u201cI knew it had been routed under Quill\u2019s seal. I did not know whose body they meant to certify until I saw the first relay request. By then I had no access left that could not be watched.\u201d\n\n\u201cThat is not an answer,\u201d Elian says.\n\n\u201cNo.\u201d Vela\u2019s voice is low. \u201cIt is the reason I have spent three years trying to find the ledger before the people who took the envelope learned how much of themselves it remembers.\u201d\n\nRen speaks from outside the line Elian drew for him. \u201cYou could have reported it.\u201d\n\nVela looks at him with a tired contempt that seems older than the room. \u201cTo whom? The Office that sealed Quill\u2019s quarantine request? The same Office that placed a preservation order on Mara Vey before anyone had heard what was in her book?\u201d\n\nRen\u2019s jaw tightens. He does not cross the threshold.\n\nVela\u2019s attention returns to you. \u201cThere is one thing more. The first page will name the order that moved Elian\u2019s cradle. But the wheel was armed to transmit every later page once it turns. Those pages include people who used Quill\u2019s seal to get medicine past Helix holds, to move children out of custody blocks, to disappear from violent homes. Some are guilty. Some are alive because the envelope was abused.\u201d\n\nHer eyes flick toward Mara\u2019s coat, where the anchor book rests like a second heart.\n\n\u201cAnd somewhere in that chain is the authorization for your first certification. I saw the phrase *pre-collapse variance* in an internal relay request. I never saw the originating file. Quill did. He told me it frightened him.\u201d\n\nElian closes her fingers more firmly around the brass key. Not trust. Not yet. But Vela has placed herself inside the crime instead of above it.\n\nThe ledger wheel waits between all of you: an answer that may expose the people it cannot save. Calyx\u2019s pencil is ready. Ren is still outside, publicly held to his word. And in the rain-muted hall beyond, the witnesses have begun to understand that the first page is not the whole truth\u2014it is only the first thing truth will cost.\n\n\u201cWhat do we do?\u201d Elian asks.\n\nThis time, she asks no one in particular.\n\nThe key remains in her hand. The choice remains painfully shared.\n\nRequire Vela to admit Sister Calyx into the chamber and give her testimony again with a durable witness present.",
-        "content_type": "narrative",
-        "metadata": {
-          "season": 1,
-          "episode": 2,
-          "scene_number": 10,
-          "world_time": "2189-10-17 19:40:00+00:00"
-        },
-        "model_scores": {
-          "Octen-Embedding-4B": 0.32071895529444516
-        },
-        "text_score": 0.5380960364901808,
-        "vector_score": 0.32071895529444516,
-        "score": 0.10968414210067495,
-        "source": "multi_model_hybrid_search",
-        "original_score": 0.3641943715335923,
-        "reranker_score": 0.0006083294865675271
-      },
-      {
-        "id": "15",
-        "chunk_id": "15",
-        "text": "You nod once.\n\n\u201cDo it.\u201d\n\nVela\u2019s eyes close\u2014not in relief, but in acceptance of a sentence she helped write years ago.\n\n\u201cElian,\u201d she says.\n\nElian braces the brass key in the wheel\u2019s throat. Her knuckles whiten. You come to her other side without touching her, close enough that she can feel you there if she chooses to. Calyx stands behind the cabinet with her pencil ready. Niko watches the chamber door, one shoulder angled toward the rain-dark arcade.\n\nVela kneels and slides two fingers beneath the cabinet\u2019s brass collar.\n\nFor an instant, nothing happens.\n\nThen the relay wakes in earnest.\n\nA buried motor turns somewhere below the tiles. Blue-white current threads through the old conduits, chasing itself under the green glaze. The cloudy glass over the ledger clears from its center outward, not cleanly but in widening rings, as though a drowned eye were opening.\n\n\u201cHold it,\u201d Vela says.\n\nElian holds.\n\nVela finds a filament no thicker than a hair. It glows a dull red between her fingers.\n\n\u201cThis is the part nobody gets to call mercy afterward,\u201d she says.\n\nShe pulls.\n\nThe sound is small.\n\nA sharp metallic snap, almost lost beneath the rain.\n\nEvery light in the relay chamber dies.\n\nFor one black second, Vesper Station seems to have stopped breathing.\n\nThen emergency strips flare along the floor. The ledger wheel jerks once under Elian\u2019s hand and releases its first sealed leaf. It rises beneath the glass, old paper preserved in a skin of polymer, its typewritten lines dark and merciless.\n\nAt the same moment, somewhere beyond the room, something answers.\n\nNot an alarm. A single descending tone passes through the building\u2019s bones\u2014a breach pulse, sent outward into the wet dark toward whoever armed the relay.\n\nNiko swears under his breath. \u201cThat got out.\u201d\n\nVela does not look away from the page. \u201cYes.\u201d\n\nCalyx leans close enough to read without touching the glass. Her pencil begins to move.\n\nThe order is brief. Old civic language, before the Office learned to make its cruelties sound kind.\n\n**EMERGENCY MORTUARY TRANSFER: ELIAN ROOK.**\n\n**Disposition: Continuity removal pending containment review.**\n\n**Rationale: Witness retains unharmonized proximity to protected subject M. Vey, designated pre-collapse variance. Direct reconciliation contraindicated.**\n\nBelow it, beneath the authorization field, sits a name.\n\n**DR. SERA VEY**\n\nThe chamber narrows around it.\n\nYour mouth has gone dry enough that breathing hurts.\n\nThe recording in your anchor book comes back all at once: your mother\u2019s laugh, the orange peel, her warm voice saying *good work* to a terrified child. Not an invented voice. Not necessarily. But a voice now standing at the foot of a document that ordered Elian Rook removed from the world rather than allowed near you.\n\nElian reads the name twice.\n\nWhen she speaks, her voice has no edge left in it. That is worse.\n\n\u201cYour mother signed it.\u201d\n\nVela looks at you, then down. \u201cShe authorized the transfer order. This page does not say whether she originated it, whether she was compelled, or what she was told about the cradle. The rest of the chain might have.\u201d\n\n*Might have.* The word lies in the severed spine like a shard.\n\nFrom beyond the gate, Ren says, \u201cSera Vey was not a mortuary authority.\u201d\n\nNobody has invited him in. He remains where Elian made him stand, framed by memorial light and rain.\n\n\u201cShe was Early Continuity,\u201d he continues. His face has lost the careful neutrality he wore into the hall. \u201cA child-certification specialist. Her name should not be on a removal order.\u201d\n\n\u201cYet it is,\u201d Calyx says. She copies every line, then marks beneath them: *Seen directly through local ledger display after spine severance. Chain subsequently uncertifiable.* Her handwriting does not tremble.\n\nThe service door in the arcade opens.\n\nThis time no one closes it gently.\n\nA strip of rain-pale light falls across the far wall. Niko shifts toward the threshold, every line of him listening. Out in the hall, someone murmurs; then the memorial crowd falls silent as it realizes the breach tone came from inside their walls.\n\nElian\u2019s hand remains on the key. She is looking at the name, not at you.\n\n\u201cI was put in a cradle because I remembered you,\u201d she says. \u201cAnd your mother signed the order.\u201d\n\nThe first page is yours now\u2014real enough to wound, fragile enough to be attacked from every direction. Behind it, the rest of the ledger has become a locked country of uncertifiable ghosts. Beyond the chamber, whoever received the breach pulse is no longer merely listening.\n\nNiko glances back at you. \u201cWe have seconds before whoever used that service door decides whether they came for the paper, the people, or the cabinet.\u201d\n\nWhat do you make visible first?\n\nStay with Elian and ask what she needs from you now that the first page has named your mother.",
-        "content_type": "narrative",
-        "metadata": {
-          "season": 1,
-          "episode": 2,
-          "scene_number": 13,
-          "world_time": "2189-10-17 19:53:00+00:00"
-        },
-        "model_scores": {
-          "Octen-Embedding-4B": 0.3457795910826036
-        },
-        "text_score": 0.41215868846226106,
-        "vector_score": 0.3457795910826036,
-        "score": 0.10933996682060611,
-        "source": "multi_model_hybrid_search",
-        "original_score": 0.35905541055853507,
-        "reranker_score": 0.0023190623614937067
-      },
-      {
-        "id": "17",
-        "chunk_id": "17",
-        "text": "You let the exhaustion stay where it is\u2014in your mouth, in the small sway of the tiles beneath your shoes\u2014and make your voice carry anyway.\n\n\u201cCalyx\u2019s testimony is not for surrender.\u201d\n\nThe stranger\u2019s raised hand trembles once. Rain ticks from their cuff onto the arcade concrete.\n\n\u201cNo one moves,\u201d you say. \u201cYou tell us who sent you.\u201d\n\nFor a moment the hall seems to listen with its walls. The old lanterns beyond the gate burn through wet air; the mourners do not come closer, but neither do they disperse. Calyx has one hand inside her coat, not touching the copy so much as reminding herself it is there.\n\nThe stranger looks past you toward the cabinet glass, toward Sera Vey\u2019s name trapped beneath it. Then, unexpectedly, they look at Ren.\n\n\u201cAsk him,\u201d they say.\n\nRen\u2019s face does not change. Only the sealed petition at his side makes a minute crackle beneath his grip.\n\n\u201cI did not send this person,\u201d he says.\n\n\u201cNot directly,\u201d the stranger answers. Their hidden hand comes out slowly. Empty. A thin civic access wafer lies between two fingers, its authorization face scorched blank. \u201cRecords Integrity sent a retrieval notice to my terminal forty-three minutes ago. It bore Vale\u2019s containment reference. The notice said a compromised relay had generated unlicensed physical derivatives.\u201d\n\nCalyx\u2019s expression hardens. \u201cPaper,\u201d she says.\n\n\u201cPaper,\u201d the stranger agrees. \u201cAnd a location. This hall. A preservation directive was attached: recover the newest derivative, identify all prior copies, hold the site until search authority arrives.\u201d\n\nRen steps as far as the threshold permits and no farther. Rain stitches dark lines down his hair and collar.\n\n\u201cMy containment reference was used?\u201d\n\nThe stranger gives a short, frightened laugh. \u201cYou tell me. The seal parsed. My supervisor said it had been escalated above her access. Then the service log disappeared.\u201d\n\nVela turns from the ruined transmit spine. Her eyes settle on the scorched wafer with a recognition that is not relief.\n\n\u201cA borrowed chain,\u201d she says. \u201cSomeone is making the Office look like it has already chosen a side.\u201d\n\nThe stranger flinches at that\u2014not because it is false, but because it is larger than whatever job they thought they had accepted. \u201cI don\u2019t care who is making it look like anything,\u201d they say. \u201cIf I return without a copy, they will run my memory for the missing log. If a search team comes here, they will not ask politely what the hall remembers. They will reconcile the discrepancy and call it civic hygiene.\u201d\n\nThe words leave a silence behind them.\n\nOutside, one of the mourners touches a thumb to her temple. Another sees and does the same. A small, stubborn motion passing through the hall: memory offered in good faith.\n\nNiko shifts his weight near the service door, keeping his body angled between the stranger and Elian. \u201cSo you came to buy your way out with her paper.\u201d\n\n\u201cI came to keep them from taking all of it,\u201d the stranger says. \u201cThere is a difference.\u201d\n\n\u201cSometimes,\u201d Ren says quietly.\n\nThat earns him the stranger\u2019s eyes again. \u201cThen prove it, Vale. Your name is on the order. Either revoke it in front of the people who heard the threat, or tell them whose authority can write through yours.\u201d\n\nElian says nothing. Her hand stays locked around the brass key. But she looks at you, then at Calyx\u2014not asking Mara to decide what happens to the testimony, only measuring who will let it remain hers.\n\nThe stranger has given you something: not a sponsor, but a fault line. Ren can disclaim the order, invoke his blind audit, or refuse and let his procedural promise rot in public. And somewhere behind the erased log, someone knows enough about Calyx\u2019s sheets to turn a frightened municipal worker into a knife.\n\nThe rain thickens on the arcade roof, loud enough to make secrets briefly expensive.\n\nWhat do you press first?\n\nAsk the stranger to state their name and repeat the vanished service log exactly while Calyx records it in wet ink.",
-        "content_type": "narrative",
-        "metadata": {
-          "season": 1,
-          "episode": 2,
-          "scene_number": 15,
-          "world_time": "2189-10-17 19:58:00+00:00"
-        },
-        "model_scores": {
-          "Octen-Embedding-4B": 0.34561702169765474
-        },
-        "text_score": 0.4994561632604469,
-        "vector_score": 0.34561702169765474,
-        "score": 0.11356078058623689,
-        "source": "multi_model_hybrid_search",
-        "original_score": 0.37638485001021316,
-        "reranker_score": 0.0009218936902470887
+        "reranker_score": 0.0016775873955339193,
+        "is_recalled": true
       }
     ],
     "token_count": 3550
@@ -1754,8 +1764,8 @@
     "token_count": 3550
   },
   "metadata": {
-    "turn_id": "c6d21307-5573-4cd7-9049-4e43c5a170e5",
-    "timestamp": "2026-09-24T17:13:56.164744",
+    "turn_id": "7b7d5ced-2a07-45ca-811c-1aa882311e3e",
+    "timestamp": "2026-09-24T17:20:52.428261",
     "target_chunk_id": 49
   },
   "memory_state": {
