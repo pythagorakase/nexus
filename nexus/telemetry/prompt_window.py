@@ -169,6 +169,7 @@ class PromptWindowRecord(BaseModel):
     policy_headroom: int = Field(ge=0)
     headroom: int
     trimming: dict[str, Any] = Field(default_factory=dict)
+    validation_notes: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def count_openai_request(

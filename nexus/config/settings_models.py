@@ -724,6 +724,11 @@ class DeferredWorkSettings(BaseModel):
     lease_duration_seconds: float = Field(default=60, gt=0)
     heartbeat_interval_seconds: float = Field(default=10, gt=0)
     poll_interval_seconds: float = Field(default=5, gt=0)
+    unlock_hold_seconds: float | None = Field(
+        default=None,
+        gt=0,
+        description="Observer hold after an observed unlock; defaults to poll interval",
+    )
     generation_wait_seconds: float = Field(default=1, gt=0)
     error_backoff_seconds: float = Field(default=5, gt=0)
     milestone_recovery_age_seconds: float = Field(default=60, ge=0)
@@ -735,7 +740,9 @@ class DeferredWorkSettings(BaseModel):
 
     @model_validator(mode="after")
     def validate_heartbeat(self) -> "DeferredWorkSettings":
-        """Reject a heartbeat that cannot renew the lease before expiry."""
+        """Resolve the unlock hold and reject heartbeats that cannot renew in time."""
+        if self.unlock_hold_seconds is None:
+            self.unlock_hold_seconds = self.poll_interval_seconds
         if self.heartbeat_interval_seconds >= self.lease_duration_seconds:
             raise ValueError(
                 "Scheduler heartbeat interval must be below lease duration"

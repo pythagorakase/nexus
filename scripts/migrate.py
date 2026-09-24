@@ -16,8 +16,6 @@ Usage:
 
 from __future__ import annotations
 
-from nexus.database import connection_kwargs
-
 import argparse
 import importlib.util
 import logging
@@ -32,6 +30,7 @@ import psycopg2
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from nexus.database import connection_kwargs, maintenance_connection  # noqa: E402
 from scripts.database_targets import evaluation_dbname  # noqa: E402
 
 LOG = logging.getLogger("nexus.migrate")
@@ -276,7 +275,10 @@ def apply_migration(
 
 
 def migrate_database(
-    dbname: str, dry_run: bool = False, skip_locked: bool = True
+    dbname: str,
+    dry_run: bool = False,
+    skip_locked: bool = True,
+    write_locked_slot: bool = False,
 ) -> Tuple[int, int]:
     """
     Apply pending migrations to a single database.
@@ -287,14 +289,16 @@ def migrate_database(
         LOG.warning("Database %s does not exist, skipping", dbname)
         return (0, 0)
 
-    if skip_locked and is_db_locked(dbname):
+    if skip_locked and not write_locked_slot and is_db_locked(dbname):
         LOG.warning("Database %s is LOCKED (read-only), skipping", dbname)
         return (0, 0)
 
     LOG.info("Migrating %s...", dbname)
 
     try:
-        conn = get_connection(dbname)
+        conn = maintenance_connection(
+            dbname, write_locked_slot=write_locked_slot, operation="migrate"
+        )
     except psycopg2.Error as e:
         LOG.error("Cannot connect to %s: %s", dbname, e)
         return (0, 0)
@@ -369,7 +373,7 @@ def show_status() -> None:
         print(f"{dbname}:{status}")
 
         if locked:
-            print("  (locked - unlock to view/apply migrations)")
+            print("  (locked - use --write-locked-slot to apply migrations)")
             continue
 
         try:
@@ -448,6 +452,11 @@ def main():
         help="Show what would be applied without making changes",
     )
 
+    parser.add_argument(
+        "--write-locked-slot",
+        action="store_true",
+        help="Override read-only policy only for this maintenance session",
+    )
     args = parser.parse_args()
 
     # Default to --status if no target specified
@@ -465,7 +474,7 @@ def main():
         try:
             with conn.cursor() as cur:
                 cur.execute("SHOW default_transaction_read_only")
-                if cur.fetchone()[0] == "on":
+                if cur.fetchone()[0] == "on" and not args.write_locked_slot:
                     parser.error(f"Database {args.dbname} is read-only")
         finally:
             conn.close()
@@ -486,7 +495,9 @@ def main():
     total_skipped = 0
 
     for dbname in targets:
-        applied, skipped = migrate_database(dbname, dry_run=args.dry_run)
+        applied, skipped = migrate_database(
+            dbname, dry_run=args.dry_run, write_locked_slot=args.write_locked_slot
+        )
         total_applied += applied
         total_skipped += skipped
 

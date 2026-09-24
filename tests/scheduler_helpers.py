@@ -103,6 +103,7 @@ from contextlib import contextmanager
 @contextmanager
 def gateway_lane(monkeypatch):
     """Serve the real lifespan on the order's port and tear down only our server."""
+    import os
     import socket
     import subprocess
     import threading
@@ -110,18 +111,19 @@ def gateway_lane(monkeypatch):
     import uvicorn
     from nexus.api import narrative
 
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8018")
-    monkeypatch.setenv("NEXUS_API_URL", "http://127.0.0.1:8018")
+    port = int(os.environ.get("NEXUS_GATEWAY_PORT", "8018"))
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", str(port))
+    monkeypatch.setenv("NEXUS_API_URL", f"http://127.0.0.1:{port}")
     check = subprocess.run(
-        ["lsof", "-nP", "-iTCP:8018", "-sTCP:LISTEN"], capture_output=True, text=True
+        ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True
     )
     assert check.returncode == 1, check.stdout + check.stderr
     server = uvicorn.Server(
-        uvicorn.Config(narrative.app, host="127.0.0.1", port=8018, log_level="warning")
+        uvicorn.Config(narrative.app, host="127.0.0.1", port=port, log_level="warning")
     )
     with socket.socket() as listener:
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind(("127.0.0.1", 8018))
+        listener.bind(("127.0.0.1", port))
         listener.listen()
         thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]})
         thread.start()
@@ -131,10 +133,10 @@ def gateway_lane(monkeypatch):
                 not server.started and thread.is_alive() and time.monotonic() < deadline
             ):
                 time.sleep(0.01)
-            assert server.started, "Gateway 8018 failed to start"
+            assert server.started, f"Gateway {port} failed to start"
             yield narrative.app.state.scheduler
         finally:
             server.should_exit = True
             thread.join(timeout=30)
-            assert not thread.is_alive(), "Gateway 8018 did not shut down"
+            assert not thread.is_alive(), f"Gateway {port} did not shut down"
             run_cli(monkeypatch, "down")

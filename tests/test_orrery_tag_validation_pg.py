@@ -1514,3 +1514,35 @@ async def test_same_turn_declared_faction_first_application_commits(
         entity_id=int(faction_row[1]),
         tag=FACTION_TAG,
     ) == (accepting_world_time, None, accepted_chunk_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("supplied_id", [True, False])
+async def test_place_resolution_preserves_supplied_identity_conflicts(
+    qa649_db: _Qa649Database, supplied_id: bool
+) -> None:
+    """A supplied pair reaches conflict validation; name-only updates resolve."""
+    place = qa649_db.place
+    supplied_name = qa649_db.no_default_place.name if supplied_id else place.name
+    response = _response(
+        places=[
+            {
+                "id": place.wire_id if supplied_id else None,
+                "name": supplied_name,
+                "tags_add": [PLACE_TAG],
+                "condition": "The shutters are open.",
+            }
+        ]
+    )
+    validator = build_storyteller_tag_validator(
+        qa649_db.dbname, anchor_chunk_id_provider=lambda: qa649_db.anchor_chunk_id
+    )
+    if supplied_id:
+        with pytest.raises(ModelRetry, match="reason=id-name-conflict"):
+            await validator(SimpleNamespace(retry=0), response)
+        assert response.updates.places[0].name == supplied_name
+        assert response.updates.places[0].id == place.wire_id
+    else:
+        await validator(SimpleNamespace(retry=0), response)
+        assert response.updates.places[0].id == place.wire_id
+        assert response.updates.places[0].name == supplied_name

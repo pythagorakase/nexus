@@ -1019,23 +1019,22 @@ def test_faction_mention_remains_valid() -> None:
 
 
 @pytest.mark.parametrize("roster_operation", ["enter", "exit"])
-def test_scene_reset_rejects_roster_operations(roster_operation: str) -> None:
-    with pytest.raises(
-        ValidationError,
-        match="scene_reset cannot be combined with enter or exit",
-    ):
-        SkaldTurnWire.model_validate(
-            {
-                **SPARSE_WIRE_PAYLOAD,
-                "presence": {
-                    "scene_reset": {
-                        "place": {"kind": "place", "name": "Archive"},
-                        "present": [],
-                    },
-                    roster_operation: [{"kind": "character", "name": "Brena Tideloft"}],
+def test_scene_reset_repairs_roster_operations(roster_operation: str) -> None:
+    wire = SkaldTurnWire.model_validate(
+        {
+            **SPARSE_WIRE_PAYLOAD,
+            "presence": {
+                "scene_reset": {
+                    "place": {"kind": "place", "name": "Archive"},
+                    "present": [],
                 },
-            }
-        )
+                roster_operation: [{"kind": "character", "name": "Brena Tideloft"}],
+            },
+        }
+    )
+    assert not wire.presence.enter and not wire.presence.exit
+    expected = ["Brena Tideloft"] if roster_operation == "enter" else []
+    assert [ref.name for ref in wire.presence.scene_reset.present] == expected
 
 
 @pytest.mark.parametrize(

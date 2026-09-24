@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
+from nexus.api.native_structured_output import WireContractViolation
+
 if TYPE_CHECKING:
     from nexus.agents.logon.skald_wire import (
         PresenceBaseline,
@@ -439,3 +441,51 @@ async def write_roster_async(conn: Any, chunk_id: int, roster: PresenceRoster) -
             r"(?<![\w:]):(\w+)", lambda match: f"${keys.index(match[1]) + 1}", query
         )
         await conn.execute(query, *(params[key] for key in keys))
+
+
+def resolve_place_update(
+    cur: Any,
+    *,
+    identifier: int | None,
+    name: str | None,
+    pending_names: frozenset[str] = frozenset(),
+    lock: bool = False,
+) -> tuple[int | None, str]:
+    """Resolve a place; only staging explicitly requests a shared row lock."""
+    lock_clause = " FOR SHARE" if lock else ""
+    if identifier is not None:
+        cur.execute(
+            f"SELECT id, name FROM places WHERE id = %s{lock_clause}", (identifier,)
+        )
+    else:
+        if not name:
+            raise ValueError("place state update requires an id or name")
+        cur.execute("SELECT to_regclass('public.place_aliases')")
+        row = cur.fetchone()
+        aliases_exist = next(iter(row.values())) if hasattr(row, "values") else row[0]
+        predicate = "lower(p.name) = lower(%s)"
+        params = [name]
+        if aliases_exist:
+            predicate += (
+                " OR EXISTS (SELECT 1 FROM public.place_aliases a "
+                "WHERE a.place_id = p.id AND lower(a.alias) = lower(%s))"
+            )
+            params.append(name)
+        cur.execute(
+            f"SELECT p.id, p.name FROM places p WHERE {predicate}{lock_clause}", params
+        )
+    rows = cur.fetchall()
+    if len(rows) > 1:
+        raise ValueError(f"Ambiguous place state update name {name!r}")
+    if rows:
+        row = rows[0]
+        if hasattr(row, "keys"):
+            return int(row["id"]), str(row["name"])
+        return int(row[0]), str(row[1])
+    if identifier is None and name in pending_names:
+        return None, name
+    identity = f"id {identifier}" if identifier is not None else f"name {name!r}"
+    raise WireContractViolation(
+        f"Unresolved place state update {identity}; new places must be declared "
+        "through new_entities in the same turn."
+    )
