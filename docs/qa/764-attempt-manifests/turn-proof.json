@@ -1,0 +1,190 @@
+{
+  "session": {
+    "accepted_chunk_id": 51,
+    "error_class": null,
+    "operation": "continue",
+    "parent_chunk_id": 50,
+    "phase": "complete",
+    "replaced_by_session_id": null,
+    "session_id": "3b4d8208-2c83-425a-a7b5-fa96f8c15afc",
+    "terminal_outcome": "accepted"
+  },
+  "phases": [
+    {
+      "phase": "retrieval",
+      "recorded_at": "2026-09-24 21:24:10.169962+00"
+    },
+    {
+      "phase": "assembly",
+      "recorded_at": "2026-09-24 21:24:54.044551+00"
+    },
+    {
+      "phase": "writer",
+      "recorded_at": "2026-09-24 21:24:55.0647+00"
+    },
+    {
+      "phase": "gaia",
+      "recorded_at": "2026-09-24 21:24:55.905872+00"
+    },
+    {
+      "phase": "staging",
+      "recorded_at": "2026-09-24 21:24:56.186239+00"
+    },
+    {
+      "phase": "complete",
+      "recorded_at": "2026-09-24 21:24:56.197384+00"
+    }
+  ],
+  "jobs": [
+    {
+      "generation_session_id": "3b4d8208-2c83-425a-a7b5-fa96f8c15afc",
+      "id": 2,
+      "queue": "correspondence_compaction",
+      "state": "queued"
+    }
+  ],
+  "manifests": [
+    {
+      "attempt": 1,
+      "config_sha256": "4bce67453eccfaf1ea1daffdce0f11165c6e0656302e53c42db63779a7f36c1d",
+      "created_at": "2026-09-24 21:24:55.952184+00:00",
+      "exposure_ids": [
+        388,
+        389,
+        390,
+        391,
+        392,
+        393,
+        394,
+        395,
+        396,
+        397,
+        398,
+        399,
+        400
+      ],
+      "generation_session_id": "3b4d8208-2c83-425a-a7b5-fa96f8c15afc",
+      "model_id": "TEST",
+      "outcome": "accepted",
+      "prompt_sha256": "d6bb41714b41a976054aba92219e9c1b890d9dc9647ef7c7268c9d21f789945c",
+      "provider_outcome": "accepted",
+      "recall_ids": [
+        162,
+        163,
+        164,
+        165
+      ],
+      "response_sha256": "e9efc304a9fe5766dbf6ac724017fae1cf78bc6f83da45be6c01ead4f2fd7be3",
+      "retrieval_ids": [
+        51
+      ],
+      "schema_version": 1,
+      "seat": "gaia",
+      "story_pin": {
+        "apex_context_window": null,
+        "gaia_model": "TEST",
+        "model": "TEST"
+      },
+      "updated_at": "2026-09-24 21:24:56.967778+00:00",
+      "validation": [],
+      "window_record": {
+        "block_tokens": {
+          "entity dossier": 2194,
+          "finished writer output": 164,
+          "historical context": 14915,
+          "instructions": 30,
+          "intertitle": 50,
+          "orrery imminent activity": 263,
+          "orrery joint beats": 216,
+          "orrery scene pressure": 319,
+          "orrery tag library": 3742,
+          "private storyteller correspondence": 5931,
+          "recent narrative": 14031,
+          "recent orrery rulings": 240,
+          "request framing": -85,
+          "scene conditions": 17,
+          "system": 1900,
+          "user input": 26,
+          "world knowledge": 252
+        },
+        "effective_ceiling": 71000,
+        "headroom": 26795,
+        "input_tokens": 44205,
+        "policy_headroom": 4000
+      },
+      "wire_schema_sha256": "c0a42c8bc77faca8ec714d4e6329819182a5b2b22429351a788d3c8ec9e2d2cb",
+      "ordered_block_count": 167
+    },
+    {
+      "attempt": 1,
+      "config_sha256": "4bce67453eccfaf1ea1daffdce0f11165c6e0656302e53c42db63779a7f36c1d",
+      "created_at": "2026-09-24 21:24:55.115012+00:00",
+      "exposure_ids": [
+        388,
+        389,
+        390,
+        391,
+        392,
+        393,
+        394,
+        395,
+        396,
+        397,
+        398,
+        399,
+        400
+      ],
+      "generation_session_id": "3b4d8208-2c83-425a-a7b5-fa96f8c15afc",
+      "model_id": "TEST",
+      "outcome": "accepted",
+      "prompt_sha256": "2bf3d4f16ec0cc7dd76829fedaddbf5b78c4f6f78b41635856f6025eddb9e78a",
+      "provider_outcome": "accepted",
+      "recall_ids": [
+        162,
+        163,
+        164,
+        165
+      ],
+      "response_sha256": "5bcce4b8f979e98738cbcbfb8f44a2bfecb4202073549dfe06b13a34c4ee0620",
+      "retrieval_ids": [
+        51
+      ],
+      "schema_version": 1,
+      "seat": "skald_writer",
+      "story_pin": {
+        "apex_context_window": null,
+        "gaia_model": "TEST",
+        "model": "TEST"
+      },
+      "updated_at": "2026-09-24 21:24:56.967778+00:00",
+      "validation": [],
+      "window_record": {
+        "block_tokens": {
+          "entity dossier": 2194,
+          "historical context": 14915,
+          "instructions": 30,
+          "intertitle": 50,
+          "orrery imminent activity": 263,
+          "orrery joint beats": 216,
+          "orrery scene pressure": 319,
+          "orrery tag library": 3742,
+          "private storyteller correspondence": 5931,
+          "recent narrative": 14031,
+          "recent orrery rulings": 240,
+          "request framing": -84,
+          "scene conditions": 17,
+          "scene roster": 22,
+          "system": 4580,
+          "user input": 26,
+          "world knowledge": 252
+        },
+        "effective_ceiling": 71000,
+        "headroom": 24256,
+        "input_tokens": 46744,
+        "policy_headroom": 4000
+      },
+      "wire_schema_sha256": "e80aa17fd14a13a21821de76a54e37856d90edbd2b907d7aefd858f642a496ad",
+      "ordered_block_count": 167
+    }
+  ]
+}
