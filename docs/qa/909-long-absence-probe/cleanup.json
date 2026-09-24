@@ -1,0 +1,43 @@
+{
+  "checks": [
+    {
+      "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks",
+      "result": [
+        [
+          "qa640_909_long_absence",
+          46,
+          49
+        ]
+      ]
+    },
+    {
+      "sql": "SELECT current_database(), count(*), max(id) FROM narrative_chunks",
+      "result": [
+        [
+          "save_04",
+          46,
+          49
+        ]
+      ]
+    },
+    {
+      "sql": "SELECT current_database()",
+      "result": [
+        [
+          "postgres"
+        ]
+      ]
+    },
+    {
+      "sql": "DROP DATABASE qa640_909_long_absence",
+      "result": "dropped"
+    },
+    {
+      "sql": "SELECT current_database(), datname FROM pg_database WHERE datname='qa640_909_long_absence'",
+      "result": []
+    }
+  ],
+  "nexus_down": "nothing running\n",
+  "lsof_exit_code": 1,
+  "lsof_stdout": ""
+}
