@@ -1,0 +1,37 @@
+{
+  "status": "Label-only measurement, not an implemented after-render",
+  "narrative_label_examples": [
+    {
+      "chunk_id": 8,
+      "label": "[Chunk 8 | 17 Oct 2189 \u00b7 19:27] ",
+      "added_tokens": 17
+    },
+    {
+      "chunk_id": 9,
+      "label": "[Chunk 9 | 17 Oct 2189 \u00b7 19:29] ",
+      "added_tokens": 17
+    },
+    {
+      "chunk_id": 11,
+      "label": "[Chunk 11 | 17 Oct 2189 \u00b7 19:36] ",
+      "added_tokens": 17
+    },
+    {
+      "chunk_id": 12,
+      "label": "[Chunk 12 | 17 Oct 2189 \u00b7 19:40] ",
+      "added_tokens": 17
+    },
+    {
+      "chunk_id": 15,
+      "label": "[Chunk 15 | 17 Oct 2189 \u00b7 19:53] ",
+      "added_tokens": 17
+    },
+    {
+      "chunk_id": 17,
+      "label": "[Chunk 17 | 17 Oct 2189 \u00b7 19:58] ",
+      "added_tokens": 17
+    }
+  ],
+  "total_added_tokens": 102,
+  "recalled_heading_tokens": 8
+}

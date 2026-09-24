@@ -1583,12 +1583,15 @@ class MEMNON:
             logger.error(f"Error fetching chunk {chunk_id}: {str(e)}")
             return None
 
-    def get_recent_chunks(self, limit: int = 10) -> Dict[str, Any]:
+    def get_recent_chunks(
+        self, limit: int = 10, *, through_chunk_id: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Retrieve the most recent narrative chunks.
 
         Args:
             limit: Maximum number of chunks to retrieve
+            through_chunk_id: Inclusive parent boundary; None uses the frontier
 
         Returns:
             Dictionary containing the recent chunks and metadata
@@ -1610,12 +1613,15 @@ class MEMNON:
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                     WHERE {playable_narrative_predicate()}
+                      AND (:through_chunk_id IS NULL OR nc.id <= :through_chunk_id)
                     ORDER BY nc.id DESC
                     LIMIT :limit
                 """
                 )
 
-                results = session.execute(query, {"limit": limit}).fetchall()
+                results = session.execute(
+                    query, {"limit": limit, "through_chunk_id": through_chunk_id}
+                ).fetchall()
 
                 chunks = []
                 for result in results:

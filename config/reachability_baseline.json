@@ -93,6 +93,7 @@
     "nexus/agents/lore/utils/chunk_operations.py",
     "nexus/agents/lore/utils/entity_inclusion.py",
     "nexus/agents/lore/utils/entity_queries.py",
+    "nexus/agents/lore/utils/scene_order.py",
     "nexus/agents/lore/utils/token_budget.py",
     "nexus/agents/lore/utils/turn_context.py",
     "nexus/agents/lore/utils/turn_cycle.py",

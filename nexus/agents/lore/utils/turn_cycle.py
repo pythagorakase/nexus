@@ -11,8 +11,14 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
+from nexus.agents.lore.utils.scene_order import (
+    hydrate_recalled_clocks,
+    is_recalled,
+    select_scene_memories,
+)
 from nexus.agents.orrery.cards import rendered_selection
 from nexus.agents.orrery.player_identity import canonical_player_character_id
+from nexus.config.settings_models import RenderLimits
 from nexus.memory.context_state import memory_identity
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 
@@ -395,15 +401,14 @@ class TurnCycleManager:
         if self.lore.memnon:
             try:
                 # Get chunk parameters from settings
-                chunk_params = (
-                    self.settings.get("Agent Settings", {})
-                    .get("LORE", {})
-                    .get("chunk_parameters", {})
-                )
-                initial_chunks = chunk_params.get("warm_slice_initial", 10)
+                initial_chunks = self.settings["lore"]["chunk_parameters"][
+                    "warm_slice_initial"
+                ]
 
-                # Get most recent chunks directly
-                recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
+                # Select the configured window ending at the requested parent.
+                recent_chunks = self.lore.memnon.get_recent_chunks(
+                    limit=initial_chunks, through_chunk_id=target_chunk_id
+                )
                 recent_list = recent_chunks.get("results", [])
                 if target_chunk_id is None and recent_list:
                     recent_list[0]["is_target"] = True
@@ -411,7 +416,7 @@ class TurnCycleManager:
                     recent_list = [
                         chunk
                         for chunk in recent_list
-                        if chunk.get("id") != target_chunk_id
+                        if int(chunk["id"]) < target_chunk_id
                     ]
 
                 warm_slice_chunks.extend(recent_list)
@@ -999,6 +1004,15 @@ class TurnCycleManager:
             "memory_state": turn_context.memory_state,
         }
 
+        self._select_scene_payload(turn_context.context_payload)
+        memories = (
+            turn_context.context_payload["warm_slice"]["chunks"]
+            + turn_context.context_payload["retrieved_passages"]["results"]
+        )
+        if any(is_recalled(memory) for memory in memories):
+            with self.lore.memnon.Session() as session:
+                hydrate_recalled_clocks(session, memories)
+
         if (
             getattr(self.lore, "enable_logon", True)
             and turn_context.target_chunk_id is not None
@@ -1140,6 +1154,19 @@ class TurnCycleManager:
                 limit=prompt_settings.max_rendered_recent_rulings,
             )
 
+    def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
+        """Freeze the deduplicated, capped selection before hydration and trimming."""
+        limits = RenderLimits.model_validate(
+            self.lore.settings.get("lore", {}).get("render_limits", {})
+        )
+        warm, retrieved = select_scene_memories(
+            payload["warm_slice"]["chunks"],
+            payload["retrieved_passages"]["results"],
+            limits.historical_passages,
+        )
+        payload["warm_slice"]["chunks"] = warm
+        payload["retrieved_passages"]["results"] = retrieved
+
     def _enforce_context_payload_budget(
         self, turn_context: TurnContext
     ) -> Dict[str, int]:
@@ -1169,6 +1196,7 @@ class TurnCycleManager:
             }
         logon = self.lore.logon
         window = turn_context.token_counts["apex_window"]
+        self._select_scene_payload(payload)
         requests = logon.measure_turn_requests(payload, window)
         writer = requests[0]
         tokens_before = writer.tokens
@@ -1210,14 +1238,16 @@ class TurnCycleManager:
                 break
             chunk = warm_chunks.pop(oldest_index)
             dropped_chunks.append(chunk)
-            drop(chunk, "recent narrative")
+            drop(chunk, "recalled scenes" if is_recalled(chunk) else "recent narrative")
             warm_chunks_dropped += 1
             tokens_after = writer.tokens
 
         while over_budget() and retrieved_passages:
             chunk = retrieved_passages.pop()
             dropped_chunks.append(chunk)
-            drop(chunk, "historical context")
+            drop(
+                chunk, "recalled scenes" if is_recalled(chunk) else "historical context"
+            )
             retrieved_passages_dropped += 1
             tokens_after = writer.tokens
 
@@ -1267,8 +1297,15 @@ class TurnCycleManager:
             "tokens_recovered": tokens_before - tokens_after,
             "dropped_chunk_ids": [memory_identity(chunk) for chunk in dropped_chunks],
             "dropped_blocks": {
-                "recent narrative": warm_chunks_dropped,
-                "historical context": retrieved_passages_dropped,
+                "recent narrative": sum(
+                    not is_recalled(chunk)
+                    for chunk in dropped_chunks[:warm_chunks_dropped]
+                ),
+                "historical context": sum(
+                    not is_recalled(chunk)
+                    for chunk in dropped_chunks[warm_chunks_dropped:]
+                ),
+                "recalled scenes": sum(is_recalled(chunk) for chunk in dropped_chunks),
             },
             "seats": {
                 request.budget.seat: {

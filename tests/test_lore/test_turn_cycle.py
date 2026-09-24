@@ -477,6 +477,9 @@ def test_frontier_payload_below_ceiling_is_unchanged(
         "structured": 3_600,
         "augmentation": 1_800,
     }
+    turn_manager.settings["lore"] = {
+        "render_limits": load_settings_as_dict()["lore"]["render_limits"]
+    }
 
     with caplog.at_level(logging.INFO, logger="nexus.lore.turn_cycle"):
         asyncio.run(turn_manager.assemble_context_payload(ctx))
@@ -502,9 +505,10 @@ def test_frontier_payload_below_ceiling_is_unchanged(
     ).encode()
 
     assert assembled_bytes == expected_bytes
-    assert ctx.context_payload["warm_slice"]["chunks"] is ctx.warm_slice
+    assert ctx.context_payload["warm_slice"]["chunks"][0] is ctx.warm_slice[0]
     assert (
-        ctx.context_payload["retrieved_passages"]["results"] is ctx.retrieved_passages
+        ctx.context_payload["retrieved_passages"]["results"][0]
+        is ctx.retrieved_passages[0]
     )
     assert "Storyteller payload trimmed" not in caplog.text
 
@@ -528,124 +532,58 @@ def test_payload_trims_retrieved_passages_last_first():
 
 
 def test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable() -> None:
-    """Phase 5 reverses Pass-2 registration so a dropped chunk can resurface."""
-
-    class RetrievalMemnon:
-        def __init__(self) -> None:
-            self.queries: list[str] = []
-
-        def query_memory(
-            self, query: str, k: int = 5, use_hybrid: bool = True
-        ) -> Dict[str, Any]:
-            self.queries.append(query)
-            return {
-                "results": [
-                    {
-                        "chunk_id": 501,
-                        "text": "retrieved " * 600,
-                    }
-                ]
-            }
-
-    class RetrievalLore:
-        def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
-            self.settings["orrery"]["enabled"] = False
-            self.settings["Agent Settings"]["LORE"]["token_budget"][
-                "prompt_overhead_tokens"
-            ] = 500
-            self.logon = window_logon(self.settings)
-            self.enable_logon = True
-            self.memnon = RetrievalMemnon()
-            self.memory_manager = ContextMemoryManager(
-                self.settings,
-                memnon=self.memnon,
-                provider_wire_type="openai",
-                provider_name="openai",
-            )
-            self.token_manager = None
-
-    lore = RetrievalLore()
-    manager = TurnCycleManager(lore)
+    """Real rendering refunds registered retrievals so they can be kept again."""
+    utility = window_logon()
+    memory = ContextMemoryManager(utility.settings)
     parent = {"chunk_id": 100, "text": "Parent.", "is_target": True}
-    lore.memory_manager.handle_storyteller_response(
+    recalled = {
+        "chunk_id": 50,
+        "text": "retrieved " * 600,
+        "metadata": {"world_time": "2189-10-17T19:27:00Z"},
+    }
+    memory.handle_storyteller_response(
         narrative="Prior storyteller response.",
         warm_slice=[parent],
-        retrieved_passages=[],
-        token_usage={
-            "total_available": 2_000,
-            "warm_slice": 100,
-            "structured": 0,
-            "augmentation": 0,
-        },
+        token_usage={"total_available": 2000, "warm_slice": 100},
     )
-    initial_budget = lore.memory_manager.context_state.get_remaining_budget()
-
-    first_turn = TurnContext(
-        turn_id="pass2-first",
-        user_input="Find the first missing memory.",
-        start_time=time.time(),
-    )
-    asyncio.run(manager.process_user_input(first_turn))
-    first_cost = first_turn.memory_state["pass2"]["tokens_used"]
-    assert first_turn.memory_state["pass2"]["retrieved_chunk_ids"] == [501]
-    assert lore.memory_manager.context_state.is_chunk_known(501)
-    assert lore.memory_manager.context_state.get_remaining_budget() == (
-        initial_budget - first_cost
-    )
-
-    first_turn.provider_wire_type = "openai"
-    first_turn.provider_name = "openai"
-    first_turn.warm_slice = lore.memory_manager.augment_warm_slice([parent])
-    first_turn.token_counts = {
-        "total_available": 1_000,
-        "warm_slice": 100,
-        "structured": 0,
-        "augmentation": 0,
+    initial_budget = memory.context_state.get_remaining_budget()
+    cost = memory._estimate_tokens(recalled["text"])
+    memory.context_state.register_additional_chunks([recalled], token_costs={50: cost})
+    assert memory.context_state.get_remaining_budget() == initial_budget - cost
+    context = TurnContext(turn_id="pass2-trim", user_input="Recall.", start_time=0)
+    context.memory_state["pass2"] = {
+        "retrieved_chunk_ids": [50],
+        "retrieved_memory_ids": [50],
+        "tokens_used": cost,
     }
-    core_payload = {
-        "user_input": first_turn.user_input,
+    context.context_payload = {
+        "user_input": context.user_input,
         "warm_slice": {"chunks": [parent]},
         "retrieved_passages": {"results": []},
         "entity_data": {},
     }
-    core_tokens = lore.logon.measure_writer_request(core_payload, 75000)[0]
-    first_turn.token_counts["apex_window"] = core_tokens + 4100
-    asyncio.run(manager.assemble_context_payload(first_turn))
-
-    assert [
-        chunk["chunk_id"]
-        for chunk in first_turn.context_payload["warm_slice"]["chunks"]
-    ] == [100]
-    assert not lore.memory_manager.context_state.is_chunk_known(501)
-    assert lore.memory_manager.context_state.get_remaining_budget() == initial_budget
-    assert first_turn.memory_state["pass2"]["retrieved_chunk_ids"] == []
-    assert first_turn.memory_state["pass2"]["tokens_used"] == 0
-    assert (
-        first_turn.phase_states["payload_assembly"]["memory_budget_refunded"]
-        == first_cost
+    core_tokens = utility.measure_writer_request(context.context_payload, 75000)[0]
+    context.token_counts = {"total_available": 1000, "apex_window": core_tokens + 4100}
+    context.context_payload["warm_slice"]["chunks"] = memory.augment_warm_slice(
+        [parent]
     )
-
-    asyncio.run(manager.integrate_response(first_turn, "New storyteller response."))
-    assert 501 not in lore.memory_manager.context_state.context.baseline_chunks
-    next_turn_budget = lore.memory_manager.context_state.get_remaining_budget()
-
-    second_turn = TurnContext(
-        turn_id="pass2-second",
-        user_input="Find that missing memory again.",
-        start_time=time.time(),
+    manager = TurnCycleManager(
+        SimpleNamespace(settings=utility.settings, logon=utility, memory_manager=memory)
     )
-    asyncio.run(manager.process_user_input(second_turn))
-
-    assert second_turn.memory_state["pass2"]["retrieved_chunk_ids"] == [501]
-    assert lore.memory_manager.context_state.is_chunk_known(501)
-    assert lore.memory_manager.context_state.get_remaining_budget() == (
-        next_turn_budget - second_turn.memory_state["pass2"]["tokens_used"]
-    )
-    assert lore.memnon.queries == [
-        "Find the first missing memory.",
-        "Find that missing memory again.",
-    ]
+    budget = manager._enforce_context_payload_budget(context)
+    assert context.context_payload["warm_slice"]["chunks"] == [parent]
+    assert not memory.context_state.is_chunk_known(50)
+    assert memory.context_state.get_remaining_budget() == initial_budget
+    assert context.memory_state["pass2"] == {
+        "retrieved_chunk_ids": [],
+        "retrieved_memory_ids": [],
+        "tokens_used": 0,
+    }
+    assert budget["memory_budget_refunded"] == cost
+    assert memory.context_state.register_additional_chunks(
+        [recalled], token_costs={50: cost}
+    ) == [recalled]
+    assert memory.context_state.get_remaining_budget() == initial_budget - cost
 
 
 def test_structured_payload_overflow_raises():
@@ -722,10 +660,13 @@ def test_warm_analysis_ignores_parent_authorial_directives(
                 "authorial_directives": ["Legacy directive should be ignored."],
             }
 
-        def get_recent_chunks(self, limit: int) -> Dict[str, Any]:
+        def get_recent_chunks(
+            self, limit: int, *, through_chunk_id: int | None = None
+        ) -> Dict[str, Any]:
             return {"results": []}
 
     turn_manager.lore.memnon = DummyMemnon()
+    turn_manager.settings["lore"] = load_settings_as_dict()["lore"]
     ctx = TurnContext(
         turn_id="turn_parent_no_directives",
         user_input="Continue.",

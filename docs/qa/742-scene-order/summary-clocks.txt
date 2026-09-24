@@ -1,0 +1,13 @@
+BEGIN
+ id | recorded_at_chunk_id | chronology  | event_time |    recorded_at_time    
+----+----------------------+-------------+------------+------------------------
+ 21 |                   46 | recent_past |            | 2189-10-17 18:23:00-04
+ 27 |                   49 | recent_past |            | 2189-10-17 18:37:00-04
+(2 rows)
+
+ summaries | summaries_with_event_time | summaries_with_recording_anchor 
+-----------+---------------------------+---------------------------------
+        27 |                         0 |                              27
+(1 row)
+
+COMMIT

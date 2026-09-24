@@ -51,7 +51,7 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
     ): "Developer API documentation describing the function or module, not model instructions.",
     (
         "nexus/agents/lore/utils/chunk_operations.py",
-        "\n    Format a chunk with its metadata headers for Apex AI.\n    \n    Uses the same format as narrative_view to maintain consistency.\n    \n    Args:\n        chunk_data: Dictionary with chunk data and metadata\n        include_world_time: Whether to include world time in header\n        \n    Returns:\n        Formatted chunk text with headers\n    ",
+        "\n    Format a chunk with its metadata headers for Apex AI.\n\n    Uses the same format as narrative_view to maintain consistency.\n\n    Args:\n        chunk_data: Dictionary with chunk data and metadata\n        include_world_time: Whether to include world time in header\n\n    Returns:\n        Formatted chunk text with headers\n    ",
     ): "Developer API documentation describing the function or module, not model instructions.",
     (
         "scripts/api_openai.py",
