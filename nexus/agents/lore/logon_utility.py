@@ -75,6 +75,7 @@ from nexus.config.loader import get_provider_for_model  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
     OrreryRetrogradeMaturationSettings,
+    RenderLimits,
 )
 from nexus.config.story_model import StorySettings, read_story_settings
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
@@ -2334,12 +2335,11 @@ class LogonUtility:
     ) -> str:
         """Format context payload into a prompt for the Apex AI"""
         from nexus.config import load_settings
-        from nexus.config.settings_models import LORERenderLimits
         from nexus.telemetry.prompt_window import RenderedSections
 
         raw_limits = (self.settings.get("lore") or {}).get("render_limits")
         render_limits = (
-            LORERenderLimits.model_validate(raw_limits)
+            RenderLimits.model_validate(raw_limits)
             if raw_limits is not None
             else load_settings(self.settings_path).lore.render_limits
         )
@@ -2460,7 +2460,15 @@ class LogonUtility:
                         name = char.get("name", "Unknown")
                         location = char.get("current_location", "unknown location")
                         activity = char.get("current_activity", "status unknown")
-                        sections.append(f"- {name}: at {location}, {activity}")
+                        tags = ", ".join(
+                            (char.get("orrery_tag_summary") or "").split(", ")[
+                                : render_limits.character_tags
+                            ]
+                        )
+                        tag_detail = f" Tags: {tags}" if tags else ""
+                        sections.append(
+                            f"- {name}: at {location}, {activity}{tag_detail}"
+                        )
 
                 # Featured characters (full details)
                 featured_chars = characters.get("featured", [])
@@ -2470,7 +2478,16 @@ class LogonUtility:
                         name = char.get("name", "Unknown")
                         ref_type = char.get("reference_type", "")
                         summary = char.get("summary", "")
-                        sections.append(f"- {name} [{ref_type}]: {summary}")
+                        tags = ", ".join(
+                            (char.get("orrery_tag_summary") or "").split(", ")[
+                                : render_limits.character_tags
+                            ]
+                        )
+                        tag_detail = f"Tags: {tags}" if tags else ""
+                        detail = " ".join(
+                            part for part in (summary, tag_detail) if part
+                        )
+                        sections.append(f"- {name} [{ref_type}]: {detail}")
 
                         # Add detailed fields if present
                         if char.get("personality"):
