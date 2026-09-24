@@ -8,7 +8,7 @@ NEXUS_template is read only to export schema and vocabulary; no fleet writes.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import json
 import os
@@ -199,6 +199,27 @@ def lifecycle_runtime(
                         ],
                         input=schema + "\n" + seeds,
                     )
+                    # The fleet template intentionally waits for land-time migrations.
+                    # Upgrade only this fixture's private databases for branch proofs.
+                    with (
+                        closing(
+                            psycopg2.connect(dbname=dbname, **_cluster_params(cluster))
+                        ) as conn,
+                        conn,
+                        conn.cursor() as cur,
+                    ):
+                        cur.execute(
+                            "SELECT 1 FROM information_schema.columns "
+                            "WHERE table_schema = 'public' AND table_name = 'character_aliases' "
+                            "AND column_name = 'provenance'"
+                        )
+                        if cur.fetchone() is None:
+                            cur.execute(
+                                (
+                                    ROOT
+                                    / "migrations/123_character_alias_provenance.sql"
+                                ).read_text()
+                            )
         finally:
             admin.close()
 

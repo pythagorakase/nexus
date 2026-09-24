@@ -14,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
 from nexus.api.native_structured_output import WireContractViolation
+from nexus.config import load_settings
+from nexus.presence.normalization import normalize_identity_name
 
 if TYPE_CHECKING:
     from nexus.agents.logon.skald_wire import (
@@ -41,7 +43,11 @@ class RosterEntry(BaseModel):
     @property
     def key(self) -> RosterKey:
         """Return the canonical key, falling back only before resolution."""
-        return self.kind, self.id if self.id is not None else self.name.casefold()
+        return self.kind, (
+            self.id
+            if self.id is not None
+            else normalize_identity_name(self.name, load_settings().character_identity)
+        )
 
 
 class PresenceRoster(BaseModel):
@@ -277,26 +283,49 @@ class IdentityIndex:
     """Resolve canonical names and stored aliases without choosing an ambiguity."""
 
     def __init__(
-        self, entries: Iterable[RosterEntry], aliases: Iterable[Mapping[str, Any]] = ()
+        self,
+        entries: Iterable[RosterEntry],
+        aliases: Iterable[Mapping[str, Any]] = (),
+        *,
+        evidence: Mapping[RosterKey, Mapping[str, Any]] | None = None,
     ) -> None:
         self.by_id = {entry.key: entry for entry in entries}
+        self.evidence = dict(evidence or {})
         self.by_name: dict[tuple[str, str], set[RosterKey]] = {}
+        self.labels: list[tuple[str, str, RosterKey]] = []
         for entry in self.by_id.values():
+            self.labels.append((entry.kind, entry.name, entry.key))
             self.by_name.setdefault((entry.kind, entry.name.casefold()), set()).add(
                 entry.key
             )
         for alias in aliases:
             key: RosterKey = ("character", int(alias["character_id"]))
             if key in self.by_id:
+                self.labels.append(("character", str(alias["alias"]), key))
                 self.by_name.setdefault(
                     ("character", str(alias["alias"]).casefold()), set()
                 ).add(key)
+
+    def matching_keys(self, name: str, kind: Kind | None = None) -> set[RosterKey]:
+        """Match original catalog labels with the pre-mint normalization policy.
+
+        ``by_name`` remains the case-insensitive prose detector's search index;
+        identity matching must use original labels to honor case-sensitive settings.
+        """
+        settings = load_settings().character_identity
+        normalized = normalize_identity_name(name, settings)
+        return {
+            key
+            for candidate_kind, label, key in self.labels
+            if (kind is None or kind == candidate_kind)
+            and normalize_identity_name(label, settings) == normalized
+        }
 
     def resolve(self, entry: RosterEntry) -> RosterEntry:
         """Resolve an ID first, then an unambiguous canonical name or alias."""
         if entry.id is not None:
             return self.by_id.get(entry.key, entry)
-        keys = self.by_name.get((entry.kind, entry.name.casefold()), set())
+        keys = self.matching_keys(entry.name, entry.kind)
         if len(keys) > 1:
             raise ValueError(
                 f"Ambiguous {entry.kind} name {entry.name!r}: {sorted(keys)}"
@@ -308,29 +337,31 @@ def character_identity_index(
     character_rows: Iterable[Mapping[str, Any]], alias_rows: Iterable[Mapping[str, Any]]
 ) -> IdentityIndex:
     """Build the character resolver from the turn's already-prefetched catalog."""
+    characters = list(character_rows)
     return IdentityIndex(
         (
             RosterEntry(kind="character", id=int(row["id"]), name=row["name"])
-            for row in character_rows
+            for row in characters
         ),
         alias_rows,
+        evidence={("character", int(row["id"])): row for row in characters},
     )
 
 
-def _resolution_query(
-    kind: Kind, id: int | None, name: str | None
-) -> tuple[str, dict[str, Any]]:
+def _reference_index_entry(
+    index: IdentityIndex, kind: Kind, name: str | None
+) -> RosterEntry:
+    keys = index.matching_keys(name, kind) if name and name.strip() else set()
+    if len(keys) != 1:
+        raise ValueError(
+            f"{'Ambiguous' if keys else 'Unresolved'} {kind} reference name={name!r}: {sorted(keys)}"
+        )
+    return index.by_id[next(iter(keys))]
+
+
+def _reference_id_query(kind: Kind) -> str:
     table = {"character": "characters", "place": "places", "faction": "factions"}[kind]
-    if id is not None:
-        predicate, params = "item.id = :id", {"id": id}
-    else:
-        predicate, params = "lower(item.name) = lower(:name)", {"name": name}
-        if kind == "character":
-            predicate += " OR EXISTS (SELECT 1 FROM character_aliases a WHERE a.character_id = item.id AND lower(a.alias) = lower(:name))"
-    return (
-        f"SELECT item.id, item.name, item.entity_id FROM {table} item WHERE {predicate}",
-        params,
-    )
+    return f"SELECT item.id, item.name, item.entity_id FROM {table} item WHERE item.id = :id"
 
 
 def _resolved_entry(
@@ -347,18 +378,24 @@ def resolve_reference(
     conn: Any, *, kind: Kind, id: int | None, name: str | None
 ) -> RosterEntry:
     """Resolve a persistent reference, including aliases, or fail loudly."""
-    query, params = _resolution_query(kind, id, name)
-    return _resolved_entry(_rows(conn, query, params), kind, id, name)
+    if id is None:
+        from nexus.presence.identity import read_identity_index
+
+        return _reference_index_entry(read_identity_index(conn), kind, name)
+    return _resolved_entry(
+        _rows(conn, _reference_id_query(kind), {"id": id}), kind, id, name
+    )
 
 
 async def resolve_reference_async(
     conn: Any, *, kind: Kind, id: int | None, name: str | None
 ) -> RosterEntry:
     """Resolve a reference through an existing asyncpg transaction."""
-    query, params = _resolution_query(kind, id, name)
-    rows = await conn.fetch(
-        re.sub(r"(?<![\w:]):(\w+)", "$1", query), next(iter(params.values()))
-    )
+    if id is None:
+        from nexus.presence.identity import read_identity_index_async
+
+        return _reference_index_entry(await read_identity_index_async(conn), kind, name)
+    rows = await conn.fetch(_reference_id_query(kind).replace(":id", "$1"), id)
     return _resolved_entry(list(rows), kind, id, name)
 
 

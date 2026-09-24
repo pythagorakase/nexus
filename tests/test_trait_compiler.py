@@ -163,6 +163,26 @@ class TraitCompilerCursor:
         params = params or ()
         normalized = " ".join(sql.strip().upper().split())
 
+        if (
+            "SELECT C.ID, C.NAME, C.ENTITY_ID, C.SUMMARY, P.NAME AS CURRENT_LOCATION FROM CHARACTERS"
+            in normalized
+        ):
+            self._next_rows = [
+                {
+                    "id": key,
+                    "name": row["name"],
+                    "entity_id": row["entity_id"],
+                    "summary": None,
+                }
+                for key, row in self.characters.items()
+            ]
+            return
+        if "PG_ADVISORY_XACT_LOCK" in normalized or "CHARACTER_ALIASES" in normalized:
+            self._next_rows = []
+            return
+        if "SELECT 'PLACE' AS KIND" in normalized:
+            self._next_rows = []
+            return
         if "CURRENT_SETTING('NEXUS.WRITE_PRODUCER'" in normalized:
             self._next_row = ("",)
             return
@@ -605,6 +625,10 @@ class TraitCompilerCursor:
         row = self._next_row
         self._next_row = None
         return row
+
+    @property
+    def description(self):
+        return [(name,) for name in self._next_rows[0]] if self._next_rows else []
 
     def fetchall(self):
         rows = self._next_rows
@@ -1426,27 +1450,22 @@ def test_dependent_target_resolving_to_protagonist_is_remainder() -> None:
     assert cur.character_relationships == []
 
 
-def test_ambiguous_target_name_is_structured_remainder() -> None:
+def test_ambiguous_target_name_requires_identity_review() -> None:
+    from nexus.presence.identity import CharacterIdentityAmbiguity
+
     cur = TraitCompilerCursor()
     cur.characters[4] = {"entity_id": 504, "name": "Bren"}
     inputs = TraitCompileInputs(
         dependents=DependentsTraitInput(targets=[DependentTargetInput(name="Bren")])
     )
-
-    result = compile_character_traits(
-        cur,
-        character=_character("dependents", "resources", "allies", inputs=inputs),
-        character_id=1,
-        character_entity_id=501,
-        dry_run=True,
-    )
-
-    remainder = next(
-        item for item in result.prose_only_remainders if item.trait == "dependents"
-    )
-    assert remainder.trait == "dependents"
-    assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
-    assert remainder.details["match_count"] == 2
+    with pytest.raises(CharacterIdentityAmbiguity, match="Bren"):
+        compile_character_traits(
+            cur,
+            character=_character("dependents", "resources", "allies", inputs=inputs),
+            character_id=1,
+            character_entity_id=501,
+            dry_run=True,
+        )
 
 
 def test_obligation_character_counterparty_writes_edge_and_relationship() -> None:

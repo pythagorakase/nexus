@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "742-A: register the prompt package and retire the dead JSON batch readers and unused LORE prompt fallback",
+  "reason": "Track shared character identity normalization and the prompt registry; retain the prompt migration retirements.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -245,6 +245,8 @@
     "nexus/memory/retrieval_coverage.py",
     "nexus/presence/__init__.py",
     "nexus/presence/cues.py",
+    "nexus/presence/identity.py",
+    "nexus/presence/normalization.py",
     "nexus/presence/roster.py",
     "nexus/prompts/__init__.py",
     "nexus/prompts/registry.py",

@@ -752,7 +752,9 @@ class FakeRetrogradePersistenceCursor:
     def execute(self, sql: str, params: Optional[Any] = None) -> None:
         self.statements.append(sql)
         self.params.append(params)
-        if "current_setting('nexus.write_producer'" in sql:
+        if "SELECT 'place' AS kind" in sql:
+            self._result = []
+        elif "current_setting('nexus.write_producer'" in sql:
             self._result = [{"producer": ""}]
         elif "nexus.write_producer" in sql:
             self._result = []
@@ -810,6 +812,30 @@ class FakeRetrogradePersistenceCursor:
                     }
                 )
             self._result = rows
+        elif "SELECT character_id, alias FROM character_aliases" in sql:
+            self._result = []
+        elif (
+            "SELECT c.id, c.name, c.entity_id, c.summary, p.name AS current_location FROM characters"
+            in sql
+        ):
+            self._result = [
+                {"id": 11, "name": "Mara", "entity_id": 101, "summary": None},
+                {"id": 12, "name": "Vale", "entity_id": 102, "summary": None},
+            ] + [
+                {
+                    "id": 30 + offset,
+                    "name": name,
+                    "entity_id": 300 + offset,
+                    "summary": None,
+                }
+                for offset, name in enumerate(self.inserted_character_stubs)
+            ]
+        elif (
+            "pg_advisory_xact_lock" in sql
+            or "DELETE FROM character_aliases" in sql
+            or "INSERT INTO character_aliases" in sql
+        ):
+            self._result = []
         elif "orrery:retrograde:protagonist_identity" in sql:
             self._result = [{"id": 11, "name": "Mara", "alias": None}]
         elif "orrery:retrograde:event_types" in sql:
@@ -945,6 +971,10 @@ class FakeRetrogradePersistenceCursor:
             self._result = [{"id": 904}]
         else:
             raise AssertionError(f"Unexpected SQL: {sql}")
+
+    @property
+    def description(self):
+        return [(name,) for name in self._result[0]] if self._result else []
 
     def fetchall(self) -> list[dict[str, Any]]:
         return list(self._result)

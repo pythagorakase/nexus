@@ -910,13 +910,13 @@ def test_declared_character_already_listed_present_has_one_present_row(
     ["alias", "canonical"],
     ids=["alias-owner", "canonical-name"],
 )
-def test_declared_name_collision_raises_and_rolls_back(
+def test_declared_name_identity_binds_existing_owner(
     wizard_database: str,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     collision_kind: str,
 ) -> None:
-    """An ambiguous declaration must not commit either guessed identity."""
+    """A unique alias or case-folded canonical declaration reuses its owner."""
 
     payloads: Dict[type[BaseModel], Deque[dict[str, Any]]] = {
         StorytellerResponseBootstrap: deque([BOOTSTRAP_PAYLOAD.copy()]),
@@ -963,10 +963,7 @@ def test_declared_name_collision_raises_and_rolls_back(
             conflict_id=conflict_id,
             conflict_name=conflict_name,
         )
-        from fastapi import HTTPException
-
-        with pytest.raises(HTTPException, match="Ambiguous character name"):
-            _accept_pending(session_id, staged_chunk_id)
+        accepted_chunk_id = _accept_pending(session_id, staged_chunk_id)
     with _connect(wizard_database) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -974,8 +971,12 @@ def test_declared_name_collision_raises_and_rolls_back(
             )
             assert cur.fetchone()[0] == 0
             cur.execute("SELECT max(id) FROM narrative_chunks")
-            assert cur.fetchone()[0] == opening_chunk_id
-    assert audit_observations == []
+            assert cur.fetchone()[0] == accepted_chunk_id
+            cur.execute(
+                "SELECT count(*) FROM chunk_character_references WHERE chunk_id = %s AND character_id = %s",
+                (accepted_chunk_id, conflict_id),
+            )
+            assert cur.fetchone()[0] == 1
 
 
 def test_ordinary_turn_carries_promoted_presence_before_commit(

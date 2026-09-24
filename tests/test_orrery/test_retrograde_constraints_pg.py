@@ -88,6 +88,13 @@ def disposable_dbname() -> Iterator[str]:
                     / "097_trait_cold_start_relationship_constraints.sql"
                 )
                 cur.execute(migration.read_text())
+                cur.execute(
+                    (
+                        Path(__file__).parents[2]
+                        / "migrations"
+                        / "123_character_alias_provenance.sql"
+                    ).read_text()
+                )
                 # Fixture invariant: production persists the canonical clock
                 # before any character INSERT fires need-state initialization.
                 cur.execute(
@@ -601,7 +608,7 @@ def test_real_cache_compiler_gate_suppresses_all_named_target_materialization(
             }
 
 
-def test_persistence_refuses_database_alias_stub_even_without_packet_alias(
+def test_persistence_identity_binds_database_alias_without_packet_alias(
     disposable_dbname: str,
 ) -> None:
     """The persistence wall reads character_aliases before staging stubs."""
@@ -647,11 +654,10 @@ def test_persistence_refuses_database_alias_stub_even_without_packet_alias(
             summaries_enabled=False,
         )
 
-    with pytest.raises(ValueError, match="protagonist_duplicate_stub_forbidden"):
-        NewStoryDatabaseMapper(dbname=disposable_dbname).perform_transition(
-            transition,
-            in_transaction=persist,
-        )
+    NewStoryDatabaseMapper(dbname=disposable_dbname).perform_transition(
+        transition,
+        in_transaction=persist,
+    )
 
     with _connect(disposable_dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:

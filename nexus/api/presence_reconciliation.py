@@ -23,7 +23,13 @@ from nexus.agents.logon.skald_wire import (
     SkaldTurnWire,
 )
 from nexus.memory.entity_detector import EntityMatch, HighSpecificityEntityDetector
+from nexus.presence.identity import (
+    CharacterIdentityAmbiguity,
+    resolve_character_declaration,
+    validate_character_batch,
+)
 from nexus.presence.roster import (
+    IdentityIndex,
     RosterEntry,
     apply_delta,
     character_identity_index,
@@ -147,7 +153,9 @@ def read_character_roster_from_connection(conn: Any) -> CharacterRosterRows:
     """Read the character roster through an existing psycopg2 transaction."""
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT id, name, summary FROM characters WHERE name IS NOT NULL")
+        cur.execute(
+            "SELECT c.id, c.name, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
+        )
         character_rows = cur.fetchall()
         cur.execute("SELECT character_id, alias FROM character_aliases")
         alias_rows = cur.fetchall()
@@ -181,7 +189,7 @@ async def read_character_roster_from_async_connection(
     """Read the character roster through an existing asyncpg transaction."""
 
     character_rows = await conn.fetch(
-        "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+        "SELECT c.id, c.name, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
     )
     alias_rows = await conn.fetch("SELECT character_id, alias FROM character_aliases")
     return CharacterRosterRows(
@@ -318,47 +326,45 @@ def reconcile_public_prose_mentions_by_character_ids(
     )
 
 
-def _declared_character_names(
+def _declared_characters(
     declarations: Sequence[Mapping[str, Any]],
-) -> List[str]:
-    """Return unique character names from this committed wire's declarations."""
+) -> List[NewEntityDeclaration]:
+    """Return character declarations with their identity evidence intact."""
 
     parsed = [
         NewEntityDeclaration.model_validate(declaration) for declaration in declarations
     ]
-    return list(
-        dict.fromkeys(
-            declaration.name
-            for declaration in parsed
-            if declaration.kind == "character"
-        )
-    )
+    return [declaration for declaration in parsed if declaration.kind == "character"]
 
 
 def _reconcile_declared_character_mentions(
     prose_parts: Sequence[str],
     *,
-    declared_names: Sequence[str],
+    declarations: Sequence[NewEntityDeclaration],
+    scene_location: str | None = None,
     accounted_character_ids: Collection[int],
     roster_rows: CharacterRosterRows,
 ) -> List[PresenceRef]:
     """Detect only transaction-visible characters declared by this wire."""
 
-    rows_by_name: dict[str, List[Any]] = {name: [] for name in declared_names}
-    for character in roster_rows.characters:
-        name = str(character["name"])
-        if name in rows_by_name:
-            rows_by_name[name].append(character)
-
+    index = character_identity_index(roster_rows.characters, roster_rows.aliases)
+    rows_by_id = {int(row["id"]): row for row in roster_rows.characters}
     declared_rows: List[Any] = []
-    for name in declared_names:
-        matches = rows_by_name[name]
-        if len(matches) != 1:
+    for declaration in declarations:
+        name = declaration.name
+        result = resolve_character_declaration(
+            declaration.model_dump(),
+            index,
+            descriptors=declaration.summary,
+            scene_location=scene_location,
+        )
+        if result.status == "ambiguous":
+            raise CharacterIdentityAmbiguity(name, result)
+        if result.existing_id is None:
             raise ValueError(
-                f"Declared character name {name!r} resolved to {len(matches)} "
-                "roster rows after stub creation"
+                f"Declared character name {name!r} has no roster row after stub creation"
             )
-        declared_rows.append(matches[0])
+        declared_rows.append(rows_by_id[result.existing_id])
 
     declared_ids = {int(character["id"]) for character in declared_rows}
     accounted_ids = set(accounted_character_ids)
@@ -391,17 +397,19 @@ def reconcile_declared_character_mentions(
     prose_parts: Sequence[str],
     *,
     declarations: Sequence[Mapping[str, Any]],
+    scene_location: str | None = None,
     accounted_character_ids: Collection[int],
     roster_rows: Optional[CharacterRosterRows] = None,
 ) -> List[PresenceRef]:
     """Reconcile same-turn declarations inside a psycopg2 commit transaction."""
 
-    declared_names = _declared_character_names(declarations)
-    if not declared_names:
+    parsed = _declared_characters(declarations)
+    if not parsed:
         return []
     return _reconcile_declared_character_mentions(
         prose_parts,
-        declared_names=declared_names,
+        declarations=parsed,
+        scene_location=scene_location,
         accounted_character_ids=accounted_character_ids,
         roster_rows=roster_rows or read_character_roster_from_connection(conn),
     )
@@ -412,22 +420,43 @@ async def reconcile_declared_character_mentions_async(
     prose_parts: Sequence[str],
     *,
     declarations: Sequence[Mapping[str, Any]],
+    scene_location: str | None = None,
     accounted_character_ids: Collection[int],
     roster_rows: Optional[CharacterRosterRows] = None,
 ) -> List[PresenceRef]:
     """Reconcile same-turn declarations inside an asyncpg commit transaction."""
 
-    declared_names = _declared_character_names(declarations)
-    if not declared_names:
+    parsed = _declared_characters(declarations)
+    if not parsed:
         return []
     active_roster = roster_rows
     if active_roster is None:
         active_roster = await read_character_roster_from_async_connection(conn)
     return _reconcile_declared_character_mentions(
         prose_parts,
-        declared_names=declared_names,
+        declarations=parsed,
+        scene_location=scene_location,
         accounted_character_ids=accounted_character_ids,
         roster_rows=active_roster,
+    )
+
+
+def validate_character_declarations(
+    declarations: Sequence[NewEntityDeclaration],
+    roster_rows: CharacterRosterRows | None = None,
+    *,
+    index: IdentityIndex | None = None,
+    scene_location: str | None = None,
+) -> None:
+    """Reject ambiguous identity before a provider repair or staging mutation."""
+    if index is None:
+        if roster_rows is None:
+            raise ValueError("Character declaration validation requires a catalog")
+        index = character_identity_index(roster_rows.characters, roster_rows.aliases)
+    validate_character_batch(
+        [declaration.model_dump() for declaration in declarations],
+        index,
+        scene_location=scene_location,
     )
 
 
@@ -446,6 +475,15 @@ def reconcile_prose_mentions(
     """
 
     index = character_identity_index(roster_rows.characters, roster_rows.aliases)
+    validate_character_declarations(
+        wire.new_entities,
+        roster_rows,
+        scene_location=(
+            presence_baseline.setting.name
+            if presence_baseline and presence_baseline.setting
+            else None
+        ),
+    )
     if presence_baseline is not None:
         presence_baseline.present = [
             CharacterRef(kind="character", id=resolved.id, name=resolved.name)

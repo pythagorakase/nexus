@@ -219,6 +219,16 @@ def qa649_db() -> Iterator[_Qa649Database]:
                     migration_sql = (migrations_dir / migration_name).read_text()
                     cur.execute(migration_sql)
                     cur.execute(migration_sql)
+                cur.execute(
+                    "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+                    "AND table_name = 'character_aliases' AND column_name = 'provenance'"
+                )
+                if cur.fetchone() is None:
+                    cur.execute(
+                        (
+                            migrations_dir / "123_character_alias_provenance.sql"
+                        ).read_text()
+                    )
                 anchor_world_time = datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
                 cur.execute(
                     """
@@ -281,6 +291,16 @@ def qa649_db() -> Iterator[_Qa649Database]:
                     cur, "character", "QA649 Commit Character"
                 )
                 place = _insert_entity(cur, "place", "QA649 Place")
+                for chunk_id in (
+                    anchor_chunk_id,
+                    source_chunk_id,
+                    declaration_anchor_chunk_id,
+                ):
+                    cur.execute(
+                        "INSERT INTO place_chunk_references (place_id, chunk_id, reference_type) "
+                        "VALUES (%s, %s, 'setting')",
+                        (place.wire_id, chunk_id),
+                    )
                 no_default_place = _insert_entity(
                     cur, "place", "QA649 No Default Place"
                 )

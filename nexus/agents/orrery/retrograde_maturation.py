@@ -66,6 +66,12 @@ from nexus.config.settings_models import (
     Settings,
 )
 from nexus.presence.roster import read_roster
+from nexus.presence.identity import (
+    CharacterIdentityAmbiguity,
+    require_character_identity,
+    read_identity_index,
+    refresh_generated_aliases,
+)
 from nexus.telemetry.usage import usage_context
 from nexus.prompts.registry import PromptId, load
 
@@ -123,6 +129,7 @@ def enqueue_declared_entity_maturations(
     slot: Optional[int] = None,
     settings: Optional[Mapping[str, Any]] = None,
     accepting_world_time: Optional[datetime] = None,
+    scene_location: str | None = None,
 ) -> MaturationEnqueueResult:
     """Process Skald new-entity declarations inside the commit transaction.
 
@@ -179,12 +186,16 @@ def enqueue_declared_entity_maturations(
             record = _resolve_or_create_stub(
                 cur,
                 declaration,
+                scene_location=scene_location,
                 source_chunk_id=chunk_id,
                 accepting_world_time=accepting_world_time,
             )
             declaration_records.append((declaration, record))
             if record.created:
                 result.stubs_created += 1
+
+        if any(declaration.kind == "character" for declaration in parsed):
+            refresh_generated_aliases(cur)
 
         for declaration, record in declaration_records:
             if not declaration.pair_tag_hints:
@@ -236,6 +247,7 @@ def _resolve_or_create_stub(
     *,
     source_chunk_id: int,
     accepting_world_time: Optional[datetime],
+    scene_location: str | None = None,
 ) -> _DeclaredEntityRecord:
     """Resolve a declared entity by exact name, creating a stub when absent.
 
@@ -244,6 +256,16 @@ def _resolve_or_create_stub(
     kind-incompatible names raise ``ValueError``).
     """
 
+    if declaration.kind == "character":
+        existing = require_character_identity(
+            cur,
+            declaration.name,
+            descriptors=declaration.summary,
+            scene_location=scene_location,
+            declared_location=declaration.scene_location,
+        )
+        if existing is not None:
+            declaration = declaration.model_copy(update={"name": existing.name})
     table = _SUBTYPE_TABLES[declaration.kind]
     cur.execute(
         f"SELECT id, entity_id FROM {table} WHERE name = %s ORDER BY id",
@@ -358,42 +380,24 @@ def _require_accepting_world_time(cur: Any, chunk_id: int) -> datetime:
 def _resolve_pair_hint_entity(cur: Any, name: str) -> _DeclaredEntityRecord:
     """Resolve one exact, globally unambiguous declaration-hint endpoint."""
 
-    cur.execute(
-        """
-        SELECT entity_kind, subtype_id, entity_id
-        FROM (
-            SELECT 'character' AS entity_kind, id AS subtype_id, entity_id
-            FROM characters WHERE name = %s
-            UNION ALL
-            SELECT 'place' AS entity_kind, id AS subtype_id, entity_id
-            FROM places WHERE name = %s
-            UNION ALL
-            SELECT 'faction' AS entity_kind, id AS subtype_id, entity_id
-            FROM factions WHERE name = %s
-        ) AS matches
-        ORDER BY entity_kind, subtype_id
-        """,
-        (name, name, name),
-    )
-    rows = cur.fetchall()
-    if not rows:
+    index = read_identity_index(cur)
+    keys = index.matching_keys(name)
+    if not keys:
         raise ValueError(
             f"Pair-tag hint endpoint {name!r} does not resolve to an entity"
         )
-    if len(rows) > 1:
+    if len(keys) > 1:
         raise ValueError(
-            f"Pair-tag hint endpoint {name!r} is ambiguous: "
-            f"{len(rows)} entities match"
+            f"Pair-tag hint endpoint {name!r} is ambiguous: {len(keys)} entities match"
         )
-    row = rows[0]
-    entity_id = _row_value(row, "entity_id", 2)
-    if entity_id is None:
+    entry = index.by_id[next(iter(keys))]
+    if entry.entity_id is None:
         raise ValueError(f"Pair-tag hint endpoint {name!r} has no entity spine id")
     return _DeclaredEntityRecord(
-        entity_kind=str(_row_value(row, "entity_kind", 0)),
-        subtype_id=int(_row_value(row, "subtype_id", 1)),
-        entity_id=int(entity_id),
-        name=name,
+        entity_kind=entry.kind,
+        subtype_id=entry.id,
+        entity_id=entry.entity_id,
+        name=entry.name,
         created=False,
     )
 
@@ -669,6 +673,7 @@ def drain_maturation_jobs_sync(
                             cur,
                             row=row,
                             error=str(exc),
+                            failure_class=type(exc).__name__,
                             max_attempts=cfg.max_attempts,
                             retry_delay_seconds=cfg.retry_delay_seconds,
                         )
@@ -1564,6 +1569,7 @@ def _mark_maturation_failed(
     error: str,
     max_attempts: int,
     retry_delay_seconds: int,
+    failure_class: str | None = None,
 ) -> None:
     _require_maturation_lease(cur, row)
     attempt_count = int(row.get("attempts") or 0) + 1
@@ -1573,13 +1579,24 @@ def _mark_maturation_failed(
         SET state = %s::orrery_job_state,
             available_at = now() + (%s * interval '1 second'),
             lease_until = NULL, locked_by = NULL, lease_nonce = NULL,
-            last_error = %s, updated_at = now()
+            last_error = %s,
+            result_manifest = jsonb_build_object('schema_version', %s::text)
+                || COALESCE(result_manifest, '{}'::jsonb)
+                || jsonb_build_object('failure_class', %s::text),
+            updated_at = now()
         WHERE id = %s
         """,
         (
-            "queued" if attempt_count < max_attempts else "failed",
+            (
+                "queued"
+                if attempt_count < max_attempts
+                and failure_class != CharacterIdentityAmbiguity.__name__
+                else "failed"
+            ),
             retry_delay_seconds,
             error,
+            MATURATION_MANIFEST_SCHEMA_VERSION,
+            failure_class,
             row["job_id"],
         ),
     )

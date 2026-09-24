@@ -127,18 +127,46 @@ class AsyncCommitConnection:
                 )
             ]
         if "/* presence:roster */" in normalized:
-            return [{"chunk_id": chunk_id, "kind": None} for chunk_id in args[0]]
+            return [
+                {
+                    "chunk_id": chunk_id,
+                    "kind": "place",
+                    "id": 99,
+                    "name": "Hall",
+                    "summary": None,
+                    "entity_id": 1099,
+                    "evidence": None,
+                    "is_active": True,
+                    "reference": "setting",
+                }
+                for chunk_id in args[0]
+            ]
         if "FROM relationship_milestone_queue" in normalized:
             return []
         if "/* orrery:bleed_uptake_candidates */" in normalized:
             return [offer for offer in self.bleed_offers if offer["id"] in args[0]]
         if normalized == (
-            "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+            "SELECT c.id, c.name, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
         ):
             return [
                 {"id": character_id, "name": name, "summary": None}
                 for name, character_id in sorted(self.characters.items())
             ]
+        if (
+            normalized
+            == "SELECT c.id, c.name, c.entity_id, c.summary, p.name AS current_location FROM characters c LEFT JOIN places p ON p.id = c.current_location WHERE c.name IS NOT NULL"
+        ):
+            return [
+                {
+                    "id": character_id,
+                    "name": name,
+                    "entity_id": character_id + 1000,
+                    "summary": None,
+                }
+                for name, character_id in self.characters.items()
+            ]
+        if "SELECT 'place' AS kind" in normalized:
+            return []
         if normalized == "SELECT character_id, alias FROM character_aliases":
             return []
         if "SELECT id FROM characters WHERE name" in normalized:

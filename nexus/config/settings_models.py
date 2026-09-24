@@ -3693,6 +3693,27 @@ class SecretsConfig(BaseModel):
     )
 
 
+class CharacterIdentitySettings(BaseModel):
+    """Conservative pre-mint matching and deterministic alias policy."""
+
+    case_folding: bool = True
+    strip_diacritics: bool = False
+    strip_titles: bool = True
+    titles: List[str] = Field(
+        default_factory=lambda: [
+            "mr",
+            "mrs",
+            "ms",
+            "dr",
+            "captain",
+            "sir",
+            "lady",
+            "lord",
+        ]
+    )
+    fuzzy_threshold: float = Field(default=0.9, gt=0.0, le=1.0)
+
+
 class Settings(BaseModel):
     """
     Root configuration model for NEXUS.
@@ -3725,6 +3746,9 @@ class Settings(BaseModel):
     )
     wizard: WizardSettings
     api: Optional[APISettings] = Field(default=None, description="API settings")
+    character_identity: CharacterIdentitySettings = Field(
+        default_factory=CharacterIdentitySettings
+    )
     ui: UISettings = Field(
         default_factory=UISettings,
         description="React client settings (served via GET /api/settings)",
