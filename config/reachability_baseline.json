@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register shared seat-window accounting, the gateway scheduler, and durable correspondence compaction as production-reachable modules.",
+  "reason": "Register the long-absence probe QA operators from issue 909 as reachable scripts.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -274,6 +274,8 @@
     "scripts/database_targets.py",
     "scripts/migrate.py",
     "scripts/new_story_setup.py",
+    "scripts/qa_shift/long_absence_probe.py",
+    "scripts/qa_shift/long_absence_turn.py",
     "scripts/summarize_narrative.py"
   ]
 }
