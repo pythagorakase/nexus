@@ -639,3 +639,68 @@ def test_recall_scores_any_historical_setting(historical_settings) -> None:
             } == expected
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("event_has_location", [False, True])
+def test_experience_metadata_retains_all_historical_settings(
+    historical_settings, event_has_location: bool
+) -> None:
+    """Persist an experience and reread both settings without choosing one."""
+    import json
+    from psycopg2.extras import RealDictCursor
+    from nexus.agents.orrery.experiences import (
+        _known_and_allowed_names,
+        _load_experience_sources,
+        _render_prompt,
+        seed_character_experiences_sync,
+    )
+    from nexus.config import load_settings_as_dict
+
+    dbname, ids, chunk_id, hall, garden = historical_settings
+    with connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE characters SET summary = 'A careful observer.', "
+                "background = 'Raised near the hall.' WHERE id = %s RETURNING entity_id",
+                (ids["Remote Friend"],),
+            )
+            owner = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO world_events (event_type, tick_chunk_id, actor_entity_id, "
+                "location_id, world_layer, source, changed_fields, payload) "
+                "VALUES ('hunt_declared', %s, %s, %s, 'primary', 'resolver', '{}', "
+                "'{\"hidden\": true}'::jsonb) RETURNING id",
+                (chunk_id, owner, garden if event_has_location else None),
+            )
+            event = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO world_event_entities (event_id, entity_id, role) "
+                "VALUES (%s, %s, 'actor')",
+                (event, owner),
+            )
+        assert (
+            seed_character_experiences_sync(
+                conn, anchor_chunk_id=chunk_id, settings=load_settings_as_dict()
+            )
+            == 1
+        )
+    # A fresh connection proves the setting list is recovered from persisted
+    # anchor metadata rather than retained only in the formation call's locals.
+    with connect(dbname) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT id, location_id FROM character_experiences WHERE world_event_ids @> ARRAY[%s]::bigint[]",
+            (event,),
+        )
+        experience = cur.fetchone()
+        assert experience["location_id"] == (garden if event_has_location else None)
+        rows = _load_experience_sources(cur, [experience["id"]])
+        assert len(rows) == 1
+        assert rows[0]["setting_place_ids"] == [hall, garden]
+        assert rows[0]["setting_place_names"] == ["Hall", "Garden"]
+        _, allowed = _known_and_allowed_names(cur, rows[0])
+        assert {"Hall", "Garden"} <= allowed
+        records = json.loads(_render_prompt(rows).split("Scene seed records:\n", 1)[1])
+        assert records[0]["settings"] == [
+            {"id": hall, "name": "Hall"},
+            {"id": garden, "name": "Garden"},
+        ]
