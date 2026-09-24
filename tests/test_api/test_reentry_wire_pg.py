@@ -328,6 +328,9 @@ async def test_tag_fixture_repairs_active_or_applies_inactive(
         ),
     )
     assert ("`forewarned` is active in this context" in library) is active
+    assert "replacement-state entity tag additions" in library
+    if not active:
+        assert "When `forewarned` is already active" in library
     with closing(connect(dbname)) as conn:
         committed = commit_incubator_to_database_sync(conn, session, slot=5)
         with conn.cursor() as cur:
