@@ -1,0 +1,1 @@
+The passage is finished; Gaia's state and adjudications follow.

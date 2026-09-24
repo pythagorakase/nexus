@@ -1,0 +1,16 @@
+......................                                                   [100%]
+=============================== warnings summary ===============================
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+tests/test_prompt_lint.py::test_wizard_tools_use_registered_descriptions
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+22 passed, 5 warnings in 15.91s

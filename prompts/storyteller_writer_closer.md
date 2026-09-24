@@ -1,0 +1,1 @@
+Skald writes the next passage from the user input above.

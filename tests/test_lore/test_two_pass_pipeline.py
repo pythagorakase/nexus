@@ -51,6 +51,7 @@ from nexus.api.slot_utils import require_slot_dbname
 from nexus.config import load_settings
 from nexus.config.story_model import StorySettings
 from nexus.memory.correspondence import CorrespondenceDigestWire
+from nexus.prompts.registry import PromptId, load
 
 
 PINNED_GAIA_MODEL = next(
@@ -453,7 +454,9 @@ def _assert_two_pass_calls(
         for line in writer_call["prompt"].split("\n")
         if not line.startswith("PRESENT:")
     )
-    assert gaia_call["prompt"].startswith(writer_context)
+    assert writer_context.endswith(load(PromptId.WRITER_CLOSER))
+    shared_context = writer_context.removesuffix(load(PromptId.WRITER_CLOSER))
+    assert gaia_call["prompt"].startswith(shared_context + load(PromptId.GAIA_CLOSER))
     assert "PRESENT:" in writer_call["prompt"]
     assert "PRESENT:" not in gaia_call["prompt"]
     assert writer.narrative in gaia_call["prompt"]

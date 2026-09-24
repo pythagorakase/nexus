@@ -51,6 +51,7 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     skald_writer_lenient_schema,
     skald_writer_strict_text_format,
 )
+from nexus.agents.lore.seat_blocks import SEAT_BLOCKS, ContextSeat, order_seat_blocks
 from nexus.agents.lore.utils.chunk_operations import (  # noqa: E402
     calculate_chunk_tokens,
 )
@@ -875,6 +876,7 @@ class LogonUtility:
         prompt = self._format_context_prompt(
             context_payload,
             presence_baseline=presence_baseline,
+            seat="writer" if self._is_two_pass_turn(schema_model) else "single_pass",
         )
         self._writer_window_blocks = list(self._last_rendered_blocks)
 
@@ -967,6 +969,7 @@ class LogonUtility:
         prompt = self._format_context_prompt(
             context_payload,
             presence_baseline=presence_baseline,
+            seat="writer" if self._is_two_pass_turn(schema_model) else "single_pass",
         )
         self._writer_window_blocks = list(self._last_rendered_blocks)
 
@@ -1675,7 +1678,11 @@ class LogonUtility:
         self._ensure_provider(payload)
         schema = self._select_response_schema(payload)
         presence = self._read_presence_baseline_for_context(payload, schema)
-        prompt = self._format_context_prompt(payload, presence_baseline=presence)
+        prompt = self._format_context_prompt(
+            payload,
+            presence_baseline=presence,
+            seat="writer" if self._is_two_pass_turn(schema) else "single_pass",
+        )
         blocks = self._last_rendered_blocks
         sources = self._last_rendered_block_sources
         provider = copy.copy(self.provider)
@@ -2416,7 +2423,7 @@ class LogonUtility:
         presence_baseline: Optional[PresenceBaseline] = None,
         include_ambient_scene_seeds: bool = True,
         rendered_blocks: Optional[list[tuple[str, str]]] = None,
-        seat: Literal["writer", "gaia"] = "writer",
+        seat: ContextSeat = "writer",
     ) -> str:
         """Format context payload into a prompt for the Apex AI"""
         from nexus.config import load_settings
@@ -2428,6 +2435,11 @@ class LogonUtility:
             if raw_limits is not None
             else load_settings(self.settings_path).lore.render_limits
         )
+        manifest_seat: ContextSeat = (
+            "bootstrap" if self._is_bootstrap_context(context) else seat
+        )
+        manifest = SEAT_BLOCKS[manifest_seat]
+        legacy = manifest_seat in {"bootstrap", "single_pass"}
         sections = RenderedSections()
 
         # The intertitle anchors Skald's declared time deltas and episode
@@ -2693,7 +2705,7 @@ class LogonUtility:
 
         sections.kind = "scene roster"
         # The writer authors sparse changes against this exact parent roster.
-        if seat == "writer" and presence_baseline is not None:
+        if seat != "gaia" and presence_baseline is not None:
             from nexus.presence.roster import render_roster, roster_from_baseline
 
             sections.append(
@@ -2736,9 +2748,10 @@ class LogonUtility:
                 sections.append("(older knowledge omitted)")
 
         sections.kind = "orrery tag library"
-        tag_library = self._format_turn_tag_library(
-            context,
-            presence_baseline=presence_baseline,
+        tag_library = (
+            self._format_turn_tag_library(context, presence_baseline=presence_baseline)
+            if "orrery tag library" in manifest
+            else ""
         )
         if tag_library:
             sections.extend(["\n=== ORRERY TAG LIBRARY ===", tag_library])
@@ -2818,7 +2831,8 @@ class LogonUtility:
         imminent_activity = context.get("orrery_imminent_activity") or []
         if imminent_activity:
             sections.append("\n=== ORRERY IMMINENT ACTIVITY ===")
-            sections.append(load(PromptId.TURN_BLOCKS_IMMINENT_ACTIVITY))
+            if seat == "gaia" or legacy:
+                sections.append(load(PromptId.TURN_BLOCKS_IMMINENT_ACTIVITY))
             for item in card_selection:
                 if item["kind"] == "resolution":
                     sections.append(card_line(proposal_cards[item["proposal_id"]]))
@@ -2827,7 +2841,8 @@ class LogonUtility:
         scene_pressures = context.get("orrery_scene_pressures") or []
         if scene_pressures:
             sections.append("\n=== ORRERY SCENE PRESSURE ===")
-            sections.append(load(PromptId.TURN_BLOCKS_SCENE_PRESSURE))
+            if seat == "gaia" or legacy:
+                sections.append(load(PromptId.TURN_BLOCKS_SCENE_PRESSURE))
             for item in card_selection:
                 if (
                     item["kind"] == "scene_pressure"
@@ -2880,7 +2895,8 @@ class LogonUtility:
         joint_beats = context.get("orrery_joint_beats") or []
         if joint_beats:
             sections.append("\n=== ORRERY JOINT BEATS ===")
-            sections.append(load(PromptId.TURN_BLOCKS_JOINT_BEATS))
+            if seat == "gaia" or legacy:
+                sections.append(load(PromptId.TURN_BLOCKS_JOINT_BEATS))
             for item in card_selection:
                 if item["kind"] == "joint_beat":
                     sections.append(card_line(proposal_cards[item["proposal_id"]]))
@@ -2900,8 +2916,7 @@ class LogonUtility:
                 sections.append(f"- {prefix} {summary}")
 
         # Add author's note (soft out-of-character suggestion, used by regenerate).
-        # Placed immediately before INSTRUCTIONS so recency bias gives it the influence
-        # a soft nudge needs — entity/historical context above would otherwise bury it.
+        # The manifest keeps the soft nudge near the input and seat closer.
         sections.kind = "author's note"
         note = context.get("note")
         if note:
@@ -2909,12 +2924,19 @@ class LogonUtility:
             sections.append(load(PromptId.TURN_BLOCKS_AUTHORS_NOTE))
             sections.append(note)
 
-        sections.kind = "instructions"
-        # Add instructions
-        sections.append("\n=== INSTRUCTIONS ===")
-        sections.append(load(PromptId.TURN_BLOCKS_CONTINUE_NARRATIVE))
-        sections.append(load(PromptId.TURN_BLOCKS_MAINTAIN_CONSISTENCY))
+        if legacy:
+            sections.kind = "instructions"
+            sections.append("\n=== INSTRUCTIONS ===")
+            sections.append(load(PromptId.TURN_BLOCKS_CONTINUE_NARRATIVE))
+            sections.append(load(PromptId.TURN_BLOCKS_MAINTAIN_CONSISTENCY))
+        elif seat == "writer":
+            sections.kind = "writer closer"
+            sections.append(load(PromptId.WRITER_CLOSER))
+        else:
+            sections.kind = "gaia closer"
+            sections.append(load(PromptId.GAIA_CLOSER))
 
+        sections = order_seat_blocks(sections, manifest_seat)
         self._last_rendered_blocks = sections.blocks()
         self._last_rendered_block_sources = sections.sources
         if rendered_blocks is not None:

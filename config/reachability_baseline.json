@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Track shared character identity normalization and the prompt registry; retain the prompt migration retirements.",
+  "reason": "Track shared character identity normalization and the prompt registry plus seat block manifests; retain the prompt migration retirements.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -90,6 +90,7 @@
     "nexus/agents/lore/__init__.py",
     "nexus/agents/lore/logon_utility.py",
     "nexus/agents/lore/lore.py",
+    "nexus/agents/lore/seat_blocks.py",
     "nexus/agents/lore/utils/chunk_operations.py",
     "nexus/agents/lore/utils/entity_inclusion.py",
     "nexus/agents/lore/utils/entity_queries.py",

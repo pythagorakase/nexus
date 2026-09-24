@@ -58,7 +58,10 @@ def test_render_scene_order_and_recalled_clocks_match_both_seats() -> None:
         utility._format_context_prompt(payload, seat=seat)
         for seat in ("writer", "gaia")
     ]
-    assert prompts[0] == prompts[1]
+    assert (
+        prompts[0].split("=== USER INPUT ===")[0]
+        == prompts[1].split("=== USER INPUT ===")[0]
+    )
     prompt = prompts[0]
     recent = prompt.split("=== RECENT NARRATIVE ===")[1].split("=== USER INPUT ===")[0]
     assert recent.strip() == "Earlier scene.\nParent scene."

@@ -1,0 +1,213 @@
+........................................................................ [ 56%]
+...........................FF...........................                 [100%]
+=================================== FAILURES ===================================
+_ test_sync_two_pass_pipeline_uses_provider_specific_transports[anthropic-prompted] _
+
+provider_type = 'anthropic', anthropic_transport = 'prompted'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x177f3e190>
+
+    @pytest.mark.parametrize(
+        ("provider_type", "anthropic_transport"),
+        [
+            ("openai", None),
+            ("local", None),
+            ("anthropic", "prompted"),
+            ("anthropic", "tool_envelope"),
+        ],
+    )
+    def test_sync_two_pass_pipeline_uses_provider_specific_transports(
+        provider_type: str,
+        anthropic_transport: str | None,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        utility, provider = _utility(
+            provider_type,
+            [WRITER_PAYLOAD, GAIA_PAYLOAD],
+            anthropic_transport=anthropic_transport,
+        )
+        monkeypatch.setattr(
+            utility,
+            "_read_presence_baseline_for_context",
+            lambda _context_payload, _schema_model: BASELINE,
+        )
+    
+        response = utility.generate_narrative(
+            _context(),
+            effective_context_window=75_000,
+        )
+    
+>       _assert_two_pass_calls(provider, provider_type, anthropic_transport)
+
+tests/test_lore/test_two_pass_pipeline.py:529: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+provider = <test_lore.test_two_pass_pipeline._RecordingProvider object at 0x177fcda10>
+provider_type = 'anthropic', anthropic_transport = 'prompted'
+
+    def _assert_two_pass_calls(
+        provider: _RecordingProvider,
+        provider_type: str,
+        anthropic_transport: str | None,
+    ) -> None:
+        writer = SkaldWriterWire.model_validate(WRITER_PAYLOAD)
+        assert len(provider.calls) == 2
+        writer_call, gaia_call = provider.calls
+        expected_writer_kwargs, expected_gaia_kwargs = _expected_schema_kwargs(
+            provider_type,
+            anthropic_transport,
+        )
+    
+        assert writer_call["schema_model"] is SkaldWriterWire
+        assert gaia_call["schema_model"] is SkaldGaiaWire
+        assert writer_call["kwargs"] == expected_writer_kwargs
+        assert gaia_call["kwargs"] == expected_gaia_kwargs
+        assert writer_call["output_validator"] is not None
+        assert gaia_call["output_validator"] is not None
+        assert writer_call["output_validator"] is not gaia_call["output_validator"]
+        assert writer_call["structured_output_retries"] == 3
+        assert gaia_call["structured_output_retries"] == 3
+        assert writer_call["usage_seat"] == "skald_writer"
+        assert gaia_call["usage_seat"] == "gaia"
+        # Writer pass = core doctrine + explicit scope note (gaia work excluded);
+        # schema-free writers obey the core prompt over the repair loop without it.
+        assert writer_call["system_prompt"].startswith("Core storyteller prompt")
+        assert "# Writer Pass" in writer_call["system_prompt"]
+        assert "# Writer Pass" not in gaia_call["system_prompt"]
+        assert "## Gaia" in gaia_call["system_prompt"]
+        writer_context = "\n".join(
+            line
+            for line in writer_call["prompt"].split("\n")
+            if not line.startswith("PRESENT:")
+        )
+>       assert gaia_call["prompt"].startswith(writer_context)
+E       AssertionError: assert False
+E        +  where False = <built-in method startswith of str object at 0x7aa7345000>('\n=== HISTORICAL CONTEXT ===\n=== RECENT NARRATIVE ===\n\n=== USER INPUT ===\nOpen the archive.\nSkald writes the next passage from the user input above.')
+E        +    where <built-in method startswith of str object at 0x7aa7345000> = '\n=== HISTORICAL CONTEXT ===\n=== RECENT NARRATIVE ===\n\n=== USER INPUT ===\nOpen the archive.\nThe passage is finis...LETTER (VERBATIM, PRIVATE) ===\n\nThe bell is bait. Let Iona suspect the Choir before we confirm who actually rang it.'.startswith
+
+tests/test_lore/test_two_pass_pipeline.py:456: AssertionError
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:56:19,901 - asyncio - DEBUG - Using selector: KqueueSelector
+2026-09-24 17:56:19,917 - asyncio - DEBUG - Using selector: KqueueSelector
+2026-09-24 17:56:19,925 - nexus.lore.logon - DEBUG - Received structured response with narrative length: 44
+------------------------------ Captured log call -------------------------------
+DEBUG    asyncio:selector_events.py:54 Using selector: KqueueSelector
+DEBUG    asyncio:selector_events.py:54 Using selector: KqueueSelector
+DEBUG    nexus.lore.logon:logon_utility.py:926 Received structured response with narrative length: 44
+_ test_async_two_pass_pipeline_uses_provider_specific_transports[anthropic-prompted] _
+
+provider_type = 'anthropic', anthropic_transport = 'prompted'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x17823df90>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("provider_type", "anthropic_transport"),
+        [
+            ("openai", None),
+            ("local", None),
+            ("anthropic", "prompted"),
+            ("anthropic", "tool_envelope"),
+        ],
+    )
+    async def test_async_two_pass_pipeline_uses_provider_specific_transports(
+        provider_type: str,
+        anthropic_transport: str | None,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        utility, provider = _utility(
+            provider_type,
+            [WRITER_PAYLOAD, GAIA_PAYLOAD],
+            anthropic_transport=anthropic_transport,
+        )
+    
+        async def read_baseline(
+            _context_payload: dict[str, Any],
+            _schema_model: type,
+        ) -> PresenceBaseline:
+            return BASELINE
+    
+        monkeypatch.setattr(
+            utility,
+            "_read_presence_baseline_for_context_async",
+            read_baseline,
+        )
+    
+        response = await utility.generate_narrative_async(
+            _context(),
+            effective_context_window=75_000,
+        )
+    
+>       _assert_two_pass_calls(provider, provider_type, anthropic_transport)
+
+tests/test_lore/test_two_pass_pipeline.py:624: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+provider = <test_lore.test_two_pass_pipeline._RecordingProvider object at 0x17823c3d0>
+provider_type = 'anthropic', anthropic_transport = 'prompted'
+
+    def _assert_two_pass_calls(
+        provider: _RecordingProvider,
+        provider_type: str,
+        anthropic_transport: str | None,
+    ) -> None:
+        writer = SkaldWriterWire.model_validate(WRITER_PAYLOAD)
+        assert len(provider.calls) == 2
+        writer_call, gaia_call = provider.calls
+        expected_writer_kwargs, expected_gaia_kwargs = _expected_schema_kwargs(
+            provider_type,
+            anthropic_transport,
+        )
+    
+        assert writer_call["schema_model"] is SkaldWriterWire
+        assert gaia_call["schema_model"] is SkaldGaiaWire
+        assert writer_call["kwargs"] == expected_writer_kwargs
+        assert gaia_call["kwargs"] == expected_gaia_kwargs
+        assert writer_call["output_validator"] is not None
+        assert gaia_call["output_validator"] is not None
+        assert writer_call["output_validator"] is not gaia_call["output_validator"]
+        assert writer_call["structured_output_retries"] == 3
+        assert gaia_call["structured_output_retries"] == 3
+        assert writer_call["usage_seat"] == "skald_writer"
+        assert gaia_call["usage_seat"] == "gaia"
+        # Writer pass = core doctrine + explicit scope note (gaia work excluded);
+        # schema-free writers obey the core prompt over the repair loop without it.
+        assert writer_call["system_prompt"].startswith("Core storyteller prompt")
+        assert "# Writer Pass" in writer_call["system_prompt"]
+        assert "# Writer Pass" not in gaia_call["system_prompt"]
+        assert "## Gaia" in gaia_call["system_prompt"]
+        writer_context = "\n".join(
+            line
+            for line in writer_call["prompt"].split("\n")
+            if not line.startswith("PRESENT:")
+        )
+>       assert gaia_call["prompt"].startswith(writer_context)
+E       AssertionError: assert False
+E        +  where False = <built-in method startswith of str object at 0x7aa7344400>('\n=== HISTORICAL CONTEXT ===\n=== RECENT NARRATIVE ===\n\n=== USER INPUT ===\nOpen the archive.\nSkald writes the next passage from the user input above.')
+E        +    where <built-in method startswith of str object at 0x7aa7344400> = '\n=== HISTORICAL CONTEXT ===\n=== RECENT NARRATIVE ===\n\n=== USER INPUT ===\nOpen the archive.\nThe passage is finis...LETTER (VERBATIM, PRIVATE) ===\n\nThe bell is bait. Let Iona suspect the Choir before we confirm who actually rang it.'.startswith
+
+tests/test_lore/test_two_pass_pipeline.py:456: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026-09-24 17:56:19,941 - asyncio - DEBUG - Using selector: KqueueSelector
+------------------------------ Captured log setup ------------------------------
+DEBUG    asyncio:selector_events.py:54 Using selector: KqueueSelector
+----------------------------- Captured stderr call -----------------------------
+2026-09-24 17:56:19,991 - nexus.lore.logon - DEBUG - Received structured response with narrative length: 44
+------------------------------ Captured log call -------------------------------
+DEBUG    nexus.lore.logon:logon_utility.py:1017 Received structured response with narrative length: 44
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_two_pass_pipeline.py::test_sync_two_pass_pipeline_uses_provider_specific_transports[anthropic-prompted]
+FAILED tests/test_lore/test_two_pass_pipeline.py::test_async_two_pass_pipeline_uses_provider_specific_transports[anthropic-prompted]
+2 failed, 126 passed, 296 deselected, 5 warnings in 47.38s

@@ -1,0 +1,1 @@
+/Users/pythagor/nexus/.claude/worktrees/742-seat-blocks/nexus/__init__.py
