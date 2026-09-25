@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Track the test-session provider guard and remove the now-tested OpenRouter wrapper from orphan exemptions.",
+  "reason": "Record the versioned wizard transcript module reached by production conversation transport and resume paths.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -221,6 +221,7 @@
     "nexus/api/trait_input_derivation.py",
     "nexus/api/wizard_agent.py",
     "nexus/api/wizard_chat.py",
+    "nexus/api/wizard_transcript.py",
     "nexus/cli.py",
     "nexus/config/__init__.py",
     "nexus/config/loader.py",
