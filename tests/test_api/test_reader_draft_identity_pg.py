@@ -1,6 +1,7 @@
 """Reader draft identity uses existing fresh-slot creation metadata, read-only."""
 
 from contextlib import closing
+from datetime import timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -37,7 +38,10 @@ def test_reader_story_identity_is_stable_and_fresh_on_slot_reuse(
                 second = client.get("/api/slot/4/state")
             assert first.status_code == second.status_code == 200
             story_id = first.json()["story_id"]
-            assert story_id == before["slot_created_at"].isoformat()
+            assert (
+                story_id
+                == before["slot_created_at"].astimezone(timezone.utc).isoformat()
+            )
             assert second.json()["story_id"] == story_id
             assert first.json()["current_chunk_id"] == 0
             identities.append(story_id)
@@ -78,7 +82,7 @@ def test_legacy_null_creation_time_uses_read_only_player_identity(
                     before = dict(cur.fetchone())
                     cur.execute("SELECT * FROM characters WHERE id = %s", (player_id,))
                     player_before = dict(cur.fetchone())
-            expected = f"player:{player_id}:{player_before['created_at'].isoformat()}"
+            expected = f"player:{player_id}:{player_before['created_at'].astimezone(timezone.utc).isoformat()}"
             with TestClient(app) as client:
                 for _ in range(2):
                     response = client.get("/api/slot/4/state")
