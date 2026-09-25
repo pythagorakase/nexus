@@ -149,10 +149,9 @@ def create_hybrid_alias_search_sql(
 
     # Different query based on whether we have alias terms
     if has_alias_terms:
-        # For characters stored as "Name:status", we use a simplified approach:
-        # Instead of relying on complex array operations that may have syntax issues,
-        # we'll use text search in the raw text which will find mentions of the character
-        # regardless of whether they're in the metadata
+        # Match aliases in narrative text. Character/place references are
+        # normalized relations; chunk_metadata no longer owns those fields
+        # or atmosphere. Select only metadata columns in the current schema.
         sql = f"""
         WITH text_search AS (
             -- Pre-filter with text search
@@ -169,7 +168,7 @@ def create_hybrid_alias_search_sql(
                (ce.embedding <=> :query_vector) AS distance,
                ts.text_score,
                m.season, m.episode, m.scene, m.world_layer, 
-               m.characters, m.place, m.atmosphere, m.time_delta
+               m.time_delta
         FROM {table_name} ce
         JOIN narrative_chunks c ON ce.chunk_id = c.id
         JOIN text_search ts ON c.id = ts.id
@@ -207,7 +206,7 @@ def create_hybrid_alias_search_sql(
                (ce.embedding <=> :query_vector) AS distance,
                ts.text_score,
                m.season, m.episode, m.scene, m.world_layer, 
-               m.characters, m.place, m.atmosphere, m.time_delta
+               m.time_delta
         FROM {table_name} ce
         JOIN narrative_chunks c ON ce.chunk_id = c.id
         JOIN text_search ts ON c.id = ts.id

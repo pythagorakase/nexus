@@ -26,7 +26,9 @@ from nexus.agents.memnon.utils.embedding_tables import (
     build_candidate_ann_index,
     candidate_ann_index_name,
     drop_candidate_ann_index,
+    ensure_character_experience_embedding_table,
 )
+from nexus.agents.orrery.knowledge_surfacing import _Candidate, _semantic_scores
 from nexus.config import load_settings
 from nexus.config.settings_models import ANNConfig
 from nexus.database import connection_kwargs, database_url
@@ -127,11 +129,36 @@ def test_ann_runtime_searches_and_plans(
             )
             chunk_id, model, vector = cursor.fetchone()
             cursor.execute(
+                "SELECT word FROM narrative_chunks c, "
+                "unnest(tsvector_to_array(to_tsvector('english', c.raw_text))) word "
+                "WHERE c.id = %s AND word ~ '^[a-z]{3,}$' AND word <> 'gender' "
+                "ORDER BY word LIMIT 1",
+                (chunk_id,),
+            )
+            query_word = cursor.fetchone()[0]
+            cursor.execute(
                 "INSERT INTO world_events (event_type, tick_chunk_id, source) "
                 "SELECT type, %s, 'retrograde' FROM event_types ORDER BY type LIMIT 1 RETURNING id",
                 (chunk_id,),
             )
             event_id = cursor.fetchone()[0]
+            cursor.execute(
+                "INSERT INTO character_experiences (character_entity_id, "
+                "anchor_chunk_id, world_event_ids, basis, seed_summary, salience, "
+                "source_digest, world_layer) "
+                "SELECT entity_id, %s, ARRAY[%s]::bigint[], 'participant', "
+                "'ANN proof experience', 0.8, 'ann-proof', 'primary' "
+                "FROM characters WHERE entity_id IS NOT NULL ORDER BY id LIMIT 1 "
+                "RETURNING id, character_entity_id",
+                (chunk_id, event_id),
+            )
+            experience_id, owner_id = cursor.fetchone()
+            experience_table = ensure_character_experience_embedding_table(cursor, 2560)
+            cursor.execute(
+                f"INSERT INTO {experience_table} (experience_id, model, embedding) "
+                "VALUES (%s, %s, %s::vector(2560))",
+                (experience_id, model, vector),
+            )
             cursor.execute(
                 "INSERT INTO retrograde_summaries (world_event_id, recorded_at_chunk_id, chronology, summary_text) "
                 "VALUES (%s, %s, 'deep_past', 'ANN proof memory') RETURNING id",
@@ -175,6 +202,9 @@ def test_ann_runtime_searches_and_plans(
                         observer.execute("SET LOCAL jit = off")
                         observer.execute("EXPLAIN (FORMAT JSON) " + statement)
                         plan = observer.fetchone()[0]
+                        # Return rows from the controlled index execution too,
+                        # so top-1 equivalence exercises HNSW at this scale.
+                        result = super().execute(query, vars)
                         observer.execute("RESET enable_seqscan")
                         observer.execute("RESET enable_sort")
                         observer.execute("RESET jit")
@@ -202,8 +232,6 @@ def test_ann_runtime_searches_and_plans(
         enabled = mode
         config_path.write_text(
             baseline_config.replace(
-                "[memnon.retrieval.ann]\n", "[memnon.retrieval.ann]\n", 1
-            ).replace(
                 "enabled = false\n# Require substantial growth",
                 f"enabled = {str(mode).lower()}\n# Require substantial growth",
                 1,
@@ -231,41 +259,84 @@ def test_ann_runtime_searches_and_plans(
                     cursor, 2560, vector, model, 10
                 )
                 assert summaries[0]["summary_id"] == summary_id
+                experience_scores = _semantic_scores(
+                    cursor,
+                    candidates=[
+                        _Candidate(
+                            kind="experience",
+                            candidate_id=experience_id,
+                            character_entity_id=owner_id,
+                            character_name="ANN proof",
+                            summary="ANN proof experience",
+                            source_chunk_id=chunk_id,
+                            claim_id=None,
+                            claim_scope=None,
+                            source_tier="participant",
+                            immediate_source_entity_id=None,
+                            immediate_source_name=None,
+                            acquired_at_world_time=None,
+                            location_id=None,
+                            severity=None,
+                            salience=0.8,
+                            freshly_revealed=False,
+                            current_scene_acquisition=False,
+                        )
+                    ],
+                    query_embeddings={model: embedding},
+                    missing_score=0.0,
+                )
+                score, status = experience_scores[experience_id]
+                assert status == "scored"
+                assert score == pytest.approx(1.0, abs=1e-6)
         finally:
             connection.close()
         engine = create_engine(url)
         try:
             with engine.connect() as conn:
                 aliases = hybrid_alias_search(
-                    conn, "ANN", embedding, model, 2560, alias_lookup={}
+                    conn, query_word, embedding, model, 2560, alias_lookup={}
                 )
-                # This word need not match narrative; exercise both generated SQL branches.
-                hybrid_alias_search(
-                    conn, "ANN", embedding, model, 2560, alias_lookup={"ann": ["ANN"]}
+                alias_matches = hybrid_alias_search(
+                    conn,
+                    query_word,
+                    embedding,
+                    model,
+                    2560,
+                    alias_lookup={query_word: [query_word]},
                 )
+                assert aliases
+                assert alias_matches
+                assert aliases[0]["id"] == alias_matches[0]["id"] == chunk_id
         finally:
             engine.dispose()
         assert (
-            len(captured) == 7
-        )  # Two corpora per public search + summary + two aliases.
+            len(captured) == 8
+        )  # Two corpora per public search + summary + experience + two aliases.
         for item in captured:
             plan = json.dumps(item["plan"])
             table = summary_table if "rse.embedding" in item["sql"] else TABLE
             if mode:
                 assert "halfvec(2560)" in item["sql"]
-                assert candidate_ann_index_name(table) in plan
+                # Experience scoring evaluates supplied IDs, not nearest neighbors.
+                if "source.experience_id" not in item["sql"]:
+                    assert candidate_ann_index_name(table) in plan
             else:
                 assert "halfvec(2560)" not in item["sql"]
-                # Empty text matches can prune alias vector execution; other paths scan.
-                if "text_search AS" not in item["sql"]:
+                if "source.experience_id" not in item["sql"]:
                     assert '"Node Type": "Seq Scan"' in plan
+                else:
+                    # ID-bound scoring may use its primary-key B-tree in either mode.
+                    assert "hnsw" not in plan
         assert not any("CREATE INDEX" in statement.upper() for statement in statements)
+        assert not any("enable_seqscan" in statement for statement in statements)
+        assert any("SET LOCAL hnsw.ef_search" in s for s in statements) == mode
         results_by_mode.append(
             (
                 vector_results[0]["id"],
                 hybrid_results[0]["id"],
                 summaries[0]["id"],
-                aliases,
+                aliases[0]["id"],
+                alias_matches[0]["id"],
             )
         )
-    assert results_by_mode[0][:3] == results_by_mode[1][:3]
+    assert results_by_mode[0] == results_by_mode[1]
