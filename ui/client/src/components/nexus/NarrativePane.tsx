@@ -208,7 +208,8 @@ export function NarrativePane({
   const chunks = episodeChunks?.chunks ?? [];
   const hasPending = slotState?.has_pending ?? false;
   const pendingText = hasPending ? slotState?.storyteller_text ?? null : null;
-  const choices = slotState?.choices ?? [];
+  const choices = hasPending ? slotState?.choices ?? [] : [];
+  const needsRecovery = !!engine.failedGeneration && !hasPending;
   const isBootstrapNeeded =
     !!slotState &&
     !slotState.is_empty &&
@@ -307,7 +308,8 @@ export function NarrativePane({
       ? historicalGrounding
       : null;
 
-  const canSubmit = !isGenerating && !!slotState && !slotState.is_wizard_mode;
+  const canSubmit = !isGenerating && !engine.isRecoveryLoading && !needsRecovery
+    && !!slotState && !slotState.is_wizard_mode;
 
   const handleChoice = useCallback(
     (index: number) => {
@@ -543,7 +545,63 @@ export function NarrativePane({
             </div>
           )}
 
-          {isBootstrapNeeded && !isGenerating && (
+          <div className="choices">
+              {draft.previousActions.map((action) => (
+                <details key={action.attempt} data-testid="unconfirmed-action">
+                  <summary>Unconfirmed previous action</summary>
+                  <p>
+                    Its send was not confirmed. Check the latest scene before
+                    using this text again.
+                  </p>
+                  <Textarea
+                    readOnly
+                    autoSize
+                    value={action.text}
+                    aria-label="Saved unconfirmed action"
+                  />
+                  <button type="button" onClick={() => draft.dismissAction(action.attempt)}>
+                    Dismiss saved action
+                  </button>
+                </details>
+              ))}
+              {draft.storageError && (
+                <p role="alert">
+                  This draft could not be saved in your browser. Keep this page
+                  open or copy your text before leaving.
+                </p>
+              )}
+          </div>
+
+          {needsRecovery && !isGenerating && (
+            <section className="choices" data-testid="generation-recovery" role="alert">
+              <h3>The next scene could not be completed.</h3>
+              <p>
+                {isBootstrapNeeded
+                  ? "Your story setup is saved. You can try beginning the story again."
+                  : "Your last accepted action is saved. Retry continues from that action without choosing or saving it again."}
+              </p>
+              <p>Nothing will be retried until you choose to continue.</p>
+              <details>
+                <summary>Failure details</summary>
+                <p>{engine.generationError || engine.failedGeneration?.error}</p>
+              </details>
+              <button
+                className="choice"
+                onClick={() => void engine.retryGeneration()}
+                disabled={engine.isRecoveryLoading}
+                data-testid="button-retry-generation"
+              >
+                <span className="choice-glyph">◆</span>
+                <span className="choice-text">Retry continuation</span>
+              </button>
+            </section>
+          )}
+
+          {engine.isRecoveryLoading && !isGenerating && !needsRecovery && (
+            <p role="status">Checking the latest continuation…</p>
+          )}
+
+          {isBootstrapNeeded && canSubmit && (
             <section className="choices">
               <button
                 className="choice"
@@ -558,32 +616,8 @@ export function NarrativePane({
 
           {/* Freeform slot 0 stays available even when the storyteller
               presented no numbered choices (matches the CLI continue flow). */}
-          {!isGenerating && !isBootstrapNeeded && (
+          {!isGenerating && !isBootstrapNeeded && !needsRecovery && (
             <section className="choices" data-testid="story-choices">
-              {draft.previousAction && (
-                <details data-testid="unconfirmed-action">
-                  <summary>Unconfirmed previous action</summary>
-                  <p>
-                    Its send was not confirmed. Check the latest scene before
-                    using this text again.
-                  </p>
-                  <Textarea
-                    readOnly
-                    autoSize
-                    value={draft.previousAction.text}
-                    aria-label="Saved unconfirmed action"
-                  />
-                  <button type="button" onClick={draft.dismissAction}>
-                    Dismiss saved action
-                  </button>
-                </details>
-              )}
-              {draft.storageError && (
-                <p role="alert">
-                  This draft could not be saved in your browser. Keep this page
-                  open or copy your text before leaving.
-                </p>
-              )}
               {choices.map((text, i) => (
                 <button
                   key={`${i}-${text}`}

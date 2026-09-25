@@ -4,8 +4,9 @@ import {
   clearUnconfirmedAction,
   readReaderDraft,
   readerDraftScope,
-  readUnconfirmedAction,
+  readUnconfirmedActions,
   READER_ACTION_CHANGED,
+  READER_DRAFT_ACCEPTED,
   writeReaderDraft,
   writeUnconfirmedAction,
   type ReaderDraft,
@@ -17,7 +18,7 @@ import type { SlotState } from "@/types/narrative";
 interface DraftState {
   key: string | null;
   draft: ReaderDraft;
-  action: UnconfirmedAction | null;
+  actions: UnconfirmedAction[];
   storageError: boolean;
 }
 
@@ -27,11 +28,11 @@ function load(scope: ReaderDraftScope | null): DraftState {
     return {
       key: scope?.draftKey ?? null,
       draft: scope ? readReaderDraft(scope.draftKey) ?? empty : empty,
-      action: scope ? readUnconfirmedAction(scope.actionKey) : null,
+      actions: scope ? readUnconfirmedActions(scope.actionKey) : [],
       storageError: false,
     };
   } catch {
-    return { key: scope?.draftKey ?? null, draft: empty, action: null, storageError: true };
+    return { key: scope?.draftKey ?? null, draft: empty, actions: [], storageError: true };
   }
 }
 
@@ -50,17 +51,34 @@ export function useReaderDraft(slotState: SlotState | undefined) {
     if (!scope) return;
     const refreshAction = () => {
       try {
-        const action = readUnconfirmedAction(scope.actionKey);
-        setState((previous) => previous.key === key ? { ...previous, action } : previous);
+        const actions = readUnconfirmedActions(scope.actionKey);
+        setState((previous) => previous.key === key ? { ...previous, actions } : previous);
       } catch {
         setState((previous) => ({ ...previous, storageError: true }));
       }
     };
+    const accepted = (event: Event) => {
+      const { key: acceptedKey, revision } = (event as CustomEvent).detail;
+      setState((previous) => previous.key === acceptedKey && previous.draft.revision === revision
+        ? { ...previous, draft: { revision: crypto.randomUUID(), text: "" } } : previous);
+    };
+    const storage = (event: StorageEvent) => {
+      refreshAction();
+      if (event.key === key && event.newValue === null && event.oldValue) {
+        try {
+          accepted(new CustomEvent(READER_DRAFT_ACCEPTED, {
+            detail: { key, revision: JSON.parse(event.oldValue).revision },
+          }));
+        } catch { /* Ignore malformed foreign records. */ }
+      }
+    };
+    window.addEventListener(READER_DRAFT_ACCEPTED, accepted);
     window.addEventListener(READER_ACTION_CHANGED, refreshAction);
-    window.addEventListener("storage", refreshAction);
+    window.addEventListener("storage", storage);
     return () => {
+      window.removeEventListener(READER_DRAFT_ACCEPTED, accepted);
       window.removeEventListener(READER_ACTION_CHANGED, refreshAction);
-      window.removeEventListener("storage", refreshAction);
+      window.removeEventListener("storage", storage);
     };
   }, [key, scope?.actionKey]);
 
@@ -89,7 +107,6 @@ export function useReaderDraft(slotState: SlotState | undefined) {
     if (action && scope) {
       try {
         writeUnconfirmedAction(scope.actionKey, action);
-        setState((previous) => ({ ...previous, action }));
       } catch {
         setState((previous) => ({ ...previous, storageError: true }));
       }
@@ -107,7 +124,7 @@ export function useReaderDraft(slotState: SlotState | undefined) {
         }
       }
       setState((previous) => previous.key === key && previous.draft.revision === draft.revision
-        ? { ...previous, draft: { revision: crypto.randomUUID(), text: "" }, action: null }
+        ? { ...previous, draft: { revision: crypto.randomUUID(), text: "" } }
         : previous);
     } catch {
       // Transport errors normally become false in useNarrativeEngine. Retain
@@ -117,11 +134,10 @@ export function useReaderDraft(slotState: SlotState | undefined) {
     }
   };
 
-  const dismissAction = () => {
-    if (!scope || !current.action) return;
+  const dismissAction = (attempt: string) => {
+    if (!scope) return;
     try {
-      clearUnconfirmedAction(scope.actionKey, current.action.attempt);
-      setState((previous) => ({ ...previous, action: null }));
+      clearUnconfirmedAction(scope.actionKey, attempt);
     } catch {
       setState((previous) => ({ ...previous, storageError: true }));
     }
@@ -133,7 +149,8 @@ export function useReaderDraft(slotState: SlotState | undefined) {
     submit,
     // Failed auto-approval can move the frontier. Keep that action readable,
     // without copying it into the new frontier's editable input.
-    previousAction: current.action?.draftKey !== key ? current.action : null,
+    previousActions: current.actions.filter((action) =>
+      action.draftKey !== key || action.revision !== current.draft.revision),
     dismissAction,
     storageError: current.storageError,
   };

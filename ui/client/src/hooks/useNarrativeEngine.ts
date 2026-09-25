@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import {
   continueNarrative,
+  retryNarrative,
   getSlotState,
   getActiveGeneration,
   getGenerationStatus,
@@ -23,6 +24,7 @@ import {
   ACTIVE_GENERATION_PHASES,
   type NarrativePhase,
   type GenerationSettings,
+  type GenerationSession,
   type NarrativeProgressPayload,
   type SkaldStatus,
   type SlotState,
@@ -43,6 +45,9 @@ export interface NarrativeEngine {
   skaldStatus: SkaldStatus;
   elapsedMs: number;
   generationError: string | null;
+  failedGeneration: GenerationSession | null;
+  isRecoveryLoading: boolean;
+  retryGeneration: () => Promise<boolean>;
   isGenerating: boolean;
   /** Increments on completion to restore frontier scrolling and input focus. */
   completedGenerations: number;
@@ -55,6 +60,8 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
 
   const [phase, setPhase] = useState<NarrativePhase | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [failedGeneration, setFailedGeneration] = useState<GenerationSession | null>(null);
+  const [isRecoveryLoading, setIsRecoveryLoading] = useState(true);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [backendReachable, setBackendReachable] = useState(true);
   const [receiving, setReceiving] = useState(false);
@@ -139,6 +146,8 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     phaseRef.current = null;
     setPhase(null);
     setGenerationError(null);
+    setFailedGeneration(null);
+    setIsRecoveryLoading(true);
     setReceiving(false);
     stopClock();
     if (slot === null) return;
@@ -202,8 +211,13 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
             ? await read((signal) => getGenerationStatus(slot, active.session_id, signal))
             : active;
         if (obsolete()) return;
+        if (state && (state.slot !== slot || state.session_id !== active?.session_id)) {
+          throw new Error("Generation response identity mismatch");
+        }
+        setIsRecoveryLoading(false);
         setBackendReachable(true);
         if (!state) {
+          setFailedGeneration(null);
           if (lastTerminal) {
             lastTerminal = "";
             invalidateNarrativeQueries();
@@ -221,6 +235,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           if (sessionRef.current !== state.session_id) {
             startClock(Date.parse(state.created_at));
           }
+          setFailedGeneration(null);
           sessionRef.current = state.session_id;
           phaseRef.current = state.phase;
           setPhase(state.phase);
@@ -236,9 +251,12 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
             lastTerminal = terminal;
             invalidateNarrativeQueries();
             if (state.terminal_outcome === "discarded") {
+              setFailedGeneration(null);
               setGenerationError(null);
               setReceiving(false);
             } else if (state.terminal_outcome === "error" || state.status === "error") {
+              setFailedGeneration(state);
+              setReceiving(false);
               const message =
                 state.error || state.error_class || "Narrative generation failed";
               setGenerationError(message);
@@ -248,6 +266,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
                 variant: "destructive",
               });
             } else {
+              setFailedGeneration(null);
               setGenerationError(null);
               setCompletedGenerations((n) => n + 1);
               setReceiving(true);
@@ -362,8 +381,8 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     };
   }, []);
 
-  const submitTurn = useCallback(
-    async (params: { choice?: number; userText?: string }) => {
+  const submitRequest = useCallback(
+    async (params: { choice?: number; userText?: string }, retrySession?: string) => {
       if (slot === null) throw new Error("No active slot");
       if (submittingRef.current || isActivePhase(phaseRef.current)) {
         toast({
@@ -382,10 +401,10 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
       startClock();
 
       try {
-        if (slotState?.has_pending && !slotState.session_id) {
+        if (!retrySession && slotState?.has_pending && !slotState.session_id) {
           throw new Error("Pending turn is missing its session ID");
         }
-        const result = await continueNarrative({
+        const result = retrySession ? await retryNarrative(slot, retrySession) : await continueNarrative({
           slot,
           ...params,
           sessionId: slotState?.has_pending
@@ -393,6 +412,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
             : undefined,
         });
         if (activeSlotRef.current !== slot) return true;
+        setFailedGeneration(null);
         sessionRef.current = result.session_id;
         submittingRef.current = false;
         recoverRef.current();
@@ -424,6 +444,17 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     [slot, slotState, startClock, stopClock, invalidateNarrativeQueries],
   );
 
+  const submitTurn = useCallback(
+    (params: { choice?: number; userText?: string }) => {
+      if (failedGeneration && !slotState?.has_pending) return Promise.resolve(false);
+      return submitRequest(params);
+    }, [failedGeneration, slotState?.has_pending, submitRequest],
+  );
+  const retryGeneration = useCallback(() => {
+    if (!failedGeneration || slotState?.has_pending) return Promise.resolve(false);
+    return submitRequest({}, failedGeneration.session_id);
+  }, [failedGeneration, slotState?.has_pending, submitRequest]);
+
   let skaldStatus: SkaldStatus = "READY";
   if (!backendReachable) {
     skaldStatus = "OFFLINE";
@@ -446,6 +477,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     skaldStatus,
     elapsedMs,
     generationError: generationError ?? recoverySettingsError?.message ?? null,
+    failedGeneration,
+    isRecoveryLoading,
+    retryGeneration,
     isGenerating: isActivePhase(phase),
     completedGenerations,
     submitTurn,

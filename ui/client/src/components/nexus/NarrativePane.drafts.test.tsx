@@ -38,7 +38,7 @@ function mount(
   client.setQueryData(["/api/narrative/outline", state.slot], []);
   const engine: NarrativeEngine = {
     slotState: state, slotStateError: null, isSlotStateLoading: false,
-    phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null,
+    phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
     isGenerating: false, completedGenerations: 0, submitTurn: send,
   };
   return render(
@@ -131,6 +131,39 @@ describe("reader draft recovery", () => {
     next.unmount();
     mount();
     expect(input()).toHaveValue("");
+  });
+
+  it("clears the restored same revision when acknowledgement arrives after remount", async () => {
+    let accept!: (accepted: boolean) => void;
+    const view = mount(base, () => new Promise<boolean>((resolve) => { accept = resolve; }));
+    type(TEXT);
+    submit();
+    view.unmount();
+    mount();
+    expect(input()).toHaveValue(TEXT);
+    await act(async () => { accept(true); });
+    expect(input()).toHaveValue("");
+  });
+
+  it("retains earlier unconfirmed actions when another frontier send fails", async () => {
+    let view = mount(base, async () => false);
+    type(TEXT);
+    submit();
+    await act(async () => {});
+    view.unmount();
+    view = mount({ ...base, session_id: "second-frontier" }, async () => false);
+    type("Second unconfirmed action");
+    submit();
+    await act(async () => {});
+    expect(screen.getByLabelText("Saved unconfirmed action")).toHaveValue(TEXT);
+    view.unmount();
+    mount({ ...base, session_id: "third-frontier" });
+    const saved = screen.getAllByLabelText("Saved unconfirmed action");
+    expect(saved).toHaveLength(2);
+    expect(saved[0]).toHaveValue(TEXT);
+    expect(saved[1]).toHaveValue("Second unconfirmed action");
+    fireEvent.click(screen.getAllByText("Dismiss saved action")[1]);
+    expect(screen.getByLabelText("Saved unconfirmed action")).toHaveValue(TEXT);
   });
 
   it("does not let a delayed acknowledgement erase an edited revision", async () => {
