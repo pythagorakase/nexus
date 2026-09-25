@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Track the test-session provider guard and remove the now-tested OpenRouter wrapper from orphan exemptions.",
+  "reason": "Record the explicit character name reveal module reached by production validation, reconciliation, and acceptance paths.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -250,6 +250,7 @@
     "nexus/presence/__init__.py",
     "nexus/presence/cues.py",
     "nexus/presence/identity.py",
+    "nexus/presence/name_reveals.py",
     "nexus/presence/normalization.py",
     "nexus/presence/roster.py",
     "nexus/prompts/__init__.py",
