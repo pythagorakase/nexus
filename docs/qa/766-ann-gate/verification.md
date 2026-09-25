@@ -190,5 +190,17 @@ SELECT datname FROM pg_database WHERE datname LIKE 'qa640_766_%';
 - After resolving those decisions, complete the remaining enabled search-site
   checks, experience-scoring coverage, final-snapshot offline run, the specified
   PostgreSQL `tests/test_memnon tests/test_api -k 'ann or vector or embedding or search'`
-  gate, standalone reachability/prompt-lint tests, and config validation.
+  gate, and standalone reachability/prompt-lint tests.
 - No push, PR, review wait, or merge was performed because proof gates did not pass.
+
+## Commit Checks
+
+The partial implementation was committed as `3d987c87`. Both pre-commit hooks
+ran without bypass and passed (including `scripts/validate_config_commit.py`):
+
+```text
+Regenerate Orrery package catalog........................................Passed
+Validate NEXUS config and model-ID drift.................................Passed
+```
+
+Authored by Codex (GPT-6 Astra).
