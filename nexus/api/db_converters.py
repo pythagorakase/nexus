@@ -187,6 +187,12 @@ async def create_declared_entity_stubs(
     parsed = [
         NewEntityDeclaration.model_validate(declaration) for declaration in declarations
     ]
+    if any(declaration.same_as is not None for declaration in parsed):
+        from nexus.presence.name_reveals import CharacterNameRevealConflict
+
+        raise CharacterNameRevealConflict(
+            "Name reveals require accepted ruling persistence before stub creation"
+        )
     created = 0
 
     for declaration in parsed:

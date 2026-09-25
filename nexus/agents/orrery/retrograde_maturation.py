@@ -154,6 +154,12 @@ def enqueue_declared_entity_maturations(
     parsed = [
         NewEntityDeclaration.model_validate(declaration) for declaration in declarations
     ]
+    if any(declaration.same_as is not None for declaration in parsed):
+        from nexus.presence.name_reveals import CharacterNameRevealConflict
+
+        raise CharacterNameRevealConflict(
+            "Name reveals require accepted ruling persistence, not maturation"
+        )
     result.declared = len(parsed)
 
     settings_dict = dict(settings or load_settings_as_dict())
@@ -270,6 +276,10 @@ def _resolve_or_create_stub(
     kind-incompatible names raise ``ValueError``).
     """
 
+    if declaration.same_as is not None:
+        from nexus.presence.name_reveals import CharacterNameRevealConflict
+
+        raise CharacterNameRevealConflict("Name reveals cannot create a stub")
     if declaration.kind == "character":
         existing = require_character_identity(
             cur,
@@ -1428,7 +1438,10 @@ def _load_job_context(
             entry for entry in roster.all_references.values() if entry.kind == kind
         ]
         for entry in sorted(entries, key=lambda entry: entry.id)[:6]:
-            if entry.name == row["entity_name"]:
+            if (entry.kind, entry.id) == (
+                row["entity_kind"],
+                row["entity_subtype_id"],
+            ):
                 continue
             scene_entities.append(
                 {

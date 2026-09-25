@@ -1489,7 +1489,11 @@ class LogonUtility:
                 anthropic_transport=anthropic_gaia_transport,
             )
         self._attach_prompt_window_guard(
-            gaia_provider, gaia_prompt, seat="gaia", window=gaia_window
+            gaia_provider,
+            gaia_prompt,
+            seat="gaia",
+            window=gaia_window,
+            narrative=writer.narrative,
         )
         gaia_schema_model = self._gaia_schema_model(gaia_wire)
         gaia, _gaia_response = gaia_provider.get_structured_completion(
@@ -1591,7 +1595,11 @@ class LogonUtility:
                 anthropic_transport=anthropic_gaia_transport,
             )
         self._attach_prompt_window_guard(
-            gaia_provider, gaia_prompt, seat="gaia", window=gaia_window
+            gaia_provider,
+            gaia_prompt,
+            seat="gaia",
+            window=gaia_window,
+            narrative=writer.narrative,
         )
         gaia_schema_model = self._gaia_schema_model(gaia_wire)
         gaia, _gaia_response = await gaia_provider.get_structured_completion_async(
@@ -1802,7 +1810,13 @@ class LogonUtility:
         return writer.tokens, writer.budget, writer.blocks, writer.counter
 
     def _attach_prompt_window_guard(
-        self, provider: Any, prompt: str, *, seat: str, window: Optional[int]
+        self,
+        provider: Any,
+        prompt: str,
+        *,
+        seat: str,
+        window: Optional[int],
+        narrative: str | None = None,
     ) -> None:
         """Bind exact rendered accounting to every provider attempt, including repair."""
         from nexus.telemetry.generation import report_generation_phase
@@ -1829,6 +1843,11 @@ class LogonUtility:
         delegate = getattr(delegate, "_wire_validation_delegate", delegate)
 
         async def validate_attempt(ctx: Any, output: Any) -> Any:
+            from contextlib import nullcontext
+
+            from nexus.agents.logon.orrery_tag_validation import (
+                name_reveal_update_validation,
+            )
             from nexus.agents.logon.skald_wire import finalize_scene_reset_repair
             from nexus.api.db_pool import get_connection
             from nexus.api.presence_reconciliation import (
@@ -1838,6 +1857,8 @@ class LogonUtility:
             from nexus.telemetry.usage import validation_attempt
 
             with validation_attempt(attempt_record):
+                identity_updates = nullcontext(lambda value: value)
+                prospective_index = None
                 declarations = getattr(output, "new_entities", None)
                 if (
                     any(
@@ -1869,16 +1890,45 @@ class LogonUtility:
                         declarations,
                         index=identity_catalog,
                         scene_location=scene_location,
+                        narrative=(
+                            narrative
+                            if narrative is not None
+                            else getattr(output, "narrative", None)
+                        ),
+                    )
+                    from nexus.presence.name_reveals import project_name_reveals
+
+                    prospective_index, _ = project_name_reveals(
+                        [declaration.model_dump() for declaration in declarations],
+                        identity_catalog,
+                        narrative=(
+                            narrative
+                            if narrative is not None
+                            else getattr(output, "narrative", None)
+                        ),
+                    )
+                    identity_updates = name_reveal_update_validation(
+                        output,
+                        identity_catalog,
+                        narrative=(
+                            narrative
+                            if narrative is not None
+                            else getattr(output, "narrative", None)
+                        ),
                     )
                 presence = getattr(output, "presence", None)
                 if presence is not None and presence._reset_repair is not None:
-                    index = None
-                    if self._validation_dbname is not None:
+                    index = prospective_index
+                    if index is None and self._validation_dbname is not None:
                         with get_connection(self._validation_dbname) as conn:
                             rows = read_character_roster_from_connection(conn)
                         index = character_identity_index(rows.characters, rows.aliases)
                     finalize_scene_reset_repair(output, index)
-                return await delegate(ctx, output) if delegate is not None else output
+                with identity_updates as accepted_names:
+                    accepted = (
+                        await delegate(ctx, output) if delegate is not None else output
+                    )
+                return accepted_names(accepted)
 
         validate_attempt._wire_validation_delegate = delegate
         provider.output_validator = validate_attempt

@@ -16,11 +16,23 @@ back to the model while it still owns the turn.
 from __future__ import annotations
 
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from difflib import get_close_matches
 import logging
-from typing import Any, Callable, FrozenSet, List, Mapping, MutableSet, Optional, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    FrozenSet,
+    List,
+    Mapping,
+    MutableSet,
+    Optional,
+    Tuple,
+)
 
 from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
@@ -39,6 +51,9 @@ from nexus.agents.orrery.tag_writer import (
 from nexus.telemetry.usage import record_wire_repair
 from nexus.util.log_safety import quote_log_value
 from nexus.prompts.registry import PromptId, load
+
+if TYPE_CHECKING:
+    from nexus.presence.roster import IdentityIndex
 
 logger = logging.getLogger("nexus.logon.orrery_tag_validation")
 
@@ -616,6 +631,74 @@ def _has_substantive_update(entity_kind: str, update: Any) -> bool:
     )
 
 
+@contextmanager
+def name_reveal_update_validation(
+    response: Any,
+    index: IdentityIndex,
+    *,
+    narrative: str | None,
+) -> Iterator[Callable[[Any], Any]]:
+    """Validate revealed identities against their existing tag state.
+
+    The accepted canonical name is not in the database yet. Bind only explicit,
+    narrative-validated revelations to their stable IDs, use their current name
+    while registry validators read the database, and expose the accepted name
+    afterwards. Failed validation restores the caller's original references.
+    """
+    from nexus.presence.name_reveals import (
+        CharacterNameRevealConflict,
+        project_name_reveals,
+    )
+
+    projected, reveals = project_name_reveals(
+        [item.model_dump() for item in (getattr(response, "new_entities", None) or [])],
+        index,
+        narrative=narrative,
+    )
+    by_id = {reveal.target.id: reveal for reveal in reveals}
+    updates = getattr(getattr(response, "updates", None), "characters", None) or []
+    bindings = []
+    for update in updates:
+        keys = projected.matching_keys(update.name, "character")
+        reveal_keys = {key for key in keys if key[1] in by_id}
+        if update.id not in by_id and not reveal_keys:
+            continue
+        if len(keys) != 1:
+            raise CharacterNameRevealConflict(
+                "Name-reveal update has an unresolved or ambiguous name: "
+                f"{update.name!r}"
+            )
+        key = next(iter(keys))
+        if key[1] not in by_id or (update.id is not None and update.id != key[1]):
+            raise CharacterNameRevealConflict(
+                "Name-reveal update ID conflicts with its declared identity"
+            )
+        bindings.append((update, update.id, update.name, by_id[key[1]]))
+
+    for update, _, _, reveal in bindings:
+        update.id = reveal.target.id
+        update.name = reveal.target.name
+
+    def accepted_names(value: Any) -> Any:
+        # Validators may return a copied wire. Restore that result as well as
+        # the input objects, including request-time registry-specialized wires.
+        for update in (
+            getattr(getattr(value, "updates", None), "characters", None) or []
+        ):
+            if update.id in by_id:
+                update.name = by_id[update.id].new_name
+        return value
+
+    succeeded = False
+    try:
+        yield accepted_names
+        succeeded = True
+    finally:
+        for update, original_id, original_name, reveal in bindings:
+            update.id = reveal.target.id if succeeded else original_id
+            update.name = reveal.new_name if succeeded else original_name
+
+
 def normalize_extend_expiry_reasserts(
     response: Any,
     cur: Any,
@@ -684,6 +767,7 @@ def normalize_extend_expiry_reasserts(
                 str(getattr(declaration, "name", "")),
             )
             for declaration in (getattr(response, "new_entities", None) or [])
+            if getattr(declaration, "same_as", None) is None
         )
         if allow_same_turn_declarations
         else frozenset()
