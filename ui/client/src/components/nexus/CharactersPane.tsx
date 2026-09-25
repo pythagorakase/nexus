@@ -121,7 +121,6 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
     [
       selected.summary,
       selected.appearance,
-      selected.background,
       selected.personality,
       selected.emotionalState,
       selected.currentActivity,
@@ -218,7 +217,6 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
               )}
               <DossierSection title="Summary" body={selected.summary} />
               <DossierSection title="Appearance" body={selected.appearance} />
-              <DossierSection title="Background" body={selected.background} />
               <DossierSection title="Personality" body={selected.personality} />
               <DossierSection
                 title="Emotional State"

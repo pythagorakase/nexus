@@ -80,6 +80,7 @@ describe("CharactersPane", () => {
     const character = makeCharacter({
       id: 946,
       name: "Nell Rourke",
+      background: "Trait-compiler stub; details intentionally sparse until play.",
       extraData: {
         source: "retrograde",
         stub_kind: "retrograde_expansion_ref",
@@ -89,7 +90,7 @@ describe("CharactersPane", () => {
     const view = renderPane([character]);
     expect(screen.getByText("No details recorded yet.")).toBeInTheDocument();
     expect(
-      screen.queryByText(/retrograde|canonical rows|latent/i),
+      screen.queryByText(/retrograde|trait-compiler|canonical rows|latent/i),
     ).not.toBeInTheDocument();
 
     view.unmount();
@@ -112,15 +113,15 @@ describe("CharactersPane", () => {
     expect(screen.queryByText("No details recorded yet.")).not.toBeInTheDocument();
   });
 
-  it("shows genuine background even when the other dossier fields are unknown", () => {
+  it("shows genuine appearance even when the other dossier fields are unknown", () => {
     renderPane([
       makeCharacter({
         id: 946,
         name: "Nell Rourke",
-        background: "A former shipwright.",
+        appearance: "A weathered yellow coat.",
       }),
     ]);
-    expect(screen.getByText("A former shipwright.")).toBeInTheDocument();
+    expect(screen.getByText("A weathered yellow coat.")).toBeInTheDocument();
     expect(screen.queryByText("No details recorded yet.")).not.toBeInTheDocument();
   });
 
