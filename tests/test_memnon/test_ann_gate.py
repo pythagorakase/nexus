@@ -225,7 +225,7 @@ def test_ann_search_sql_matches_repaired_baseline(path: str) -> None:
         if isinstance(node, (ast.JoinedStr, ast.Constant))
         and any(
             keyword in (ast.get_source_segment(source, node) or "")
-            for keyword in ("SELECT ", "WITH text_search")
+            for keyword in ("SELECT ", "WITH text_search", "<=>")
         )
     ]
     assert (
