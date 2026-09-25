@@ -218,3 +218,92 @@ def test_retry_bootstrap_without_a_playable_parent(recovery_db):
     response, tasks = retry(failed)
     assert tasks.tasks[0].args == (response.session_id, 0, "", 4)
     assert snapshot(dbname)[0] == []
+
+
+def _frontier_state(parent: int):
+    """Production-shaped slot state for a committed frontier with open choices."""
+    return SimpleNamespace(
+        is_wizard_mode=False,
+        narrative_state=SimpleNamespace(
+            has_pending=False,
+            session_id=None,
+            current_chunk_id=parent,
+            choices=["Agree.", "Walk away."],
+        ),
+    )
+
+
+def _continue(**request):
+    from nexus.api.narrative_schemas import ContinueNarrativeRequest
+
+    tasks = BackgroundTasks()
+    return asyncio.run(
+        narrative.continue_narrative(ContinueNarrativeRequest(slot=4, **request), tasks)
+    )
+
+
+def _latest_session(dbname):
+    with connect(dbname, cursor_factory=RealDictCursor) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT session_id, status, parent_chunk_id, terminal_outcome "
+            "FROM narrative_generation_sessions ORDER BY created_at DESC LIMIT 1"
+        )
+        return dict(cur.fetchone())
+
+
+def test_failure_between_acceptance_and_bind_stays_retryable(recovery_db, monkeypatch):
+    """A committed action survives a bind failure as the failed session's parent."""
+    dbname, parent, _ = recovery_db
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM narrative_generation_sessions")
+        cur.execute(
+            "UPDATE narrative_chunks SET choice_text = NULL WHERE id = %s", (parent,)
+        )
+    monkeypatch.setattr(
+        slot_state, "get_slot_state", lambda slot: _frontier_state(parent)
+    )
+    real_bind = narrative._bind_generation_owner
+    bind_outage = {"active": True}
+
+    def flaky_bind(**kwargs):
+        if bind_outage["active"]:
+            raise RuntimeError("bind connection lost")
+        return real_bind(**kwargs)
+
+    monkeypatch.setattr(narrative, "_bind_generation_owner", flaky_bind)
+
+    # 1. A failure before acceptance records nothing and binds nothing.
+    with pytest.raises(HTTPException) as rejected:
+        _continue(choice=5)
+    assert rejected.value.status_code == 400
+    assert snapshot(dbname)[0][0]["choice_text"] is None
+    unbound = _latest_session(dbname)
+    assert (unbound["status"], unbound["parent_chunk_id"]) == ("error", None)
+    with pytest.raises(HTTPException) as stale:
+        retry(unbound["session_id"])
+    assert stale.value.status_code == 409
+
+    # 2. The action is accepted, then the bind fails on its own connection.
+    with pytest.raises(RuntimeError, match="bind connection lost"):
+        _continue(choice=1)
+    assert snapshot(dbname)[0][0]["choice_text"] == "Agree."
+    failed = _latest_session(dbname)
+    assert (failed["status"], failed["terminal_outcome"]) == ("error", "error")
+    assert failed["parent_chunk_id"] == parent
+    assert snapshot(dbname)[2] == []
+
+    # 3. A client that was not told about the recorded action sends another
+    #    one: the 409 attempt is also bound to the recorded action, so the
+    #    reader is offered recovery instead of a dead end.
+    with pytest.raises(HTTPException) as conflict:
+        _continue(choice=2)
+    assert conflict.value.status_code == 409
+    assert _latest_session(dbname)["parent_chunk_id"] == parent
+    assert snapshot(dbname)[0][0]["choice_text"] == "Agree."
+
+    # 4. Once the outage clears, the explicit retry of the displayed failure
+    #    resumes the exact recorded action.
+    bind_outage["active"] = False
+    response, tasks = retry(_latest_session(dbname)["session_id"])
+    assert tasks.tasks[0].args == (response.session_id, parent, "Agree.", 4)
+    assert snapshot(dbname)[0][0]["choice_text"] == "Agree."

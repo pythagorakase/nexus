@@ -628,12 +628,17 @@ def _abandon_generation_owner(
     session_id: str,
     error: str,
     error_class: str = "GenerationError",
+    accepted_parent_candidate: Optional[int] = None,
 ) -> None:
     """Release a route-owned lease after a pre-scheduling failure."""
     conn = get_db_connection(slot)
     try:
         abandon_generation(
-            conn, session_id=session_id, error=error, error_class=error_class
+            conn,
+            session_id=session_id,
+            error=error,
+            error_class=error_class,
+            accepted_parent_candidate=accepted_parent_candidate,
         )
     finally:
         conn.close()
@@ -645,8 +650,14 @@ def _abandon_unscheduled_generation_owner(
     session_id: str,
     error: str,
     error_class: str = "GenerationError",
+    accepted_parent_candidate: Optional[int] = None,
 ) -> None:
-    """Best-effort cleanup for a route that never scheduled its generator."""
+    """Best-effort cleanup for a route that never scheduled its generator.
+
+    ``accepted_parent_candidate`` is the frontier chunk the route acted on; the
+    lease layer binds the failed session to it only if the player's action is
+    durably recorded there, so a later retry can resume that exact action.
+    """
 
     try:
         _abandon_generation_owner(
@@ -654,6 +665,7 @@ def _abandon_unscheduled_generation_owner(
             session_id=session_id,
             error=error,
             error_class=error_class,
+            accepted_parent_candidate=accepted_parent_candidate,
         )
     except Exception as release_exc:
         logger.error(
@@ -843,6 +855,10 @@ async def continue_narrative(
     accept_warnings: List[Dict[str, Any]] = []
     failure_class = "GenerationError"
     failure_reason = "Narrative request ended before generation was scheduled."
+    # The frontier chunk whose recorded action this request consumes. Acceptance
+    # commits before _bind_generation_owner runs, so a failure in between must
+    # still bind the failed session to this chunk when the action is on disk.
+    accepted_parent_candidate: Optional[int] = None
     try:
         if request.chunk_id is None and state is not None:
             if state.narrative_state is not None:
@@ -873,8 +889,10 @@ async def continue_narrative(
                         )
                     )
                     request.chunk_id = approved_chunk_id
+                    accepted_parent_candidate = approved_chunk_id
                 else:
                     request.chunk_id = narrative_state.current_chunk_id
+                    accepted_parent_candidate = narrative_state.current_chunk_id
                     if (
                         request.choice is not None
                         or request.accept_fate
@@ -970,6 +988,7 @@ async def continue_narrative(
                 session_id=session_id,
                 error=failure_reason,
                 error_class=failure_class,
+                accepted_parent_candidate=accepted_parent_candidate,
             )
 
 

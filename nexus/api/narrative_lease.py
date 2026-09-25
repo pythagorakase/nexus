@@ -309,8 +309,17 @@ def _finish_generation(
     error: Optional[str],
     release_embedding_claim: bool,
     error_class: Optional[str] = None,
+    accepted_parent_candidate: Optional[int] = None,
 ) -> None:
-    """Apply one terminal transition using lease -> claims -> session order."""
+    """Apply one terminal transition using lease -> claims -> session order.
+
+    ``accepted_parent_candidate`` names the frontier chunk a failed route acted
+    on before it could bind its parent. The player's action is committed in its
+    own transaction ahead of the bind, so the session is bound to that chunk
+    here, in the same transaction that records the failure, if and only if the
+    chunk durably holds a recorded action. A failure with no recorded action
+    keeps a NULL parent and ordinary input stays open.
+    """
     if status not in {"complete", "error"}:
         raise ValueError(f"Unsupported terminal generation status: {status}")
     try:
@@ -393,6 +402,21 @@ def _finish_generation(
                     session_id,
                 ),
             )
+            if accepted_parent_candidate is not None:
+                cur.execute(
+                    "SELECT choice_text FROM narrative_chunks WHERE id = %s",
+                    (accepted_parent_candidate,),
+                )
+                candidate = cur.fetchone()
+                if candidate and (candidate["choice_text"] or "").strip():
+                    cur.execute(
+                        """
+                        UPDATE narrative_generation_sessions
+                        SET parent_chunk_id = %s, updated_at = NOW()
+                        WHERE session_id = %s AND parent_chunk_id IS NULL
+                        """,
+                        (accepted_parent_candidate, session_id),
+                    )
         commit_transaction(conn)
         if released_lease:
             from nexus.jobs.scheduler import notify_generation_released
@@ -406,7 +430,12 @@ def _finish_generation(
 
 
 def abandon_generation(
-    conn: Any, *, session_id: str, error: str, error_class: str = "GenerationError"
+    conn: Any,
+    *,
+    session_id: str,
+    error: str,
+    error_class: str = "GenerationError",
+    accepted_parent_candidate: Optional[int] = None,
 ) -> None:
     """Fail a pre-scheduling route and release both its lease and parent claim."""
     _finish_generation(
@@ -417,6 +446,7 @@ def abandon_generation(
         error=error,
         release_embedding_claim=True,
         error_class=error_class,
+        accepted_parent_candidate=accepted_parent_candidate,
     )
 
 

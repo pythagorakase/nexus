@@ -185,3 +185,77 @@ async def test_retry_scheduling_failure_releases_its_new_owner(route, monkeypatc
         )
     assert tasks.tasks == []
     narrative._abandon_unscheduled_generation_owner.assert_called_once()
+
+
+def _committed_state(*, has_pending: bool = False, choices=("Open.", "Wait.")):
+    """Slot state whose frontier chunk is 17, pending session when requested."""
+    return SimpleNamespace(
+        is_wizard_mode=False,
+        narrative_state=SimpleNamespace(
+            has_pending=has_pending,
+            session_id="pending-17" if has_pending else None,
+            current_chunk_id=17,
+            choices=list(choices),
+        ),
+    )
+
+
+@pytest.fixture
+def continue_route(monkeypatch):
+    """Drive continue_narrative to the bind boundary without a database."""
+    from nexus.api.narrative_schemas import ContinueNarrativeRequest
+
+    monkeypatch.setattr(narrative, "require_writable_slot", Mock())
+    monkeypatch.setattr(narrative, "_acquire_generation_owner", Mock())
+    monkeypatch.setattr(
+        narrative,
+        "_bind_generation_owner",
+        Mock(side_effect=RuntimeError("bind connection lost")),
+    )
+    abandon = Mock()
+    monkeypatch.setattr(narrative, "_abandon_unscheduled_generation_owner", abandon)
+    monkeypatch.setattr(narrative.manager, "send_progress", AsyncMock())
+
+    async def run(state, **request):
+        monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: state)
+        tasks = BackgroundTasks()
+        with pytest.raises(RuntimeError, match="bind connection lost"):
+            await narrative.continue_narrative(
+                ContinueNarrativeRequest(slot=4, **request), tasks
+            )
+        assert tasks.tasks == []
+        abandon.assert_called_once()
+        return abandon.call_args.kwargs["accepted_parent_candidate"]
+
+    return run
+
+
+@pytest.mark.asyncio
+async def test_bind_failure_after_committed_frontier_action_names_that_chunk(
+    continue_route, monkeypatch
+):
+    """The accepted action's chunk reaches the abandon path for durable binding."""
+    monkeypatch.setattr(
+        narrative, "_record_player_response_for_chunk", Mock(return_value="Open.")
+    )
+    assert await continue_route(_committed_state(), choice=1) == 17
+
+
+@pytest.mark.asyncio
+async def test_bind_failure_after_auto_approval_names_the_approved_chunk(
+    continue_route, monkeypatch
+):
+    """Auto-approval commits a new chunk; that chunk is the retry frontier."""
+    monkeypatch.setattr(
+        narrative,
+        "_resolve_and_approve_pending",
+        AsyncMock(return_value=("Open.", 18, [])),
+    )
+    assert await continue_route(_committed_state(has_pending=True), choice=1) == 18
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_bind_failure_has_no_accepted_action(continue_route):
+    """No player action exists before the first chunk; nothing is bound."""
+    state = SimpleNamespace(is_wizard_mode=False, narrative_state=None)
+    assert await continue_route(state) is None

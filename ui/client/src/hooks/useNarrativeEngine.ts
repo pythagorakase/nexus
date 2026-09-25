@@ -255,11 +255,12 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
               setGenerationError(null);
               setReceiving(false);
             } else if (state.terminal_outcome === "error" || state.status === "error") {
-              // Only a failure bound to a committed action can be retried
-              // server-side. A failure recorded before that binding (for
-              // example while accepting the player's response) leaves normal
-              // input open, with the draft retained, instead of a Retry that
-              // the server would always reject.
+              // Only a failure bound to a recorded action can be retried
+              // server-side. The server binds parent_chunk_id whenever the
+              // player's action is durably recorded, including failures between
+              // acceptance and binding. A NULL parent therefore means no action
+              // is on disk: normal input stays open, with the draft retained,
+              // instead of a Retry the server would always reject.
               setFailedGeneration(state.parent_chunk_id == null ? null : state);
               setReceiving(false);
               const message =
