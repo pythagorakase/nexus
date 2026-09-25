@@ -33,7 +33,6 @@
     "nexus/api/resilient_openai.py",
     "scripts/assemble_context.py",
     "scripts/backfill_routine_anchors.py",
-    "scripts/benchmark_experience_enqueue_fence.py",
     "scripts/checkpoint_state.py",
     "scripts/chunk_transcripts.py",
     "scripts/create_vector_index.py",

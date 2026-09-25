@@ -50,7 +50,9 @@ def build_pydantic_ai_model_with_provider(model: str) -> tuple[Model, str]:
         raise ValueError(f"Unknown provider for model {model!r}")
     if provider == "openai":
         legacy_openai_provider = LegacyOpenAIProvider(model=model)
-        openai_provider = PydanticOpenAIProvider(api_key=legacy_openai_provider.api_key)
+        openai_provider = PydanticOpenAIProvider(
+            api_key=legacy_openai_provider.credential()
+        )
         return (
             OpenAIResponsesModel(model_name=model, provider=openai_provider),
             provider,
@@ -58,7 +60,7 @@ def build_pydantic_ai_model_with_provider(model: str) -> tuple[Model, str]:
     if provider == "anthropic":
         legacy_anthropic_provider = LegacyAnthropicProvider(model=model)
         anthropic_provider = PydanticAnthropicProvider(
-            api_key=legacy_anthropic_provider.api_key
+            api_key=legacy_anthropic_provider.credential()
         )
         override = get_native_structured_output_override(model)
         if override is not None:
@@ -86,6 +88,9 @@ def build_pydantic_ai_model_with_provider(model: str) -> tuple[Model, str]:
         )
     # Any other provider is an OpenAI-compatible server registered via
     # base_url in [global.model.api_models] (mock TEST server, Ollama, vLLM).
+    from nexus.config.provider_guard import require_test_provider
+
+    require_test_provider(model)
     endpoint = get_openai_compatible_endpoint(model)
     if endpoint is None:
         raise ValueError(f"No base_url registry entry for model {model!r}")

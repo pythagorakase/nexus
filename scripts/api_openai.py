@@ -427,14 +427,24 @@ class OpenAIProvider(LLMProvider):
                 f"Using standard model: {self.model} with temperature: {self.temperature}"
             )
 
+    def _ensure_network(self) -> None:
+        """Guard network access before loading the credential exactly once."""
+        from nexus.config.provider_guard import require_test_provider
+
+        require_test_provider(self.model, settings=self._registry_settings)
+        if not self.api_key:
+            self.api_key = self._get_api_key()
+
+    def credential(self) -> str:
+        """Return a guarded credential for consumers that own their SDK client."""
+        self._ensure_network()
+        return self.api_key
+
     @property
     def client(self) -> Any:
         """Create the SDK client on first use, after the test-provider guard."""
         if self._client is None:
-            from nexus.config.provider_guard import require_test_provider
-
-            require_test_provider(self.model, settings=self._registry_settings)
-            self.api_key = self.api_key or self._get_api_key()
+            self._ensure_network()
 
             # Create client with optional base_url for mock servers
             client_kwargs: Dict[str, Any] = {"api_key": self.api_key}

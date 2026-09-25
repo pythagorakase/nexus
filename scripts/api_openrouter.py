@@ -295,16 +295,24 @@ class OpenRouterProvider(LLMProvider):
         if self.repetition_penalty is not None:
             logger.info(f"Repetition penalty: {self.repetition_penalty}")
 
+    def _ensure_network(self) -> None:
+        """Guard network access before loading the credential exactly once."""
+        from nexus.config.provider_guard import require_test_provider
+
+        require_test_provider(self._registry_model, settings=self._registry_settings)
+        if not self.api_key:
+            self.api_key = self._get_api_key()
+
+    def credential(self) -> str:
+        """Return a guarded credential for consumers that own their SDK client."""
+        self._ensure_network()
+        return self.api_key
+
     @property
     def client(self) -> Any:
         """Create the SDK client on first use, after the test-provider guard."""
         if self._client is None:
-            from nexus.config.provider_guard import require_test_provider
-
-            require_test_provider(
-                self._registry_model, settings=self._registry_settings
-            )
-            self.api_key = self.api_key or self._get_api_key()
+            self._ensure_network()
             self._client = openai.OpenAI(api_key=self.api_key, base_url=self.API_BASE)
         return self._client
 
@@ -422,6 +430,7 @@ class OpenRouterProvider(LLMProvider):
         The OpenAI SDK doesn't support OpenRouter's reasoning parameters, so we use
         direct HTTP requests when reasoning is enabled.
         """
+        self._ensure_network()
         import requests
 
         # Build request payload

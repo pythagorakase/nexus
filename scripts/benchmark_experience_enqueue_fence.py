@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from nexus.agents.orrery.experiences import _ENQUEUE_CANDIDATES_SQL  # noqa: E402
+from nexus.config.story_model import resolve_seat  # noqa: E402
 from scripts import new_story_setup  # noqa: E402
 
 MIGRATION = ROOT / "migrations" / "111_experience_job_enqueue_gin_fence.sql"
@@ -60,6 +61,7 @@ def _explain_samples(
 
 
 def _plant_shape(cur: Any) -> int:
+    resolution = resolve_seat("orrery.experiences.model", override="TEST")
     cur.execute(
         "INSERT INTO narrative_chunks (raw_text) VALUES ('benchmark scene end') "
         "RETURNING id"
@@ -96,12 +98,12 @@ def _plant_shape(cur: Any) -> int:
             boundary_season, boundary_episode, boundary_scene,
             scene_end_season, scene_end_episode, scene_end_scene,
             batch_ordinal, experience_ids, slot, state, requested_model,
-            source_digest
+            source_digest, resolved_model, resolved_source
         )
         SELECT %s, %s, 'primary', 1, 1, 2, 1, 1, 1,
                grouped.batch_ordinal, grouped.experience_ids,
                'qa_wt720', 'queued', 'TEST',
-               'qa-wt720-benchmark-job-' || grouped.batch_ordinal::text
+               'qa-wt720-benchmark-job-' || grouped.batch_ordinal::text, %s, %s
         FROM (
             SELECT ((numbered.ordinal - 1) / 10)::integer AS batch_ordinal,
                    array_agg(numbered.id ORDER BY numbered.id) AS experience_ids
@@ -113,7 +115,7 @@ def _plant_shape(cur: Any) -> int:
             GROUP BY ((numbered.ordinal - 1) / 10)::integer
         ) grouped
         """,
-        (boundary_chunk_id, scene_end_chunk_id),
+        (boundary_chunk_id, scene_end_chunk_id, resolution.model, resolution.source),
     )
     cur.execute("ANALYZE character_experiences")
     cur.execute("ANALYZE character_experience_jobs")
