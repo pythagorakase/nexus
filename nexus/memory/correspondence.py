@@ -17,6 +17,7 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.config.settings_models import calculate_digest_hard_cap_tokens
+from nexus.config.story_model import StorySettings
 from nexus.prompts.registry import PromptId, load
 
 
@@ -49,6 +50,7 @@ AsyncOutputValidator = Callable[[Any, Any], Coroutine[Any, Any, Any]]
 def build_letter_length_validator(
     *,
     max_letter_tokens: int,
+    story: StorySettings | None = None,
     delegate: Optional[OutputValidator] = None,
 ) -> AsyncOutputValidator:
     """Build a repairable semantic validator for every storyteller wire letter."""
@@ -59,7 +61,7 @@ def build_letter_length_validator(
     async def _validate(ctx: Any, output: Any) -> Any:
         letter = getattr(output, "letter", None)
         if isinstance(letter, str):
-            token_count = calculate_chunk_tokens(letter)
+            token_count = calculate_chunk_tokens(letter, story=story)
             if token_count > max_letter_tokens:
                 from pydantic_ai import ModelRetry
 
@@ -84,6 +86,7 @@ def build_digest_length_validator(
     *,
     max_digest_tokens: int,
     digest_hard_cap_multiplier: float,
+    story: StorySettings | None = None,
 ) -> AsyncOutputValidator:
     """Build two-band digest enforcement for correspondence compaction."""
 
@@ -106,7 +109,7 @@ def build_digest_length_validator(
             if normalized_digest == output.digest
             else output.model_copy(update={"digest": normalized_digest})
         )
-        token_count = calculate_chunk_tokens(normalized_digest)
+        token_count = calculate_chunk_tokens(normalized_digest, story=story)
         if token_count > hard_cap_tokens:
             from pydantic_ai import ModelRetry
 
@@ -154,7 +157,7 @@ class CorrespondenceContext:
     exchanges: tuple[CorrespondenceExchange, ...]
     digest_accepting_chunk_id: Optional[int] = None
 
-    def render(self, *, max_tokens: int) -> str:
+    def render(self, *, max_tokens: int, story: StorySettings | None = None) -> str:
         """Render the complete private block, failing rather than truncating."""
 
         parts = [
@@ -178,7 +181,7 @@ class CorrespondenceContext:
                 }[seat]
                 parts.extend([f"{label}:", body])
         rendered = "\n".join(parts)
-        token_count = calculate_chunk_tokens(rendered)
+        token_count = calculate_chunk_tokens(rendered, story=story)
         if token_count > max_tokens:
             raise RuntimeError(
                 "Private storyteller correspondence breached its configured "
@@ -231,6 +234,7 @@ def load_accepted_correspondence(
     dbname: str,
     *,
     max_tokens: int,
+    story: StorySettings | None = None,
 ) -> str:
     """Read and render only accepted correspondence from the slot database."""
 
@@ -241,7 +245,7 @@ def load_accepted_correspondence(
             context = read_accepted_correspondence(cur)
     finally:
         conn.close()
-    return context.render(max_tokens=max_tokens)
+    return context.render(max_tokens=max_tokens, story=story)
 
 
 def read_accepted_correspondence(

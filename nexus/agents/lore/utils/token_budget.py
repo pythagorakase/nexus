@@ -5,8 +5,10 @@ Handles dynamic token budget calculation and allocation.
 """
 
 import logging
-from typing import Dict, Any, Optional, List, Tuple
-from .chunk_operations import calculate_chunk_tokens
+from typing import Any, Dict, List, Optional, Tuple
+
+from nexus.config.story_model import StorySettings, resolve_seat
+from nexus.telemetry.prompt_window import estimator_for
 
 logger = logging.getLogger("nexus.lore.token_budget")
 
@@ -58,9 +60,6 @@ class TokenBudgetManager:
 
         system_prompt = self.token_budget_config.get("system_prompt_tokens", 5000)
 
-        # Calculate user input tokens using tiktoken
-        user_input_tokens = calculate_chunk_tokens(user_input)
-
         # Check if we're using a reasoning model
         if not apex_model:
             apex_settings = self.settings.get("API Settings", {}).get("apex", {})
@@ -71,6 +70,8 @@ class TokenBudgetManager:
                     "token budget"
                 )
             apex_model = configured_model
+
+        user_input_tokens = estimator_for(apex_model)(user_input)
 
         from nexus.config.seat_window import resolve_seat_window
 
@@ -285,7 +286,11 @@ class TokenBudgetManager:
             summary = entity.get("summary", "")
             text_candidates.append(f"{name}: {summary}")
 
-        tokens = calculate_chunk_tokens("\n".join(text_candidates))
+        model = self.settings.get("apex", {}).get("model") or self.settings.get(
+            "API Settings", {}
+        ).get("apex", {}).get("model")
+        model = resolve_seat("skald", story=StorySettings(skald_model=model)).model
+        tokens = estimator_for(model)("\n".join(text_candidates))
         entity["token_count"] = tokens
         return tokens
 

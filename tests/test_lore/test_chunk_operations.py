@@ -52,10 +52,8 @@ class TestTokenCalculation:
         """Test that encoding uses correct model from settings."""
         encoding = get_apex_model_encoding()
         assert encoding is not None
-        # Should use gpt-4o encoding as fallback/proxy for newer models
         test_text = "Test encoding"
-        tokens = encoding.encode(test_text)
-        assert len(tokens) > 0
+        assert encoding(test_text) == calculate_chunk_tokens(test_text)
 
 
 class TestWarmSliceSelection:

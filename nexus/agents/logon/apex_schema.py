@@ -822,7 +822,7 @@ class StorytellerResponseExtended(StorytellerResponseBase):
 
 def calculate_token_count(text: str) -> int:
     """
-    Calculate precise token count using tiktoken.
+    Estimate text tokens using the resolved writer registry entry.
     Uses the proper encoding based on the target model.
     """
     # Import here to avoid circular dependencies

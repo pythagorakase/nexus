@@ -1455,10 +1455,10 @@ class SummaryGenerator:
         """Reject assembled system, user, and schema input before provider dispatch."""
         from nexus.api.native_structured_output import openai_response_text_format
         from nexus.config.seat_window import resolve_summary_window
-        from nexus.telemetry.prompt_window import local_text_counter
+        from nexus.telemetry.prompt_window import estimator_for
 
         budget = resolve_summary_window(self._settings, self.model, mode=mode)
-        count = local_text_counter(self._model_entry)
+        count = estimator_for(self._model_entry.id)
         token_count = count(text) + count(self._get_system_prompt(mode))
         if schema_model is not None:
             token_count += count(

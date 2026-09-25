@@ -5,72 +5,27 @@ Handles chunk selection, assembly, and chronological sorting.
 All operations are deterministic - no LLM inference required.
 """
 
-import logging
 import json
-import re
-from typing import List, Dict, Any, Optional
+import logging
 from pathlib import Path
-import tiktoken
+from typing import Any, Callable, Dict, List, Optional
+
+from nexus.config.story_model import StorySettings, resolve_seat
+from nexus.telemetry.prompt_window import estimator_for
 
 logger = logging.getLogger("nexus.lore.chunk_operations")
 
 
-def get_apex_model_encoding():
-    """
-    Get the tiktoken encoding for the Apex AI model from settings.
-    """
-    try:
-        from nexus.config import load_settings_as_dict
-
-        settings = load_settings_as_dict()
-        target_model = (
-            settings.get("Agent Settings", {})
-            .get("LOGON", {})
-            .get("apex_AI", {})
-            .get("model", {})
-            .get("target_model")
-        )
-        if target_model:
-            # Map model names to tiktoken-compatible names
-            # Note: Using gpt-4o encoding as proxy until newer models are supported
-            normalized = str(target_model).lower()
-            if re.match(r"^gpt-5(\.[0-9]+)?$", normalized):
-                try:
-                    return tiktoken.encoding_for_model("gpt-5.2")
-                except Exception:
-                    model_name = "gpt-4o"
-            else:
-                model_map = {
-                    "claude-opus-4-1": "gpt-4o",
-                    "claude-opus-4-0": "gpt-4o",
-                    "claude-sonnet-4-0": "gpt-4o",
-                }
-                model_name = model_map.get(normalized, target_model)
-            return tiktoken.encoding_for_model(model_name)
-    except Exception as e:
-        logger.warning(f"Failed to load target model from settings: {e}")
-
-    # Default fallback
-    return tiktoken.encoding_for_model("gpt-4o")
+def get_apex_model_encoding(
+    *, story: StorySettings | None = None
+) -> Callable[[str], int]:
+    """Return the resolved writer's registry counter (legacy helper name)."""
+    return estimator_for(resolve_seat("skald", story=story).model)
 
 
-def calculate_chunk_tokens(text: str) -> int:
-    """
-    Calculate precise token count using tiktoken.
-    Uses the Apex AI model's encoding from nexus.toml configuration.
-
-    Args:
-        text: Text to tokenize
-
-    Returns:
-        Exact token count
-
-    Raises:
-        Exception if tokenization fails
-    """
-    encoding = get_apex_model_encoding()
-    tokens = encoding.encode(text)
-    return len(tokens)
+def calculate_chunk_tokens(text: str, *, story: StorySettings | None = None) -> int:
+    """Estimate text tokens for the resolved writer seat."""
+    return get_apex_model_encoding(story=story)(text)
 
 
 def select_warm_slice(all_chunk_ids: List[int], span: int) -> List[int]:

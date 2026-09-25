@@ -225,11 +225,12 @@ def test_consumer_client_construction_is_guarded(monkeypatch, consumer):
         build(model)
 
 
-def test_anthropic_token_counter_cannot_swallow_guard(monkeypatch):
-    """Token counting must not downgrade a forbidden network call to estimation."""
+def test_anthropic_token_counter_is_local_under_provider_guard(monkeypatch):
+    """Local estimation must not initialize a paid provider client."""
     monkeypatch.setenv("NEXUS_TEST_PROVIDER_ONLY", "1")
     model = load_settings().global_.model.api_models["anthropic"].models[0].id
     instance = AnthropicProvider(model=model)
-    with pytest.raises(ProviderForbiddenInTests):
-        instance.count_tokens("guard proof")
+    from nexus.telemetry.prompt_window import estimator_for
+
+    assert instance.count_tokens("guard proof") == estimator_for(model)("guard proof")
     assert instance._client is None

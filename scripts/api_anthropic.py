@@ -72,10 +72,7 @@ except ImportError:
     anthropic = None  # type: ignore[assignment]
 
 # For token counting
-try:
-    import tiktoken
-except ImportError:
-    tiktoken = None  # type: ignore[assignment]
+from nexus.telemetry.prompt_window import estimator_for
 
 from pydantic import ValidationError
 
@@ -150,34 +147,8 @@ class LLMResponse:
 
 
 def get_token_count(text: str, model: str) -> int:
-    """
-    Get an approximate token count.
-
-    Args:
-        text: The text to count tokens for
-        model: The model name to use for tokenization
-
-    Returns:
-        The number of tokens in the text
-    """
-    # Token estimation is local; network counting belongs to the guarded provider.
-    if tiktoken:
-        try:
-            encoding = tiktoken.get_encoding("cl100k_base")
-            return len(encoding.encode(text))
-        except Exception as e:
-            logger.warning(
-                "Failed to get token count using tiktoken: %s. "
-                "Falling back to character-based estimation.",
-                e,
-            )
-
-    # Fallback to character-based estimation if all else fails
-    # Claude's tokenization is roughly 4 characters per token
-    logger.warning(
-        "Falling back to character-based token estimation; counts may be inaccurate."
-    )
-    return len(text) // 4
+    """Estimate text with the model's explicitly registered tokenizer."""
+    return estimator_for(model)(text)
 
 
 class LLMProvider(abc.ABC):
@@ -556,6 +527,7 @@ class AnthropicProvider(LLMProvider):
             if response is not None:
                 record_anthropic_response(
                     response,
+                    request=params,
                     provider=self.usage_provider_name,
                     model=cast(str, self.model),
                     seat=self.usage_seat,
@@ -746,14 +718,13 @@ class AnthropicProvider(LLMProvider):
                 from nexus.jobs.gate import before_provider_call
 
                 before_provider_call()
-                response = self.client.beta.messages.create(
-                    **self._build_native_structured_request_params(
-                        active_prompt,
-                        schema_model,
-                        output_config=output_config,
-                        output_format=output_format,
-                    )
+                request_params = self._build_native_structured_request_params(
+                    active_prompt,
+                    schema_model,
+                    output_config=output_config,
+                    output_format=output_format,
                 )
+                response = self.client.beta.messages.create(**request_params)
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
@@ -805,10 +776,11 @@ class AnthropicProvider(LLMProvider):
                 if response is not None:
                     record_anthropic_response(
                         response,
+                        request=request_params,
                         provider=self.usage_provider_name,
                         model=cast(str, self.model),
                         seat=self.usage_seat,
-                        attempt=attempt + 1,
+                        attempt=getattr(self, "usage_attempt", attempt + 1),
                         outcome=usage_outcome,
                     )
 
@@ -843,13 +815,12 @@ class AnthropicProvider(LLMProvider):
                 from nexus.jobs.gate import before_provider_call
 
                 before_provider_call()
-                response = self.client.beta.messages.create(
-                    **self._build_tool_envelope_structured_request_params(
-                        active_prompt,
-                        schema_model,
-                        input_schema=input_schema,
-                    )
+                request_params = self._build_tool_envelope_structured_request_params(
+                    active_prompt,
+                    schema_model,
+                    input_schema=input_schema,
                 )
+                response = self.client.beta.messages.create(**request_params)
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
@@ -905,10 +876,11 @@ class AnthropicProvider(LLMProvider):
                 if response is not None:
                     record_anthropic_response(
                         response,
+                        request=request_params,
                         provider=self.usage_provider_name,
                         model=cast(str, self.model),
                         seat=self.usage_seat,
-                        attempt=attempt + 1,
+                        attempt=getattr(self, "usage_attempt", attempt + 1),
                         outcome=usage_outcome,
                     )
 
@@ -941,9 +913,10 @@ class AnthropicProvider(LLMProvider):
                 from nexus.jobs.gate import before_provider_call
 
                 before_provider_call()
-                response = self.client.beta.messages.create(
-                    **self._build_prompted_structured_request_params(active_prompt)
+                request_params = self._build_prompted_structured_request_params(
+                    active_prompt
                 )
+                response = self.client.beta.messages.create(**request_params)
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
@@ -999,10 +972,11 @@ class AnthropicProvider(LLMProvider):
                 if response is not None:
                     record_anthropic_response(
                         response,
+                        request=request_params,
                         provider=self.usage_provider_name,
                         model=cast(str, self.model),
                         seat=self.usage_seat,
-                        attempt=attempt + 1,
+                        attempt=getattr(self, "usage_attempt", attempt + 1),
                         outcome=usage_outcome,
                     )
 
@@ -1215,28 +1189,8 @@ class AnthropicProvider(LLMProvider):
         )
 
     def count_tokens(self, text: str) -> int:
-        """
-        Count tokens for Anthropic models.
-
-        Args:
-            text: The text to count tokens for
-
-        Returns:
-            The number of tokens in the text
-        """
-        # Access outside the fallback so guard/credential errors remain loud.
-        client = self.client
-        try:
-            # Use Anthropic's built-in token counter
-            return cast(Any, client).count_tokens(text)
-        except Exception as e:
-            # Fall back to base implementation if Anthropic's counter fails
-            logger.warning(
-                "Error using Anthropic token counter: %s. "
-                "Falling back to approximation.",
-                e,
-            )
-            return super().count_tokens(text)
+        """Estimate locally; provider counting belongs only to the window guard."""
+        return get_token_count(text, cast(str, self.model))
 
     def _format_system_with_cache(self) -> List[Dict[str, Any]]:
         """
@@ -1321,7 +1275,7 @@ class AnthropicProvider(LLMProvider):
                 # Mark large sections for caching (those over 1024 tokens estimated)
                 # Anthropic caches minimum 1024 tokens, max 4 cache breakpoints
                 # Use full block text (including header) for token estimation
-                estimated_tokens = len(block_text) // 4  # Rough estimate
+                estimated_tokens = get_token_count(block_text, self.model)
 
                 if estimated_tokens > 1024 and section_name in [
                     "RECENT STORYTELLER CONTEXT",
@@ -1334,7 +1288,7 @@ class AnthropicProvider(LLMProvider):
                 content_blocks.append(block)
         else:
             # Fallback: cache the entire prompt if it's large enough
-            estimated_tokens = len(prompt) // 4
+            estimated_tokens = get_token_count(prompt, self.model)
             block = {"type": "text", "text": prompt}
             if estimated_tokens > 1024:
                 block["cache_control"] = {"type": "ephemeral"}

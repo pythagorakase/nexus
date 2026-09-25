@@ -205,6 +205,34 @@ def record_response(record: PromptWindowRecord, response: Any) -> None:
             raise RuntimeError("Response has no durable attempt manifest")
 
 
+def record_token_counts(
+    session: str | None, seat: str, attempt: int, estimated: int, reported: int
+) -> None:
+    """Add estimate and reported input to the existing numeric window JSON."""
+    factory = _connection_factory.get()
+    if factory is None:
+        return
+    with closing(factory()) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """UPDATE generation_attempt_manifests SET
+            window_record=window_record || %s::jsonb, updated_at=now()
+            WHERE generation_session_id=%s AND seat=%s AND attempt=%s""",
+            (
+                Json(
+                    {
+                        "estimated_input_tokens": estimated,
+                        "reported_input_tokens": reported,
+                    }
+                ),
+                session,
+                seat,
+                attempt,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise RuntimeError("Token counts have no durable attempt manifest")
+
+
 def finish_attempt(record: PromptWindowRecord, outcome: str) -> None:
     """Finish a provider attempt independently of the later draft decision."""
     factory = _connection_factory.get()

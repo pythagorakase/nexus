@@ -15,7 +15,7 @@ import sys
 import re
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import tiktoken
+from nexus.agents.lore.utils.chunk_operations import get_apex_model_encoding
 import logging
 from typing import Dict, List, Any, Tuple, Optional, Union
 from decimal import Decimal
@@ -62,7 +62,7 @@ class ContextAssembler:
             "factions": {},
         }
         self.conn = self._connect_to_db()
-        self.encoder = tiktoken.get_encoding("cl100k_base")  # Default for GPT models
+        self.encoder = get_apex_model_encoding()
 
         if not new and os.path.exists(filename):
             self._load_file()
@@ -156,7 +156,7 @@ class ContextAssembler:
     def _calculate_tokens(self) -> int:
         """Calculate the token count of the current data."""
         json_str = json.dumps(self.data, cls=DecimalEncoder)
-        tokens = len(self.encoder.encode(json_str))
+        tokens = self.encoder(json_str)
         return tokens
 
     def _update_and_save(self):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import sys
-import tiktoken
+from nexus.telemetry.prompt_window import estimator_for
 import chardet
 import mimetypes
 import json
@@ -12,8 +12,7 @@ from typing import Optional
 
 def count_tokens(text: str, encoding) -> int:
     """Encodes the provided text and returns the estimated token count."""
-    tokens = encoding.encode(text)
-    return len(tokens)
+    return encoding(text)
 
 
 def detect_encoding(file_path: Path) -> str:
@@ -106,44 +105,22 @@ def read_file_with_fallback(file_path: Path) -> Optional[str]:
 
 
 def get_target_model() -> str:
-    """Get the target model from configuration for accurate token counting."""
-    try:
-        from nexus.config import load_settings_as_dict
+    """Resolve the configured writer seat."""
+    from nexus.config.story_model import resolve_seat
 
-        settings = load_settings_as_dict()
-        target_model = (
-            settings.get("Agent Settings", {})
-            .get("LOGON", {})
-            .get("apex_AI", {})
-            .get("model", {})
-            .get("target_model")
-        )
-        if target_model:
-            # Map model names to tiktoken-compatible names
-            model_map = {
-                "gpt-5": "gpt-4o",  # Use gpt-4o encoding until gpt-5 is officially supported
-                "claude-opus-4-1": "gpt-4o",  # Claude uses similar tokenization
-                "claude-opus-4-0": "gpt-4o",
-                "claude-sonnet-4-0": "gpt-4o",
-            }
-            return model_map.get(target_model, target_model)
-    except Exception:
-        pass
-
-    # Default fallback
-    return "gpt-4o"
+    return resolve_seat("skald").model
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Count tokens in provided file(s) or piped input using tiktoken.",
+        description="Count tokens in provided file(s) or piped input using the model registry.",
         epilog="Supports various text formats including .txt, .json, .md, .py, .docx, .pdf, etc.",
     )
     parser.add_argument("files", nargs="*", help="Path(s) to files to count tokens for")
     parser.add_argument(
         "--model",
         default=None,
-        help="Model encoding to use (default: from settings.json)",
+        help="Registry model ID (default: configured writer)",
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Show verbose output"
@@ -156,7 +133,7 @@ def main():
         print(f"Using tokenizer for model: {model_name}")
 
     # Get the encoder for the specified model.
-    encoding = tiktoken.encoding_for_model(model_name)
+    encoding = estimator_for(model_name)
 
     total_tokens = 0
 

@@ -129,12 +129,10 @@ class LLMProvider(abc.ABC):
         pass
 
     def count_tokens(self, text: str) -> int:
-        """
-        Estimate token count (rough approximation).
-        OpenRouter doesn't provide token counting, so we estimate.
-        """
-        # Rough estimate: 1 token ≈ 4 characters
-        return len(text) // 4
+        """Estimate using the configured registry model."""
+        from nexus.telemetry.prompt_window import estimator_for
+
+        return estimator_for(self.model)(text)
 
     def check_tpm_limit(
         self, prompt: str, estimated_output_tokens: Optional[int] = None

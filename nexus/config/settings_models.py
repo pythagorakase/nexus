@@ -281,6 +281,12 @@ class ModelConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    tokenizer_probe_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        allow_inf_nan=False,
+        description="Maximum duration of the commit/CI tokenizer roster probe.",
+    )
     default_model_policy: Literal["fixed", "follow_story"] = Field(
         default="fixed",
         description="Use the configured seat ID or follow the story Skald model.",
@@ -3855,6 +3861,22 @@ class Settings(BaseModel):
     def _validate_model_ids(self) -> "Settings":
         """Require every configured model ID to exist in the provider registry."""
         registry = self._build_model_registry()
+        import tiktoken
+
+        # Declarative only: settings must not load tokenizers or probe the network.
+        encodings = set(tiktoken.list_encoding_names())
+        for provider in self.global_.model.api_models.values():
+            for entry in provider.models:
+                if not entry.tokenizer_encoding and not entry.tokenizer_repository:
+                    raise ValueError(f"No local tokenizer declared for {entry.id!r}")
+                if (
+                    entry.tokenizer_encoding
+                    and entry.tokenizer_encoding not in encodings
+                ):
+                    raise ValueError(
+                        f"Model {entry.id!r}: unknown tokenizer_encoding "
+                        f"{entry.tokenizer_encoding!r}"
+                    )
         # Each tuple is (container, attribute_name, optional_flag). When the
         # value is None on an optional field, there is no model to validate.
         targets: List[Tuple[Any, str, bool]] = [

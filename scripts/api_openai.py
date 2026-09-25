@@ -76,10 +76,7 @@ except ImportError:
     openai = None
 
 # For token counting
-try:
-    import tiktoken
-except ImportError:
-    tiktoken = None
+from nexus.telemetry.prompt_window import estimator_for
 
 # For database connection (utilities only, no ORM)
 import sqlalchemy as sa
@@ -158,47 +155,8 @@ class LLMResponse:
 
 
 def get_token_count(text: str, model: str) -> int:
-    """
-    Get an accurate token count using tiktoken.
-
-    Args:
-        text: The text to count tokens for
-        model: The model name to use for tokenization
-
-    Returns:
-        The number of tokens in the text
-    """
-    if not tiktoken:
-        # Fallback to character-based estimation if tiktoken not available
-        return len(text) // 4
-
-    try:
-        if (
-            model.startswith("gpt-3.5")
-            or model.startswith("gpt-4")
-            or model.startswith("o")
-        ):
-            encoding_name = "cl100k_base"  # GPT-3.5/4/o* all use cl100k
-        else:
-            # Try to get encoding for the specific model
-            try:
-                encoding = tiktoken.encoding_for_model(model)
-                return len(encoding.encode(text))
-            except KeyError:
-                # If that fails, fall back to cl100k
-                encoding_name = "cl100k_base"
-
-        # Get the tokenizer
-        encoding = tiktoken.get_encoding(encoding_name)
-
-        # Count tokens
-        return len(encoding.encode(text))
-    except Exception as e:
-        # If anything goes wrong, fall back to character-based estimation
-        logger.warning(
-            f"Failed to get token count using tiktoken: {str(e)}. Falling back to character-based estimation."
-        )
-        return len(text) // 4
+    """Estimate text with the model's explicitly registered tokenizer."""
+    return estimator_for(model)(text)
 
 
 class LLMProvider(abc.ABC):
@@ -702,10 +660,11 @@ class OpenAIProvider(LLMProvider):
                     if response is not None:
                         record_openai_response(
                             response,
+                            request=request_params,
                             provider=self.usage_provider_name,
                             model=cast(str, self.model),
                             seat=self.usage_seat,
-                            attempt=attempt + 1,
+                            attempt=getattr(self, "usage_attempt", attempt + 1),
                             outcome=usage_outcome,
                             transport="responses",
                         )
@@ -784,11 +743,10 @@ class OpenAIProvider(LLMProvider):
                 from nexus.jobs.gate import before_provider_call
 
                 before_provider_call()
-                response = self.client.chat.completions.create(
-                    **self._build_chat_structured_request_params(
-                        active_prompt, schema_model, text_format=text_format
-                    )
+                request_params = self._build_chat_structured_request_params(
+                    active_prompt, schema_model, text_format=text_format
                 )
+                response = self.client.chat.completions.create(**request_params)
                 response_recorder = getattr(self, "attempt_manifest_response", None)
                 if response_recorder is not None:
                     response_recorder(response)
@@ -840,10 +798,11 @@ class OpenAIProvider(LLMProvider):
                 if response is not None:
                     record_openai_response(
                         response,
+                        request=request_params,
                         provider=self.usage_provider_name,
                         model=cast(str, self.model),
                         seat=self.usage_seat,
-                        attempt=attempt + 1,
+                        attempt=getattr(self, "usage_attempt", attempt + 1),
                         outcome=usage_outcome,
                         transport="chat_completions",
                     )
@@ -1121,6 +1080,7 @@ class OpenAIProvider(LLMProvider):
         finally:
             record_openai_response(
                 response,
+                request=request_params,
                 provider=self.usage_provider_name,
                 model=cast(str, self.model),
                 seat=self.usage_seat,
@@ -1171,6 +1131,7 @@ class OpenAIProvider(LLMProvider):
         finally:
             record_openai_response(
                 response,
+                request=request_params,
                 provider=self.usage_provider_name,
                 model=cast(str, self.model),
                 seat=self.usage_seat,

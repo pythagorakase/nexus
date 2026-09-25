@@ -474,6 +474,50 @@ def _nested_attr(value: Any, *names: str) -> Any:
     return current
 
 
+def record_token_estimate(event: UsageEvent, estimated: int) -> None:
+    """Log drift separately from accounting and attach numeric manifest evidence."""
+    from nexus.telemetry.attempt_manifest import record_token_counts
+
+    reported = event.input_tokens
+    if reported is None:
+        return
+    # Anthropic input_tokens excludes both cached and newly cached input.
+    if event.transport == "anthropic_messages":
+        reported += (event.cached_input_tokens or 0) + (
+            event.cache_creation_tokens or 0
+        )
+    ratio = (
+        estimated / reported if reported else (1.0 if estimated == 0 else float("inf"))
+    )
+    logger.info(
+        "token_estimate seat=%s model=%s estimated=%s reported=%s ratio=%.2f",
+        event.seat,
+        event.model,
+        estimated,
+        reported,
+        ratio,
+    )
+    record_token_counts(event.run_id, event.seat, event.attempt, estimated, reported)
+
+
+def _record_request_estimate(event: UsageEvent, request: Dict[str, Any]) -> None:
+    """Keep advisory estimation failures out of successful provider responses."""
+    if event.input_tokens is None:
+        return
+    try:
+        from nexus.telemetry.prompt_window import estimate_request_tokens
+
+        record_token_estimate(event, estimate_request_tokens(event.model, request))
+    except Exception as exc:
+        logger.error(
+            "token_estimate_failed seat=%s model=%s cause=%s: %s",
+            event.seat,
+            event.model,
+            type(exc).__name__,
+            " ".join(str(exc).splitlines()),
+        )
+
+
 def record_openai_response(
     response: Any,
     *,
@@ -483,6 +527,7 @@ def record_openai_response(
     attempt: int,
     outcome: UsageOutcome,
     transport: Literal["responses", "chat_completions"],
+    request: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Extract truthful usage from one raw OpenAI-compatible response."""
 
@@ -526,6 +571,8 @@ def record_openai_response(
         service_tier=getattr(response, "service_tier", None),
     )
     record_usage_event(event)
+    if request is not None:
+        _record_request_estimate(event, request)
 
 
 def record_anthropic_response(
@@ -536,6 +583,7 @@ def record_anthropic_response(
     seat: Optional[str],
     attempt: int,
     outcome: UsageOutcome,
+    request: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Extract truthful usage from one raw Anthropic Messages response."""
 
@@ -562,6 +610,8 @@ def record_anthropic_response(
         cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", None),
     )
     record_usage_event(event)
+    if request is not None:
+        _record_request_estimate(event, request)
 
 
 def record_pydantic_ai_result(
@@ -616,6 +666,53 @@ def record_pydantic_ai_result(
         requests=getattr(usage, "requests", None),
     )
     record_usage_event(event)
+
+    try:
+        if hasattr(result, "all_messages") and hasattr(result, "new_messages"):
+            from pydantic_ai.messages import ModelResponse
+            from pydantic_core import to_jsonable_python
+            from nexus.telemetry.prompt_window import estimator_for
+
+            count = estimator_for(model)
+            new_responses = {
+                id(message)
+                for message in result.new_messages()
+                if isinstance(message, ModelResponse)
+            }
+            history_tokens = 0
+            attempt = 0
+            for message in result.all_messages():
+                if isinstance(message, ModelResponse) and id(message) in new_responses:
+                    attempt += 1
+                    reported = message.usage.input_tokens
+                    if reported or message.usage.output_tokens:
+                        exchange = event.model_copy(
+                            update={
+                                "input_tokens": reported,
+                                "attempt": attempt,
+                            }
+                        )
+                        record_token_estimate(exchange, history_tokens)
+                for part in message.parts:
+                    content = getattr(part, "content", None)
+                    if content is None:
+                        content = getattr(part, "args", None)
+                    if content is not None:
+                        history_tokens += count(
+                            content
+                            if isinstance(content, str)
+                            else json.dumps(
+                                to_jsonable_python(content), ensure_ascii=False
+                            )
+                        )
+    except Exception as exc:
+        logger.error(
+            "token_estimate_failed seat=%s model=%s cause=%s: %s",
+            event.seat,
+            event.model,
+            type(exc).__name__,
+            " ".join(str(exc).splitlines()),
+        )
 
 
 def record_prompt_window(record: "PromptWindowRecord") -> None:
