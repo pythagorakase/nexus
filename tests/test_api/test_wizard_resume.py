@@ -1,5 +1,6 @@
 """Resume must restore the persisted conversation without starting a new one."""
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -45,6 +46,7 @@ def test_resume_restores_all_messages_choices_and_drafts(
             "thread_id": "conv_saved",
             "target_slot": 4,
             "setting_genre": "folklore",
+            "setting_confirmed": True,
             "setting_world_name": "The Waking Wood",
             "choice_object": {
                 "presented": ["A wanderer", "A keeper"],
@@ -110,6 +112,7 @@ def test_resume_restores_partial_character(
     """Concept and confirmed traits survive before the wildcard is completed."""
     cache = WizardCache(
         thread_id="conv_saved",
+        setting_confirmed=True,
         setting=SettingData(genre="folklore"),
         character=CharacterData(
             name="Rowan",
@@ -155,6 +158,8 @@ def test_resume_restores_seed_awaiting_confirmation(
     """A ready wizard includes the seed and complete set design for confirmation."""
     cache = WizardCache(
         thread_id="conv_saved",
+        character_confirmed=True,
+        setting_confirmed=True,
         setting=SettingData(genre="folklore"),
         character=CharacterData(
             name="Rowan", traits_confirmed=True, wildcard_rationale="A hidden name"
@@ -248,7 +253,11 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
     class Agent:
         def set_artifact(self, context: Any) -> None:
             if reply == "artifact":
-                context.last_tool_result = {"phase_complete": True, "data": {}}
+                context.last_tool_result = {
+                    "phase_complete": True,
+                    "data": {},
+                    **cache.confirmation_metadata(),
+                }
 
         async def run(self, *args: Any, **kwargs: Any) -> Any:
             self.set_artifact(kwargs["deps"])
@@ -260,7 +269,11 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
 
     monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: state)
     monkeypatch.setattr(wizard_agent, "read_cache", lambda dbname: cache)
+    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
     monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
+    monkeypatch.setattr(
+        wizard_chat, "guarded_wizard_write", lambda *args: nullcontext()
+    )
     monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
     monkeypatch.setattr(wizard_chat, "wizard_debug_agent", Agent())
@@ -274,7 +287,7 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
     monkeypatch.setattr(
         wizard_chat,
         "write_wizard_choices",
-        lambda choices, dbname: setattr(cache, "choices", choices),
+        lambda choices, dbname, **kwargs: setattr(cache, "choices", choices),
     )
     monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
     monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")

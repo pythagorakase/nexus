@@ -73,9 +73,19 @@ async def get_slot_state_endpoint(slot: int):
                 model=state.model,
             )
 
+            from nexus.api.new_story_cache import read_cache
+
+            cache = read_cache(slot_dbname(slot))
+            if cache is not None:
+                response.pending_confirmation = cache.pending_confirmation()
+                response.artifact_token = cache.artifact_token()
+                response.character_revision_pending = cache.character_revision_pending
+
             # Add trait menu if in character phase, traits subphase
             ws = state.wizard_state
-            if ws.phase == "character" and ws.has_concept and not ws.has_traits:
+            if response.character_revision_pending:
+                response.subphase = "revision"
+            elif ws.phase == "character" and ws.has_concept and not ws.has_traits:
                 from nexus.api.new_story_cache import (
                     get_trait_menu,
                     get_selected_trait_count,

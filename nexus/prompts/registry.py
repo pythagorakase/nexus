@@ -163,6 +163,8 @@ class PromptId(str, Enum):
     WIZARD_ACCEPT_FATE = "wizard/accept_fate"
     WIZARD_ACCEPT_FATE_RETRY = "wizard/accept_fate_retry"
     WIZARD_CANONICAL_FAME = "wizard/canonical_fame"
+    WIZARD_CHARACTER_REVISION = "wizard/character_revision"
+    WIZARD_CHARACTER_REVISION_RETRY = "wizard/character_revision_retry"
     WIZARD_CHARACTER_PHASE = "wizard/character_phase"
     WIZARD_CHOICES_INSTRUCTION = "wizard/choices_instruction"
     WIZARD_DEV_PREAMBLE = "wizard/dev_preamble"
@@ -764,6 +766,12 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
         ),
         PromptId.WIZARD_CANONICAL_FAME: PromptSpec(
             "wizard/canonical_fame.md", ("trait_input_derivation",), frozenset(())
+        ),
+        PromptId.WIZARD_CHARACTER_REVISION: PromptSpec(
+            "wizard/character_revision.md", ("wizard",), frozenset(("CHARACTER_STATE",))
+        ),
+        PromptId.WIZARD_CHARACTER_REVISION_RETRY: PromptSpec(
+            "wizard/character_revision_retry.md", ("wizard",)
         ),
         PromptId.WIZARD_CHARACTER_PHASE: PromptSpec(
             "wizard/character_phase.md", ("wizard", "wizard_wildcard", "wizard_debug")

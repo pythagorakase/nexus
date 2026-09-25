@@ -16,6 +16,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from nexus.api.conversations import ConversationsClient
 from nexus.api.narrative_schemas import (
+    ConfirmSetupArtifactRequest,
+    ReviseCharacterRequest,
     RecordDraftRequest,
     ResetSetupRequest,
     ResumeSetupResponse,
@@ -23,6 +25,12 @@ from nexus.api.narrative_schemas import (
     StartSetupRequest,
 )
 from nexus.api.new_story_cache import write_wizard_choices
+from nexus.api.new_story_schemas import CharacterCreationState
+from nexus.api.wizard_confirmation import (
+    WizardStateConflict,
+    confirm_artifact,
+    begin_character_revision,
+)
 from nexus.api.new_story_flow import (
     activate_slot,
     record_drafts,
@@ -107,6 +115,16 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
             thread_id=data.thread_id,
             target_slot=slot,
             current_phase=data.current_phase(),
+            pending_confirmation=data.pending_confirmation(),
+            artifact_token=data.artifact_token(),
+            character_revision_pending=data.character_revision_pending,
+            character_sheet=(
+                CharacterCreationState.model_validate(data.get_character_dict())
+                .to_character_sheet()
+                .model_dump()
+                if data.pending_confirmation() == "character"
+                else None
+            ),
             messages=[
                 message
                 for message in reversed(messages)
@@ -127,6 +145,37 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
     except Exception as e:
         logger.error(f"Error resuming setup: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/setup/confirm")
+def confirm_setup_artifact_endpoint(
+    request: ConfirmSetupArtifactRequest,
+) -> Dict[str, Any]:
+    """Persist explicit artifact acceptance before introducing the next phase."""
+    require_writable_slot(request.slot)
+    try:
+        return confirm_artifact(
+            slot_dbname(request.slot),
+            thread_id=request.thread_id,
+            phase=request.phase,
+            artifact_token=request.artifact_token,
+        )
+    except WizardStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/setup/character/revise")
+def revise_character_endpoint(request: ReviseCharacterRequest) -> Dict[str, Any]:
+    """Enable a durable, canonical concept revision without generating text."""
+    require_writable_slot(request.slot)
+    try:
+        return begin_character_revision(
+            slot_dbname(request.slot),
+            thread_id=request.thread_id,
+            artifact_token=request.artifact_token,
+        )
+    except WizardStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/setup/record")

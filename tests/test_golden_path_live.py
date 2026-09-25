@@ -196,6 +196,17 @@ def _stage_reset_slot() -> None:
         target_slot=SLOT,
         dbname=DBNAME,
     )
+    from nexus.api.new_story_cache import read_cache
+    from nexus.api.wizard_confirmation import confirm_artifact
+
+    for phase in ("setting", "character"):
+        draft = read_cache(DBNAME)
+        confirm_artifact(
+            DBNAME,
+            thread_id=draft.thread_id,
+            phase=phase,
+            artifact_token=draft.artifact_token(phase),
+        )
     # Fresh slots default to the mock TEST model; a real wizard run persists
     # the real model in start_setup. Mirror that so the transition engages
     # Retrograde + trait derivation with real frontier calls.

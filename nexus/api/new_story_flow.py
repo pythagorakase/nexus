@@ -233,6 +233,11 @@ def record_drafts(
 
     # Build args for legacy write_cache, preserving existing data
     write_cache(
+        invalidate_phase=(
+            "setting"
+            if setting is not None
+            else "character" if character is not None else None
+        ),
         thread_id=cache.thread_id if cache else None,
         setting_draft=setting or (cache.get_setting_dict() if cache else None),
         character_draft=character or (cache.get_character_dict() if cache else None),

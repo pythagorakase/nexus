@@ -34,6 +34,10 @@ interface Message {
 export interface WizardResumeData {
     thread_id: string;
     current_phase: Phase | "ready";
+    pending_confirmation?: "setting" | "character" | null;
+    artifact_token?: string | null;
+    character_revision_pending?: boolean;
+    character_sheet?: any;
     messages: Pick<Message, "role" | "content">[];
     choices: string[];
     setting_draft: any;
@@ -130,6 +134,9 @@ export function InteractiveWizard({
     const [threadId, setThreadId] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<Phase>(initialPhase || "setting");
     const [pendingArtifact, setPendingArtifact] = useState<any>(null);
+    const confirmedArtifactTokenRef = useRef<string | null>(null);
+    const [artifactToken, setArtifactToken] = useState<string | null>(null);
+    const [isRevisingCharacter, setIsRevisingCharacter] = useState(false);
     const [displayChoices, setDisplayChoices] = useState<string[]>([]);
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
@@ -178,6 +185,9 @@ export function InteractiveWizard({
                 setMessages([]);
                 setDisplayChoices([]);
                 setPendingArtifact(null);
+                setArtifactToken(null);
+                confirmedArtifactTokenRef.current = null;
+                setIsRevisingCharacter(false);
                 setPhaseTransitionError(null);
                 setShowTraitSelector(false);
                 setSuggestedTraits([]);
@@ -191,8 +201,17 @@ export function InteractiveWizard({
                         timestamp: 0,
                     })));
                     setDisplayChoices(normalizeChoices(resumeData.choices));
+                    setArtifactToken(resumeData.artifact_token ?? null);
+                    setIsRevisingCharacter(!!resumeData.character_revision_pending);
                     const characterState = resumeData.character_state;
-                    if (resumeData.current_phase === "character" && characterState?.concept && !characterState.trait_selection) {
+                    if (resumeData.pending_confirmation === "setting") {
+                        setPendingArtifact({ type: "submit_world_document", data: resumeData.setting_draft });
+                        setDisplayChoices([]);
+                    } else if (resumeData.pending_confirmation === "character") {
+                        setPendingArtifact({ type: "submit_character_sheet", data: resumeData.character_sheet });
+                        setDisplayChoices([]);
+                    }
+                    if (resumeData.current_phase === "character" && !resumeData.character_revision_pending && characterState?.concept && !characterState.trait_selection) {
                         setSuggestedTraits(characterState.concept.suggested_traits ?? []);
                         setShowTraitSelector(true);
                         setDisplayChoices([]);
@@ -315,10 +334,34 @@ export function InteractiveWizard({
     }, []);
 
     // Handle revise from panel
-    const handleRevise = useCallback(() => {
-        setPanelExpanded(false);
-        setPendingArtifact(null);
-    }, []);
+    const handleRevise = async () => {
+        if (processingRef.current || isLoading) return;
+        processingRef.current = true;
+        setIsLoading(true);
+        setPhaseTransitionError(null);
+        try {
+            if (currentPhase === "character") {
+                if (!threadId || !artifactToken) throw new Error("Resume the character before revising it.");
+                const response = await fetch("/api/story/new/setup/character/revise", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ slot, thread_id: threadId, artifact_token: artifactToken }),
+                });
+                const data = await response.json();
+                if (!response.ok || data.status !== "revision_started") throw new Error(data.detail || "Could not start character revision.");
+                setIsRevisingCharacter(true);
+                setShowTraitSelector(false);
+                setDisplayChoices([]);
+            }
+            setPanelExpanded(false);
+            setPendingArtifact(null);
+        } catch (error) {
+            setPhaseTransitionError(error instanceof Error ? error.message : "Could not start revision.");
+        } finally {
+            processingRef.current = false;
+            setIsLoading(false);
+        }
+    };
 
     // Handle trait selection change from panel
     const handleTraitSelectionChange = useCallback((traits: string[]) => {
@@ -493,9 +536,11 @@ export function InteractiveWizard({
             const data = await res.json();
 
             if (data.phase_complete) {
+                if (data.artifact_token) setArtifactToken(data.artifact_token);
                 setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                 setDisplayChoices([]);
             } else if (data.subphase_complete) {
+                if (data.artifact_token) setArtifactToken(data.artifact_token);
                 handleSubphaseCompletion(data.artifact_type, data.data);
             } else {
                 addMessage("assistant", data.message);
@@ -603,11 +648,27 @@ export function InteractiveWizard({
             if (!res.ok) throw new Error("Failed to send message");
 
             const data = await res.json();
+            if (data.artifact_token) setArtifactToken(data.artifact_token);
+            if (data.character_revised) {
+                setIsRevisingCharacter(false);
+                setWizardData((prev: any) => ({ ...prev, character_state: data.data.character_state }));
+                addMessage("assistant", data.message);
+                if (!data.phase_complete) {
+                    const state = data.data.character_state;
+                    setShowTraitSelector(!state.trait_selection);
+                    if (!state.trait_selection) setSuggestedTraits(state.concept.suggested_traits ?? []);
+                    setDisplayChoices([]);
+                    return true;
+                }
+            }
+
 
             if (data.phase_complete) {
+                if (data.artifact_token) setArtifactToken(data.artifact_token);
                 setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                 setDisplayChoices([]);
             } else if (data.subphase_complete) {
+                if (data.artifact_token) setArtifactToken(data.artifact_token);
                 handleSubphaseCompletion(data.artifact_type, data.data);
             } else {
                 addMessage("assistant", data.message);
@@ -697,9 +758,11 @@ export function InteractiveWizard({
             .then(async (res) => {
                 if (!res.ok) throw new Error("Failed to send message");
                 const data = await res.json();
+                if (data.artifact_token) setArtifactToken(data.artifact_token);
                 // Close selector AFTER successful response
                 setShowTraitSelector(false);
                 if (data.phase_complete) {
+                    if (data.artifact_token) setArtifactToken(data.artifact_token);
                     setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                     setDisplayChoices([]);
                 } else if (data.subphase_complete) {
@@ -795,12 +858,28 @@ export function InteractiveWizard({
             setIsLoading(true);
             setDisplayChoices([]);
             try {
+                if (!threadId || !artifactToken) throw new Error("Resume this artifact before confirming it.");
+                if (confirmedArtifactTokenRef.current !== artifactToken) {
+                    const confirmation = await fetch("/api/story/new/setup/confirm", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ slot, thread_id: threadId, phase: currentPhase, artifact_token: artifactToken }),
+                    });
+                    const accepted = await confirmation.json();
+                    if (!confirmation.ok || accepted.status !== "confirmed" || accepted.next_phase !== nextPhase || accepted.thread_id !== threadId) {
+                        throw new Error(accepted.detail || "Could not confirm the saved artifact.");
+                    }
+                    confirmedArtifactTokenRef.current = artifactToken;
+                }
                 const data = await triggerNextPhase(nextPhase, contextData);
+                if (data.artifact_token) setArtifactToken(data.artifact_token);
                 setWizardData(contextData);
                 onArtifactConfirmed?.(currentPhase, pendingArtifact.data);
                 updatePhase(nextPhase);
+                confirmedArtifactTokenRef.current = null;
                 setShowTraitSelector(false);
                 if (data.phase_complete) {
+                    if (data.artifact_token) setArtifactToken(data.artifact_token);
                     setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                 } else {
                     setPendingArtifact(null);
@@ -945,6 +1024,7 @@ export function InteractiveWizard({
                             if (!res.ok) throw new Error("Failed to send message");
                             const data = await res.json();
 
+                            if (data.artifact_token) setArtifactToken(data.artifact_token);
                             if (data.phase_complete) {
                                 setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                             } else if (data.subphase_complete) {
@@ -962,7 +1042,7 @@ export function InteractiveWizard({
                         }
                     }}
                     className="text-amber-500/70 hover:text-amber-400 font-mono text-xs uppercase tracking-wider"
-                    disabled={isLoading || !!pendingArtifact || !threadId}
+                    disabled={isLoading || !!pendingArtifact || !threadId || isRevisingCharacter}
                 >
                     Accept Fate
                 </Button>
@@ -1043,6 +1123,11 @@ export function InteractiveWizard({
                                 </motion.div>
                             ))}
                         </AnimatePresence>
+                        {isRevisingCharacter && (
+                            <p role="status" className="font-serif text-sm text-foreground">
+                                Describe the change to your character. Your selected traits and wildcard will be kept.
+                            </p>
+                        )}
                         {/* Structured choices + freeform slot */}
                         {!isLoading && !initializationError && (
                             <motion.div
