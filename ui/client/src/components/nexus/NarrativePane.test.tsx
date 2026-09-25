@@ -55,7 +55,7 @@ function makeEngine(slotState: SlotState): NarrativeEngine {
     generationError: null,
     isGenerating: false,
     completedGenerations: 0,
-    submitTurn: vi.fn(async () => undefined),
+    submitTurn: vi.fn(async () => true),
   };
 }
 

@@ -46,7 +46,8 @@ export interface NarrativeEngine {
   isGenerating: boolean;
   /** Increments on completion to restore frontier scrolling and input focus. */
   completedGenerations: number;
-  submitTurn: (params: { choice?: number; userText?: string }) => Promise<void>;
+  /** True only after the server acknowledged this submission. */
+  submitTurn: (params: { choice?: number; userText?: string }) => Promise<boolean>;
 }
 
 export function useNarrativeEngine(slot: number | null): NarrativeEngine {
@@ -369,7 +370,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           title: "Generation Active",
           description: "Wait for the current turn to finish.",
         });
-        return;
+        return false;
       }
 
       submissionEpochRef.current += 1;
@@ -391,15 +392,16 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
             ? slotState.session_id ?? undefined
             : undefined,
         });
-        if (activeSlotRef.current !== slot) return;
+        if (activeSlotRef.current !== slot) return true;
         sessionRef.current = result.session_id;
         submittingRef.current = false;
         recoverRef.current();
         // Continue accepts the previous draft before starting generation.
         // Refresh its frontier clock now, without waiting for the next draft.
         invalidateNarrativeQueries();
+        return true;
       } catch (error) {
-        if (activeSlotRef.current !== slot) return;
+        if (activeSlotRef.current !== slot) return false;
         submittingRef.current = false;
         stopClock();
         phaseRef.current = null;
@@ -416,6 +418,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           description: message,
           variant: "destructive",
         });
+        return false;
       }
     },
     [slot, slotState, startClock, stopClock, invalidateNarrativeQueries],

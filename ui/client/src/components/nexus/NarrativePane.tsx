@@ -27,7 +27,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type KeyboardEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -50,6 +49,7 @@ import {
   type ReaderNav,
 } from "@/lib/narrative-nav";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
+import { useReaderDraft } from "@/hooks/useReaderDraft";
 import {
   PHASE_LABELS,
   type ChunkContext,
@@ -153,7 +153,8 @@ export function NarrativePane({
 }: NarrativePaneProps) {
   const { slotState, isGenerating, completedGenerations, submitTurn, phase } =
     engine;
-  const [freeform, setFreeform] = useState("");
+  const draft = useReaderDraft(slotState);
+  const freeform = draft.text;
   const freeformRef = useRef<HTMLTextAreaElement>(null);
   const tailRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLElement>(null);
@@ -311,18 +312,16 @@ export function NarrativePane({
   const handleChoice = useCallback(
     (index: number) => {
       if (!canSubmit) return;
-      setFreeform("");
-      void submitTurn({ choice: index });
+      void draft.submit(() => submitTurn({ choice: index }), false);
     },
-    [canSubmit, submitTurn],
+    [canSubmit, submitTurn, draft.submit],
   );
 
   const handleFreeformSubmit = useCallback(() => {
     const text = freeform.trim();
     if (!text || !canSubmit) return;
-    setFreeform("");
-    void submitTurn({ userText: text });
-  }, [freeform, canSubmit, submitTurn]);
+    void draft.submit(() => submitTurn({ userText: text }), true);
+  }, [freeform, canSubmit, submitTurn, draft.submit]);
 
   const handleFreeformKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -561,6 +560,30 @@ export function NarrativePane({
               presented no numbered choices (matches the CLI continue flow). */}
           {!isGenerating && !isBootstrapNeeded && (
             <section className="choices" data-testid="story-choices">
+              {draft.previousAction && (
+                <details data-testid="unconfirmed-action">
+                  <summary>Unconfirmed previous action</summary>
+                  <p>
+                    Its send was not confirmed. Check the latest scene before
+                    using this text again.
+                  </p>
+                  <Textarea
+                    readOnly
+                    autoSize
+                    value={draft.previousAction.text}
+                    aria-label="Saved unconfirmed action"
+                  />
+                  <button type="button" onClick={draft.dismissAction}>
+                    Dismiss saved action
+                  </button>
+                </details>
+              )}
+              {draft.storageError && (
+                <p role="alert">
+                  This draft could not be saved in your browser. Keep this page
+                  open or copy your text before leaving.
+                </p>
+              )}
               {choices.map((text, i) => (
                 <button
                   key={`${i}-${text}`}
@@ -585,7 +608,7 @@ export function NarrativePane({
                   value={freeform}
                   placeholder={freeformPresent.placeholder}
                   autoFocus={freeformPresent.autoFocus}
-                  onChange={(e) => setFreeform(e.target.value)}
+                  onChange={(e) => draft.update(e.target.value)}
                   onKeyDown={handleFreeformKeyDown}
                   disabled={!canSubmit}
                   data-testid="input-freeform"

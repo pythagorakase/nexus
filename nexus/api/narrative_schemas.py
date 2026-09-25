@@ -255,6 +255,7 @@ class SlotStateResponse(BaseModel):
         default_factory=lambda: load_settings().api.narrative_generation
     )
     slot: int = Field(ge=1, le=5)
+    story_id: Optional[str] = None  # Stable identity across frontier changes
     is_empty: bool
     is_wizard_mode: bool
     phase: Optional[str] = None  # Wizard phase if in wizard mode

@@ -38,7 +38,7 @@ it("renders only durable phases in order with monotonic progress and nothing at 
   const engine: NarrativeEngine = {
     slotState: undefined, slotStateError: null, isSlotStateLoading: false,
     phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null,
-    isGenerating: true, completedGenerations: 0, submitTurn: async () => {},
+    isGenerating: true, completedGenerations: 0, submitTurn: async () => true,
   };
   const view = () => <QueryClientProvider client={client}>
     <RightLedger slot={4} engine={engine} readingChunkId={null} onNavigate={() => {}} />

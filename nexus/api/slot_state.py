@@ -88,6 +88,7 @@ class SlotState:
     wizard_state: Optional[WizardState]
     narrative_state: Optional[NarrativeState]
     model: Optional[str]  # Current model for this slot
+    story_id: Optional[str] = None  # Stable creation identity, not the story clock
 
 
 def get_slot_state(slot: int) -> SlotState:
@@ -151,7 +152,7 @@ def get_slot_state(slot: int) -> SlotState:
             # Check global_variables for post-transition bootstrap state
             cur.execute(
                 """
-                SELECT setting, base_timestamp
+                SELECT setting, base_timestamp, slot_created_at
                 FROM global_variables
                 WHERE id = TRUE
                 """
@@ -205,6 +206,11 @@ def get_slot_state(slot: int) -> SlotState:
                     wizard_state=None,
                     narrative_state=narrative_state,
                     model=current_model,
+                    story_id=(
+                        global_row["slot_created_at"].isoformat()
+                        if global_row and global_row.get("slot_created_at")
+                        else None
+                    ),
                 )
             else:
                 # Empty slot: no wizard cache and no narrative

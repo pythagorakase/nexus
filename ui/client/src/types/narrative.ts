@@ -62,6 +62,7 @@ export interface GenerationSession {
 export interface SlotState {
   narrative_generation: GenerationSettings;
   slot: number;
+  story_id?: string | null;
   is_empty: boolean;
   is_wizard_mode: boolean;
   phase: string | null;
