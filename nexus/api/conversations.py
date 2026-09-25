@@ -14,7 +14,6 @@ import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, TypedDict
 
-import openai
 
 from scripts.api_openai import OpenAIProvider
 from nexus.config.loader import get_provider_for_model
@@ -79,7 +78,7 @@ class ConversationsClient:
         # Threads were retired on August 26, 2026.
         self._test_mode = False
         provider_client = OpenAIProvider(model=model)
-        self.client = openai.OpenAI(api_key=provider_client.api_key)
+        self.client = provider_client.client
 
     def create_thread(self) -> str:
         """Create a new conversation thread and return its ID."""

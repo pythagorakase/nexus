@@ -93,7 +93,7 @@ Examples:
     python creative_character_expansion.py --input creative_character_expansion_id_042.json
 """
 
-from nexus.config import load_settings
+from nexus.config.story_model import resolve_seat
 from nexus.database import create_slot_engine
 
 import os
@@ -215,7 +215,7 @@ def parse_arguments() -> argparse.Namespace:
     # LLM options
     parser.add_argument(
         "--model",
-        default=load_settings().ir_eval.judgment.model,
+        default=resolve_seat("ir_eval.judgment.model").model,
         help="Model to use (default: ir_eval.judgment.model in nexus.toml)",
     )
     parser.add_argument(

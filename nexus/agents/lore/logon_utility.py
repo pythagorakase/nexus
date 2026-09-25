@@ -363,6 +363,7 @@ class LogonUtility:
         bootstrap_mode: bool = False,
         settings_path: Optional[Union[str, Path]] = None,
         story_settings: StorySettings | None = None,
+        persisted_model: str | None = None,
     ):
         """
         Initialize LOGON utility with configured provider.
@@ -373,6 +374,7 @@ class LogonUtility:
                     If not provided, uses NEXUS_SLOT env var.
             model_override: Optional model to use instead of settings/slot config.
                            If None, will check slot's configured model first.
+            persisted_model: Literal queued model identity; never resolve a live seat.
             bootstrap_mode: Whether this LOGON instance is generating chunk #1.
             story_settings: Optional explicit story snapshot for already-resolved callers.
                 When omitted, model resolution reads the live slot.
@@ -382,6 +384,9 @@ class LogonUtility:
         self.settings = settings
         self.story_settings = story_settings
         self.dbname = dbname
+        if persisted_model is not None and model_override is not None:
+            raise ValueError("A persisted model cannot also have a request override")
+        self.persisted_model = persisted_model
         self.model_override = model_override
         self.bootstrap_mode = bootstrap_mode
         self.settings_path = (
@@ -570,18 +575,25 @@ class LogonUtility:
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
 
         from nexus.config import load_settings
-        from nexus.config.story_model import StorySettings, resolve_story_model
+        from nexus.config.story_model import StorySettings, resolve_seat
 
-        model = resolve_story_model(
-            "skald",
-            settings=load_settings(self.settings_path),
-            story=(
-                StorySettings(skald_model=self._get_slot_model())
-                if self.model_override is None
-                else None
-            ),
-            override=self.model_override,
-        )
+        if self.persisted_model is not None:
+            model = load_settings(self.settings_path).resolve_model_ref(
+                self.persisted_model
+            )
+        else:
+            resolution = resolve_seat(
+                "skald",
+                settings=load_settings(self.settings_path),
+                story=(
+                    StorySettings(skald_model=self._get_slot_model())
+                    if self.model_override is None
+                    else None
+                ),
+                override=self.model_override,
+            )
+            self._writer_resolution = resolution
+            model = resolution.model
         provider_type = get_provider_for_model(model, self.settings_path)
         if provider_type is None:
             raise ValueError(f"Model {model!r} is absent from the registry")
@@ -807,7 +819,9 @@ class LogonUtility:
                 resolved_route[3]
             )
         else:
-            active_model = self.model_override or self._get_slot_model()
+            active_model = (
+                self.persisted_model or self.model_override or self._get_slot_model()
+            )
             if active_model:
                 active_model = self._resolve_generation_model(active_model)
             active_wire_type = self._provider_wire_type
@@ -1172,11 +1186,11 @@ class LogonUtility:
         """
         from nexus.api.slot_utils import require_slot_dbname
         from nexus.config import load_settings
-        from nexus.config.story_model import read_story_settings, resolve_story_model
+        from nexus.config.story_model import read_story_settings, resolve_seat
 
         story = self._read_story_settings()
         # A null pin follows the actual writer, including a request override.
-        gaia_model = resolve_story_model(
+        resolution = resolve_seat(
             "gaia",
             settings=load_settings(self.settings_path),
             story=story,
@@ -1186,6 +1200,12 @@ class LogonUtility:
                 else None
             ),
         )
+        if story.gaia_model is None:
+            from dataclasses import replace
+
+            resolution = replace(resolution, source="story_follow")
+        self._gaia_resolution = resolution
+        gaia_model = resolution.model
         if self._provider_type_name is None:
             raise RuntimeError("Gaia route resolution requires an initialized provider")
         if self._provider_type_name == "test":
@@ -1927,6 +1947,15 @@ class LogonUtility:
 
             start_attempt(
                 attempt_record,
+                resolved_source=getattr(
+                    getattr(
+                        self,
+                        "_gaia_resolution" if seat == "gaia" else "_writer_resolution",
+                        None,
+                    ),
+                    "source",
+                    None,
+                ),
                 blocks=[
                     {
                         "kind": "system",

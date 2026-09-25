@@ -6,6 +6,7 @@
 # =============================================================================
 
 [global.model]
+default_model_policy = "fixed"
 # Model IDs live only in the provider roster below. To upgrade a model, edit
 # its `id` once; `uses` supplies that ID to the listed configuration fields.
 # Move a use to another entry to select a different model. The settings picker
@@ -385,6 +386,7 @@ enabled = true
 duration_hours = 12
 
 [orrery.experiences]
+model_policy = "follow_story"
 enabled = true
 include_player_character = false
 dossier_fields = ["summary", "background", "personality"]
@@ -727,6 +729,7 @@ junction_counts_by_weird = { low = 0, medium = 1, high = 1 }
 excluded_event_categories = ["orrery_resolution", "physiological", "routine"]
 
 [orrery.retrograde.maturation]
+model_ref_policy = "fixed"
 lease_duration_seconds = 900
 # Runtime stub maturation (spec decisions 9/10/12, M8). When Skald declares a
 # new entity via the new_entities structured-output field and the entity
@@ -1155,6 +1158,7 @@ max_sql_iterations = 5           # Max iterations for agentic SQL generation
 # =============================================================================
 
 [storyteller.correspondence]
+compaction_model_policy = "follow_story"
 # Hysteresis is denominated in accepted turn exchange pairs. A post-accept
 # compaction fires when the current exchange pushes the uncompacted journal
 # above the ceiling, retaining the prior floor plus the newly accepted turn.
@@ -1215,10 +1219,11 @@ suggestion_limit = 3
 # =============================================================================
 
 [summaries]
+model_policy = "follow_story"
 # Summaries follow the storyteller (apex.model) by default — summary quality
 # varies materially by model, so the default is never a cheaper model. Set
-# `model` explicitly (advanced) to decouple the summarizer from the
-# storyteller. Provider routing follows the model registry: native OpenAI,
+# `model` explicitly and model_policy = "fixed" to decouple the summarizer
+# from the storyteller. Provider routing follows the model registry: native OpenAI,
 # native Anthropic, Responses-compatible endpoints, and local Chat Completions
 # endpoints all use their declared structured-output transport.
 # model = "MODEL_ID"
@@ -1240,6 +1245,7 @@ reasoning_reserve_tokens = 0
 # =============================================================================
 
 [ir_eval.judgment]
+model_policy = "fixed"
 reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
 
 # =============================================================================

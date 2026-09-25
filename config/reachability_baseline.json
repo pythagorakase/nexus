@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Track character identity, prompt registry and seat block manifests; route durable narrative embedding and summary queues through the slot scheduler.",
+  "reason": "Track the test-session provider guard and remove the now-tested OpenRouter wrapper from orphan exemptions.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -31,10 +31,8 @@
     "nexus/agents/memnon/utils/temporal_search_example.py",
     "nexus/api/models.py",
     "nexus/api/resilient_openai.py",
-    "scripts/api_openrouter.py",
     "scripts/assemble_context.py",
     "scripts/backfill_routine_anchors.py",
-    "scripts/benchmark_experience_enqueue_fence.py",
     "scripts/checkpoint_state.py",
     "scripts/chunk_transcripts.py",
     "scripts/create_vector_index.py",
@@ -228,6 +226,7 @@
     "nexus/config/loader.py",
     "nexus/config/local_window.py",
     "nexus/config/preferences.py",
+    "nexus/config/provider_guard.py",
     "nexus/config/seat_window.py",
     "nexus/config/settings_models.py",
     "nexus/config/story_model.py",

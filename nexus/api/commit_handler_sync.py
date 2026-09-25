@@ -868,6 +868,7 @@ def compact_accepted_correspondence_sync(
     *,
     accepting_chunk_id: int,
     completion_fence: Any = None,
+    resolved_model: str | None = None,
 ) -> bool:
     """Run and persist post-accept hysteresis compaction when it is due."""
 
@@ -889,11 +890,14 @@ def compact_accepted_correspondence_sync(
     if plan is None:
         return False
 
-    model = config["compaction_model"]
-    if not isinstance(model, str) or not model:
-        raise ValueError(
-            "storyteller.correspondence.compaction_model must resolve to a model"
-        )
+    if resolved_model is None:
+        from nexus.config.story_model import resolve_enqueued_seat
+
+        with conn, conn.cursor() as cur:
+            resolved_model = resolve_enqueued_seat(
+                "storyteller.correspondence.compaction_model", cur, settings=settings
+            ).model
+    model = resolved_model
     dbname = getattr(getattr(conn, "info", None), "dbname", None)
     if not isinstance(dbname, str) or not dbname:
         raise RuntimeError("Correspondence compaction requires a slot DB connection")
@@ -902,7 +906,7 @@ def compact_accepted_correspondence_sync(
     utility = LogonUtility(
         settings,
         dbname=dbname,
-        model_override=model,
+        persisted_model=model,
     )
     digest = utility.compact_correspondence(
         system_prompt=load_compaction_system_prompt(

@@ -29,6 +29,7 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import structured_output_error_text
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
+from tests.model_registry_helpers import registry_model
 
 
 class FakeRegistryCursor:
@@ -1365,7 +1366,7 @@ def test_anthropic_transport_repairs_invalid_declaration(
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_output_retries=1,
         output_validator=build_storyteller_tag_validator("test_slot"),

@@ -57,11 +57,23 @@ def schedule_summary_generation(
     tasks: Sequence[SummaryTask], *, cur: Any, session_id: str
 ) -> None:
     """Persist idempotent plans in the caller's accepting transaction."""
+    if not tasks:
+        return
+    from nexus.config.story_model import resolve_enqueued_seat
+
+    resolution = resolve_enqueued_seat("summaries.model", cur)
     for task in tasks:
         cur.execute(
             """INSERT INTO narrative_summary_jobs
-            (kind, season, episode, generation_session_id)
-            VALUES (%s, %s, %s, %s)
+            (kind, season, episode, generation_session_id, resolved_model, resolved_source)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (kind, season, episode) DO NOTHING""",
-            (task.kind, task.season, task.episode, session_id),
+            (
+                task.kind,
+                task.season,
+                task.episode,
+                session_id,
+                resolution.model,
+                resolution.source,
+            ),
         )

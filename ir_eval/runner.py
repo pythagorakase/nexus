@@ -99,7 +99,6 @@ def _build_judgment_engine() -> JudgmentEngine:
     if not judgment_cfg.get("model"):
         raise ValueError("ir_eval.judgment.model is not configured in nexus.toml")
     return JudgmentEngine(
-        model=judgment_cfg["model"],
         reasoning_effort=judgment_cfg.get("reasoning_effort", "high"),
     )
 

@@ -22,7 +22,7 @@ import argparse
 from typing import Dict, List, Any, Tuple, Optional, Set
 from pathlib import Path
 
-from nexus.config import load_settings
+from nexus.config.story_model import resolve_seat
 
 # Add parent directory to path
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -2193,7 +2193,7 @@ class IREvalPGCLI:
                 return
 
             # Get model and configuration
-            default_model = load_settings().ir_eval.judgment.model
+            default_model = resolve_seat("ir_eval.judgment.model").model
             model = (
                 input(
                     f"\nEnter OpenAI model to use (default: {default_model}): "

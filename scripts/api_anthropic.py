@@ -160,21 +160,7 @@ def get_token_count(text: str, model: str) -> int:
     Returns:
         The number of tokens in the text
     """
-    # For Claude models, we can use the anthropic library if available
-    if anthropic and model.startswith("claude"):
-        try:
-            client = cast(Any, anthropic.Anthropic())
-            token_count = client.count_tokens(text)
-            return token_count
-        except Exception as e:
-            logger.warning(
-                "Failed to get token count using anthropic library: %s. "
-                "Falling back to approximation.",
-                e,
-            )
-
-    # cl100k_base is a reasonable approximation when Anthropic's counter is
-    # unavailable.
+    # Token estimation is local; network counting belongs to the guarded provider.
     if tiktoken:
         try:
             encoding = tiktoken.get_encoding("cl100k_base")
@@ -370,7 +356,7 @@ class AnthropicProvider(LLMProvider):
         )
 
     def initialize(self) -> None:
-        """Initialize the Anthropic client."""
+        """Resolve registry identity without constructing a network client."""
         if not anthropic:
             raise ImportError(
                 "The 'anthropic' package is required for AnthropicProvider. "
@@ -378,11 +364,13 @@ class AnthropicProvider(LLMProvider):
             )
 
         self.provider_name = "anthropic"
-        self.api_key = self.api_key or self._get_api_key()
         self.model = self.model or self.DEFAULT_MODEL
+        from nexus.config import load_settings
 
-        # Initialize the client
-        self.client = anthropic.Anthropic(api_key=self.api_key, timeout=self.timeout)
+        self._registry_settings = load_settings()
+        self._registry_settings.provider_for_model(self.model)
+        self._registry_model = self.model
+        self._client: Any = None
 
         # Log the model type and thinking status
         if self.thinking_enabled:
@@ -410,6 +398,34 @@ class AnthropicProvider(LLMProvider):
                     f"Using Anthropic model: {self.model} with temperature: "
                     f"{self.temperature}"
                 )
+
+    def _ensure_network(self) -> None:
+        """Guard network access before loading the credential exactly once."""
+        from nexus.config.provider_guard import require_test_provider
+
+        require_test_provider(self._registry_model, settings=self._registry_settings)
+        if not self.api_key:
+            self.api_key = self._get_api_key()
+
+    def credential(self) -> str:
+        """Return a guarded credential for consumers that own their SDK client."""
+        self._ensure_network()
+        return self.api_key
+
+    @property
+    def client(self) -> Any:
+        """Create the SDK client on first use, after the test-provider guard."""
+        if self._client is None:
+            self._ensure_network()
+            self._client = anthropic.Anthropic(
+                api_key=self.api_key, timeout=self.timeout
+            )
+        return self._client
+
+    @client.setter
+    def client(self, client: Any) -> None:
+        """Accept an explicitly supplied client without creating an SDK client."""
+        self._client = client
 
     def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
         """
@@ -1208,9 +1224,11 @@ class AnthropicProvider(LLMProvider):
         Returns:
             The number of tokens in the text
         """
+        # Access outside the fallback so guard/credential errors remain loud.
+        client = self.client
         try:
             # Use Anthropic's built-in token counter
-            return cast(Any, self.client).count_tokens(text)
+            return cast(Any, client).count_tokens(text)
         except Exception as e:
             # Fall back to base implementation if Anthropic's counter fails
             logger.warning(

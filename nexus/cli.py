@@ -1857,7 +1857,7 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Get or set the model for a slot.
 
-    Calls GET or PATCH /api/slot/{slot}/settings.
+    Read seat identities directly; change pins through PATCH /api/slot/{slot}/settings.
     """
     try:
         if args.list:
@@ -1887,19 +1887,32 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
                 "model": data.get("skald_model"),
             }
 
-        # Get current model
-        response = _api_get(base_url, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        current = data.get("skald_model") or "(default)"
-        from nexus.config import get_available_api_models
+        # Read-only diagnostics do not require a running gateway.
+        from dataclasses import asdict
 
-        available = get_available_api_models()
+        from nexus.api.slot_utils import slot_dbname
+        from nexus.config import load_settings
+        from nexus.config.story_model import (
+            AUXILIARY_SEATS,
+            read_story_settings,
+            resolve_seat,
+        )
+
+        settings = load_settings()
+        story = read_story_settings(slot_dbname(args.slot))
+        story.slot = args.slot
+        seats = [
+            resolve_seat(seat, settings=settings, story=story)
+            for seat in ("skald", "gaia", "wizard", *AUXILIARY_SEATS)
+        ]
         return {
             "success": True,
-            "message": f"Current model: {current}\nAvailable: {', '.join(available)}",
-            "model": data.get("skald_model"),
-            "available_models": available,
+            "message": "\n".join(
+                f"{item.seat} {item.policy} {item.model} {item.source}"
+                for item in seats
+            ),
+            "model": story.skald_model,
+            "seats": [asdict(item) for item in seats],
         }
 
     except requests.exceptions.ConnectionError:

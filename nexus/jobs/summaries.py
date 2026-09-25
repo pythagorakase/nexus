@@ -6,7 +6,7 @@ from typing import Any
 
 from psycopg2.extras import Json
 
-from nexus.config import load_settings
+from nexus.config.story_model import persisted_job_model
 from nexus.config.settings_models import NarrativeJobSettings
 from nexus.database import database_url
 from nexus.jobs.narrative_jobs import drain_job
@@ -21,6 +21,7 @@ def drain_summary(
     def prepare(job: dict[str, Any]) -> dict[str, Any] | None:
         from scripts.summarize_narrative import DatabaseManager, SummaryGenerator
 
+        model = persisted_job_model(job, table="narrative_summary_jobs")
         db = DatabaseManager(db_url=database_url(dbname))
         try:
             episode = job["kind"] == "episode"
@@ -39,11 +40,8 @@ def drain_summary(
                     f"Episode S{job['season']:02d}E{job['episode']:02d} has no chunks "
                     "to summarize"
                 )
-            settings = load_settings()
-            if not settings.summaries.model:
-                raise ValueError("No narrative summary model is configured")
             generator = SummaryGenerator(
-                model=settings.summaries.model,
+                model=model,
                 db_manager=db,
                 dry_run=True,
                 prompt_on_conflict=False,

@@ -43,7 +43,7 @@ from tests.test_orrery.claim_accounts_test_support import (
 )
 
 
-pytestmark = pytest.mark.requires_postgres
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
 
 LIVE_SLOT = 5
 

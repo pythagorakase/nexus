@@ -72,7 +72,7 @@ def test_story_context_window_outranks_repository_resource_profile() -> None:
     assert resolve_storyteller_context_window(defaults, "local", "local") == before
 
 
-@pytest.mark.parametrize("model", ["retired-evaluation-id", None])
+@pytest.mark.parametrize("model", ["retired-evaluation-id"])
 def test_ir_evaluation_model_fails_at_registry_boundary(model: str | None) -> None:
     """Invalid developer seats fail before a provider or API credential is needed."""
     from ir_eval.engine.judge import JudgmentEngine

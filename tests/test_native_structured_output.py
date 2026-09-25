@@ -479,7 +479,7 @@ def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         reasoning_effort=reasoning_effort,
         structured_output_retries=0,
@@ -530,7 +530,7 @@ def test_two_pass_gaia_tool_envelope_reaches_forced_non_strict_tool() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport="tool_envelope",
         structured_output_retries=0,
@@ -578,7 +578,7 @@ async def test_two_pass_gaia_tool_envelope_async_uses_effort_only_config() -> No
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         reasoning_effort="medium",
         structured_transport="tool_envelope",
@@ -1202,8 +1202,10 @@ def test_openai_chat_transport_dispatches_without_responses_attempt() -> None:
     provider._get_structured_completion_chat_completions_sync = Mock(
         return_value=expected
     )
-    provider.client.responses.create = Mock(
-        side_effect=AssertionError("Responses must not be called")
+    provider.client = SimpleNamespace(
+        responses=SimpleNamespace(
+            create=Mock(side_effect=AssertionError("Responses must not be called"))
+        )
     )
 
     result = provider._get_structured_completion_native_sync(
@@ -1234,8 +1236,10 @@ async def test_openai_chat_transport_dispatches_async_without_responses_attempt(
     provider._get_structured_completion_chat_completions_async = AsyncMock(
         return_value=expected
     )
-    provider.client.responses.create = Mock(
-        side_effect=AssertionError("Responses must not be called")
+    provider.client = SimpleNamespace(
+        responses=SimpleNamespace(
+            create=Mock(side_effect=AssertionError("Responses must not be called"))
+        )
     )
 
     result = await provider._get_structured_completion_native_async(
@@ -1264,7 +1268,7 @@ def test_anthropic_provider_uses_native_output_format() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         system_prompt="System prompt",
         max_tokens=5678,
@@ -1347,7 +1351,7 @@ async def test_anthropic_rejection_logs_cover_branches_without_input_leaks(
             )
 
     provider = AnthropicProvider(
-        model="anthropic-log-test-model",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport=transport,
         structured_output_retries=1,
@@ -1384,7 +1388,7 @@ async def test_anthropic_rejection_logs_cover_branches_without_input_leaks(
     assert len(rejection_logs) == 1
     rejection_log = rejection_logs[0]
     assert f"transport={transport}" in rejection_log
-    assert "model=anthropic-log-test-model" in rejection_log
+    assert f"model={registry_model('anthropic')}" in rejection_log
     assert "seat=writer" in rejection_log
     assert "attempt=1" in rejection_log
     assert f"exception={exception_name}" in rejection_log
@@ -1404,7 +1408,7 @@ def test_anthropic_provider_rejects_unknown_structured_transport() -> None:
         ),
     ):
         AnthropicProvider(
-            model="claude-sonnet-4-5",
+            model=registry_model("anthropic"),
             api_key="test-key",
             structured_transport="unknown",  # type: ignore[arg-type]
         )
@@ -1434,7 +1438,7 @@ def test_anthropic_tool_envelope_forces_non_strict_tool_and_validates_input() ->
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         system_prompt="System prompt",
         temperature=0.2,
@@ -1505,7 +1509,7 @@ async def test_anthropic_tool_envelope_async_carries_effort_without_format() -> 
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         reasoning_effort="low",
         structured_transport="tool_envelope",
@@ -1550,7 +1554,7 @@ def test_anthropic_tool_envelope_repairs_text_only_then_raises() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport="tool_envelope",
         structured_output_retries=1,
@@ -1593,7 +1597,7 @@ async def test_anthropic_tool_envelope_async_repairs_text_only_then_raises() -> 
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport="tool_envelope",
         structured_output_retries=1,
@@ -1634,7 +1638,7 @@ def test_anthropic_prompted_transport_omits_schema_and_parses_json_fence() -> No
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         system_prompt="System prompt",
         temperature=0.2,
@@ -1657,7 +1661,7 @@ def test_anthropic_prompted_transport_omits_schema_and_parses_json_fence() -> No
     assert llm_response.input_tokens == 33
     assert llm_response.output_tokens == 44
     assert captured == {
-        "model": "claude-sonnet-4-5",
+        "model": registry_model("anthropic"),
         "messages": [{"role": "user", "content": "Prompt"}],
         "max_tokens": 5678,
         "system": "System prompt",
@@ -1687,7 +1691,7 @@ async def test_anthropic_prompted_transport_async_parses_bare_fence() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport="prompted",
         structured_output_retries=0,
@@ -1719,7 +1723,7 @@ def test_anthropic_prompted_transport_repairs_then_raises_on_garbage(
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport="prompted",
         structured_output_retries=1,
@@ -1750,7 +1754,7 @@ def test_anthropic_prompted_transport_repairs_then_raises_on_garbage(
     ]
     assert len(exhaustion_logs) == 1
     assert "transport=prompted" in exhaustion_logs[0]
-    assert "model=claude-sonnet-4-5" in exhaustion_logs[0]
+    assert f"model={registry_model('anthropic')}" in exhaustion_logs[0]
     assert "seat=storyteller" in exhaustion_logs[0]
     assert "attempt=2" in exhaustion_logs[0]
     assert "exception=ValidationError" in exhaustion_logs[0]
@@ -1771,7 +1775,7 @@ async def test_anthropic_prompted_transport_async_repairs_then_raises() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport="prompted",
         structured_output_retries=1,
@@ -1802,7 +1806,7 @@ def test_anthropic_prompted_transport_carries_effort_without_format() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         reasoning_effort="medium",
         structured_transport="prompted",
@@ -1836,7 +1840,7 @@ async def test_anthropic_prompted_transport_async_carries_effort_without_format(
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         reasoning_effort="low",
         structured_transport="prompted",
@@ -1865,7 +1869,7 @@ def test_anthropic_non_native_transport_rejects_caller_schema_arguments(
 ) -> None:
     create = Mock(side_effect=AssertionError("request must not be sent"))
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         structured_transport=structured_transport,  # type: ignore[arg-type]
     )
@@ -1905,7 +1909,7 @@ def test_anthropic_provider_accepts_native_output_config_override() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         system_prompt="System prompt",
         max_tokens=5678,
@@ -1938,7 +1942,7 @@ def test_anthropic_provider_wraps_legacy_output_format_override() -> None:
             )
 
     provider = AnthropicProvider(
-        model="claude-sonnet-4-5",
+        model=registry_model("anthropic"),
         api_key="test-key",
         system_prompt="System prompt",
         max_tokens=5678,

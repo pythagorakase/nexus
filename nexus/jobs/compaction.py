@@ -7,16 +7,20 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.database import is_connection_failure
 from nexus.config.settings_models import DeferredWorkSettings
+from nexus.config.story_model import persisted_job_model, resolve_enqueued_seat
 from nexus.memory.correspondence import read_accepted_correspondence
 
 
 def enqueue_compaction(cur: Any, *, accepting_chunk_id: int, floor_turns: int) -> None:
     """Enqueue in the accepting transaction once the retained floor is crossed."""
     if len(read_accepted_correspondence(cur).exchanges) > floor_turns:
+        resolution = resolve_enqueued_seat(
+            "storyteller.correspondence.compaction_model", cur
+        )
         cur.execute(
-            "INSERT INTO correspondence_compaction_jobs (accepting_chunk_id) "
-            "VALUES (%s) ON CONFLICT (accepting_chunk_id) DO NOTHING",
-            (accepting_chunk_id,),
+            "INSERT INTO correspondence_compaction_jobs (accepting_chunk_id, resolved_model, resolved_source) "
+            "VALUES (%s, %s, %s) ON CONFLICT (accepting_chunk_id) DO NOTHING",
+            (accepting_chunk_id, resolution.model, resolution.source),
         )
 
 
@@ -45,7 +49,7 @@ def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, attempts FROM correspondence_compaction_jobs
+                SELECT id, attempts, resolved_model, resolved_source FROM correspondence_compaction_jobs
                 WHERE (state = 'queued' AND available_at <= clock_timestamp())
                    OR (state = 'leased' AND lease_until < clock_timestamp())
                 ORDER BY available_at, id LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -80,6 +84,7 @@ def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int
     report_leased_job("correspondence_compaction_jobs", job["id"])
     error = None
     try:
+        model = persisted_job_model(job, table="correspondence_compaction_jobs")
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 context = read_accepted_correspondence(cur)
@@ -88,6 +93,7 @@ def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int
                 conn,
                 accepting_chunk_id=context.exchanges[-1].chunk_id,
                 completion_fence=fence,
+                resolved_model=model,
             )
     except Exception as exc:
         if is_connection_failure(exc):

@@ -79,12 +79,9 @@ logger = logging.getLogger("nexus.summarize_narrative")
 
 def _resolve_default_summary_model() -> str:
     """Read the dedicated narrative-summary model from nexus.toml."""
-    from nexus.config import load_settings
+    from nexus.config.story_model import resolve_seat
 
-    model = load_settings().summaries.model
-    if model is None:  # Defensive: Settings resolves follow-the-storyteller first.
-        raise ValueError("No narrative summary model is configured")
-    return model
+    return resolve_seat("summaries.model").model
 
 
 # Constants

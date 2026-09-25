@@ -255,24 +255,26 @@ class OpenRouterProvider(LLMProvider):
         )
 
     def initialize(self) -> None:
-        """Initialize the OpenRouter client."""
+        """Resolve registry identity without constructing a network client."""
         if not openai:
             raise ImportError(
                 "The 'openai' package is required for OpenRouterProvider. Install with 'pip install openai'."
             )
 
         self.provider_name = "openrouter"
-        self.api_key = self.api_key or self._get_api_key()
         self.model = self.model or self.DEFAULT_MODEL
+        from nexus.config import load_settings
+
+        self._registry_settings = load_settings()
+        self._registry_settings.provider_for_model(self.model)
+        self._registry_model = self.model
+        self._client: Any = None
 
         # Map database model name to OpenRouter model ID
         if self.model in self.MODEL_MAPPING:
             original_model = self.model
             self.model = self.MODEL_MAPPING[self.model]
             logger.info(f"Mapped model {original_model} -> {self.model}")
-
-        # Initialize the client with OpenRouter base URL
-        self.client = openai.OpenAI(api_key=self.api_key, base_url=self.API_BASE)
 
         # Log the configuration
         logger.info(
@@ -292,6 +294,32 @@ class OpenRouterProvider(LLMProvider):
             logger.info(f"Presence penalty: {self.presence_penalty}")
         if self.repetition_penalty is not None:
             logger.info(f"Repetition penalty: {self.repetition_penalty}")
+
+    def _ensure_network(self) -> None:
+        """Guard network access before loading the credential exactly once."""
+        from nexus.config.provider_guard import require_test_provider
+
+        require_test_provider(self._registry_model, settings=self._registry_settings)
+        if not self.api_key:
+            self.api_key = self._get_api_key()
+
+    def credential(self) -> str:
+        """Return a guarded credential for consumers that own their SDK client."""
+        self._ensure_network()
+        return self.api_key
+
+    @property
+    def client(self) -> Any:
+        """Create the SDK client on first use, after the test-provider guard."""
+        if self._client is None:
+            self._ensure_network()
+            self._client = openai.OpenAI(api_key=self.api_key, base_url=self.API_BASE)
+        return self._client
+
+    @client.setter
+    def client(self, client: Any) -> None:
+        """Accept an explicitly supplied client without creating an SDK client."""
+        self._client = client
 
     def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
         """
@@ -402,6 +430,7 @@ class OpenRouterProvider(LLMProvider):
         The OpenAI SDK doesn't support OpenRouter's reasoning parameters, so we use
         direct HTTP requests when reasoning is enabled.
         """
+        self._ensure_network()
         import requests
 
         # Build request payload

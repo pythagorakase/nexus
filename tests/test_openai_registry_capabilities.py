@@ -35,7 +35,7 @@ def test_registry_controls_request_parameters(model, temperature):
             assert "temperature" not in params.get("extra_body", {})
             assert "top_p" not in params.get("extra_body", {})
     assert ("reasoning" in native) is (model != "TEST")
-    provider.client.close()
+    assert provider._client is None
 
 
 def test_unregistered_model_fails_with_registry_guidance():
@@ -48,11 +48,9 @@ def test_default_provider_and_cli_use_registered_judgment_model():
     from scripts.api_openai import get_default_llm_argument_parser
 
     provider = OpenAIProvider(api_key="unused-offline")
-    try:
-        assert provider.model == load_settings().ir_eval.judgment.model
-        assert get_default_llm_argument_parser().parse_args([]).model is None
-    finally:
-        provider.client.close()
+    assert provider.model == load_settings().ir_eval.judgment.model
+    assert get_default_llm_argument_parser().parse_args([]).model is None
+    assert provider._client is None
 
 
 def test_ir_judge_default_constructs_without_network():
@@ -70,7 +68,7 @@ def test_ir_judge_default_constructs_without_network():
             "from nexus.config import load_settings; "
             "judge = AIJudge(); "
             "assert judge.model == load_settings().ir_eval.judgment.model; "
-            "assert judge.provider.model == judge.model; judge.provider.client.close()",
+            "assert judge.provider.model == judge.model; assert judge.provider._client is None",
         ],
         env={
             **os.environ,

@@ -6,7 +6,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from nexus.config.story_model import resolve_story_model
+from nexus.config.story_model import resolve_seat
 from scripts.api_openai import OpenAIProvider
 
 
@@ -47,7 +47,7 @@ class JudgmentEngine:
 
     def __init__(
         self,
-        model: str,
+        model: str | None = None,
         reasoning_effort: str = "high",
     ):
         """Create a judgment engine backed by an OpenAI structured-output call.
@@ -59,7 +59,8 @@ class JudgmentEngine:
         Errors from the underlying API call propagate to the caller — this
         engine has no fallback or default-score behavior.
         """
-        self.model = resolve_story_model("ir_eval", override=model)
+        self.resolution = resolve_seat("ir_eval.judgment.model", override=model)
+        self.model = self.resolution.model
         self.reasoning_effort = reasoning_effort
         self._provider: Optional[OpenAIProvider] = None
 

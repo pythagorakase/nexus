@@ -34,7 +34,7 @@ from typing import Dict, List, Any, Optional, Set, Tuple, Literal
 # Import Pydantic for structured output
 from pydantic import BaseModel, Field
 
-from nexus.config import load_settings
+from nexus.config.story_model import resolve_seat
 
 # Make sure we can import from parent directories
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -98,7 +98,8 @@ class AIJudge:
             dry_run: If True, don't save judgments to database
             debug: If True, print detailed debug information
         """
-        self.model = model or load_settings().ir_eval.judgment.model
+        self.resolution = resolve_seat("ir_eval.judgment.model", override=model)
+        self.model = self.resolution.model
         self.temperature = temperature
         self.dry_run = dry_run
         self.debug = debug
