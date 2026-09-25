@@ -38,3 +38,19 @@ before returning, invalidating local pools and registered engines. SQLAlchemy
 engine references remain registered after disposal so repeated resets invalidate
 their replacement pools too. Replacement must quiesce work using that database;
 disposal does not coordinate transactions in other processes.
+
+## Schema Documentation
+
+PostgreSQL comments are the schema reference (`\d+` in psql or
+`MEMNON.get_schema_summary`); add a non-empty `COMMENT ON TABLE` and
+`COMMENT ON COLUMN` with each new table and column. The PostgreSQL-gated
+`tests/test_schema_documentation_pg.py` ratchet checks every table and column in
+`public` and `assets`, excluding extension ownership through `pg_depend`
+(`deptype = 'e'`). Legacy debt is listed by qualified object name and reason in
+`config/schema_docs_baseline.json`. To retire an entry, establish its contract
+from reader/writer code, cite that evidence in the comment migration, add the
+comment, and remove the baseline entry in the same change; documented or removed
+objects left in the baseline fail, as do new undocumented objects. Run with
+`NEXUS_RUN_POSTGRES=1`; the test migrates disposable template clones and proves
+that schema-only dumps and the actual new-story setup preserve comments. Enums,
+functions, and views are inventoried but not enforced in this slice.

@@ -148,7 +148,15 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
                     version TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     applied_at TIMESTAMPTZ DEFAULT NOW()
-                )
+                );
+                COMMENT ON TABLE schema_migrations IS
+                    'Applied migration versions tracked by the migration runner.';
+                COMMENT ON COLUMN schema_migrations.version IS
+                    'Three-digit migration version from the migration filename or bootstrap list.';
+                COMMENT ON COLUMN schema_migrations.name IS
+                    'Migration name from the migration filename or bootstrap list.';
+                COMMENT ON COLUMN schema_migrations.applied_at IS
+                    'Database transaction timestamp when the migration stamp was inserted.';
                 """
             )
     conn.commit()
