@@ -1106,6 +1106,26 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
                 "phase": data.get("phase"),
                 "choices": [],
             }
+            if data.get("pending_confirmation") in {"setting", "character"}:
+                phase = data["pending_confirmation"]
+                result.update(
+                    pending_confirmation=phase,
+                    artifact_token=data.get("artifact_token"),
+                    thread_id=data.get("thread_id"),
+                    message=(
+                        f"The saved {phase} draft awaits confirmation. "
+                        f"Use 'nexus continue --slot {args.slot}' to confirm, "
+                        "or supply --user-text to revise it."
+                    ),
+                )
+            if data.get("character_revision_pending"):
+                result.update(
+                    character_revision_pending=True,
+                    message=(
+                        "Character revision is unfinished. Continue with --user-text "
+                        "describing the replacement before confirming."
+                    ),
+                )
             # Include trait menu if in traits subphase
             if data.get("trait_menu"):
                 result["trait_menu"] = data.get("trait_menu")
@@ -1422,6 +1442,127 @@ def _apply_traits_to_wildcard_transition(
     result["subphase"] = "wildcard"
 
 
+def _wizard_artifact_identity(data: Mapping[str, Any]) -> Dict[str, str]:
+    """Read the exact persisted artifact the player is confirming or revising."""
+    phase = data.get("pending_confirmation")
+    thread_id = data.get("thread_id")
+    artifact_token = data.get("artifact_token")
+    if (
+        phase not in {"setting", "character"}
+        or data.get("phase") != phase
+        or not isinstance(thread_id, str)
+        or not thread_id.strip()
+        or not isinstance(artifact_token, str)
+        or not artifact_token.strip()
+    ):
+        raise ValueError(
+            "Wizard artifact identity is missing. Reload the saved wizard."
+        )
+    return {
+        "phase": phase,
+        "thread_id": thread_id,
+        "artifact_token": artifact_token,
+    }
+
+
+def _confirm_wizard_artifact_and_introduce(
+    *,
+    slot: int,
+    data: Mapping[str, Any],
+    result: Dict[str, Any],
+    model: Optional[str],
+) -> Dict[str, Any]:
+    """Confirm the authoritative draft before requesting the next phase intro."""
+    try:
+        identity = _wizard_artifact_identity(data)
+        response = _api_post(
+            f"{get_api_url()}/api/story/new/setup/confirm",
+            json={"slot": slot, **identity},
+            timeout=30,
+        )
+        if not 200 <= response.status_code < 300:
+            raise ValueError(f"Wizard confirmation failed: {response.text}")
+        confirmed = response.json()
+        next_phase = _get_next_phase(identity["phase"])
+        if (
+            not isinstance(confirmed, dict)
+            or confirmed.get("status") != "confirmed"
+            or confirmed.get("phase") != identity["phase"]
+            or confirmed.get("next_phase") != next_phase
+            or confirmed.get("thread_id") != identity["thread_id"]
+        ):
+            raise ValueError("Wizard confirmation returned an unexpected identity.")
+    except (ValueError, requests.exceptions.RequestException) as exc:
+        result.update(
+            success=False,
+            error=str(exc),
+            recovery_command=f"nexus load --slot {slot}",
+        )
+        return result
+
+    # A failed or lost acknowledgement above never schedules another model turn.
+    result.update(phase=next_phase, pending_confirmation=None, artifact_token=None)
+    payload = {
+        "slot": slot,
+        "thread_id": identity["thread_id"],
+        "message": (
+            f"[SYSTEM] Phase {identity['phase']} complete. "
+            f"Proceeding to {next_phase}. Please introduce the next phase."
+        ),
+        "current_phase": next_phase,
+    }
+    if model:
+        payload["model"] = model
+    try:
+        response = _api_post(
+            f"{get_api_url()}/api/story/new/chat", json=payload, timeout=120
+        )
+        if not 200 <= response.status_code < 300:
+            raise ValueError(f"Next phase introduction failed: {response.text}")
+        intro = response.json()
+        if (
+            not isinstance(intro, dict)
+            or not isinstance(intro.get("message"), str)
+            or not intro["message"].strip()
+        ):
+            raise ValueError("The next phase returned no introduction.")
+        result.update(
+            next_phase_intro=intro["message"], choices=intro.get("choices", [])
+        )
+    except (ValueError, requests.exceptions.RequestException) as exc:
+        result.update(
+            success=False,
+            error=f"Artifact confirmed, but the next phase could not be loaded: {exc}",
+            recovery_command=f"nexus load --slot {slot}",
+        )
+    return result
+
+
+def _start_wizard_character_revision(slot: int, state: Mapping[str, Any]) -> str:
+    """Enter persisted concept revision before sending replacement player text."""
+    identity = _wizard_artifact_identity(state)
+    response = _api_post(
+        f"{get_api_url()}/api/story/new/setup/character/revise",
+        json={
+            "slot": slot,
+            "thread_id": identity["thread_id"],
+            "artifact_token": identity["artifact_token"],
+        },
+        timeout=30,
+    )
+    if not 200 <= response.status_code < 300:
+        raise ValueError(f"Character revision could not start: {response.text}")
+    revised = response.json()
+    if (
+        not isinstance(revised, dict)
+        or revised.get("status") != "revision_started"
+        or revised.get("phase") != "character"
+        or revised.get("thread_id") != identity["thread_id"]
+    ):
+        raise ValueError("Character revision returned an unexpected identity.")
+    return identity["thread_id"]
+
+
 def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Advance the story (wizard or narrative).
@@ -1467,6 +1608,42 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
         if state.get("is_wizard_mode"):
+            revision_thread_id = None
+            pending_confirmation = state.get("pending_confirmation")
+            if pending_confirmation in {"setting", "character"}:
+                if args.choice is not None:
+                    return {
+                        "success": False,
+                        "error": (
+                            "A saved artifact awaits confirmation. Continue without "
+                            "a choice to confirm it, or type a revision."
+                        ),
+                    }
+                if not (args.user_text or "").strip():
+                    if args.dev:
+                        return {"success": False, "error": "Dev mode requires text."}
+                    return _confirm_wizard_artifact_and_introduce(
+                        slot=args.slot,
+                        data=state,
+                        result={
+                            "success": True,
+                            "phase": pending_confirmation,
+                            "phase_complete": True,
+                            "pending_confirmation": pending_confirmation,
+                            "artifact_token": state.get("artifact_token"),
+                        },
+                        model=getattr(args, "model", None),
+                    )
+                if args.accept_fate:
+                    return {
+                        "success": False,
+                        "error": "Cannot combine a revision with --accept-fate.",
+                    }
+                revision_thread_id = _wizard_artifact_identity(state)["thread_id"]
+                if pending_confirmation == "character":
+                    revision_thread_id = _start_wizard_character_revision(
+                        args.slot, state
+                    )
             # Check if wizard is ready for transition to narrative
             if state.get("phase") == "ready":
                 # Call transition endpoint, then bootstrap. Retrograde
@@ -1588,6 +1765,8 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     "accept_fate": args.accept_fate,
                     # thread_id and current_phase resolved by backend
                 }
+                if revision_thread_id is not None:
+                    payload["thread_id"] = revision_thread_id
                 if args.dev and args.accept_fate:
                     return {
                         "success": False,
@@ -1623,6 +1802,8 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     "can_confirm": data.get("can_confirm", False),
                     "subphase": data.get("subphase"),
                     "subphase_complete": data.get("subphase_complete", False),
+                    "pending_confirmation": data.get("pending_confirmation"),
+                    "artifact_token": data.get("artifact_token"),
                 }
 
                 _apply_traits_to_wildcard_transition(
@@ -1639,28 +1820,12 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     next_phase = _get_next_phase(current_phase)
 
                     if next_phase and next_phase != "ready":
-                        # Send transition message to get next phase intro
-                        transition_payload = {
-                            "slot": args.slot,
-                            "message": (
-                                f"[SYSTEM] Phase {current_phase} complete. "
-                                f"Proceeding to {next_phase}. "
-                                "Please introduce the next phase."
-                            ),
-                            "current_phase": next_phase,
-                        }
-                        if model_to_use:
-                            transition_payload["model"] = model_to_use
-
-                        intro_response = _api_post(
-                            url, json=transition_payload, timeout=120
+                        return _confirm_wizard_artifact_and_introduce(
+                            slot=args.slot,
+                            data=data,
+                            result=result,
+                            model=model_to_use,
                         )
-                        if intro_response.ok:
-                            intro_data = intro_response.json()
-                            # Append intro to result, preserving the artifact.
-                            result["next_phase_intro"] = intro_data.get("message")
-                            result["choices"] = intro_data.get("choices", [])
-                            result["phase"] = intro_data.get("phase") or next_phase
 
                     elif next_phase == "ready":
                         # Seed phase complete → transition to narrative mode
