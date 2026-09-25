@@ -251,3 +251,33 @@ def ensure_character_experience_embedding_table(
         "'Database time of the most recent successful vector upsert.'",
     )
     return table_name
+
+
+def candidate_ann_index_name(table_name: str) -> str:
+    """Validate the table and return its stable, explicit promotion index name."""
+    dimensions = (
+        parse_embedding_table_dimensions(table_name)
+        or parse_retrograde_summary_embedding_table_dimensions(table_name)
+        or parse_character_experience_embedding_table_dimensions(table_name)
+    )
+    if dimensions != 2560:
+        raise ValueError(f"ANN gate supports only 2560d embedding tables: {table_name}")
+    return f"{table_name}_halfvec_hnsw_idx"
+
+
+def build_candidate_ann_index(executor: Any, table_name: str) -> str:
+    """Build an explicitly requested candidate; runtime search never calls this."""
+    name = candidate_ann_index_name(table_name)
+    _execute_ddl(
+        executor,
+        f"CREATE INDEX {name} ON {table_name} USING hnsw "
+        "((embedding::halfvec(2560)) halfvec_cosine_ops)",
+    )
+    return name
+
+
+def drop_candidate_ann_index(executor: Any, table_name: str) -> None:
+    """Drop only the named candidate index for an explicitly supplied table."""
+    _execute_ddl(
+        executor, f"DROP INDEX IF EXISTS {candidate_ann_index_name(table_name)}"
+    )

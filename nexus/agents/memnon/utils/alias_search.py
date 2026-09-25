@@ -158,7 +158,7 @@ def create_hybrid_alias_search_sql(
                (ce.embedding <=> :query_vector) AS distance,
                ts.text_score,
                m.season, m.episode, m.scene, m.world_layer, 
-               m.characters, m.place, m.atmosphere, m.time_delta
+               m.time_delta
         FROM {table_name} ce
         JOIN narrative_chunks c ON ce.chunk_id = c.id
         JOIN text_search ts ON c.id = ts.id
@@ -196,7 +196,7 @@ def create_hybrid_alias_search_sql(
                (ce.embedding <=> :query_vector) AS distance,
                ts.text_score,
                m.season, m.episode, m.scene, m.world_layer, 
-               m.characters, m.place, m.atmosphere, m.time_delta
+               m.time_delta
         FROM {table_name} ce
         JOIN narrative_chunks c ON ce.chunk_id = c.id
         JOIN text_search ts ON c.id = ts.id
@@ -264,74 +264,60 @@ def hybrid_alias_search(
 
     # First try a direct text search for the specific items we know exist
     if "gender" in query_text.lower():
-        try:
-            # This is a backup direct lookup for our test case
-            direct_sql = f"""
+        # This is a backup direct lookup for our test case
+        direct_sql = f"""
             SELECT c.id, c.raw_text, 'direct_lookup' as model, 0.0 as distance, 1.0 as text_score
             FROM narrative_chunks c
             WHERE c.raw_text ILIKE '%gender%'
             LIMIT :limit;
             """
-            results = []
-            direct_results = conn.execute(text(direct_sql), {"limit": limit})
-
-            for row in direct_results:
-                result = {
-                    "id": row.id,
-                    "text": row.raw_text,
-                    "model": row.model,
-                    "distance": float(row.distance),
-                    "score": 1.0,  # Direct match gets perfect score
-                    "source": "direct_text_search",
-                }
-                results.append(result)
-
-            if results:
-                logger.info(
-                    f"Direct text search found {len(results)} results for 'gender'"
-                )
-                return results
-        except Exception as e:
-            logger.warning(f"Direct text search failed: {e}")
-
-    # Execute the main hybrid search query
-    try:
         results = []
-        result_set = conn.execute(text(sql), params)
+        direct_results = conn.execute(text(direct_sql), {"limit": limit})
 
-        for row in result_set:
-            # Convert to dict format for compatibility with existing code
+        for row in direct_results:
             result = {
                 "id": row.id,
                 "text": row.raw_text,
                 "model": row.model,
                 "distance": float(row.distance),
-                "text_score": (
-                    float(row.text_score) if hasattr(row, "text_score") else 0.0
-                ),
-                "score": 1.0
-                - float(row.distance),  # Convert distance to similarity score
-                "characters": row.characters if hasattr(row, "characters") else None,
-                "season": row.season if hasattr(row, "season") else None,
-                "episode": row.episode if hasattr(row, "episode") else None,
-                "scene": row.scene if hasattr(row, "scene") else None,
-                "world_layer": row.world_layer if hasattr(row, "world_layer") else None,
-                "place": row.place if hasattr(row, "place") else None,
-                "atmosphere": row.atmosphere if hasattr(row, "atmosphere") else None,
-                "time_delta": row.time_delta if hasattr(row, "time_delta") else None,
-                "source": "hybrid_alias_search",
+                "score": 1.0,  # Direct match gets perfect score
+                "source": "direct_text_search",
             }
             results.append(result)
 
-        logger.info(f"Hybrid alias search returned {len(results)} results")
-        return results
+        if results:
+            logger.info(f"Direct text search found {len(results)} results for 'gender'")
+            return results
 
-    except Exception as e:
-        logger.error(f"Error executing hybrid alias search: {e}")
-        import traceback
+    # Execute the main hybrid search query
+    results = []
+    result_set = conn.execute(text(sql), params)
 
-        logger.error(traceback.format_exc())
-        return []
+    for row in result_set:
+        # Convert to dict format for compatibility with existing code
+        result = {
+            "id": row.id,
+            "text": row.raw_text,
+            "model": row.model,
+            "distance": float(row.distance),
+            "text_score": (
+                float(row.text_score) if hasattr(row, "text_score") else 0.0
+            ),
+            "score": 1.0 - float(row.distance),  # Convert distance to similarity score
+            "characters": row.characters if hasattr(row, "characters") else None,
+            "season": row.season if hasattr(row, "season") else None,
+            "episode": row.episode if hasattr(row, "episode") else None,
+            "scene": row.scene if hasattr(row, "scene") else None,
+            "world_layer": row.world_layer if hasattr(row, "world_layer") else None,
+            "place": row.place if hasattr(row, "place") else None,
+            "atmosphere": row.atmosphere if hasattr(row, "atmosphere") else None,
+            "time_delta": row.time_delta if hasattr(row, "time_delta") else None,
+            "source": "hybrid_alias_search",
+        }
+        results.append(result)
+
+    logger.info(f"Hybrid alias search returned {len(results)} results")
+    return results
 
 
 # Testing function
