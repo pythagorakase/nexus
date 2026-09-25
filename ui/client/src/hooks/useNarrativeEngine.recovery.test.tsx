@@ -20,7 +20,7 @@ const settings = {
 };
 const failure: GenerationSession = {
   slot: 4, session_id: "failed-8", status: "error", phase: "staging",
-  terminal_outcome: "error", replaced_by_session_id: null, chunk_id: null,
+  terminal_outcome: "error", replaced_by_session_id: null, chunk_id: null, parent_chunk_id: 9,
   created_at: "2026-09-25T08:00:00Z", heartbeat_at: "2026-09-25T08:01:00Z",
   expires_at: null, error: "Unresolved place state update", error_class: "WireContractViolation",
 };
@@ -118,6 +118,22 @@ describe("durable reader generation recovery", () => {
     expect(engine.failedGeneration).toBeNull();
     expect(screen.queryByTestId("generation-recovery")).not.toBeInTheDocument();
     expect(api.retryNarrative).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves normal input open for a failure recorded before a committed action", async () => {
+    currentSession = { ...failure, parent_chunk_id: null, error: "Ambiguous acceptance result" };
+    vi.mocked(api.continueNarrative).mockImplementation(async () => {
+      currentSession = { ...failure, session_id: "again-10", status: "initiated", phase: "writer", terminal_outcome: null, error: null };
+      return { session_id: "again-10", status: "processing", message: "started" };
+    });
+    mount();
+    await waitFor(() => expect(engine.generationError).toBe("Ambiguous acceptance result"));
+    expect(engine.failedGeneration).toBeNull();
+    expect(screen.queryByTestId("generation-recovery")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("input-freeform")).toBeEnabled());
+    await act(async () => { expect(await engine.submitTurn({ userText: "Try the door" })).toBe(true); });
+    expect(api.continueNarrative).toHaveBeenCalledTimes(1);
+    expect(api.retryNarrative).not.toHaveBeenCalled();
   });
 
   it("rejects a mismatched terminal status and leaves controls disabled", async () => {

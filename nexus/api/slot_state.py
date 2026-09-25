@@ -152,7 +152,7 @@ def get_slot_state(slot: int) -> SlotState:
             # Check global_variables for post-transition bootstrap state
             cur.execute(
                 """
-                SELECT setting, base_timestamp, slot_created_at
+                SELECT setting, base_timestamp
                 FROM global_variables
                 WHERE id = TRUE
                 """
@@ -200,24 +200,23 @@ def get_slot_state(slot: int) -> SlotState:
             elif has_narrative_data:
                 # Narrative mode: chunks or incubator exist
                 narrative_state = _get_narrative_state(cur)
-                created_at = global_row.get("slot_created_at") if global_row else None
-                if created_at is not None:
-                    story_id = created_at.isoformat()
-                else:
-                    # Legacy slots may predate slot_created_at. The canonical
-                    # protagonist is created once per story; its non-null row
-                    # creation timestamp is stable while the story clock moves.
-                    cur.execute(
-                        "SELECT created_at FROM characters WHERE id = %s",
-                        (player_character_id,),
-                    )
-                    player_row = cur.fetchone()
-                    if not player_row or player_row.get("created_at") is None:
-                        raise RuntimeError("Story has no stable creation identity")
-                    story_id = (
-                        f"player:{player_character_id}:"
-                        f"{player_row['created_at'].isoformat()}"
-                    )
+                # The transition recreates the canonical protagonist for every
+                # story while it keeps the slot's global_variables row, so the
+                # protagonist's non-null row creation timestamp is the identity
+                # that is stable within a story and renewed when the slot is
+                # overwritten. Sequence resets can repeat the id; the
+                # transaction-time timestamp cannot.
+                cur.execute(
+                    "SELECT created_at FROM characters WHERE id = %s",
+                    (player_character_id,),
+                )
+                player_row = cur.fetchone()
+                if not player_row or player_row.get("created_at") is None:
+                    raise RuntimeError("Story has no stable creation identity")
+                story_id = (
+                    f"player:{player_character_id}:"
+                    f"{player_row['created_at'].isoformat()}"
+                )
                 return SlotState(
                     slot=slot,
                     is_empty=False,

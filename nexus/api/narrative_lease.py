@@ -69,9 +69,8 @@ def _retry_context(cur: Any, expected_session_id: str) -> GenerationRetryContext
         raise GenerationRetryConflict("A pending narrative already exists.")
     cur.execute(
         "SELECT nc.id, nc.choice_text FROM narrative_chunks nc "
-        "LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id "
         f"WHERE {playable_narrative_predicate()} ORDER BY nc.id DESC LIMIT 1 "
-        "FOR UPDATE OF nc"
+        "FOR UPDATE"
     )
     parent = cur.fetchone()
     parent_id = int(failed["parent_chunk_id"])
