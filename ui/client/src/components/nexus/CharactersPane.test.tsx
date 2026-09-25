@@ -76,6 +76,54 @@ describe("portraitSrc", () => {
 });
 
 describe("CharactersPane", () => {
+  it("shows an empty state for an incomplete character without displaying provenance", () => {
+    const character = makeCharacter({
+      id: 946,
+      name: "Nell Rourke",
+      extraData: {
+        source: "retrograde",
+        stub_kind: "retrograde_expansion_ref",
+        sources: [{ plan: "event_plan", event_ref: "harbor_rescue" }],
+      },
+    });
+    const view = renderPane([character]);
+    expect(screen.getByText("No details recorded yet.")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/retrograde|canonical rows|latent/i),
+    ).not.toBeInTheDocument();
+
+    view.unmount();
+    renderPane([character]);
+    expect(screen.getByText("No details recorded yet.")).toBeInTheDocument();
+  });
+
+  it("shows available facts on a character that retains its creation provenance", () => {
+    renderPane([
+      makeCharacter({
+        id: 946,
+        name: "Nell Rourke",
+        summary: "Nell keeps the rescue ledger.",
+        currentActivity: "Sorting repair slips.",
+        extraData: { source: "retrograde", stub_kind: "retrograde_expansion_ref" },
+      }),
+    ]);
+    expect(screen.getByText("Nell keeps the rescue ledger.")).toBeInTheDocument();
+    expect(screen.getByText("Sorting repair slips.")).toBeInTheDocument();
+    expect(screen.queryByText("No details recorded yet.")).not.toBeInTheDocument();
+  });
+
+  it("shows genuine background even when the other dossier fields are unknown", () => {
+    renderPane([
+      makeCharacter({
+        id: 946,
+        name: "Nell Rourke",
+        background: "A former shipwright.",
+      }),
+    ]);
+    expect(screen.getByText("A former shipwright.")).toBeInTheDocument();
+    expect(screen.queryByText("No details recorded yet.")).not.toBeInTheDocument();
+  });
+
   it("lists names in natural case with no location or id suffix", () => {
     renderPane([
       makeCharacter({

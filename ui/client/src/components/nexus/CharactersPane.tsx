@@ -116,6 +116,16 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
 
   const mainImage =
     images?.find((img) => img.isMain === 1) ?? images?.[0] ?? null;
+  const hasDetails =
+    selected &&
+    [
+      selected.summary,
+      selected.appearance,
+      selected.background,
+      selected.personality,
+      selected.emotionalState,
+      selected.currentActivity,
+    ].some((body) => body?.trim());
 
   return (
     <div className="charspane" data-testid="characters-pane">
@@ -201,8 +211,14 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
             </header>
             <DecoDivider variant="glyph" />
             <div className="char-sections">
+              {!hasDetails && (
+                <div className="char-section">
+                  <p>No details recorded yet.</p>
+                </div>
+              )}
               <DossierSection title="Summary" body={selected.summary} />
               <DossierSection title="Appearance" body={selected.appearance} />
+              <DossierSection title="Background" body={selected.background} />
               <DossierSection title="Personality" body={selected.personality} />
               <DossierSection
                 title="Emotional State"

@@ -360,6 +360,62 @@ async def get_chunk_by_id(chunk_id: int, slot: Optional[int] = None) -> Dict[str
 # ---------------------------------------------------------------------------
 
 
+def _character_payload(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Project character facts without legacy setup placeholders.
+
+    Older Retrograde stubs stored diagnostic sentences in prose columns.
+    Suppress only those exact values on records carrying their provenance;
+    later facts on the same record remain visible. The stored row and its
+    extra_data provenance are unchanged.
+    """
+    prose = {
+        "summary": row["summary"],
+        "background": row["background"],
+        "currentActivity": row["current_activity"],
+    }
+    provenance = row["extra_data"] or {}
+    if (
+        isinstance(provenance, dict)
+        and provenance.get("source") == "retrograde"
+        and provenance.get("stub_kind") == "retrograde_expansion_ref"
+    ):
+        placeholders = {
+            "summary": (
+                f"Retrograde-generated character stub for {row['name']}. "
+                "Created so Skald-selected setup history can resolve to canonical rows."
+            ),
+            "background": (
+                "Retrograde-generated stub; details intentionally sparse until play."
+            ),
+            "currentActivity": "latent in generated backstory",
+        }
+        prose = {
+            field: None if value == placeholders[field] else value
+            for field, value in prose.items()
+        }
+
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        **prose,
+        "appearance": row["appearance"],
+        "personality": row["personality"],
+        "emotionalState": row["emotional_state"],
+        # current_location is live bigint; the wire contract is a string
+        # (legacy Drizzle typing) so the client compares against String(id).
+        "currentLocation": (
+            str(row["current_location"])
+            if row["current_location"] is not None
+            else None
+        ),
+        "extraData": row["extra_data"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+        "currentLocationName": row["current_location_name"],
+        "portraitPath": row["portrait_path"],
+    }
+
+
 @router.get("/api/characters")
 async def get_characters(
     startId: Optional[int] = None,
@@ -412,31 +468,7 @@ async def get_characters(
         """,
         tuple(params),
     )
-    return [
-        {
-            "id": row["id"],
-            "name": row["name"],
-            "summary": row["summary"],
-            "appearance": row["appearance"],
-            "background": row["background"],
-            "personality": row["personality"],
-            "emotionalState": row["emotional_state"],
-            "currentActivity": row["current_activity"],
-            # current_location is live bigint; the wire contract is a string
-            # (legacy Drizzle typing) so the client compares against String(id).
-            "currentLocation": (
-                str(row["current_location"])
-                if row["current_location"] is not None
-                else None
-            ),
-            "extraData": row["extra_data"],
-            "createdAt": row["created_at"],
-            "updatedAt": row["updated_at"],
-            "currentLocationName": row["current_location_name"],
-            "portraitPath": row["portrait_path"],
-        }
-        for row in rows
-    ]
+    return [_character_payload(row) for row in rows]
 
 
 @router.get("/api/characters/{character_id}/relationships")
