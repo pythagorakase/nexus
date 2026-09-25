@@ -7,7 +7,7 @@ import calendar
 import json
 import logging
 from dataclasses import dataclass, replace
-from functools import lru_cache
+from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -24,12 +24,14 @@ from pydantic_ai.tools import (
 from nexus.api.config_utils import get_wizard_max_tokens, get_wizard_retry_budget
 from nexus.api.new_story_cache import (
     clear_suggested_traits,
+    guarded_wizard_write,
     get_selected_trait_count,
     get_trait_menu,
     read_cache,
     write_suggested_traits,
 )
 from nexus.api.new_story_flow import record_drafts
+from nexus.api.wizard_confirmation import WizardStateConflict, replace_character_concept
 from nexus.api.new_story_schemas import (
     CharacterConceptSubmission,
     CharacterCreationState,
@@ -66,6 +68,7 @@ class WizardContext:
     assistant_turns: int = 0
     last_tool_result: Optional[Dict[str, Any]] = None
     last_tool_name: Optional[str] = None
+    persisted_tool_cache: Any = None
 
     @classmethod
     def from_request(
@@ -85,6 +88,18 @@ class WizardContext:
         cache = read_cache(slot_dbname(slot))
         if not cache:
             raise ValueError(f"No wizard cache found for slot {slot}")
+        if cache.thread_id != thread_id or cache.current_phase() != phase:
+            raise WizardStateConflict(
+                "The wizard conversation or phase changed before generation."
+            )
+        if phase == "character":
+            # A second tab may still send the concept from before a revision.
+            # Tools and their snapshot guard must consume the same canonical data.
+            context_data = {
+                **(context_data or {}),
+                "setting": cache.get_setting_dict(),
+                "character_state": cache.get_character_state_dict(),
+            }
         return cls(
             slot=slot,
             cache=cache,
@@ -157,6 +172,13 @@ def _phase_instruction(context: WizardContext) -> str:
     instruction = f"Current Phase: {context.phase.upper()}.\n"
     if context.phase == "character":
         subphase = _character_subphase(context)
+        if getattr(context.cache, "character_revision_pending", False):
+            return instruction + load(
+                PromptId.WIZARD_CHARACTER_REVISION,
+                CHARACTER_STATE=json.dumps(
+                    context.cache.get_character_state_dict(), ensure_ascii=False
+                ),
+            )
         instruction += load(PromptId.WIZARD_CHARACTER_PHASE)
         if context.context_data and "setting" in context.context_data:
             instruction += (
@@ -284,6 +306,36 @@ def _ensure_character_subphase(
 # =============================================================================
 
 
+def _atomic_artifact_write(tool):
+    """Keep a normal artifact tool's entire persistence atomic and snapshot-bound."""
+
+    @wraps(tool)
+    async def guarded(ctx, *args, **kwargs):
+        if ctx.deps.last_tool_result is not None:
+            raise WizardStateConflict(
+                "Only one artifact submission is allowed per wizard response."
+            )
+        if tool.__name__ == "_submit_concept_impl" and getattr(
+            ctx.deps.cache, "character_revision_pending", False
+        ):
+            # The replacement tool performs its own exact artifact CAS transaction.
+            return await tool(ctx, *args, **kwargs)
+        deferred = None
+        with guarded_wizard_write(slot_dbname(ctx.deps.slot), ctx.deps.cache):
+            try:
+                return await tool(ctx, *args, **kwargs)
+            except CallDeferred as exc:
+                # Deferred tool completion is success, not a reason to roll back.
+                deferred = exc
+                persisted = read_cache(slot_dbname(ctx.deps.slot))
+                ctx.deps.persisted_tool_cache = persisted
+                ctx.deps.last_tool_result.update(persisted.confirmation_metadata())
+        raise deferred
+
+    return guarded
+
+
+@_atomic_artifact_write
 async def _submit_world_impl(
     ctx: RunContext[WizardContext], setting: SettingCard
 ) -> str:
@@ -304,11 +356,36 @@ async def _submit_world_impl(
     raise CallDeferred()
 
 
+@_atomic_artifact_write
 async def _submit_concept_impl(
     ctx: RunContext[WizardContext], concept: CharacterConceptSubmission
 ) -> str:
     _log_retry(ctx, "submit_character_concept")
     _ensure_phase(ctx, "character", "submit_character_concept")
+    if getattr(ctx.deps.cache, "character_revision_pending", False):
+        cache = replace_character_concept(
+            slot_dbname(ctx.deps.slot),
+            thread_id=ctx.deps.thread_id,
+            artifact_token=ctx.deps.cache.artifact_token("character"),
+            concept=concept.to_character_concept().model_dump(),
+        )
+        ctx.deps.persisted_tool_cache = cache
+        state = CharacterCreationState.model_validate(cache.get_character_state_dict())
+        data = {"character_state": state.model_dump()}
+        if state.is_complete():
+            data["character_sheet"] = state.to_character_sheet().model_dump()
+        ctx.deps.last_tool_name = "submit_character_concept"
+        ctx.deps.last_tool_result = {
+            "message": "Character concept updated. Your traits and wildcard are preserved.",
+            "phase": "character",
+            "phase_complete": state.is_complete(),
+            "subphase_complete": True,
+            "character_revised": True,
+            **cache.confirmation_metadata(),
+            "artifact_type": "submit_character_concept",
+            "data": data,
+        }
+        raise CallDeferred()
     creation_state = _ensure_character_subphase(
         ctx, "concept", "submit_character_concept"
     )
@@ -371,6 +448,7 @@ async def _submit_concept_impl(
     raise CallDeferred()
 
 
+@_atomic_artifact_write
 async def _submit_traits_impl(
     ctx: RunContext[WizardContext], selection: TraitSelection
 ) -> str:
@@ -403,6 +481,7 @@ async def _submit_traits_impl(
     raise CallDeferred()
 
 
+@_atomic_artifact_write
 async def _submit_wildcard_impl(
     ctx: RunContext[WizardContext], wildcard: WildcardTrait
 ) -> str:
@@ -417,9 +496,9 @@ async def _submit_wildcard_impl(
     # later inside the transition transaction (M9 gate finding).
     if wildcard.orrery_tags is not None:
         from nexus.agents.orrery.tag_writer import validate_tag_bestowal
-        from nexus.api.db_pool import get_connection
+        from nexus.api.new_story_cache import _cache_connection
 
-        with get_connection(slot_dbname(ctx.deps.slot)) as conn:
+        with _cache_connection(slot_dbname(ctx.deps.slot)) as conn:
             with conn.cursor() as cur:
                 tag_issues = validate_tag_bestowal(
                     cur,
@@ -457,6 +536,7 @@ async def _submit_wildcard_impl(
     raise CallDeferred()
 
 
+@_atomic_artifact_write
 async def _submit_scenario_impl(
     ctx: RunContext[WizardContext], submission: StorySeedSubmission
 ) -> str:
@@ -664,6 +744,29 @@ _concept_accept_agent.output_validator(
     _make_accept_fate_validator("submit_character_concept")
 )
 
+
+async def _require_revision_submission(
+    ctx: RunContext[WizardContext], output: AgentOutput
+) -> AgentOutput:
+    """Do not acknowledge a revision that has not actually been persisted."""
+    if isinstance(output, WizardResponse):
+        raise ModelRetry(load(PromptId.WIZARD_CHARACTER_REVISION_RETRY))
+    return output
+
+
+_concept_revision_agent = Agent(
+    output_type=(_wizard_response_output, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_concept_revision_agent.tool(name="submit_character_concept", retries=_wizard_retries)(
+    _submit_concept_impl
+)
+_concept_revision_agent.output_validator(_require_revision_submission)
+
+
 # -----------------------------------------------------------------------------
 # Character Phase - Traits Subphase Agent
 # -----------------------------------------------------------------------------
@@ -799,6 +902,8 @@ def get_wizard_agent(context: WizardContext) -> Agent:
         return _setting_accept_agent if accept_fate else _setting_agent
 
     if phase == "character":
+        if getattr(context.cache, "character_revision_pending", False):
+            return _concept_revision_agent
         subphase = _character_subphase(context)
         if subphase == "concept":
             return _concept_accept_agent if accept_fate else _concept_agent

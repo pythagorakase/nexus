@@ -43,7 +43,9 @@ class FakeConnection:
 
 def _install_fake_connection(monkeypatch) -> FakeConnection:
     fake_conn = FakeConnection()
-    monkeypatch.setattr(cache_module, "get_connection", lambda _dbname: fake_conn)
+    monkeypatch.setattr(
+        cache_module, "get_connection", lambda _dbname, **kwargs: fake_conn
+    )
     return fake_conn
 
 

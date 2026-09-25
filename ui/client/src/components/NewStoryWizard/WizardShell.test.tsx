@@ -185,8 +185,9 @@ describe("confirming wizard phases", () => {
                 choices: ["Use this draft"],
             })))
             .mockResolvedValueOnce(new Response(JSON.stringify({
-                phase_complete: true, phase, artifact_type: type, data: artifact,
+                phase_complete: true, phase, artifact_type: type, data: artifact, artifact_token: "a".repeat(64),
             })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: "confirmed", phase, next_phase: nextPhase, thread_id: "conv_saved" })))
             .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "The next prompt could not be generated" }), { status: 500 }))
             .mockReturnValueOnce(new Promise<Response>(resolve => { finishTransition = resolve; }));
         vi.stubGlobal("fetch", fetch);
@@ -199,7 +200,7 @@ describe("confirming wizard phases", () => {
         expect(screen.getByRole("heading", { name: title, level: 3 })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
         expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
-        expect(JSON.parse(fetch.mock.calls[2][1].body)).toMatchObject({
+        expect(JSON.parse(fetch.mock.calls[3][1].body)).toMatchObject({
             slot: 5, thread_id: "conv_saved", current_phase: nextPhase,
             context_data: { [phase]: artifact, character_state: null },
         });
@@ -207,8 +208,8 @@ describe("confirming wizard phases", () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         expect(screen.getByRole("heading", { name: title, level: 3 })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
-        expect(fetch).toHaveBeenCalledTimes(4);
-        expect(fetch.mock.calls[3][1].body).toBe(fetch.mock.calls[2][1].body);
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(5));
+        expect(fetch.mock.calls[4][1].body).toBe(fetch.mock.calls[3][1].body);
         await act(async () => finishTransition(new Response(JSON.stringify({
             message: "Your next phase begins here", choices: ["A new possibility"],
         }))));
@@ -229,8 +230,9 @@ describe("confirming wizard phases", () => {
             .mockResolvedValueOnce(new Response(JSON.stringify({ ...savedSession, current_phase: "setting" })))
             .mockResolvedValueOnce(new Response(JSON.stringify({
                 phase_complete: true, phase: "setting", artifact_type: "submit_world_document",
-                data: { world_name: "The Waking Wood" },
+                data: { world_name: "The Waking Wood" }, artifact_token: "a".repeat(64),
             })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: "confirmed", phase: "setting", next_phase: "character", thread_id: "conv_saved" })))
             .mockResolvedValueOnce(new Response(body, { status })));
         render(<NewStoryWizard resumeSlot={5} />);
         fireEvent.click(await screen.findByTestId("wizard-choice-1"));
@@ -239,4 +241,87 @@ describe("confirming wizard phases", () => {
         expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
         expect(screen.getByRole("heading", { name: "Setting", level: 3 })).toBeInTheDocument();
     });
+});
+
+
+describe("persisted character confirmation and revision", () => {
+    const state = {
+        concept: { name: "Mara", archetype: "Engineer", background: "Age 38. Maintains the old harbor machinery.", appearance: "Gray coat.", suggested_traits: ["allies", "contacts", "patron"], trait_rationales: {} },
+        trait_selection: { selected_traits: ["allies", "contacts", "patron"] },
+        wildcard: { wildcard_name: "The bell", wildcard_description: "She hears the bell before anyone else." },
+    };
+    const sheet = { name: "Mara", summary: "Age 38. Maintains the old harbor machinery." };
+    const session = { ...savedSession, choices: [], pending_confirmation: "character", artifact_token: "a".repeat(64), character_state: state, character_draft: state, character_sheet: sheet };
+
+    it("restores the unconfirmed character without introducing the next phase", async () => {
+        const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(session)));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+        expect(await screen.findByRole("button", { name: "Confirm" })).toBeEnabled();
+        expect(screen.getByRole("heading", { name: "Character", level: 3 })).toBeInTheDocument();
+        expect(screen.getByTestId("wizard-freeform")).toBeDisabled();
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("begins durable revision, submits player text, and confirms the replacement token", async () => {
+        const revised = { ...state, concept: { ...state.concept, background: "Age 54. Maintains the old harbor machinery." } };
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(session)))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: "revision_started", thread_id: "conv_saved", phase: "character" })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ phase: "character", character_revised: true, phase_complete: true, artifact_type: "submit_character_concept", artifact_token: "b".repeat(64), message: "Character concept updated.", data: { character_state: revised, character_sheet: { name: "Mara", summary: revised.concept.background } } })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: "confirmed", thread_id: "conv_saved", phase: "character", next_phase: "seed" })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Where does her story begin?", choices: ["The harbor"] })));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+        fireEvent.click(await screen.findByRole("button", { name: "Revise" }));
+        expect(await screen.findByText(/Describe the change to your character/)).toBeInTheDocument();
+        expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ slot: 5, thread_id: "conv_saved", artifact_token: "a".repeat(64) });
+        fireEvent.change(screen.getByTestId("wizard-freeform"), { target: { value: "Make her 54 instead." } });
+        fireEvent.keyDown(screen.getByTestId("wizard-freeform"), { key: "Enter" });
+        expect(await screen.findByText("Character concept updated.")).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+        expect(await screen.findByText("Where does her story begin?")).toBeInTheDocument();
+        expect(JSON.parse(fetch.mock.calls[3][1].body)).toEqual({ slot: 5, thread_id: "conv_saved", phase: "character", artifact_token: "b".repeat(64) });
+        expect(JSON.parse(fetch.mock.calls[4][1].body).context_data.character_state).toEqual(revised);
+    });
+
+    it("reloads active revision with the composer enabled and selections preserved", async () => {
+        const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ ...session, pending_confirmation: null, character_revision_pending: true })));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+        expect(await screen.findByText(/Describe the change to your character/)).toBeInTheDocument();
+        expect(screen.getByTestId("wizard-freeform")).toBeEnabled();
+        expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("a stale confirmation stays on the character and makes no model request", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(session)))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "This artifact changed. Resume it." }), { status: 409 }));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("This artifact changed. Resume it.");
+        expect(fetch).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole("heading", { name: "Character", level: 3 })).toBeInTheDocument();
+    });
+});
+
+it.each(["setting confirmation", "accept fate"])("uses the concept token when %s produces character traits", async (origin) => {
+    const concept = { name: "Mara", archetype: "Veteran harbor engineer", suggested_traits: ["allies", "contacts", "patron"], trait_rationales: {} };
+    const fromSetting = origin === "setting confirmation";
+    const fetch = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ ...savedSession, current_phase: fromSetting ? "setting" : "character", choices: [], pending_confirmation: fromSetting ? "setting" : null, artifact_token: "a".repeat(64) })));
+    if (fromSetting) fetch.mockResolvedValueOnce(new Response(JSON.stringify({ status: "confirmed", thread_id: "conv_saved", phase: "setting", next_phase: "character" })));
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ phase: "character", subphase_complete: true, artifact_type: "submit_character_concept", artifact_token: "b".repeat(64), data: { character_state: { concept } } })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ status: "revision_started", thread_id: "conv_saved", phase: "character" })));
+    vi.stubGlobal("fetch", fetch);
+    render(<NewStoryWizard resumeSlot={5} />);
+    fireEvent.click(await screen.findByRole("button", { name: fromSetting ? "Confirm" : "Accept Fate" }));
+    expect(await screen.findByText("3 traits selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Revise" }));
+    expect(await screen.findByText(/Describe the change to your character/)).toBeInTheDocument();
+    expect(JSON.parse(fetch.mock.calls[fetch.mock.calls.length - 1][1].body).artifact_token).toBe("b".repeat(64));
 });

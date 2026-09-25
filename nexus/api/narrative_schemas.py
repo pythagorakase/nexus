@@ -191,6 +191,10 @@ class ResumeSetupResponse(BaseModel):
 
     thread_id: str
     target_slot: int
+    pending_confirmation: Optional[Literal["setting", "character"]] = None
+    artifact_token: Optional[str] = None
+    character_revision_pending: bool = False
+    character_sheet: Optional[Dict[str, Any]] = None
     current_phase: Literal["setting", "character", "seed", "ready"]
     messages: List[WizardHistoryMessage]
     choices: List[str]
@@ -202,6 +206,23 @@ class ResumeSetupResponse(BaseModel):
     zone_draft: Optional[Dict[str, Any]]
     initial_location: Optional[Dict[str, Any]]
     base_timestamp: Optional[datetime]
+
+
+class ConfirmSetupArtifactRequest(BaseModel):
+    """Accept a specific persisted draft in a specific wizard conversation."""
+
+    slot: StrictInt = Field(ge=1, le=5)
+    thread_id: str = Field(min_length=1)
+    phase: Literal["setting", "character"]
+    artifact_token: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class ReviseCharacterRequest(BaseModel):
+    """Start concept replacement against the player-visible artifact."""
+
+    slot: StrictInt = Field(ge=1, le=5)
+    thread_id: str = Field(min_length=1)
+    artifact_token: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class StartSetupRequest(BaseModel):
@@ -257,6 +278,9 @@ class SlotStateResponse(BaseModel):
     slot: int = Field(ge=1, le=5)
     is_empty: bool
     is_wizard_mode: bool
+    pending_confirmation: Optional[Literal["setting", "character"]] = None
+    artifact_token: Optional[str] = None
+    character_revision_pending: bool = False
     phase: Optional[str] = None  # Wizard phase if in wizard mode
     subphase: Optional[str] = None  # Character subphase (concept/traits/wildcard)
     thread_id: Optional[str] = None  # Wizard thread ID

@@ -156,8 +156,8 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
 
                 // Restore confirmed artifacts from resumed data
                 setConfirmedArtifacts({
-                    setting: resumeData.setting_draft ?? undefined,
-                    character: resumeData.character_draft ?? undefined,
+                    setting: inferredPhase !== "setting" ? resumeData.setting_draft ?? undefined : undefined,
+                    character: ["seed", "ready"].includes(resumeData.current_phase) ? resumeData.character_sheet ?? resumeData.character_draft ?? undefined : undefined,
                 });
 
                 rememberActiveSlot(resumeRequest);

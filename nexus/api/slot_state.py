@@ -126,6 +126,9 @@ def get_slot_state(slot: int) -> SlotState:
                 """
                 SELECT nsc.thread_id,
                        nsc.setting_genre,
+                       nsc.setting_confirmed,
+                       nsc.character_confirmed,
+                       nsc.character_revision_pending,
                        nsc.character_name,
                        nsc.seed_type,
                        nsc.layer_name,
@@ -245,9 +248,9 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
     )
 
     # Infer phase
-    if not setting_complete:
+    if not setting_complete or not row.get("setting_confirmed", False):
         phase = "setting"
-    elif not character_complete:
+    elif not character_complete or not row.get("character_confirmed", False):
         phase = "character"
     elif not seed_complete:
         phase = "seed"

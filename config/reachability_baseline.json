@@ -221,6 +221,7 @@
     "nexus/api/trait_input_derivation.py",
     "nexus/api/wizard_agent.py",
     "nexus/api/wizard_chat.py",
+    "nexus/api/wizard_confirmation.py",
     "nexus/cli.py",
     "nexus/config/__init__.py",
     "nexus/config/loader.py",

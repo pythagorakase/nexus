@@ -34,6 +34,7 @@ from nexus.api.narrative_schemas import (
 )
 from nexus.api.new_story_cache import (
     clear_suggested_traits,
+    guarded_wizard_write,
     read_cache,
     write_wizard_choices,
 )
@@ -57,6 +58,7 @@ from nexus.api.pydantic_ai_utils import (
 )
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.wizard_confirmation import WizardStateConflict
 from nexus.api.wizard_agent import (
     WizardContext,
     wizard_debug_agent,
@@ -122,16 +124,14 @@ def _wizard_subphase_for_state(
 
 
 def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]:
-    """Fill missing character context from the persisted wizard subphases."""
+    """Use persisted character subphases instead of stale client-side concepts."""
     context = request.context_data
-    if request.current_phase != "character" or (context or {}).get("character_state"):
+    if request.current_phase != "character":
         return context
 
     cache = read_cache(slot_dbname(request.slot))
     char_state = cache.get_character_state_dict() if cache else None
-    if char_state:
-        return {**(context or {}), "character_state": char_state}
-    return context
+    return {**(context or {}), "character_state": char_state}
 
 
 def _accept_fate_prompt(message: Optional[str]) -> str:
@@ -166,9 +166,15 @@ async def _handle_accept_fate_traits(
     ):
         return None
 
-    cache = read_cache(slot_dbname(slot))
+    cache = context.cache
     if not cache or not cache.character.suggested_traits:
         return None
+    if (
+        cache.character_revision_pending
+        or cache.thread_id != thread_id
+        or cache.current_phase() != "character"
+    ):
+        raise WizardStateConflict("The wizard changed before traits could be accepted.")
 
     # Build TraitSelection from suggested traits (exactly 3 guaranteed by schema)
     selected = [st.trait for st in cache.character.suggested_traits]
@@ -182,14 +188,18 @@ async def _handle_accept_fate_traits(
     )
 
     # Get current character state and apply trait selection
-    char_state_data = (context.context_data or {}).get("character_state", {})
+    char_state_data = cache.get_character_state_dict()
     creation_state = CharacterCreationState.model_validate(char_state_data)
     updated_state = apply_trait_selection_to_state(creation_state, trait_selection)
 
     # Commit to cache (same as tool would do)
-    clear_suggested_traits(slot_dbname(slot))
-    record_drafts(slot, character=updated_state.model_dump())
+    with guarded_wizard_write(slot_dbname(slot), cache):
+        clear_suggested_traits(slot_dbname(slot))
+        record_drafts(slot, character=updated_state.model_dump())
+        # Capture the exact committed state before releasing its lock.
+        context.cache = read_cache(slot_dbname(slot))
 
+    # This deterministic transition committed before the wildcard model starts.
     # Update context for wildcard phase
     context.context_data = {"character_state": updated_state.model_dump()}
 
@@ -235,6 +245,37 @@ async def _handle_accept_fate_traits(
     }
 
 
+def _record_set_design(slot: int, expected_cache: Any, **drafts: Any) -> Any:
+    """Do not attach a delayed location design to a changed setup."""
+    with guarded_wizard_write(slot_dbname(slot), expected_cache):
+        record_drafts(slot, **drafts)
+        return read_cache(slot_dbname(slot))
+
+
+def _artifact_response(result: dict, slot: int, thread_id: str) -> dict:
+    """Do not pair an old artifact with a newer draft's confirmation token."""
+    dbname = slot_dbname(slot)
+    cache = read_cache(dbname)
+    if (
+        cache is None
+        or cache.thread_id != thread_id
+        or result.get("thread_id") != thread_id
+    ):
+        raise HTTPException(status_code=409, detail="The wizard session changed.")
+    if cache.confirmation_metadata() != {
+        key: result.get(key) for key in cache.confirmation_metadata()
+    }:
+        raise HTTPException(
+            status_code=409,
+            detail="This artifact changed before its response arrived. Resume to review the current draft.",
+        )
+    with guarded_wizard_write(dbname, cache):
+        write_wizard_choices(
+            result.get("choices", []), dbname, expected_thread_id=thread_id
+        )
+    return result
+
+
 @router.post("/chat")
 async def new_story_chat_endpoint(request: ChatRequest):
     """Handle chat for new story wizard with tool calling."""
@@ -260,6 +301,26 @@ async def new_story_chat_endpoint(request: ChatRequest):
             request.current_phase = state.wizard_state.phase
 
         state_phase = state.wizard_state.phase
+        if (
+            request.thread_id != state.wizard_state.thread_id
+            or request.current_phase != state_phase
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="The wizard phase or conversation changed. Resume before continuing.",
+            )
+        persisted_cache = read_cache(slot_dbname(request.slot))
+        if persisted_cache and persisted_cache.character_revision_pending:
+            if request.trait_choice is not None or request.accept_fate:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Describe the character revision before continuing.",
+                )
+        elif persisted_cache and persisted_cache.pending_confirmation() == "character":
+            raise HTTPException(
+                status_code=409,
+                detail="Confirm or revise the completed character before continuing.",
+            )
         state_subphase = _wizard_subphase_for_state(
             state_phase,
             has_concept=state.wizard_state.has_concept,
@@ -296,51 +357,55 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 cache
                 and cache.character.has_concept()
                 and not cache.character.has_traits()
+                and not cache.character_revision_pending
+                and cache.thread_id == request.thread_id
+                and cache.current_phase() == "character"
             ):
-                if request.trait_choice == 0:
-                    selected_count = get_selected_trait_count(dbname)
-                    if selected_count != 3:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Must select exactly 3 traits. Currently: {selected_count}",
-                        )
-                    confirm_trait_selection(dbname)
-                    return {
-                        "message": "Traits confirmed. Moving to wildcard definition.",
-                        "phase": "character",
-                        "subphase": "wildcard",
-                        "subphase_complete": True,
-                    }
-                if 1 <= request.trait_choice <= 10:
-                    trait_menu = get_trait_menu(dbname)
-                    trait = trait_menu[request.trait_choice - 1]
-                    toggle_trait(dbname, trait.name)
+                with guarded_wizard_write(dbname, cache):
+                    if request.trait_choice == 0:
+                        selected_count = get_selected_trait_count(dbname)
+                        if selected_count != 3:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Must select exactly 3 traits. Currently: {selected_count}",
+                            )
+                        confirm_trait_selection(dbname)
+                        return {
+                            "message": "Traits confirmed. Moving to wildcard definition.",
+                            "phase": "character",
+                            "subphase": "wildcard",
+                            "subphase_complete": True,
+                        }
+                    if 1 <= request.trait_choice <= 10:
+                        trait_menu = get_trait_menu(dbname)
+                        trait = trait_menu[request.trait_choice - 1]
+                        toggle_trait(dbname, trait.name)
 
-                    trait_menu = get_trait_menu(dbname)
-                    selected_count = get_selected_trait_count(dbname)
+                        trait_menu = get_trait_menu(dbname)
+                        selected_count = get_selected_trait_count(dbname)
 
-                    return {
-                        "message": "",
-                        "phase": "character",
-                        "subphase": "traits",
-                        "trait_menu": [
-                            {
-                                "id": t.id,
-                                "name": t.name,
-                                "description": t.description,
-                                "is_selected": t.is_selected,
-                                "rationale": t.rationale,
-                            }
-                            for t in trait_menu
-                        ],
-                        "can_confirm": selected_count == 3,
-                    }
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Invalid trait_choice: {request.trait_choice}. Must be 0-10."
-                    ),
-                )
+                        return {
+                            "message": "",
+                            "phase": "character",
+                            "subphase": "traits",
+                            "trait_menu": [
+                                {
+                                    "id": t.id,
+                                    "name": t.name,
+                                    "description": t.description,
+                                    "is_selected": t.is_selected,
+                                    "rationale": t.rationale,
+                                }
+                                for t in trait_menu
+                            ],
+                            "can_confirm": selected_count == 3,
+                        }
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Invalid trait_choice: {request.trait_choice}. Must be 0-10."
+                        ),
+                    )
 
             raise HTTPException(
                 status_code=409,
@@ -461,7 +526,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
             )
             content = result.output
             client.add_message(request.thread_id, "assistant", content)
-            write_wizard_choices([], slot_dbname(request.slot))
+            write_wizard_choices(
+                [], slot_dbname(request.slot), expected_thread_id=request.thread_id
+            )
             return {
                 "message": content,
                 "choices": [],
@@ -490,10 +557,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             thread_id=request.thread_id,
         )
         if traits_result is not None:
-            write_wizard_choices(
-                traits_result.get("choices", []), slot_dbname(request.slot)
-            )
-            return traits_result
+            return _artifact_response(traits_result, request.slot, request.thread_id)
 
         # =================================================================
         # Standard wizard agent flow
@@ -530,7 +594,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 seed_data = tool_data.get("seed", {})
 
                 # Get setting from cache
-                cache = read_cache(slot_dbname(request.slot))
+                cache = context.persisted_tool_cache
                 if cache and cache.setting_complete() and seed_data:
                     setting = SettingCard(**cache.get_setting_dict())
                     seed = StorySeed(**seed_data)
@@ -556,11 +620,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
                             }
                             location_data = mock_cache.get("initial_location") or {}
 
-                            record_drafts(
+                            persisted_design = _record_set_design(
                                 request.slot,
+                                cache,
                                 layer=layer_data,
                                 zone=zone_data,
                                 location=location_data,
+                            )
+                            context.last_tool_result.update(
+                                persisted_design.confirmation_metadata()
                             )
                             context.last_tool_result["phase_complete"] = True
                             context.last_tool_result["set_design"] = {
@@ -593,11 +661,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
                             )
 
                             # Record the generated location data
-                            record_drafts(
+                            persisted_design = _record_set_design(
                                 request.slot,
+                                cache,
                                 layer=layer.model_dump(),
                                 zone=zone.model_dump(),
                                 location=place.model_dump(),
+                            )
+                            context.last_tool_result.update(
+                                persisted_design.confirmation_metadata()
                             )
 
                             # Update the result to indicate full completion
@@ -618,8 +690,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                             context.last_tool_result["set_design_error"] = str(e)
                             # Still return partial result so user can see the seed
 
-            write_wizard_choices([], slot_dbname(request.slot))
-            return context.last_tool_result
+            return _artifact_response(
+                context.last_tool_result, request.slot, request.thread_id
+            )
         if isinstance(result.output, DeferredToolRequests):
             raise HTTPException(
                 status_code=500,
@@ -639,7 +712,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
             ui_choices,
         )
 
-        write_wizard_choices(ui_choices, slot_dbname(request.slot))
+        write_wizard_choices(
+            ui_choices, slot_dbname(request.slot), expected_thread_id=request.thread_id
+        )
 
         return {
             "message": wizard_response.message,
@@ -650,6 +725,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
     except HTTPException:
         raise
+    except WizardStateConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except Exception as e:
         logger.exception("Error in chat endpoint: %s", e)
         detail = f"{e} (cause: {e.__cause__})" if e.__cause__ is not None else str(e)
@@ -686,6 +763,24 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
         request.thread_id = state.wizard_state.thread_id
     if request.current_phase is None:
         request.current_phase = state.wizard_state.phase
+
+    if (
+        request.thread_id != state.wizard_state.thread_id
+        or request.current_phase != state.wizard_state.phase
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="The wizard phase or conversation changed. Resume before continuing.",
+        )
+    persisted_cache = read_cache(slot_dbname(request.slot))
+    if persisted_cache and (
+        persisted_cache.character_revision_pending
+        or persisted_cache.pending_confirmation()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Use the non-streaming wizard route to confirm or revise this artifact.",
+        )
 
     request.context_data = _hydrate_character_context(request)
 
@@ -783,7 +878,9 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 run_id=request.thread_id,
             )
             client.add_message(request.thread_id, "assistant", result.output)
-            write_wizard_choices([], slot_dbname(request.slot))
+            write_wizard_choices(
+                [], slot_dbname(request.slot), expected_thread_id=request.thread_id
+            )
             payload = {"type": "message", "message": result.output, "choices": []}
             yield json.dumps(payload) + "\n"
             return
@@ -803,10 +900,14 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             thread_id=request.thread_id,
         )
         if traits_result is not None:
-            write_wizard_choices(
-                traits_result.get("choices", []), slot_dbname(request.slot)
-            )
-            yield json.dumps({"type": "artifact", "data": traits_result}) + "\n"
+            yield json.dumps(
+                {
+                    "type": "artifact",
+                    "data": _artifact_response(
+                        traits_result, request.slot, request.thread_id
+                    ),
+                }
+            ) + "\n"
             return
 
         user_prompt = (
@@ -853,7 +954,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                     location_sketch = payload.get("location_sketch", "")
                     seed_data = tool_data.get("seed", {})
 
-                    cache = read_cache(slot_dbname(request.slot))
+                    cache = context.persisted_tool_cache
                     if cache and cache.setting_complete() and seed_data:
                         setting = SettingCard(**cache.get_setting_dict())
                         seed = StorySeed(**seed_data)
@@ -879,12 +980,14 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                 }
                                 location_data = mock_cache.get("initial_location") or {}
 
-                                record_drafts(
+                                persisted_design = _record_set_design(
                                     request.slot,
+                                    cache,
                                     layer=layer_data,
                                     zone=zone_data,
                                     location=location_data,
                                 )
+                                payload.update(persisted_design.confirmation_metadata())
                                 payload["phase_complete"] = True
                                 payload["set_design"] = {
                                     "layer": layer_data,
@@ -918,12 +1021,14 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                     model=selected_model,
                                 )
 
-                                record_drafts(
+                                persisted_design = _record_set_design(
                                     request.slot,
+                                    cache,
                                     layer=layer.model_dump(),
                                     zone=zone.model_dump(),
                                     location=place.model_dump(),
                                 )
+                                payload.update(persisted_design.confirmation_metadata())
 
                                 payload["phase_complete"] = True
                                 payload["set_design"] = {
@@ -941,8 +1046,14 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                 logger.error("Set designer (stream) failed: %s", e)
                                 payload["set_design_error"] = str(e)
 
-                write_wizard_choices([], slot_dbname(request.slot))
-                yield json.dumps({"type": "artifact", "data": payload}) + "\n"
+                yield json.dumps(
+                    {
+                        "type": "artifact",
+                        "data": _artifact_response(
+                            payload, request.slot, request.thread_id
+                        ),
+                    }
+                ) + "\n"
                 return
 
             client.add_message(request.thread_id, "assistant", final_output.message)
@@ -951,7 +1062,11 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 for c in final_output.choices
                 if isinstance(c, str) and c.strip()
             ]
-            write_wizard_choices(ui_choices, slot_dbname(request.slot))
+            write_wizard_choices(
+                ui_choices,
+                slot_dbname(request.slot),
+                expected_thread_id=request.thread_id,
+            )
             yield json.dumps(
                 {
                     "type": "final",
@@ -986,6 +1101,18 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
         raise HTTPException(
             status_code=400,
             detail=f"No setup data found for slot {request.slot}. Complete the wizard first.",
+        )
+
+    if cache.character_revision_pending:
+        raise HTTPException(
+            status_code=409,
+            detail="Finish the character revision before starting the story.",
+        )
+
+    if not cache.setting_confirmed or not cache.character_confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail="Confirm the setting and character before starting the story.",
         )
 
     # Validate all phases are complete

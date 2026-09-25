@@ -10,18 +10,81 @@ Phase completion is determined by:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Mapping, Optional
+
+from psycopg2.extras import RealDictCursor
 
 from nexus.api.choice_handling import extract_presented_choices
 from nexus.api.db_pool import get_connection
 from nexus.api.trait_compiler_schemas import canonical_trait_name
 
 logger = logging.getLogger("nexus.api.new_story_cache")
+
+_wizard_transaction: ContextVar[Optional[tuple[str, Any]]] = ContextVar(
+    "wizard_transaction", default=None
+)
+
+
+@contextmanager
+def _cache_connection(dbname: Optional[str], dict_cursor: bool = False):
+    """Reuse the locked tool transaction without independently committing writes."""
+    active = _wizard_transaction.get()
+    if active is None:
+        with get_connection(
+            dbname, **({"dict_cursor": True} if dict_cursor else {})
+        ) as conn:
+            yield conn
+        return
+    active_dbname, conn = active
+    if active_dbname != dbname:
+        raise ValueError("A wizard transaction cannot write another story database")
+    previous_factory = conn.cursor_factory
+    conn.cursor_factory = RealDictCursor if dict_cursor else None
+    try:
+        yield conn
+    finally:
+        conn.cursor_factory = previous_factory
+
+
+def _write_snapshot(cache: "WizardCache") -> Dict[str, Any]:
+    """Ignore conversation decoration but bind every persisted setup decision."""
+    snapshot = asdict(cache)
+    snapshot.pop("updated_at")
+    snapshot.pop("choices")
+    return snapshot
+
+
+@contextmanager
+def guarded_wizard_write(dbname: str, expected: "WizardCache"):
+    """Fence a late model result and commit all its cache/trait writes together."""
+    from nexus.api.wizard_confirmation import WizardStateConflict
+
+    if expected is None:
+        raise WizardStateConflict("No canonical wizard snapshot was provided.")
+    if _wizard_transaction.get() is not None:
+        raise RuntimeError("Nested wizard tool transactions are not supported")
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            current = read_cache_cursor(cur, lock=True)
+        if current is None or _write_snapshot(current) != _write_snapshot(expected):
+            raise WizardStateConflict(
+                "The wizard changed while this response was being generated. "
+                "Resume before retrying."
+            )
+        token = _wizard_transaction.set((dbname, conn))
+        try:
+            yield
+        finally:
+            _wizard_transaction.reset(token)
+
 
 # Valid trait enum values (must match PostgreSQL trait enum)
 VALID_TRAITS = frozenset(
@@ -251,6 +314,9 @@ class WizardCache:
     base_timestamp: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     choices: List[str] = field(default_factory=list)
+    setting_confirmed: bool = False
+    character_confirmed: bool = False
+    character_revision_pending: bool = False
 
     def setting_complete(self) -> bool:
         """Check if setting phase is complete."""
@@ -270,15 +336,59 @@ class WizardCache:
         )
 
     def current_phase(self) -> str:
-        """Infer current phase from data presence."""
-        if not self.setting_complete():
+        """Resolve the phase from persisted player confirmation, then drafts."""
+        if not self.setting_complete() or not self.setting_confirmed:
             return "setting"
-        elif not self.character_complete():
+        elif not self.character_complete() or not self.character_confirmed:
             return "character"
         elif not self.seed_complete():
             return "seed"
         else:
             return "ready"
+
+    def pending_confirmation(self) -> Optional[str]:
+        """Return the complete artifact still awaiting explicit acceptance."""
+        if self.current_phase() == "setting" and self.setting_complete():
+            return "setting"
+        if (
+            self.current_phase() == "character"
+            and self.character_complete()
+            and not self.character_revision_pending
+        ):
+            return "character"
+        return None
+
+    def confirmation_metadata(self) -> Dict[str, Any]:
+        """Capture acceptance metadata alongside the artifact that was persisted."""
+        return {
+            "thread_id": self.thread_id,
+            "pending_confirmation": self.pending_confirmation(),
+            "artifact_token": self.artifact_token(),
+            "character_revision_pending": self.character_revision_pending,
+        }
+
+    def artifact_token(self, phase: Optional[str] = None) -> Optional[str]:
+        """Bind a player action to the canonical artifact, including subphases."""
+        phase = phase or self.current_phase()
+        data = (
+            self.get_setting_dict()
+            if phase == "setting"
+            else (
+                self.get_character_state_dict()
+                if phase == "character"
+                else (
+                    {"seed": asdict(self.seed), "base_timestamp": self.base_timestamp}
+                    if phase in {"seed", "ready"}
+                    else None
+                )
+            )
+        )
+        if data is None:
+            return None
+        serialized = json.dumps(
+            data, sort_keys=True, separators=(",", ":"), default=str
+        )
+        return hashlib.sha256(serialized.encode()).hexdigest()
 
     # ═══════════════════════════════════════════════════════════════
     # BACKWARDS COMPATIBILITY HELPERS
@@ -436,48 +546,56 @@ def read_cache(dbname: Optional[str] = None) -> Optional[WizardCache]:
     Returns:
         WizardCache containing all cached state, or None if no cache exists
     """
-    with get_connection(dbname, dict_cursor=True) as conn:
+    with _cache_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM assets.new_story_creator WHERE id = TRUE")
-            row = cur.fetchone()
-            if row is None:
-                return None
+            return read_cache_cursor(cur)
 
-            # Load trait data from assets.traits
-            cur.execute(
-                """
-                SELECT id, name, rationale, is_selected, cold_start_relationships,
-                       preexisting_relationship_targets
-                FROM assets.traits
-                ORDER BY id
-                """
-            )
-            traits_rows = cur.fetchall()
 
-            # Build trait info for CharacterData
-            selected_traits = [
-                SuggestedTrait(
-                    trait=r["name"],
-                    rationale=r["rationale"] or "",
-                    cold_start_relationships=r.get("cold_start_relationships")
-                    or "allowed",
-                    preexisting_relationship_targets=list(
-                        r.get("preexisting_relationship_targets") or []
-                    ),
-                )
-                for r in traits_rows
-                if r["is_selected"] and r["id"] <= 10
-            ]
-            selected_count = len(selected_traits)
-            wildcard_row = next((r for r in traits_rows if r["id"] == 11), None)
+def read_cache_cursor(cur: Any, *, lock: bool = False) -> Optional[WizardCache]:
+    """Read canonical setup and traits in the caller transaction, optionally locked."""
+    cur.execute(
+        "SELECT * FROM assets.new_story_creator WHERE id = TRUE"
+        + (" FOR UPDATE" if lock else "")
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
 
-            return _row_to_cache(
-                dict(row),
-                selected_traits,
-                selected_count,
-                row.get("traits_confirmed", False),
-                wildcard_row,
-            )
+    # Load trait data from assets.traits
+    cur.execute(
+        """
+        SELECT id, name, rationale, is_selected, cold_start_relationships,
+               preexisting_relationship_targets
+        FROM assets.traits
+        ORDER BY id
+        """
+        + (" FOR UPDATE" if lock else "")
+    )
+    traits_rows = cur.fetchall()
+
+    # Build trait info for CharacterData
+    selected_traits = [
+        SuggestedTrait(
+            trait=r["name"],
+            rationale=r["rationale"] or "",
+            cold_start_relationships=r.get("cold_start_relationships") or "allowed",
+            preexisting_relationship_targets=list(
+                r.get("preexisting_relationship_targets") or []
+            ),
+        )
+        for r in traits_rows
+        if r["is_selected"] and r["id"] <= 10
+    ]
+    selected_count = len(selected_traits)
+    wildcard_row = next((r for r in traits_rows if r["id"] == 11), None)
+
+    return _row_to_cache(
+        dict(row),
+        selected_traits,
+        selected_count,
+        row.get("traits_confirmed", False),
+        wildcard_row,
+    )
 
 
 def read_cache_raw(dbname: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -490,7 +608,7 @@ def read_cache_raw(dbname: Optional[str] = None) -> Optional[Dict[str, Any]]:
     Returns:
         Dictionary containing cache data, or None if no cache exists
     """
-    with get_connection(dbname, dict_cursor=True) as conn:
+    with _cache_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM assets.new_story_creator WHERE id = TRUE")
             row = cur.fetchone()
@@ -521,6 +639,9 @@ def _row_to_cache(
 ) -> WizardCache:
     """Convert a database row to a WizardCache object."""
     return WizardCache(
+        setting_confirmed=bool(row.get("setting_confirmed", False)),
+        character_confirmed=bool(row.get("character_confirmed", False)),
+        character_revision_pending=bool(row.get("character_revision_pending", False)),
         thread_id=row.get("thread_id"),
         target_slot=row.get("target_slot"),
         choices=extract_presented_choices(row.get("choice_object")),
@@ -605,7 +726,7 @@ def write_setting(
     geographic_scope: str = "regional",
 ) -> None:
     """Write setting phase data to cache."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -658,7 +779,7 @@ def write_character_concept(
     appearance: str,
 ) -> None:
     """Write character concept (subphase 1) to cache."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -685,7 +806,7 @@ def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
         )
     storage_name = canonical_trait_name(trait_name)
 
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -713,7 +834,7 @@ def confirm_trait_selection(dbname: Optional[str]) -> List[str]:
     Returns list of selected trait names.
     Raises ValueError if not exactly 3 traits selected.
     """
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             # Get selected optional traits (id 1-10, not wildcard)
             cur.execute(
@@ -736,7 +857,8 @@ def confirm_trait_selection(dbname: Optional[str]) -> List[str]:
 
             # Set confirmation flag in cache
             cur.execute(
-                "UPDATE assets.new_story_creator SET traits_confirmed = TRUE WHERE id = TRUE"
+                "UPDATE assets.new_story_creator SET traits_confirmed = TRUE WHERE "
+                "id = TRUE"
             )
     logger.info("Confirmed trait selection in %s: %s", dbname, selected)
     return selected
@@ -760,7 +882,7 @@ def get_trait_menu(dbname: Optional[str]) -> List[TraitMenuItem]:
     Returns traits with their definitions, selection state, and rationales.
     Used for rendering the interactive trait selection UI.
     """
-    with get_connection(dbname, dict_cursor=True) as conn:
+    with _cache_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -785,10 +907,11 @@ def get_trait_menu(dbname: Optional[str]) -> List[TraitMenuItem]:
 
 def get_selected_trait_count(dbname: Optional[str]) -> int:
     """Get count of selected optional traits (not including wildcard)."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FROM assets.traits WHERE is_selected = TRUE AND id <= 10"
+                "SELECT COUNT(*) FROM assets.traits WHERE is_selected = TRUE AND "
+                "id <= 10"
             )
             return cur.fetchone()[0]
 
@@ -830,7 +953,7 @@ def write_character_wildcard(
     orrery_tags: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Write character wildcard (subphase 3) to assets.traits row 11."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             _write_character_wildcard(
                 cur,
@@ -857,7 +980,7 @@ def write_suggested_traits(
     if len(suggestions) > 3:
         raise ValueError("Cannot store more than 3 suggested traits")
 
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             # First deselect all optional traits (not wildcard)
             cur.execute(
@@ -897,7 +1020,7 @@ def write_suggested_traits(
 
 def clear_suggested_traits(dbname: Optional[str] = None) -> None:
     """Clear trait selections (deselect all optional traits, clear rationales)."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL, "
@@ -936,7 +1059,7 @@ def write_seed(
     base_timestamp: Optional[datetime] = None,
 ) -> None:
     """Write seed phase data to cache."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -999,7 +1122,7 @@ def init_cache(
     Initialize cache with thread_id and target slot.
     Creates the singleton row if it doesn't exist.
     """
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -1026,7 +1149,7 @@ def clear_cache(dbname: Optional[str] = None) -> None:
     Args:
         dbname: Optional database name (defaults to PGDATABASE env var)
     """
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
             # Reset traits: deselect optional traits, clear rationales, reset wildcard name
@@ -1036,7 +1159,8 @@ def clear_cache(dbname: Optional[str] = None) -> None:
                 "preexisting_relationship_targets = '[]'::jsonb WHERE id <= 10"
             )
             cur.execute(
-                "UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11"
+                "UPDATE assets.traits SET name = 'wildcard', rationale = NULL "
+                "WHERE id = 11"
             )
     logger.info(
         "Cleared new_story_creator cache in %s",
@@ -1046,7 +1170,7 @@ def clear_cache(dbname: Optional[str] = None) -> None:
 
 def clear_seed_phase(dbname: Optional[str] = None) -> None:
     """Clear seed phase columns to revert from ready to seed phase."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -1083,12 +1207,14 @@ def clear_seed_phase(dbname: Optional[str] = None) -> None:
 
 def clear_character_phase(dbname: Optional[str] = None) -> None:
     """Clear character and seed phase columns to revert to character phase."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             # Clear character concept columns
             cur.execute(
                 """
                 UPDATE assets.new_story_creator SET
+                    character_confirmed = FALSE,
+                    character_revision_pending = FALSE,
                     -- Character columns
                     character_name = NULL,
                     character_archetype = NULL,
@@ -1139,11 +1265,13 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
 
 def clear_setting_phase(dbname: Optional[str] = None) -> None:
     """Clear all phase columns to revert to setting phase."""
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE assets.new_story_creator SET
+                    setting_confirmed = FALSE,
+                    traits_confirmed = FALSE,
                     -- Setting columns
                     setting_genre = NULL,
                     setting_secondary_genres = NULL,
@@ -1160,6 +1288,8 @@ def clear_setting_phase(dbname: Optional[str] = None) -> None:
                     setting_language_notes = NULL,
                     setting_geographic_scope = NULL,
                     setting_diegetic_artifact = NULL,
+                    character_confirmed = FALSE,
+                    character_revision_pending = FALSE,
                     -- Character columns
                     character_name = NULL,
                     character_archetype = NULL,
@@ -1224,13 +1354,14 @@ def write_cache(
     base_timestamp: Optional[str] = None,
     target_slot: Optional[int] = None,
     dbname: Optional[str] = None,
+    invalidate_phase: Optional[str] = None,
 ) -> None:
     """
     Legacy write function - converts JSONB format to normalized columns.
 
     DEPRECATED: Use the typed write_* functions instead.
     """
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             # First ensure the row exists; wildcard Orrery tags are written with
             # an UPDATE below, so first-time legacy writes need the cache row now.
@@ -1244,6 +1375,8 @@ def write_cache(
 
             # Build the update dynamically based on what's provided
             updates = ["updated_at = NOW()"]
+            if invalidate_phase in {"setting", "character"}:
+                updates.append(f"{invalidate_phase}_confirmed = FALSE")
             params: List[Any] = []
 
             if thread_id is not None:
@@ -1468,7 +1601,9 @@ def write_cache(
     )
 
 
-def write_wizard_choices(choices: List[str], dbname: str) -> None:
+def write_wizard_choices(
+    choices: List[str], dbname: str, *, expected_thread_id: Optional[str] = None
+) -> None:
     """
     Store wizard choices in new_story_creator for CLI --choice resolution.
 
@@ -1482,15 +1617,26 @@ def write_wizard_choices(choices: List[str], dbname: str) -> None:
 
     choice_object = {"presented": choices, "selected": None}
 
-    with get_connection(dbname) as conn:
+    with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE assets.new_story_creator
                 SET choice_object = %s, updated_at = NOW()
                 WHERE id = TRUE
-                """,
-                (json.dumps(choice_object),),
+                """
+                + (" AND thread_id = %s" if expected_thread_id is not None else ""),
+                (
+                    (json.dumps(choice_object), expected_thread_id)
+                    if expected_thread_id is not None
+                    else (json.dumps(choice_object),)
+                ),
             )
+            if expected_thread_id is not None and cur.rowcount != 1:
+                from nexus.api.wizard_confirmation import WizardStateConflict
+
+                raise WizardStateConflict(
+                    "The wizard conversation changed before its choices could be saved."
+                )
 
     logger.debug("Stored %d wizard choices in %s", len(choices), dbname)
