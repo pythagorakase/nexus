@@ -55,10 +55,7 @@ except ImportError:
     openai = None
 
 # For token counting
-try:
-    import tiktoken
-except ImportError:
-    tiktoken = None
+from nexus.telemetry.prompt_window import estimator_for
 
 # Set up logging
 logging.basicConfig(
@@ -126,46 +123,8 @@ class LLMResponse:
 
 
 def get_token_count(text: str, model: str) -> int:
-    """
-    Get an accurate token count using tiktoken.
-
-    Args:
-        text: The text to count tokens for
-        model: The model name to use for tokenization
-
-    Returns:
-        The number of tokens in the text
-    """
-    if not tiktoken:
-        # Fallback to character-based estimation if tiktoken not available
-        return len(text) // 4
-
-    try:
-        # For Claude models, use cl100k_base encoding (same as GPT-4)
-        if model.startswith("claude"):
-            encoding_name = "cl100k_base"
-        elif model.startswith("gpt-3.5") or model.startswith("gpt-4"):
-            encoding_name = "cl100k_base"  # GPT-3.5/4 also use cl100k
-        else:
-            # Try to get encoding for the specific model
-            try:
-                encoding = tiktoken.encoding_for_model(model)
-                return len(encoding.encode(text))
-            except KeyError:
-                # If that fails, fall back to cl100k
-                encoding_name = "cl100k_base"
-
-        # Get the tokenizer
-        encoding = tiktoken.get_encoding(encoding_name)
-
-        # Count tokens
-        return len(encoding.encode(text))
-    except Exception as e:
-        # If anything goes wrong, fall back to character-based estimation
-        logger.warning(
-            f"Failed to get token count using tiktoken: {str(e)}. Falling back to character-based estimation."
-        )
-        return len(text) // 4
+    """Estimate text with the model's explicitly registered tokenizer."""
+    return estimator_for(model)(text)
 
 
 class LLMProvider:
@@ -1066,7 +1025,9 @@ Total time delta for Chunk #1: 15 minutes
 
         # Check TPM limits before calling the API
         logger.info(f"DEBUG: Checking TPM limits for prompt length {len(prompt)}")
-        estimated_output_tokens = max(500, len(prompt) // 4)  # Rough estimate
+        estimated_output_tokens = max(
+            500, get_token_count(prompt, llm.model)
+        )  # Output estimate
         within_limit, input_tokens, total_tokens = llm.check_tpm_limit(
             prompt, estimated_output_tokens
         )

@@ -366,6 +366,7 @@ class ContextMemoryManager:
             context_state=self.context_state,
             query_memory=self.query_memory,
             warm_slice_default=self.warm_slice_default,
+            text_counter=self._estimate_tokens,
         )
 
         self.token_manager = token_manager
@@ -1042,9 +1043,11 @@ class ContextMemoryManager:
     # ------------------------------------------------------------------
     def _estimate_tokens(self, text: str) -> int:
         """Estimate token count for text."""
-        # Simple heuristic: words * 1.25 ≈ tokens
-        words = len(text.split())
-        return int(words * 1.25)
+        from nexus.config.story_model import StorySettings
+        from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
+
+        model = self.settings.get("apex", {}).get("model")
+        return calculate_chunk_tokens(text, story=StorySettings(skald_model=model))
 
     def _coerce_chunk_id(self, chunk: Dict[str, Any]) -> Optional[int]:
         """Attempt to coerce a chunk identifier without logging noise."""

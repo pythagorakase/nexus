@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -13,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from nexus.config.seat_window import SeatWindow
-    from nexus.config.settings_models import APIModelEntry
+    from nexus.config.settings_models import APIModelEntry, Settings
 
 
 class RenderedSections(list[str]):
@@ -64,6 +66,110 @@ class LocalRequestCounter:
         return self.overhead + self.text_count(text)
 
 
+def estimator_for(
+    model_id: str, *, settings: Settings | None = None
+) -> Callable[[str], int]:
+    """Return the registered local estimate, never provider usage accounting."""
+    from nexus.config import load_settings
+
+    entry = (settings or load_settings()).model_entry(model_id)
+    return local_text_counter(entry)
+
+
+def estimate_request_tokens(model_id: str, request: dict[str, Any]) -> int:
+    """Estimate visible request content and schemas, excluding transport options."""
+    count = estimator_for(model_id)
+    request = {**request, **request.get("extra_body", {})}
+
+    def content_tokens(value: Any) -> int:
+        if isinstance(value, str):
+            return count(value)
+        if isinstance(value, list):
+            return sum(content_tokens(part) for part in value)
+        if isinstance(value, dict):
+            if "content" in value:
+                return content_tokens(value["content"])
+            if "text" in value:
+                return content_tokens(value["text"])
+            # Tool arguments/results and other structured content are estimates too.
+            return count(json.dumps(value, ensure_ascii=False))
+        return 0
+
+    total = sum(
+        content_tokens(request.get(key))
+        for key in ("input", "messages", "system", "instructions")
+    )
+    for key in (
+        "text",
+        "response_format",
+        "tools",
+        "tool_choice",
+        "thinking",
+        "output_config",
+    ):
+        if request.get(key):
+            total += count(json.dumps(request[key], ensure_ascii=False))
+    return total
+
+
+def validate_tokenizer_registry(entries: Iterable[APIModelEntry]) -> None:
+    """Probe repository loaders outside the gateway's lightweight import path."""
+    entries = list(entries)
+    repositories = tuple(
+        sorted(
+            {
+                entry.tokenizer_repository
+                for entry in entries
+                if entry.tokenizer_repository
+            }
+        )
+    )
+    errors = _validate_tokenizer_repositories(repositories) if repositories else {}
+    for entry in entries:
+        if entry.tokenizer_repository:
+            if entry.tokenizer_repository in errors:
+                raise ValueError(
+                    _tokenizer_error(entry, errors[entry.tokenizer_repository])
+                )
+        else:
+            # Encoding presence and validity require no inference/ML imports.
+            local_text_counter(entry)
+
+
+@lru_cache(maxsize=None)
+def _validate_tokenizer_repositories(repositories: tuple[str, ...]) -> dict[str, str]:
+    # Use the same installed interpreter and loader. No remote Python is trusted.
+    # Batch the roster so each settings process imports Transformers just once.
+    code = """import json, sys
+from nexus.telemetry.prompt_window import _load_tokenizer
+errors = {}
+for repository in json.loads(sys.argv[1]):
+    try:
+        _load_tokenizer(repository)
+    except Exception as exc:
+        errors[repository] = f"{type(exc).__name__}: {exc}"
+print(json.dumps(errors))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, json.dumps(repositories)],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+
+def _tokenizer_error(entry: APIModelEntry, cause: object) -> str:
+    return (
+        f"Model {entry.id!r}: cannot load tokenizer_repository "
+        f"{entry.tokenizer_repository!r} with trust_remote_code=False. "
+        "Declare tokenizer_encoding with token_count_safety_margin using "
+        "the Anthropic local trimming approximation pattern. "
+        f"Cause: {cause}"
+    )
+
+
 def local_text_counter(entry: APIModelEntry) -> Callable[[str], int]:
     """Select only the explicitly declared tokenizer; cache within one assembly."""
     if entry.tokenizer_encoding:
@@ -72,7 +178,10 @@ def local_text_counter(entry: APIModelEntry) -> Callable[[str], int]:
         tokenizer = tiktoken.get_encoding(entry.tokenizer_encoding)
         return lru_cache(maxsize=None)(lambda text: len(tokenizer.encode(text)))
     if entry.tokenizer_repository:
-        tokenizer = _load_tokenizer(entry.tokenizer_repository)
+        try:
+            tokenizer = _load_tokenizer(entry.tokenizer_repository)
+        except Exception as exc:
+            raise ValueError(_tokenizer_error(entry, exc)) from exc
         return lru_cache(maxsize=None)(
             lambda text: len(tokenizer.encode(text, add_special_tokens=False))
         )
@@ -210,7 +319,7 @@ def rendered_request_counter(
     anthropic_request: dict[str, Any] | None = None,
     settings_path: Path | None = None,
 ) -> Callable[[str], int]:
-    """Return the provider's exact counter; unsupported transports fail loudly."""
+    """Return provider counting or the explicitly declared local request estimate."""
     if provider.usage_provider_name == "openai":
         return lambda prompt: count_openai_request(provider, prompt, text_format)
     if provider.usage_provider_name == "anthropic":
@@ -238,19 +347,19 @@ def rendered_request_counter(
             return result["input_tokens"]
 
         return count
-    if provider.usage_provider_name == "test":
-        # TEST has no language model; this deterministic contract is for its text.
-        import tiktoken
-
-        tokenizer = tiktoken.get_encoding("o200k_base")
-        return lambda prompt: len(tokenizer.encode(provider.system_prompt or "")) + len(
-            tokenizer.encode(prompt)
-        )
     from nexus.config import load_settings
 
-    entry = load_settings(settings_path).model_entry(provider.model)
-    if entry.tokenizer_repository is None:
-        raise ValueError(f"No tokenizer declared for {provider.model!r}")
+    settings = load_settings(settings_path)
+    entry = settings.model_entry(provider.model)
+    if entry.tokenizer_encoding:
+        # Explicit registry approximation; the admission margin is seat policy.
+        return local_request_counter(
+            provider,
+            entry,
+            estimator_for(provider.model, settings=settings),
+            text_format=text_format,
+            anthropic_request=anthropic_request,
+        )
     tokenizer = _load_tokenizer(entry.tokenizer_repository)
 
     def count_local(prompt: str) -> int:
@@ -271,7 +380,7 @@ def _load_tokenizer(repository: str) -> Any:
     """Load the model owner's tokenizer without loading inference weights."""
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(repository, trust_remote_code=True)
+    return AutoTokenizer.from_pretrained(repository, trust_remote_code=False)
 
 
 def measure_blocks(

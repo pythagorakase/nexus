@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .context_state import (
     ContextStateManager,
@@ -37,7 +37,9 @@ class IncrementalRetriever:
         context_state: ContextStateManager,
         query_memory: QueryMemory,
         warm_slice_default: bool = True,
+        text_counter: Callable[[str], int] | None = None,
     ) -> None:
+        self.text_counter = text_counter
         self.memnon = memnon
         self.context_state = context_state
         self.query_memory = query_memory
@@ -229,6 +231,6 @@ class IncrementalRetriever:
 
     # ------------------------------------------------------------------
     def _estimate_tokens(self, text: str) -> int:
-        # Fallback heuristic: words * 1.25 ≈ tokens
-        words = len(text.split())
-        return int(words * 1.25)
+        from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
+
+        return (self.text_counter or calculate_chunk_tokens)(text)

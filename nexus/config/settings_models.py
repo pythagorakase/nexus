@@ -3842,6 +3842,14 @@ class Settings(BaseModel):
     def _validate_model_ids(self) -> "Settings":
         """Require every configured model ID to exist in the provider registry."""
         registry = self._build_model_registry()
+        from nexus.telemetry.prompt_window import validate_tokenizer_registry
+
+        # Validate the entire selectable roster, including currently unused models.
+        validate_tokenizer_registry(
+            entry
+            for provider in self.global_.model.api_models.values()
+            for entry in provider.models
+        )
         # Each tuple is (container, attribute_name, optional_flag). When the
         # value is None on an optional field, there is no model to validate.
         targets: List[Tuple[Any, str, bool]] = [

@@ -1620,7 +1620,7 @@ class LogonUtility:
         """Reuse one declared local tokenizer cache for all blocks in this turn."""
         from nexus.config.settings_models import APIModelEntry
         from nexus.telemetry.prompt_window import (
-            local_text_counter,
+            estimator_for,
             local_request_counter,
         )
 
@@ -1636,7 +1636,16 @@ class LogonUtility:
             self._window_text_counters = {}
         key = (entry.tokenizer_encoding, entry.tokenizer_repository)
         if key not in self._window_text_counters:
-            self._window_text_counters[key] = local_text_counter(entry)
+            from nexus.config.settings_models import Settings
+
+            typed = Settings.model_validate(
+                {
+                    k: v
+                    for k, v in self.settings.items()
+                    if k not in {"Agent Settings", "API Settings"}
+                }
+            )
+            self._window_text_counters[key] = estimator_for(entry.id, settings=typed)
         return (
             local_request_counter(
                 provider, entry, self._window_text_counters[key], **kwargs
@@ -1878,6 +1887,7 @@ class LogonUtility:
         ) -> None:
             nonlocal attempt_record, manifest_ordinal
             manifest_ordinal = max(attempt, manifest_ordinal + 1)
+            provider.usage_attempt = manifest_ordinal
             if window is None:
                 resolved_window = resolve_storyteller_context_window(
                     self.settings, self._provider_wire_type, self._provider_type_name
@@ -1996,9 +2006,17 @@ class LogonUtility:
                 },
             )
             record_prompt_window(attempt_record)
+            # Native providers count remotely. A declared compatible-provider
+            # approximation also reserves its margin on every retry.
+            margin = (
+                entry.token_count_safety_margin
+                if entry.tokenizer_encoding
+                and provider.usage_provider_name not in {"openai", "anthropic", "test"}
+                else 0
+            )
             self._enforce_final_prompt_window(
                 active_prompt,
-                effective_context_window=budget.input_ceiling,
+                effective_context_window=budget.input_ceiling - margin,
                 rendered_tokens=tokens,
             )
             if seat != "gaia":
