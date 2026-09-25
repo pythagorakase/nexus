@@ -3167,13 +3167,10 @@ def _insert_character_stub(
         INSERT INTO characters (
             name, summary, background, current_activity, extra_data
         )
-        VALUES (%s, %s, %s, %s, %s::jsonb)
+        VALUES (%s, NULL, NULL, NULL, %s::jsonb)
         """,
         (
             entity_ref,
-            _stub_summary(entity_ref, "character"),
-            "Retrograde-generated stub; details intentionally sparse until play.",
-            "latent in generated backstory",
             json.dumps(_stub_extra_data(sources)),
         ),
     )

@@ -35,7 +35,7 @@ export function portraitSrc(filePath: string): string {
 }
 
 function DossierSection({ title, body }: { title: string; body: string | null }) {
-  if (!body) return null;
+  if (!body?.trim()) return null;
   return (
     <section className="char-section">
       <span className="eyebrow">{title}</span>
@@ -116,6 +116,15 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
 
   const mainImage =
     images?.find((img) => img.isMain === 1) ?? images?.[0] ?? null;
+  const hasDetails =
+    selected &&
+    [
+      selected.summary,
+      selected.appearance,
+      selected.personality,
+      selected.emotionalState,
+      selected.currentActivity,
+    ].some((body) => body?.trim());
 
   return (
     <div className="charspane" data-testid="characters-pane">
@@ -201,6 +210,11 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
             </header>
             <DecoDivider variant="glyph" />
             <div className="char-sections">
+              {!hasDetails && (
+                <div className="char-section">
+                  <p>No details recorded yet.</p>
+                </div>
+              )}
               <DossierSection title="Summary" body={selected.summary} />
               <DossierSection title="Appearance" body={selected.appearance} />
               <DossierSection title="Personality" body={selected.personality} />
