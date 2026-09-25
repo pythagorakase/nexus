@@ -58,7 +58,7 @@ async def test_writer_reference_is_repaired_before_real_staging(
             references, declarations = cur.fetchone()
             assert any(
                 reference["place_name"] == "Machine-Shop"
-                and reference["place_id"] is None
+                and reference.get("place_id") is None
                 for reference in references["places"]
             )
             assert declarations[0]["name"] == "Machine-Shop"
