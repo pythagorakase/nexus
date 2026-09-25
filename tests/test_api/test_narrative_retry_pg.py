@@ -307,3 +307,253 @@ def test_failure_between_acceptance_and_bind_stays_retryable(recovery_db, monkey
     response, tasks = retry(_latest_session(dbname)["session_id"])
     assert tasks.tasks[0].args == (response.session_id, parent, "Agree.", 4)
     assert snapshot(dbname)[0][0]["choice_text"] == "Agree."
+
+
+def _seed_pending(dbname: str, parent: int) -> tuple[str, int]:
+    """Stage a complete pending draft with one open choice through production."""
+    from nexus.api.narrative_generation import write_to_incubator
+    from nexus.memory.manager import empty_pass2_baseline
+    from tests.pg_fixtures import seed_protagonist
+    from tests.test_api.test_narrative_continue_validation import _valid_override
+
+    # The production commit resolves the canonical protagonist.
+    seed_protagonist(dbname)
+    pending_session = str(uuid.uuid4())
+    draft = {
+        "chunk_id": None,
+        "parent_chunk_id": parent,
+        "user_text": ACTION,
+        "storyteller_text": "The hinges sigh open.",
+        "generation_model": _valid_override(),
+        "choice_object": {"presented": ["Enter.", "Wait."], "selected": None},
+        "choice_text": None,
+        "metadata_updates": {
+            "chronology": {"episode_transition": "continue", "time_delta_minutes": 1},
+            "world_layer": "primary",
+        },
+        "entity_updates": {},
+        "reference_updates": {"characters": [], "places": [], "factions": []},
+        "orrery_proposal": {},
+        "orrery_adjudications": [],
+        "new_entities": [],
+        "lore_pass_baseline": empty_pass2_baseline({}).model_dump(mode="json"),
+        "session_id": pending_session,
+        "llm_response_id": None,
+        "status": "complete",
+    }
+    with connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM narrative_generation_sessions")
+        conn.commit()
+        # The staging writer requires the writing session to own the lease.
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=pending_session,
+                operation="continue",
+                stale_timeout_seconds=600,
+            )
+            is None
+        )
+        narrative_lease.bind_generation_parent(
+            conn, session_id=pending_session, parent_chunk_id=parent
+        )
+        asyncio.run(write_to_incubator(conn, draft))
+        narrative_lease.finish_generation(
+            conn, session_id=pending_session, status="complete"
+        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT chunk_id FROM incubator WHERE session_id = %s",
+                (pending_session,),
+            )
+            pending_chunk = cur.fetchone()[0]
+    return pending_session, int(pending_chunk) if pending_chunk else parent + 1
+
+
+def _pending_state(session: str, chunk: int):
+    return SimpleNamespace(
+        is_wizard_mode=False,
+        narrative_state=SimpleNamespace(
+            has_pending=True,
+            session_id=session,
+            current_chunk_id=chunk,
+            choices=["Enter.", "Wait."],
+        ),
+    )
+
+
+def _latest_chunk(dbname):
+    with connect(dbname, cursor_factory=RealDictCursor) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, choice_text FROM narrative_chunks ORDER BY id DESC LIMIT 1"
+        )
+        return dict(cur.fetchone())
+
+
+def test_explicit_frontier_chunk_bind_failure_stays_retryable(recovery_db, monkeypatch):
+    """chunk_id supplied explicitly binds the same way as the inferred frontier."""
+    dbname, parent, _ = recovery_db
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM narrative_generation_sessions")
+        cur.execute(
+            "UPDATE narrative_chunks SET choice_text = NULL WHERE id = %s", (parent,)
+        )
+    monkeypatch.setattr(
+        slot_state, "get_slot_state", lambda slot: _frontier_state(parent)
+    )
+    real_bind = narrative._bind_generation_owner
+    outage = {"active": True}
+
+    def flaky_bind(**kwargs):
+        if outage["active"]:
+            raise RuntimeError("bind connection lost")
+        return real_bind(**kwargs)
+
+    monkeypatch.setattr(narrative, "_bind_generation_owner", flaky_bind)
+    with pytest.raises(RuntimeError, match="bind connection lost"):
+        _continue(chunk_id=parent, choice=1)
+    assert snapshot(dbname)[0][0]["choice_text"] == "Agree."
+    failed = _latest_session(dbname)
+    assert (failed["status"], failed["parent_chunk_id"]) == ("error", parent)
+    outage["active"] = False
+    response, tasks = retry(failed["session_id"])
+    assert tasks.tasks[0].args == (response.session_id, parent, "Agree.", 4)
+
+
+def test_pending_approval_failure_after_commit_stays_retryable(
+    recovery_db, monkeypatch
+):
+    """An exception after the incubator commit keeps the approved action bound."""
+    dbname, parent, _ = recovery_db
+    pending_session, pending_chunk = _seed_pending(dbname, parent)
+    monkeypatch.setattr(
+        slot_state,
+        "get_slot_state",
+        lambda slot: _pending_state(pending_session, pending_chunk),
+    )
+    monkeypatch.setattr(
+        narrative,
+        "wake_scheduler",
+        lambda slot: (_ for _ in ()).throw(RuntimeError("scheduler offline")),
+    )
+    with pytest.raises(RuntimeError, match="scheduler offline"):
+        _continue(choice=1)
+    approved = _latest_chunk(dbname)
+    assert approved["choice_text"] == "Enter."
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM incubator")
+        assert cur.fetchone()[0] == 0
+    failed = _latest_session(dbname)
+    assert (failed["status"], failed["terminal_outcome"]) == ("error", "error")
+    assert failed["parent_chunk_id"] == approved["id"]
+    monkeypatch.setattr(narrative, "wake_scheduler", lambda slot: None)
+    response, tasks = retry(failed["session_id"])
+    assert tasks.tasks[0].args == (response.session_id, approved["id"], "Enter.", 4)
+
+
+def test_abandon_before_worker_commit_still_binds_the_approved_action(
+    recovery_db, monkeypatch
+):
+    """Cleanup that outruns the worker's commit is repaired by the commit itself."""
+    dbname, parent, _ = recovery_db
+    pending_session, pending_chunk = _seed_pending(dbname, parent)
+    monkeypatch.setattr(narrative, "wake_scheduler", lambda slot: None)
+    new_session = str(uuid.uuid4())
+    with connect(dbname) as conn:
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=new_session,
+                operation="continue",
+                stale_timeout_seconds=600,
+            )
+            is None
+        )
+    # Ordering under test: the route's finally already abandoned the session
+    # (candidate unknown: the approved chunk id does not exist yet) ...
+    with connect(dbname) as conn:
+        narrative_lease.abandon_generation(
+            conn,
+            session_id=new_session,
+            error="CancelledError",
+            error_class="CancelledError",
+        )
+    unbound = _latest_session(dbname)
+    assert (unbound["status"], unbound["parent_chunk_id"]) == ("error", None)
+    # ... and only then does the still-running worker commit the approval.
+    text, approved = narrative._resolve_and_approve_pending_sync(
+        slot=4,
+        session_id=pending_session,
+        chunk_id=pending_chunk,
+        user_text="",
+        choice=1,
+        accept_fate=False,
+        bind_session_id=new_session,
+    )
+    assert (text, approved) == ("Enter.", _latest_chunk(dbname)["id"])
+    bound = _latest_session(dbname)
+    assert (bound["session_id"], bound["status"]) == (new_session, "error")
+    assert bound["parent_chunk_id"] == approved
+    assert snapshot(dbname)[2] == []
+    response, tasks = retry(new_session)
+    assert tasks.tasks[0].args == (response.session_id, approved, "Enter.", 4)
+
+
+def test_cancelled_route_leaves_a_retryable_failure_after_the_worker_commits(
+    recovery_db, monkeypatch
+):
+    """Real cancellation during approval: the worker outlives the route safely."""
+    from nexus.api.narrative_schemas import ContinueNarrativeRequest
+
+    dbname, parent, _ = recovery_db
+    pending_session, pending_chunk = _seed_pending(dbname, parent)
+    monkeypatch.setattr(
+        slot_state,
+        "get_slot_state",
+        lambda slot: _pending_state(pending_session, pending_chunk),
+    )
+    monkeypatch.setattr(narrative, "wake_scheduler", lambda slot: None)
+    from nexus.api import commit_handler_sync
+
+    gate = threading.Event()
+    real_commit = commit_handler_sync.commit_incubator_to_database_sync
+
+    def gated_commit(*args, **kwargs):
+        assert gate.wait(timeout=20), "route never released the worker"
+        return real_commit(*args, **kwargs)
+
+    # The worker imports the commit from its defining module at call time.
+    monkeypatch.setattr(
+        commit_handler_sync, "commit_incubator_to_database_sync", gated_commit
+    )
+    observed = {}
+
+    async def scenario():
+        task = asyncio.create_task(
+            narrative.continue_narrative(
+                ContinueNarrativeRequest(slot=4, choice=1), BackgroundTasks()
+            )
+        )
+        await asyncio.sleep(0.5)  # the worker is parked at the gate
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        observed["after_cancel"] = _latest_session(dbname)
+        gate.set()
+        for _ in range(100):
+            await asyncio.sleep(0.1)
+            if _latest_session(dbname)["parent_chunk_id"] is not None:
+                break
+
+    asyncio.run(scenario())
+    after_cancel = observed["after_cancel"]
+    assert (after_cancel["status"], after_cancel["parent_chunk_id"]) == ("error", None)
+    approved = _latest_chunk(dbname)
+    assert approved["choice_text"] == "Enter."
+    final = _latest_session(dbname)
+    assert final["session_id"] == after_cancel["session_id"]
+    assert (final["status"], final["parent_chunk_id"]) == ("error", approved["id"])
+    assert snapshot(dbname)[2] == []
+    response, tasks = retry(final["session_id"])
+    assert tasks.tasks[0].args == (response.session_id, approved["id"], "Enter.", 4)

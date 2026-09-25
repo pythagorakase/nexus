@@ -75,6 +75,7 @@ from nexus.api.narrative_lease import (
     GenerationRetryContext,
     abandon_generation,
     acquire_generation_lease,
+    associate_accepted_parent,
     bind_generation_parent,
     claim_parent_embedding,
     discard_generation,
@@ -414,9 +415,16 @@ def _record_player_response_for_chunk(
     require_response: bool,
     connection: Any = None,
     incubator_session_id: Optional[str] = None,
+    bind_session_id: Optional[str] = None,
 ) -> str:
     """
     Resolve and persist the player's response for an incubator/committed chunk.
+
+    ``bind_session_id`` binds that generation session to this committed chunk
+    in the same transaction that records (or re-confirms) the response, so a
+    later bind failure cannot leave a recorded action without a retryable
+    parent. Callers pass it only for the committed frontier chunk; incubator
+    responses are bound by the incubator commit instead.
 
     Returns:
         The response text that should be sent into the next generation.
@@ -503,6 +511,12 @@ def _record_player_response_for_chunk(
                             status_code=409,
                             detail=f"Choice already selected for chunk {chunk_id}.",
                         )
+                if bind_session_id is not None and chunk_id is not None:
+                    associate_accepted_parent(
+                        cur, session_id=bind_session_id, parent_chunk_id=chunk_id
+                    )
+                    if owns_connection:
+                        conn.commit()
                 return existing_choice_text
 
             has_unresolved_choices = bool(choice_object and choice_object["presented"])
@@ -553,6 +567,10 @@ def _record_player_response_for_chunk(
                 choice_text=resolved.choice_text,
                 incubator_session_id=str(chunk["session_id"]) if is_incubator else None,
             )
+            if bind_session_id is not None and chunk_id is not None:
+                associate_accepted_parent(
+                    cur, session_id=bind_session_id, parent_chunk_id=chunk_id
+                )
 
         if owns_connection:
             conn.commit()
@@ -684,6 +702,7 @@ def _resolve_and_approve_pending_sync(
     choice: Optional[int],
     accept_fate: bool,
     warning_sink: Optional[List[Dict[str, Any]]] = None,
+    bind_session_id: Optional[str] = None,
 ) -> tuple[str, int]:
     """Resolve and approve a pending choice with worker-owned connection life."""
 
@@ -705,7 +724,7 @@ def _resolve_and_approve_pending_sync(
         )
         if warning_sink is None:
             approved_chunk_id = commit_incubator_to_database_sync(
-                conn, session_id, slot
+                conn, session_id, slot, bind_session_id=bind_session_id
             )
         else:
             approved_chunk_id = commit_incubator_to_database_sync(
@@ -713,6 +732,7 @@ def _resolve_and_approve_pending_sync(
                 session_id,
                 slot,
                 warning_sink=warning_sink,
+                bind_session_id=bind_session_id,
             )
     except HTTPException:
         conn.rollback()
@@ -740,8 +760,14 @@ async def _resolve_and_approve_pending(
     choice: Optional[int],
     accept_fate: bool,
     background_tasks: BackgroundTasks,
+    bind_session_id: Optional[str] = None,
 ) -> tuple[str, int, List[Dict[str, Any]]]:
-    """Resolve and approve without exposing the worker connection to cancellation."""
+    """Resolve and approve without exposing the worker connection to cancellation.
+
+    The worker thread keeps running if this coroutine is cancelled, so the
+    parent binding for ``bind_session_id`` is written by the worker's own
+    transaction rather than by code after this await.
+    """
 
     commit_warnings: List[Dict[str, Any]] = []
     resolved_user_text, approved_chunk_id = await asyncio.to_thread(
@@ -753,6 +779,7 @@ async def _resolve_and_approve_pending(
         choice=choice,
         accept_fate=accept_fate,
         warning_sink=commit_warnings,
+        bind_session_id=bind_session_id,
     )
     return resolved_user_text, approved_chunk_id, commit_warnings
 
@@ -886,6 +913,7 @@ async def continue_narrative(
                             choice=request.choice,
                             accept_fate=request.accept_fate,
                             background_tasks=background_tasks,
+                            bind_session_id=session_id,
                         )
                     )
                     request.chunk_id = approved_chunk_id
@@ -905,6 +933,7 @@ async def continue_narrative(
                             choice=request.choice,
                             accept_fate=request.accept_fate,
                             require_response=bool(narrative_state.choices),
+                            bind_session_id=session_id,
                         )
                 logger.info(
                     "Resolved chunk_id=%s from slot %s",
@@ -912,6 +941,16 @@ async def continue_narrative(
                     request.slot,
                 )
         elif request.chunk_id:
+            # Only an action recorded on the current committed frontier can be
+            # resumed by retry; an explicit older chunk is left unbound.
+            frontier = getattr(state, "narrative_state", None)
+            at_frontier = (
+                frontier is not None
+                and not frontier.has_pending
+                and frontier.current_chunk_id == request.chunk_id
+            )
+            if at_frontier:
+                accepted_parent_candidate = request.chunk_id
             resolved_user_text = _record_player_response_for_chunk(
                 slot=request.slot,
                 chunk_id=request.chunk_id,
@@ -919,6 +958,7 @@ async def continue_narrative(
                 choice=request.choice,
                 accept_fate=request.accept_fate,
                 require_response=False,
+                bind_session_id=session_id if at_frontier else None,
             )
 
         parent_chunk_id = request.chunk_id if request.chunk_id else 0

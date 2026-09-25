@@ -259,3 +259,40 @@ async def test_bootstrap_bind_failure_has_no_accepted_action(continue_route):
     """No player action exists before the first chunk; nothing is bound."""
     state = SimpleNamespace(is_wizard_mode=False, narrative_state=None)
     assert await continue_route(state) is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_frontier_chunk_action_is_bound_and_named(
+    continue_route, monkeypatch
+):
+    """An explicit chunk_id at the committed frontier is treated like the frontier."""
+    record = Mock(return_value="Open.")
+    monkeypatch.setattr(narrative, "_record_player_response_for_chunk", record)
+    assert await continue_route(_committed_state(), chunk_id=17, choice=1) == 17
+    assert isinstance(record.call_args.kwargs["bind_session_id"], str)
+
+
+@pytest.mark.asyncio
+async def test_explicit_older_chunk_action_is_left_unbound(continue_route, monkeypatch):
+    """An action recorded on an older chunk cannot be resumed at the frontier."""
+    record = Mock(return_value="Open.")
+    monkeypatch.setattr(narrative, "_record_player_response_for_chunk", record)
+    assert await continue_route(_committed_state(), chunk_id=12, choice=1) is None
+    assert record.call_args.kwargs["bind_session_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_frontier_and_pending_routes_bind_inside_acceptance(
+    continue_route, monkeypatch
+):
+    """Both acceptance paths receive the new session so they bind atomically."""
+    record = Mock(return_value="Open.")
+    monkeypatch.setattr(narrative, "_record_player_response_for_chunk", record)
+    await continue_route(_committed_state(), choice=1)
+    assert isinstance(record.call_args.kwargs["bind_session_id"], str)
+
+    approve = AsyncMock(return_value=("Open.", 18, []))
+    monkeypatch.setattr(narrative, "_resolve_and_approve_pending", approve)
+    narrative._abandon_unscheduled_generation_owner.reset_mock()
+    await continue_route(_committed_state(has_pending=True), choice=1)
+    assert isinstance(approve.call_args.kwargs["bind_session_id"], str)

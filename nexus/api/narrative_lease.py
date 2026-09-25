@@ -189,6 +189,36 @@ def acquire_generation_lease(
         raise
 
 
+def associate_accepted_parent(
+    cur: Any, *, session_id: str, parent_chunk_id: int
+) -> None:
+    """Bind a session to the chunk whose player action this transaction records.
+
+    Runs inside the acceptance transaction so the binding commits atomically
+    with the action. It requires no lease ownership: when the route has already
+    abandoned the session (a post-commit exception, or a cancellation that
+    outran the worker's commit), the failed row still gains its parent and the
+    reviewed retry can resume the exact recorded action. A parent bound
+    earlier is never overwritten.
+    """
+    cur.execute(
+        """
+        UPDATE narrative_generation_sessions
+        SET parent_chunk_id = %s, updated_at = NOW()
+        WHERE session_id = %s AND parent_chunk_id IS NULL
+        """,
+        (parent_chunk_id, session_id),
+    )
+    cur.execute(
+        """
+        UPDATE narrative_generation_lease
+        SET parent_chunk_id = %s
+        WHERE id = TRUE AND session_id = %s AND parent_chunk_id IS NULL
+        """,
+        (parent_chunk_id, session_id),
+    )
+
+
 def bind_generation_parent(conn: Any, *, session_id: str, parent_chunk_id: int) -> None:
     """Bind the active owner and its durable status to the resolved parent."""
     try:
