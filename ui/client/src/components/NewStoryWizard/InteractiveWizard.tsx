@@ -484,6 +484,7 @@ export function InteractiveWizard({
                     slot,
                     thread_id: threadId,
                     message: `[SYSTEM] Artifact ${artifactType} confirmed. Proceed to next step.`,
+                    message_origin: "wizard_control",
                     current_phase: currentPhase,
                     context_data: contextData
                 }),
@@ -840,6 +841,7 @@ export function InteractiveWizard({
                 slot,
                 thread_id: threadId,
                 message: `[SYSTEM] Phase ${currentPhase} complete. Proceeding to ${nextPhase}. Please introduce the next phase.`,
+                message_origin: "wizard_control",
                 current_phase: nextPhase,
                 context_data: contextData,
             }),

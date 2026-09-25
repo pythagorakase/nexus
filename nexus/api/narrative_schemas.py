@@ -353,6 +353,10 @@ class SlotLockResponse(BaseModel):
 class ChatRequest(BaseModel):
     slot: StrictInt = Field(ge=1, le=5)
     message: str
+    message_origin: Literal["user", "wizard_control"] = Field(
+        default="user",
+        description="Distinguish player text from application continuation messages.",
+    )
     # thread_id and current_phase are optional - resolved from slot state if not provided
     thread_id: Optional[str] = None
     current_phase: Optional[Literal["setting", "character", "seed"]] = None
