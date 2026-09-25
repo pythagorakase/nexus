@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 from psycopg2.extras import RealDictCursor
 
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.database import AmbiguousCommit, commit_transaction, transaction
 
 logger = logging.getLogger("nexus.api.narrative_lease")
@@ -32,13 +33,69 @@ class GenerationLeaseConflict:
     active_session_id: str
 
 
+class GenerationRetryConflict(ValueError):
+    """The reviewed failure no longer describes a safe retry frontier."""
+
+
+@dataclass(frozen=True)
+class GenerationRetryContext:
+    """The unchanged committed action captured while claiming the slot."""
+
+    parent_chunk_id: int
+    user_text: str
+
+
+def _retry_context(cur: Any, expected_session_id: str) -> GenerationRetryContext:
+    """Fence retry against durable state under the generation lease lock."""
+    cur.execute(
+        "SELECT session_id, status, terminal_outcome, parent_chunk_id, "
+        "replaced_by_session_id FROM narrative_generation_sessions "
+        "ORDER BY created_at DESC LIMIT 1 FOR UPDATE"
+    )
+    failed = cur.fetchone()
+    if (
+        failed is None
+        or str(failed["session_id"]) != expected_session_id
+        or failed["status"] != "error"
+        or failed["terminal_outcome"] != "error"
+        or failed["replaced_by_session_id"] is not None
+        or failed["parent_chunk_id"] is None
+    ):
+        raise GenerationRetryConflict(
+            "The failed generation changed. Reload the story."
+        )
+    cur.execute("SELECT 1 FROM incubator LIMIT 1")
+    if cur.fetchone() is not None:
+        raise GenerationRetryConflict("A pending narrative already exists.")
+    cur.execute(
+        "SELECT nc.id, nc.choice_text FROM narrative_chunks nc "
+        "LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id "
+        f"WHERE {playable_narrative_predicate()} ORDER BY nc.id DESC LIMIT 1 "
+        "FOR UPDATE OF nc"
+    )
+    parent = cur.fetchone()
+    parent_id = int(failed["parent_chunk_id"])
+    if parent_id == 0 and parent is None:
+        return GenerationRetryContext(parent_chunk_id=0, user_text="")
+    if (
+        parent is None
+        or int(parent["id"]) != parent_id
+        or not (parent["choice_text"] or "").strip()
+    ):
+        raise GenerationRetryConflict("The committed action changed. Reload the story.")
+    return GenerationRetryContext(
+        parent_chunk_id=parent_id, user_text=parent["choice_text"]
+    )
+
+
 def acquire_generation_lease(
     conn: Any,
     *,
     session_id: str,
     operation: str,
     stale_timeout_seconds: int,
-) -> Optional[GenerationLeaseConflict]:
+    expected_failed_session_id: Optional[str] = None,
+) -> Optional[GenerationLeaseConflict | GenerationRetryContext]:
     """Acquire the slot singleton, replacing only an expired owner."""
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -81,11 +138,16 @@ def acquire_generation_lease(
                     (stale_session_id,),
                 )
 
+            retry = (
+                _retry_context(cur, expected_failed_session_id)
+                if expected_failed_session_id is not None
+                else None
+            )
             cur.execute(
                 """
                 INSERT INTO narrative_generation_sessions (
-                    session_id, operation, status
-                ) VALUES (%s, %s, 'initiated')
+                    session_id, operation, status, parent_chunk_id
+                ) VALUES (%s, %s, 'initiated', %s)
                 ON CONFLICT (session_id) DO UPDATE
                 SET operation = EXCLUDED.operation,
                     parent_chunk_id = NULL,
@@ -94,21 +156,33 @@ def acquire_generation_lease(
                     error = NULL,
                     updated_at = NOW()
                 """,
-                (session_id, operation),
+                (session_id, operation, retry.parent_chunk_id if retry else None),
             )
             cur.execute(
                 """
                 INSERT INTO narrative_generation_lease (
-                    id, session_id, operation, expires_at
+                    id, session_id, operation, expires_at, parent_chunk_id
                 ) VALUES (
                     TRUE, %s, %s,
-                    NOW() + make_interval(secs => %s)
+                    NOW() + make_interval(secs => %s), %s
                 )
                 """,
-                (session_id, operation, stale_timeout_seconds),
+                (
+                    session_id,
+                    operation,
+                    stale_timeout_seconds,
+                    retry.parent_chunk_id if retry else None,
+                ),
             )
+            if retry is not None:
+                cur.execute(
+                    "UPDATE narrative_generation_sessions "
+                    "SET replaced_by_session_id = %s, updated_at = NOW() "
+                    "WHERE session_id = %s",
+                    (session_id, expected_failed_session_id),
+                )
         commit_transaction(conn)
-        return None
+        return retry
     except AmbiguousCommit:
         raise
     except Exception:

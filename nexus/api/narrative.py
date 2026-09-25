@@ -70,6 +70,9 @@ from nexus.api.narrative_generation import (
     generate_bootstrap_narrative,
 )
 from nexus.api.narrative_lease import (
+    GenerationLeaseConflict,
+    GenerationRetryConflict,
+    GenerationRetryContext,
     abandon_generation,
     acquire_generation_lease,
     bind_generation_parent,
@@ -308,6 +311,7 @@ def load_settings():
 from nexus.api.narrative_schemas import (
     ContinueNarrativeRequest,
     ContinueNarrativeResponse,
+    RetryNarrativeRequest,
     GenerationLeaseConflictResponse,
     RegenerateNarrativeRequest,
     ApproveNarrativeRequest,
@@ -582,7 +586,7 @@ def _acquire_generation_owner(
         )
     finally:
         conn.close()
-    if conflict is not None:
+    if isinstance(conflict, GenerationLeaseConflict):
         raise HTTPException(
             status_code=409,
             detail={
@@ -950,6 +954,97 @@ async def continue_narrative(
             status="processing",
             message=message,
             warnings=accept_warnings,
+        )
+    except asyncio.CancelledError:
+        failure_class = "CancelledError"
+        failure_reason = "CancelledError"
+        raise
+    except Exception as exc:
+        failure_class = generation_error_class(exc)
+        failure_reason = str(exc) or type(exc).__name__
+        raise
+    finally:
+        if not scheduled:
+            _abandon_unscheduled_generation_owner(
+                slot=request.slot,
+                session_id=session_id,
+                error=failure_reason,
+                error_class=failure_class,
+            )
+
+
+@app.post("/api/narrative/retry", response_model=ContinueNarrativeResponse)
+async def retry_narrative(
+    request: RetryNarrativeRequest, background_tasks: BackgroundTasks
+) -> ContinueNarrativeResponse:
+    """Retry a reviewed terminal failure using its unchanged committed action."""
+    from nexus.api.slot_state import get_slot_state
+
+    require_writable_slot(request.slot)
+    if get_slot_state(request.slot).is_wizard_mode:
+        raise HTTPException(status_code=409, detail="The slot is in story setup.")
+    session_id = str(uuid.uuid4())
+    conn = get_db_connection(request.slot)
+    try:
+        acquired = acquire_generation_lease(
+            conn,
+            session_id=session_id,
+            operation="continue",
+            stale_timeout_seconds=get_generation_lease_timeout_seconds(),
+            expected_failed_session_id=request.expected_session_id,
+        )
+    except GenerationRetryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    finally:
+        conn.close()
+    if isinstance(acquired, GenerationLeaseConflict):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Another narrative generation owns this slot.",
+                "active_session_id": acquired.active_session_id,
+            },
+        )
+    if not isinstance(acquired, GenerationRetryContext):
+        raise RuntimeError("Retry lease did not capture a committed action.")
+
+    scheduled = False
+    failure_class = "GenerationError"
+    failure_reason = "Retry ended before generation was scheduled."
+    try:
+        parent_chunk_id = acquired.parent_chunk_id
+        _bind_generation_owner(
+            slot=request.slot,
+            session_id=session_id,
+            parent_chunk_id=parent_chunk_id,
+            claim_embedding=parent_chunk_id != 0,
+        )
+        await manager.send_progress(
+            session_id,
+            "initiated",
+            {
+                "chunk_id": parent_chunk_id,
+                "parent_chunk_id": parent_chunk_id,
+                "is_bootstrap": parent_chunk_id == 0,
+                "slot": request.slot,
+            },
+        )
+        background_tasks.add_task(
+            generate_narrative_async,
+            session_id,
+            parent_chunk_id,
+            acquired.user_text,
+            request.slot,
+            get_db_connection=get_db_connection,
+            load_settings=load_settings,
+            manager=manager,
+            manage_generation_lease=True,
+        )
+        scheduled = True
+        return ContinueNarrativeResponse(
+            session_id=session_id,
+            status="processing",
+            message="Retrying the failed narrative with the recorded action.",
         )
     except asyncio.CancelledError:
         failure_class = "CancelledError"
