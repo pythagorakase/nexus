@@ -379,6 +379,8 @@ def _character_payload(row: Dict[str, Any]) -> Dict[str, Any]:
         and provenance.get("source") == "retrograde"
         and provenance.get("stub_kind") == "retrograde_expansion_ref"
     ):
+        # Frozen signatures from legacy saved rows. New character stubs store
+        # NULL prose; do not couple these values to mutable producer wording.
         placeholders = {
             "summary": (
                 f"Retrograde-generated character stub for {row['name']}. "

@@ -113,15 +113,41 @@ describe("CharactersPane", () => {
     expect(screen.queryByText("No details recorded yet.")).not.toBeInTheDocument();
   });
 
+  it("shows only the empty state when every prose field is whitespace", () => {
+    renderPane([
+      makeCharacter({
+        id: 946,
+        name: "Nell Rourke",
+        summary: "   ",
+        appearance: "\n",
+        personality: "\t",
+        emotionalState: " \n ",
+        currentActivity: "\t ",
+      }),
+    ]);
+    expect(screen.getByText("No details recorded yet.")).toBeInTheDocument();
+    for (const title of [
+      "Summary",
+      "Appearance",
+      "Personality",
+      "Emotional State",
+      "Current Activity",
+    ]) {
+      expect(screen.queryByText(title)).not.toBeInTheDocument();
+    }
+  });
+
   it("shows genuine appearance even when the other dossier fields are unknown", () => {
     renderPane([
       makeCharacter({
         id: 946,
         name: "Nell Rourke",
+        summary: " \n ",
         appearance: "A weathered yellow coat.",
       }),
     ]);
     expect(screen.getByText("A weathered yellow coat.")).toBeInTheDocument();
+    expect(screen.queryByText("Summary")).not.toBeInTheDocument();
     expect(screen.queryByText("No details recorded yet.")).not.toBeInTheDocument();
   });
 

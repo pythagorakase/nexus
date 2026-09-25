@@ -35,7 +35,7 @@ export function portraitSrc(filePath: string): string {
 }
 
 function DossierSection({ title, body }: { title: string; body: string | null }) {
-  if (!body) return null;
+  if (!body?.trim()) return null;
   return (
     <section className="char-section">
       <span className="eyebrow">{title}</span>
