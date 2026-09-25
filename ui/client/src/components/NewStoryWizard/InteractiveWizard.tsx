@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { rememberActiveSlot } from "@/lib/active-slot";
+import { wizardDraftScope } from "@/lib/wizard-draft";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { WizardChoices, normalizeChoices } from "./WizardChoices";
@@ -577,9 +578,9 @@ export function InteractiveWizard({
     };
 
     // Unified turn submission for structured choices and freeform input.
-    const sendMessage = async (text: string) => {
+    const sendMessage = async (text: string): Promise<boolean> => {
         // Synchronous ref-based guard for double-click prevention
-        if (processingRef.current || !text.trim() || isLoading || !threadId) return;
+        if (processingRef.current || !text.trim() || isLoading || !threadId) return false;
         processingRef.current = true;
 
         const userMsg = text.trim();
@@ -604,6 +605,10 @@ export function InteractiveWizard({
 
             const data = await res.json();
 
+            if (!data || (!data.phase_complete && !data.subphase_complete && !data.message?.trim())) {
+                throw new Error("No wizard response received.");
+            }
+
             if (data.phase_complete) {
                 setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                 setDisplayChoices([]);
@@ -621,6 +626,7 @@ export function InteractiveWizard({
                 }
             }
 
+            return true;
         } catch (error) {
             console.error("Chat error:", error);
             toast({
@@ -628,6 +634,7 @@ export function InteractiveWizard({
                 description: "Failed to send message. Please try again.",
                 variant: "destructive",
             });
+            return false;
         } finally {
             processingRef.current = false;
             setIsLoading(false);
@@ -1053,6 +1060,7 @@ export function InteractiveWizard({
                                 <WizardChoices
                                     choices={displayChoices}
                                     onSubmit={sendMessage}
+                                    draftScope={wizardDraftScope(slot, threadId, currentPhase, wizardData.character_state)}
                                     disabled={isLoading || !!pendingArtifact || !threadId}
                                 />
                             </motion.div>
