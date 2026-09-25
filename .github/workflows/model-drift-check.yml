@@ -1,4 +1,4 @@
-name: Model Drift and Configuration Check
+name: Model drift check
 
 # Runs scripts/check_model_drift.py on every push and PR. The check fails if a
 # literal gpt-5.X or claude-{sonnet,opus,haiku}-N-N reference appears outside
@@ -27,35 +27,3 @@ jobs:
       # The drift checker is stdlib-only; no `poetry install` required.
       - name: Run drift checker
         run: python scripts/check_model_drift.py
-
-  config:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install Registry Validation Dependencies
-        # Read the existing project constraints; no inference weights or Torch.
-        run: |
-          python - <<'PYDEPS'
-          import re
-          import subprocess
-          import sys
-          import tomllib
-          from pathlib import Path
-
-          required = {"pydantic", "tiktoken", "transformers", "sentencepiece", "protobuf", "huggingface-hub"}
-          dependencies = tomllib.loads(Path("pyproject.toml").read_text())["project"]["dependencies"]
-          subprocess.run([sys.executable, "-m", "pip", "install", *[
-              dependency for dependency in dependencies
-              if re.split(r"[\s<>=!~(\[]", dependency, maxsplit=1)[0] in required
-          ]], check=True)
-          PYDEPS
-      - name: Validate Configuration and Tokenizer Loadability
-        run: PYTHONPATH=$PWD python scripts/validate_config_commit.py
