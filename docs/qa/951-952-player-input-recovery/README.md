@@ -40,4 +40,8 @@ Rendered verification on the d50f05ee bundle used the same disclosed synthetic f
 
 ![Failure before acceptance leaves input open](pre-acceptance-failure-input-open.jpg)
 
+The binding helper takes the lease row before the session row, matching every other writer in the lease module; a deterministic private PostgreSQL test pauses the worker between its two statements while a cancelled route's abandon contends, which deadlocked under the reversed order and now simply waits. The reader treats the bound parent as part of a failure's identity, so a session that was abandoned before its worker committed enters recovery on the next poll when its parent arrives, without a reload, a second toast, or any automatic request.
+
+![Same session gains its parent on a later poll](same-session-parent-arrival-recovery.jpg)
+
 Claude Fable 5.1, after the owner-directed handoff from Codex (GPT-6).

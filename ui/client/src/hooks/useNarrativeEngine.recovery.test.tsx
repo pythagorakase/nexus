@@ -136,6 +136,34 @@ describe("durable reader generation recovery", () => {
     expect(api.retryNarrative).not.toHaveBeenCalled();
   });
 
+  it("enters recovery when the same failed session gains its parent on a later poll", async () => {
+    const { toast } = await import("@/hooks/use-toast");
+    currentSession = { ...failure, parent_chunk_id: null, error: "CancelledError" };
+    mount();
+    await waitFor(() => expect(engine.generationError).toBe("CancelledError"));
+    expect(engine.failedGeneration).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("input-freeform")).toBeEnabled());
+    // The cancelled route abandoned first; the worker's commit binds the parent afterwards.
+    currentSession = { ...failure, parent_chunk_id: 9, error: "CancelledError" };
+    boundary();
+    await waitFor(() => expect(screen.getByTestId("generation-recovery")).toBeInTheDocument());
+    expect(engine.failedGeneration?.parent_chunk_id).toBe(9);
+    expect(screen.queryByTestId("input-freeform")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("choice-1")).not.toBeInTheDocument();
+    expect(api.continueNarrative).not.toHaveBeenCalled();
+    expect(api.retryNarrative).not.toHaveBeenCalled();
+    expect(vi.mocked(toast)).toHaveBeenCalledTimes(1);
+    // The retry now targets the bound failure without any remount.
+    vi.mocked(api.retryNarrative).mockImplementation(async () => {
+      currentSession = { ...failure, session_id: "retry-9", status: "complete", phase: "complete", terminal_outcome: "accepted", error: null };
+      currentState = { ...state, has_pending: true, session_id: "retry-9", choices: ["New live choice"] };
+      return { session_id: "retry-9", status: "processing", message: "started" };
+    });
+    fireEvent.click(screen.getByTestId("button-retry-generation"));
+    await waitFor(() => expect(screen.getByTestId("choice-1")).toHaveTextContent("New live choice"));
+    expect(api.retryNarrative).toHaveBeenCalledWith(4, "failed-8");
+  });
+
   it("rejects a mismatched terminal status and leaves controls disabled", async () => {
     vi.mocked(api.getGenerationStatus).mockResolvedValue({ ...failure, session_id: "another-session" });
     mount();

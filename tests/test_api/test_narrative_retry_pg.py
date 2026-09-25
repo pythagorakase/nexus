@@ -557,3 +557,105 @@ def test_cancelled_route_leaves_a_retryable_failure_after_the_worker_commits(
     assert snapshot(dbname)[2] == []
     response, tasks = retry(final["session_id"])
     assert tasks.tasks[0].args == (response.session_id, approved["id"], "Enter.", 4)
+
+
+class _PausingCursor:
+    """Block after the first statement so a competing transaction can start."""
+
+    def __init__(self, cur, held: threading.Event, proceed: threading.Event):
+        self._cur = cur
+        self._held = held
+        self._proceed = proceed
+        self.calls = 0
+
+    def execute(self, *args, **kwargs):
+        result = self._cur.execute(*args, **kwargs)
+        self.calls += 1
+        if self.calls == 1:
+            self._held.set()
+            assert self._proceed.wait(timeout=20), "test never released the worker"
+        return result
+
+    def __getattr__(self, name):
+        return getattr(self._cur, name)
+
+
+def test_worker_binding_and_cancelled_abandon_overlap_without_deadlock(recovery_db):
+    """The worker's binding and a cancelled route's cleanup contend on the same rows.
+
+    The worker is paused between its two statements, holding its first lock,
+    while the abandon runs and blocks on it. Under the reversed lock order this
+    is an ABBA deadlock that PostgreSQL resolves by aborting one side; under the
+    module's lease -> session order the abandon simply waits and the final row
+    is a retryable failure.
+    """
+    import time
+
+    dbname, parent, _ = recovery_db
+    session = str(uuid.uuid4())
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM narrative_generation_sessions")
+    with connect(dbname) as conn:
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=session,
+                operation="continue",
+                stale_timeout_seconds=600,
+            )
+            is None
+        )
+    held, proceed = threading.Event(), threading.Event()
+    timeline: dict = {}
+    errors: dict = {}
+
+    def worker():
+        try:
+            conn = connect(dbname)
+            try:
+                narrative_lease.associate_accepted_parent(
+                    _PausingCursor(conn.cursor(), held, proceed),
+                    session_id=session,
+                    parent_chunk_id=parent,
+                )
+                conn.commit()
+                timeline["worker_committed"] = time.monotonic()
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001 - recorded for the assertion
+            errors["worker"] = exc
+
+    def cancelled_route():
+        try:
+            with connect(dbname) as conn:
+                narrative_lease.abandon_generation(
+                    conn,
+                    session_id=session,
+                    error="CancelledError",
+                    error_class="CancelledError",
+                )
+            timeline["abandon_done"] = time.monotonic()
+        except Exception as exc:  # noqa: BLE001 - recorded for the assertion
+            errors["abandon"] = exc
+
+    worker_thread = threading.Thread(target=worker)
+    abandon_thread = threading.Thread(target=cancelled_route)
+    worker_thread.start()
+    assert held.wait(timeout=20)
+    abandon_thread.start()
+    time.sleep(
+        0.5
+    )  # let the abandon reach its first lock while the worker holds its own
+    assert abandon_thread.is_alive(), "abandon must contend with the paused worker"
+    proceed.set()
+    worker_thread.join(timeout=30)
+    abandon_thread.join(timeout=30)
+    assert not worker_thread.is_alive() and not abandon_thread.is_alive()
+    assert errors == {}, errors
+    assert timeline["abandon_done"] > timeline["worker_committed"]
+    final = _latest_session(dbname)
+    assert (final["session_id"], final["status"]) == (session, "error")
+    assert final["parent_chunk_id"] == parent
+    assert snapshot(dbname)[2] == []
+    response, tasks = retry(session)
+    assert tasks.tasks[0].args == (response.session_id, parent, ACTION, 4)

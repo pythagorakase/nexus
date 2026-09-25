@@ -200,20 +200,26 @@ def associate_accepted_parent(
     outran the worker's commit), the failed row still gains its parent and the
     reviewed retry can resume the exact recorded action. A parent bound
     earlier is never overwritten.
+
+    Lock order is lease -> session, the same order every other writer in this
+    module uses (acquire, bind, heartbeat, finish). A concurrent abandon from a
+    cancelled route holds the lease row while it waits for the session row;
+    taking the session row first here would form an ABBA deadlock between the
+    worker's commit and that cleanup.
     """
-    cur.execute(
-        """
-        UPDATE narrative_generation_sessions
-        SET parent_chunk_id = %s, updated_at = NOW()
-        WHERE session_id = %s AND parent_chunk_id IS NULL
-        """,
-        (parent_chunk_id, session_id),
-    )
     cur.execute(
         """
         UPDATE narrative_generation_lease
         SET parent_chunk_id = %s
         WHERE id = TRUE AND session_id = %s AND parent_chunk_id IS NULL
+        """,
+        (parent_chunk_id, session_id),
+    )
+    cur.execute(
+        """
+        UPDATE narrative_generation_sessions
+        SET parent_chunk_id = %s, updated_at = NOW()
+        WHERE session_id = %s AND parent_chunk_id IS NULL
         """,
         (parent_chunk_id, session_id),
     )

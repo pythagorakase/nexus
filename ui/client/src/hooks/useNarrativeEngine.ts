@@ -203,8 +203,11 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           if (obsolete()) return;
           invalidateNarrativeQueries();
         }
+        // The bound parent is part of a failure's identity: a session that was
+        // abandoned before its worker committed gains its parent on a later
+        // poll, and that transition must re-enter recovery.
         const terminalKey = active
-          ? `${active.session_id}:${active.status}:${active.terminal_outcome}`
+          ? `${active.session_id}:${active.status}:${active.terminal_outcome}:${active.parent_chunk_id ?? "null"}`
           : "";
         const state =
           active && (active.status === "initiated" || terminalKey !== lastTerminal)
@@ -246,8 +249,11 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           phaseRef.current = null;
           setPhase(null);
           stopClock();
-          const terminal = `${state.session_id}:${state.status}:${state.terminal_outcome}`;
+          const failure = `${state.session_id}:${state.status}:${state.terminal_outcome}:`;
+          const terminal = `${failure}${state.parent_chunk_id ?? "null"}`;
           if (terminal !== lastTerminal) {
+            // Same failure, newly bound parent: update recovery, no second toast.
+            const parentArrived = lastTerminal.startsWith(failure);
             lastTerminal = terminal;
             invalidateNarrativeQueries();
             if (state.terminal_outcome === "discarded") {
@@ -266,11 +272,13 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
               const message =
                 state.error || state.error_class || "Narrative generation failed";
               setGenerationError(message);
-              toast({
-                title: "Generation Failed",
-                description: message,
-                variant: "destructive",
-              });
+              if (!parentArrived) {
+                toast({
+                  title: "Generation Failed",
+                  description: message,
+                  variant: "destructive",
+                });
+              }
             } else {
               setFailedGeneration(null);
               setGenerationError(null);
