@@ -4,7 +4,7 @@
 -- Timestamp comments describe stored database fields, not automatic-update guarantees.
 -- Unresolved semantics remain in config/schema_docs_baseline.json.
 -- assets.character_images: nexus/api/asset_endpoints.py:61,119,142,168,231,287,349
--- assets.new_story_creator: nexus/api/new_story_cache.py:301,325,371,410,1006,1249,1379,1430,1462
+-- assets.new_story_creator: nexus/api/new_story_cache.py:301,325,371,396,410,566,568,1006,1249,1379,1430,1462
 -- assets.place_images: nexus/api/asset_endpoints.py:61,119,142,168,231,287,349
 -- public.character_need_states: nexus/agents/orrery/events.py:5600,5634; migrations/028_orrery_sunhelm_needs.py:105,207
 -- public.character_psychology: nexus/api/reader_endpoints.py:477
@@ -14,11 +14,11 @@
 -- public.chunk_metadata: nexus/api/commit_handler.py:265,279; nexus/api/reader_endpoints.py:84
 -- public.entities: migrations/023_orrery_schema.py:184,231,257; nexus/agents/orrery/resolver.py:395,518
 -- public.entity_pair_tags: nexus/agents/orrery/tag_writer.py:1527,1696
--- public.entity_tags: nexus/agents/orrery/events.py:5890,5990; nexus/agents/orrery/tag_writer.py:889
+-- public.entity_tags: nexus/agents/orrery/events.py:5890,5990; nexus/agents/orrery/tag_writer.py:889,897,925,966; nexus/agents/orrery/resolver.py:450,468; nexus/agents/orrery/tag_activity.py:20
 -- public.event_types: nexus/agents/orrery/tag_library.py:188,216; nexus/agents/orrery/events.py:6854; migrations/025_orrery_package_library_vocab.py:264; migrations/023_orrery_schema.py:545
 -- public.factions: migrations/023_orrery_schema.py:231,257
--- public.global_variables: nexus/config/story_model.py:38,64
--- public.incubator: nexus/api/narrative_generation.py:557
+-- public.global_variables: nexus/config/story_model.py:38,64; nexus/api/save_slots.py:68,113
+-- public.incubator: nexus/api/narrative_generation.py:557,584,605
 -- public.layers: nexus/api/new_story_db_mapper.py:380
 -- public.narrative_generation_lease: nexus/api/narrative_lease.py:50,101,125
 -- public.narrative_generation_sessions: nexus/api/narrative_lease.py:71,84,137,213
@@ -84,6 +84,7 @@ COMMENT ON COLUMN assets.new_story_creator.seed_immediate_goal IS 'Cached seed i
 COMMENT ON COLUMN assets.new_story_creator.seed_stakes IS 'Cached seed stakes from the wizard seed draft.';
 COMMENT ON COLUMN assets.new_story_creator.seed_tension_source IS 'Cached seed tension source from the wizard seed draft.';
 COMMENT ON COLUMN assets.new_story_creator.seed_weather IS 'Cached seed weather from the wizard seed draft.';
+COMMENT ON COLUMN assets.new_story_creator.seed_potential_allies IS 'Legacy-cache compatibility input merged with seed_key_npcs into SeedData.key_npcs and exposed as key_npcs when reconstructing the selected seed.';
 COMMENT ON COLUMN assets.new_story_creator.seed_key_npcs IS 'Cached seed key npcs from the wizard seed draft.';
 COMMENT ON COLUMN assets.new_story_creator.layer_name IS 'Cached layer name from the wizard layer draft.';
 COMMENT ON COLUMN assets.new_story_creator.layer_type IS 'Cached layer type from the wizard layer draft.';
@@ -155,9 +156,9 @@ COMMENT ON TABLE public.entity_tags IS 'Applications of registered tags to entit
 COMMENT ON COLUMN public.entity_tags.id IS 'Identifier of one tag application, referenced by tag_clearance_log.';
 COMMENT ON COLUMN public.entity_tags.entity_id IS 'Entity receiving the tag application.';
 COMMENT ON COLUMN public.entity_tags.tag_id IS 'Applied vocabulary entry in tags.';
-COMMENT ON COLUMN public.entity_tags.applied_at IS 'Database timestamp when the tag application row was inserted.';
-COMMENT ON COLUMN public.entity_tags.applied_at_world_time IS 'Diegetic timestamp of tag application, supplied by the writer.';
-COMMENT ON COLUMN public.entity_tags.cleared_at IS 'Database timestamp of clearance; NULL identifies a current application.';
+COMMENT ON COLUMN public.entity_tags.applied_at IS 'Database timestamp of the most recent tag application; rewritten to now() by replacement and expiry-extension conflict updates.';
+COMMENT ON COLUMN public.entity_tags.applied_at_world_time IS 'Writer-supplied diegetic timestamp of the most recent tag application; replaced on replacement and expiry-extension conflict updates.';
+COMMENT ON COLUMN public.entity_tags.cleared_at IS 'Database timestamp of clearance; NULL means not cleared. Read-side activity also requires the expiry predicate: no supplied world time, no expiry, or expiry later than the supplied world time.';
 COMMENT ON COLUMN public.entity_tags.template_id IS 'Orrery template identifier supplied by template-driven tag writers.';
 COMMENT ON COLUMN public.entity_tags.source_kind IS 'Provenance category supplied by the tag writer, such as template or authored.';
 
@@ -173,10 +174,11 @@ COMMENT ON COLUMN public.event_types.synonym_for IS 'Canonical event-type name r
 COMMENT ON COLUMN public.factions.entity_id IS 'Shared entity identity for this faction, allocated by the entity-kind trigger.';
 
 -- public.global_variables
+COMMENT ON COLUMN public.global_variables.new_story IS 'Flag read by save-slot metadata to return the slot card activity as is_active = not row.get("new_story", True).';
 COMMENT ON COLUMN public.global_variables.model IS 'Per-story Skald model pin read through StorySettings; NULL leaves model resolution to defaults.';
 
 -- public.incubator
-COMMENT ON COLUMN public.incubator.created_at IS 'Database timestamp when this row was created; defaults to transaction time.';
+COMMENT ON COLUMN public.incubator.created_at IS 'Database timestamp of the incubator insert or most recent conditional replacement; replacement rewrites it to NOW().';
 COMMENT ON COLUMN public.incubator.updated_at IS 'Stored row update timestamp; initialized to database transaction time.';
 
 -- public.layers
