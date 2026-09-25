@@ -29,3 +29,15 @@ All provider/database tripwire counts remained zero. All owned fixture processes
 The full PostgreSQL gate is owned by the parent review task and is **not claimed green here**. The identity regression expectations were normalized to UTC after private PostgreSQL exposed a test-connection timezone mismatch; no product, fixture, or saved-story data was altered to make that assertion pass.
 
 Codex — GPT-6
+
+## Follow-up: recorded action bound after a bind failure (d50f05ee)
+
+A failure between accepting the player's action and binding the generation parent used to leave the failed session with no parent. The reader then opened ordinary input, where any different action received 409 and the accepted action had no recovery control. The route now passes the frontier chunk it acted on into the abandon path, and the lease layer binds the failed session to that chunk only when the chunk durably holds a recorded action. Failures before acceptance keep a NULL parent, so ordinary input stays open with the draft retained.
+
+Rendered verification on the d50f05ee bundle used the same disclosed synthetic fixtures with two added reader outcomes. A structured choice followed by a bind failure produced a durable recovery panel that survived reload; one explicit Retry sent only the slot and expected session and restored a pending scene. A failure before acceptance showed the error, kept choices and free text enabled, retained the draft on the unchanged frontier, and an ordinary continue then advanced the scene. Reader and wizard drafts with Unicode, multiline and outer whitespace survived reload and Home/Continue; a rejected send kept the draft and logged an unconfirmed action; a delayed acknowledgement cleared only its own revision. Text was entered through the extension's form-input path because its keystroke path did not reach the page in that session; details, tripwire counts and driver limits are in `temp/qa_fix_951/claude/browser/browser-evidence.json`. The PostgreSQL boundary regression drives the production route through a real accept, bind outage, stale conflicting submission and eventual retry.
+
+![Recovery after a bind failure, after reload](bind-failure-recovery-after-reload.jpg)
+
+![Failure before acceptance leaves input open](pre-acceptance-failure-input-open.jpg)
+
+Claude Fable 5.1, after the owner-directed handoff from Codex (GPT-6).
