@@ -83,6 +83,7 @@
     "nexus/agents/logon/apex_schema.py",
     "nexus/agents/logon/gaia_registry_schema.py",
     "nexus/agents/logon/orrery_tag_validation.py",
+    "nexus/agents/logon/place_reference_validation.py",
     "nexus/agents/logon/skald_wire.py",
     "nexus/agents/lore/__init__.py",
     "nexus/agents/lore/logon_utility.py",
