@@ -1,0 +1,3255 @@
+{
+  "measured_at": "2026-09-25T00:15:43.756865+00:00",
+  "machine": "macOS-27.0-arm64-arm-64bit",
+  "python": "3.11.12",
+  "postgres": "PostgreSQL 17.10 (Postgres.app) on aarch64-apple-darwin23.6.0, compiled by Apple clang version 15.0.0 (clang-1500.3.9.4), 64-bit",
+  "pgvector": "0.8.2",
+  "clone": "qa640_766_13987631cf83",
+  "table": "chunk_embeddings_2560d",
+  "rows": 1425,
+  "documents": 1425,
+  "probe_queries": 100,
+  "settings": {
+    "enabled": false,
+    "min_documents": 10000,
+    "max_exact_p95_ms": 50.0,
+    "minimum_recall_at_10": 0.98,
+    "ef_search": 100,
+    "probe_queries": 100
+  },
+  "sample_sha256": "675b5084155879a0a3bb01882f5e8ab5ab39b25cc5f25b21abcafaef09d36f0b",
+  "method": "Deterministic MD5-ordered stored-vector probes, self-match included; one warm-up then one timed query per path; nearest-rank p95; client execute+fetch wall time, same process/machine; exact before index build. No inference.",
+  "exact_p95_ms": 5.603375029750168,
+  "approximate_p95_ms": 2.0721249748021364,
+  "recall_at_10": 1.0,
+  "index_build_ms": 2386.835083947517,
+  "index_bytes": 11681792,
+  "index_name": "chunk_embeddings_2560d_halfvec_hnsw_idx",
+  "exact_plan": [
+    {
+      "Plan": {
+        "Node Type": "Limit",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 67.17,
+        "Total Cost": 67.19,
+        "Plan Rows": 10,
+        "Plan Width": 16,
+        "Plans": [
+          {
+            "Node Type": "Sort",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 67.17,
+            "Total Cost": 70.73,
+            "Plan Rows": 1425,
+            "Plan Width": 16,
+            "Sort Key": [
+              "((embedding <=> '<stored query vector>'::vector(2560)))"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Seq Scan",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Relation Name": "chunk_embeddings_2560d",
+                "Alias": "chunk_embeddings_2560d",
+                "Startup Cost": 0.0,
+                "Total Cost": 36.38,
+                "Plan Rows": 1425,
+                "Plan Width": 16,
+                "Filter": "(model = 'Octen-Embedding-4B'::text)"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "approximate_plan": [
+    {
+      "Plan": {
+        "Node Type": "Limit",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 3426.46,
+        "Total Cost": 3443.11,
+        "Plan Rows": 10,
+        "Plan Width": 16,
+        "Plans": [
+          {
+            "Node Type": "Index Scan",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "chunk_embeddings_2560d_halfvec_hnsw_idx",
+            "Relation Name": "chunk_embeddings_2560d",
+            "Alias": "chunk_embeddings_2560d",
+            "Startup Cost": 3426.46,
+            "Total Cost": 5799.62,
+            "Plan Rows": 1425,
+            "Plan Width": 16,
+            "Order By": "((embedding)::halfvec(2560) <=> '<stored query vector>'::halfvec(2560))",
+            "Filter": "(model = 'Octen-Embedding-4B'::text)"
+          }
+        ]
+      }
+    }
+  ],
+  "natural_approximate_plan": [
+    {
+      "Plan": {
+        "Node Type": "Limit",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 70.73,
+        "Total Cost": 70.76,
+        "Plan Rows": 10,
+        "Plan Width": 16,
+        "Plans": [
+          {
+            "Node Type": "Sort",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 70.73,
+            "Total Cost": 74.29,
+            "Plan Rows": 1425,
+            "Plan Width": 16,
+            "Sort Key": [
+              "(((embedding)::halfvec(2560) <=> '<stored query vector>'::halfvec(2560)))"
+            ],
+            "Plans": [
+              {
+                "Node Type": "Seq Scan",
+                "Parent Relationship": "Outer",
+                "Parallel Aware": false,
+                "Async Capable": false,
+                "Relation Name": "chunk_embeddings_2560d",
+                "Alias": "chunk_embeddings_2560d",
+                "Startup Cost": 0.0,
+                "Total Cost": 39.94,
+                "Plan Rows": 1425,
+                "Plan Width": 16,
+                "Filter": "(model = 'Octen-Embedding-4B'::text)"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "ann_planner_controls": {
+    "enable_seqscan": false,
+    "enable_sort": false,
+    "jit": false
+  },
+  "queries": [
+    {
+      "query_chunk_id": 1407,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.603375029750168,
+      "exact_top_10": [
+        1407,
+        1406,
+        1410,
+        1404,
+        1408,
+        1403,
+        1409,
+        1163,
+        1405,
+        1411
+      ],
+      "approximate_ms": 1.6737920232117176,
+      "approximate_top_10": [
+        1407,
+        1406,
+        1410,
+        1404,
+        1408,
+        1403,
+        1409,
+        1163,
+        1405,
+        1411
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 180,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.456708953715861,
+      "exact_top_10": [
+        180,
+        181,
+        173,
+        188,
+        113,
+        185,
+        194,
+        182,
+        120,
+        10
+      ],
+      "approximate_ms": 1.2195410672575235,
+      "approximate_top_10": [
+        180,
+        181,
+        173,
+        188,
+        113,
+        185,
+        194,
+        182,
+        120,
+        10
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 638,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.414833081886172,
+      "exact_top_10": [
+        638,
+        637,
+        639,
+        640,
+        635,
+        323,
+        641,
+        325,
+        298,
+        496
+      ],
+      "approximate_ms": 1.5172091079875827,
+      "approximate_top_10": [
+        638,
+        637,
+        639,
+        640,
+        635,
+        323,
+        641,
+        325,
+        298,
+        496
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1367,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.374624975956976,
+      "exact_top_10": [
+        1367,
+        1369,
+        1368,
+        1360,
+        1366,
+        1361,
+        1359,
+        1363,
+        1355,
+        1357
+      ],
+      "approximate_ms": 1.5982909826561809,
+      "approximate_top_10": [
+        1367,
+        1369,
+        1368,
+        1360,
+        1366,
+        1361,
+        1359,
+        1363,
+        1355,
+        1357
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 980,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.273749935440719,
+      "exact_top_10": [
+        980,
+        1034,
+        1085,
+        1084,
+        1307,
+        952,
+        1036,
+        919,
+        976,
+        999
+      ],
+      "approximate_ms": 1.7594159580767155,
+      "approximate_top_10": [
+        980,
+        1034,
+        1085,
+        1084,
+        1307,
+        952,
+        1036,
+        919,
+        976,
+        999
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1393,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.2951250690966845,
+      "exact_top_10": [
+        1393,
+        1392,
+        1391,
+        1395,
+        1394,
+        1387,
+        1418,
+        1385,
+        1386,
+        1396
+      ],
+      "approximate_ms": 1.49779103230685,
+      "approximate_top_10": [
+        1393,
+        1392,
+        1391,
+        1395,
+        1394,
+        1387,
+        1418,
+        1385,
+        1386,
+        1396
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 178,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.214208038523793,
+      "exact_top_10": [
+        178,
+        177,
+        179,
+        176,
+        174,
+        112,
+        170,
+        145,
+        98,
+        30
+      ],
+      "approximate_ms": 1.3473749859258533,
+      "approximate_top_10": [
+        178,
+        177,
+        179,
+        176,
+        174,
+        112,
+        170,
+        145,
+        98,
+        30
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 683,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.26762509252876,
+      "exact_top_10": [
+        683,
+        684,
+        682,
+        685,
+        717,
+        687,
+        498,
+        723,
+        729,
+        726
+      ],
+      "approximate_ms": 1.487750094383955,
+      "approximate_top_10": [
+        683,
+        684,
+        682,
+        685,
+        717,
+        687,
+        498,
+        723,
+        729,
+        726
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 342,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.478125065565109,
+      "exact_top_10": [
+        342,
+        343,
+        341,
+        295,
+        344,
+        301,
+        324,
+        294,
+        335,
+        348
+      ],
+      "approximate_ms": 1.5470420476049185,
+      "approximate_top_10": [
+        342,
+        343,
+        341,
+        295,
+        344,
+        301,
+        324,
+        294,
+        335,
+        348
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 889,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.26533299125731,
+      "exact_top_10": [
+        889,
+        888,
+        1323,
+        887,
+        1324,
+        1220,
+        890,
+        1403,
+        974,
+        1319
+      ],
+      "approximate_ms": 1.7290840623900294,
+      "approximate_top_10": [
+        889,
+        888,
+        1323,
+        887,
+        1324,
+        1220,
+        890,
+        1403,
+        974,
+        1319
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 90,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.470458068884909,
+      "exact_top_10": [
+        90,
+        226,
+        89,
+        85,
+        93,
+        76,
+        74,
+        60,
+        84,
+        526
+      ],
+      "approximate_ms": 1.6238330863416195,
+      "approximate_top_10": [
+        90,
+        226,
+        89,
+        85,
+        93,
+        76,
+        74,
+        60,
+        84,
+        526
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 725,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.3804999915882945,
+      "exact_top_10": [
+        725,
+        726,
+        724,
+        727,
+        678,
+        721,
+        728,
+        489,
+        723,
+        682
+      ],
+      "approximate_ms": 1.5137080335989594,
+      "approximate_top_10": [
+        725,
+        726,
+        724,
+        727,
+        678,
+        721,
+        728,
+        489,
+        723,
+        682
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1096,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.1893750205636024,
+      "exact_top_10": [
+        1096,
+        1100,
+        1143,
+        1040,
+        1331,
+        1097,
+        1101,
+        1144,
+        1223,
+        1330
+      ],
+      "approximate_ms": 1.6054159495979548,
+      "approximate_top_10": [
+        1096,
+        1100,
+        1143,
+        1040,
+        1331,
+        1097,
+        1101,
+        1144,
+        1223,
+        1330
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 714,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.207916954532266,
+      "exact_top_10": [
+        714,
+        713,
+        711,
+        712,
+        710,
+        593,
+        1189,
+        1291,
+        1290,
+        1266
+      ],
+      "approximate_ms": 1.3815000420436263,
+      "approximate_top_10": [
+        714,
+        713,
+        711,
+        712,
+        710,
+        593,
+        1189,
+        1291,
+        1290,
+        1266
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 330,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.300957942381501,
+      "exact_top_10": [
+        330,
+        313,
+        321,
+        322,
+        331,
+        333,
+        316,
+        319,
+        329,
+        332
+      ],
+      "approximate_ms": 1.4682080363854766,
+      "approximate_top_10": [
+        330,
+        313,
+        321,
+        322,
+        331,
+        333,
+        316,
+        319,
+        332,
+        329
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 28,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.2132080309093,
+      "exact_top_10": [
+        28,
+        29,
+        31,
+        27,
+        101,
+        48,
+        26,
+        15,
+        32,
+        100
+      ],
+      "approximate_ms": 1.5167909441515803,
+      "approximate_top_10": [
+        28,
+        29,
+        31,
+        27,
+        101,
+        48,
+        26,
+        15,
+        32,
+        100
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1324,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.249541951343417,
+      "exact_top_10": [
+        1324,
+        1323,
+        1325,
+        890,
+        1219,
+        1190,
+        886,
+        1319,
+        887,
+        1288
+      ],
+      "approximate_ms": 1.4418329810723662,
+      "approximate_top_10": [
+        1324,
+        1323,
+        1325,
+        890,
+        1219,
+        1190,
+        886,
+        1319,
+        887,
+        1288
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 37,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.289792083203793,
+      "exact_top_10": [
+        37,
+        36,
+        38,
+        39,
+        35,
+        358,
+        43,
+        357,
+        270,
+        337
+      ],
+      "approximate_ms": 1.8879169365391135,
+      "approximate_top_10": [
+        37,
+        36,
+        38,
+        39,
+        35,
+        358,
+        43,
+        357,
+        270,
+        337
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 168,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.409416975453496,
+      "exact_top_10": [
+        168,
+        167,
+        165,
+        159,
+        162,
+        166,
+        164,
+        124,
+        225,
+        163
+      ],
+      "approximate_ms": 2.000250038690865,
+      "approximate_top_10": [
+        168,
+        167,
+        165,
+        159,
+        162,
+        166,
+        164,
+        124,
+        225,
+        163
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 432,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.294625065289438,
+      "exact_top_10": [
+        432,
+        433,
+        431,
+        386,
+        434,
+        408,
+        398,
+        435,
+        437,
+        407
+      ],
+      "approximate_ms": 1.6927500255405903,
+      "approximate_top_10": [
+        432,
+        433,
+        431,
+        386,
+        434,
+        408,
+        398,
+        435,
+        437,
+        407
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 382,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.186374997720122,
+      "exact_top_10": [
+        382,
+        383,
+        378,
+        379,
+        377,
+        373,
+        376,
+        374,
+        384,
+        381
+      ],
+      "approximate_ms": 1.4681249158456922,
+      "approximate_top_10": [
+        382,
+        383,
+        378,
+        379,
+        377,
+        373,
+        376,
+        374,
+        384,
+        381
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1038,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.119833047501743,
+      "exact_top_10": [
+        1038,
+        1039,
+        965,
+        1176,
+        1009,
+        1113,
+        961,
+        969,
+        1241,
+        1205
+      ],
+      "approximate_ms": 1.8518749857321382,
+      "approximate_top_10": [
+        1038,
+        1039,
+        965,
+        1176,
+        1009,
+        1113,
+        961,
+        969,
+        1241,
+        1205
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 292,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.277082906104624,
+      "exact_top_10": [
+        292,
+        293,
+        294,
+        635,
+        291,
+        296,
+        396,
+        688,
+        633,
+        883
+      ],
+      "approximate_ms": 1.574499998241663,
+      "approximate_top_10": [
+        292,
+        293,
+        294,
+        635,
+        291,
+        296,
+        396,
+        688,
+        633,
+        883
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1306,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.4148329654708505,
+      "exact_top_10": [
+        1306,
+        1305,
+        1304,
+        1219,
+        1300,
+        1303,
+        1201,
+        1029,
+        974,
+        890
+      ],
+      "approximate_ms": 1.3467499520629644,
+      "approximate_top_10": [
+        1306,
+        1305,
+        1304,
+        1219,
+        1300,
+        1303,
+        1201,
+        1029,
+        974,
+        890
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 489,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.2207919070497155,
+      "exact_top_10": [
+        489,
+        724,
+        490,
+        718,
+        544,
+        491,
+        720,
+        486,
+        726,
+        488
+      ],
+      "approximate_ms": 1.328374957665801,
+      "approximate_top_10": [
+        489,
+        724,
+        490,
+        718,
+        544,
+        491,
+        720,
+        486,
+        726,
+        488
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 78,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.302084027789533,
+      "exact_top_10": [
+        78,
+        79,
+        229,
+        77,
+        76,
+        228,
+        230,
+        80,
+        226,
+        51
+      ],
+      "approximate_ms": 1.6504169907420874,
+      "approximate_top_10": [
+        78,
+        79,
+        229,
+        77,
+        76,
+        228,
+        230,
+        80,
+        226,
+        51
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1192,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.296040908433497,
+      "exact_top_10": [
+        1192,
+        1193,
+        1195,
+        1194,
+        1197,
+        1196,
+        1422,
+        1206,
+        1421,
+        1191
+      ],
+      "approximate_ms": 1.50395801756531,
+      "approximate_top_10": [
+        1192,
+        1193,
+        1195,
+        1194,
+        1197,
+        1196,
+        1422,
+        1206,
+        1421,
+        1191
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1140,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.3345420164987445,
+      "exact_top_10": [
+        1140,
+        1141,
+        1154,
+        1139,
+        1159,
+        1093,
+        1152,
+        1112,
+        1111,
+        968
+      ],
+      "approximate_ms": 1.9558330532163382,
+      "approximate_top_10": [
+        1140,
+        1141,
+        1154,
+        1139,
+        1159,
+        1093,
+        1152,
+        1112,
+        1111,
+        968
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 793,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.3324170876294374,
+      "exact_top_10": [
+        793,
+        794,
+        792,
+        795,
+        838,
+        791,
+        837,
+        843,
+        855,
+        846
+      ],
+      "approximate_ms": 1.382749993354082,
+      "approximate_top_10": [
+        793,
+        794,
+        792,
+        795,
+        838,
+        791,
+        837,
+        843,
+        855,
+        846
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1246,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.438541062176228,
+      "exact_top_10": [
+        1246,
+        1245,
+        1247,
+        395,
+        1248,
+        1250,
+        55,
+        393,
+        394,
+        194
+      ],
+      "approximate_ms": 2.0721249748021364,
+      "approximate_top_10": [
+        1246,
+        1245,
+        1247,
+        395,
+        1248,
+        1250,
+        55,
+        393,
+        394,
+        194
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1206,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.427290918305516,
+      "exact_top_10": [
+        1206,
+        1323,
+        1195,
+        1133,
+        1201,
+        1219,
+        1138,
+        1321,
+        1217,
+        1226
+      ],
+      "approximate_ms": 1.4374159509316087,
+      "approximate_top_10": [
+        1206,
+        1323,
+        1195,
+        1133,
+        1201,
+        1219,
+        1138,
+        1321,
+        1217,
+        1226
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 926,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.355332978069782,
+      "exact_top_10": [
+        926,
+        925,
+        921,
+        927,
+        631,
+        928,
+        1105,
+        929,
+        1222,
+        1138
+      ],
+      "approximate_ms": 2.082040999084711,
+      "approximate_top_10": [
+        926,
+        925,
+        921,
+        927,
+        631,
+        928,
+        1105,
+        929,
+        1222,
+        1138
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 760,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.312207969836891,
+      "exact_top_10": [
+        760,
+        759,
+        762,
+        761,
+        752,
+        747,
+        758,
+        748,
+        770,
+        1121
+      ],
+      "approximate_ms": 1.5200420748442411,
+      "approximate_top_10": [
+        760,
+        759,
+        762,
+        761,
+        752,
+        747,
+        758,
+        748,
+        770,
+        1121
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 673,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.375916953198612,
+      "exact_top_10": [
+        673,
+        672,
+        674,
+        678,
+        494,
+        446,
+        679,
+        499,
+        498,
+        408
+      ],
+      "approximate_ms": 1.418457948602736,
+      "approximate_top_10": [
+        673,
+        672,
+        674,
+        678,
+        494,
+        446,
+        679,
+        499,
+        498,
+        408
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1005,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.442874971777201,
+      "exact_top_10": [
+        1005,
+        1006,
+        1178,
+        1007,
+        1177,
+        1014,
+        1003,
+        1220,
+        1113,
+        1030
+      ],
+      "approximate_ms": 1.5807920135557652,
+      "approximate_top_10": [
+        1005,
+        1006,
+        1178,
+        1007,
+        1177,
+        1014,
+        1003,
+        1220,
+        1113,
+        1030
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1083,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.400458001531661,
+      "exact_top_10": [
+        1083,
+        1084,
+        890,
+        1186,
+        550,
+        1082,
+        1203,
+        587,
+        1201,
+        1314
+      ],
+      "approximate_ms": 1.6397079452872276,
+      "approximate_top_10": [
+        1083,
+        1084,
+        890,
+        1186,
+        550,
+        1082,
+        1203,
+        587,
+        1201,
+        1314
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 558,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.254957941360772,
+      "exact_top_10": [
+        558,
+        1263,
+        554,
+        532,
+        557,
+        1271,
+        578,
+        1262,
+        534,
+        552
+      ],
+      "approximate_ms": 1.8456249963492155,
+      "approximate_top_10": [
+        558,
+        1263,
+        554,
+        532,
+        557,
+        1271,
+        578,
+        1262,
+        534,
+        552
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 390,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.463709007017314,
+      "exact_top_10": [
+        390,
+        391,
+        427,
+        389,
+        383,
+        426,
+        388,
+        258,
+        392,
+        387
+      ],
+      "approximate_ms": 1.8319999799132347,
+      "approximate_top_10": [
+        390,
+        391,
+        427,
+        389,
+        383,
+        426,
+        388,
+        258,
+        392,
+        387
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1326,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.42620790656656,
+      "exact_top_10": [
+        1326,
+        1327,
+        1221,
+        1328,
+        1226,
+        1222,
+        999,
+        1240,
+        788,
+        1323
+      ],
+      "approximate_ms": 1.8646660028025508,
+      "approximate_top_10": [
+        1326,
+        1327,
+        1221,
+        1328,
+        1226,
+        1222,
+        999,
+        1240,
+        788,
+        1323
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1185,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.351958097890019,
+      "exact_top_10": [
+        1185,
+        1266,
+        1188,
+        1189,
+        1182,
+        1184,
+        1183,
+        711,
+        1270,
+        578
+      ],
+      "approximate_ms": 1.461207983084023,
+      "approximate_top_10": [
+        1185,
+        1266,
+        1188,
+        1189,
+        1182,
+        1184,
+        1183,
+        711,
+        1270,
+        578
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 454,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.753124947659671,
+      "exact_top_10": [
+        454,
+        452,
+        453,
+        455,
+        482,
+        486,
+        720,
+        483,
+        718,
+        672
+      ],
+      "approximate_ms": 1.4266669750213623,
+      "approximate_top_10": [
+        454,
+        452,
+        453,
+        455,
+        482,
+        486,
+        720,
+        483,
+        718,
+        672
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 804,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.663834046572447,
+      "exact_top_10": [
+        804,
+        803,
+        807,
+        824,
+        806,
+        802,
+        841,
+        849,
+        1417,
+        1399
+      ],
+      "approximate_ms": 1.6631250036880374,
+      "approximate_top_10": [
+        804,
+        803,
+        807,
+        824,
+        806,
+        802,
+        841,
+        849,
+        1417,
+        1399
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1176,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.734083009883761,
+      "exact_top_10": [
+        1176,
+        1175,
+        1177,
+        965,
+        974,
+        1006,
+        947,
+        1110,
+        1178,
+        1221
+      ],
+      "approximate_ms": 1.874165958724916,
+      "approximate_top_10": [
+        1176,
+        1175,
+        1177,
+        965,
+        974,
+        1006,
+        947,
+        1110,
+        1178,
+        1221
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1328,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.337083013728261,
+      "exact_top_10": [
+        1328,
+        1240,
+        1394,
+        1224,
+        1326,
+        1236,
+        1226,
+        1231,
+        1227,
+        1136
+      ],
+      "approximate_ms": 1.6480829799547791,
+      "approximate_top_10": [
+        1328,
+        1240,
+        1394,
+        1224,
+        1326,
+        1236,
+        1226,
+        1231,
+        1227,
+        1136
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1344,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.515208933502436,
+      "exact_top_10": [
+        1344,
+        1343,
+        1350,
+        1342,
+        1346,
+        1345,
+        1349,
+        1347,
+        1341,
+        1097
+      ],
+      "approximate_ms": 2.0047089783474803,
+      "approximate_top_10": [
+        1344,
+        1343,
+        1350,
+        1342,
+        1346,
+        1345,
+        1349,
+        1347,
+        1341,
+        1097
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 242,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.377458990551531,
+      "exact_top_10": [
+        242,
+        241,
+        270,
+        244,
+        243,
+        273,
+        240,
+        272,
+        135,
+        138
+      ],
+      "approximate_ms": 1.8699170323088765,
+      "approximate_top_10": [
+        242,
+        241,
+        270,
+        244,
+        243,
+        273,
+        240,
+        272,
+        135,
+        138
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 979,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.946083063259721,
+      "exact_top_10": [
+        979,
+        703,
+        961,
+        1037,
+        1085,
+        732,
+        1302,
+        735,
+        512,
+        1003
+      ],
+      "approximate_ms": 1.884249970316887,
+      "approximate_top_10": [
+        979,
+        703,
+        961,
+        1037,
+        1085,
+        732,
+        1302,
+        735,
+        512,
+        1003
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 797,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.172124947421253,
+      "exact_top_10": [
+        797,
+        1322,
+        846,
+        1198,
+        1320,
+        851,
+        822,
+        854,
+        796,
+        823
+      ],
+      "approximate_ms": 1.359167043119669,
+      "approximate_top_10": [
+        797,
+        1322,
+        846,
+        1198,
+        1320,
+        851,
+        822,
+        854,
+        796,
+        823
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 315,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.949624999426305,
+      "exact_top_10": [
+        315,
+        328,
+        329,
+        446,
+        314,
+        310,
+        308,
+        313,
+        309,
+        401
+      ],
+      "approximate_ms": 1.5602089697495103,
+      "approximate_top_10": [
+        315,
+        328,
+        329,
+        446,
+        314,
+        310,
+        308,
+        313,
+        309,
+        401
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1227,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.074582993984222,
+      "exact_top_10": [
+        1227,
+        1228,
+        1229,
+        1226,
+        1224,
+        1240,
+        1327,
+        1328,
+        1236,
+        1230
+      ],
+      "approximate_ms": 1.5754160704091191,
+      "approximate_top_10": [
+        1227,
+        1228,
+        1229,
+        1226,
+        1224,
+        1240,
+        1327,
+        1328,
+        1236,
+        1230
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 845,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.826624994166195,
+      "exact_top_10": [
+        845,
+        842,
+        846,
+        838,
+        851,
+        843,
+        854,
+        840,
+        844,
+        852
+      ],
+      "approximate_ms": 1.3191670877858996,
+      "approximate_top_10": [
+        845,
+        842,
+        846,
+        838,
+        851,
+        843,
+        854,
+        840,
+        844,
+        852
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 65,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.922666004858911,
+      "exact_top_10": [
+        65,
+        72,
+        73,
+        64,
+        75,
+        51,
+        63,
+        62,
+        134,
+        66
+      ],
+      "approximate_ms": 1.7055829521268606,
+      "approximate_top_10": [
+        65,
+        72,
+        73,
+        64,
+        75,
+        51,
+        63,
+        62,
+        134,
+        66
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 435,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.008250009268522,
+      "exact_top_10": [
+        435,
+        436,
+        437,
+        408,
+        433,
+        407,
+        444,
+        434,
+        493,
+        398
+      ],
+      "approximate_ms": 1.6398750012740493,
+      "approximate_top_10": [
+        435,
+        436,
+        437,
+        408,
+        433,
+        407,
+        444,
+        434,
+        493,
+        398
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 370,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.949291003867984,
+      "exact_top_10": [
+        370,
+        369,
+        371,
+        495,
+        373,
+        372,
+        368,
+        358,
+        357,
+        433
+      ],
+      "approximate_ms": 1.9127910491079092,
+      "approximate_top_10": [
+        370,
+        369,
+        371,
+        495,
+        373,
+        372,
+        368,
+        358,
+        357,
+        433
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1340,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.006499937735498,
+      "exact_top_10": [
+        1340,
+        1341,
+        1330,
+        1338,
+        1339,
+        1331,
+        1040,
+        1334,
+        1329,
+        1326
+      ],
+      "approximate_ms": 2.0506250439211726,
+      "approximate_top_10": [
+        1340,
+        1341,
+        1330,
+        1338,
+        1339,
+        1331,
+        1040,
+        1334,
+        1329,
+        1326
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 247,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.73241601139307,
+      "exact_top_10": [
+        247,
+        244,
+        250,
+        248,
+        246,
+        252,
+        243,
+        255,
+        245,
+        251
+      ],
+      "approximate_ms": 1.7395000904798508,
+      "approximate_top_10": [
+        247,
+        244,
+        250,
+        248,
+        246,
+        252,
+        243,
+        255,
+        245,
+        251
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 917,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.880208987742662,
+      "exact_top_10": [
+        917,
+        918,
+        922,
+        916,
+        915,
+        923,
+        1281,
+        1167,
+        213,
+        924
+      ],
+      "approximate_ms": 2.053332980722189,
+      "approximate_top_10": [
+        917,
+        918,
+        922,
+        916,
+        915,
+        923,
+        1281,
+        1167,
+        213,
+        924
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1009,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.936749930493534,
+      "exact_top_10": [
+        1009,
+        948,
+        949,
+        1205,
+        1010,
+        1114,
+        1024,
+        1039,
+        1006,
+        950
+      ],
+      "approximate_ms": 1.8255419563502073,
+      "approximate_top_10": [
+        1009,
+        948,
+        949,
+        1205,
+        1010,
+        1114,
+        1024,
+        1039,
+        1006,
+        950
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1208,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.001540994271636,
+      "exact_top_10": [
+        1208,
+        1182,
+        1364,
+        1183,
+        1317,
+        1184,
+        1209,
+        1206,
+        1195,
+        974
+      ],
+      "approximate_ms": 1.5055000549182296,
+      "approximate_top_10": [
+        1208,
+        1182,
+        1364,
+        1183,
+        1317,
+        1184,
+        1209,
+        1206,
+        1195,
+        974
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 936,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.8917909152805805,
+      "exact_top_10": [
+        936,
+        935,
+        934,
+        930,
+        937,
+        931,
+        929,
+        932,
+        933,
+        475
+      ],
+      "approximate_ms": 1.6927079996094108,
+      "approximate_top_10": [
+        936,
+        935,
+        934,
+        930,
+        937,
+        931,
+        929,
+        932,
+        933,
+        475
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 508,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.827250028029084,
+      "exact_top_10": [
+        508,
+        509,
+        511,
+        504,
+        501,
+        507,
+        694,
+        505,
+        510,
+        502
+      ],
+      "approximate_ms": 1.8130840035155416,
+      "approximate_top_10": [
+        508,
+        509,
+        511,
+        504,
+        501,
+        507,
+        694,
+        505,
+        510,
+        502
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 93,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.8542500007897615,
+      "exact_top_10": [
+        93,
+        90,
+        60,
+        94,
+        611,
+        613,
+        614,
+        74,
+        85,
+        226
+      ],
+      "approximate_ms": 1.8039169954136014,
+      "approximate_top_10": [
+        93,
+        90,
+        60,
+        94,
+        611,
+        613,
+        614,
+        74,
+        85,
+        226
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 293,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.139249959029257,
+      "exact_top_10": [
+        293,
+        292,
+        294,
+        296,
+        635,
+        297,
+        883,
+        299,
+        325,
+        291
+      ],
+      "approximate_ms": 1.6908330144360662,
+      "approximate_top_10": [
+        293,
+        292,
+        294,
+        296,
+        635,
+        297,
+        883,
+        299,
+        325,
+        291
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 950,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.136250052601099,
+      "exact_top_10": [
+        950,
+        949,
+        946,
+        1206,
+        947,
+        948,
+        958,
+        974,
+        1133,
+        1142
+      ],
+      "approximate_ms": 1.6212500631809235,
+      "approximate_top_10": [
+        950,
+        949,
+        946,
+        1206,
+        947,
+        948,
+        958,
+        974,
+        1133,
+        1142
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 584,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.2100419998168945,
+      "exact_top_10": [
+        584,
+        585,
+        583,
+        586,
+        582,
+        590,
+        872,
+        544,
+        489,
+        610
+      ],
+      "approximate_ms": 1.6158339567482471,
+      "approximate_top_10": [
+        584,
+        585,
+        583,
+        586,
+        582,
+        590,
+        872,
+        544,
+        489,
+        610
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 26,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.12945803347975,
+      "exact_top_10": [
+        26,
+        27,
+        15,
+        23,
+        24,
+        14,
+        25,
+        101,
+        28,
+        212
+      ],
+      "approximate_ms": 1.4758330071344972,
+      "approximate_top_10": [
+        26,
+        27,
+        15,
+        23,
+        24,
+        14,
+        25,
+        101,
+        28,
+        212
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1101,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.358999944292009,
+      "exact_top_10": [
+        1101,
+        1100,
+        1102,
+        1096,
+        1099,
+        1225,
+        1226,
+        1224,
+        1132,
+        1150
+      ],
+      "approximate_ms": 1.5970829408615828,
+      "approximate_top_10": [
+        1101,
+        1100,
+        1102,
+        1096,
+        1099,
+        1225,
+        1226,
+        1224,
+        1132,
+        1150
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1317,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.325334030203521,
+      "exact_top_10": [
+        1317,
+        1320,
+        1211,
+        1198,
+        1214,
+        1322,
+        1318,
+        1213,
+        1199,
+        1321
+      ],
+      "approximate_ms": 1.286999904550612,
+      "approximate_top_10": [
+        1317,
+        1320,
+        1211,
+        1198,
+        1214,
+        1322,
+        1318,
+        1213,
+        1199,
+        1321
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1130,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.137583939358592,
+      "exact_top_10": [
+        1130,
+        1108,
+        1133,
+        1136,
+        1132,
+        1135,
+        1131,
+        1384,
+        1110,
+        1126
+      ],
+      "approximate_ms": 1.8179999897256494,
+      "approximate_top_10": [
+        1130,
+        1108,
+        1133,
+        1136,
+        1132,
+        1135,
+        1131,
+        1384,
+        1110,
+        1126
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 249,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.186583031900227,
+      "exact_top_10": [
+        249,
+        248,
+        255,
+        254,
+        250,
+        244,
+        246,
+        243,
+        247,
+        263
+      ],
+      "approximate_ms": 2.133375033736229,
+      "approximate_top_10": [
+        249,
+        248,
+        255,
+        254,
+        250,
+        244,
+        246,
+        243,
+        247,
+        263
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 469,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 6.104959058575332,
+      "exact_top_10": [
+        469,
+        468,
+        470,
+        471,
+        472,
+        476,
+        474,
+        473,
+        463,
+        477
+      ],
+      "approximate_ms": 1.577041926793754,
+      "approximate_top_10": [
+        469,
+        468,
+        470,
+        471,
+        472,
+        476,
+        474,
+        473,
+        463,
+        477
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 151,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.126332980580628,
+      "exact_top_10": [
+        151,
+        150,
+        149,
+        148,
+        152,
+        147,
+        157,
+        144,
+        146,
+        153
+      ],
+      "approximate_ms": 2.0088331075385213,
+      "approximate_top_10": [
+        151,
+        150,
+        149,
+        148,
+        152,
+        147,
+        157,
+        144,
+        146,
+        153
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1309,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.134416976943612,
+      "exact_top_10": [
+        1309,
+        1197,
+        1308,
+        1327,
+        1193,
+        1311,
+        1195,
+        1312,
+        1310,
+        1194
+      ],
+      "approximate_ms": 1.5769170131534338,
+      "approximate_top_10": [
+        1309,
+        1197,
+        1308,
+        1327,
+        1193,
+        1311,
+        1195,
+        1312,
+        1310,
+        1194
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 413,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.117249907925725,
+      "exact_top_10": [
+        413,
+        414,
+        412,
+        411,
+        415,
+        409,
+        410,
+        416,
+        408,
+        420
+      ],
+      "approximate_ms": 1.4908750308677554,
+      "approximate_top_10": [
+        413,
+        414,
+        412,
+        411,
+        415,
+        409,
+        410,
+        416,
+        408,
+        420
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1320,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.007416009902954,
+      "exact_top_10": [
+        1320,
+        1322,
+        1318,
+        1198,
+        1321,
+        1300,
+        1317,
+        797,
+        1218,
+        1215
+      ],
+      "approximate_ms": 1.1362920049577951,
+      "approximate_top_10": [
+        1320,
+        1322,
+        1318,
+        1198,
+        1321,
+        1300,
+        1317,
+        797,
+        1218,
+        1215
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1226,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.095708998851478,
+      "exact_top_10": [
+        1226,
+        1327,
+        1224,
+        1123,
+        1229,
+        1240,
+        1227,
+        1326,
+        1236,
+        1328
+      ],
+      "approximate_ms": 1.5742500545457006,
+      "approximate_top_10": [
+        1226,
+        1327,
+        1224,
+        1123,
+        1229,
+        1240,
+        1227,
+        1326,
+        1236,
+        1328
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1022,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.160250002518296,
+      "exact_top_10": [
+        1022,
+        1021,
+        1017,
+        1018,
+        1019,
+        1335,
+        1016,
+        1096,
+        1097,
+        1071
+      ],
+      "approximate_ms": 1.762458006851375,
+      "approximate_top_10": [
+        1022,
+        1021,
+        1017,
+        1018,
+        1019,
+        1335,
+        1016,
+        1096,
+        1097,
+        1071
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1334,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.116416024975479,
+      "exact_top_10": [
+        1334,
+        1335,
+        1333,
+        1019,
+        1350,
+        1341,
+        1326,
+        946,
+        1042,
+        1021
+      ],
+      "approximate_ms": 1.6467910027131438,
+      "approximate_top_10": [
+        1334,
+        1335,
+        1333,
+        1019,
+        1350,
+        1341,
+        1326,
+        946,
+        1042,
+        1021
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 652,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.16070902813226,
+      "exact_top_10": [
+        652,
+        653,
+        659,
+        651,
+        660,
+        654,
+        524,
+        647,
+        663,
+        646
+      ],
+      "approximate_ms": 1.4490409521386027,
+      "approximate_top_10": [
+        652,
+        653,
+        659,
+        651,
+        660,
+        654,
+        524,
+        647,
+        663,
+        646
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1203,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.223458050750196,
+      "exact_top_10": [
+        1203,
+        1201,
+        1219,
+        1202,
+        1190,
+        890,
+        1204,
+        1323,
+        1029,
+        1206
+      ],
+      "approximate_ms": 1.3040410121902823,
+      "approximate_top_10": [
+        1203,
+        1201,
+        1219,
+        1202,
+        1190,
+        890,
+        1204,
+        1323,
+        1029,
+        1206
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 792,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.251583992503583,
+      "exact_top_10": [
+        792,
+        794,
+        793,
+        791,
+        795,
+        790,
+        838,
+        846,
+        837,
+        1320
+      ],
+      "approximate_ms": 1.3010000111535192,
+      "approximate_top_10": [
+        792,
+        794,
+        793,
+        791,
+        795,
+        790,
+        838,
+        846,
+        837,
+        1320
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 490,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.129292025230825,
+      "exact_top_10": [
+        490,
+        489,
+        491,
+        475,
+        447,
+        488,
+        448,
+        498,
+        725,
+        724
+      ],
+      "approximate_ms": 1.4154999516904354,
+      "approximate_top_10": [
+        490,
+        489,
+        491,
+        475,
+        447,
+        488,
+        448,
+        498,
+        725,
+        724
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 946,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.123000009916723,
+      "exact_top_10": [
+        946,
+        947,
+        950,
+        945,
+        974,
+        1060,
+        911,
+        921,
+        1206,
+        1138
+      ],
+      "approximate_ms": 1.82862498331815,
+      "approximate_top_10": [
+        946,
+        947,
+        950,
+        945,
+        974,
+        1060,
+        911,
+        921,
+        1206,
+        1138
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 184,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.278625059872866,
+      "exact_top_10": [
+        184,
+        183,
+        185,
+        120,
+        182,
+        1247,
+        194,
+        181,
+        59,
+        197
+      ],
+      "approximate_ms": 1.4154170639812946,
+      "approximate_top_10": [
+        184,
+        183,
+        185,
+        120,
+        182,
+        1247,
+        194,
+        181,
+        59,
+        197
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1050,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.0833330024033785,
+      "exact_top_10": [
+        1050,
+        1049,
+        1051,
+        978,
+        970,
+        975,
+        1055,
+        1391,
+        976,
+        969
+      ],
+      "approximate_ms": 1.913541927933693,
+      "approximate_top_10": [
+        1050,
+        1049,
+        1051,
+        978,
+        970,
+        975,
+        1055,
+        1391,
+        976,
+        969
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 70,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.930124967359006,
+      "exact_top_10": [
+        70,
+        71,
+        17,
+        174,
+        18,
+        16,
+        129,
+        34,
+        176,
+        33
+      ],
+      "approximate_ms": 2.2452910197898746,
+      "approximate_top_10": [
+        70,
+        71,
+        17,
+        174,
+        18,
+        16,
+        129,
+        34,
+        176,
+        33
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 976,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.968416993506253,
+      "exact_top_10": [
+        976,
+        978,
+        977,
+        975,
+        969,
+        1085,
+        1319,
+        964,
+        1326,
+        962
+      ],
+      "approximate_ms": 1.8164999783039093,
+      "approximate_top_10": [
+        976,
+        978,
+        977,
+        975,
+        969,
+        1085,
+        1319,
+        964,
+        1326,
+        962
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 415,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.9707499565556645,
+      "exact_top_10": [
+        415,
+        398,
+        413,
+        416,
+        420,
+        436,
+        408,
+        402,
+        397,
+        912
+      ],
+      "approximate_ms": 1.7747499514371157,
+      "approximate_top_10": [
+        415,
+        398,
+        413,
+        416,
+        420,
+        436,
+        408,
+        402,
+        397,
+        912
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1339,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.040707997977734,
+      "exact_top_10": [
+        1339,
+        1338,
+        1340,
+        1341,
+        1017,
+        1104,
+        1021,
+        1342,
+        1334,
+        1040
+      ],
+      "approximate_ms": 1.831584027968347,
+      "approximate_top_10": [
+        1339,
+        1338,
+        1340,
+        1341,
+        1017,
+        1104,
+        1021,
+        1342,
+        1334,
+        1040
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 424,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.052999942563474,
+      "exact_top_10": [
+        424,
+        423,
+        736,
+        885,
+        735,
+        513,
+        1240,
+        626,
+        732,
+        741
+      ],
+      "approximate_ms": 2.1440410055220127,
+      "approximate_top_10": [
+        424,
+        423,
+        736,
+        885,
+        735,
+        513,
+        1240,
+        626,
+        732,
+        741
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1410,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.000334000214934,
+      "exact_top_10": [
+        1410,
+        1409,
+        1408,
+        1407,
+        1411,
+        1403,
+        1405,
+        1406,
+        1400,
+        1404
+      ],
+      "approximate_ms": 1.705167000181973,
+      "approximate_top_10": [
+        1410,
+        1409,
+        1408,
+        1407,
+        1411,
+        1403,
+        1405,
+        1406,
+        1400,
+        1404
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 846,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.9587920075282454,
+      "exact_top_10": [
+        846,
+        845,
+        838,
+        854,
+        851,
+        855,
+        797,
+        1322,
+        843,
+        840
+      ],
+      "approximate_ms": 1.4668749645352364,
+      "approximate_top_10": [
+        846,
+        845,
+        838,
+        854,
+        851,
+        855,
+        797,
+        1322,
+        843,
+        840
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 535,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.297750001773238,
+      "exact_top_10": [
+        535,
+        536,
+        534,
+        884,
+        602,
+        796,
+        537,
+        1241,
+        553,
+        622
+      ],
+      "approximate_ms": 2.2190420422703028,
+      "approximate_top_10": [
+        535,
+        536,
+        534,
+        884,
+        602,
+        796,
+        537,
+        1241,
+        553,
+        622
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 711,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.071167019195855,
+      "exact_top_10": [
+        711,
+        710,
+        712,
+        1184,
+        714,
+        707,
+        709,
+        1188,
+        1266,
+        1187
+      ],
+      "approximate_ms": 1.49929104372859,
+      "approximate_top_10": [
+        711,
+        710,
+        712,
+        1184,
+        714,
+        707,
+        709,
+        1188,
+        1266,
+        1187
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 674,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 4.909625044092536,
+      "exact_top_10": [
+        674,
+        462,
+        675,
+        673,
+        457,
+        677,
+        627,
+        628,
+        495,
+        456
+      ],
+      "approximate_ms": 1.5213750302791595,
+      "approximate_top_10": [
+        674,
+        462,
+        675,
+        673,
+        457,
+        677,
+        627,
+        628,
+        495,
+        456
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 100,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.1547500770539045,
+      "exact_top_10": [
+        100,
+        101,
+        146,
+        99,
+        145,
+        102,
+        31,
+        129,
+        97,
+        147
+      ],
+      "approximate_ms": 1.7436250345781446,
+      "approximate_top_10": [
+        100,
+        101,
+        146,
+        99,
+        145,
+        102,
+        31,
+        129,
+        97,
+        147
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 970,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.3515840554609895,
+      "exact_top_10": [
+        970,
+        971,
+        1086,
+        969,
+        1404,
+        903,
+        1188,
+        950,
+        1060,
+        1055
+      ],
+      "approximate_ms": 1.9269579788669944,
+      "approximate_top_10": [
+        970,
+        971,
+        1086,
+        969,
+        1404,
+        903,
+        1188,
+        950,
+        1060,
+        1055
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 354,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.145542090758681,
+      "exact_top_10": [
+        354,
+        355,
+        363,
+        349,
+        364,
+        353,
+        350,
+        365,
+        359,
+        373
+      ],
+      "approximate_ms": 1.650958089157939,
+      "approximate_top_10": [
+        354,
+        355,
+        363,
+        349,
+        364,
+        353,
+        350,
+        365,
+        359,
+        373
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 908,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.513957934454083,
+      "exact_top_10": [
+        908,
+        909,
+        911,
+        1105,
+        910,
+        1104,
+        631,
+        1265,
+        594,
+        1292
+      ],
+      "approximate_ms": 1.749709015712142,
+      "approximate_top_10": [
+        908,
+        909,
+        911,
+        1105,
+        910,
+        1104,
+        631,
+        1265,
+        594,
+        1292
+      ],
+      "recall_at_10": 1.0
+    },
+    {
+      "query_chunk_id": 1141,
+      "model": "Octen-Embedding-4B",
+      "exact_ms": 5.654666922055185,
+      "exact_top_10": [
+        1141,
+        1140,
+        1159,
+        1222,
+        1151,
+        967,
+        1139,
+        1221,
+        966,
+        1098
+      ],
+      "approximate_ms": 1.751833944581449,
+      "approximate_top_10": [
+        1141,
+        1140,
+        1159,
+        1222,
+        1151,
+        967,
+        1139,
+        1221,
+        966,
+        1098
+      ],
+      "recall_at_10": 1.0
+    }
+  ],
+  "verdict": "KEEP_EXACT",
+  "source": "save_01",
+  "clone_dropped": true
+}

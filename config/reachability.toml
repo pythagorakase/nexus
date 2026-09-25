@@ -32,6 +32,10 @@ reason = "CLAUDE.md slot initialization workflow."
 target = "scripts/qa_shift/qa_shift.py:main"
 reason = "Authorized Night QA entry point; scripts/qa_shift/mission_prompt.md."
 [[operators]]
+target = "scripts/qa_shift/ann_gate.py:main"
+reason = "Issue 766 measured ANN gate; read-only slot dump, index evaluation only on disposable qa640_766_* clones."
+
+[[operators]]
 target = "scripts/qa_shift/prose_metrics.py:main"
 reason = "Read-only reference-corpus metrics CLI documented in scripts/qa_shift/README.md; issue 765."
 

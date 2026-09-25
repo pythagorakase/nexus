@@ -12,7 +12,12 @@ from typing import Any
 
 from sqlalchemy import text
 
+from nexus.config import load_settings
+
 from nexus.agents.memnon.utils.embedding_tables import (
+    ann_enabled,
+    configure_ann_session,
+    vector_distance_sql,
     parse_character_experience_embedding_table_dimensions,
 )
 from nexus.agents.orrery.player_identity import canonical_player_entity_id
@@ -420,6 +425,7 @@ def _semantic_scores(
             for experience_id in experience_ids
         }
 
+    ann = load_settings().memnon.retrieval.ann
     tables = _experience_embedding_tables(session_or_cur)
     experience_tables = {
         dimensions: table_name
@@ -438,13 +444,18 @@ def _semantic_scores(
         if experience_table is None:
             continue
         embedding_value = "[" + ",".join(str(value) for value in embedding) + "]"
+        configure_ann_session(session_or_cur, dimensions, ann)
+        distance = (
+            vector_distance_sql("source.embedding", ":query_embedding", dimensions, ann)
+            if ann_enabled(dimensions, ann)
+            else f"source.embedding <=>\n                       CAST(:query_embedding AS vector({dimensions}))"
+        )
         result = _execute(
             session_or_cur,
             f"""
             SELECT source.experience_id AS candidate_id,
                    1 - (
-                       source.embedding <=>
-                       CAST(:query_embedding AS vector({dimensions}))
+                       {distance}
                    ) AS score
             FROM {experience_table} source
             WHERE source.model = :model

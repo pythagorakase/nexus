@@ -14,9 +14,13 @@ from urllib.parse import urlparse
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.presence.roster import read_rosters
+from nexus.config import load_settings
 
 from .embedding_tables import (
     PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
+    ann_enabled,
+    configure_ann_session,
+    vector_distance_sql,
     parse_embedding_table_dimensions,
     retrograde_summary_table_name_for_dimensions,
     resolve_dimension_table,
@@ -123,6 +127,14 @@ def _execute_retrograde_summary_vector_search(
     if not _embedding_table_exists(cursor, table_name):
         return []
 
+    ann = load_settings().memnon.retrieval.ann
+    configure_ann_session(cursor, dimensions, ann)
+    distance = vector_distance_sql("rse.embedding", "%s", dimensions, ann)
+    order = distance if ann_enabled(dimensions, ann) else "score DESC"
+    params = (embedding_value, model_key)
+    if ann_enabled(dimensions, ann):
+        params += (embedding_value,)
+
     cursor.execute(
         f"""
         SELECT
@@ -132,14 +144,14 @@ def _execute_retrograde_summary_vector_search(
             rs.recorded_at_chunk_id,
             rs.chronology,
             rs.created_at,
-            1 - (rse.embedding <=> %s::vector({dimensions})) AS score
+            1 - ({distance}) AS score
         FROM retrograde_summaries rs
         JOIN {table_name} rse ON rs.id = rse.summary_id
         WHERE rse.model = %s
-        ORDER BY score DESC
+        ORDER BY {order}
         LIMIT %s
         """,
-        (embedding_value, model_key, top_k),
+        (*params, top_k),
     )
     results: List[Dict[str, Any]] = []
     for row in cursor.fetchall():
@@ -262,6 +274,7 @@ def execute_vector_search(
     Returns:
         List of matching chunks with scores and metadata
     """
+    ann = load_settings().memnon.retrieval.ann
     try:
 
         # Connect to the database
@@ -318,6 +331,13 @@ def execute_vector_search(
                     f"Using {table_name} for vector search with {dimensions}D embeddings"
                 )
 
+                configure_ann_session(cursor, dimensions, ann)
+                distance = vector_distance_sql("ce.embedding", "%s", dimensions, ann)
+                order = distance if ann_enabled(dimensions, ann) else "score DESC"
+                params = (embedding_str, model_key)
+                if ann_enabled(dimensions, ann):
+                    params += (embedding_str,)
+
                 # Use proper vector similarity search with the <=> operator
                 # This works now that we're using the correct vector type tables
                 sql = f"""
@@ -328,7 +348,7 @@ def execute_vector_search(
                     cm.episode, 
                     cm.scene as scene_number,
                     nv.world_time,
-                    1 - (ce.embedding <=> %s::vector({dimensions})) as score  -- Cosine similarity (1 - distance)
+                    1 - ({distance}) as score  -- Cosine similarity (1 - distance)
                 FROM 
                     narrative_chunks nc
                 JOIN 
@@ -342,13 +362,13 @@ def execute_vector_search(
                     AND {playable_narrative_predicate()}
                     {filter_sql}
                 ORDER BY
-                    score DESC
+                    {order}
                 LIMIT 
                     %s
                 """
 
                 # Execute the query with vector similarity search
-                cursor.execute(sql, (embedding_str, model_key, top_k))
+                cursor.execute(sql, (*params, top_k))
                 query_results = cursor.fetchall()
 
                 # Process results
@@ -395,6 +415,8 @@ def execute_vector_search(
         )[:top_k]
 
     except Exception as e:
+        if ann.enabled:
+            raise
         logger.error(f"Error in vector search: {e}")
         import traceback
 
@@ -658,6 +680,7 @@ def execute_multi_model_hybrid_search(
         sorted({int(character_id) for character_id in present_character_ids or ()})
     )
 
+    ann = load_settings().memnon.retrieval.ann
     try:
 
         # Validate weights
@@ -1040,6 +1063,25 @@ def execute_multi_model_hybrid_search(
                             dimensions
                         )
                         if _embedding_table_exists(cursor, summary_table):
+                            configure_ann_session(cursor, dimensions, ann)
+                            distance = vector_distance_sql(
+                                "rse.embedding", "%s", dimensions, ann
+                            )
+                            # Keep the disabled SQL, including its whitespace, unchanged.
+                            exact_distance = f"rse.embedding\n                                        <=> %s::vector({dimensions})"
+                            distance = (
+                                distance
+                                if ann_enabled(dimensions, ann)
+                                else exact_distance
+                            )
+                            order = (
+                                distance
+                                if ann_enabled(dimensions, ann)
+                                else "vector_score DESC"
+                            )
+                            params = (embedding_str, model_key)
+                            if ann_enabled(dimensions, ann):
+                                params += (embedding_str,)
                             cursor.execute(
                                 f"""
                                 SELECT
@@ -1050,17 +1092,16 @@ def execute_multi_model_hybrid_search(
                                     rs.chronology,
                                     rs.created_at,
                                     1 - (
-                                        rse.embedding
-                                        <=> %s::vector({dimensions})
+                                        {distance}
                                     ) AS vector_score
                                 FROM retrograde_summaries rs
                                 JOIN {summary_table} rse
                                   ON rs.id = rse.summary_id
                                 WHERE rse.model = %s
-                                ORDER BY vector_score DESC
+                                ORDER BY {order}
                                 LIMIT %s
                                 """,
-                                (embedding_str, model_key, top_k * 3),
+                                (*params, top_k * 3),
                             )
                             for row in cursor.fetchall():
                                 (
@@ -1136,11 +1177,24 @@ def execute_multi_model_hybrid_search(
                         f"Using {table_name} for model {model_key} with {dimensions}D embeddings"
                     )
 
+                    configure_ann_session(cursor, dimensions, ann)
+                    distance = vector_distance_sql(
+                        "ce.embedding", "%s", dimensions, ann
+                    )
+                    order = (
+                        distance
+                        if ann_enabled(dimensions, ann)
+                        else "vector_score DESC"
+                    )
+                    params = (embedding_str, model_key)
+                    if ann_enabled(dimensions, ann):
+                        params += (embedding_str,)
+
                     # Use proper vector search with cosine similarity
                     vector_sql = f"""
                     SELECT 
                         nc.id, 
-                        1 - (ce.embedding <=> %s::vector({dimensions})) as vector_score  -- Cosine similarity (1 - distance)
+                        1 - ({distance}) as vector_score  -- Cosine similarity (1 - distance)
                     FROM 
                         narrative_chunks nc
                     JOIN 
@@ -1152,12 +1206,12 @@ def execute_multi_model_hybrid_search(
                         AND {playable_narrative_predicate()}
                         {filter_sql}
                     ORDER BY
-                        vector_score DESC
+                        {order}
                     LIMIT %s
                     """
 
                     # Execute vector search for this model
-                    cursor.execute(vector_sql, (embedding_str, model_key, top_k * 3))
+                    cursor.execute(vector_sql, (*params, top_k * 3))
 
                     # Process vector results
                     for result in cursor.fetchall():
@@ -1299,6 +1353,8 @@ def execute_multi_model_hybrid_search(
     except IDFStateError:
         raise
     except Exception as e:
+        if ann.enabled:
+            raise
         logger.error(f"Error in multi-model hybrid search: {e}")
         import traceback
 

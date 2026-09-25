@@ -964,6 +964,21 @@ structured_search_place_score = 0.9    # Score when location matches
 # is likewise 0). Revisit only with bake-off-grade evidence.
 structured_data_enabled = false
 
+[memnon.retrieval.ann]
+# Issue 766 requires measured latency AND recall, never row count alone.
+# The verifier specifies keys, not numbers: these are conservative starting gates.
+enabled = false
+# Require substantial growth beyond the historical 1,425-document corpus.
+min_documents = 10000
+# Historical 10–21 ms scans do not justify promotion; remeasure every run.
+max_exact_p95_ms = 50.0
+# Permit at most 2% mean top-10 loss; ANN must also beat exact p95.
+minimum_recall_at_10 = 0.98
+# Evaluate a wider graph frontier than pgvector's default of 40.
+ef_search = 100
+# A deterministic stored-vector sample gives five observations in the p95 tail.
+probe_queries = 100
+
 [memnon.retrieval.source_weights]
 # Relative importance of different retrieval sources
 structured_data = 1.5   # Highest weight - entity database

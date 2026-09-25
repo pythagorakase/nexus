@@ -12,8 +12,16 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 
 from nexus.agents.orrery.player_identity import canonical_player_character_id
+from nexus.config import load_settings
+from nexus.config.settings_models import ANNConfig
 
-from .embedding_tables import embedding_table_exists, table_name_for_dimensions
+from .embedding_tables import (
+    ann_enabled,
+    configure_ann_session,
+    embedding_table_exists,
+    table_name_for_dimensions,
+    vector_distance_sql,
+)
 
 logger = logging.getLogger("nexus.memnon.alias_search")
 
@@ -116,7 +124,10 @@ def alias_terms(query: str, alias_lookup: Dict[str, List[str]]) -> List[str]:
 
 
 def create_hybrid_alias_search_sql(
-    table_name: str, dimensions: int, alias_terms: List[str] = None
+    table_name: str,
+    dimensions: int,
+    alias_terms: List[str] = None,
+    ann: Optional[ANNConfig] = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """
     Creates a SQL query for hybrid search with alias awareness.
@@ -206,6 +217,26 @@ def create_hybrid_alias_search_sql(
         LIMIT :limit;
         """
 
+    ann = ann if ann is not None else load_settings().memnon.retrieval.ann
+    if ann_enabled(dimensions, ann):
+        distance = vector_distance_sql("ce.embedding", ":query_vector", dimensions, ann)
+        sql = sql.replace("ce.embedding <=> :query_vector", distance)
+        # Blend text/alias scores over a bounded nearest-neighbor candidate set.
+        # MATERIALIZED preserves the indexable distance ORDER BY + LIMIT stage.
+        sql = sql.replace(
+            "WITH text_search AS (",
+            f"""WITH ann_candidates AS MATERIALIZED (
+            SELECT * FROM {table_name} ce
+            WHERE ce.model = :model_name
+            ORDER BY {distance}
+            LIMIT GREATEST(:limit, :ann_candidates)
+        ), text_search AS (""",
+        )
+        sql = sql.replace(
+            f"FROM {table_name} ce\n        JOIN",
+            "FROM ann_candidates ce\n        JOIN",
+        )
+        params["ann_candidates"] = ann.ef_search
     return sql, params
 
 
@@ -250,7 +281,9 @@ def hybrid_alias_search(
     query_vector_str = f"[{','.join(str(x) for x in query_vector)}]"
 
     # Get SQL and params
-    sql, params = create_hybrid_alias_search_sql(table_name, dimensions, terms)
+    ann = load_settings().memnon.retrieval.ann
+    configure_ann_session(conn, dimensions, ann)
+    sql, params = create_hybrid_alias_search_sql(table_name, dimensions, terms, ann)
 
     # Add the remaining parameters
     params.update(
@@ -327,6 +360,8 @@ def hybrid_alias_search(
         return results
 
     except Exception as e:
+        if ann.enabled:
+            raise
         logger.error(f"Error executing hybrid alias search: {e}")
         import traceback
 

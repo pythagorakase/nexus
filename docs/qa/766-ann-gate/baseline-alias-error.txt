@@ -1,0 +1,5 @@
+transaction_read_only: on
+SQL builder: unchanged HEAD:nexus/agents/memnon/utils/alias_search.py
+UndefinedColumn: column m.characters does not exist
+LINE 17:                m.characters, m.place, m.atmosphere, m.time_d...
+                        ^

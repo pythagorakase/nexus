@@ -3020,12 +3020,26 @@ class CrossEncoderReranking(BaseModel):
     candidates: Dict[str, RerankerCandidate] = Field(default_factory=dict)
 
 
+class ANNConfig(BaseModel):
+    """Measured promotion gate for the production 2560d half-vector index."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    min_documents: int = Field(..., ge=10)
+    max_exact_p95_ms: float = Field(..., gt=0, allow_inf_nan=False)
+    minimum_recall_at_10: float = Field(..., gt=0, le=1, allow_inf_nan=False)
+    ef_search: int = Field(..., ge=10, le=1000)
+    probe_queries: int = Field(..., ge=20)
+
+
 class RetrievalConfig(BaseModel):
     """Main retrieval configuration."""
 
     model_config = ConfigDict(extra="forbid")
 
     max_results: int = Field(..., ge=1)
+    ann: ANNConfig
     relevance_threshold: float = Field(..., ge=0.0, le=1.0)
     entity_boost_factor: float = Field(..., ge=0.0)
     source_weights: SourceWeights
