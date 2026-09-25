@@ -47,7 +47,7 @@ from nexus.api.choice_handling import (
     normalize_choice_object,
     selected_text_from_choice_object,
 )
-from nexus.api.db_converters import chronology_to_db_values
+from nexus.api.db_converters import chronology_for_commit, chronology_to_db_values
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
 from nexus.api.presence_reconciliation import (
     read_character_roster_from_connection,
@@ -419,7 +419,10 @@ def commit_incubator_to_database_sync(
             # Step 3: Convert metadata
             metadata_update = ChunkMetadataUpdate(**incubator["metadata_updates"])
             chronology_data = incubator["metadata_updates"].get("chronology", {})
-            chronology = ChronologyUpdate(**chronology_data)
+            chronology = chronology_for_commit(
+                ChronologyUpdate(**chronology_data),
+                parent_chunk_id=incubator["parent_chunk_id"],
+            )
             db_meta = chronology_to_db_values(
                 chronology,
                 current_season=parent_meta["season"],

@@ -39,6 +39,7 @@ from nexus.api.choice_handling import (
     selected_text_from_choice_object,
 )
 from nexus.api.db_converters import (
+    chronology_for_commit,
     chronology_to_db_values,
     create_declared_entity_stubs,
     lookup_character_by_name,
@@ -634,7 +635,10 @@ async def commit_incubator_to_database(
             # Step 3: Convert metadata
             metadata_update = ChunkMetadataUpdate(**incubator["metadata_updates"])
             chronology_data = incubator["metadata_updates"].get("chronology", {})
-            chronology = ChronologyUpdate(**chronology_data)
+            chronology = chronology_for_commit(
+                ChronologyUpdate(**chronology_data),
+                parent_chunk_id=incubator["parent_chunk_id"],
+            )
             db_meta = chronology_to_db_values(
                 chronology,
                 current_season=parent_meta["season"],
