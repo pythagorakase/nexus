@@ -22,9 +22,7 @@ from psycopg2.extensions import make_dsn
 
 from nexus.agents.memnon.utils.embedding_tables import (
     build_candidate_ann_index,
-    configure_ann_session,
     drop_candidate_ann_index,
-    vector_distance_sql,
 )
 from nexus.api.slot_utils import slot_dbname
 from nexus.config import load_settings
@@ -97,9 +95,10 @@ def slot_clone(slot: int) -> Iterator[str]:
 
 
 def promotion_verdict(evidence: dict[str, Any], config: ANNConfig) -> str:
-    """Require scale, measured latency, speedup, and recall together."""
+    """Require natural index selection, scale, latency, speedup, and recall."""
     passed = (
-        evidence["documents"] >= config.min_documents
+        evidence["natural_uses_candidate_index"]
+        and evidence["documents"] >= config.min_documents
         and evidence["exact_p95_ms"] > config.max_exact_p95_ms
         and evidence["approximate_p95_ms"] < evidence["exact_p95_ms"]
         and evidence["recall_at_10"] >= config.minimum_recall_at_10
@@ -139,10 +138,8 @@ def measure_clone(dbname: str, config: ANNConfig) -> dict[str, Any]:
                 (config.probe_queries,),
             )
             probes = cursor.fetchall()
-            exact_config = config.model_copy(update={"enabled": False})
-            ann_config = config.model_copy(update={"enabled": True})
-            exact_distance = vector_distance_sql("embedding", "%s", 2560, exact_config)
-            ann_distance = vector_distance_sql("embedding", "%s", 2560, ann_config)
+            exact_distance = "embedding <=> %s::vector(2560)"
+            ann_distance = "embedding::halfvec(2560) <=> CAST(%s AS halfvec(2560))"
             exact_sql = f"SELECT chunk_id FROM {TABLE} WHERE model = %s ORDER BY {exact_distance} LIMIT 10"
             ann_sql = f"SELECT chunk_id FROM {TABLE} WHERE model = %s ORDER BY {ann_distance} LIMIT 10"
             # Explicit exact control even if a future source has another ANN index.
@@ -172,55 +169,55 @@ def measure_clone(dbname: str, config: ANNConfig) -> dict[str, Any]:
                 "EXPLAIN (FORMAT JSON) " + exact_sql, (probes[0][1], probes[0][2])
             )
             exact_plan = cursor.fetchone()[0]
-            cursor.execute("SET LOCAL enable_indexscan = on")
-            cursor.execute("SET LOCAL enable_bitmapscan = on")
+            cursor.execute("SET LOCAL enable_indexscan = DEFAULT")
+            cursor.execute("SET LOCAL enable_bitmapscan = DEFAULT")
             start = perf_counter()
             index_name = build_candidate_ann_index(cursor, TABLE)
             build_ms = (perf_counter() - start) * 1000
             cursor.execute("SELECT pg_relation_size(%s::regclass)", (index_name,))
             index_bytes = cursor.fetchone()[0]
-            configure_ann_session(cursor, 2560, ann_config)
-            cursor.execute(
-                "EXPLAIN (FORMAT JSON) " + ann_sql, (probes[0][1], probes[0][2])
-            )
-            natural_approximate_plan = cursor.fetchone()[0]
-            # Tiny, toasted-vector tables are commonly cheaper in the planner's
-            # model as a full scan + sort. Benchmark the actual ANN candidate,
-            # recording this control separately from the natural runtime plan.
-            cursor.execute("SET LOCAL enable_seqscan = off")
-            cursor.execute("SET LOCAL enable_sort = off")
-            cursor.execute("SET LOCAL jit = off")
-            for (_, model, vector), measurement in zip(
-                probes, measurements, strict=True
-            ):
-                cursor.execute(ann_sql, (model, vector))
-                cursor.fetchall()
-                start = perf_counter()
-                cursor.execute(ann_sql, (model, vector))
-                approximate_ids = [row[0] for row in cursor.fetchall()]
-                elapsed = (perf_counter() - start) * 1000
-                measurement.update(
-                    {
-                        "approximate_ms": elapsed,
-                        "approximate_top_10": approximate_ids,
-                        "recall_at_10": len(
-                            set(approximate_ids) & set(measurement["exact_top_10"])
+            cursor.execute(f"SET LOCAL hnsw.ef_search = {int(config.ef_search)}")
+            natural_plans = []
+            controlled_plans = []
+            for controlled in (False, True):
+                prefix = "controlled_" if controlled else ""
+                plans = controlled_plans if controlled else natural_plans
+                if controlled:
+                    # Eligibility/performance information only; never verdict inputs.
+                    cursor.execute("SET LOCAL enable_seqscan = off")
+                    cursor.execute("SET LOCAL enable_sort = off")
+                    cursor.execute("SET LOCAL jit = off")
+                for (_, model, vector), measurement in zip(
+                    probes, measurements, strict=True
+                ):
+                    cursor.execute("EXPLAIN (FORMAT JSON) " + ann_sql, (model, vector))
+                    plan = cursor.fetchone()[0]
+                    uses_index = _plan_uses_index(plan, index_name)
+                    _redact_query_vector(plan)
+                    plans.append(plan)
+                    if controlled and not uses_index:
+                        raise RuntimeError(
+                            f"Controlled plan did not use the candidate index: {plan}"
                         )
-                        / 10,
-                    }
-                )
-            cursor.execute(
-                "EXPLAIN (FORMAT JSON) " + ann_sql, (probes[0][1], probes[0][2])
-            )
-            approximate_plan = cursor.fetchone()[0]
-            if index_name not in json.dumps(approximate_plan):
-                _redact_query_vector(approximate_plan)
-                raise RuntimeError(
-                    f"Planner did not use the candidate index; ANN evidence is invalid: {approximate_plan}"
-                )
-            # Avoid embedding vectors in EXPLAIN evidence (the Order By contains them).
-            for plan in (exact_plan, approximate_plan, natural_approximate_plan):
-                _redact_query_vector(plan)
+                    cursor.execute(ann_sql, (model, vector))  # Per-query warm-up.
+                    cursor.fetchall()
+                    start = perf_counter()
+                    cursor.execute(ann_sql, (model, vector))
+                    approximate_ids = [row[0] for row in cursor.fetchall()]
+                    elapsed = (perf_counter() - start) * 1000
+                    measurement.update(
+                        {
+                            prefix + "approximate_ms": elapsed,
+                            prefix + "approximate_top_10": approximate_ids,
+                            prefix + "uses_candidate_index": uses_index,
+                            prefix
+                            + "recall_at_10": len(
+                                set(approximate_ids) & set(measurement["exact_top_10"])
+                            )
+                            / 10,
+                        }
+                    )
+            _redact_query_vector(exact_plan)
             evidence = {
                 "measured_at": datetime.now(timezone.utc).isoformat(),
                 "machine": platform.platform(),
@@ -245,9 +242,20 @@ def measure_clone(dbname: str, config: ANNConfig) -> dict[str, Any]:
                 "index_bytes": index_bytes,
                 "index_name": index_name,
                 "exact_plan": exact_plan,
-                "approximate_plan": approximate_plan,
-                "natural_approximate_plan": natural_approximate_plan,
-                "ann_planner_controls": {
+                "natural_uses_candidate_index": all(
+                    m["uses_candidate_index"] for m in measurements
+                ),
+                "natural_approximate_plans": natural_plans,
+                "controlled_approximate_plans": controlled_plans,
+                "controlled_approximate_p95_ms": _p95(
+                    [m["controlled_approximate_ms"] for m in measurements]
+                ),
+                "controlled_recall_at_10": sum(
+                    m["controlled_recall_at_10"] for m in measurements
+                )
+                / len(measurements),
+                "natural_session_settings": {"hnsw.ef_search": config.ef_search},
+                "controlled_planner_settings_informational_only": {
                     "enable_seqscan": False,
                     "enable_sort": False,
                     "jit": False,
@@ -255,9 +263,28 @@ def measure_clone(dbname: str, config: ANNConfig) -> dict[str, Any]:
                 "queries": measurements,
             }
             evidence["verdict"] = promotion_verdict(evidence, config)
+            evidence["reason"] = (
+                "planner_prefers_sequential_scan"
+                if not evidence["natural_uses_candidate_index"]
+                else (
+                    "measurement_gate_passed"
+                    if evidence["verdict"] == "PROMOTE"
+                    else "measurement_thresholds_not_met"
+                )
+            )
             return evidence
     finally:
         connection.close()
+
+
+def _plan_uses_index(plan: Any, index_name: str) -> bool:
+    if isinstance(plan, dict):
+        return plan.get("Index Name") == index_name or any(
+            _plan_uses_index(child, index_name) for child in plan.values()
+        )
+    if isinstance(plan, list):
+        return any(_plan_uses_index(child, index_name) for child in plan)
+    return False
 
 
 def _redact_query_vector(value: Any) -> None:
@@ -280,11 +307,17 @@ def _redact_query_vector(value: Any) -> None:
 def compact_table(evidence: dict[str, Any]) -> str:
     """Render the measured gate as one compact, copyable Markdown table."""
     return (
-        "| Rows | Probes | Exact p95 ms | ANN p95 ms | Recall@10 | Build ms | Index bytes | Verdict |\n"
-        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |\n"
-        f"| {evidence['rows']} | {evidence['probe_queries']} | {evidence['exact_p95_ms']:.3f} | "
+        "| Path | Rows | Probes | p95 ms | Recall@10 | Build ms | Index bytes |\n"
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        f"| Exact | {evidence['rows']} | {evidence['probe_queries']} | "
+        f"{evidence['exact_p95_ms']:.3f} | 1.0000 | — | — |\n"
+        f"| Candidate (Natural Plan) | {evidence['rows']} | {evidence['probe_queries']} | "
         f"{evidence['approximate_p95_ms']:.3f} | {evidence['recall_at_10']:.4f} | "
-        f"{evidence['index_build_ms']:.3f} | {evidence['index_bytes']} | {evidence['verdict']} |"
+        f"{evidence['index_build_ms']:.3f} | {evidence['index_bytes']} |\n"
+        f"| Controlled HNSW (Informational Only) | {evidence['rows']} | {evidence['probe_queries']} | "
+        f"{evidence['controlled_approximate_p95_ms']:.3f} | "
+        f"{evidence['controlled_recall_at_10']:.4f} | — | — |\n"
+        f"{evidence['verdict']}: {evidence['reason']}"
     )
 
 

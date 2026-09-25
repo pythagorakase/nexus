@@ -967,7 +967,7 @@ structured_data_enabled = false
 [memnon.retrieval.ann]
 # Issue 766 requires measured latency AND recall, never row count alone.
 # The verifier specifies keys, not numbers: these are conservative starting gates.
-enabled = false
+# Measurement only; runtime promotion requires a separate order.
 # Require substantial growth beyond the historical 1,425-document corpus.
 min_documents = 10000
 # Historical 10–21 ms scans do not justify promotion; remeasure every run.

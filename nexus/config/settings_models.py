@@ -3025,7 +3025,6 @@ class ANNConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool
     min_documents: int = Field(..., ge=10)
     max_exact_p95_ms: float = Field(..., gt=0, allow_inf_nan=False)
     minimum_recall_at_10: float = Field(..., gt=0, le=1, allow_inf_nan=False)

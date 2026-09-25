@@ -253,28 +253,6 @@ def ensure_character_experience_embedding_table(
     return table_name
 
 
-def ann_enabled(dimensions: int, config: Any) -> bool:
-    """Scope the measured switch to the production 2560d representation."""
-    return config.enabled and dimensions == 2560
-
-
-def configure_ann_session(executor: Any, dimensions: int, config: Any) -> None:
-    """Set the search frontier only for enabled ANN; never perform runtime DDL."""
-    if ann_enabled(dimensions, config):
-        statement = f"SET LOCAL hnsw.ef_search = {int(config.ef_search)}"
-        if hasattr(executor, "get_bind"):
-            executor.execute(text(statement))
-        else:
-            _execute_ddl(executor, statement)
-
-
-def vector_distance_sql(column: str, query: str, dimensions: int, config: Any) -> str:
-    """Render the indexed halfvec expression or the original exact distance."""
-    if ann_enabled(dimensions, config):
-        return f"{column}::halfvec({dimensions}) <=> CAST({query} AS halfvec({dimensions}))"
-    return f"{column} <=> {query}::vector({dimensions})"
-
-
 def candidate_ann_index_name(table_name: str) -> str:
     """Validate the table and return its stable, explicit promotion index name."""
     dimensions = (
