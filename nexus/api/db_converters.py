@@ -87,6 +87,20 @@ def interval_to_time_fields(interval: timedelta) -> Tuple[int, int, int]:
 # ============================================================================
 
 
+def chronology_for_commit(
+    chronology: ChronologyUpdate, *, parent_chunk_id: int
+) -> ChronologyUpdate:
+    """Keep bootstrap in its initial episode without closing an empty span.
+
+    A parentless opening establishes S1E1; its transition does not advance an
+    existing episode or season. Apply this same chronology to both numbering
+    and summary planning, preserving elapsed time and the staged draft.
+    """
+    if parent_chunk_id == 0:
+        return chronology.model_copy(update={"episode_transition": "continue"})
+    return chronology
+
+
 def chronology_to_db_values(
     chronology: ChronologyUpdate, current_season: int, current_episode: int
 ) -> dict:
