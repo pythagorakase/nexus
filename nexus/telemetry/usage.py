@@ -500,6 +500,24 @@ def record_token_estimate(event: UsageEvent, estimated: int) -> None:
     record_token_counts(event.run_id, event.seat, event.attempt, estimated, reported)
 
 
+def _record_request_estimate(event: UsageEvent, request: Dict[str, Any]) -> None:
+    """Keep advisory estimation failures out of successful provider responses."""
+    if event.input_tokens is None:
+        return
+    try:
+        from nexus.telemetry.prompt_window import estimate_request_tokens
+
+        record_token_estimate(event, estimate_request_tokens(event.model, request))
+    except Exception as exc:
+        logger.error(
+            "token_estimate_failed seat=%s model=%s cause=%s: %s",
+            event.seat,
+            event.model,
+            type(exc).__name__,
+            " ".join(str(exc).splitlines()),
+        )
+
+
 def record_openai_response(
     response: Any,
     *,
@@ -554,9 +572,7 @@ def record_openai_response(
     )
     record_usage_event(event)
     if request is not None:
-        from nexus.telemetry.prompt_window import estimate_request_tokens
-
-        record_token_estimate(event, estimate_request_tokens(model, request))
+        _record_request_estimate(event, request)
 
 
 def record_anthropic_response(
@@ -595,9 +611,7 @@ def record_anthropic_response(
     )
     record_usage_event(event)
     if request is not None:
-        from nexus.telemetry.prompt_window import estimate_request_tokens
-
-        record_token_estimate(event, estimate_request_tokens(model, request))
+        _record_request_estimate(event, request)
 
 
 def record_pydantic_ai_result(
@@ -653,41 +667,52 @@ def record_pydantic_ai_result(
     )
     record_usage_event(event)
 
-    if hasattr(result, "all_messages") and hasattr(result, "new_messages"):
-        from pydantic_ai.messages import ModelResponse
-        from pydantic_core import to_jsonable_python
-        from nexus.telemetry.prompt_window import estimator_for
+    try:
+        if hasattr(result, "all_messages") and hasattr(result, "new_messages"):
+            from pydantic_ai.messages import ModelResponse
+            from pydantic_core import to_jsonable_python
+            from nexus.telemetry.prompt_window import estimator_for
 
-        count = estimator_for(model)
-        new_responses = {
-            id(message)
-            for message in result.new_messages()
-            if isinstance(message, ModelResponse)
-        }
-        history_tokens = 0
-        attempt = 0
-        for message in result.all_messages():
-            if isinstance(message, ModelResponse) and id(message) in new_responses:
-                attempt += 1
-                reported = message.usage.input_tokens
-                if reported or message.usage.output_tokens:
-                    exchange = event.model_copy(
-                        update={
-                            "input_tokens": reported,
-                            "attempt": attempt,
-                        }
-                    )
-                    record_token_estimate(exchange, history_tokens)
-            for part in message.parts:
-                content = getattr(part, "content", None)
-                if content is None:
-                    content = getattr(part, "args", None)
-                if content is not None:
-                    history_tokens += count(
-                        content
-                        if isinstance(content, str)
-                        else json.dumps(to_jsonable_python(content), ensure_ascii=False)
-                    )
+            count = estimator_for(model)
+            new_responses = {
+                id(message)
+                for message in result.new_messages()
+                if isinstance(message, ModelResponse)
+            }
+            history_tokens = 0
+            attempt = 0
+            for message in result.all_messages():
+                if isinstance(message, ModelResponse) and id(message) in new_responses:
+                    attempt += 1
+                    reported = message.usage.input_tokens
+                    if reported or message.usage.output_tokens:
+                        exchange = event.model_copy(
+                            update={
+                                "input_tokens": reported,
+                                "attempt": attempt,
+                            }
+                        )
+                        record_token_estimate(exchange, history_tokens)
+                for part in message.parts:
+                    content = getattr(part, "content", None)
+                    if content is None:
+                        content = getattr(part, "args", None)
+                    if content is not None:
+                        history_tokens += count(
+                            content
+                            if isinstance(content, str)
+                            else json.dumps(
+                                to_jsonable_python(content), ensure_ascii=False
+                            )
+                        )
+    except Exception as exc:
+        logger.error(
+            "token_estimate_failed seat=%s model=%s cause=%s: %s",
+            event.seat,
+            event.model,
+            type(exc).__name__,
+            " ".join(str(exc).splitlines()),
+        )
 
 
 def record_prompt_window(record: "PromptWindowRecord") -> None:

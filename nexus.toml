@@ -6,6 +6,7 @@
 # =============================================================================
 
 [global.model]
+tokenizer_probe_timeout_seconds = 120.0
 default_model_policy = "fixed"
 # Model IDs live only in the provider roster below. To upgrade a model, edit
 # its `id` once; `uses` supplies that ID to the listed configuration fields.

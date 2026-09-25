@@ -4,6 +4,9 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
+import os
+import subprocess
+import sys
 from pathlib import Path
 from threading import Thread
 from typing import Iterator
@@ -82,7 +85,7 @@ def test_settings_reject_missing_tokenizer_on_unused_entry(tmp_path: Path) -> No
         load_settings(path)
 
 
-def test_settings_reject_remote_code_tokenizer_without_executing_it(
+def test_commit_probe_and_first_use_reject_remote_code_tokenizer(
     tmp_path: Path,
 ) -> None:
     repository = tmp_path / "custom-tokenizer"
@@ -106,11 +109,77 @@ def test_settings_reject_remote_code_tokenizer_without_executing_it(
     entry["tokenizer_repository"] = str(repository)
     path = tmp_path / "settings.toml"
     path.write_text(tomlkit.dumps(settings))
-    with pytest.raises(ValueError, match="trust_remote_code=False") as error:
+    from scripts.validate_config_commit import validate_tokenizer_registry
+
+    loaded = load_settings(path)  # Declaration is valid; no runtime roster probe.
+    for check in (
+        lambda: validate_tokenizer_registry(loaded),
+        lambda: estimator_for(entry["id"], settings=loaded),
+    ):
+        with pytest.raises(ValueError, match="trust_remote_code=False") as error:
+            check()
+        assert entry["id"] in str(error.value)
+        assert "tokenizer_encoding" in str(error.value)
+        assert "Remote tokenizer code executed" not in str(error.value)
+
+
+def test_settings_reject_unknown_encoding(tmp_path: Path) -> None:
+    config = tomlkit.parse(Path("nexus.toml").read_text())
+    entry = config["global"]["model"]["api_models"]["test"]["models"][0]
+    entry["tokenizer_encoding"] = "missing-encoding"
+    path = tmp_path / "settings.toml"
+    path.write_text(tomlkit.dumps(config))
+    with pytest.raises(ValueError, match="Model 'TEST': unknown tokenizer_encoding"):
         load_settings(path)
-    assert entry["id"] in str(error.value)
-    assert "tokenizer_encoding" in str(error.value)
-    assert "Remote tokenizer code executed" not in str(error.value)
+
+
+def test_commit_tokenizer_probe_timeout_names_entries() -> None:
+    from scripts.validate_config_commit import validate_tokenizer_registry
+
+    settings = load_settings()
+    settings.global_.model.tokenizer_probe_timeout_seconds = 0.000001
+    with pytest.raises(ValueError, match="Tokenizer probe failed") as error:
+        validate_tokenizer_registry(settings)
+    for provider in settings.global_.model.api_models.values():
+        for entry in provider.models:
+            if entry.tokenizer_repository:
+                assert entry.id in str(error.value)
+    assert "timed out" in str(error.value)
+
+
+def test_empty_hf_cache_offline_test_provider(tmp_path: Path) -> None:
+    # Fresh process: neither settings nor TEST may initialize Transformers/HF.
+    code = """import sys
+from nexus.config import load_settings
+from scripts.api_openai import OpenAIProvider
+from nexus.telemetry import usage
+from pathlib import Path
+usage._config = usage._RecorderConfig(enabled=False, usage_dir=Path(sys.argv[2]), daily_allowance={})
+load_settings()
+provider = OpenAIProvider(model="TEST", api_key="test", base_url=sys.argv[1], usage_provider_name="test")
+result = provider.get_completion("Literal <|endoftext|> stays text.")
+assert result.input_tokens > 0
+provider.client.close()
+assert "transformers" not in sys.modules
+print("offline TEST exchange passed; Transformers not imported")
+"""
+    with token_test_server() as base_url:
+        result = subprocess.run(
+            [sys.executable, "-c", code, base_url, str(tmp_path / "usage")],
+            env={
+                **os.environ,
+                "HF_HUB_OFFLINE": "1",
+                "HF_HOME": str(tmp_path / "empty-hf"),
+                "HUGGINGFACE_HUB_CACHE": str(tmp_path / "empty-hf" / "hub"),
+                "TRANSFORMERS_CACHE": str(tmp_path / "empty-hf" / "transformers"),
+            },
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (tmp_path / "empty-hf").exists()
+    print(result.stdout.strip())
 
 
 @contextmanager
@@ -124,7 +193,8 @@ def token_test_server() -> Iterator[str]:
             assert request["model"] == "TEST"
             messages = request.get("input", request.get("messages"))
             reported = sum(
-                len(encoding.encode(message["content"])) for message in messages
+                len(encoding.encode(message["content"], disallowed_special=()))
+                for message in messages
             )
             usage = {
                 "input_tokens": reported,
@@ -189,7 +259,10 @@ def token_test_server() -> Iterator[str]:
 
 
 @pytest.mark.parametrize("transport", ["responses", "chat_completions"])
-def test_token_drift_real_test_http_exchange(transport, tmp_path, caplog) -> None:
+@pytest.mark.parametrize("prompt", [SENTENCE, "Literal <|endoftext|> stays text."])
+def test_token_drift_real_test_http_exchange(
+    transport, prompt, tmp_path, caplog
+) -> None:
     with token_test_server() as base_url:
         provider = OpenAIProvider(
             model="TEST",
@@ -201,11 +274,11 @@ def test_token_drift_real_test_http_exchange(transport, tmp_path, caplog) -> Non
         )
         with caplog.at_level(logging.INFO, logger="nexus.usage"):
             if transport == "responses":
-                result = provider.get_completion(SENTENCE)
+                result = provider.get_completion(prompt)
             else:
-                result = provider._get_completion_chat_completions(SENTENCE)
+                result = provider._get_completion_chat_completions(prompt)
         provider.client.close()
-    expected = estimator_for("TEST")(SENTENCE) + estimator_for("TEST")(
+    expected = estimator_for("TEST")(prompt) + estimator_for("TEST")(
         "Count this sentence."
     )
     line = f"token_estimate seat=skald_writer model=TEST estimated={expected} reported={expected} ratio=1.00"
@@ -297,3 +370,123 @@ def test_token_estimate_manifest_keeps_both_counts() -> None:
         assert window["input_tokens"] == 10
         assert window["estimated_input_tokens"] == 10
         assert window["reported_input_tokens"] == 12
+
+
+@pytest.mark.parametrize("transport", ["responses", "chat_completions"])
+def test_drift_failure_does_not_break_real_exchange(
+    transport, tmp_path, caplog
+) -> None:
+    from nexus.config.loader import settings_path_scope
+
+    config = tomlkit.parse(Path("nexus.toml").read_text())
+    entry = config["global"]["model"]["api_models"]["test"]["models"][0]
+    entry.pop("tokenizer_encoding")
+    entry["tokenizer_repository"] = str(tmp_path / "absent-tokenizer")
+    path = tmp_path / "settings.toml"
+    path.write_text(tomlkit.dumps(config))
+    with token_test_server() as base_url, settings_path_scope(path):
+        provider = OpenAIProvider(
+            model="TEST",
+            api_key="test",
+            base_url=base_url,
+            usage_provider_name="test",
+            usage_seat="skald_writer",
+        )
+        with caplog.at_level(logging.INFO, logger="nexus.usage"):
+            result = (
+                provider.get_completion(SENTENCE)
+                if transport == "responses"
+                else provider._get_completion_chat_completions(SENTENCE)
+            )
+        provider.client.close()
+    errors = [
+        record
+        for record in caplog.records
+        if record.message.startswith("token_estimate_failed")
+    ]
+    assert len(errors) == 1 and errors[0].levelno == logging.ERROR
+    assert "absent-tokenizer" in errors[0].message
+    assert "\n" not in errors[0].message
+    assert result.input_tokens == estimator_for("TEST")(SENTENCE)
+    event = summarize_usage(usage_dir=tmp_path / "usage")["events"][0]
+    assert event["input_tokens"] == result.input_tokens
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("override", [False, True])
+def test_memory_admission_uses_resolved_writer_token_estimate(override: bool) -> None:
+    """Clone-owned pin, real LOGON route, turn setup, and MEMNON SQL admission."""
+    import asyncio
+    from contextlib import closing
+    from types import SimpleNamespace
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from nexus.agents.lore.logon_utility import LogonUtility
+    from nexus.agents.lore.utils.token_budget import TokenBudgetManager
+    from nexus.agents.lore.utils.turn_context import TurnContext
+    from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+    from nexus.agents.memnon.memnon import MEMNON
+    from nexus.config import load_settings_as_dict
+    from nexus.config.story_model import read_story_settings
+    from nexus.memory import ContextMemoryManager
+    from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
+
+    settings = load_settings()
+    model = next(
+        entry.id
+        for provider in settings.global_.model.api_models.values()
+        for entry in provider.models
+        if entry.tokenizer_repository and entry.id != settings.apex.model
+    )
+    text = "token_estimate"  # Hermes and o200k differ at this admission boundary.
+    expected = estimator_for(model)(text)
+    default = estimator_for(settings.apex.model)(text)
+    assert expected != default
+    with disposable_slot_database(
+        "qa640_818_pin", story_pin="TEST" if override else model
+    ) as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO narrative_chunks (raw_text, storyteller_text) VALUES (%s, %s) RETURNING id",
+                (text, text),
+            )
+            chunk_id = cur.fetchone()[0]
+        runtime = load_settings_as_dict()
+        memory = ContextMemoryManager(runtime, dbname=dbname)
+        logon = LogonUtility(
+            runtime,
+            dbname=dbname,
+            model_override=model if override else None,
+            story_settings=read_story_settings(dbname),
+        )
+        lore = SimpleNamespace(
+            settings=runtime,
+            memory_manager=memory,
+            token_manager=TokenBudgetManager(runtime),
+            logon=logon,
+            ensure_logon=lambda: None,
+            enable_logon=True,
+        )
+        turn = TurnContext(turn_id="token-pin", user_input="1", start_time=0.0)
+        asyncio.run(TurnCycleManager(lore).process_user_input(turn))
+        assert turn.apex_model == model
+        # A subsequent window refresh must not overwrite a request override.
+        memory._refresh_story_settings()
+        assert memory._estimate_tokens(text) == expected
+        # Exercise the real SQL-only retrieval method without constructing
+        # inference/embedding models that this path never uses.
+        engine = create_engine(sqlalchemy_url(dbname))
+        memnon = MEMNON.__new__(MEMNON)
+        memnon.Session = sessionmaker(bind=engine)
+        memory.incremental.memnon = memnon
+        try:
+            chunks, used = memory.incremental.expand_warm_slice(expected)
+            assert [chunk["id"] for chunk in chunks] == [chunk_id]
+            assert used == expected
+            chunks, used = memory.incremental.expand_warm_slice(expected - 1)
+            assert chunks == [] and used == 0
+        finally:
+            engine.dispose()
+        print(
+            f"writer={model} admission={expected} repository_default={default} override={override}"
+        )

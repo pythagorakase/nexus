@@ -151,6 +151,7 @@ def test_two_pass_prompts_and_validator_share_real_letter_budget(
         *,
         max_letter_tokens: int,
         delegate: Any = None,
+        story: Any = None,
     ) -> object:
         captured["max_letter_tokens"] = max_letter_tokens
         return validator

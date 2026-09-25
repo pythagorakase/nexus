@@ -52,9 +52,6 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     skald_writer_strict_text_format,
 )
 from nexus.agents.lore.seat_blocks import SEAT_BLOCKS, ContextSeat, order_seat_blocks
-from nexus.agents.lore.utils.chunk_operations import (  # noqa: E402
-    calculate_chunk_tokens,
-)
 from nexus.agents.lore.utils.scene_order import (  # noqa: E402
     is_recalled,
     recalled_clock_label,
@@ -722,7 +719,7 @@ class LogonUtility:
         output_validator = tag_output_validator
         if not provider_bootstrap_mode:
             output_validator = self._build_letter_output_validator(
-                delegate=tag_output_validator
+                delegate=tag_output_validator, model=model
             )
         self._validation_dbname = validation_dbname
         self._schema_format_cache = {}
@@ -1068,13 +1065,16 @@ class LogonUtility:
             gaia_letter=None,
         )
 
-    def _build_letter_output_validator(self, *, delegate: Any = None) -> Any:
+    def _build_letter_output_validator(
+        self, *, delegate: Any = None, model: str | None = None
+    ) -> Any:
         """Bind the configured repairable letter limit to one provider pass."""
 
         config = correspondence_settings(self.settings)
         return build_letter_length_validator(
             max_letter_tokens=int(config["max_letter_tokens"]),
             delegate=delegate,
+            story=StorySettings(skald_model=model),
         )
 
     def compact_correspondence(
@@ -1096,6 +1096,7 @@ class LogonUtility:
         compaction_provider.output_validator = build_digest_length_validator(
             max_digest_tokens=max_digest_tokens,
             digest_hard_cap_multiplier=digest_hard_cap_multiplier,
+            story=StorySettings(skald_model=compaction_provider.model),
         )
         if isinstance(compaction_provider, AnthropicProvider):
             # The compact digest schema is intentionally small enough for
@@ -1440,7 +1441,9 @@ class LogonUtility:
         )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
-            output_validator=self._build_letter_output_validator(),
+            output_validator=self._build_letter_output_validator(
+                model=self.provider.model
+            ),
             usage_seat="skald_writer",
             anthropic_transport=(
                 "native" if self._provider_wire_type == "anthropic" else None
@@ -1538,7 +1541,9 @@ class LogonUtility:
         )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
-            output_validator=self._build_letter_output_validator(),
+            output_validator=self._build_letter_output_validator(
+                model=self.provider.model
+            ),
             usage_seat="skald_writer",
             anthropic_transport=(
                 "native" if self._provider_wire_type == "anthropic" else None

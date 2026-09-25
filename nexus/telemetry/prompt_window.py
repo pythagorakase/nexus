@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -112,54 +110,6 @@ def estimate_request_tokens(model_id: str, request: dict[str, Any]) -> int:
     return total
 
 
-def validate_tokenizer_registry(entries: Iterable[APIModelEntry]) -> None:
-    """Probe repository loaders outside the gateway's lightweight import path."""
-    entries = list(entries)
-    repositories = tuple(
-        sorted(
-            {
-                entry.tokenizer_repository
-                for entry in entries
-                if entry.tokenizer_repository
-            }
-        )
-    )
-    errors = _validate_tokenizer_repositories(repositories) if repositories else {}
-    for entry in entries:
-        if entry.tokenizer_repository:
-            if entry.tokenizer_repository in errors:
-                raise ValueError(
-                    _tokenizer_error(entry, errors[entry.tokenizer_repository])
-                )
-        else:
-            # Encoding presence and validity require no inference/ML imports.
-            local_text_counter(entry)
-
-
-@lru_cache(maxsize=None)
-def _validate_tokenizer_repositories(repositories: tuple[str, ...]) -> dict[str, str]:
-    # Use the same installed interpreter and loader. No remote Python is trusted.
-    # Batch the roster so each settings process imports Transformers just once.
-    code = """import json, sys
-from nexus.telemetry.prompt_window import _load_tokenizer
-errors = {}
-for repository in json.loads(sys.argv[1]):
-    try:
-        _load_tokenizer(repository)
-    except Exception as exc:
-        errors[repository] = f"{type(exc).__name__}: {exc}"
-print(json.dumps(errors))
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", code, json.dumps(repositories)],
-        cwd=Path(__file__).resolve().parents[2],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return json.loads(result.stdout)
-
-
 def _tokenizer_error(entry: APIModelEntry, cause: object) -> str:
     return (
         f"Model {entry.id!r}: cannot load tokenizer_repository "
@@ -176,7 +126,9 @@ def local_text_counter(entry: APIModelEntry) -> Callable[[str], int]:
         import tiktoken
 
         tokenizer = tiktoken.get_encoding(entry.tokenizer_encoding)
-        return lru_cache(maxsize=None)(lambda text: len(tokenizer.encode(text)))
+        return lru_cache(maxsize=None)(
+            lambda text: len(tokenizer.encode(text, disallowed_special=()))
+        )
     if entry.tokenizer_repository:
         try:
             tokenizer = _load_tokenizer(entry.tokenizer_repository)

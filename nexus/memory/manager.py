@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set
 from sqlalchemy import text
 
 from nexus.agents.orrery.player_identity import canonical_player_character_id
+from nexus.config.story_model import StorySettings
 
 from .context_state import (
     ContextPackage,
@@ -315,6 +316,8 @@ class ContextMemoryManager:
         self.settings = settings
         self._base_settings = settings
         self.dbname = dbname
+        self.story_settings: StorySettings | None = None
+        self._turn_model: Optional[str] = None
         self.memnon = memnon  # Store reference for entity detector
         memory_settings = settings.get("memory", {})
 
@@ -381,9 +384,14 @@ class ContextMemoryManager:
         self._initialize_entity_maps(memnon)
 
     def configure_storyteller_budget(
-        self, provider_wire_type: str, provider_name: str
+        self,
+        provider_wire_type: str,
+        provider_name: str,
+        *,
+        model: Optional[str] = None,
     ) -> int:
         """Apply the active provider's resource profile to payload budgets."""
+        self._turn_model = model
         self._refresh_story_settings()
         apex_context_window = resolve_storyteller_context_window(
             self.settings, provider_wire_type, provider_name
@@ -396,6 +404,7 @@ class ContextMemoryManager:
 
     def configure_base_storyteller_budget(self) -> int:
         """Use the base window for a turn where LOGON is explicitly disabled."""
+        self._turn_model = None
         self._refresh_story_settings()
         apex_context_window = resolve_base_storyteller_context_window(self.settings)
         self.provider_wire_type = None
@@ -412,8 +421,9 @@ class ContextMemoryManager:
                 story_context_settings,
             )
 
+            self.story_settings = read_story_settings(self.dbname)
             self.settings = story_context_settings(
-                self._base_settings, read_story_settings(self.dbname)
+                self._base_settings, self.story_settings
             )
 
     def _configure_phase2_budget(self, apex_context_window: int) -> None:
@@ -491,6 +501,7 @@ class ContextMemoryManager:
         return load_accepted_correspondence(
             dbname,
             max_tokens=max_tokens,
+            story=self._estimator_story(),
         )
 
     def export_pass2_baseline(self) -> Pass2BaselineV1:
@@ -1041,13 +1052,19 @@ class ContextMemoryManager:
     # ------------------------------------------------------------------
     # Helper Methods
     # ------------------------------------------------------------------
+    def _estimator_story(self) -> StorySettings | None:
+        """Return the turn writer pin, preserving an explicit route override."""
+        return (
+            StorySettings(skald_model=self._turn_model)
+            if self._turn_model is not None
+            else self.story_settings
+        )
+
     def _estimate_tokens(self, text: str) -> int:
-        """Estimate token count for text."""
-        from nexus.config.story_model import StorySettings
+        """Estimate memory admission with the resolved turn writer."""
         from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 
-        model = self.settings.get("apex", {}).get("model")
-        return calculate_chunk_tokens(text, story=StorySettings(skald_model=model))
+        return calculate_chunk_tokens(text, story=self._estimator_story())
 
     def _coerce_chunk_id(self, chunk: Dict[str, Any]) -> Optional[int]:
         """Attempt to coerce a chunk identifier without logging noise."""

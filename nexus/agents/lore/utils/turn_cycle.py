@@ -332,7 +332,7 @@ class TurnCycleManager:
                 turn_context.provider_wire_type = provider_wire_type
                 turn_context.provider_name = provider_name
                 apex_context_window = memory_manager.configure_storyteller_budget(
-                    provider_wire_type, provider_name
+                    provider_wire_type, provider_name, model=apex_model
                 )
                 turn_context.token_counts = self.lore.token_manager.calculate_budget(
                     turn_context.user_input,
