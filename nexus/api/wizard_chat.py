@@ -242,6 +242,10 @@ async def _handle_accept_fate_traits(
         "phase_complete": False,
         "thread_id": thread_id,
         "traits_auto_confirmed": True,
+        # _artifact_response compares these against the persisted draft, so the
+        # committed trait state must travel with this response like every other
+        # path through that gate.
+        **context.cache.confirmation_metadata(),
     }
 
 
@@ -860,7 +864,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
     model, provider_name = build_pydantic_ai_model_with_provider(selected_model)
     model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
 
-    async def event_stream():
+    async def wizard_events():
         if dev_mode:
             result = await wizard_debug_agent.run(
                 None,
@@ -1073,6 +1077,22 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                     "message": final_output.message,
                     "choices": ui_choices,
                 }
+            ) + "\n"
+
+    async def event_stream():
+        # StreamingResponse commits HTTP 200 with the first record, so a stale
+        # wizard state detected after that cannot become a 409 status. Encode it
+        # as the terminal NDJSON record instead of truncating the body.
+        try:
+            async for record in wizard_events():
+                yield record
+        except HTTPException as e:
+            yield json.dumps(
+                {"type": "error", "status_code": e.status_code, "detail": e.detail}
+            ) + "\n"
+        except WizardStateConflict as e:
+            yield json.dumps(
+                {"type": "error", "status_code": 409, "detail": str(e)}
             ) + "\n"
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")

@@ -305,3 +305,67 @@ def test_stale_client_context_cannot_restore_prose_after_revision(monkeypatch):
         "Age 54"
     )
     assert stale["concept"]["background"].startswith("Age 38")
+
+
+@pytest.mark.asyncio
+async def test_accept_fate_prose_fallback_carries_committed_confirmation_metadata(
+    monkeypatch,
+) -> None:
+    """A bare wildcard reply after auto-confirmed traits must still pass the gate."""
+    from contextlib import nullcontext
+
+    cache = character_cache(complete=False)
+    committed = deepcopy(cache)
+    committed.character.traits_confirmed = True
+    context = wizard_agent.WizardContext(
+        slot=4,
+        cache=cache,
+        phase="character",
+        thread_id=cache.thread_id,
+        model="TEST",
+        context_data={
+            "character_state": {
+                "concept": {"name": cache.character.name},
+                "trait_selection": None,
+            }
+        },
+        accept_fate=True,
+    )
+
+    class Agent:
+        async def run(self, *args, **kwargs):
+            return SimpleNamespace(
+                output=WizardResponse(
+                    message="The bell rings once before the wildcard is chosen.",
+                    choices=["Answer the bell", "Ignore the bell"],
+                )
+            )
+
+    monkeypatch.setattr(wizard_chat, "guarded_wizard_write", lambda *a: nullcontext())
+    monkeypatch.setattr(wizard_chat, "clear_suggested_traits", lambda dbname: None)
+    monkeypatch.setattr(wizard_chat, "record_drafts", lambda slot, **drafts: None)
+    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: committed)
+    monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
+    monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
+    monkeypatch.setattr(wizard_chat, "write_wizard_choices", lambda *a, **k: None)
+
+    result = await wizard_chat._handle_accept_fate_traits(
+        context=context,
+        accept_fate=True,
+        current_phase="character",
+        slot=4,
+        message_history=[],
+        model=None,
+        model_name="TEST",
+        provider_name="test",
+        model_settings=None,
+        client=Mock(),
+        thread_id=cache.thread_id,
+    )
+
+    assert result is not None
+    assert result["traits_auto_confirmed"] is True
+    for key, value in committed.confirmation_metadata().items():
+        assert result[key] == value, key
+    # The same consistency gate every other artifact path passes through.
+    assert wizard_chat._artifact_response(result, 4, cache.thread_id) is result
