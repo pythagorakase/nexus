@@ -120,6 +120,7 @@ def test_confirm_precedes_next_phase_inference(monkeypatch, phase, resumed):
     }
     assert calls[-1][1]["thread_id"] == "saved-conversation"
     assert calls[-1][1]["current_phase"] == next_phase
+    assert calls[-1][1]["message_origin"] == "wizard_control"
     assert calls[-1][1]["model"] == "explicit-model"
     if not resumed:
         assert result["artifact_data"] == {"name": "Saved draft"}

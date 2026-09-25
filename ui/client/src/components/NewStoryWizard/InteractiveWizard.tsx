@@ -658,7 +658,7 @@ export function InteractiveWizard({
                     setShowTraitSelector(!state.trait_selection);
                     if (!state.trait_selection) setSuggestedTraits(state.concept.suggested_traits ?? []);
                     setDisplayChoices([]);
-                    return;
+                    return true;
                 }
             }
 

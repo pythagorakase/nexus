@@ -285,6 +285,23 @@ describe("persisted character confirmation and revision", () => {
         expect(JSON.parse(fetch.mock.calls[4][1].body).context_data.character_state).toEqual(revised);
     });
 
+    it("clears acknowledged revision text when the revised concept still needs traits", async () => {
+        const partialState = { ...state, trait_selection: null, wildcard: null };
+        const revised = { ...partialState, concept: { ...state.concept, background: "Age 54. Maintains the old harbor machinery." } };
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify({ ...session, pending_confirmation: null, character_revision_pending: true, character_state: partialState, character_draft: partialState })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ phase: "character", character_revised: true, phase_complete: false, artifact_type: "submit_character_concept", artifact_token: "b".repeat(64), message: "Character concept updated.", data: { character_state: revised } })));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+        expect(await screen.findByText(/Describe the change to your character/)).toBeInTheDocument();
+        fireEvent.change(screen.getByTestId("wizard-freeform"), { target: { value: "Make her 54 instead." } });
+        fireEvent.keyDown(screen.getByTestId("wizard-freeform"), { key: "Enter" });
+        expect(await screen.findByText("Character concept updated.")).toBeInTheDocument();
+        expect(await screen.findByText("3 traits selected")).toBeInTheDocument();
+        await vi.waitFor(() => expect(screen.getByTestId("wizard-freeform")).toHaveValue(""));
+        expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
     it("reloads active revision with the composer enabled and selections preserved", async () => {
         const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ ...session, pending_confirmation: null, character_revision_pending: true })));
         vi.stubGlobal("fetch", fetch);

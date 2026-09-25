@@ -1510,6 +1510,7 @@ def _confirm_wizard_artifact_and_introduce(
             f"Proceeding to {next_phase}. Please introduce the next phase."
         ),
         "current_phase": next_phase,
+        "message_origin": "wizard_control",
     }
     if model:
         payload["model"] = model

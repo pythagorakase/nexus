@@ -27,8 +27,12 @@ this validation. Final narrative transition requires both accepted artifacts.
 The standalone branch is based on `b0645daf`; it does not include the concurrent
 #879 transcript-provenance or #951 composer-recovery changes. When integrating
 #879, the CLI's new `_confirm_wizard_artifact_and_introduce` phase-introduction
-request must carry `message_origin="wizard_control"`. The private integration
-branch applies that adjustment. Resume must preserve both this branch's metadata
+request carries `message_origin="wizard_control"`. Successful partial character
+revision returns a true acknowledgement for #951's composer recovery. These
+compatibility lines were added after the browser run and passed 26 CLI tests,
+17 wizard UI tests and TypeScript. The rendered revision draft-clear regression
+fails before the acknowledgement fix when combined with #951; on this standalone
+base the callback result is ignored. Resume must preserve both this branch's metadata
 and #879's transcript projection. Composer recovery must retain its slot/thread/
 phase/subphase isolation, including the new revision subphase.
 
@@ -86,7 +90,7 @@ in these standalone-branch screenshots is covered separately by #879.
 
 - Focused Python: **91 passed, 24 skipped**. The skipped cases require live
   provider or PostgreSQL resources and are not represented as passing.
-- UI: **249 passed**; TypeScript, production build, focused lint and commit hooks
+- UI before the compatibility follow-up: **249 passed**; TypeScript, production build, focused lint and commit hooks
   passed.
 - Prompt and reachability checks: **60 passed**. The new prompts have exact
   registry entries/readers; the new production module has an explicit reachability
