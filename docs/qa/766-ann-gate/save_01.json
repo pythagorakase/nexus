@@ -1,10 +1,10 @@
 {
-  "measured_at": "2026-09-25T00:15:43.756865+00:00",
+  "measured_at": "2026-09-25T00:24:29.989037+00:00",
   "machine": "macOS-27.0-arm64-arm-64bit",
   "python": "3.11.12",
   "postgres": "PostgreSQL 17.10 (Postgres.app) on aarch64-apple-darwin23.6.0, compiled by Apple clang version 15.0.0 (clang-1500.3.9.4), 64-bit",
   "pgvector": "0.8.2",
-  "clone": "qa640_766_13987631cf83",
+  "clone": "qa640_766_b59be6921185",
   "table": "chunk_embeddings_2560d",
   "rows": 1425,
   "documents": 1425,
@@ -19,10 +19,10 @@
   },
   "sample_sha256": "675b5084155879a0a3bb01882f5e8ab5ab39b25cc5f25b21abcafaef09d36f0b",
   "method": "Deterministic MD5-ordered stored-vector probes, self-match included; one warm-up then one timed query per path; nearest-rank p95; client execute+fetch wall time, same process/machine; exact before index build. No inference.",
-  "exact_p95_ms": 5.603375029750168,
-  "approximate_p95_ms": 2.0721249748021364,
+  "exact_p95_ms": 5.481458967551589,
+  "approximate_p95_ms": 2.0614999812096357,
   "recall_at_10": 1.0,
-  "index_build_ms": 2386.835083947517,
+  "index_build_ms": 2481.065541971475,
   "index_bytes": 11681792,
   "index_name": "chunk_embeddings_2560d_halfvec_hnsw_idx",
   "exact_plan": [
@@ -151,7 +151,7 @@
     {
       "query_chunk_id": 1407,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.603375029750168,
+      "exact_ms": 5.518083926290274,
       "exact_top_10": [
         1407,
         1406,
@@ -164,7 +164,7 @@
         1405,
         1411
       ],
-      "approximate_ms": 1.6737920232117176,
+      "approximate_ms": 1.7985000740736723,
       "approximate_top_10": [
         1407,
         1406,
@@ -182,7 +182,7 @@
     {
       "query_chunk_id": 180,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.456708953715861,
+      "exact_ms": 5.598540999926627,
       "exact_top_10": [
         180,
         181,
@@ -195,7 +195,7 @@
         120,
         10
       ],
-      "approximate_ms": 1.2195410672575235,
+      "approximate_ms": 1.3002919731661677,
       "approximate_top_10": [
         180,
         181,
@@ -213,7 +213,7 @@
     {
       "query_chunk_id": 638,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.414833081886172,
+      "exact_ms": 5.336500005796552,
       "exact_top_10": [
         638,
         637,
@@ -226,7 +226,7 @@
         298,
         496
       ],
-      "approximate_ms": 1.5172091079875827,
+      "approximate_ms": 1.44529202952981,
       "approximate_top_10": [
         638,
         637,
@@ -244,7 +244,7 @@
     {
       "query_chunk_id": 1367,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.374624975956976,
+      "exact_ms": 5.300084012560546,
       "exact_top_10": [
         1367,
         1369,
@@ -257,7 +257,7 @@
         1355,
         1357
       ],
-      "approximate_ms": 1.5982909826561809,
+      "approximate_ms": 1.741332933306694,
       "approximate_top_10": [
         1367,
         1369,
@@ -275,7 +275,7 @@
     {
       "query_chunk_id": 980,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.273749935440719,
+      "exact_ms": 5.302833975292742,
       "exact_top_10": [
         980,
         1034,
@@ -288,7 +288,7 @@
         976,
         999
       ],
-      "approximate_ms": 1.7594159580767155,
+      "approximate_ms": 1.8810840556398034,
       "approximate_top_10": [
         980,
         1034,
@@ -306,7 +306,7 @@
     {
       "query_chunk_id": 1393,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.2951250690966845,
+      "exact_ms": 5.314332898706198,
       "exact_top_10": [
         1393,
         1392,
@@ -319,7 +319,7 @@
         1386,
         1396
       ],
-      "approximate_ms": 1.49779103230685,
+      "approximate_ms": 1.589666004292667,
       "approximate_top_10": [
         1393,
         1392,
@@ -337,7 +337,7 @@
     {
       "query_chunk_id": 178,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.214208038523793,
+      "exact_ms": 5.249541951343417,
       "exact_top_10": [
         178,
         177,
@@ -350,7 +350,7 @@
         98,
         30
       ],
-      "approximate_ms": 1.3473749859258533,
+      "approximate_ms": 1.481125014834106,
       "approximate_top_10": [
         178,
         177,
@@ -368,7 +368,7 @@
     {
       "query_chunk_id": 683,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.26762509252876,
+      "exact_ms": 5.364084034226835,
       "exact_top_10": [
         683,
         684,
@@ -381,7 +381,7 @@
         729,
         726
       ],
-      "approximate_ms": 1.487750094383955,
+      "approximate_ms": 1.5024159802123904,
       "approximate_top_10": [
         683,
         684,
@@ -399,7 +399,7 @@
     {
       "query_chunk_id": 342,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.478125065565109,
+      "exact_ms": 5.368832964450121,
       "exact_top_10": [
         342,
         343,
@@ -412,7 +412,7 @@
         335,
         348
       ],
-      "approximate_ms": 1.5470420476049185,
+      "approximate_ms": 1.4899160014465451,
       "approximate_top_10": [
         342,
         343,
@@ -430,7 +430,7 @@
     {
       "query_chunk_id": 889,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.26533299125731,
+      "exact_ms": 5.324415978975594,
       "exact_top_10": [
         889,
         888,
@@ -443,7 +443,7 @@
         974,
         1319
       ],
-      "approximate_ms": 1.7290840623900294,
+      "approximate_ms": 1.7147909384220839,
       "approximate_top_10": [
         889,
         888,
@@ -461,7 +461,7 @@
     {
       "query_chunk_id": 90,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.470458068884909,
+      "exact_ms": 5.247917026281357,
       "exact_top_10": [
         90,
         226,
@@ -474,7 +474,7 @@
         84,
         526
       ],
-      "approximate_ms": 1.6238330863416195,
+      "approximate_ms": 1.5935410046949983,
       "approximate_top_10": [
         90,
         226,
@@ -492,7 +492,7 @@
     {
       "query_chunk_id": 725,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.3804999915882945,
+      "exact_ms": 5.504083004780114,
       "exact_top_10": [
         725,
         726,
@@ -505,7 +505,7 @@
         723,
         682
       ],
-      "approximate_ms": 1.5137080335989594,
+      "approximate_ms": 1.5005000168457627,
       "approximate_top_10": [
         725,
         726,
@@ -523,7 +523,7 @@
     {
       "query_chunk_id": 1096,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.1893750205636024,
+      "exact_ms": 5.412333062849939,
       "exact_top_10": [
         1096,
         1100,
@@ -536,7 +536,7 @@
         1223,
         1330
       ],
-      "approximate_ms": 1.6054159495979548,
+      "approximate_ms": 1.6518750926479697,
       "approximate_top_10": [
         1096,
         1100,
@@ -554,7 +554,7 @@
     {
       "query_chunk_id": 714,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.207916954532266,
+      "exact_ms": 5.361000075936317,
       "exact_top_10": [
         714,
         713,
@@ -567,7 +567,7 @@
         1290,
         1266
       ],
-      "approximate_ms": 1.3815000420436263,
+      "approximate_ms": 1.4161249855533242,
       "approximate_top_10": [
         714,
         713,
@@ -585,7 +585,7 @@
     {
       "query_chunk_id": 330,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.300957942381501,
+      "exact_ms": 5.462957895360887,
       "exact_top_10": [
         330,
         313,
@@ -598,7 +598,7 @@
         329,
         332
       ],
-      "approximate_ms": 1.4682080363854766,
+      "approximate_ms": 1.464499975554645,
       "approximate_top_10": [
         330,
         313,
@@ -616,7 +616,7 @@
     {
       "query_chunk_id": 28,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.2132080309093,
+      "exact_ms": 5.423375056125224,
       "exact_top_10": [
         28,
         29,
@@ -629,7 +629,7 @@
         32,
         100
       ],
-      "approximate_ms": 1.5167909441515803,
+      "approximate_ms": 1.6025000950321555,
       "approximate_top_10": [
         28,
         29,
@@ -647,7 +647,7 @@
     {
       "query_chunk_id": 1324,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.249541951343417,
+      "exact_ms": 5.3280830616131425,
       "exact_top_10": [
         1324,
         1323,
@@ -660,7 +660,7 @@
         887,
         1288
       ],
-      "approximate_ms": 1.4418329810723662,
+      "approximate_ms": 1.4617500128224492,
       "approximate_top_10": [
         1324,
         1323,
@@ -678,7 +678,7 @@
     {
       "query_chunk_id": 37,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.289792083203793,
+      "exact_ms": 5.393333034589887,
       "exact_top_10": [
         37,
         36,
@@ -691,7 +691,7 @@
         270,
         337
       ],
-      "approximate_ms": 1.8879169365391135,
+      "approximate_ms": 1.8873750232160091,
       "approximate_top_10": [
         37,
         36,
@@ -709,7 +709,7 @@
     {
       "query_chunk_id": 168,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.409416975453496,
+      "exact_ms": 5.426625022664666,
       "exact_top_10": [
         168,
         167,
@@ -722,7 +722,7 @@
         225,
         163
       ],
-      "approximate_ms": 2.000250038690865,
+      "approximate_ms": 2.003666013479233,
       "approximate_top_10": [
         168,
         167,
@@ -740,7 +740,7 @@
     {
       "query_chunk_id": 432,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.294625065289438,
+      "exact_ms": 5.444999900646508,
       "exact_top_10": [
         432,
         433,
@@ -753,7 +753,7 @@
         437,
         407
       ],
-      "approximate_ms": 1.6927500255405903,
+      "approximate_ms": 1.9073339644819498,
       "approximate_top_10": [
         432,
         433,
@@ -771,7 +771,7 @@
     {
       "query_chunk_id": 382,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.186374997720122,
+      "exact_ms": 5.327125079929829,
       "exact_top_10": [
         382,
         383,
@@ -784,7 +784,7 @@
         384,
         381
       ],
-      "approximate_ms": 1.4681249158456922,
+      "approximate_ms": 1.593249966390431,
       "approximate_top_10": [
         382,
         383,
@@ -802,7 +802,7 @@
     {
       "query_chunk_id": 1038,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.119833047501743,
+      "exact_ms": 5.429917015135288,
       "exact_top_10": [
         1038,
         1039,
@@ -815,7 +815,7 @@
         1241,
         1205
       ],
-      "approximate_ms": 1.8518749857321382,
+      "approximate_ms": 2.007082919590175,
       "approximate_top_10": [
         1038,
         1039,
@@ -833,7 +833,7 @@
     {
       "query_chunk_id": 292,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.277082906104624,
+      "exact_ms": 5.3668750915676355,
       "exact_top_10": [
         292,
         293,
@@ -846,7 +846,7 @@
         633,
         883
       ],
-      "approximate_ms": 1.574499998241663,
+      "approximate_ms": 1.6594589687883854,
       "approximate_top_10": [
         292,
         293,
@@ -864,7 +864,7 @@
     {
       "query_chunk_id": 1306,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.4148329654708505,
+      "exact_ms": 5.3738749120384455,
       "exact_top_10": [
         1306,
         1305,
@@ -877,7 +877,7 @@
         974,
         890
       ],
-      "approximate_ms": 1.3467499520629644,
+      "approximate_ms": 1.4707500813528895,
       "approximate_top_10": [
         1306,
         1305,
@@ -895,7 +895,7 @@
     {
       "query_chunk_id": 489,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.2207919070497155,
+      "exact_ms": 5.3928750567138195,
       "exact_top_10": [
         489,
         724,
@@ -908,7 +908,7 @@
         726,
         488
       ],
-      "approximate_ms": 1.328374957665801,
+      "approximate_ms": 1.3532080920413136,
       "approximate_top_10": [
         489,
         724,
@@ -926,7 +926,7 @@
     {
       "query_chunk_id": 78,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.302084027789533,
+      "exact_ms": 5.481458967551589,
       "exact_top_10": [
         78,
         79,
@@ -939,7 +939,7 @@
         226,
         51
       ],
-      "approximate_ms": 1.6504169907420874,
+      "approximate_ms": 1.7688750522211194,
       "approximate_top_10": [
         78,
         79,
@@ -957,7 +957,7 @@
     {
       "query_chunk_id": 1192,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.296040908433497,
+      "exact_ms": 5.515000084415078,
       "exact_top_10": [
         1192,
         1193,
@@ -970,7 +970,7 @@
         1421,
         1191
       ],
-      "approximate_ms": 1.50395801756531,
+      "approximate_ms": 1.5766669530421495,
       "approximate_top_10": [
         1192,
         1193,
@@ -988,7 +988,7 @@
     {
       "query_chunk_id": 1140,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.3345420164987445,
+      "exact_ms": 5.270915920846164,
       "exact_top_10": [
         1140,
         1141,
@@ -1001,7 +1001,7 @@
         1111,
         968
       ],
-      "approximate_ms": 1.9558330532163382,
+      "approximate_ms": 2.109082997776568,
       "approximate_top_10": [
         1140,
         1141,
@@ -1019,7 +1019,7 @@
     {
       "query_chunk_id": 793,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.3324170876294374,
+      "exact_ms": 5.287874955683947,
       "exact_top_10": [
         793,
         794,
@@ -1032,7 +1032,7 @@
         855,
         846
       ],
-      "approximate_ms": 1.382749993354082,
+      "approximate_ms": 1.4279161114245653,
       "approximate_top_10": [
         793,
         794,
@@ -1050,7 +1050,7 @@
     {
       "query_chunk_id": 1246,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.438541062176228,
+      "exact_ms": 5.273209069855511,
       "exact_top_10": [
         1246,
         1245,
@@ -1063,7 +1063,7 @@
         394,
         194
       ],
-      "approximate_ms": 2.0721249748021364,
+      "approximate_ms": 2.1255830070003867,
       "approximate_top_10": [
         1246,
         1245,
@@ -1081,7 +1081,7 @@
     {
       "query_chunk_id": 1206,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.427290918305516,
+      "exact_ms": 5.285416962578893,
       "exact_top_10": [
         1206,
         1323,
@@ -1094,7 +1094,7 @@
         1217,
         1226
       ],
-      "approximate_ms": 1.4374159509316087,
+      "approximate_ms": 1.490166992880404,
       "approximate_top_10": [
         1206,
         1323,
@@ -1112,7 +1112,7 @@
     {
       "query_chunk_id": 926,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.355332978069782,
+      "exact_ms": 5.274625029414892,
       "exact_top_10": [
         926,
         925,
@@ -1125,7 +1125,7 @@
         1222,
         1138
       ],
-      "approximate_ms": 2.082040999084711,
+      "approximate_ms": 2.041207975707948,
       "approximate_top_10": [
         926,
         925,
@@ -1143,7 +1143,7 @@
     {
       "query_chunk_id": 760,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.312207969836891,
+      "exact_ms": 5.245459033176303,
       "exact_top_10": [
         760,
         759,
@@ -1156,7 +1156,7 @@
         770,
         1121
       ],
-      "approximate_ms": 1.5200420748442411,
+      "approximate_ms": 1.6749579226598144,
       "approximate_top_10": [
         760,
         759,
@@ -1174,7 +1174,7 @@
     {
       "query_chunk_id": 673,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.375916953198612,
+      "exact_ms": 5.277124932035804,
       "exact_top_10": [
         673,
         672,
@@ -1187,7 +1187,7 @@
         498,
         408
       ],
-      "approximate_ms": 1.418457948602736,
+      "approximate_ms": 1.4272090047597885,
       "approximate_top_10": [
         673,
         672,
@@ -1205,7 +1205,7 @@
     {
       "query_chunk_id": 1005,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.442874971777201,
+      "exact_ms": 5.475874990224838,
       "exact_top_10": [
         1005,
         1006,
@@ -1218,7 +1218,7 @@
         1113,
         1030
       ],
-      "approximate_ms": 1.5807920135557652,
+      "approximate_ms": 1.6454580472782254,
       "approximate_top_10": [
         1005,
         1006,
@@ -1236,7 +1236,7 @@
     {
       "query_chunk_id": 1083,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.400458001531661,
+      "exact_ms": 5.370832979679108,
       "exact_top_10": [
         1083,
         1084,
@@ -1249,7 +1249,7 @@
         1201,
         1314
       ],
-      "approximate_ms": 1.6397079452872276,
+      "approximate_ms": 1.7361670034006238,
       "approximate_top_10": [
         1083,
         1084,
@@ -1267,7 +1267,7 @@
     {
       "query_chunk_id": 558,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.254957941360772,
+      "exact_ms": 5.272708018310368,
       "exact_top_10": [
         558,
         1263,
@@ -1280,7 +1280,7 @@
         534,
         552
       ],
-      "approximate_ms": 1.8456249963492155,
+      "approximate_ms": 1.967957941815257,
       "approximate_top_10": [
         558,
         1263,
@@ -1298,7 +1298,7 @@
     {
       "query_chunk_id": 390,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.463709007017314,
+      "exact_ms": 5.284416954964399,
       "exact_top_10": [
         390,
         391,
@@ -1311,7 +1311,7 @@
         392,
         387
       ],
-      "approximate_ms": 1.8319999799132347,
+      "approximate_ms": 1.9446250516921282,
       "approximate_top_10": [
         390,
         391,
@@ -1329,7 +1329,7 @@
     {
       "query_chunk_id": 1326,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.42620790656656,
+      "exact_ms": 5.3094999166205525,
       "exact_top_10": [
         1326,
         1327,
@@ -1342,7 +1342,7 @@
         788,
         1323
       ],
-      "approximate_ms": 1.8646660028025508,
+      "approximate_ms": 1.8559159943833947,
       "approximate_top_10": [
         1326,
         1327,
@@ -1360,7 +1360,7 @@
     {
       "query_chunk_id": 1185,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.351958097890019,
+      "exact_ms": 5.24812494404614,
       "exact_top_10": [
         1185,
         1266,
@@ -1373,7 +1373,7 @@
         1270,
         578
       ],
-      "approximate_ms": 1.461207983084023,
+      "approximate_ms": 1.5279160579666495,
       "approximate_top_10": [
         1185,
         1266,
@@ -1391,7 +1391,7 @@
     {
       "query_chunk_id": 454,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.753124947659671,
+      "exact_ms": 5.280417040921748,
       "exact_top_10": [
         454,
         452,
@@ -1404,7 +1404,7 @@
         718,
         672
       ],
-      "approximate_ms": 1.4266669750213623,
+      "approximate_ms": 1.406208029948175,
       "approximate_top_10": [
         454,
         452,
@@ -1422,7 +1422,7 @@
     {
       "query_chunk_id": 804,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.663834046572447,
+      "exact_ms": 5.244125030003488,
       "exact_top_10": [
         804,
         803,
@@ -1435,7 +1435,7 @@
         1417,
         1399
       ],
-      "approximate_ms": 1.6631250036880374,
+      "approximate_ms": 1.7508340533822775,
       "approximate_top_10": [
         804,
         803,
@@ -1453,7 +1453,7 @@
     {
       "query_chunk_id": 1176,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.734083009883761,
+      "exact_ms": 5.236333003267646,
       "exact_top_10": [
         1176,
         1175,
@@ -1466,7 +1466,7 @@
         1178,
         1221
       ],
-      "approximate_ms": 1.874165958724916,
+      "approximate_ms": 1.8478750716894865,
       "approximate_top_10": [
         1176,
         1175,
@@ -1484,7 +1484,7 @@
     {
       "query_chunk_id": 1328,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.337083013728261,
+      "exact_ms": 5.420624976977706,
       "exact_top_10": [
         1328,
         1240,
@@ -1497,7 +1497,7 @@
         1227,
         1136
       ],
-      "approximate_ms": 1.6480829799547791,
+      "approximate_ms": 1.6841670731082559,
       "approximate_top_10": [
         1328,
         1240,
@@ -1515,7 +1515,7 @@
     {
       "query_chunk_id": 1344,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.515208933502436,
+      "exact_ms": 5.311458022333682,
       "exact_top_10": [
         1344,
         1343,
@@ -1528,7 +1528,7 @@
         1341,
         1097
       ],
-      "approximate_ms": 2.0047089783474803,
+      "approximate_ms": 2.030499977990985,
       "approximate_top_10": [
         1344,
         1343,
@@ -1546,7 +1546,7 @@
     {
       "query_chunk_id": 242,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.377458990551531,
+      "exact_ms": 5.26545790489763,
       "exact_top_10": [
         242,
         241,
@@ -1559,7 +1559,7 @@
         135,
         138
       ],
-      "approximate_ms": 1.8699170323088765,
+      "approximate_ms": 1.7595409881323576,
       "approximate_top_10": [
         242,
         241,
@@ -1577,7 +1577,7 @@
     {
       "query_chunk_id": 979,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.946083063259721,
+      "exact_ms": 5.3573750192299485,
       "exact_top_10": [
         979,
         703,
@@ -1590,7 +1590,7 @@
         512,
         1003
       ],
-      "approximate_ms": 1.884249970316887,
+      "approximate_ms": 1.9165000412613153,
       "approximate_top_10": [
         979,
         703,
@@ -1608,7 +1608,7 @@
     {
       "query_chunk_id": 797,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.172124947421253,
+      "exact_ms": 5.295584094710648,
       "exact_top_10": [
         797,
         1322,
@@ -1621,7 +1621,7 @@
         796,
         823
       ],
-      "approximate_ms": 1.359167043119669,
+      "approximate_ms": 1.3730410719290376,
       "approximate_top_10": [
         797,
         1322,
@@ -1639,7 +1639,7 @@
     {
       "query_chunk_id": 315,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.949624999426305,
+      "exact_ms": 5.36425004247576,
       "exact_top_10": [
         315,
         328,
@@ -1652,7 +1652,7 @@
         309,
         401
       ],
-      "approximate_ms": 1.5602089697495103,
+      "approximate_ms": 1.5295409830287099,
       "approximate_top_10": [
         315,
         328,
@@ -1670,7 +1670,7 @@
     {
       "query_chunk_id": 1227,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.074582993984222,
+      "exact_ms": 5.2111250115558505,
       "exact_top_10": [
         1227,
         1228,
@@ -1683,7 +1683,7 @@
         1236,
         1230
       ],
-      "approximate_ms": 1.5754160704091191,
+      "approximate_ms": 1.5913329552859068,
       "approximate_top_10": [
         1227,
         1228,
@@ -1701,7 +1701,7 @@
     {
       "query_chunk_id": 845,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.826624994166195,
+      "exact_ms": 5.244750063866377,
       "exact_top_10": [
         845,
         842,
@@ -1714,7 +1714,7 @@
         844,
         852
       ],
-      "approximate_ms": 1.3191670877858996,
+      "approximate_ms": 1.322166994214058,
       "approximate_top_10": [
         845,
         842,
@@ -1732,7 +1732,7 @@
     {
       "query_chunk_id": 65,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.922666004858911,
+      "exact_ms": 5.339709110558033,
       "exact_top_10": [
         65,
         72,
@@ -1745,7 +1745,7 @@
         134,
         66
       ],
-      "approximate_ms": 1.7055829521268606,
+      "approximate_ms": 1.7056249780580401,
       "approximate_top_10": [
         65,
         72,
@@ -1763,7 +1763,7 @@
     {
       "query_chunk_id": 435,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.008250009268522,
+      "exact_ms": 5.377874942496419,
       "exact_top_10": [
         435,
         436,
@@ -1776,7 +1776,7 @@
         493,
         398
       ],
-      "approximate_ms": 1.6398750012740493,
+      "approximate_ms": 1.6179159283638,
       "approximate_top_10": [
         435,
         436,
@@ -1794,7 +1794,7 @@
     {
       "query_chunk_id": 370,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.949291003867984,
+      "exact_ms": 5.310167092829943,
       "exact_top_10": [
         370,
         369,
@@ -1807,7 +1807,7 @@
         357,
         433
       ],
-      "approximate_ms": 1.9127910491079092,
+      "approximate_ms": 1.6410419484600425,
       "approximate_top_10": [
         370,
         369,
@@ -1825,7 +1825,7 @@
     {
       "query_chunk_id": 1340,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.006499937735498,
+      "exact_ms": 5.298333941027522,
       "exact_top_10": [
         1340,
         1341,
@@ -1838,7 +1838,7 @@
         1329,
         1326
       ],
-      "approximate_ms": 2.0506250439211726,
+      "approximate_ms": 2.0463329274207354,
       "approximate_top_10": [
         1340,
         1341,
@@ -1856,7 +1856,7 @@
     {
       "query_chunk_id": 247,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.73241601139307,
+      "exact_ms": 5.3175840293988585,
       "exact_top_10": [
         247,
         244,
@@ -1869,7 +1869,7 @@
         245,
         251
       ],
-      "approximate_ms": 1.7395000904798508,
+      "approximate_ms": 1.782042090781033,
       "approximate_top_10": [
         247,
         244,
@@ -1887,7 +1887,7 @@
     {
       "query_chunk_id": 917,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.880208987742662,
+      "exact_ms": 5.399125046096742,
       "exact_top_10": [
         917,
         918,
@@ -1900,7 +1900,7 @@
         213,
         924
       ],
-      "approximate_ms": 2.053332980722189,
+      "approximate_ms": 1.9952500006183982,
       "approximate_top_10": [
         917,
         918,
@@ -1918,7 +1918,7 @@
     {
       "query_chunk_id": 1009,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.936749930493534,
+      "exact_ms": 5.266249994747341,
       "exact_top_10": [
         1009,
         948,
@@ -1931,7 +1931,7 @@
         1006,
         950
       ],
-      "approximate_ms": 1.8255419563502073,
+      "approximate_ms": 1.6097089974209666,
       "approximate_top_10": [
         1009,
         948,
@@ -1949,7 +1949,7 @@
     {
       "query_chunk_id": 1208,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.001540994271636,
+      "exact_ms": 5.305125028826296,
       "exact_top_10": [
         1208,
         1182,
@@ -1962,7 +1962,7 @@
         1195,
         974
       ],
-      "approximate_ms": 1.5055000549182296,
+      "approximate_ms": 1.5175410080701113,
       "approximate_top_10": [
         1208,
         1182,
@@ -1980,7 +1980,7 @@
     {
       "query_chunk_id": 936,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.8917909152805805,
+      "exact_ms": 5.308084073476493,
       "exact_top_10": [
         936,
         935,
@@ -1993,7 +1993,7 @@
         933,
         475
       ],
-      "approximate_ms": 1.6927079996094108,
+      "approximate_ms": 1.5914170071482658,
       "approximate_top_10": [
         936,
         935,
@@ -2011,7 +2011,7 @@
     {
       "query_chunk_id": 508,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.827250028029084,
+      "exact_ms": 5.367542034946382,
       "exact_top_10": [
         508,
         509,
@@ -2024,7 +2024,7 @@
         510,
         502
       ],
-      "approximate_ms": 1.8130840035155416,
+      "approximate_ms": 1.7961671110242605,
       "approximate_top_10": [
         508,
         509,
@@ -2042,7 +2042,7 @@
     {
       "query_chunk_id": 93,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.8542500007897615,
+      "exact_ms": 5.390667007304728,
       "exact_top_10": [
         93,
         90,
@@ -2055,7 +2055,7 @@
         85,
         226
       ],
-      "approximate_ms": 1.8039169954136014,
+      "approximate_ms": 1.803333987481892,
       "approximate_top_10": [
         93,
         90,
@@ -2073,7 +2073,7 @@
     {
       "query_chunk_id": 293,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.139249959029257,
+      "exact_ms": 5.411125021055341,
       "exact_top_10": [
         293,
         292,
@@ -2086,7 +2086,7 @@
         325,
         291
       ],
-      "approximate_ms": 1.6908330144360662,
+      "approximate_ms": 1.6215830110013485,
       "approximate_top_10": [
         293,
         292,
@@ -2104,7 +2104,7 @@
     {
       "query_chunk_id": 950,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.136250052601099,
+      "exact_ms": 5.294625065289438,
       "exact_top_10": [
         950,
         949,
@@ -2117,7 +2117,7 @@
         1133,
         1142
       ],
-      "approximate_ms": 1.6212500631809235,
+      "approximate_ms": 1.6365830088034272,
       "approximate_top_10": [
         950,
         949,
@@ -2135,7 +2135,7 @@
     {
       "query_chunk_id": 584,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.2100419998168945,
+      "exact_ms": 5.287042004056275,
       "exact_top_10": [
         584,
         585,
@@ -2148,7 +2148,7 @@
         489,
         610
       ],
-      "approximate_ms": 1.6158339567482471,
+      "approximate_ms": 1.5789589378982782,
       "approximate_top_10": [
         584,
         585,
@@ -2166,7 +2166,7 @@
     {
       "query_chunk_id": 26,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.12945803347975,
+      "exact_ms": 5.311666056513786,
       "exact_top_10": [
         26,
         27,
@@ -2179,7 +2179,7 @@
         28,
         212
       ],
-      "approximate_ms": 1.4758330071344972,
+      "approximate_ms": 1.5225840033963323,
       "approximate_top_10": [
         26,
         27,
@@ -2197,7 +2197,7 @@
     {
       "query_chunk_id": 1101,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.358999944292009,
+      "exact_ms": 5.328624974936247,
       "exact_top_10": [
         1101,
         1100,
@@ -2210,7 +2210,7 @@
         1132,
         1150
       ],
-      "approximate_ms": 1.5970829408615828,
+      "approximate_ms": 1.577791990712285,
       "approximate_top_10": [
         1101,
         1100,
@@ -2228,7 +2228,7 @@
     {
       "query_chunk_id": 1317,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.325334030203521,
+      "exact_ms": 5.301374942064285,
       "exact_top_10": [
         1317,
         1320,
@@ -2241,7 +2241,7 @@
         1199,
         1321
       ],
-      "approximate_ms": 1.286999904550612,
+      "approximate_ms": 1.3414579443633556,
       "approximate_top_10": [
         1317,
         1320,
@@ -2259,7 +2259,7 @@
     {
       "query_chunk_id": 1130,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.137583939358592,
+      "exact_ms": 5.28366700746119,
       "exact_top_10": [
         1130,
         1108,
@@ -2272,7 +2272,7 @@
         1110,
         1126
       ],
-      "approximate_ms": 1.8179999897256494,
+      "approximate_ms": 1.809417037293315,
       "approximate_top_10": [
         1130,
         1108,
@@ -2290,7 +2290,7 @@
     {
       "query_chunk_id": 249,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.186583031900227,
+      "exact_ms": 5.353874992579222,
       "exact_top_10": [
         249,
         248,
@@ -2303,7 +2303,7 @@
         247,
         263
       ],
-      "approximate_ms": 2.133375033736229,
+      "approximate_ms": 2.0614999812096357,
       "approximate_top_10": [
         249,
         248,
@@ -2321,7 +2321,7 @@
     {
       "query_chunk_id": 469,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 6.104959058575332,
+      "exact_ms": 5.326125072315335,
       "exact_top_10": [
         469,
         468,
@@ -2334,7 +2334,7 @@
         463,
         477
       ],
-      "approximate_ms": 1.577041926793754,
+      "approximate_ms": 1.5348749002441764,
       "approximate_top_10": [
         469,
         468,
@@ -2352,7 +2352,7 @@
     {
       "query_chunk_id": 151,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.126332980580628,
+      "exact_ms": 5.268749897368252,
       "exact_top_10": [
         151,
         150,
@@ -2365,7 +2365,7 @@
         146,
         153
       ],
-      "approximate_ms": 2.0088331075385213,
+      "approximate_ms": 2.0307080121710896,
       "approximate_top_10": [
         151,
         150,
@@ -2383,7 +2383,7 @@
     {
       "query_chunk_id": 1309,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.134416976943612,
+      "exact_ms": 5.34045894164592,
       "exact_top_10": [
         1309,
         1197,
@@ -2396,7 +2396,7 @@
         1310,
         1194
       ],
-      "approximate_ms": 1.5769170131534338,
+      "approximate_ms": 1.5902500599622726,
       "approximate_top_10": [
         1309,
         1197,
@@ -2414,7 +2414,7 @@
     {
       "query_chunk_id": 413,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.117249907925725,
+      "exact_ms": 5.3223330760374665,
       "exact_top_10": [
         413,
         414,
@@ -2427,7 +2427,7 @@
         408,
         420
       ],
-      "approximate_ms": 1.4908750308677554,
+      "approximate_ms": 1.6190840397030115,
       "approximate_top_10": [
         413,
         414,
@@ -2445,7 +2445,7 @@
     {
       "query_chunk_id": 1320,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.007416009902954,
+      "exact_ms": 5.241999984718859,
       "exact_top_10": [
         1320,
         1322,
@@ -2458,7 +2458,7 @@
         1218,
         1215
       ],
-      "approximate_ms": 1.1362920049577951,
+      "approximate_ms": 1.2360829859972,
       "approximate_top_10": [
         1320,
         1322,
@@ -2476,7 +2476,7 @@
     {
       "query_chunk_id": 1226,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.095708998851478,
+      "exact_ms": 5.228040972724557,
       "exact_top_10": [
         1226,
         1327,
@@ -2489,7 +2489,7 @@
         1236,
         1328
       ],
-      "approximate_ms": 1.5742500545457006,
+      "approximate_ms": 1.5910000074654818,
       "approximate_top_10": [
         1226,
         1327,
@@ -2507,7 +2507,7 @@
     {
       "query_chunk_id": 1022,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.160250002518296,
+      "exact_ms": 5.408708937466145,
       "exact_top_10": [
         1022,
         1021,
@@ -2520,7 +2520,7 @@
         1097,
         1071
       ],
-      "approximate_ms": 1.762458006851375,
+      "approximate_ms": 1.8523749895393848,
       "approximate_top_10": [
         1022,
         1021,
@@ -2538,7 +2538,7 @@
     {
       "query_chunk_id": 1334,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.116416024975479,
+      "exact_ms": 5.297375028021634,
       "exact_top_10": [
         1334,
         1335,
@@ -2551,7 +2551,7 @@
         1042,
         1021
       ],
-      "approximate_ms": 1.6467910027131438,
+      "approximate_ms": 1.6553750028833747,
       "approximate_top_10": [
         1334,
         1335,
@@ -2569,7 +2569,7 @@
     {
       "query_chunk_id": 652,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.16070902813226,
+      "exact_ms": 5.222625099122524,
       "exact_top_10": [
         652,
         653,
@@ -2582,7 +2582,7 @@
         663,
         646
       ],
-      "approximate_ms": 1.4490409521386027,
+      "approximate_ms": 1.4808750711381435,
       "approximate_top_10": [
         652,
         653,
@@ -2600,7 +2600,7 @@
     {
       "query_chunk_id": 1203,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.223458050750196,
+      "exact_ms": 5.349791957996786,
       "exact_top_10": [
         1203,
         1201,
@@ -2613,7 +2613,7 @@
         1029,
         1206
       ],
-      "approximate_ms": 1.3040410121902823,
+      "approximate_ms": 1.395417028106749,
       "approximate_top_10": [
         1203,
         1201,
@@ -2631,7 +2631,7 @@
     {
       "query_chunk_id": 792,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.251583992503583,
+      "exact_ms": 5.293666967190802,
       "exact_top_10": [
         792,
         794,
@@ -2644,7 +2644,7 @@
         837,
         1320
       ],
-      "approximate_ms": 1.3010000111535192,
+      "approximate_ms": 1.4883329859003425,
       "approximate_top_10": [
         792,
         794,
@@ -2662,7 +2662,7 @@
     {
       "query_chunk_id": 490,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.129292025230825,
+      "exact_ms": 5.376958986744285,
       "exact_top_10": [
         490,
         489,
@@ -2675,7 +2675,7 @@
         725,
         724
       ],
-      "approximate_ms": 1.4154999516904354,
+      "approximate_ms": 1.3907499378547072,
       "approximate_top_10": [
         490,
         489,
@@ -2693,7 +2693,7 @@
     {
       "query_chunk_id": 946,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.123000009916723,
+      "exact_ms": 5.380416987463832,
       "exact_top_10": [
         946,
         947,
@@ -2706,7 +2706,7 @@
         1206,
         1138
       ],
-      "approximate_ms": 1.82862498331815,
+      "approximate_ms": 1.876041991636157,
       "approximate_top_10": [
         946,
         947,
@@ -2724,7 +2724,7 @@
     {
       "query_chunk_id": 184,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.278625059872866,
+      "exact_ms": 5.434499937109649,
       "exact_top_10": [
         184,
         183,
@@ -2737,7 +2737,7 @@
         59,
         197
       ],
-      "approximate_ms": 1.4154170639812946,
+      "approximate_ms": 1.4896671054884791,
       "approximate_top_10": [
         184,
         183,
@@ -2755,7 +2755,7 @@
     {
       "query_chunk_id": 1050,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.0833330024033785,
+      "exact_ms": 5.356334033422172,
       "exact_top_10": [
         1050,
         1049,
@@ -2768,7 +2768,7 @@
         976,
         969
       ],
-      "approximate_ms": 1.913541927933693,
+      "approximate_ms": 1.951000071130693,
       "approximate_top_10": [
         1050,
         1049,
@@ -2786,7 +2786,7 @@
     {
       "query_chunk_id": 70,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.930124967359006,
+      "exact_ms": 5.316292052157223,
       "exact_top_10": [
         70,
         71,
@@ -2799,7 +2799,7 @@
         176,
         33
       ],
-      "approximate_ms": 2.2452910197898746,
+      "approximate_ms": 2.3423340171575546,
       "approximate_top_10": [
         70,
         71,
@@ -2817,7 +2817,7 @@
     {
       "query_chunk_id": 976,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.968416993506253,
+      "exact_ms": 5.303625017404556,
       "exact_top_10": [
         976,
         978,
@@ -2830,7 +2830,7 @@
         1326,
         962
       ],
-      "approximate_ms": 1.8164999783039093,
+      "approximate_ms": 1.7744170036166906,
       "approximate_top_10": [
         976,
         978,
@@ -2848,7 +2848,7 @@
     {
       "query_chunk_id": 415,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.9707499565556645,
+      "exact_ms": 5.389166064560413,
       "exact_top_10": [
         415,
         398,
@@ -2861,7 +2861,7 @@
         397,
         912
       ],
-      "approximate_ms": 1.7747499514371157,
+      "approximate_ms": 1.7608749913051724,
       "approximate_top_10": [
         415,
         398,
@@ -2879,7 +2879,7 @@
     {
       "query_chunk_id": 1339,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.040707997977734,
+      "exact_ms": 5.324166966602206,
       "exact_top_10": [
         1339,
         1338,
@@ -2892,7 +2892,7 @@
         1334,
         1040
       ],
-      "approximate_ms": 1.831584027968347,
+      "approximate_ms": 1.8343750853091478,
       "approximate_top_10": [
         1339,
         1338,
@@ -2910,7 +2910,7 @@
     {
       "query_chunk_id": 424,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.052999942563474,
+      "exact_ms": 5.321624921634793,
       "exact_top_10": [
         424,
         423,
@@ -2923,7 +2923,7 @@
         732,
         741
       ],
-      "approximate_ms": 2.1440410055220127,
+      "approximate_ms": 2.1516659762710333,
       "approximate_top_10": [
         424,
         423,
@@ -2941,7 +2941,7 @@
     {
       "query_chunk_id": 1410,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.000334000214934,
+      "exact_ms": 5.264042061753571,
       "exact_top_10": [
         1410,
         1409,
@@ -2954,7 +2954,7 @@
         1400,
         1404
       ],
-      "approximate_ms": 1.705167000181973,
+      "approximate_ms": 1.765207969583571,
       "approximate_top_10": [
         1410,
         1409,
@@ -2972,7 +2972,7 @@
     {
       "query_chunk_id": 846,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.9587920075282454,
+      "exact_ms": 5.2661249646916986,
       "exact_top_10": [
         846,
         845,
@@ -2985,7 +2985,7 @@
         843,
         840
       ],
-      "approximate_ms": 1.4668749645352364,
+      "approximate_ms": 1.4952500350773335,
       "approximate_top_10": [
         846,
         845,
@@ -3003,7 +3003,7 @@
     {
       "query_chunk_id": 535,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.297750001773238,
+      "exact_ms": 5.2559999749064445,
       "exact_top_10": [
         535,
         536,
@@ -3016,7 +3016,7 @@
         553,
         622
       ],
-      "approximate_ms": 2.2190420422703028,
+      "approximate_ms": 2.226875047199428,
       "approximate_top_10": [
         535,
         536,
@@ -3034,7 +3034,7 @@
     {
       "query_chunk_id": 711,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.071167019195855,
+      "exact_ms": 5.328375031240284,
       "exact_top_10": [
         711,
         710,
@@ -3047,7 +3047,7 @@
         1266,
         1187
       ],
-      "approximate_ms": 1.49929104372859,
+      "approximate_ms": 1.5322079416364431,
       "approximate_top_10": [
         711,
         710,
@@ -3065,7 +3065,7 @@
     {
       "query_chunk_id": 674,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 4.909625044092536,
+      "exact_ms": 5.410708021372557,
       "exact_top_10": [
         674,
         462,
@@ -3078,7 +3078,7 @@
         495,
         456
       ],
-      "approximate_ms": 1.5213750302791595,
+      "approximate_ms": 1.4698749873787165,
       "approximate_top_10": [
         674,
         462,
@@ -3096,7 +3096,7 @@
     {
       "query_chunk_id": 100,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.1547500770539045,
+      "exact_ms": 5.526540917344391,
       "exact_top_10": [
         100,
         101,
@@ -3109,7 +3109,7 @@
         97,
         147
       ],
-      "approximate_ms": 1.7436250345781446,
+      "approximate_ms": 1.8372080521658063,
       "approximate_top_10": [
         100,
         101,
@@ -3127,7 +3127,7 @@
     {
       "query_chunk_id": 970,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.3515840554609895,
+      "exact_ms": 5.261957994662225,
       "exact_top_10": [
         970,
         971,
@@ -3140,7 +3140,7 @@
         1060,
         1055
       ],
-      "approximate_ms": 1.9269579788669944,
+      "approximate_ms": 1.967624993994832,
       "approximate_top_10": [
         970,
         971,
@@ -3158,7 +3158,7 @@
     {
       "query_chunk_id": 354,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.145542090758681,
+      "exact_ms": 5.306999897584319,
       "exact_top_10": [
         354,
         355,
@@ -3171,7 +3171,7 @@
         359,
         373
       ],
-      "approximate_ms": 1.650958089157939,
+      "approximate_ms": 1.6826660139486194,
       "approximate_top_10": [
         354,
         355,
@@ -3189,7 +3189,7 @@
     {
       "query_chunk_id": 908,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.513957934454083,
+      "exact_ms": 5.3934999741613865,
       "exact_top_10": [
         908,
         909,
@@ -3202,7 +3202,7 @@
         594,
         1292
       ],
-      "approximate_ms": 1.749709015712142,
+      "approximate_ms": 1.7241659807041287,
       "approximate_top_10": [
         908,
         909,
@@ -3220,7 +3220,7 @@
     {
       "query_chunk_id": 1141,
       "model": "Octen-Embedding-4B",
-      "exact_ms": 5.654666922055185,
+      "exact_ms": 5.315624992363155,
       "exact_top_10": [
         1141,
         1140,
@@ -3233,7 +3233,7 @@
         966,
         1098
       ],
-      "approximate_ms": 1.751833944581449,
+      "approximate_ms": 1.7686249921098351,
       "approximate_top_10": [
         1141,
         1140,
