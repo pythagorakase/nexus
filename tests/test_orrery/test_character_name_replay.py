@@ -8,7 +8,11 @@ from nexus.agents.orrery.reconstruction import (
     capture_state_checkpoint_sync,
     log_state_delta_sync,
 )
-from nexus.agents.orrery.retrograde_maturation import _load_job_context
+from nexus.agents.orrery import retrograde_maturation
+from nexus.agents.orrery.retrograde_maturation import (
+    _load_job_context,
+    build_runtime_maturation_packet,
+)
 from nexus.agents.orrery.replay import (
     ReplayResult,
     _diff_section,
@@ -17,7 +21,9 @@ from nexus.agents.orrery.replay import (
     verify_checkpoints_sync,
 )
 from nexus.config.settings_models import OrreryRetrogradeMaturationSettings
+from nexus.presence.roster import PresenceRoster, RosterEntry
 from tests.pg_fixtures import connect
+from tests.test_orrery.test_retrograde_graph import VOCABULARY
 from tests.test_presence_roster_pg import commit_wire, wire
 from tests.test_presence_roster_pg import roster_database as _roster_database
 
@@ -75,6 +81,84 @@ def test_checkpoint_comparison_detects_unledgered_name_drift(recorded_name) -> N
     assert skipped == 0
     assert len(drifts) == 1
     assert drifts[0].column == "name"
+
+
+@pytest.mark.parametrize("mapping_rows", [False, True])
+def test_pending_maturation_targets_current_name_but_finds_original_excerpt(
+    monkeypatch, mapping_rows: bool
+) -> None:
+    """A queued descriptor is source evidence, not the current generation target."""
+    old_name = "Unnamed former CP-9 crew member"
+    new_name = "Anika Sayegh"
+    source = "Distant machinery hums. " * 100 + f"{old_name} shows her timing sheet."
+    row = {
+        "job_id": 7,
+        "entity_id": 9,
+        "entity_kind": "character",
+        "entity_subtype_id": 3,
+        "entity_name": old_name,
+        "requesting_chunk_id": 12,
+        "declaration": {"name": old_name, "summary": "A timing-sheet witness."},
+    }
+    original_row = deepcopy(row)
+
+    class Cursor:
+        def execute(self, sql, params):
+            self.sql = sql
+            if "FROM characters" in sql:
+                assert params == (3,)
+            else:
+                assert "FROM narrative_chunks" in sql
+                assert params == (12,)
+
+        def fetchone(self):
+            if "FROM characters" in self.sql:
+                values = {"entity_summary": "A timing-sheet witness."}
+                if "name AS canonical_name" in self.sql:
+                    values["canonical_name"] = new_name
+            else:
+                values = {"raw_text": source}
+            return values if mapping_rows else tuple(values.values())
+
+    target = RosterEntry(kind="character", id=3, entity_id=9, name=new_name)
+    place = RosterEntry(kind="place", id=3, entity_id=10, name=old_name)
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "read_roster",
+        lambda *_: PresenceRoster(
+            present={target.key: target}, setting={place.key: place}
+        ),
+    )
+    monkeypatch.setattr(
+        retrograde_maturation, "_load_project_start_relationships", lambda *a, **kw: []
+    )
+    cfg = OrreryRetrogradeMaturationSettings(chunk_excerpt_chars=240)
+    context = _load_job_context(Cursor(), row=row, cfg=cfg)
+    packet = build_runtime_maturation_packet(
+        vocabulary=VOCABULARY,
+        row=row,
+        context=context,
+        cfg=cfg,
+        dbname="unused-offline-db",
+        setting={"genre": "fantasy"},
+    )
+
+    assert packet["maturation_target"]["name"] == new_name
+    assert context["canonical_name"] == new_name
+    assert old_name in context["chunk_excerpt"]
+    assert "shows her timing sheet" in context["chunk_excerpt"]
+    assert len(context["chunk_excerpt"]) <= cfg.chunk_excerpt_chars
+    assert [(entry["kind"], entry["name"]) for entry in context["scene_entities"]] == [
+        ("place", old_name)
+    ]
+    request = packet["seed_generation_request"]
+    assert request["project_intent_policy"]["actor_rule"].endswith(new_name)
+    assert f"Target entity: {new_name} (character)." in packet["seed_generation_prompt"]
+    assert (
+        f"Target entity: {old_name} (character)."
+        not in packet["seed_generation_prompt"]
+    )
+    assert row == original_row
 
 
 @pytest.mark.requires_postgres
@@ -163,7 +247,13 @@ def test_maturation_context_excludes_renamed_target_by_identity(
     """A pending job's historical label must not make its target its own anchor."""
     dbname, ids, place_id = name_replay_database
     character_id = ids["Remote Friend"]
-    chunk_id = commit_wire(dbname, 0, wire("The witness waits in the hall."))
+    chunk_id = commit_wire(
+        dbname,
+        0,
+        wire(
+            "Distant machinery hums. " * 100 + "Unnamed witness shows her timing sheet."
+        ),
+    )
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE characters SET name = 'Anika Sayegh' WHERE id = %s "
@@ -181,19 +271,39 @@ def test_maturation_context_excludes_renamed_target_by_identity(
         cur.execute(
             "UPDATE places SET name = 'Unnamed witness' WHERE id = %s", (place_id,)
         )
+        job = {
+            "job_id": 1,
+            "entity_id": entity_id,
+            "entity_kind": "character",
+            "entity_subtype_id": character_id,
+            "entity_name": "Unnamed witness",
+            "requesting_chunk_id": chunk_id,
+        }
+        cfg = OrreryRetrogradeMaturationSettings(chunk_excerpt_chars=240)
         context = _load_job_context(
             cur,
-            row={
-                "job_id": 1,
-                "entity_id": entity_id,
-                "entity_kind": "character",
-                "entity_subtype_id": character_id,
-                "entity_name": "Unnamed witness",
-                "requesting_chunk_id": chunk_id,
-            },
-            cfg=OrreryRetrogradeMaturationSettings(),
+            row=job,
+            cfg=cfg,
         )
 
     anchors = {(entry["kind"], entry["name"]) for entry in context["scene_entities"]}
     assert ("character", "Anika Sayegh") not in anchors
     assert ("place", "Unnamed witness") in anchors
+    assert context["canonical_name"] == "Anika Sayegh"
+    assert "Unnamed witness shows her timing sheet." in context["chunk_excerpt"]
+    packet = build_runtime_maturation_packet(
+        vocabulary=VOCABULARY,
+        row=job,
+        context=context,
+        cfg=cfg,
+        dbname=dbname,
+        setting={"genre": "fantasy"},
+    )
+    assert packet["maturation_target"]["name"] == "Anika Sayegh"
+    assert packet["seed_generation_request"]["project_intent_policy"][
+        "actor_rule"
+    ].endswith("Anika Sayegh")
+    assert (
+        "Target entity: Anika Sayegh (character)." in packet["seed_generation_prompt"]
+    )
+    assert job["entity_name"] == "Unnamed witness"
