@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import copy
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from nexus.agents.logon.apex_schema import (
     NewEntityDeclaration,
@@ -54,7 +54,7 @@ def project_name_reveals(
         declaration = NewEntityDeclaration.model_validate(raw)
         ruling = declaration.same_as
         assert ruling is not None
-        key = ("character", ruling.character_id)
+        key: tuple[Literal["character"], int] = ("character", ruling.character_id)
         target = projected.by_id.get(key)
         if target is None or target.name != ruling.previous_name:
             raise CharacterNameRevealConflict(
