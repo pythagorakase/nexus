@@ -18,6 +18,14 @@
  *                             for fitSize; a bounding polygon ring wound
  *                             the wrong way fits the whole globe)
  *
+ * Plus two view rules that keep the map honest about what it shows:
+ *
+ *  - Resize refit          → preserveViewAcrossRefit (the projection refits
+ *                             to every canvas size; the pan/zoom window is
+ *                             carried across as a geographic center + zoom)
+ *  - Coincident pins       → offsetCoincidentPins (places sharing a point
+ *                             fan out onto a small ring, deterministically)
+ *
  * Unit tests: map-geometry.test.ts.
  */
 import type { Place } from "@shared/schema";
@@ -348,6 +356,132 @@ export function centerViewBoxOn(
   );
 }
 
+// ─── Resize refit: carry the view across a projection refit ────────────
+//
+// useGeoProjection refits the projection to every canvas size, so after a
+// resize the same SVG coordinates name a different place on Earth. The
+// window is therefore captured in projection-independent terms (the
+// geographic point at its center plus the zoom factor) against the old
+// fit and rebuilt against the new one.
+
+/** A pan/zoom window expressed independently of the projection's fit. */
+export interface ViewAnchor {
+  /** Geographic point at the center of the window (unwrapped, see
+   *  invertEquirectangular). */
+  center: LatLng;
+  /** Zoom factor: canvas width / viewBox width. */
+  zoom: number;
+}
+
+function assertWorldExtent(world: PanBounds): void {
+  if (!(world.maxX > world.minX) || !(world.maxY > world.minY)) {
+    throw new Error(
+      `Degenerate projected world extent: ${JSON.stringify(world)}`,
+    );
+  }
+}
+
+/**
+ * Inverse of the fitted equirectangular projection, read off the projected
+ * world box (the two projected corners of [-180..180] × [-90..90], i.e.
+ * MapPane's pan bounds).
+ *
+ * Equirectangular is linear in both axes, so the world box fixes the
+ * mapping exactly. Unlike d3's projection.invert, the longitude is NOT
+ * wrapped into [-180, 180]: a view center panned past the antimeridian
+ * keeps its side, so re-projecting it lands on the same spot instead of
+ * jumping a world-width away.
+ */
+export function invertEquirectangular(
+  point: { x: number; y: number },
+  world: PanBounds,
+): LatLng {
+  assertWorldExtent(world);
+  return {
+    longitude:
+      -180 + ((point.x - world.minX) / (world.maxX - world.minX)) * 360,
+    latitude: 90 - ((point.y - world.minY) / (world.maxY - world.minY)) * 180,
+  };
+}
+
+/** Forward twin of invertEquirectangular (same unwrapped linear mapping). */
+export function projectEquirectangular(
+  latLng: LatLng,
+  world: PanBounds,
+): { x: number; y: number } {
+  assertWorldExtent(world);
+  return {
+    x:
+      world.minX + ((latLng.longitude + 180) / 360) * (world.maxX - world.minX),
+    y: world.minY + ((90 - latLng.latitude) / 180) * (world.maxY - world.minY),
+  };
+}
+
+/** Capture a window as its geographic center plus zoom (old fit). */
+export function captureViewAnchor(
+  box: ViewBox,
+  mapWidth: number,
+  world: PanBounds,
+): ViewAnchor {
+  return {
+    center: invertEquirectangular(
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      world,
+    ),
+    zoom: mapWidth / box.width,
+  };
+}
+
+/**
+ * Rebuild a captured window against a (new) fit: same geographic center,
+ * same zoom factor, the canvas's aspect ratio, and the usual pan clamp.
+ */
+export function restoreViewAnchor(
+  anchor: ViewAnchor,
+  mapWidth: number,
+  mapHeight: number,
+  world: PanBounds,
+): ViewBox {
+  return centerViewBoxOn(
+    projectEquirectangular(anchor.center, world),
+    {
+      x: 0,
+      y: 0,
+      width: mapWidth / anchor.zoom,
+      height: mapHeight / anchor.zoom,
+    },
+    world,
+  );
+}
+
+/**
+ * Carry a pan/zoom window across a projection refit (a canvas resize):
+ * the geographic point at the center stays centered and the zoom readout
+ * stays put. Resetting the window to the new canvas instead (the original
+ * behavior) threw away every pan and zoom on each resize.
+ *
+ * @param prev          the window, in the OLD fit's SVG coordinates
+ * @param prevMapWidth  the canvas width the old fit was made for
+ * @param prevWorld     the projected world box under the old fit
+ * @param nextMapWidth/nextMapHeight  the new canvas size
+ * @param nextWorld     the projected world box under the new fit
+ */
+export function preserveViewAcrossRefit(
+  prev: ViewBox,
+  prevMapWidth: number,
+  prevWorld: PanBounds,
+  nextMapWidth: number,
+  nextMapHeight: number,
+  nextWorld: PanBounds,
+): ViewBox {
+  return restoreViewAnchor(
+    captureViewAnchor(prev, prevMapWidth, prevWorld),
+    nextMapWidth,
+    nextMapHeight,
+    nextWorld,
+  );
+}
+
 // ─── Drag session (failure mode 3: pointer lifecycle + click-vs-drag) ──────
 //
 // The DOM half of failure mode 3 (setPointerCapture / releasePointerCapture)
@@ -441,6 +575,139 @@ export function endDragSession(
 ): { panned: boolean } | null {
   if (pointerId !== session.pointerId) return null;
   return { panned: session.panned };
+}
+
+// ─── Coincident pins ───────────────────────────────────────────────────
+
+/** Pin dot radius in screen px (MapPane divides it by zoom). */
+export const PIN_RADIUS_PX = 3;
+
+/**
+ * Screen distance (px) at or below which two pins count as coincident: a
+ * pin whose center lies inside another pin's dot can be neither seen nor
+ * clicked on its own. MapPane divides it by zoom, so zooming in resolves
+ * near-but-distinct pins back onto their true positions.
+ */
+export const COINCIDENT_PIN_EPSILON_PX = PIN_RADIUS_PX;
+
+/**
+ * Base radius (screen px) of the ring coincident pins fan out onto.
+ * MapPane divides it by zoom so the fan stays the same size on screen.
+ */
+export const COINCIDENT_PIN_RING_PX = 8;
+
+/**
+ * Fan coincident pins out onto a small ring so each stays visible and
+ * clickable.
+ *
+ * - Pins within `epsilon` of each other are grouped transitively (single
+ *   linkage: connected components of the within-epsilon graph), which
+ *   makes the grouping independent of visiting order.
+ * - Each group's members are sorted by place id and placed around the
+ *   group's centroid, the lowest id at the top (angle -π/2) and the rest
+ *   clockwise at angle -π/2 + 2πi/n.
+ * - The ring radius is `radius`, grown for large groups just enough that
+ *   neighbors on the ring stay at least `radius` apart (chord ≥ radius).
+ * - Pins with no neighbor within `epsilon` keep their exact position.
+ *
+ * The output depends only on the id → point pairs, never on the input
+ * map's insertion order (entries come back in ascending id order). It is
+ * display-only: centering and the place dialog use the true coordinates.
+ *
+ * @param coords  projected SVG coordinates per place id
+ * @param epsilon grouping distance in SVG units (≥ 0)
+ * @param radius  base ring radius in SVG units (> 0)
+ */
+export function offsetCoincidentPins(
+  coords: ReadonlyMap<number, { x: number; y: number }>,
+  epsilon: number,
+  radius: number,
+): Map<number, { x: number; y: number }> {
+  if (!Number.isFinite(epsilon) || epsilon < 0) {
+    throw new Error(
+      `Coincident-pin epsilon must be finite and >= 0: ${epsilon}`,
+    );
+  }
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new Error(
+      `Coincident-pin ring radius must be finite and > 0: ${radius}`,
+    );
+  }
+
+  const ids = Array.from(coords.keys()).sort((a, b) => a - b);
+  const points = ids.map((id) => {
+    const point = coords.get(id)!;
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      throw new Error(`Place ${id} has non-finite projected coordinates`);
+    }
+    return point;
+  });
+
+  // Union-find over the within-epsilon graph; the root of each component
+  // is its lowest index (= lowest place id).
+  const parent = ids.map((_, index) => index);
+  const find = (index: number): number => {
+    let root = index;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[index] !== root) {
+      const next = parent[index];
+      parent[index] = root;
+      index = next;
+    }
+    return root;
+  };
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      const dx = points[j].x - points[i].x;
+      const dy = points[j].y - points[i].y;
+      if (Math.hypot(dx, dy) > epsilon) continue;
+      const rootI = find(i);
+      const rootJ = find(j);
+      if (rootI !== rootJ) {
+        parent[Math.max(rootI, rootJ)] = Math.min(rootI, rootJ);
+      }
+    }
+  }
+
+  // Members in ascending index order, i.e. sorted by place id.
+  const groups = new Map<number, number[]>();
+  points.forEach((_, index) => {
+    const root = find(index);
+    const members = groups.get(root);
+    if (members) members.push(index);
+    else groups.set(root, [index]);
+  });
+
+  const placed: Array<{ x: number; y: number }> = new Array(points.length);
+  groups.forEach((members) => {
+    if (members.length === 1) {
+      const [only] = members;
+      placed[only] = { x: points[only].x, y: points[only].y };
+      return;
+    }
+
+    const n = members.length;
+    let sumX = 0;
+    let sumY = 0;
+    for (const index of members) {
+      sumX += points[index].x;
+      sumY += points[index].y;
+    }
+    const centerX = sumX / n;
+    const centerY = sumY / n;
+    // Adjacent chord = 2·r·sin(π/n); keep it ≥ radius (n ≤ 6 fit as is).
+    const ringRadius = Math.max(radius, radius / (2 * Math.sin(Math.PI / n)));
+
+    members.forEach((index, position) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * position) / n;
+      placed[index] = {
+        x: centerX + ringRadius * Math.cos(angle),
+        y: centerY + ringRadius * Math.sin(angle),
+      };
+    });
+  });
+
+  return new Map(ids.map((id, index) => [id, placed[index]]));
 }
 
 export interface LabelCandidate {

@@ -9,6 +9,9 @@
  *   - clampViewBox / panViewBox / computeMapBounds → §4.1/§4.3 pan + bounds
  *   - beginDragSession / applyDragMove / endDragSession → §6.3 pointer
  *     lifecycle (owning-pointer guard) + click-vs-drag threshold
+ *   - invertEquirectangular / preserveViewAcrossRefit → pan and zoom
+ *     survive a canvas resize (the projection refits; the view must not)
+ *   - offsetCoincidentPins → coincident pins fan out deterministically
  * (The setPointerCapture / releasePointerCapture DOM calls themselves are
  * verified in a real browser — see PR evidence.)
  */
@@ -21,18 +24,26 @@ import {
   boundsToFitObject,
   centerViewBoxOn,
   clampViewBox,
+  captureViewAnchor,
   clampZoom,
+  COINCIDENT_PIN_EPSILON_PX,
+  COINCIDENT_PIN_RING_PX,
   computeLabelVisibility,
   computeMapBounds,
   DRAG_THRESHOLD_PX,
   endDragSession,
   extractCoordinates,
+  invertEquirectangular,
   MIN_BOUNDS_SPAN_DEG,
   MIN_WORLD_VISIBLE_FRACTION,
+  offsetCoincidentPins,
   panViewBox,
+  preserveViewAcrossRefit,
+  projectEquirectangular,
   shouldDisplayLabelByZoom,
   zoomViewBoxAtCursor,
   type LabelCandidate,
+  type MapBounds,
   type PanBounds,
   type ViewBox,
 } from "./map-geometry";
@@ -613,5 +624,395 @@ describe("computeLabelVisibility (failure mode 1: label culling)", () => {
     );
     expect(result.get(1)).toBe(true);
     expect(result.get(2)).toBe(true);
+  });
+});
+
+// ─── Resize refit (pan and zoom survive a canvas resize) ──────────────────
+
+/**
+ * The fit MapPane performs for a canvas size (useGeoProjection: real d3
+ * equirectangular + fitSize on boundsToFitObject) and the pan bounds it
+ * derives from the projected world corners.
+ */
+function fitFrame(width: number, height: number, bounds: MapBounds | null) {
+  const projection = geoEquirectangular();
+  projection.fitSize(
+    [width, height],
+    boundsToFitObject(
+      bounds ?? { minLng: -180, maxLng: 180, minLat: -90, maxLat: 90 },
+    ),
+  );
+  const a = projection([-180, 90])!;
+  const b = projection([180, -90])!;
+  const world: PanBounds = {
+    minX: Math.min(a[0], b[0]),
+    minY: Math.min(a[1], b[1]),
+    maxX: Math.max(a[0], b[0]),
+    maxY: Math.max(a[1], b[1]),
+  };
+  return { projection, world, width, height };
+}
+
+/** Geographic point under the window's center, via d3's own invert. */
+function centerLngLat(
+  box: ViewBox,
+  projection: ReturnType<typeof geoEquirectangular>,
+) {
+  return projection.invert!([box.x + box.width / 2, box.y + box.height / 2])!;
+}
+
+// Bergen, Norway (a regional fit, as for any charted slot).
+const BERGEN_REGION: MapBounds = {
+  minLng: 4.8,
+  maxLng: 5.9,
+  minLat: 60.1,
+  maxLat: 60.7,
+};
+
+describe("invertEquirectangular / projectEquirectangular", () => {
+  const frames = [
+    fitFrame(1026, 792, BERGEN_REGION),
+    fitFrame(640, 900, null),
+  ];
+
+  it("inverts the fitted d3 projection exactly (regional and world fits)", () => {
+    for (const { projection, world } of frames) {
+      for (const [lng, lat] of [
+        [5.322, 60.392],
+        [-90.07, 29.95],
+        [178.5, -17.5],
+        [0, 0],
+      ]) {
+        const [x, y] = projection([lng, lat])!;
+        const inverted = invertEquirectangular({ x, y }, world);
+        expect(inverted.longitude).toBeCloseTo(lng, 9);
+        expect(inverted.latitude).toBeCloseTo(lat, 9);
+
+        const forward = projectEquirectangular(
+          { longitude: lng, latitude: lat },
+          world,
+        );
+        expect(forward.x).toBeCloseTo(x, 6);
+        expect(forward.y).toBeCloseTo(y, 6);
+      }
+    }
+  });
+
+  it("does not wrap a point past the antimeridian (round-trips instead)", () => {
+    const { projection, world } = fitFrame(800, 400, null);
+    // A view center panned 45 degrees past the east edge of the world.
+    const pastEast = { x: world.maxX + (world.maxX - world.minX) / 8, y: 200 };
+
+    const inverted = invertEquirectangular(pastEast, world);
+    expect(inverted.longitude).toBeCloseTo(225, 9);
+    const back = projectEquirectangular(inverted, world);
+    expect(back.x).toBeCloseTo(pastEast.x, 9);
+    expect(back.y).toBeCloseTo(pastEast.y, 9);
+
+    // d3 wraps it to the far side of the world, which would teleport a
+    // panned view on resize — the reason for the linear inverse.
+    expect(projection.invert!([pastEast.x, pastEast.y])![0]).toBeCloseTo(
+      -135,
+      9,
+    );
+  });
+
+  it("rejects a degenerate world extent", () => {
+    const flat: PanBounds = { minX: 0, minY: 0, maxX: 0, maxY: 100 };
+    expect(() => invertEquirectangular({ x: 0, y: 0 }, flat)).toThrow(
+      /Degenerate projected world extent/,
+    );
+  });
+});
+
+describe("preserveViewAcrossRefit (pan and zoom survive a resize)", () => {
+  it("keeps the geographic center and the zoom across a refit", () => {
+    const before = fitFrame(1026, 792, BERGEN_REGION);
+    const after = fitFrame(640, 900, BERGEN_REGION);
+
+    // A panned + zoomed window (zoom 3, centered off the fit's middle).
+    const zoom = 3;
+    const view: ViewBox = {
+      x: 700 - before.width / zoom / 2,
+      y: 250 - before.height / zoom / 2,
+      width: before.width / zoom,
+      height: before.height / zoom,
+    };
+    const centerBefore = centerLngLat(view, before.projection);
+
+    const next = preserveViewAcrossRefit(
+      view,
+      before.width,
+      before.world,
+      after.width,
+      after.height,
+      after.world,
+    );
+
+    const centerAfter = centerLngLat(next, after.projection);
+    expect(centerAfter[0]).toBeCloseTo(centerBefore[0], 9);
+    expect(centerAfter[1]).toBeCloseTo(centerBefore[1], 9);
+    // Zoom readout (canvas width / viewBox width) is unchanged:
+    expect(after.width / next.width).toBeCloseTo(zoom, 9);
+    // The window takes the new canvas's aspect ratio:
+    expect(next.width / next.height).toBeCloseTo(after.width / after.height, 9);
+  });
+
+  it("differs from the old reset-to-canvas behavior on a panned view", () => {
+    // REGRESSION: the ResizeObserver used to reset the viewBox to
+    // {0, 0, w, h} — zoom 1 over the fitted region, pan discarded.
+    const before = fitFrame(800, 600, BERGEN_REGION);
+    const after = fitFrame(1200, 600, BERGEN_REGION);
+    const view: ViewBox = { x: 500, y: 100, width: 200, height: 150 };
+
+    const next = preserveViewAcrossRefit(
+      view,
+      before.width,
+      before.world,
+      after.width,
+      after.height,
+      after.world,
+    );
+    expect(next).not.toEqual({ x: 0, y: 0, width: 1200, height: 600 });
+    expect(after.width / next.width).toBeCloseTo(4, 9);
+  });
+
+  it("maps the untouched fitted view onto the new fitted view", () => {
+    // First mount: the window is the whole fit at zoom 1; it must stay
+    // the whole fit after the canvas reports its real size.
+    const before = fitFrame(800, 600, BERGEN_REGION);
+    const after = fitFrame(1026, 792, BERGEN_REGION);
+    const next = preserveViewAcrossRefit(
+      { x: 0, y: 0, width: 800, height: 600 },
+      before.width,
+      before.world,
+      after.width,
+      after.height,
+      after.world,
+    );
+    expect(next.x).toBeCloseTo(0, 6);
+    expect(next.y).toBeCloseTo(0, 6);
+    expect(next.width).toBeCloseTo(1026, 9);
+    expect(next.height).toBeCloseTo(792, 9);
+  });
+
+  it("keeps a view panned past the antimeridian on its side", () => {
+    const before = fitFrame(800, 400, null);
+    const after = fitFrame(1000, 500, null);
+    // Center at longitude 225 (45 degrees past the east edge), zoom 1.
+    const view: ViewBox = { x: 500, y: 0, width: 800, height: 400 };
+    expect(captureViewAnchor(view, 800, before.world).center.longitude)
+      .toBeCloseTo(225, 9);
+
+    const next = preserveViewAcrossRefit(
+      view,
+      before.width,
+      before.world,
+      after.width,
+      after.height,
+      after.world,
+    );
+    const centerX = next.x + next.width / 2;
+    expect(invertEquirectangular({ x: centerX, y: 0 }, after.world).longitude)
+      .toBeCloseTo(225, 9);
+  });
+
+  it("still applies the pan clamp in the new frame", () => {
+    const before = fitFrame(800, 400, null);
+    const after = fitFrame(400, 200, null);
+    // Zoomed out (0.5) and panned to the clamp's edge in the old frame.
+    const view = clampViewBox(
+      { x: 99999, y: 0, width: 1600, height: 800 },
+      before.world,
+    );
+    const next = preserveViewAcrossRefit(
+      view,
+      before.width,
+      before.world,
+      after.width,
+      after.height,
+      after.world,
+    );
+    expect(clampViewBox(next, after.world)).toEqual(next);
+    expect(after.width / next.width).toBeCloseTo(0.5, 9);
+  });
+});
+
+// ─── Coincident pins ──────────────────────────────────────────────────────
+
+function pinMap(entries: Array<[number, number, number]>) {
+  return new Map(entries.map(([id, x, y]) => [id, { x, y }]));
+}
+
+describe("offsetCoincidentPins", () => {
+  it("leaves pins with no neighbor within epsilon exactly where they are", () => {
+    const pins = pinMap([
+      [1, 100, 100],
+      [2, 200, 100],
+      [3, 100, 250],
+    ]);
+    const out = offsetCoincidentPins(pins, 3, 8);
+    expect(out).toEqual(pins);
+  });
+
+  it("fans two coincident pins onto the ring, lowest id on top", () => {
+    const out = offsetCoincidentPins(
+      pinMap([
+        [42, 300, 200],
+        [7, 300, 200],
+      ]),
+      3,
+      8,
+    );
+    expect(out.get(7)!.x).toBeCloseTo(300, 9);
+    expect(out.get(7)!.y).toBeCloseTo(192, 9); // top: angle -π/2
+    expect(out.get(42)!.x).toBeCloseTo(300, 9);
+    expect(out.get(42)!.y).toBeCloseTo(208, 9); // opposite side
+  });
+
+  it("places members at angle -π/2 + 2πi/n on a ring around the group", () => {
+    const ids = [31, 4, 18, 9, 12];
+    const out = offsetCoincidentPins(
+      pinMap(ids.map((id) => [id, 50, 60])),
+      3,
+      10,
+    );
+    const sorted = [...ids].sort((a, b) => a - b);
+    sorted.forEach((id, i) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / sorted.length;
+      const point = out.get(id)!;
+      expect(point.x).toBeCloseTo(50 + 10 * Math.cos(angle), 9);
+      expect(point.y).toBeCloseTo(60 + 10 * Math.sin(angle), 9);
+      expect(Math.hypot(point.x - 50, point.y - 60)).toBeCloseTo(10, 9);
+    });
+  });
+
+  it("is independent of the input map's insertion order", () => {
+    const entries: Array<[number, number, number]> = [
+      [5, 10, 10],
+      [3, 10, 10],
+      [9, 11, 10],
+      [1, 400, 400],
+      [8, 400, 401],
+      [2, 90, 90],
+      [6, 10, 12],
+    ];
+    const reference = offsetCoincidentPins(pinMap(entries), 3, 8);
+    const permutations = [
+      [...entries].reverse(),
+      [3, 0, 6, 1, 5, 2, 4].map((i) => entries[i]),
+      [...entries].sort((a, b) => b[0] - a[0]),
+    ];
+    for (const permutation of permutations) {
+      const out = offsetCoincidentPins(pinMap(permutation), 3, 8);
+      expect(out).toEqual(reference);
+      // Bit-for-bit, and in the same (ascending id) order:
+      expect(Array.from(out.entries())).toEqual(
+        Array.from(reference.entries()),
+      );
+    }
+    expect(Array.from(reference.keys())).toEqual([1, 2, 3, 5, 6, 8, 9]);
+  });
+
+  it("groups transitively, so a chain cannot split by visiting order", () => {
+    // 1–2 and 2–3 are within epsilon; 1–3 is not. Greedy seeding from
+    // pin 1 or pin 3 would disagree; connected components cannot.
+    const pins = pinMap([
+      [1, 0, 0],
+      [2, 2.5, 0],
+      [3, 5, 0],
+    ]);
+    const out = offsetCoincidentPins(pins, 3, 8);
+    const centroid = { x: 2.5, y: 0 };
+    for (const id of [1, 2, 3]) {
+      const point = out.get(id)!;
+      expect(Math.hypot(point.x - centroid.x, point.y - centroid.y))
+        .toBeCloseTo(8, 9);
+    }
+    expect(out.get(1)!.y).toBeCloseTo(-8, 9); // lowest id on top
+  });
+
+  it("groups at exactly epsilon and not beyond it", () => {
+    const at = offsetCoincidentPins(
+      pinMap([
+        [1, 0, 0],
+        [2, 3, 0],
+      ]),
+      3,
+      8,
+    );
+    expect(at.get(1)).not.toEqual({ x: 0, y: 0 });
+
+    const beyond = offsetCoincidentPins(
+      pinMap([
+        [1, 0, 0],
+        [2, 3.0001, 0],
+      ]),
+      3,
+      8,
+    );
+    expect(beyond.get(1)).toEqual({ x: 0, y: 0 });
+    expect(beyond.get(2)).toEqual({ x: 3.0001, y: 0 });
+  });
+
+  it("grows the ring for large groups so neighbors stay radius apart", () => {
+    const ids = Array.from({ length: 12 }, (_, i) => i + 1);
+    const out = offsetCoincidentPins(
+      pinMap(ids.map((id) => [id, 0, 0])),
+      3,
+      8,
+    );
+    const points = ids.map((id) => out.get(id)!);
+    for (let i = 0; i < points.length; i++) {
+      const next = points[(i + 1) % points.length];
+      expect(
+        Math.hypot(next.x - points[i].x, next.y - points[i].y),
+      ).toBeCloseTo(8, 9);
+    }
+    // Six or fewer members fit on the base radius itself.
+    const six = offsetCoincidentPins(
+      pinMap(ids.slice(0, 6).map((id) => [id, 0, 0])),
+      3,
+      8,
+    );
+    expect(Math.hypot(six.get(1)!.x, six.get(1)!.y)).toBeCloseTo(8, 9);
+  });
+
+  it("keeps the fan screen-constant when MapPane scales by 1/zoom", () => {
+    // Two places ~2 SVG units apart at zoom 1 (inside one pin's dot).
+    const pins = pinMap([
+      [1, 100, 100],
+      [2, 101.2, 101.6],
+    ]);
+    const onScreen = (zoom: number) => {
+      const out = offsetCoincidentPins(
+        pins,
+        COINCIDENT_PIN_EPSILON_PX / zoom,
+        COINCIDENT_PIN_RING_PX / zoom,
+      );
+      const a = out.get(1)!;
+      const b = out.get(2)!;
+      return Math.hypot(b.x - a.x, b.y - a.y) * zoom;
+    };
+    // Grouped: the pair sits a full ring diameter apart on screen.
+    expect(onScreen(1)).toBeCloseTo(2 * COINCIDENT_PIN_RING_PX, 9);
+    expect(onScreen(1.4)).toBeCloseTo(2 * COINCIDENT_PIN_RING_PX, 9);
+    // Zoomed in far enough, the true points separate on screen and the
+    // pins return to them (2 units × zoom 4 = 8 px > epsilon).
+    const zoomedIn = offsetCoincidentPins(
+      pins,
+      COINCIDENT_PIN_EPSILON_PX / 4,
+      COINCIDENT_PIN_RING_PX / 4,
+    );
+    expect(zoomedIn).toEqual(pins);
+  });
+
+  it("rejects invalid parameters and non-finite coordinates loudly", () => {
+    const pins = pinMap([[1, 0, 0]]);
+    expect(() => offsetCoincidentPins(pins, -1, 8)).toThrow(/epsilon/);
+    expect(() => offsetCoincidentPins(pins, 3, 0)).toThrow(/radius/);
+    expect(() => offsetCoincidentPins(pins, Number.NaN, 8)).toThrow(/epsilon/);
+    expect(() => offsetCoincidentPins(pinMap([[1, Number.NaN, 0]]), 3, 8))
+      .toThrow(/non-finite/);
   });
 });
