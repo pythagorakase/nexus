@@ -16,6 +16,7 @@ from fastapi import BackgroundTasks, HTTPException
 from psycopg2.extras import Json, RealDictCursor
 
 from nexus.api import narrative, narrative_lease, slot_state
+from nexus.api.choice_recovery import recover_orphaned_choice
 from nexus.api.narrative_schemas import RetryNarrativeRequest
 from tests.pg_fixtures import connect, disposable_slot_database
 from tests.test_api.test_narrative_continue_validation import _reset_to_committed_parent
@@ -203,6 +204,95 @@ def test_retry_rejects_changed_durable_state_before_session_creation(
         retry(failed)
     assert error.value.status_code == 409
     assert snapshot(dbname) == before
+
+
+STAGING_ERROR = (
+    "Unresolved place state update name 'Machine-Shop'; new places must be "
+    "declared through new_entities in the same turn."
+)
+
+
+def resume_state(dbname):
+    """Read resume state through the production slot-state resolver."""
+    with connect(dbname, cursor_factory=RealDictCursor) as conn, conn.cursor() as cur:
+        return slot_state._get_narrative_state(cur)
+
+
+def test_staging_failure_resumes_as_recovery_and_retries_once(recovery_db):
+    """#952: has_pending=false after a staging failure is a recovery state.
+
+    The consumed menu is never reoffered, a gateway restart keeps the action,
+    one explicit retry resumes it unchanged, and every stale copy is fenced.
+    """
+    dbname, parent, failed = recovery_db
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE narrative_generation_sessions SET error = %s "
+            "WHERE session_id = %s",
+            (STAGING_ERROR, failed),
+        )
+    state = resume_state(dbname)
+    assert (state.current_chunk_id, state.has_pending, state.session_id) == (
+        parent,
+        False,
+        None,
+    )
+    assert state.choices == []
+    assert state.recorded_action == ACTION
+    assert state.recovery == narrative_lease.RetryableFailure(
+        failed, parent, STAGING_ERROR, "WireContractViolation"
+    )
+
+    # A restart runs orphan recovery; the retryable action must survive it.
+    with connect(dbname) as conn:
+        assert recover_orphaned_choice(conn) is None
+    assert resume_state(dbname).recovery == state.recovery
+    original = snapshot(dbname)[0]
+
+    response, tasks = retry(state.recovery.session_id)
+    assert tasks.tasks[0].args == (response.session_id, parent, ACTION, 4)
+    running = resume_state(dbname)
+    assert (running.recovery, running.choices) == (None, [])
+    assert snapshot(dbname)[0] == original
+
+    # The old recovery control is stale while the retry owns the slot ...
+    with pytest.raises(HTTPException) as stale:
+        retry(failed)
+    assert stale.value.status_code == 409
+    # ... and after the retry fails, recovery names only the newer attempt.
+    with connect(dbname) as conn:
+        narrative_lease.abandon_generation(
+            conn,
+            session_id=response.session_id,
+            error="fixture failure",
+            error_class="FixtureError",
+        )
+    replaced = resume_state(dbname)
+    assert replaced.recovery == narrative_lease.RetryableFailure(
+        response.session_id, parent, "fixture failure", "FixtureError"
+    )
+    with pytest.raises(HTTPException) as stale:
+        retry(failed)
+    assert stale.value.status_code == 409
+    assert snapshot(dbname)[0] == original
+
+
+def test_restart_reopens_the_menu_when_no_retry_can_resume(recovery_db):
+    """An unbound failure keeps the original orphan cleanup and live choices."""
+    dbname, parent, failed = recovery_db
+    with connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE narrative_generation_sessions SET parent_chunk_id = NULL "
+            "WHERE session_id = %s",
+            (failed,),
+        )
+    assert resume_state(dbname).recovery is None
+    with connect(dbname) as conn:
+        assert recover_orphaned_choice(conn) == parent
+    reopened = resume_state(dbname)
+    assert reopened.recorded_action is None
+    assert reopened.choices == ["Agree.", "Walk away."]
+    assert reopened.recovery is None
 
 
 def test_retry_bootstrap_without_a_playable_parent(recovery_db):

@@ -34,6 +34,8 @@ def failed_row(**overrides):
             terminal_outcome="error",
             parent_chunk_id=9,
             replaced_by_session_id=None,
+            error="Unresolved place state update",
+            error_class="WireContractViolation",
         )
         | overrides
     )
@@ -93,6 +95,42 @@ def test_bootstrap_retry_requires_no_playable_frontier():
         narrative_lease._retry_context(
             RetryCursor(row, parent={"id": 1, "choice_text": "x"}), "reviewed-failure"
         )
+
+
+@pytest.mark.parametrize(
+    "failed,pending,parent",
+    [
+        (failed_row(), None, {"id": 9, "choice_text": "Recorded"}),
+        (failed_row(parent_chunk_id=0), None, None),
+        (failed_row(replaced_by_session_id="replacement"), None, None),
+        (failed_row(status="initiated", terminal_outcome=None), None, None),
+        (failed_row(parent_chunk_id=None), None, None),
+        (failed_row(), True, None),
+        (failed_row(), None, {"id": 10, "choice_text": "Newer"}),
+        (failed_row(), None, {"id": 9, "choice_text": None}),
+        (None, None, None),
+    ],
+)
+def test_resume_recovery_matches_the_retry_fence(failed, pending, parent):
+    """Resume state offers recovery exactly when the retry route would accept it."""
+    resume = RetryCursor(failed, pending, parent)
+    offered = narrative_lease.read_retryable_failure(resume)
+    fence = RetryCursor(failed, pending, parent)
+    try:
+        accepted = narrative_lease._retry_context(fence, "reviewed-failure")
+    except narrative_lease.GenerationRetryConflict:
+        accepted = None
+    assert (offered is None) == (accepted is None)
+    if offered is not None:
+        assert offered == narrative_lease.RetryableFailure(
+            "reviewed-failure",
+            accepted.parent_chunk_id,
+            "Unresolved place state update",
+            "WireContractViolation",
+        )
+    # Only the retry route locks; reading resume state never does.
+    assert "FOR UPDATE" in fence.queries[0]
+    assert not any("FOR UPDATE" in query for query in resume.queries)
 
 
 @pytest.mark.parametrize(
@@ -296,3 +334,129 @@ async def test_frontier_and_pending_routes_bind_inside_acceptance(
     narrative._abandon_unscheduled_generation_owner.reset_mock()
     await continue_route(_committed_state(has_pending=True), choice=1)
     assert isinstance(approve.call_args.kwargs["bind_session_id"], str)
+
+
+@pytest.mark.asyncio
+async def test_new_input_on_a_consumed_frontier_is_checked_against_its_action(
+    continue_route, monkeypatch
+):
+    """Slot state lists no choices once an action is recorded; the route still
+    resolves new input against that action instead of generating from it."""
+    record = Mock(
+        side_effect=HTTPException(409, "Choice already selected for chunk 17.")
+    )
+    monkeypatch.setattr(narrative, "_record_player_response_for_chunk", record)
+    monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: _consumed_state())
+    tasks = BackgroundTasks()
+    from nexus.api.narrative_schemas import ContinueNarrativeRequest
+
+    with pytest.raises(HTTPException) as conflict:
+        await narrative.continue_narrative(
+            ContinueNarrativeRequest(slot=4, user_text="A different action"), tasks
+        )
+    assert conflict.value.status_code == 409
+    assert tasks.tasks == []
+    assert record.call_args.kwargs["chunk_id"] == 17
+    assert record.call_args.kwargs["user_text"] == "A different action"
+    narrative._bind_generation_owner.assert_not_called()
+
+
+def _consumed_state():
+    """Committed frontier 17 whose menu the recorded action consumed."""
+    return SimpleNamespace(
+        is_wizard_mode=False,
+        narrative_state=SimpleNamespace(
+            has_pending=False,
+            session_id=None,
+            current_chunk_id=17,
+            choices=[],
+            recorded_action="Open.",
+        ),
+    )
+
+
+ACTION = "Record both conditions.\nAsk for an inspection."
+
+
+class StartupCursor:
+    """Serve startup recovery's reads for one committed frontier (chunk 9)."""
+
+    def __init__(self, connection, dict_rows):
+        self.connection = connection
+        self.dict_rows = dict_rows
+        self.result = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, query, params=None):
+        normalized = " ".join(query.split())
+        if normalized.startswith("LOCK TABLE"):
+            self.result = None
+        elif normalized.startswith("UPDATE narrative_chunks"):
+            self.connection.cleared.append(params[-1])
+        elif "FROM narrative_generation_lease" in normalized:
+            self.result = None
+        elif "FROM narrative_generation_sessions" in normalized:
+            self.result = self.connection.session
+        elif "FROM incubator" in normalized:
+            self.result = None
+        elif "embedding_generated_at" in normalized:
+            menu = {"presented": ["Agree.", "Walk away."], "selected": None}
+            self.result = ("The hearing stalls.", menu, None)
+        elif "FROM narrative_chunks" in normalized:
+            self.result = (
+                {"id": 9, "choice_text": ACTION} if self.dict_rows else (9, ACTION)
+            )
+        else:
+            raise AssertionError(f"Unexpected startup query: {normalized}")
+
+    def fetchone(self):
+        return self.result
+
+
+class StartupConnection:
+    """Transaction double for recover_orphaned_choice; records cleared chunks."""
+
+    def __init__(self, session):
+        self.session = session
+        self.cleared = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def cursor(self, cursor_factory=None):
+        return StartupCursor(self, dict_rows=cursor_factory is not None)
+
+
+def test_restart_keeps_the_action_a_retryable_failure_resumes():
+    """A gateway restart must not erase the action the displayed Retry needs."""
+    from nexus.api.choice_recovery import recover_orphaned_choice
+
+    connection = StartupConnection(failed_row())
+    assert recover_orphaned_choice(connection) is None
+    assert connection.cleared == []
+
+
+@pytest.mark.parametrize(
+    "session",
+    [
+        failed_row(parent_chunk_id=None),
+        failed_row(replaced_by_session_id="replacement"),
+        failed_row(status="complete", terminal_outcome="accepted"),
+        None,
+    ],
+)
+def test_restart_still_clears_an_action_no_retry_can_resume(session):
+    """Without a retryable failure the orphaned choice is reopened as before."""
+    from nexus.api.choice_recovery import recover_orphaned_choice
+
+    connection = StartupConnection(session)
+    assert recover_orphaned_choice(connection) == 9
+    assert connection.cleared == [9]

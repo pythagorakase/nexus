@@ -921,10 +921,14 @@ async def continue_narrative(
                 else:
                     request.chunk_id = narrative_state.current_chunk_id
                     accepted_parent_candidate = narrative_state.current_chunk_id
+                    # A recorded action consumed the menu, so slot state lists
+                    # no choices; the chunk still decides whether new input
+                    # conflicts with that action.
                     if (
                         request.choice is not None
                         or request.accept_fate
                         or narrative_state.choices
+                        or narrative_state.recorded_action is not None
                     ):
                         resolved_user_text = _record_player_response_for_chunk(
                             slot=request.slot,

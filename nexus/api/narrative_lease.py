@@ -45,17 +45,58 @@ class GenerationRetryContext:
     user_text: str
 
 
+@dataclass(frozen=True)
+class RetryableFailure:
+    """The latest terminal failure that an explicit retry would resume as-is."""
+
+    session_id: str
+    parent_chunk_id: int
+    error: Optional[str]
+    error_class: Optional[str]
+
+
 def _retry_context(cur: Any, expected_session_id: str) -> GenerationRetryContext:
     """Fence retry against durable state under the generation lease lock."""
+    return _fenced_retry(cur, expected_session_id, lock=True)[1]
+
+
+def read_retryable_failure(cur: Any) -> Optional[RetryableFailure]:
+    """Return the failure ``POST /api/narrative/retry`` would accept right now.
+
+    This is the unlocked twin of the retry fence, so resume state offers a
+    recovery control exactly when the retry route would honour it. The route
+    still re-evaluates the same predicate under the lease before scheduling.
+    """
+    try:
+        failed, context = _fenced_retry(cur, None, lock=False)
+    except GenerationRetryConflict:
+        return None
+    return RetryableFailure(
+        session_id=str(failed["session_id"]),
+        parent_chunk_id=context.parent_chunk_id,
+        error=failed["error"],
+        error_class=failed["error_class"],
+    )
+
+
+def _fenced_retry(
+    cur: Any, expected_session_id: Optional[str], *, lock: bool
+) -> tuple[dict[str, Any], GenerationRetryContext]:
+    """Evaluate the retry predicate; ``None`` accepts whichever attempt is latest."""
+    lock_clause = " FOR UPDATE" if lock else ""
     cur.execute(
         "SELECT session_id, status, terminal_outcome, parent_chunk_id, "
-        "replaced_by_session_id FROM narrative_generation_sessions "
-        "ORDER BY created_at DESC LIMIT 1 FOR UPDATE"
+        "replaced_by_session_id, error, error_class "
+        "FROM narrative_generation_sessions "
+        f"ORDER BY created_at DESC LIMIT 1{lock_clause}"
     )
     failed = cur.fetchone()
     if (
         failed is None
-        or str(failed["session_id"]) != expected_session_id
+        or (
+            expected_session_id is not None
+            and str(failed["session_id"]) != expected_session_id
+        )
         or failed["status"] != "error"
         or failed["terminal_outcome"] != "error"
         or failed["replaced_by_session_id"] is not None
@@ -69,20 +110,20 @@ def _retry_context(cur: Any, expected_session_id: str) -> GenerationRetryContext
         raise GenerationRetryConflict("A pending narrative already exists.")
     cur.execute(
         "SELECT nc.id, nc.choice_text FROM narrative_chunks nc "
-        f"WHERE {playable_narrative_predicate()} ORDER BY nc.id DESC LIMIT 1 "
-        "FOR UPDATE"
+        f"WHERE {playable_narrative_predicate()} ORDER BY nc.id DESC LIMIT 1"
+        f"{lock_clause}"
     )
     parent = cur.fetchone()
     parent_id = int(failed["parent_chunk_id"])
     if parent_id == 0 and parent is None:
-        return GenerationRetryContext(parent_chunk_id=0, user_text="")
+        return failed, GenerationRetryContext(parent_chunk_id=0, user_text="")
     if (
         parent is None
         or int(parent["id"]) != parent_id
         or not (parent["choice_text"] or "").strip()
     ):
         raise GenerationRetryConflict("The committed action changed. Reload the story.")
-    return GenerationRetryContext(
+    return failed, GenerationRetryContext(
         parent_chunk_id=parent_id, user_text=parent["choice_text"]
     )
 

@@ -1749,3 +1749,45 @@ def test_retrograde_history_formatter_uses_summary_rows(capsys) -> None:
     assert "no summary" in output
     assert "embedding_pending_summary_ids: []" in output
     assert "summary_chunk" not in output
+
+
+def test_load_reports_a_failed_continuation_instead_of_consumed_choices(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """#952: the CLI resume view carries the durable failure, not a stale menu."""
+
+    error = "Unresolved place state update name 'Machine-Shop'."
+    state = {
+        "slot": 4,
+        "is_empty": False,
+        "is_wizard_mode": False,
+        "current_chunk_id": 9,
+        "has_pending": False,
+        "storyteller_text": "The hearing stalls.",
+        "choices": [],
+        "session_id": None,
+        "recovery": {
+            "session_id": "failed-8",
+            "parent_chunk_id": 9,
+            "error": error,
+            "error_class": "WireContractViolation",
+        },
+    }
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, Any]:
+            return state
+
+    monkeypatch.setattr(cli, "_api_get", lambda url, timeout: Response())
+    result = cli.run_load(Namespace(slot=4))
+    assert result["choices"] == []
+    assert result["recovery"] == state["recovery"]
+
+    cli.emit_output(result, as_json=False)
+    printed = capsys.readouterr().out
+    assert f"[Failed continuation: {error}]" in printed
+    assert "Choices:" not in printed

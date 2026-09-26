@@ -953,6 +953,12 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         print(message)
         print()
 
+    recovery = payload.get("recovery")
+    if recovery:
+        # The recorded action above consumed the menu; its continuation failed.
+        print(f"[Failed continuation: {recovery['error'] or recovery['error_class']}]")
+        print()
+
     if payload.get("trait_audit"):
         _print_trait_audit(payload)
         print()
@@ -1161,6 +1167,7 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
             "choices": data.get("choices", []),
             "chunk_id": data.get("current_chunk_id"),
             "has_pending": data.get("has_pending"),
+            "recovery": data.get("recovery"),
         }
 
     except requests.exceptions.ConnectionError:

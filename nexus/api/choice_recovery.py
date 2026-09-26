@@ -4,8 +4,11 @@ import json
 import logging
 from typing import Any, Optional
 
+from psycopg2.extras import RealDictCursor
+
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.lore_adapter import compute_raw_text
+from nexus.api.narrative_lease import read_retryable_failure
 
 logger = logging.getLogger("nexus.api.choice_recovery")
 
@@ -53,9 +56,11 @@ def clear_parent_choice(cur: Any, parent_chunk_id: int) -> None:
 def recover_orphaned_choice(conn: Any) -> Optional[int]:
     """Clear an unaccepted latest choice unless a generation or draft owns it.
 
-    Lock the lease first, then draft and narrative tables in commit order, so
-    absence checks cannot race acquisition, acceptance, or staging. A second
-    startup is a no-op.
+    A failed continuation that an explicit retry would resume also owns the
+    recorded action, so a restart keeps it for that retry instead of reopening
+    the consumed menu. Lock the lease first, then draft and narrative tables
+    in commit order, so absence checks cannot race acquisition, acceptance,
+    retry, or staging. A second startup is a no-op.
     """
     cleared = None
     with conn:
@@ -84,6 +89,9 @@ def recover_orphaned_choice(conn: Any) -> Optional[int]:
             )
             row = cur.fetchone()
             if row is not None and (row[1] or "").strip():
+                with conn.cursor(cursor_factory=RealDictCursor) as failures:
+                    if read_retryable_failure(failures) is not None:
+                        return None
                 cleared = int(row[0])
                 clear_parent_choice(cur, cleared)
     if cleared is not None:
