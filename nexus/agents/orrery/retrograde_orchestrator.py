@@ -32,6 +32,7 @@ import json
 import logging
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -98,15 +99,23 @@ def record_retrograde_progress(
     stage: str,
     detail: Optional[Mapping[str, Any]] = None,
 ) -> None:
-    """Publish the current Retrograde stage for one slot's transition run."""
+    """Publish the current Retrograde stage for one slot's transition run.
+
+    Raises:
+        ValueError: If ``stage`` is outside the published vocabulary.
+        RuntimeError: If no run has started for the slot; every stage belongs
+            to the run ``reset_retrograde_progress`` started.
+    """
 
     if stage not in RETROGRADE_WIZARD_STAGES and stage != "failed":
         raise ValueError(f"Unknown Retrograde wizard stage {stage!r}")
     with _PROGRESS_LOCK:
-        entry = _PROGRESS_BY_SLOT.setdefault(
-            slot,
-            {"slot": slot, "stages": []},
-        )
+        entry = _PROGRESS_BY_SLOT.get(slot)
+        if entry is None:
+            raise RuntimeError(
+                f"No Retrograde run has started for slot {slot}; "
+                "reset_retrograde_progress starts one before its first stage"
+            )
         entry["stage"] = stage
         entry["detail"] = dict(detail or {})
         entry["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -116,7 +125,12 @@ def record_retrograde_progress(
 
 
 def get_retrograde_progress(slot: int) -> Optional[dict[str, Any]]:
-    """Return the most recent Retrograde progress entry for a slot, if any."""
+    """Return the slot's current Retrograde run record, if a run has started.
+
+    ``run`` identifies the transition run that owns the record, so a waiter
+    that noted the identity before posting its transition can tell this
+    run's stages, terminal ones included, from the previous run's.
+    """
 
     with _PROGRESS_LOCK:
         entry = _PROGRESS_BY_SLOT.get(slot)
@@ -124,6 +138,7 @@ def get_retrograde_progress(slot: int) -> Optional[dict[str, Any]]:
             return None
         return {
             "slot": entry["slot"],
+            "run": entry["run"],
             "stage": entry["stage"],
             "detail": dict(entry["detail"]),
             "updated_at": entry["updated_at"],
@@ -131,11 +146,24 @@ def get_retrograde_progress(slot: int) -> Optional[dict[str, Any]]:
         }
 
 
-def reset_retrograde_progress(slot: int) -> None:
-    """Clear the progress registry for a slot before a new transition run."""
+def reset_retrograde_progress(slot: int) -> str:
+    """Start a slot's record for a new transition run and return its identity.
 
+    The record starts at stage ``idle`` under a fresh run identity, replacing
+    the previous run's record and its terminal stage.
+    """
+
+    run = uuid.uuid4().hex
     with _PROGRESS_LOCK:
-        _PROGRESS_BY_SLOT.pop(slot, None)
+        _PROGRESS_BY_SLOT[slot] = {
+            "slot": slot,
+            "run": run,
+            "stage": "idle",
+            "detail": {},
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "stages": [],
+        }
+    return run
 
 
 def generate_retrograde_history(

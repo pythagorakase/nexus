@@ -23,6 +23,7 @@ from pydantic_ai.tools import DeferredToolRequests
 from nexus.api.conversations import ConversationsClient
 from nexus.api.config_utils import (
     get_new_story_model,
+    get_retrograde_status_poll_interval_seconds,
     get_wizard_history_limit,
     get_wizard_max_tokens,
     get_wizard_streaming_enabled,
@@ -1375,12 +1376,16 @@ async def retrograde_status_endpoint(slot: int) -> Dict[str, Any]:
     Report wizard-time Retrograde progress for a slot.
 
     Stages: packet -> seed_candidates -> expansion -> persistence ->
-    embedding -> done (or failed). Returns stage "idle" when no Retrograde
-    run has been recorded for the slot in this server process.
+    embedding -> done (or failed). ``run`` identifies the transition run that
+    owns the record; it is null, with stage "idle", when no run has started
+    for the slot in this server process. Every answer also carries the
+    configured ``status_poll_interval_seconds``, so a player-plane waiter
+    paces its reads without the operator settings route.
     """
     from nexus.agents.orrery.retrograde_orchestrator import get_retrograde_progress
 
+    poll_interval = get_retrograde_status_poll_interval_seconds()
     progress = get_retrograde_progress(slot)
     if progress is None:
-        return {"slot": slot, "stage": "idle", "stages": []}
-    return progress
+        progress = {"slot": slot, "run": None, "stage": "idle", "stages": []}
+    return {**progress, "status_poll_interval_seconds": poll_interval}

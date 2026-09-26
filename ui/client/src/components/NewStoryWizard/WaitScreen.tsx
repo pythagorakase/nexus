@@ -1,21 +1,30 @@
 /**
  * WaitScreen - Full-screen loading state for long-running API operations.
  *
- * Displays a timer counting up, progress bar, and retry/cancel buttons.
- * Used during story generation when API calls may take up to 10 minutes.
+ * Displays a timer counting up, a segmented stage track (one pip per stage:
+ * done lit, active glowing, pending or skipped dim, failed in the danger
+ * colour), and retry/cancel buttons. Used while the story's world is
+ * generated, which can take many minutes.
  */
 import { useTheme } from '@/contexts/ThemeContext';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { RotateCcw, X } from 'lucide-react';
 
-interface WaitScreenProps {
+interface WaitScreenProps<S extends string> {
   /** Status message displayed above the timer */
   statusText: string;
   /** Elapsed time in seconds */
   elapsedSeconds: number;
-  /** Maximum expected time in seconds (default: 600 = 10 minutes) */
-  maxSeconds?: number;
+  /** Ordered stages of the operation; each renders as one pip */
+  stages: readonly S[];
+  /**
+   * The stage in progress, or the stage that failed when hasError is set.
+   * Null before the first stage reports.
+   */
+  currentStage: S | null;
+  /** Stages the operation skipped; they stay dim once passed */
+  skippedStages?: readonly S[];
   /** Called when user clicks Retry button */
   onRetry: () => void;
   /** Called when user clicks Cancel button */
@@ -26,6 +35,8 @@ interface WaitScreenProps {
   errorMessage?: string;
 }
 
+type StageState = 'done' | 'active' | 'pending' | 'skipped' | 'failed';
+
 /**
  * Format seconds as MM:SS
  */
@@ -35,26 +46,67 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function WaitScreen({
+/** Each stage's state: every unskipped stage before the current one is done. */
+function stageStates<S extends string>(
+  stages: readonly S[],
+  currentStage: S | null,
+  skippedStages: readonly S[],
+  hasError: boolean,
+): StageState[] {
+  const current = currentStage === null ? -1 : stages.indexOf(currentStage);
+  if (currentStage !== null && current < 0) {
+    throw new Error(`Wait stage ${currentStage} is not one of ${stages.join(', ')}`);
+  }
+  return stages.map((stage, index) =>
+    skippedStages.includes(stage)
+      ? 'skipped'
+      : index < current
+      ? 'done'
+      : index > current
+      ? 'pending'
+      : hasError
+      ? 'failed'
+      : 'active',
+  );
+}
+
+export function WaitScreen<S extends string>({
   statusText,
   elapsedSeconds,
-  maxSeconds = 600,
+  stages,
+  currentStage,
+  skippedStages = [],
   onRetry,
   onCancel,
   hasError = false,
   errorMessage,
-}: WaitScreenProps) {
-  const { glowClass, generatingClass, isGilded, isVector, isVeil } = useTheme();
+}: WaitScreenProps<S>) {
+  const { glowClass, generatingClass, isGilded, isVeil } = useTheme();
+  const states = stageStates(stages, currentStage, skippedStages, hasError);
 
-  // Calculate progress percentage (cap at 100%)
-  const progressPercent = Math.min((elapsedSeconds / maxSeconds) * 100, 100);
-
-  // Theme-specific accent color for the timer
+  // Theme-specific accent shared by the timer and the lit pips
   const timerColor = isGilded
     ? 'text-primary'
     : isVeil
     ? 'text-accent'
     : 'text-chart-1';
+  const pipLit = isGilded
+    ? 'bg-primary'
+    : isVeil
+    ? 'bg-accent'
+    : 'bg-chart-1';
+  const pipGlow = isGilded
+    ? 'shadow-[0_0_6px_1px_hsl(var(--primary)/0.8)]'
+    : isVeil
+    ? 'shadow-[0_0_6px_1px_hsl(var(--accent)/0.8)]'
+    : 'shadow-[0_0_6px_1px_hsl(var(--chart-1)/0.8)]';
+  const pipClass: Record<StageState, string> = {
+    done: pipLit,
+    active: cn(pipLit, pipGlow, 'animate-pulse motion-reduce:animate-none'),
+    pending: 'bg-muted',
+    skipped: 'bg-muted',
+    failed: 'bg-destructive shadow-[0_0_6px_1px_hsl(var(--destructive)/0.8)]',
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm">
@@ -78,12 +130,22 @@ export function WaitScreen({
           {formatTime(elapsedSeconds)}
         </div>
 
-        {/* Progress bar (the strip carries the proportion; no caption) */}
-        <div className="w-full max-w-xs">
-          <Progress
-            value={progressPercent}
-            className="h-2 bg-muted"
-          />
+        {/* Stage track: one uncaptioned pip per stage */}
+        <div
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={states.filter((state) => state !== 'skipped').length}
+          aria-valuenow={states.filter((state) => state === 'done').length}
+          className="flex w-full max-w-xs gap-1.5"
+        >
+          {states.map((state, index) => (
+            <span
+              key={stages[index]}
+              data-testid="wait-stage"
+              data-state={state}
+              className={cn('h-1.5 flex-1 rounded-full transition-colors', pipClass[state])}
+            />
+          ))}
         </div>
 
         {/* Action buttons */}

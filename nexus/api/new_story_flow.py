@@ -470,6 +470,12 @@ def perform_transition_with_retrograde(
     from nexus.api.save_slots import get_slot_model
     from nexus.config import load_settings
 
+    # A run reports "idle" under a fresh run identity from its first step, so
+    # stage pollers never read the previous attempt's terminal stage as this
+    # run's, whether this run derives trait inputs, skips Retrograde, fails
+    # before its first stage, or finishes before a poller's first read.
+    reset_retrograde_progress(slot_number)
+
     dbname = slot_dbname(slot_number)
     mapper = NewStoryDatabaseMapper(dbname=dbname)
     settings = load_settings()
@@ -540,8 +546,6 @@ def perform_transition_with_retrograde(
             f"Slot {slot_number} has no wizard cache; cannot run Retrograde "
             "cold-start generation"
         )
-
-    reset_retrograde_progress(slot_number)
 
     def _progress(stage: str, detail: Dict[str, Any]) -> None:
         record_retrograde_progress(slot_number, stage, detail)

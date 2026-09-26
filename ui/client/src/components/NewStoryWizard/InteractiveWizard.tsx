@@ -3,6 +3,13 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { rememberActiveSlot } from "@/lib/active-slot";
+import {
+    RETROGRADE_STAGES,
+    getRetrogradeStatus,
+    retrogradeStageOf,
+    type RetrogradeStage,
+    type RetrogradeStatus,
+} from "@/lib/narrative-api";
 import { wizardDraftScope } from "@/lib/wizard-draft";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -78,6 +85,48 @@ export const ACCEPTED_BEFORE_INTRODUCTION: Record<"character" | "seed", Phase> =
 // The server holds newer wizard state than the screen (409), such as an
 // acceptance or introduction whose response was lost after it was saved.
 class StaleWizardState extends Error {}
+
+// Genesis waits on the transition's Retrograde stages, then on scheduling
+// the opening narrative ("bootstrap"); one wait-screen pip per stage.
+export const GENESIS_STAGES = [...RETROGRADE_STAGES, "bootstrap"] as const;
+type GenesisStage = (typeof GENESIS_STAGES)[number];
+
+/**
+ * Read the gateway's Retrograde stage every `intervalMs` until `signal`
+ * aborts or this run reports done or failed. `previousRun` is the run that
+ * owned the record before the transition was posted: the gateway keeps that
+ * record until this run replaces it under a new identity, so records still
+ * carrying it are skipped and any other record is this run's, terminal or
+ * not. Reads never overlap.
+ */
+function pollRetrogradeStages(
+    slot: number,
+    previousRun: string | null,
+    intervalMs: number,
+    signal: AbortSignal,
+    onStage: (stage: RetrogradeStage) => void,
+    onError: (error: Error) => void,
+): void {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = async () => {
+        let status: RetrogradeStatus;
+        try {
+            status = await getRetrogradeStatus(slot, signal);
+        } catch (error) {
+            if (!signal.aborted) onError(error instanceof Error ? error : new Error(String(error)));
+            return;
+        }
+        if (signal.aborted) return;
+        if (status.run !== previousRun) {
+            const stage = retrogradeStageOf(status);
+            if (stage !== null) onStage(stage);
+            if (status.stage === "done" || status.stage === "failed") return;
+        }
+        timer = setTimeout(read, intervalMs);
+    };
+    timer = setTimeout(read, intervalMs);
+    signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+}
 
 // User-facing phase titles; the seed phase is presented as "Introduction"
 // throughout the wizard (see WizardShell's PHASES and the artifact modal).
@@ -184,7 +233,12 @@ export function InteractiveWizard({
     const [waitScreenElapsed, setWaitScreenElapsed] = useState(0);
     const [waitScreenError, setWaitScreenError] = useState<string | null>(null);
     const [waitScreenStatusText, setWaitScreenStatusText] = useState("Initializing your world...");
+    const [waitScreenStage, setWaitScreenStage] = useState<GenesisStage | null>(null);
+    const [waitScreenSkipped, setWaitScreenSkipped] = useState<readonly GenesisStage[]>([]);
     const transitionAbortRef = useRef<AbortController | null>(null);
+    // Stage reads end when the transition settles, on cancel, or on unmount.
+    const stagePollRef = useRef<AbortController | null>(null);
+    useEffect(() => () => stagePollRef.current?.abort(), []);
 
     const updatePhase = (newPhase: Phase) => {
         setCurrentPhase(newPhase);
@@ -408,30 +462,71 @@ export function InteractiveWizard({
         // Reset state on start/retry
         setWaitScreenError(null);
         setWaitScreenElapsed(0);
+        setWaitScreenStage(null);
+        setWaitScreenSkipped([]);
         setWaitScreenStatusText("Initializing your world...");
         setWaitScreenActive(true);
 
         // Create abort controller for cancellation
         const abortController = new AbortController();
         transitionAbortRef.current = abortController;
+        stagePollRef.current?.abort();
+        const stagePoll = new AbortController();
+        stagePollRef.current = stagePoll;
+        abortController.signal.addEventListener("abort", () => stagePoll.abort(), { once: true });
 
         try {
-            // Step 1: Transition (write entities to database)
+            // Read before the post: the record belongs to the previous run (or
+            // none), and the answer carries the configured poll interval.
+            const before = await getRetrogradeStatus(slot, abortController.signal);
+            pollRetrogradeStages(
+                slot,
+                before.run,
+                before.status_poll_interval_seconds * 1000,
+                stagePoll.signal,
+                setWaitScreenStage,
+                (error) => {
+                    console.error("Genesis stage read error:", error);
+                    toast({ title: "Transmission Error", description: error.message, variant: "destructive" });
+                },
+            );
+
+            // Step 1: Transition (Retrograde history, then world writes)
             const transitionRes = await fetch("/api/story/new/transition", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ slot }),
                 signal: abortController.signal,
             });
+            stagePoll.abort();
 
             if (!transitionRes.ok) {
                 const error = await transitionRes.json();
-                throw new Error(error.detail || "Transition failed");
+                const detail = error.detail || "Transition failed";
+                // The gateway still holds the stage that was running when the
+                // transition failed ("failed" names it in detail.stage), unless
+                // the transition was refused before its run replaced the
+                // previous run's record.
+                const status = await getRetrogradeStatus(slot, abortController.signal).catch(
+                    (statusError: Error) => {
+                        if (statusError.name === "AbortError") throw statusError;
+                        throw new Error(`${detail}\n${statusError.message}`);
+                    },
+                );
+                if (status.run !== before.run) setWaitScreenStage(retrogradeStageOf(status));
+                throw new Error(detail);
             }
 
-            await transitionRes.json(); // consume response
+            const transition = await transitionRes.json();
+            const retrogradeRan = transition.retrograde?.enabled;
+            if (typeof retrogradeRan !== "boolean") {
+                throw new Error(`Transition response names no Retrograde outcome: ${JSON.stringify(transition)}`);
+            }
+            // A skipped Retrograde run leaves its stages dim, not done.
+            if (!retrogradeRan) setWaitScreenSkipped(RETROGRADE_STAGES);
 
             // Step 2: Trigger bootstrap (generate first narrative chunk)
+            setWaitScreenStage("bootstrap");
             setWaitScreenStatusText("Starting narrative generation...");
 
             // No model override: bootstrap uses the model stamped on the
@@ -472,6 +567,7 @@ export function InteractiveWizard({
             onComplete();
 
         } catch (e: any) {
+            stagePoll.abort();
             if (e.name === "AbortError") {
                 // User cancelled via handleWaitScreenCancel - reset state for retry
                 // Note: processingRef is also reset in handleWaitScreenCancel, but we reset here too
@@ -501,6 +597,8 @@ export function InteractiveWizard({
         setWaitScreenActive(false);
         setWaitScreenError(null);
         setWaitScreenElapsed(0);
+        setWaitScreenStage(null);
+        setWaitScreenSkipped([]);
         setWaitScreenStatusText("Initializing your world...");
         setIsLoading(false);
         // Re-show the pending artifact for editing
@@ -1036,7 +1134,9 @@ export function InteractiveWizard({
                 <WaitScreen
                     statusText={waitScreenStatusText}
                     elapsedSeconds={waitScreenElapsed}
-                    maxSeconds={600}
+                    stages={GENESIS_STAGES}
+                    currentStage={waitScreenStage}
+                    skippedStages={waitScreenSkipped}
                     onRetry={handleWaitScreenRetry}
                     onCancel={handleWaitScreenCancel}
                     hasError={!!waitScreenError}

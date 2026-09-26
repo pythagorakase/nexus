@@ -2542,6 +2542,14 @@ class OrreryRetrogradeWizardSettings(BaseModel):
             "generation runs inside it, so the budget is minutes, not seconds."
         ),
     )
+    status_poll_interval_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        description=(
+            "How often the UI and CLI read GET /api/story/new/retrograde/status "
+            "while the wizard transition request is in flight."
+        ),
+    )
 
 
 class OrreryRetrogradeProjectSettings(BaseModel):
