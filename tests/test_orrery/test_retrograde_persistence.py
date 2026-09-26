@@ -744,6 +744,7 @@ class FakeRetrogradePersistenceCursor:
         self.deactivated_entity_ids: list[int] = []
         self.entity_activity_projections: list[dict[str, int]] = []
         self.inserted_character_stubs: list[str] = []
+        self.inserted_faction_stubs: list[str] = []
         self.statements: list[str] = []
         self.params: list[Any] = []
         self._result: list[dict[str, Any]] = []
@@ -808,6 +809,17 @@ class FakeRetrogradePersistenceCursor:
                         "name": name,
                         "character_id": 30 + offset,
                         "faction_id": None,
+                        "place_id": None,
+                    }
+                )
+            for offset, name in enumerate(self.inserted_faction_stubs):
+                rows.append(
+                    {
+                        "entity_id": 400 + offset,
+                        "entity_kind": "faction",
+                        "name": name,
+                        "character_id": None,
+                        "faction_id": 40 + offset,
                         "place_id": None,
                     }
                 )
@@ -936,6 +948,14 @@ class FakeRetrogradePersistenceCursor:
         elif "orrery:retrograde:insert_character_stub" in sql:
             assert params is not None
             self.inserted_character_stubs.append(str(params[0]))
+            self._result = []
+        elif "LOCK TABLE factions" in sql:
+            self._result = []
+        elif "SELECT COALESCE(MAX(id), 0) + 1 AS id FROM factions" in sql:
+            self._result = [{"id": 40 + len(self.inserted_faction_stubs)}]
+        elif "orrery:retrograde:insert_faction_stub" in sql:
+            assert params is not None
+            self.inserted_faction_stubs.append(str(params[1]))
             self._result = []
         elif "orrery:retrograde:entity_is_active" in sql:
             assert params is not None

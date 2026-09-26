@@ -19,7 +19,7 @@ PACKET_SCHEMA_VERSION = "orrery_retrograde_dry_run_packet.v0"
 SEED_REQUEST_SCHEMA_VERSION = "orrery_retrograde_seed_request.v0"
 WEIRD_LEVELS = frozenset({"low", "medium", "high"})
 # Prompt-section headings that carry first-class entity cards. The R6 entity
-# budget check (retrograde_expansion._packet_known_entity_keys) matches these
+# budget check (retrograde_expansion.packet_known_entity_keys) matches these
 # strings to rebuild the known-entity set, so they must be shared constants:
 # silent heading drift would empty that set and hard-block valid expansions.
 CORE_ENTITIES_HEADING = "Core entities"
@@ -419,10 +419,18 @@ def _trait_target_cards(
 ) -> list[dict[str, Any]]:
     """Return core-entity cards for trait-declared people, places, factions.
 
-    The trait compiler creates canonical rows for these names inside the same
-    transition transaction, before Retrograde persistence resolves expansion
-    refs. Exposing them as core entities makes Skald reuse the exact names,
-    so refs resolve as already_present instead of minting duplicate stubs.
+    The trait compiler runs in the same transition transaction, before
+    Retrograde persistence resolves expansion refs. It stubs patron,
+    dependent, obligation, and domain targets when their registry pair tags
+    exist. Exposing all trait targets as core entities makes Skald reuse
+    their exact names, so those refs resolve as already_present instead of
+    minting duplicate stubs.
+
+    Ally, contact, and enemy targets without an existing character id, and
+    status scope factions, get no trait-compiler row. Retrograde persistence
+    stubs them if the expansion references them. These cards stay in the
+    first-class starting set, so neither R6 validation nor the persistence
+    gate charges those stubs against ``max_new_entity_stubs`` (#907).
     """
 
     if not trait_compile_inputs:

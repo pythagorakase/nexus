@@ -526,16 +526,19 @@ def test_stage1_retrograde_cold_start(golden_path: GoldenPathRun) -> None:
     assert len(trait_stubs) >= 3, trait_stubs
 
     # Decision-8 cap: the wizard-time expansion stayed within its stub
-    # budget. Assert the transition's own counter -- runtime maturations
+    # budget. Assert the transition's own accounting -- runtime maturations
     # later in the run legitimately add their own expansion stubs, so an
-    # end-of-run table count would conflate the two.
+    # end-of-run table count would conflate the two. First-class stubs
+    # (trait targets or seed NPCs without a trait-compiler row) are inserted
+    # but not charged, the same rule R6 validation applies.
     from nexus.config import load_settings
 
     settings = load_settings()
     assert settings.orrery is not None
     cap = settings.orrery.retrograde.wizard.max_new_entity_stubs
-    counters = retro.get("counters") or {}
-    assert int(counters.get("entity_stubs_inserted", 0)) <= cap, counters
+    stub_budget = retro["entity_stub_budget"]
+    assert stub_budget["max_new_entity_stubs"] == cap, stub_budget
+    assert len(stub_budget["charged_stubs"]) <= cap, stub_budget
 
     # The duplicate-stub regression: one canonical row per character name.
     duplicates = _query(

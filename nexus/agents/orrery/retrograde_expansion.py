@@ -4,7 +4,17 @@ from __future__ import annotations
 
 
 import json
-from typing import Annotated, Any, Literal, Mapping, Optional, Sequence, cast
+from typing import (
+    AbstractSet,
+    Annotated,
+    Any,
+    Iterable,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    cast,
+)
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -720,7 +730,7 @@ def validate_expansion_plan(
         forbidden_relationship_traits=forbidden_relationship_traits,
         forbidden_pair_tag_traits=forbidden_pair_tag_traits,
         protagonist_identity=_packet_protagonist_identity(packet),
-        known_entity_keys=_packet_known_entity_keys(packet),
+        known_entity_keys=packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
     if (
@@ -1107,6 +1117,46 @@ def _planned_project_dependency_relationships(
 STUB_CREATABLE_ENTITY_KINDS = frozenset({"character", "place", "faction"})
 
 
+def charged_new_entity_keys(
+    entity_keys: Iterable[tuple[str, str]],
+    *,
+    known_entity_keys: AbstractSet[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Return the entity keys charged against ``max_new_entity_stubs``.
+
+    This is the single Decision 8 entity-budget rule. R6 response validation
+    applies it to every entity ref in the expansion plan, and the wizard
+    persistence gate applies it to the dry-run manifest's ``would_insert``
+    stub rows. Both sides pass the first-class starting set from
+    :func:`packet_known_entity_keys` for the same packet.
+
+    A ``(kind, normalized ref)`` key is charged when its kind can be minted as
+    a stub (character, place, faction) and it lies outside that starting
+    set. First-class starting entities (the protagonist, starting place, named
+    seed NPCs, and trait-declared targets) are never charged, even when no
+    canonical row exists for them yet at persistence time. The transition
+    creates no rows for named seed NPCs, and the trait compiler stubs only
+    some trait targets. Seed NPCs, ally, contact, and enemy targets without an
+    existing character id, and status scope factions reach persistence
+    without a row, and Retrograde persistence stubs them. Charging those
+    stubs only at persistence let a plan pass R6 validation and then roll
+    back the transition (#907).
+
+    Every ``would_insert`` key is also a plan key, so the persistence-side
+    charged set is always a subset of the generation-side charged set. A plan
+    that passes R6 validation cannot fail the persistence gate under the same
+    cap.
+    """
+
+    return sorted(
+        {
+            key
+            for key in entity_keys
+            if key[0] in STUB_CREATABLE_ENTITY_KINDS and key not in known_entity_keys
+        }
+    )
+
+
 def _new_entity_budget_issues(
     *,
     response: RetrogradeExpansionPlanResponse,
@@ -1117,10 +1167,9 @@ def _new_entity_budget_issues(
 
     if max_new_entity_stubs is None:
         return []
-    new_keys = sorted(
-        key
-        for key in _collect_plan_entity_keys(response)
-        if key[0] in STUB_CREATABLE_ENTITY_KINDS and key not in known_entity_keys
+    new_keys = charged_new_entity_keys(
+        _collect_plan_entity_keys(response),
+        known_entity_keys=known_entity_keys,
     )
     if len(new_keys) <= max_new_entity_stubs:
         return []
@@ -1233,12 +1282,14 @@ def _protagonist_duplicate_ref_issues(
     ]
 
 
-def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]:
+def packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]:
     """First-class starting entity keys known to the Retrograde packet.
 
     Reads both the top-level candidate scaffolds (full dry-run packets) and
     the seed request prompt sections (always present in loadable packets), so
     saved or compacted packets keep the same first-class entity surface.
+    R6 validation and the wizard persistence gate both read this set, so
+    :func:`charged_new_entity_keys` excludes the same entities on both sides.
     """
 
     keys: set[tuple[str, str]] = set()

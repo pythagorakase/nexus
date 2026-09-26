@@ -113,7 +113,12 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
     )
     assert sorted(retrograde["embedded_summary_ids"]) == summary_ids
 
-    # Decision 8: new minimum-viable stubs stay within the configured cap.
+    # Decision 8: stubs beyond the first-class starting set stay within the
+    # configured cap. First-class stubs (for example, trait targets without a
+    # trait-compiler row) are inserted but not charged, as in R6 validation.
+    stub_budget = retrograde["entity_stub_budget"]
+    assert stub_budget["max_new_entity_stubs"] == wizard_settings.max_new_entity_stubs
+    assert len(stub_budget["charged_stubs"]) <= wizard_settings.max_new_entity_stubs
     stub_rows = _query(
         """
         SELECT name FROM characters
@@ -126,7 +131,9 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
         WHERE extra_data ->> 'stub_kind' = 'retrograde_expansion_ref'
         """
     )
-    assert len(stub_rows) <= wizard_settings.max_new_entity_stubs
+    assert len(stub_rows) <= len(stub_budget["charged_stubs"]) + len(
+        stub_budget["first_class_stubs"]
+    )
 
     # Trait-compiler stubs (if any) remain stubs: no recursive maturation.
     protagonist = _query(
