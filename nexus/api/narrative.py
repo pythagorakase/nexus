@@ -93,6 +93,7 @@ from nexus.api.settings_endpoints import router as settings_router
 from nexus.api.preferences_endpoints import router as preferences_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
+from nexus.api.route_capabilities import require_classified
 from nexus.api.runtime_status import register_runtime_status
 from nexus.api.static_ui import mount_ui
 from nexus.api.wizard_chat import router as wizard_chat_router
@@ -1717,6 +1718,10 @@ register_runtime_status(app)
 # Static serving for the built PWA and runtime uploads. Registered last:
 # the dist mount at "/" is a catch-all and Starlette matches in order.
 mount_ui(app)
+
+# Issue #824: every route must be classified into the player or operator
+# plane before the gateway can serve; an unclassified route fails import.
+require_classified(app)
 
 
 if __name__ == "__main__":
