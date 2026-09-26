@@ -168,6 +168,11 @@ class ConversationsClient:
             # August 26, 2026).
             self.client = _hosted_conversations_client(self.model, settings)
 
+    @property
+    def store_mode(self) -> ConversationStoreMode:
+        """The conversation store this client reads and writes."""
+        return self._store_mode
+
     def _require_memory_store(self) -> _MemoryConversationStore:
         """Return the shared memory store, failing loudly if it was never set."""
         if self._memory_store is None:

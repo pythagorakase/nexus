@@ -39,9 +39,11 @@ from nexus.api.new_story_cache import (
     write_wizard_choices,
 )
 from nexus.api.new_story_flow import (
+    WizardConversationMoveError,
     build_transition_data_from_cache,
     perform_transition_with_retrograde,
     record_drafts,
+    switch_wizard_model,
 )
 from nexus.api.new_story_generator import generate_set_design
 from nexus.api.new_story_schemas import (
@@ -469,10 +471,13 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 )
 
         if request.model:
-            from nexus.api.save_slots import upsert_slot
-
-            upsert_slot(
-                request.slot, model=request.model, dbname=slot_dbname(request.slot)
+            # Moves the thread when the new provider uses another store, and
+            # saves the model and thread ID together before any read below.
+            request.thread_id = switch_wizard_model(
+                request.slot,
+                thread_id=request.thread_id,
+                slot_model=slot_model,
+                model=request.model,
             )
             logger.info("Persisted model %s to slot %s", request.model, request.slot)
 
@@ -830,9 +835,19 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             )
 
     if request.model:
-        from nexus.api.save_slots import upsert_slot
-
-        upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
+        # Moves the thread when the new provider uses another store, and saves
+        # the model and thread ID together before any read below.
+        try:
+            request.thread_id = switch_wizard_model(
+                request.slot,
+                thread_id=request.thread_id,
+                slot_model=slot_model,
+                model=request.model,
+            )
+        except WizardStateConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except WizardConversationMoveError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     client = ConversationsClient(model=selected_model)
     doc = frontmatter.loads(load(PromptId.STORYTELLER_NEW))
