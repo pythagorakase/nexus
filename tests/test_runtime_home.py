@@ -7,8 +7,12 @@ the rule is exercised from a known starting point.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from pathlib import Path
-from typing import Any, Callable, Optional
+import sys
+from typing import Any, Callable, Dict, Optional, Tuple, cast
 
 import pytest
 import tomlkit
@@ -30,6 +34,7 @@ from nexus.runtime.home import (
     repo_root,
     resolve_runtime_home,
 )
+from nexus.runtime.home_plan import HomePlan, HomePlanError, plan_home_move
 from nexus.telemetry import usage
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +67,21 @@ def _write_config(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(tomlkit.dumps(document), encoding="utf-8")
     return path
+
+
+def _tree_snapshot(root: Path) -> Dict[str, Tuple[bool, int, int]]:
+    """Record every path under ``root`` with its type, size and mtime."""
+    snapshot: Dict[str, Tuple[bool, int, int]] = {}
+    for directory, subdirectories, files in os.walk(root):
+        for name in subdirectories + files:
+            path = Path(directory) / name
+            info = path.lstat()
+            snapshot[str(path.relative_to(root))] = (
+                path.is_dir(),
+                info.st_size,
+                info.st_mtime_ns,
+            )
+    return snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +217,9 @@ def test_agreeing_locators_name_one_configuration(
 
 
 def test_disagreeing_locators_are_refused_by_every_reader(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """NEXUS_HOME and NEXUS_RUNTIME_CONFIG naming two files is a loud error."""
     home_root = tmp_path / "home"
@@ -215,6 +237,12 @@ def test_disagreeing_locators_are_refused_by_every_reader(
             reader()
     with pytest.raises(RuntimeError_, match=DISAGREEMENT):
         Supervisor.from_config()
+
+    monkeypatch.setattr(
+        sys, "argv", ["nexus", "--json", "home", "plan", "--to", str(tmp_path / "t")]
+    )
+    assert cli.main() == 1
+    assert DISAGREEMENT in json.loads(capsys.readouterr().err)["error"]
 
 
 def test_explicit_config_must_agree_with_nexus_home(
@@ -374,3 +402,347 @@ def test_upload_layout_matches_the_upload_endpoints_and_mounts() -> None:
     assert static_ui.UI_PUBLIC_DIR == REPO_ROOT / UPLOADS_DIR
     assert resolve_runtime_home().uploads_dir == asset_endpoints.UPLOAD_ROOT
     assert mounts == {f"/{name}" for name in UPLOAD_SUBDIRS}
+
+
+# ---------------------------------------------------------------------------
+# nexus home plan
+# ---------------------------------------------------------------------------
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write(path: Path, content: bytes) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return path
+
+
+def _point_models(models_source: Path) -> Callable[[Any], None]:
+    """Point every model key in a config copy at a directory under a tmp root."""
+
+    def edit(document: Any) -> None:
+        for name, model in document["memnon"]["models"].items():
+            model["local_path"] = str(models_source / f"{name}-dir")
+        reranking = document["memnon"]["retrieval"]["cross_encoder_reranking"]
+        reranking["model_path"] = str(models_source / "reranker")
+        for name, candidate in reranking["candidates"].items():
+            candidate["local_path"] = str(models_source / f"{name}-dir")
+        reranking["candidates"]["deberta-v3-trecdl22"]["local_path"] = str(
+            models_source / "reranker"
+        )
+
+    return edit
+
+
+def _fake_checkout(tmp_path: Path) -> Tuple[Path, Path, Path]:
+    """Lay out a real checkout-shaped tree with runtime data and models."""
+    checkout = tmp_path / "checkout"
+    models_source = tmp_path / "model-store"
+    config = _write_config(
+        checkout / "nexus.toml",
+        state_dir=".nexus/runtime",
+        usage_dir=".nexus/runtime/usage",
+        edit=_point_models(models_source),
+    )
+    state = checkout / ".nexus" / "runtime"
+    _write(state / "gateway.pid.json", b'{"pid": 1}\n')
+    _write(state / "gateway.log", b"line one\nline two\n")
+    _write(state / "gateway.log.1", b"older\n")
+    _write(state / "preferences.toml", b'theme = "vector"\n')
+    _write(state / "gateway-8931" / "gateway.log", b"isolated\n")
+    _write(state / "usage" / "usage-2026-09-26.jsonl", b'{"tokens": 3}\n')
+    (state / "current.log").symlink_to("gateway.log")
+    _write(checkout / ".nexus" / "cache" / "derived.bin", bytes(range(256)))
+    public = checkout / UPLOADS_DIR
+    _write(public / "character_portraits" / "7" / "a.png", b"\x89PNG portrait")
+    _write(public / "place_images" / "3" / "b.jpg", b"\xff\xd8 place")
+    _write(public / "favicon.ico", b"checked-in asset, not an upload")
+    _write(models_source / "bge-large-dir" / "config.json", b"{}")
+    _write(models_source / "bge-large-dir" / "weights.bin", b"\x00" * 4096)
+    _write(models_source / "reranker" / "model.safetensors", b"\x01" * 2048)
+    return checkout, config, models_source
+
+
+def test_home_plan_inventories_checksums_and_maps_every_runtime_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each current file gets its checksum, size, category and proposed path."""
+    checkout, config, models_source = _fake_checkout(tmp_path)
+    target = tmp_path / "target-home"
+    conflict = _write(target / ".nexus" / "runtime" / "preferences.toml", b"theirs")
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    plan = plan_home_move(target, checkout=checkout)
+
+    entries = {entry.current: entry for entry in plan.entries}
+    state = checkout / ".nexus" / "runtime"
+    public = checkout / UPLOADS_DIR
+    expected = {
+        config: ("config", "move", target / "nexus.toml"),
+        state
+        / "usage"
+        / "usage-2026-09-26.jsonl": (
+            "usage",
+            "move",
+            target / ".nexus/runtime/usage/usage-2026-09-26.jsonl",
+        ),
+        state
+        / "gateway.pid.json": (
+            "state",
+            "move",
+            target / ".nexus/runtime/gateway.pid.json",
+        ),
+        state / "gateway.log": ("state", "move", target / ".nexus/runtime/gateway.log"),
+        state
+        / "gateway.log.1": (
+            "state",
+            "move",
+            target / ".nexus/runtime/gateway.log.1",
+        ),
+        state
+        / "gateway-8931"
+        / "gateway.log": (
+            "state",
+            "move",
+            target / ".nexus/runtime/gateway-8931/gateway.log",
+        ),
+        state / "preferences.toml": ("state", "conflict", conflict),
+        state / "current.log": ("state", "move", target / ".nexus/runtime/current.log"),
+        checkout
+        / ".nexus/cache/derived.bin": (
+            "cache",
+            "move",
+            target / ".nexus/cache/derived.bin",
+        ),
+        public
+        / "character_portraits/7/a.png": (
+            "uploads",
+            "move",
+            target / UPLOADS_DIR / "character_portraits/7/a.png",
+        ),
+        public
+        / "place_images/3/b.jpg": (
+            "uploads",
+            "move",
+            target / UPLOADS_DIR / "place_images/3/b.jpg",
+        ),
+        models_source
+        / "bge-large-dir"
+        / "config.json": (
+            "models",
+            "move",
+            target / "models/bge-large-dir/config.json",
+        ),
+        models_source
+        / "bge-large-dir"
+        / "weights.bin": (
+            "models",
+            "move",
+            target / "models/bge-large-dir/weights.bin",
+        ),
+        models_source
+        / "reranker"
+        / "model.safetensors": (
+            "models",
+            "move",
+            target / "models/reranker/model.safetensors",
+        ),
+    }
+    for current, (category, status, proposed) in expected.items():
+        entry = entries[current]
+        assert (entry.category, entry.status, entry.proposed) == (
+            category,
+            status,
+            proposed,
+        ), current
+        if entry.kind == "file":
+            assert entry.sha256 == _sha256(current)
+            assert entry.size == current.stat().st_size
+    link = entries[state / "current.log"]
+    assert (link.kind, link.link_target, link.sha256) == (
+        "symlink",
+        "gateway.log",
+        None,
+    )
+    assert public / "favicon.ico" not in entries
+
+    missing = {entry.current for entry in plan.entries if entry.status == "missing"}
+    assert models_source / "e5-large-dir" in missing
+    assert models_source / "bge-large-dir" not in missing
+    assert all(
+        entry.kind == "missing" and entry.sha256 is None
+        for entry in plan.entries
+        if entry.status == "missing"
+    )
+    rewrites = {rewrite.key: rewrite for rewrite in plan.rewrites}
+    reranker_target = str(target / "models" / "reranker")
+    assert rewrites["memnon.retrieval.cross_encoder_reranking.model_path"].proposed == (
+        reranker_target
+    )
+    assert (
+        rewrites[
+            "memnon.retrieval.cross_encoder_reranking.candidates."
+            "deberta-v3-trecdl22.local_path"
+        ].proposed
+        == reranker_target
+    )
+    assert rewrites["memnon.models.bge-large.local_path"].current == str(
+        models_source / "bge-large-dir"
+    )
+    assert "memnon.models.e5-large.local_path" not in rewrites
+    assert plan.total_bytes() == sum(entry.size or 0 for entry in plan.entries)
+    assert plan.source.root == checkout.resolve()
+    assert plan.target.root == target.resolve()
+
+
+def test_home_plan_orders_entries_by_category_then_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The report order is a pure function of the inventory."""
+    checkout, config, _ = _fake_checkout(tmp_path)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    plan = plan_home_move(tmp_path / "target", checkout=checkout)
+
+    order = (
+        "config",
+        "usage",
+        "state",
+        "logs",
+        "cache",
+        "backups",
+        "uploads",
+        "models",
+    )
+    keys = [(order.index(entry.category), str(entry.current)) for entry in plan.entries]
+    assert keys == sorted(keys)
+
+
+def test_home_plan_cli_is_read_only_and_deterministic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Two runs print identical JSON and leave every file and mtime untouched."""
+    state = tmp_path / "state"
+    _write(state / "gateway.log", b"captured\n")
+    _write(state / "preferences.toml", b'theme = "vector"\n')
+    _write(tmp_path / "ledger" / "usage-2026-09-26.jsonl", b'{"tokens": 1}\n')
+    models_source = tmp_path / "model-store"
+    _write(models_source / "bge-large-dir" / "weights.bin", b"\x02" * 1024)
+    config = _write_config(
+        tmp_path / "config" / "nexus.toml",
+        state_dir=str(state),
+        usage_dir=str(tmp_path / "ledger"),
+        edit=_point_models(models_source),
+    )
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    target = tmp_path / "home-target"
+    # The checkout directories the plan walks: it must never create one.
+    checkout_layout = [
+        REPO_ROOT / ".nexus" / "cache",
+        REPO_ROOT / ".nexus" / "backups",
+        *(REPO_ROOT / UPLOADS_DIR / name for name in UPLOAD_SUBDIRS),
+    ]
+    layout_before = [path.exists() for path in checkout_layout]
+    before = _tree_snapshot(tmp_path)
+
+    outputs = []
+    for _ in range(2):
+        monkeypatch.setattr(
+            sys, "argv", ["nexus", "home", "plan", "--to", str(target), "--json"]
+        )
+        assert cli.main() == 0
+        outputs.append(capsys.readouterr().out)
+
+    assert outputs[0] == outputs[1]
+    assert _tree_snapshot(tmp_path) == before
+    assert not target.exists()
+    assert [path.exists() for path in checkout_layout] == layout_before
+    plan = cast(Dict[str, Any], json.loads(outputs[0])["home_plan"])
+    by_current = {entry["current"]: entry for entry in plan["entries"]}
+    weights = models_source / "bge-large-dir" / "weights.bin"
+    assert by_current[str(weights)]["sha256"] == _sha256(weights)
+    assert by_current[str(weights)]["proposed"] == str(
+        target / "models" / "bge-large-dir" / "weights.bin"
+    )
+    # Absolute configured directories are outside any home and stay put.
+    captured = by_current[str(state / "gateway.log")]
+    assert (captured["status"], captured["proposed"]) == (
+        "in-place",
+        str(state / "gateway.log"),
+    )
+    assert captured["sha256"] == _sha256(state / "gateway.log")
+    assert by_current[str(config.resolve())]["proposed"] == str(target / "nexus.toml")
+    assert plan["target"]["root"] == str(target)
+    assert plan["source"]["root"] == str(REPO_ROOT)
+    assert plan["config_locator"] == "NEXUS_RUNTIME_CONFIG"
+
+    monkeypatch.setattr(sys, "argv", ["nexus", "home", "plan", "--to", str(target)])
+    assert cli.main() == 0
+    human = capsys.readouterr().out.splitlines()
+    assert human[0].startswith(f"source  {REPO_ROOT} ")
+    assert human[1] == f"target  {target}"
+    assert human[-1].endswith("Dry run: nothing was moved.")
+    assert _tree_snapshot(tmp_path) == before
+
+
+def test_home_plan_defaults_to_nexus_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With NEXUS_HOME set the plan targets it; its own config stays in place."""
+    checkout, _, _ = _fake_checkout(tmp_path)
+    home_root = tmp_path / "home"
+    config = _write_config(
+        home_root / "nexus.toml",
+        edit=_point_models(tmp_path / "model-store"),
+    )
+    monkeypatch.setenv(HOME_ENV, str(home_root))
+
+    plan = plan_home_move(checkout=checkout)
+
+    assert isinstance(plan, HomePlan)
+    assert plan.target.root == home_root.resolve()
+    assert plan.config_locator == "NEXUS_HOME"
+    config_entry = plan.entries[0]
+    assert (config_entry.category, config_entry.status) == ("config", "in-place")
+    assert config_entry.current == config.resolve()
+
+
+def test_home_plan_refuses_ill_posed_targets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No target, the checkout itself, or a home inside it are refused."""
+    checkout, config, _ = _fake_checkout(tmp_path)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    with pytest.raises(HomePlanError, match="No target home"):
+        plan_home_move(checkout=checkout)
+    with pytest.raises(HomePlanError, match="inside it"):
+        plan_home_move(checkout, checkout=checkout)
+    with pytest.raises(HomePlanError, match="inside it"):
+        plan_home_move(checkout / "home", checkout=checkout)
+    occupied = _write(tmp_path / "a-file", b"not a directory")
+    with pytest.raises(HomePlanError, match="not a directory"):
+        plan_home_move(occupied, checkout=checkout)
+
+
+def test_home_plan_refuses_two_models_landing_on_one_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two model directories with one name would overwrite each other."""
+    checkout, _, models_source = _fake_checkout(tmp_path)
+
+    def edit(document: Any) -> None:
+        _point_models(models_source)(document)
+        document["memnon"]["models"]["e5-large"]["local_path"] = str(
+            tmp_path / "second-store" / "bge-large-dir"
+        )
+
+    config = _write_config(tmp_path / "collide" / "nexus.toml", edit=edit)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    with pytest.raises(HomePlanError, match="would both move"):
+        plan_home_move(tmp_path / "target", checkout=checkout)

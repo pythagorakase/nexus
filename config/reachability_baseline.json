@@ -258,6 +258,7 @@
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",
     "nexus/runtime/home.py",
+    "nexus/runtime/home_plan.py",
     "nexus/runtime/logging_config.py",
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",

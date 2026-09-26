@@ -3659,6 +3659,21 @@ def run_logs(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(exc)}
 
 
+def run_home(args: argparse.Namespace) -> Dict[str, Any]:
+    """Dry-run the move of the checkout's runtime data into a runtime home."""
+    from nexus.runtime.home import RuntimeHomeError
+    from nexus.runtime.home_plan import HomePlanError, plan_home_move
+
+    try:
+        plan = plan_home_move(args.target)
+    except (RuntimeHomeError, HomePlanError, FileNotFoundError) as exc:
+        return {"success": False, "error": str(exc)}
+    if not args.json:
+        for line in plan.render():
+            print(line)
+    return {"success": True, "home_plan": plan.as_dict()}
+
+
 def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
     """Return provider usage and rendered blocks for one UTC day or run."""
     from nexus.telemetry.usage import read_prompt_windows, summarize_usage
@@ -4142,6 +4157,20 @@ Examples:
         "-f", "--follow", action="store_true", help="Follow the log"
     )
     _add_config_arg(logs_parser)
+
+    home_parser = subparsers.add_parser(
+        "home", help="Plan a move of runtime data into a runtime home (dry run)"
+    )
+    home_parser.add_argument(
+        "action",
+        choices=("plan",),
+        help="plan: list, checksum and map every runtime file; moves nothing",
+    )
+    home_parser.add_argument(
+        "--to",
+        dest="target",
+        help="Target runtime home directory (default: NEXUS_HOME)",
+    )
 
     usage_parser = subparsers.add_parser(
         "usage",
@@ -4843,6 +4872,8 @@ def main() -> int:
         result = run_status(args)
     elif args.command == "logs":
         result = run_logs(args)
+    elif args.command == "home":
+        result = run_home(args)
     elif args.command == "usage":
         result = run_usage(args)
     elif args.command == "window-replay":
