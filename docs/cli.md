@@ -73,6 +73,29 @@ counts, the OpenAI-only UTC-day total, and configured readout-only allowances.
 The JSON payload places `day`, `events`, `providers`, `seats`,
 `openai_day_total`, and `allowance` under the `usage` key.
 
+### `window-replay` — Replay Prompt Windows
+
+Recomputes each recorded attempt's seat ceiling for one run under candidate
+settings, keeping the recorded token counts. This command is slotless, makes
+no provider calls, and reports tokens only.
+
+```bash
+# Current UTC day, under a candidate copy of nexus.toml
+poetry run nexus window-replay --run ab12cd34ef56 --config candidate.toml
+
+# Another model and prompt spend, as machine-readable JSON
+poetry run nexus window-replay --json --run ab12cd34ef56 --day 2026-09-26 \
+  --model MODEL_ID --window 90000
+```
+
+Each attempt keeps its recorded spend unless `--window` replaces it; a
+candidate whose configured window differs from the runtime config's is refused.
+Human output lists, per seat and attempt, the recorded input and ceiling, the
+candidate ceiling, whether the model cap bounded the recorded spend, the
+ceiling delta, overflow, trimmable memory tokens, feasibility, and freed
+tokens. The JSON payload places `run`, `day`, `config`, and `rows` under the
+`window_replay` key. See `docs/settings_scopes.md` for the field semantics.
+
 ### `load` — View Current State
 
 Shows the current state of a slot: wizard phase, narrative text, or empty status.

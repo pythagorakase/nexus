@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Union
 
+from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.agents.lore.utils.scene_order import (
     hydrate_recalled_clocks,
@@ -1187,6 +1188,7 @@ class TurnCycleManager:
                 "prompt_overhead_tokens": 0,
             }
         logon = self.lore.logon
+        recent, historical, recalled = TRIMMABLE_BLOCKS
         window = turn_context.token_counts["apex_window"]
         self._select_scene_payload(payload)
         requests = logon.measure_turn_requests(payload, window)
@@ -1230,16 +1232,14 @@ class TurnCycleManager:
                 break
             chunk = warm_chunks.pop(oldest_index)
             dropped_chunks.append(chunk)
-            drop(chunk, "recalled scenes" if is_recalled(chunk) else "recent narrative")
+            drop(chunk, recalled if is_recalled(chunk) else recent)
             warm_chunks_dropped += 1
             tokens_after = writer.tokens
 
         while over_budget() and retrieved_passages:
             chunk = retrieved_passages.pop()
             dropped_chunks.append(chunk)
-            drop(
-                chunk, "recalled scenes" if is_recalled(chunk) else "historical context"
-            )
+            drop(chunk, recalled if is_recalled(chunk) else historical)
             retrieved_passages_dropped += 1
             tokens_after = writer.tokens
 
@@ -1289,15 +1289,15 @@ class TurnCycleManager:
             "tokens_recovered": tokens_before - tokens_after,
             "dropped_chunk_ids": [memory_identity(chunk) for chunk in dropped_chunks],
             "dropped_blocks": {
-                "recent narrative": sum(
+                recent: sum(
                     not is_recalled(chunk)
                     for chunk in dropped_chunks[:warm_chunks_dropped]
                 ),
-                "historical context": sum(
+                historical: sum(
                     not is_recalled(chunk)
                     for chunk in dropped_chunks[warm_chunks_dropped:]
                 ),
-                "recalled scenes": sum(is_recalled(chunk) for chunk in dropped_chunks),
+                recalled: sum(is_recalled(chunk) for chunk in dropped_chunks),
             },
             "seats": {
                 request.budget.seat: {

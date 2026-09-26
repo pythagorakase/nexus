@@ -932,6 +932,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         _print_usage(payload)
         return
 
+    if "window_replay" in payload:
+        _print_window_replay(payload["window_replay"])
+        return
+
     if payload.get("queues") is not None:
         _print_jobs(payload)
         return
@@ -3393,6 +3397,86 @@ def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
     return result
 
 
+def run_window_replay(args: argparse.Namespace) -> Dict[str, Any]:
+    """Replay one run's recorded prompt windows under candidate settings."""
+    from datetime import timezone
+
+    from nexus.telemetry.usage import validate_usage_day
+    from nexus.telemetry.window_replay import NoPromptWindowsError, replay_run
+
+    day = args.day or datetime.now(timezone.utc).date().isoformat()
+    try:
+        validate_usage_day(day)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    # load_settings validates the candidate TOML against the Pydantic models.
+    baseline = load_settings().model_dump()
+    settings = load_settings(args.config).model_dump() if args.config else baseline
+    try:
+        rows = replay_run(
+            args.run,
+            day,
+            settings,
+            baseline=baseline,
+            model=args.model,
+            window=args.window,
+        )
+    except NoPromptWindowsError as exc:
+        return {"success": False, "error": str(exc)}
+    return {
+        "success": True,
+        "window_replay": {
+            "run": args.run,
+            "day": day,
+            "config": args.config,
+            "rows": [row.model_dump() for row in rows],
+        },
+    }
+
+
+def _print_window_replay(replay: Dict[str, Any]) -> None:
+    """Render one replayed attempt per line, in tokens."""
+    header = (
+        "SEAT",
+        "ATTEMPT",
+        "MODEL",
+        "INPUT",
+        "CEILING",
+        "CANDIDATE",
+        "CAPPED",
+        "DELTA",
+        "OVERFLOW",
+        "TRIMMABLE",
+        "FEASIBLE",
+        "FREED",
+    )
+    values = [
+        (
+            row["seat"],
+            row["attempt"],
+            row["candidate_model"],
+            row["recorded_input_tokens"],
+            row["recorded_ceiling"],
+            row["candidate_ceiling"],
+            "yes" if row["capped"] else "no",
+            f"{row['headroom_delta']:+}",
+            row["overflow_tokens"],
+            row["trimmable_tokens"],
+            "yes" if row["feasible"] else "no",
+            row["freed_tokens"],
+        )
+        for row in replay["rows"]
+    ]
+    widths = [
+        max(len(str(row[index])) for row in [header] + values)
+        for index in range(len(header))
+    ]
+    print(f"Run {replay['run']} (UTC day {replay['day']})")
+    for row in [header] + values:
+        cells = (str(cell).ljust(widths[i]) for i, cell in enumerate(row))
+        print("  ".join(cells).rstrip())
+
+
 def run_inspect_turn(args: argparse.Namespace) -> Dict[str, Any]:
     """Inspect durable turn references through a read-only connection."""
     from contextlib import closing
@@ -3669,6 +3753,7 @@ Examples:
   nexus up --foreground         Stay attached; Ctrl+C tears down
   nexus status                  Runtime health, processes, slot, version
   nexus usage --day 2026-07-29 Show exact API-reported UTC-day token usage
+  nexus window-replay --run SESSION --config candidate.toml  Replay prompt windows
   nexus jobs --slot 4           Show durable Retrograde maturation jobs
   nexus logs gateway -f         Follow the gateway log
   nexus down                    Stop the runtime
@@ -3778,6 +3863,36 @@ Examples:
         help="UTC quota day in YYYY-MM-DD format (default: current UTC day)",
     )
     usage_parser.add_argument("--run", help="Filter events by correlation run id")
+
+    window_replay_parser = subparsers.add_parser(
+        "window-replay",
+        help="Replay a run's recorded prompt windows under candidate settings",
+    )
+    window_replay_parser.add_argument(
+        "--run", required=True, help="Generation session id from the usage ledger"
+    )
+    window_replay_parser.add_argument(
+        "--day",
+        help="UTC ledger day in YYYY-MM-DD format (default: current UTC day)",
+    )
+    window_replay_parser.add_argument(
+        "--config",
+        help=(
+            "Candidate nexus.toml (default: the runtime config); its window "
+            "keys are not applied, so pass --window to replay a different spend"
+        ),
+    )
+    window_replay_parser.add_argument(
+        "--model", help="Registered model id replacing each recorded model"
+    )
+    window_replay_parser.add_argument(
+        "--window",
+        type=int,
+        help=(
+            "Prompt spend replacing each recorded spend; candidate window keys "
+            "are not applied, so this is how to replay a different spend"
+        ),
+    )
 
     jobs_parser = subparsers.add_parser(
         "jobs",
@@ -4412,6 +4527,8 @@ def main() -> int:
         result = run_logs(args)
     elif args.command == "usage":
         result = run_usage(args)
+    elif args.command == "window-replay":
+        result = run_window_replay(args)
     elif args.command == "inspect-turn":
         from nexus.telemetry.attempt_manifest import NoGenerationSessionError
 

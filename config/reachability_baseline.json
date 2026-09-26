@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Delete the unread narrative test-mode scripts with the [global.narrative] table (#809)",
+  "reason": "Register nexus/telemetry/window_replay.py as production-reachable through the window-replay CLI (#756)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -263,6 +263,7 @@
     "nexus/telemetry/generation.py",
     "nexus/telemetry/prompt_window.py",
     "nexus/telemetry/usage.py",
+    "nexus/telemetry/window_replay.py",
     "nexus/util/__init__.py",
     "nexus/util/clock_face.py",
     "nexus/util/gguf_inspect.py",

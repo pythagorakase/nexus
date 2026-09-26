@@ -53,3 +53,42 @@ budget, historical rows, and provisional drafts remain unchanged. Missing or
 malformed baselines are errors; refresh never stamps an empty replacement.
 Do not use refresh to bypass an actual change in retrieval semantics. The
 coordinator runs it for affected saves at landing after deploying this change.
+
+## Replaying Recorded Prompt Windows
+
+Every rendered generation attempt appends its exact input tokens, per-block
+counts, and seat ceiling to the usage ledger (`windows-<day>.jsonl`; list them
+with `nexus usage --run SESSION`). Before changing seat policy or a model's
+declared limits, replay a run under the candidate configuration:
+
+```sh
+nexus window-replay --run SESSION --day 2026-09-26 --config candidate.toml
+nexus window-replay --run SESSION --model MODEL_ID --window 90000 --json
+```
+
+`--config` names a complete copy of `nexus.toml` and is validated like any
+configuration. The replay keeps the recorded token counts and recomputes only
+the ceiling through the same seat arithmetic the trimming pass and the final
+guard use; nothing is rendered, counted, priced, or sent to a provider. Each
+attempt holds its recorded prompt spend (ceiling plus policy headroom) unless
+`--window` replaces it. The candidate's window keys
+(`lore.token_budget.apex_context_window` and its `provider_overrides`) are not
+applied: when the candidate's configured window for an attempt's model differs
+from the runtime config's, the replay stops with both values, and `--window`
+is how to replay the new spend. `--model` replaces every attempt's model,
+keeping the counts measured with the recorded model's tokenizer. Unregistered
+models and allowances above a model's maximum fail exactly as they would at
+runtime.
+
+Per attempt, the report gives the ceiling delta, whether the recorded spend
+was capped by the model's maximum input (a zero delta on a capped attempt can
+hide capacity the candidate frees; pass `--window` to see it), the overflow
+above the new ceiling, the recent-narrative, historical-context, and
+recalled-scene tokens the trimming pass could drop, whether they cover the
+overflow, and the tokens freed below the new ceiling. Feasibility is an upper
+bound: the trimmable counts include section headings and the newest scene,
+which is never dropped; the trimming pass drops memory from the writer and
+Gaia seats jointly while the replay judges each seat alone; and it ignores the
+registry's tokenizer safety margin (4,096 on the Anthropic, Kimi, and GLM
+entries), which the trimming pass reserves and the final guard also subtracts
+for the locally approximated Kimi and GLM counts.
