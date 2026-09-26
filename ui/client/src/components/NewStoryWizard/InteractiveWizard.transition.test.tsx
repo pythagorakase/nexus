@@ -51,6 +51,12 @@ function stubGateway() {
         statusReads: 0,
         served: [] as unknown[],
         requests: [] as string[],
+        // JSON bodies of the transition posts and strangeness saves, in order.
+        transitionBodies: [] as unknown[],
+        weirdSaves: [] as unknown[],
+        // How the gateway answers a strangeness save; it echoes by default.
+        weirdAnswer: (body: { slot: number; weird_level: string }): Response | Promise<Response> =>
+            Response.json({ status: "recorded", slot: body.slot, weird_level: body.weird_level }),
         transition: null as Deferred | null,
         bootstrap: null as Deferred | null,
     };
@@ -71,7 +77,15 @@ function stubGateway() {
             gateway.served.push(gateway.status.stage);
             return Response.json({ ...gateway.status, status_poll_interval_seconds: gateway.pollSeconds });
         }
-        if (url === "/api/story/new/transition") return pending("transition", init?.signal);
+        if (url === "/api/story/new/weird" && init?.method === "PUT") {
+            const body = JSON.parse(String(init.body));
+            gateway.weirdSaves.push(body);
+            return gateway.weirdAnswer(body);
+        }
+        if (url === "/api/story/new/transition") {
+            gateway.transitionBodies.push(JSON.parse(String(init?.body)));
+            return pending("transition", init?.signal);
+        }
         if (url === "/api/narrative/continue") return pending("bootstrap", init?.signal);
         throw new Error(`Unexpected request ${url}`);
     });
@@ -87,7 +101,7 @@ function stage(name: string, detail: Record<string, unknown> = {}, run: string =
 const NO_RUN = { slot: 5, run: null, stage: "idle", stages: [] };
 const TRANSITIONED = { status: "transitioned", retrograde: { enabled: true } };
 
-function renderReadyWizard(onComplete = vi.fn()) {
+function renderReadyWizard(onComplete = vi.fn(), resumeData: WizardResumeData = readyWizard) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     queryClient.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
     queryClient.setQueryData(["/api/preferences"], { theme: "veil" });
@@ -102,8 +116,8 @@ function renderReadyWizard(onComplete = vi.fn()) {
                     onPhaseChange={vi.fn()}
                     wizardData={{}}
                     setWizardData={vi.fn()}
-                    resumeData={readyWizard}
-                    initialPhase="seed"
+                    resumeData={resumeData}
+                    initialPhase={resumeData.current_phase === "ready" ? "seed" : resumeData.current_phase}
                 />
                 <Toaster />
             </ThemeProvider>
@@ -465,3 +479,110 @@ describe("genesis stage waiter", () => {
         expect(gateway.statusReads).toBe(1);
     });
 });
+
+describe("genesis strangeness", () => {
+    const glyph = (level: string) => screen.getByRole("button", { name: `Strangeness: ${level}` });
+    const pressed = () =>
+        ["low", "medium", "high"].filter((level) => glyph(level).getAttribute("aria-pressed") === "true");
+
+    it("offers three distinctly shaped, unlabeled glyphs and presses only the saved level", async () => {
+        stubGateway();
+        renderReadyWizard(vi.fn(), { ...readyWizard, weird_level: "low" });
+        await confirmIntroductionAvailable();
+
+        expect(pressed()).toEqual(["low"]);
+        const shapes = ["low", "medium", "high"].map((level) => {
+            const button = glyph(level);
+            // No visible text: the glyph and its accessible name carry it.
+            expect(button).toHaveTextContent("");
+            return button.querySelector("svg")?.getAttribute("class")?.match(/lucide-[a-z-]+/)?.[0];
+        });
+        expect(new Set(shapes).size).toBe(3);
+        expect(document.body.textContent).not.toMatch(/strange|weird/i);
+    });
+
+    it("presses a glyph only after the gateway saves its level", async () => {
+        const gateway = stubGateway();
+        const echo = gateway.weirdAnswer;
+        let answer!: (response: Response) => void;
+        // Hold the first save in flight; later saves are echoed.
+        gateway.weirdAnswer = () => {
+            gateway.weirdAnswer = echo;
+            return new Promise<Response>((resolve) => { answer = resolve; });
+        };
+        renderReadyWizard();
+        await confirmIntroductionAvailable();
+        expect(pressed()).toEqual([]);
+
+        fireEvent.click(glyph("high"));
+        await waitFor(() => expect(gateway.weirdSaves).toEqual([{ slot: 5, weird_level: "high" }]));
+        expect(pressed()).toEqual([]);
+        expect(glyph("medium")).toBeDisabled();
+
+        await act(async () => answer(Response.json({ status: "recorded", slot: 5, weird_level: "high" })));
+        await waitFor(() => expect(pressed()).toEqual(["high"]));
+        expect(glyph("medium")).toBeEnabled();
+
+        fireEvent.click(glyph("medium"));
+        await waitFor(() => expect(pressed()).toEqual(["medium"]));
+    });
+
+    it("posts the level chosen after the introduction was offered with the transition", async () => {
+        const gateway = stubGateway();
+        renderReadyWizard(vi.fn(), { ...readyWizard, weird_level: "low" });
+        await confirmIntroductionAvailable();
+
+        fireEvent.click(glyph("high"));
+        await waitFor(() => expect(pressed()).toEqual(["high"]));
+        await confirmIntroduction();
+
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        expect(gateway.transitionBodies).toEqual([{ slot: 5, weird_level: "high" }]);
+    });
+
+    it.each([
+        ["low" as const, { slot: 5, weird_level: "low" }],
+        // Nothing chosen: the server's stored selection or default applies.
+        [null, { slot: 5 }],
+    ])("posts the resumed level (%s) when the player keeps it", async (stored, body) => {
+        const gateway = stubGateway();
+        renderReadyWizard(vi.fn(), { ...readyWizard, weird_level: stored });
+        await confirmIntroduction();
+
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        expect(gateway.transitionBodies).toEqual([body]);
+        expect(gateway.weirdSaves).toEqual([]);
+    });
+
+    it("keeps the saved level and reports a refused save", async () => {
+        const gateway = stubGateway();
+        gateway.weirdAnswer = () =>
+            Response.json({ detail: "The wizard changed while this response was being generated." }, { status: 409 });
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        renderReadyWizard(vi.fn(), { ...readyWizard, weird_level: "medium" });
+        await confirmIntroductionAvailable();
+
+        fireEvent.click(glyph("high"));
+        expect(await screen.findByText("The wizard changed while this response was being generated.")).toBeInTheDocument();
+        expect(pressed()).toEqual(["medium"]);
+    });
+
+    it("appears only on the Introduction", async () => {
+        stubGateway();
+        renderReadyWizard(vi.fn(), {
+            ...readyWizard,
+            current_phase: "setting",
+            selected_seed: null,
+            layer_draft: null,
+            zone_draft: null,
+            initial_location: null,
+        });
+        expect(await screen.findByText("Your story is ready to begin.")).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /Strangeness/ })).toBeNull();
+    });
+});
+
+/** The ready wizard has restored its introduction and offers Confirm. */
+async function confirmIntroductionAvailable() {
+    expect(await screen.findByRole("button", { name: "Confirm" })).toBeEnabled();
+}
