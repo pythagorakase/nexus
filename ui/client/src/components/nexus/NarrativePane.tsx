@@ -343,9 +343,15 @@ export function NarrativePane({
 
   // Number keys 1-N select choices when focus is outside the freeform field.
   // Inert while reading history - no submission affordances exist there.
+  // Browser chords (Cmd/Ctrl/Alt+digit switch tabs), held-key repeats and IME
+  // composition are never a choice.
   useEffect(() => {
     if (isHistorical) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.metaKey || event.ctrlKey || event.altKey || event.repeat
+        || event.isComposing
+      ) return;
       if (document.activeElement === freeformRef.current) return;
       const target = event.target as HTMLElement | null;
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;

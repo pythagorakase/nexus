@@ -212,3 +212,31 @@ describe("reader draft recovery", () => {
     storage.mockRestore();
   });
 });
+
+describe("number-key choice shortcuts", () => {
+  const press = (init: KeyboardEventInit) =>
+    fireEvent.keyDown(document.body, { key: "1", code: "Digit1", ...init });
+
+  it.each([
+    ["Cmd", { metaKey: true }],
+    ["Ctrl", { ctrlKey: true }],
+    ["Alt", { altKey: true }],
+    ["held-key repeat", { repeat: true }],
+    ["IME composition", { isComposing: true }],
+  ])("never acts on a %s digit", async (_name, init) => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    press(init);
+    await act(async () => {});
+    expect(send).not.toHaveBeenCalled();
+    expect(input()).toHaveValue("");
+  });
+
+  it("still acts on a plain digit", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    press({});
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledWith({ choice: 1 });
+  });
+});
