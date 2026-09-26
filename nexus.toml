@@ -1227,6 +1227,8 @@ generation_timeout_seconds = 1200
 [apex.gaia]
 # Gaia's own generation profile, sent on both the pinned and slot-following
 # routes. It equals the writer's today; every turn uses this one profile.
+# reasoning_effort reaches OpenAI Responses and Anthropic requests only;
+# chat_completions providers send their registry request_params effort.
 reasoning_effort = "medium"
 max_output_tokens = 25000
 reasoning_reserve_tokens = 21000

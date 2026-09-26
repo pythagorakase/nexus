@@ -30,9 +30,11 @@ Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write ma
 
 Gaia's model follows story resolution; its generation profile does not. The developer-scoped `[apex.gaia]` table holds Gaia's `reasoning_effort`, `max_output_tokens`, and reserve fields, and the writer keeps `[apex]`. A Gaia resolved to a model other than the writer's builds a fresh provider from `[apex.gaia]`; the slot-following clone of the writer's provider takes its effort and output allowance from `[apex.gaia]`. The shipped profile equals the writer's.
 
-Settings load rejects a configured Gaia default (`apex.gaia_model`, else `apex.model`) whose registry entry lists `reasoning_effort` or `reasoning` in `unsupported_params`, or declares `reasoning_accounting = "none"`. Gaia seat resolution applies the same check to story pins and slot following. The TEST mock is exempt.
+`[apex.gaia].reasoning_effort` reaches the OpenAI Responses and Anthropic transports only. Chat Completions routes (OpenAI-compatible `base_url` providers such as `local` and `openrouter`) never send the configured effort for either seat: the request carries the model's registry `request_params` effort (a `reasoning = { effort = "low" }` damping, for example), or none. The output allowance reaches every transport.
 
-Every turn uses this one profile; workload-driven selection waits on real-entry-point A/B evidence (issue #758). `generation_attempt_manifests.config_sha256` hashes the full effective settings, `[apex.gaia]` included. Each usage-ledger event (`reasoning_effort`, `max_output_tokens`) and its `USAGE` log line (`effort=`, `max_output=`) record what the request actually sent; the log line shows `-` when a request sent none.
+Settings load rejects a configured Gaia default (`apex.gaia_model`, else `apex.model`) whose registry entry lists `reasoning_effort` or `reasoning` in `unsupported_params`, or declares `reasoning_accounting = "none"`. Gaia seat resolution applies the same check to story pins and slot following. The TEST mock is exempt. The writer's `apex.reasoning_effort` has no equivalent check; this profile validates the Gaia seat only.
+
+Every turn uses this one profile; workload-driven selection waits on real-entry-point A/B evidence (issue #758). `generation_attempt_manifests.config_sha256` hashes the full effective settings, `[apex.gaia]` included. Each usage-ledger event (`reasoning_effort`, `max_output_tokens`) and its `USAGE` log line (`effort=`, `max_output=`) record the generation profile sent: the exact request kwargs for provider calls, and the run's model settings for Pydantic AI aggregates. The log line shows `-` when nothing was sent.
 
 ## Retired Pins
 

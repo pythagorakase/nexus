@@ -315,6 +315,7 @@ async def _handle_accept_fate_traits(
         provider=provider_name,
         model=model_name,
         seat="wizard_wildcard",
+        model_settings=model_settings,
         slot=slot,
         run_id=thread_id,
     )
@@ -638,6 +639,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 provider=provider_name,
                 model=selected_model,
                 seat="wizard_debug",
+                model_settings=model_settings,
                 slot=request.slot,
                 run_id=request.thread_id,
             )
@@ -695,6 +697,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             provider=provider_name,
             model=selected_model,
             seat="wizard",
+            model_settings=model_settings,
             slot=request.slot,
             run_id=request.thread_id,
         )
@@ -1020,6 +1023,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 provider=provider_name,
                 model=selected_model,
                 seat="wizard_debug",
+                model_settings=model_settings,
                 slot=request.slot,
                 run_id=request.thread_id,
             )
@@ -1091,6 +1095,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 provider=provider_name,
                 model=selected_model,
                 seat="wizard",
+                model_settings=model_settings,
                 slot=request.slot,
                 run_id=request.thread_id,
             )

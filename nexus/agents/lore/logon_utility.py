@@ -1152,6 +1152,8 @@ class LogonUtility:
             )
         if usage_seat == "gaia":
             # Slot-following Gaia shares the writer's model, not its profile.
+            # Chat Completions requests never send reasoning_effort; their
+            # effort stays the registry request_params value, as for the writer.
             gaia = self._gaia_seat_policy()
             pass_provider.reasoning_effort = gaia.reasoning_effort
             if self._provider_wire_type == "anthropic":
@@ -1168,6 +1170,11 @@ class LogonUtility:
         """Return the validated [apex.gaia] generation profile."""
 
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        if "gaia" not in apex_settings:
+            raise ValueError(
+                "The [apex.gaia] table is missing from the settings; Gaia has no "
+                "generation profile to send."
+            )
         return GaiaSeatPolicy.model_validate(apex_settings["gaia"])
 
     def _writer_system_prompt(self) -> str:
@@ -1266,7 +1273,8 @@ class LogonUtility:
 
         Mirrors _initialize_provider's constructor arguments, except that the
         output allowance and reasoning effort come from the [apex.gaia]
-        profile rather than the writer's apex values.
+        profile rather than the writer's apex values. A Chat Completions route
+        sends the registry request_params effort, not the profile's.
         """
         gaia_model, provider_type, endpoint, gaia_wire = gaia_route
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
@@ -1816,10 +1824,12 @@ class LogonUtility:
                 anthropic_transport=transport,
             )
         else:
-            gaia_provider = copy.copy(self.provider)
-            gaia_provider.system_prompt = system
-            if transport is not None:
-                gaia_provider.structured_transport = transport
+            gaia_provider = self._clone_provider_for_two_pass(
+                system_prompt=system,
+                output_validator=None,
+                usage_seat="gaia",
+                anthropic_transport=transport,
+            )
         gaia_prompt = self._format_context_prompt(
             payload,
             presence_baseline=presence,

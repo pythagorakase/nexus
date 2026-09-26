@@ -162,11 +162,11 @@ class APIModelEntry(BaseModel):
         default_factory=list,
         description=(
             "Request parameters this model's API rejects outright (e.g. "
-            "'temperature' on reasoning-class models). Config load and Gaia "
-            "seat resolution refuse a configured Gaia reasoning_effort that "
-            "this list rejects (see Settings._validate_param_capabilities); "
-            "request builders omit listed params, so a rejected parameter can "
-            "never reach the provider."
+            "'temperature' on reasoning-class models). Request builders omit "
+            "listed params, so a rejected parameter can never reach the "
+            "provider. Config load and Gaia seat resolution refuse a Gaia "
+            "model that lists reasoning_effort or reasoning here (see "
+            "require_reasoning_effort_support)."
         ),
     )
     native_structured_output: Optional[bool] = Field(
@@ -212,6 +212,40 @@ class APIModelEntry(BaseModel):
                 f"request keys: {sorted(reserved)}"
             )
         return self
+
+
+# Parameter names that carry a reasoning effort. Listing either in a model's
+# unsupported_params means the provider rejects it, or request filtering would
+# strip it before the call.
+REASONING_EFFORT_PARAMS = frozenset({"reasoning_effort", "reasoning"})
+
+
+def require_reasoning_effort_support(
+    entry: APIModelEntry, *, provider: str, source: str
+) -> None:
+    """Refuse a Gaia model that cannot take a reasoning effort.
+
+    The configured [apex.gaia] effort reaches the OpenAI Responses and
+    Anthropic transports. Chat Completions routes (OpenAI-compatible base_url
+    providers) never send it; there the check still holds Gaia to a reasoning
+    model whose registry request_params effort is not stripped. The TEST mock
+    is exempt: TEST-provider slots stay self-contained, run no inference, and
+    declare no reasoning by design.
+    """
+    if provider == "test":
+        return
+    rejected = sorted(REASONING_EFFORT_PARAMS & set(entry.unsupported_params))
+    if rejected:
+        raise ValueError(
+            f"{source} configures reasoning_effort, but model {entry.id!r} "
+            f"declares {rejected} unsupported (unsupported_params in "
+            "[global.model.api_models]). Choose a model that accepts it."
+        )
+    if entry.reasoning_accounting == "none":
+        raise ValueError(
+            f"{source} configures reasoning_effort, but model {entry.id!r} "
+            "declares reasoning_accounting = 'none'. Choose a reasoning model."
+        )
 
 
 class ProviderModels(BaseModel):
@@ -3437,41 +3471,15 @@ class GaiaSeatPolicy(SeatWindowPolicy):
     reasoning_effort: Literal["low", "medium", "high"] = Field(
         ...,
         description=(
-            "Reasoning effort sent with every Gaia request. The Gaia model must "
-            "declare reasoning and must not list reasoning_effort (or its wire "
-            "key, reasoning) in unsupported_params."
+            "Reasoning effort sent with every Gaia request on the OpenAI "
+            "Responses and Anthropic transports. Chat Completions routes "
+            "(OpenAI-compatible base_url providers such as local and "
+            "OpenRouter) do not send it: as for the writer, their effort is the "
+            "model's registry request_params value, or none. The Gaia model "
+            "must declare reasoning and must not list reasoning_effort (or its "
+            "wire key, reasoning) in unsupported_params."
         ),
     )
-
-
-# Parameter names that carry a configured reasoning effort. Listing either in a
-# model's unsupported_params means the provider rejects it, or request
-# filtering would strip it before the call.
-REASONING_EFFORT_PARAMS = frozenset({"reasoning_effort", "reasoning"})
-
-
-def require_reasoning_effort_support(
-    entry: APIModelEntry, *, provider: str, source: str
-) -> None:
-    """Refuse a configured reasoning effort that the selected model cannot take.
-
-    The TEST mock is exempt: TEST-provider slots stay self-contained, run no
-    inference, and declare no reasoning by design.
-    """
-    if provider == "test":
-        return
-    rejected = sorted(REASONING_EFFORT_PARAMS & set(entry.unsupported_params))
-    if rejected:
-        raise ValueError(
-            f"{source} configures reasoning_effort, but model {entry.id!r} "
-            f"declares {rejected} unsupported (unsupported_params in "
-            "[global.model.api_models]). Choose a model that accepts it."
-        )
-    if entry.reasoning_accounting == "none":
-        raise ValueError(
-            f"{source} configures reasoning_effort, but model {entry.id!r} "
-            "declares reasoning_accounting = 'none'. Choose a reasoning model."
-        )
 
 
 class APEXSettings(SeatWindowPolicy):

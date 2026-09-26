@@ -10,7 +10,7 @@ import logging
 import os
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Literal, Mapping, Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -116,7 +116,8 @@ class UsageEvent(BaseModel):
     service_tier: Optional[str] = None
     aggregate: bool = False
     requests: Optional[int] = Field(default=None, ge=0)
-    # Generation profile the request actually sent; None when it sent none.
+    # Generation profile sent: the exact request kwargs, or a Pydantic AI
+    # run's model settings. None when nothing was sent.
     reasoning_effort: Optional[str] = None
     max_output_tokens: Optional[int] = Field(default=None, ge=1)
 
@@ -336,6 +337,38 @@ def request_generation_profile(
             break
     allowance = request.get("max_output_tokens", request.get("max_tokens"))
     return effort, allowance
+
+
+def pydantic_ai_generation_profile(
+    model_settings: Mapping[str, Any], *, provider: str
+) -> tuple[Optional[str], int]:
+    """Return the reasoning effort and output allowance a Pydantic AI run sent.
+
+    Pydantic AI forwards the run's ``max_tokens`` as every request's output
+    allowance, ``openai_reasoning_effort`` as the effort on OpenAI-wire models
+    (Anthropic models ignore it), and ``extra_body`` verbatim. ``max_tokens`` is
+    required: without it Anthropic models send the library's own default, which
+    the ledger cannot see.
+    """
+    if model_settings.get("max_tokens") is None:
+        raise ValueError(
+            "Pydantic AI usage recording requires the run's max_tokens; without "
+            "it the ledger cannot state the output allowance the run sent."
+        )
+    openai_effort = (
+        None
+        if provider == "anthropic"
+        else model_settings.get("openai_reasoning_effort")
+    )
+    extra_body = model_settings.get("extra_body") or {}
+    effort, _allowance = request_generation_profile(
+        {
+            "reasoning": {"effort": openai_effort},
+            "output_config": extra_body.get("output_config"),
+            "extra_body": extra_body,
+        }
+    )
+    return effort, int(model_settings["max_tokens"])
 
 
 def _empty_totals() -> Dict[str, int]:
@@ -666,10 +699,15 @@ def record_pydantic_ai_result(
     provider: str,
     model: str,
     seat: str,
+    model_settings: Mapping[str, Any],
     slot: Optional[int] = None,
     run_id: Optional[str] = None,
 ) -> None:
-    """Record one Pydantic AI run-level aggregate including internal requests."""
+    """Record one Pydantic AI run-level aggregate including internal requests.
+
+    ``model_settings`` are the settings the run was given; they supply the
+    output allowance and effort recorded for the run's requests.
+    """
 
     usage = result.usage()
     input_tokens = getattr(usage, "input_tokens", None)
@@ -692,6 +730,9 @@ def record_pydantic_ai_result(
     cache_creation_tokens = getattr(usage, "cache_write_tokens", None)
     if cache_creation_tokens is None:
         cache_creation_tokens = details.get("cache_creation_tokens")
+    reasoning_effort, max_output_tokens = pydantic_ai_generation_profile(
+        model_settings, provider=provider
+    )
     event = make_usage_event(
         provider=provider,
         model=model,
@@ -710,6 +751,8 @@ def record_pydantic_ai_result(
         reasoning_tokens=details.get("reasoning_tokens"),
         aggregate=True,
         requests=getattr(usage, "requests", None),
+        reasoning_effort=reasoning_effort,
+        max_output_tokens=max_output_tokens,
     )
     record_usage_event(event)
 
