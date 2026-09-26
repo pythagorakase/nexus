@@ -67,7 +67,7 @@ configuration.
 - `nexus.database.is_connection_failure` stays. The scheduler, Orrery worker,
   Retrograde maturation, experience rendering, and compaction use it.
 - `tests/test_api/test_db_pool_pg.py` keeps its no-replay proofs without the
-  facades. `test_ambiguous_commit_is_never_replayed` runs the interrupted
+  facades. `test_terminated_commit_raises_ambiguous_commit_once` runs the interrupted
   mutation directly. It still requires `AmbiguousCommit` caused by
   `OperationalError`, zero committed rows, and a sequence witness of a single
   insert attempt. `test_scheduler_does_not_replay_wrapped_connection_failure`

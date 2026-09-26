@@ -44,7 +44,8 @@ def database(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[str]:
                 "COMMENT ON TABLE writes IS 'Disposable connection proof writes'"
             )
             cur.execute(
-                "COMMENT ON COLUMN writes.id IS 'Nontransactional sequence witnesses replay'"
+                "COMMENT ON COLUMN writes.id IS "
+                "'Nontransactional sequence witnesses replay'"
             )
             cur.execute("COMMENT ON COLUMN writes.value IS 'Proof value'")
         yield name
@@ -108,7 +109,7 @@ def test_body_connection_error_discards(database: str) -> None:
         print(f"body_failure_discarded=True new_pid={fresh.get_backend_pid()}")
 
 
-def test_ambiguous_commit_is_never_replayed(database: str) -> None:
+def test_terminated_commit_raises_ambiguous_commit_once(database: str) -> None:
     with pytest.raises(AmbiguousCommit, match=database) as caught:
         with db_pool.get_connection(database) as conn, conn.cursor() as cur:
             cur.execute("INSERT INTO writes(value) VALUES ('once')")
