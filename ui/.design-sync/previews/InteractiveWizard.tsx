@@ -17,6 +17,7 @@ export const Shell = () => (
       onCancel={() => {}}
       onPhaseChange={() => {}}
       onArtifactConfirmed={() => {}}
+      onResumeRequired={() => {}}
       wizardData={{
         slot: 5,
         setting: null,
