@@ -5,12 +5,31 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from psycopg2 import sql
-
+from nexus.agents.memnon.utils.embedding_tables import ensure_embedding_table
+from nexus.agents.memnon.utils.source_embeddings import (
+    EmbeddingSource,
+    ModelVectors,
+    active_embedding_models,
+    generate_source_vectors,
+    upsert_source_vectors,
+)
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.config.settings_models import NarrativeJobSettings
 from nexus.jobs.gate import before_provider_call
 from nexus.jobs.narrative_jobs import drain_job
+
+# Chunks embed only through this durable queue, never through
+# embed_source_rows: the job fences the stamp with its lease and keeps the
+# first stamp, where the summary and experience corpora restamp on repair.
+_NARRATIVE_CHUNKS = EmbeddingSource(
+    label="narrative chunk",
+    plural_label="Narrative chunks",
+    table="narrative_chunks",
+    id_column="id",
+    text_column="raw_text",
+    embedding_fk_column="chunk_id",
+    ensure_table=ensure_embedding_table,
+)
 
 
 def enqueue_embedding(cur: Any, chunk_id: int, session_id: str | None = None) -> str:
@@ -42,7 +61,7 @@ def drain_embedding(
 ) -> int:
     """Generate locally, then atomically fence vectors, ironman stamp and job."""
 
-    def prepare(job: dict[str, Any]) -> list[tuple[str, list[float]]]:
+    def prepare(job: dict[str, Any]) -> dict[int, ModelVectors]:
         with conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT raw_text, embedding_generated_at FROM narrative_chunks WHERE id=%s",
@@ -50,20 +69,14 @@ def drain_embedding(
             )
             text, embedded = cur.fetchone()
         if embedded is not None:
-            return []
-        models = {
-            name: model
-            for name, model in settings["Agent Settings"]["MEMNON"]["models"].items()
-            if model["is_active"]
-        }
-        if not models:
-            raise ValueError("No active MEMNON embedding model is configured")
+            return {}
+        models = active_embedding_models(settings["Agent Settings"]["MEMNON"])
         from nexus.agents.memnon.utils.embedding_manager import (
             _get_or_load_sentence_transformer,
         )
 
-        vectors = []
-        for name, config in models.items():
+        def encode(chunk_text: str, name: str) -> list[float]:
+            config = models[name]
             before_provider_call()
             path = config.get("local_path")
             if not path or not Path(path).is_dir():
@@ -72,27 +85,19 @@ def drain_embedding(
                 )
             model = _get_or_load_sentence_transformer(path)
             before_provider_call()
-            vector = model.encode(text).tolist()
+            vector = model.encode(chunk_text).tolist()
             if len(vector) != config["dimensions"]:
                 raise ValueError(f"Embedding dimension mismatch for {name}")
-            vectors.append((name, vector))
-        return vectors
+            return vector
+
+        return generate_source_vectors(
+            _NARRATIVE_CHUNKS, {int(job["chunk_id"]): text}, list(models), encode
+        )
 
     def complete(
-        cur: Any, job: dict[str, Any], vectors: list[tuple[str, list[float]]]
+        cur: Any, job: dict[str, Any], generated: dict[int, ModelVectors]
     ) -> None:
-        from nexus.agents.memnon.utils.embedding_tables import ensure_embedding_table
-
-        for name, vector in vectors:
-            table = sql.Identifier(ensure_embedding_table(cur, len(vector)))
-            cur.execute(
-                sql.SQL(
-                    """INSERT INTO {} (chunk_id, model, embedding)
-                    VALUES (%s, %s, %s::vector) ON CONFLICT (chunk_id, model)
-                    DO UPDATE SET embedding=EXCLUDED.embedding, created_at=now()"""
-                ).format(table),
-                (job["chunk_id"], name, str(vector)),
-            )
+        upsert_source_vectors(cur, _NARRATIVE_CHUNKS, generated)
         cur.execute(
             "UPDATE narrative_chunks SET embedding_generated_at=coalesce(embedding_generated_at, now()) WHERE id=%s",
             (job["chunk_id"],),
