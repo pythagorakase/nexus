@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import keyring
@@ -133,6 +134,25 @@ def test_keychain_outside_the_temp_root_is_never_disposable() -> None:
     backend = MacOSKeychainBackend(service=DISPOSABLE_SERVICE, keychain=login)
     for operation in secret_store_guard.OPERATIONS:
         assert not secret_store_guard.access_allowed(backend, operation)
+
+
+def test_library_is_never_disposable_even_under_the_temp_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``TMPDIR`` above ``~/Library`` cannot make the login keychain disposable."""
+    monkeypatch.setattr(tempfile, "tempdir", str(Path.home()))
+    assert tempfile.gettempdir() == str(Path.home())
+    login = Path.home() / "Library" / "Keychains" / "login.keychain-db"
+    assert not secret_store_guard.is_disposable_keychain(login)
+    scratch = Path.home() / "nexus-secret-it" / "probe.keychain-db"
+    assert secret_store_guard.is_disposable_keychain(scratch)
+
+
+def test_keyword_call_reaches_the_guard() -> None:
+    """Keyword arguments are forwarded, so the guard, not a TypeError, answers."""
+    backend = MacOSKeychainBackend()
+    with pytest.raises(pytest.fail.Exception, match=f"account '{PROBE_ACCOUNT}'"):
+        backend.write(account=PROBE_ACCOUNT, key="never-stored")
 
 
 def test_set_secret_without_injection_is_denied() -> None:

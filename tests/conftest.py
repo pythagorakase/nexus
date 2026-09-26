@@ -5,10 +5,13 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 import psycopg2
 import pytest
+
+if TYPE_CHECKING:
+    from _pytest.terminal import TerminalReporter
 
 # Apply before collection and propagate to test subprocesses.
 if os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
@@ -23,6 +26,11 @@ from tests import secret_store_guard
 # bodies. A conftest that cannot install the guard fails to load, and pytest
 # stops before collecting anything.
 secret_store_guard.install(setattr)
+
+# The guard's patches do not reach subprocesses, so unless the session opted
+# into a real store, children inherit env-only credential mode.
+if not (secret_store_guard.SECRET_STORE_OPT_IN or secret_store_guard.LIVE_LLM_OPT_IN):
+    os.environ["NEXUS_KEYRING_DISABLE"] = "1"
 
 
 def _flag_enabled(name: str) -> bool:
@@ -105,6 +113,15 @@ def _isolate_provider_usage(
 def pytest_report_header(config: pytest.Config) -> str:
     """Show the secret-store guard state at the top of every run."""
     return secret_store_guard.describe()
+
+
+def pytest_terminal_summary(
+    terminalreporter: TerminalReporter,
+    exitstatus: int,
+    config: pytest.Config,
+) -> None:
+    """Repeat the guard state after the run; ``-q`` hides the report header."""
+    terminalreporter.write_line(secret_store_guard.describe())
 
 
 def pytest_collection_finish(session: pytest.Session) -> None:

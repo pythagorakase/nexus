@@ -18,9 +18,13 @@ more specific instructions.
   accumulates; a run that skips them is not the gate.
 - The secret-store guard is a mandatory part of the gate. `tests/conftest.py`
   installs it before collection and stops the session if collection removes
-  it. Before trusting a gate result, confirm the run header reads
-  `secret-store guard: active; nexus-api: denied`, which requires
-  `NEXUS_RUN_LIVE_LLM` to be unset. Never pass `--noconftest`.
+  it. Before trusting a gate result, confirm the final terminal summary (or
+  the run header, which `-q` hides) reads `secret-store guard: active;
+  nexus-api: denied`, which requires `NEXUS_RUN_LIVE_LLM` to be unset. Never
+  pass `--noconftest`. The guard covers credential-store access only, in the
+  pytest process plus `NEXUS_KEYRING_DISABLE=1` for its children. It is not
+  a protected-path write guard, and no launcher preflight runs outside
+  pytest; those parts of #963 are not implemented yet.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 

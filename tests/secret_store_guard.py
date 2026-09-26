@@ -17,6 +17,16 @@ The opt-in flags are read once, when this module is first imported by the
 root conftest. Editing the environment mid-session (for example unsetting
 ``NEXUS_KEYRING_DISABLE`` or setting ``NEXUS_RUN_SECRET_STORE``) cannot lift
 the guard.
+
+The patches live only in the pytest process. Subprocesses that tests start
+(``python -m nexus.cli``, uvicorn) do not inherit them, so when neither opt-in
+flag is set the root conftest also exports ``NEXUS_KEYRING_DISABLE=1`` before
+collection. Children then read credentials from ``<ACCOUNT>_API_KEY`` only and
+cannot write to any store. Tests in this process that need the store path use
+the ``in_memory_secret_store`` fixture, which unsets it for their duration.
+
+Scope: this guards credential-store access only. It is not a protected-path
+write guard, and there is no launcher preflight outside pytest.
 """
 
 from __future__ import annotations
@@ -61,12 +71,16 @@ def is_disposable_keychain(keychain: Path | None) -> bool:
     """Return whether ``keychain`` is an explicit file under the temp root.
 
     ``None`` means the user's keychain search list, which is the owner's
-    login Keychain, so it is never disposable.
+    login Keychain, so it is never disposable. Nothing under
+    ``~/Library`` is disposable either, even when ``TMPDIR`` points at one of
+    its ancestors.
     """
     if keychain is None:
         return False
-    temp_root = Path(tempfile.gettempdir()).resolve()
-    return keychain.resolve().is_relative_to(temp_root)
+    resolved = keychain.resolve()
+    if resolved.is_relative_to((Path.home() / "Library").resolve()):
+        return False
+    return resolved.is_relative_to(Path(tempfile.gettempdir()).resolve())
 
 
 def access_allowed(backend: RealBackend, operation: str) -> bool:
@@ -135,15 +149,16 @@ def _guard_backend(operation: str, original: Callable[..., Any]) -> Callable[...
     """Wrap one real backend method so a denied call fails the test first."""
 
     @functools.wraps(original)
-    def guarded(self: RealBackend, account: str, *args: str) -> Any:
+    def guarded(self: RealBackend, *args: Any, **kwargs: Any) -> Any:
         if not access_allowed(self, operation):
+            account = kwargs.get("account", args[0] if args else None)
             _deny(
                 f"Test attempted a real secret-store {operation} "
                 f"({type(self).__name__}, service {self.service!r}, account "
                 f"{account!r})."
             )
         with _permitted():
-            return original(self, account, *args)
+            return original(self, *args, **kwargs)
 
     setattr(guarded, GUARD_MARKER, True)
     return guarded

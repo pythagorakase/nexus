@@ -6,6 +6,12 @@ temp directory and a random service name. The fixture proves that target
 before the first read, write, or delete, then deletes the keychain and checks
 that the user's keychain search list is unchanged. The owner's login keychain
 and the production ``nexus-api`` service are never addressed.
+
+Known limitation: ``security create-keychain`` can add the new keychain to the
+user's search list while the test runs. The before/after equality check
+detects drift that survives teardown but does not prevent the temporary
+change. This test has not yet run on macOS; it was written and exercised
+only to the point of its skip on Linux.
 """
 
 from __future__ import annotations

@@ -8,6 +8,8 @@ fails any test that reaches the real Keychain or keyring store instead.
 from __future__ import annotations
 
 import secrets
+import subprocess
+import sys
 
 import pytest
 
@@ -22,6 +24,7 @@ from nexus.util.secret_manager import (
     set_secret,
     use_secret_backend,
 )
+from tests import secret_store_guard
 
 TEST_ACCOUNT = "test-secret-455"
 TEST_ENV_VAR = f"{TEST_ACCOUNT.upper()}_API_KEY"
@@ -164,3 +167,27 @@ def test_platform_backend_targets_production_service() -> None:
     assert backend.service == "nexus-api"
     if isinstance(backend, MacOSKeychainBackend):
         assert backend.keychain is None
+
+
+@pytest.mark.skipif(
+    secret_store_guard.SECRET_STORE_OPT_IN or secret_store_guard.LIVE_LLM_OPT_IN,
+    reason="Opted-in sessions do not export environment-only mode.",
+)
+def test_child_processes_inherit_environment_only_mode() -> None:
+    """Subprocesses miss the guard's patches, so they get the env-only flag.
+
+    The child only reports its environment; it never touches a secret store,
+    so this probe stays safe even if the export regresses.
+    """
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os; print(os.environ.get('NEXUS_KEYRING_DISABLE'))",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30.0,
+    )
+    assert child.stdout.strip() == "1"

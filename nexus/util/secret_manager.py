@@ -249,7 +249,7 @@ class KeyringLibraryBackend:
             import keyring  # type: ignore[import-not-found]
         except ImportError:
             raise RuntimeError(
-                "The keyring package is required to store API keys on this " "platform."
+                "The keyring package is required to store API keys on this platform."
             ) from None
 
         try:
@@ -261,20 +261,32 @@ class KeyringLibraryBackend:
             ) from None
 
     def delete(self, account: str) -> None:
-        """Remove a keyring item; the library's not-found error means gone."""
+        """Remove a keyring item; an item confirmed absent is already gone."""
         try:
             import keyring  # type: ignore[import-not-found]
             import keyring.errors  # type: ignore[import-not-found]
         except ImportError:
             raise RuntimeError(
-                "The keyring package is required to delete API keys on this "
-                "platform."
+                "The keyring package is required to delete API keys on this platform."
             ) from None
 
         try:
             keyring.delete_password(self.service, account)
         except keyring.errors.PasswordDeleteError:
-            return
+            # Backends raise this for a missing item and for a refused delete,
+            # so only a follow-up read that finds nothing means "already gone".
+            try:
+                absent = keyring.get_password(self.service, account) is None
+            except Exception as exc:  # noqa: BLE001 - sanitize backend failures
+                raise RuntimeError(
+                    f"Keyring delete failed for account '{account}' "
+                    f"({type(exc).__name__})."
+                ) from None
+            if not absent:
+                raise RuntimeError(
+                    f"Keyring delete failed for account '{account}' "
+                    "(PasswordDeleteError)."
+                ) from None
         except Exception as exc:  # noqa: BLE001 - sanitize backend-specific failures
             raise RuntimeError(
                 f"Keyring delete failed for account '{account}' "
