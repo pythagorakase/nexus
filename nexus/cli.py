@@ -2108,6 +2108,8 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             # Narrative mode - call continue directly
             # The API already resolves the persisted slot model. Sending a
             # model is an explicit override and must remain opt-in.
+            # --choice with --text is one edited-choice payload: the server
+            # keeps the number and records the text when it differs.
             model_to_use = getattr(args, "model", None)
             user_text = args.user_text or ""
 
@@ -4197,11 +4199,16 @@ Examples:
     continue_parser.add_argument(
         "--choice",
         type=int,
-        help="Select structured choice by number (1-indexed)",
+        help=(
+            "Select structured choice by number (1-indexed); with --text, send "
+            "your edited version of that choice"
+        ),
     )
     continue_parser.add_argument(
         "--user-text",
-        help="Freeform user input",
+        "--text",
+        dest="user_text",
+        help="Freeform user input, or with --choice the edited text of that choice",
     )
     continue_parser.add_argument(
         "--accept-fate",

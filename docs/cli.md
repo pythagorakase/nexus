@@ -118,6 +118,10 @@ poetry run nexus continue --slot 5 --choice 2
 # Provide custom input
 poetry run nexus continue --slot 5 --user-text "I search the room"
 
+# Send your edited version of a numbered choice (one request: the number
+# is kept and the edited text is recorded as the player's action)
+poetry run nexus continue --slot 5 --choice 2 --text "Ask Sana, quietly, about the torn page"
+
 # Auto-advance without input (Accept Fate)
 poetry run nexus continue --slot 5 --accept-fate
 
@@ -135,6 +139,18 @@ server rejects it if a newer attempt has replaced that failure.
 
 ```bash
 poetry run nexus retry --slot 5
+```
+
+### `regenerate` — Re-Roll the Pending Turn
+
+Regenerates the pending storyteller turn from the same parent and player text.
+The current draft stays until its replacement is staged, so a failed
+regeneration leaves it in place. `--note` adds an optional out-of-character
+note to the storyteller, at most 500 characters.
+
+```bash
+poetry run nexus regenerate --slot 5
+poetry run nexus regenerate --slot 5 --note "darker, plz"
 ```
 
 ### `clear` — Reset a Slot
