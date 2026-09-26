@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Retire the orphan Storyteller app, its session layer, and ChunkWorkflow with the broken chunk-state route (#807)",
+  "reason": "Add the shared MEMNON retrieval result builders and source-embedding orchestrator (#848)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -105,7 +105,9 @@
     "nexus/agents/memnon/utils/embedding_tables.py",
     "nexus/agents/memnon/utils/idf_dictionary.py",
     "nexus/agents/memnon/utils/query_analysis.py",
+    "nexus/agents/memnon/utils/results.py",
     "nexus/agents/memnon/utils/search.py",
+    "nexus/agents/memnon/utils/source_embeddings.py",
     "nexus/agents/orrery/__init__.py",
     "nexus/agents/orrery/ambient.py",
     "nexus/agents/orrery/audit.py",
