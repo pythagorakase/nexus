@@ -7,15 +7,13 @@ import pytest
 from nexus.agents.memnon.utils.continuous_temporal_search import (
     result_temporal_anchor,
 )
-from nexus.agents.memnon.utils.db_access import (
-    _retrograde_summaries_allowed,
-    _retrograde_summary_result,
-)
+from nexus.agents.memnon.utils.db_access import _retrograde_summaries_allowed
 from nexus.agents.memnon.utils.embedding_tables import (
     ensure_retrograde_summary_embedding_table,
     parse_retrograde_summary_embedding_table_dimensions,
     retrograde_summary_table_name_for_dimensions,
 )
+from nexus.agents.memnon.utils.results import retrograde_summary_result
 from nexus.agents.orrery.retrograde_embedding import _normalized_summary_ids
 
 
@@ -61,7 +59,7 @@ def test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor() -> Non
 def test_retrograde_summary_result_keeps_typed_identity() -> None:
     """A summary result never masquerades as a narrative chunk."""
     created_at = datetime(2089, 4, 3, tzinfo=timezone.utc)
-    result = _retrograde_summary_result(
+    result = retrograde_summary_result(
         17,
         "The Saltline mirrors carried Orji's damaged case.",
         91,

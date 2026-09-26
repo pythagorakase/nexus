@@ -14,7 +14,6 @@ from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 
 # Import utility modules
 from .db_access import (
-    _retrograde_summary_result,
     _retrograde_summaries_allowed,
     execute_hybrid_search,
     execute_multi_model_hybrid_search,
@@ -29,6 +28,7 @@ from .continuous_temporal_search import (
 from .idf_dictionary import IDFDictionary, IDFStateError
 from .embedding_manager import EmbeddingManager
 from .query_analysis import QueryAnalyzer
+from .results import narrative_metadata, narrative_result, retrograde_summary_result
 
 logger = logging.getLogger("nexus.memnon.search")
 
@@ -450,20 +450,15 @@ class SearchManager:
                     row
                 )
                 text_results.append(
-                    {
-                        "id": str(chunk_id),
-                        "chunk_id": str(chunk_id),
-                        "text": raw_text,
-                        "content_type": "narrative",
-                        "metadata": {
-                            "season": season,
-                            "episode": episode,
-                            "scene_number": scene_number,
-                            "highlights": highlights,
-                        },
-                        "score": float(score),
-                        "source": "text_search",
-                    }
+                    narrative_result(
+                        chunk_id,
+                        raw_text,
+                        narrative_metadata(
+                            season, episode, scene_number, highlights=highlights
+                        ),
+                        score=float(score),
+                        source="text_search",
+                    )
                 )
 
             # Retrograde summaries form a distinct corpus. They participate in
@@ -505,14 +500,10 @@ class SearchManager:
                         {"query": processed_query, "limit": limit},
                     )
                     for row in summary_result:
-                        summary = _retrograde_summary_result(*row[:6])
-                        summary["metadata"]["highlights"] = row[7]
-                        summary.update(
-                            {
-                                "score": float(row[6]),
-                                "source": "text_search",
-                            }
+                        summary = retrograde_summary_result(
+                            *row[:6], score=float(row[6]), source="text_search"
                         )
+                        summary["metadata"]["highlights"] = row[7]
                         text_results.append(summary)
 
             # Fallback: if no matches and the query is a single token, try ILIKE
@@ -558,20 +549,18 @@ class SearchManager:
                             highlights,
                         ) = row
                         text_results.append(
-                            {
-                                "id": str(chunk_id),
-                                "chunk_id": str(chunk_id),
-                                "text": raw_text,
-                                "content_type": "narrative",
-                                "metadata": {
-                                    "season": season,
-                                    "episode": episode,
-                                    "scene_number": scene_number,
-                                    "highlights": highlights,
-                                },
-                                "score": float(score),
-                                "source": "text_search_like",
-                            }
+                            narrative_result(
+                                chunk_id,
+                                raw_text,
+                                narrative_metadata(
+                                    season,
+                                    episode,
+                                    scene_number,
+                                    highlights=highlights,
+                                ),
+                                score=float(score),
+                                source="text_search_like",
+                            )
                         )
                     if summary_table_exists:
                         like_summary_result = session.execute(
@@ -592,11 +581,11 @@ class SearchManager:
                             {"like": single, "limit": limit},
                         )
                         for row in like_summary_result:
-                            summary = _retrograde_summary_result(*row)
-                            summary.update(
-                                {"score": 0.05, "source": "text_search_like"}
+                            text_results.append(
+                                retrograde_summary_result(
+                                    *row, score=0.05, source="text_search_like"
+                                )
                             )
-                            text_results.append(summary)
 
             return sorted(
                 text_results,
