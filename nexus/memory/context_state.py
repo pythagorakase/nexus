@@ -8,6 +8,7 @@ from typing import (
     Annotated,
     Any,
     Dict,
+    Final,
     Iterable,
     List,
     Literal,
@@ -24,7 +25,14 @@ from pydantic import (
     NonNegativeInt,
     PositiveInt,
     StrictInt,
+    TypeAdapter,
     model_validator,
+)
+
+from .baseline_compat import (
+    Pass2ConfigSnapshot,
+    pass2_baseline_config_fingerprint,
+    snapshot_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,24 +41,39 @@ logger = logging.getLogger(__name__)
 MemoryIdentity = Union[int, str]
 RETROGRADE_SUMMARY_CONTENT_TYPE = "retrograde_summary"
 RETROGRADE_SUMMARY_ID_PREFIX = "retrograde_summary:"
-PASS2_BASELINE_SCHEMA_VERSION = 1
-PASS2_BASELINE_PRODUCER = "nexus.memory.context_memory_manager"
+PASS2_BASELINE_PRODUCER: Final = "nexus.memory.context_memory_manager"
 
 PersistedRetrogradeIdentity = Annotated[
     str,
     Field(pattern=r"^retrograde_summary:[1-9][0-9]*$"),
 ]
 PersistedMemoryIdentity = Union[StrictInt, PersistedRetrogradeIdentity]
+ConfigFingerprint = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+def _require_valid_identities(identities: Iterable[MemoryIdentity]) -> None:
+    """Reject non-positive chunk ids and duplicate identities."""
+
+    ordered: List[MemoryIdentity] = list(identities)
+    for identity in ordered:
+        if isinstance(identity, int) and identity <= 0:
+            raise ValueError("narrative memory identities must be positive")
+    if len(set(ordered)) != len(ordered):
+        raise ValueError("memory identities must be unique")
 
 
 class Pass2BaselineV1(BaseModel):
-    """Durable Pass-1 state required to run Pass 2 on the next turn."""
+    """Schema-1 durable Pass-1 state; readable, no longer produced.
+
+    It records only the full config fingerprint, so a changed setting cannot
+    be classified and any mismatch fails until an operator refreshes it.
+    """
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    schema_version: Literal[1] = PASS2_BASELINE_SCHEMA_VERSION
+    schema_version: Literal[1] = 1
     producer: Literal["nexus.memory.context_memory_manager"] = PASS2_BASELINE_PRODUCER
-    config_fingerprint: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    config_fingerprint: ConfigFingerprint
     parent_chunk_id: Optional[PositiveInt] = None
     memory_identities: List[PersistedMemoryIdentity]
     prior_token_accounting: Dict[str, NonNegativeInt]
@@ -60,25 +83,112 @@ class Pass2BaselineV1(BaseModel):
     def validate_memory_identities(self) -> "Pass2BaselineV1":
         """Reject booleans, non-positive chunk ids, and duplicate identities."""
 
-        identities: List[MemoryIdentity] = list(self.memory_identities)
-        for identity in identities:
-            if isinstance(identity, int) and identity <= 0:
-                raise ValueError("narrative memory identities must be positive")
-        if len(set(identities)) != len(identities):
-            raise ValueError("memory identities must be unique")
+        _require_valid_identities(self.memory_identities)
         return self
 
 
-def validate_staged_pass2_baseline(payload: Any) -> Pass2BaselineV1:
+class Pass2BaselineV2(BaseModel):
+    """Durable Pass-1 state required to run Pass 2 on the next turn.
+
+    ``config_fingerprint`` is the unchanged full hash kept for audit and
+    schema-1 comparison. ``config_snapshot`` records every fingerprinted
+    setting under its compatibility class and ``semantic_fingerprint`` hashes
+    its semantic class, so a budget-only change can be told apart from a
+    semantic one (see ``nexus.memory.baseline_compat``).
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal[2] = 2
+    producer: Literal["nexus.memory.context_memory_manager"] = PASS2_BASELINE_PRODUCER
+    config_fingerprint: ConfigFingerprint
+    semantic_fingerprint: ConfigFingerprint
+    config_snapshot: Pass2ConfigSnapshot
+    parent_chunk_id: Optional[PositiveInt] = None
+    memory_identities: List[PersistedMemoryIdentity]
+    prior_token_accounting: Dict[str, NonNegativeInt]
+    remaining_budget: NonNegativeInt
+
+    @model_validator(mode="after")
+    def validate_identities_and_semantics(self) -> "Pass2BaselineV2":
+        """Reject invalid identities and a semantic hash its snapshot disowns."""
+
+        _require_valid_identities(self.memory_identities)
+        recorded = self.config_snapshot.semantic_fingerprint()
+        if self.semantic_fingerprint != recorded:
+            raise ValueError(
+                "semantic_fingerprint does not match the semantic settings in "
+                f"config_snapshot: stored={self.semantic_fingerprint}, "
+                f"snapshot={recorded}"
+            )
+        return self
+
+    @classmethod
+    def for_settings(
+        cls,
+        settings: Mapping[str, Any],
+        *,
+        memory_identities: List[MemoryIdentity],
+        prior_token_accounting: Dict[str, int],
+        remaining_budget: int,
+        parent_chunk_id: Optional[int] = None,
+    ) -> "Pass2BaselineV2":
+        """Build a baseline fingerprinted and snapshotted under ``settings``."""
+
+        snapshot = snapshot_config(settings)
+        return cls(
+            config_fingerprint=pass2_baseline_config_fingerprint(settings),
+            semantic_fingerprint=snapshot.semantic_fingerprint(),
+            config_snapshot=snapshot,
+            parent_chunk_id=parent_chunk_id,
+            memory_identities=memory_identities,
+            prior_token_accounting=prior_token_accounting,
+            remaining_budget=remaining_budget,
+        )
+
+
+Pass2Baseline = Union[Pass2BaselineV1, Pass2BaselineV2]
+_PASS2_BASELINE: TypeAdapter[Pass2Baseline] = TypeAdapter(
+    Annotated[Pass2Baseline, Field(discriminator="schema_version")]
+)
+
+
+def parse_pass2_baseline(payload: Any) -> Pass2Baseline:
+    """Validate a baseline of any readable schema version by its tag."""
+
+    return _PASS2_BASELINE.validate_python(payload)
+
+
+def restamp_pass2_baseline(
+    baseline: Pass2Baseline, settings: Mapping[str, Any]
+) -> Pass2BaselineV2:
+    """Re-fingerprint a baseline under ``settings``, keeping its recorded state.
+
+    Memory identities, prior accounting, remaining budget, and the bound
+    parent are copied unchanged. Callers own the decision that ``settings``
+    may govern this history: a player's context-window change or an explicit
+    operator refresh.
+    """
+
+    return Pass2BaselineV2.for_settings(
+        settings,
+        memory_identities=list(baseline.memory_identities),
+        prior_token_accounting=dict(baseline.prior_token_accounting),
+        remaining_budget=baseline.remaining_budget,
+        parent_chunk_id=baseline.parent_chunk_id,
+    )
+
+
+def validate_staged_pass2_baseline(payload: Any) -> Pass2Baseline:
     """Validate an incubator baseline and require it to remain ID-unbound."""
 
-    baseline = Pass2BaselineV1.model_validate(payload)
+    baseline = parse_pass2_baseline(payload)
     if baseline.parent_chunk_id is not None:
         raise ValueError("Staged Pass-2 baseline must not predict an accepted chunk id")
     return baseline
 
 
-def bind_pass2_baseline(payload: Any, chunk_id: int) -> Pass2BaselineV1:
+def bind_pass2_baseline(payload: Any, chunk_id: int) -> Pass2Baseline:
     """Bind a validated staged baseline to the actual accepted chunk id."""
 
     if isinstance(chunk_id, bool) or not isinstance(chunk_id, int) or chunk_id <= 0:

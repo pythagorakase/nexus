@@ -23,7 +23,7 @@ from nexus.api.choice_handling import (
     selected_text_from_choice_object,
 )
 from nexus.memory.correspondence import GeneratedCorrespondence
-from nexus.memory.context_state import Pass2BaselineV1, validate_staged_pass2_baseline
+from nexus.memory.context_state import Pass2Baseline, validate_staged_pass2_baseline
 
 logger = logging.getLogger("nexus.api.lore_adapter")
 
@@ -136,7 +136,7 @@ def response_to_incubator(
     parent_chunk_id: int,
     user_text: str,
     session_id: str,
-    lore_pass_baseline: Pass2BaselineV1,
+    lore_pass_baseline: Pass2Baseline,
     orrery_proposal: Optional[Any] = None,
     bleed_offer_resolution_ids: Iterable[int] = (),
     correspondence: Optional[GeneratedCorrespondence] = None,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import logging
 import os
 from contextlib import closing
 from pathlib import Path
@@ -692,6 +693,134 @@ def test_component_regeneration_sparse_promotion_restore_and_cascade(
                 (accepted_chunk_id,),
             )
             assert cur.fetchone()[0] == 0
+    finally:
+        conn.close()
+        engine.dispose()
+
+
+def _windowed_settings(window: int, **memory: Any) -> dict[str, Any]:
+    settings = _settings()
+    settings["Agent Settings"]["LORE"]["token_budget"]["apex_context_window"] = window
+    settings["memory"].update(memory)
+    return settings
+
+
+def test_window_change_rebases_accepted_baseline_and_semantic_change_refuses(
+    pass2_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A budget-only change keeps accepted memory; semantics and V1 stop (#805)."""
+
+    _patch_unrelated_commit_work(monkeypatch)
+    database_url = f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
+    database_url += (
+        f"{os.environ.get('PGHOST', 'localhost')}:"
+        f"{os.environ.get('PGPORT', '5432')}/{pass2_database}"
+    )
+    engine = create_engine(database_url, future=True)
+    conn = _connect(pass2_database)
+    try:
+        parent_chunk_id = _seed_parent(conn, "window parent")
+        manager_n = ContextMemoryManager(_settings(), memnon=_DatabaseMemnon(engine))
+        manager_n.handle_storyteller_response(
+            narrative="Window candidate.",
+            warm_slice=[{"chunk_id": parent_chunk_id, "text": "window parent"}],
+            retrieved_passages=[
+                {
+                    "memory_id": "retrograde_summary:7",
+                    "content_type": "retrograde_summary",
+                    "text": "summary",
+                }
+            ],
+            token_usage={
+                "total_available": 100,
+                "warm_slice": 10,
+                "structured": 0,
+                "augmentation": 0,
+            },
+        )
+        staged = manager_n.export_pass2_baseline()
+        assert staged.schema_version == 2
+        session_id = str(uuid4())
+        _create_lease(conn, session_id, parent_chunk_id)
+        conn.commit()
+        payload = response_to_incubator(
+            _response("Window candidate."),
+            parent_chunk_id=parent_chunk_id,
+            user_text="Continue.",
+            session_id=session_id,
+            lore_pass_baseline=staged,
+        )
+        asyncio.run(write_to_incubator(conn, payload))
+        accepted_id = commit_incubator_to_database_sync(conn, session_id, slot=5)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT schema_version, payload FROM lore_pass_baselines "
+                "WHERE chunk_id = %s",
+                (accepted_id,),
+            )
+            stored = cur.fetchone()
+        assert stored[0] == 2
+
+        widened = ContextMemoryManager(
+            _windowed_settings(2_000),
+            memnon=_DatabaseMemnon(
+                engine,
+                results=[
+                    {"chunk_id": parent_chunk_id, "text": "duplicate parent"},
+                    {"chunk_id": 999_999, "text": "new memory"},
+                ],
+            ),
+        )
+        with caplog.at_level(logging.WARNING, logger="nexus.memory.manager"):
+            restored = widened.restore_pass2_baseline(accepted_id)
+        assert restored.memory_identities == staged.memory_identities
+        assert "Rebasing Pass-2 baseline" in caplog.text
+        assert "window 1000 -> 2000" in caplog.text
+        widened.configure_base_storyteller_budget()
+        assert widened.phase2_budget == 200
+        update = widened.handle_user_input("Investigate Zyxonium")
+        assert update.baseline_available is True
+        assert [row["chunk_id"] for row in update.retrieved_chunks] == [999_999]
+
+        broadened = ContextMemoryManager(
+            _windowed_settings(2_000, raw_search_k=40),
+            memnon=_DatabaseMemnon(engine),
+        )
+        with pytest.raises(RuntimeError, match=r"memory\.raw_search_k: 30 -> 40"):
+            broadened.restore_pass2_baseline(accepted_id)
+        assert broadened.context_state.context is None
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT schema_version, payload FROM lore_pass_baselines "
+                "WHERE chunk_id = %s",
+                (accepted_id,),
+            )
+            assert cur.fetchone() == stored
+
+            legacy = {
+                key: value
+                for key, value in stored[1].items()
+                if key not in {"semantic_fingerprint", "config_snapshot"}
+            }
+            legacy.update(schema_version=1)
+            cur.execute(
+                "UPDATE lore_pass_baselines SET schema_version = 1, "
+                "payload = %s::jsonb WHERE chunk_id = %s",
+                (json.dumps(legacy), accepted_id),
+            )
+        conn.commit()
+        same = ContextMemoryManager(_settings(), memnon=_DatabaseMemnon(engine))
+        assert same.restore_pass2_baseline(accepted_id).schema_version == 1
+        legacy_widened = ContextMemoryManager(
+            _windowed_settings(2_000), memnon=_DatabaseMemnon(engine)
+        )
+        with pytest.raises(
+            RuntimeError, match="schema-1 baseline records no settings snapshot"
+        ):
+            legacy_widened.restore_pass2_baseline(accepted_id)
     finally:
         conn.close()
         engine.dispose()
