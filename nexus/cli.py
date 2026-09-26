@@ -151,6 +151,13 @@ def _is_terminal_generation_status(status: Optional[str]) -> bool:
     return status in TERMINAL_GENERATION_STATUSES
 
 
+# The phase each accepted setup artifact enters, and the reverse lookup.
+_WIZARD_PHASE_ENTERED_BY = {"setting": "character", "character": "seed"}
+_WIZARD_PHASE_ACCEPTED_BEFORE = {
+    entered: accepted for accepted, entered in _WIZARD_PHASE_ENTERED_BY.items()
+}
+
+
 def _get_next_phase(current_phase: str) -> Optional[str]:
     """Get the next wizard phase after the current one."""
     phase_order = ["setting", "character", "seed", "ready"]
@@ -1108,7 +1115,7 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
                 "success": True,
                 "message": f"Slot {args.slot} is in wizard mode.",
                 "phase": data.get("phase"),
-                "choices": [],
+                "choices": data.get("choices", []),
             }
             if data.get("pending_confirmation") in {"setting", "character"}:
                 phase = data["pending_confirmation"]
@@ -1120,6 +1127,16 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
                         f"The saved {phase} draft awaits confirmation. "
                         f"Use 'nexus continue --slot {args.slot}' to confirm, "
                         "or supply --user-text to revise it."
+                    ),
+                )
+            if data.get("awaiting_introduction") in _WIZARD_PHASE_ACCEPTED_BEFORE:
+                phase = data["awaiting_introduction"]
+                result.update(
+                    awaiting_introduction=phase,
+                    message=(
+                        f"The {phase} phase was entered but never introduced. "
+                        f"Run 'nexus continue --slot {args.slot}' to load its "
+                        "introduction."
                     ),
                 )
             if data.get("character_revision_pending"):
@@ -1488,7 +1505,7 @@ def _confirm_wizard_artifact_and_introduce(
         if not 200 <= response.status_code < 300:
             raise ValueError(f"Wizard confirmation failed: {response.text}")
         confirmed = response.json()
-        next_phase = _get_next_phase(identity["phase"])
+        next_phase = _WIZARD_PHASE_ENTERED_BY[identity["phase"]]
         if (
             not isinstance(confirmed, dict)
             or confirmed.get("status") != "confirmed"
@@ -1507,11 +1524,31 @@ def _confirm_wizard_artifact_and_introduce(
 
     # A failed or lost acknowledgement above never schedules another model turn.
     result.update(phase=next_phase, pending_confirmation=None, artifact_token=None)
+    return _introduce_accepted_phase(
+        slot=slot,
+        thread_id=identity["thread_id"],
+        accepted_phase=identity["phase"],
+        next_phase=next_phase,
+        result=result,
+        model=model,
+    )
+
+
+def _introduce_accepted_phase(
+    *,
+    slot: int,
+    thread_id: str,
+    accepted_phase: str,
+    next_phase: str,
+    result: Dict[str, Any],
+    model: Optional[str],
+) -> Dict[str, Any]:
+    """Request the introduction of a phase whose predecessor is already accepted."""
     payload = {
         "slot": slot,
-        "thread_id": identity["thread_id"],
+        "thread_id": thread_id,
         "message": (
-            f"[SYSTEM] Phase {identity['phase']} complete. "
+            f"[SYSTEM] Phase {accepted_phase} complete. "
             f"Proceeding to {next_phase}. Please introduce the next phase."
         ),
         "current_phase": next_phase,
@@ -1615,6 +1652,34 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
 
         if state.get("is_wizard_mode"):
             revision_thread_id = None
+            awaiting_introduction = state.get("awaiting_introduction")
+            if (
+                awaiting_introduction in _WIZARD_PHASE_ACCEPTED_BEFORE
+                and not (args.user_text or "").strip()
+                and args.choice is None
+                and not args.accept_fate
+                and not args.dev
+            ):
+                # The acceptance is durable; only its introduction is missing.
+                thread_id = state.get("thread_id")
+                if not isinstance(thread_id, str) or not thread_id.strip():
+                    return {
+                        "success": False,
+                        "error": "Wizard conversation identity is missing. "
+                        "Reload the saved wizard.",
+                    }
+                return _introduce_accepted_phase(
+                    slot=args.slot,
+                    thread_id=thread_id,
+                    accepted_phase=_WIZARD_PHASE_ACCEPTED_BEFORE[awaiting_introduction],
+                    next_phase=awaiting_introduction,
+                    result={
+                        "success": True,
+                        "phase": awaiting_introduction,
+                        "pending_confirmation": None,
+                    },
+                    model=getattr(args, "model", None),
+                )
             pending_confirmation = state.get("pending_confirmation")
             if pending_confirmation in {"setting", "character"}:
                 if args.choice is not None:

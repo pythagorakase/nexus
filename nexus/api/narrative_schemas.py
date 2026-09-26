@@ -203,6 +203,8 @@ class ResumeSetupResponse(BaseModel):
     thread_id: str
     target_slot: int
     pending_confirmation: Optional[Literal["setting", "character"]] = None
+    # Phase entered by an accepted artifact whose introduction was never recorded.
+    awaiting_introduction: Optional[Literal["character", "seed"]] = None
     artifact_token: Optional[str] = None
     character_revision_pending: bool = False
     character_sheet: Optional[Dict[str, Any]] = None
@@ -291,6 +293,7 @@ class SlotStateResponse(BaseModel):
     is_empty: bool
     is_wizard_mode: bool
     pending_confirmation: Optional[Literal["setting", "character"]] = None
+    awaiting_introduction: Optional[Literal["character", "seed"]] = None
     artifact_token: Optional[str] = None
     character_revision_pending: bool = False
     phase: Optional[str] = None  # Wizard phase if in wizard mode

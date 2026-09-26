@@ -193,7 +193,8 @@ interface ArtifactSidePanelProps {
   pendingArtifact: Artifact | null;
   onPhaseClick: (phase: Phase) => void;
   onConfirm: () => void;
-  onRevise: () => void;
+  // Omitted once the artifact is accepted: it can no longer be revised.
+  onRevise?: () => void;
   isLoading: boolean;
   // Trait selector props
   showTraitSelector?: boolean;
@@ -893,14 +894,16 @@ export function ArtifactSidePanel({
       {shouldShowFooter && (
         <div className="p-4 border-t border-primary/30">
           <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={onRevise}
-              disabled={isLoading}
-              className="flex-1 border-destructive/50 text-destructive hover:bg-destructive/10 font-sans uppercase tracking-wide text-xs"
-            >
-              Revise
-            </Button>
+            {onRevise && (
+              <Button
+                variant="outline"
+                onClick={onRevise}
+                disabled={isLoading}
+                className="flex-1 border-destructive/50 text-destructive hover:bg-destructive/10 font-sans uppercase tracking-wide text-xs"
+              >
+                Revise
+              </Button>
+            )}
             <Button
               onClick={onConfirm}
               disabled={isConfirmDisabled}

@@ -15,6 +15,7 @@ const props = {
     slot: 5,
     onComplete: vi.fn(),
     onCancel: vi.fn(),
+    onResumeRequired: vi.fn(),
     onPhaseChange: vi.fn(),
     wizardData: {},
     setWizardData: vi.fn(),

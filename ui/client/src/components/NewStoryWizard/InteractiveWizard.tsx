@@ -36,6 +36,8 @@ export interface WizardResumeData {
     thread_id: string;
     current_phase: Phase | "ready";
     pending_confirmation?: "setting" | "character" | null;
+    // Phase entered by an accepted artifact whose introduction never arrived.
+    awaiting_introduction?: "character" | "seed" | null;
     artifact_token?: string | null;
     character_revision_pending?: boolean;
     character_sheet?: any;
@@ -54,6 +56,8 @@ interface InteractiveWizardProps {
     slot: number;
     onComplete: () => void;
     onCancel: () => void;
+    // Reload the saved wizard in place, exactly as resuming the slot would.
+    onResumeRequired: () => void;
     onPhaseChange: (phase: Phase) => void;
     onArtifactConfirmed?: (type: "setting" | "character" | "seed", data: any) => void;
     wizardData: any;
@@ -63,6 +67,17 @@ interface InteractiveWizardProps {
 }
 
 type Phase = "setting" | "character" | "seed";
+
+// An accepted artifact stays on screen, Confirm-only, until the phase it
+// entered is introduced. Keyed by that awaiting phase.
+export const ACCEPTED_BEFORE_INTRODUCTION: Record<"character" | "seed", Phase> = {
+    character: "setting",
+    seed: "character",
+};
+
+// The server holds newer wizard state than the screen (409), such as an
+// acceptance or introduction whose response was lost after it was saved.
+class StaleWizardState extends Error {}
 
 // User-facing phase titles; the seed phase is presented as "Introduction"
 // throughout the wizard (see WizardShell's PHASES and the artifact modal).
@@ -120,6 +135,7 @@ export function InteractiveWizard({
     slot,
     onComplete,
     onCancel,
+    onResumeRequired,
     onPhaseChange,
     onArtifactConfirmed,
     wizardData,
@@ -135,7 +151,9 @@ export function InteractiveWizard({
     const [threadId, setThreadId] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<Phase>(initialPhase || "setting");
     const [pendingArtifact, setPendingArtifact] = useState<any>(null);
-    const confirmedArtifactTokenRef = useRef<string | null>(null);
+    // Phase whose artifact is durably accepted while the next phase has not
+    // been introduced; Confirm then only requests that introduction.
+    const [acceptedPhase, setAcceptedPhase] = useState<Phase | null>(null);
     const [artifactToken, setArtifactToken] = useState<string | null>(null);
     const [isRevisingCharacter, setIsRevisingCharacter] = useState(false);
     const [displayChoices, setDisplayChoices] = useState<string[]>([]);
@@ -187,7 +205,7 @@ export function InteractiveWizard({
                 setDisplayChoices([]);
                 setPendingArtifact(null);
                 setArtifactToken(null);
-                confirmedArtifactTokenRef.current = null;
+                setAcceptedPhase(null);
                 setIsRevisingCharacter(false);
                 setPhaseTransitionError(null);
                 setShowTraitSelector(false);
@@ -205,10 +223,14 @@ export function InteractiveWizard({
                     setArtifactToken(resumeData.artifact_token ?? null);
                     setIsRevisingCharacter(!!resumeData.character_revision_pending);
                     const characterState = resumeData.character_state;
-                    if (resumeData.pending_confirmation === "setting") {
+                    const accepted = resumeData.awaiting_introduction
+                        ? ACCEPTED_BEFORE_INTRODUCTION[resumeData.awaiting_introduction]
+                        : null;
+                    setAcceptedPhase(accepted);
+                    if (resumeData.pending_confirmation === "setting" || accepted === "setting") {
                         setPendingArtifact({ type: "submit_world_document", data: resumeData.setting_draft });
                         setDisplayChoices([]);
-                    } else if (resumeData.pending_confirmation === "character") {
+                    } else if (resumeData.pending_confirmation === "character" || accepted === "character") {
                         setPendingArtifact({ type: "submit_character_sheet", data: resumeData.character_sheet });
                         setDisplayChoices([]);
                     }
@@ -378,7 +400,7 @@ export function InteractiveWizard({
             // Trait selection confirmation - route to existing handler
             handleTraitConfirm(selectedTraits);
         }
-    }, [pendingArtifact, showTraitSelector, selectedTraits]);
+    }, [pendingArtifact, showTraitSelector, selectedTraits, acceptedPhase]);
 
     // Transition handler - performs transition + triggers bootstrap, then navigates
     // NexusLayout handles detecting incubator data and showing approval modal
@@ -866,25 +888,35 @@ export function InteractiveWizard({
             setIsLoading(true);
             setDisplayChoices([]);
             try {
-                if (!threadId || !artifactToken) throw new Error("Resume this artifact before confirming it.");
-                if (confirmedArtifactTokenRef.current !== artifactToken) {
+                if (!threadId) throw new Error("Resume this artifact before confirming it.");
+                // Acceptance is recorded once; an interrupted transition only
+                // requests the next phase's introduction again.
+                if (acceptedPhase !== currentPhase) {
+                    if (!artifactToken) throw new Error("Resume this artifact before confirming it.");
                     const confirmation = await fetch("/api/story/new/setup/confirm", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ slot, thread_id: threadId, phase: currentPhase, artifact_token: artifactToken }),
                     });
-                    const accepted = await confirmation.json();
-                    if (!confirmation.ok || accepted.status !== "confirmed" || accepted.next_phase !== nextPhase || accepted.thread_id !== threadId) {
-                        throw new Error(accepted.detail || "Could not confirm the saved artifact.");
+                    if (confirmation.status === 409) {
+                        // The acceptance may have been saved although its
+                        // response was lost; continue only if the saved wizard
+                        // now awaits exactly this transition's introduction.
+                        await requireSavedAcceptance(nextPhase);
+                    } else {
+                        const accepted = await confirmation.json().catch(() => null);
+                        if (!confirmation.ok || accepted?.status !== "confirmed" || accepted.next_phase !== nextPhase || accepted.thread_id !== threadId) {
+                            throw new Error(accepted?.detail || "Could not confirm the saved artifact.");
+                        }
                     }
-                    confirmedArtifactTokenRef.current = artifactToken;
+                    setAcceptedPhase(currentPhase);
                 }
                 const data = await triggerNextPhase(nextPhase, contextData);
                 if (data.artifact_token) setArtifactToken(data.artifact_token);
                 setWizardData(contextData);
                 onArtifactConfirmed?.(currentPhase, pendingArtifact.data);
                 updatePhase(nextPhase);
-                confirmedArtifactTokenRef.current = null;
+                setAcceptedPhase(null);
                 setShowTraitSelector(false);
                 if (data.phase_complete) {
                     if (data.artifact_token) setArtifactToken(data.artifact_token);
@@ -899,6 +931,11 @@ export function InteractiveWizard({
                     }
                 }
             } catch (error) {
+                if (error instanceof StaleWizardState) {
+                    // Show the saved state instead of a dead-end retry.
+                    onResumeRequired();
+                    return;
+                }
                 console.error("Next phase trigger error:", error);
                 setPhaseTransitionError(
                     error instanceof Error ? error.message : "Could not start the next phase.",
@@ -919,6 +956,14 @@ export function InteractiveWizard({
         }
     };
 
+    const requireSavedAcceptance = async (nextPhase: Phase) => {
+        const res = await fetch(`/api/story/new/setup/resume?slot=${slot}`);
+        const saved: WizardResumeData | null = res.ok ? await res.json().catch(() => null) : null;
+        if (!saved || saved.thread_id !== threadId || saved.awaiting_introduction !== nextPhase) {
+            throw new StaleWizardState();
+        }
+    };
+
     const triggerNextPhase = async (nextPhase: Phase, contextData: any) => {
         const res = await fetch("/api/story/new/chat", {
             method: "POST",
@@ -933,6 +978,7 @@ export function InteractiveWizard({
             }),
         });
         const data = await res.json().catch(() => null);
+        if (res.status === 409) throw new StaleWizardState(data?.detail);
         if (!res.ok) {
             throw new Error(
                 typeof data?.detail === "string"
@@ -1188,7 +1234,7 @@ export function InteractiveWizard({
                     pendingArtifact={pendingArtifact}
                     onPhaseClick={handlePhaseClick}
                     onConfirm={handlePanelConfirm}
-                    onRevise={handleRevise}
+                    onRevise={acceptedPhase === currentPhase ? undefined : handleRevise}
                     isLoading={isLoading}
                     showTraitSelector={showTraitSelector && !pendingArtifact}
                     suggestedTraits={suggestedTraits}

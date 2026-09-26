@@ -319,3 +319,71 @@ def test_load_explains_an_unfinished_revision_without_confirming(monkeypatch):
     assert result["character_revision_pending"] is True
     assert "unfinished" in result["message"]
     assert calls == []
+
+
+def awaiting(phase: str) -> dict[str, Any]:
+    """An accepted artifact whose next phase was never introduced (#955)."""
+    return {
+        "phase": phase,
+        "thread_id": "saved-conversation",
+        "pending_confirmation": None,
+        "awaiting_introduction": phase,
+        "choices": [],
+    }
+
+
+@pytest.mark.parametrize(
+    ("accepted", "introduced"), [("setting", "character"), ("character", "seed")]
+)
+def test_interrupted_introduction_resumes_without_reconfirming(
+    monkeypatch, accepted, introduced
+):
+    calls = gateway(
+        monkeypatch,
+        awaiting(introduced),
+        [
+            Response(
+                {
+                    "message": "The next phase begins.",
+                    "choices": ["A quiet start", "A loud start"],
+                }
+            )
+        ],
+    )
+    result = cli.run_continue(arguments())
+    assert result["success"] is True
+    assert result["phase"] == introduced
+    assert result["next_phase_intro"] == "The next phase begins."
+    assert result["choices"] == ["A quiet start", "A loud start"]
+    assert calls == [
+        (
+            "story/new/chat",
+            {
+                "slot": 4,
+                "thread_id": "saved-conversation",
+                "message": (
+                    f"[SYSTEM] Phase {accepted} complete. Proceeding to "
+                    f"{introduced}. Please introduce the next phase."
+                ),
+                "current_phase": introduced,
+                "message_origin": "wizard_control",
+            },
+        )
+    ]
+
+
+def test_interrupted_introduction_failure_stays_recoverable(monkeypatch):
+    calls = gateway(monkeypatch, awaiting("seed"), [Response({}, 503)])
+    result = cli.run_continue(arguments())
+    assert result["success"] is False
+    assert result["phase"] == "seed"
+    assert result["recovery_command"] == "nexus load --slot 4"
+    assert [path for path, _ in calls] == ["story/new/chat"]
+
+
+def test_load_reports_a_missing_introduction_without_requesting_it(monkeypatch):
+    calls = gateway(monkeypatch, awaiting("seed"), [])
+    result = cli.run_load(arguments())
+    assert result["awaiting_introduction"] == "seed"
+    assert "nexus continue --slot 4" in result["message"]
+    assert calls == []

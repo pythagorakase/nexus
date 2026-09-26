@@ -228,6 +228,8 @@ describe("confirming wizard phases", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent("The next prompt could not be generated");
         expect(screen.getByRole("heading", { name: title, level: 3 })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
+        // The acceptance is durable, so the artifact can no longer be revised.
+        expect(screen.queryByRole("button", { name: "Revise" })).toBeNull();
         expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
         expect(JSON.parse(fetch.mock.calls[3][1].body)).toMatchObject({
             slot: 5, thread_id: "conv_saved", current_phase: nextPhase,
@@ -342,17 +344,39 @@ describe("persisted character confirmation and revision", () => {
         expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    it("a stale confirmation stays on the character and makes no model request", async () => {
-        vi.spyOn(console, "error").mockImplementation(() => {});
+    it("a stale confirmation resumes the saved character before any model request", async () => {
+        // Another tab revised the character, so this screen's token is stale.
+        const changed = {
+            ...session,
+            artifact_token: "e".repeat(64),
+            character_sheet: { name: "Mara", summary: "Age 54. Maintains the old harbor machinery." },
+        };
         const fetch = vi.fn()
             .mockResolvedValueOnce(new Response(JSON.stringify(session)))
-            .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "This artifact changed. Resume it." }), { status: 409 }));
+            .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "This artifact changed. Review it again before continuing." }), { status: 409 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify(changed)))
+            .mockResolvedValueOnce(new Response(JSON.stringify(changed)))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: "confirmed", thread_id: "conv_saved", phase: "character", next_phase: "seed" })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Where does her story begin?", choices: ["The harbor", "The lighthouse"] })));
         vi.stubGlobal("fetch", fetch);
         render(<NewStoryWizard resumeSlot={5} />);
         fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
-        expect(await screen.findByRole("alert")).toHaveTextContent("This artifact changed. Resume it.");
-        expect(fetch).toHaveBeenCalledTimes(2);
+
+        expect(await screen.findByText("Age 54. Maintains the old harbor machinery.")).toBeInTheDocument();
         expect(screen.getByRole("heading", { name: "Character", level: 3 })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Revise" })).toBeEnabled();
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/setup/confirm",
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/setup/resume?slot=5",
+        ]);
+
+        // Confirming again binds the refreshed artifact.
+        fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+        expect(await screen.findByText("Where does her story begin?")).toBeInTheDocument();
+        expect(JSON.parse(fetch.mock.calls[4][1].body).artifact_token).toBe("e".repeat(64));
     });
 });
 
@@ -371,4 +395,176 @@ it.each(["setting confirmation", "accept fate"])("uses the concept token when %s
     fireEvent.click(screen.getByRole("button", { name: "Revise" }));
     expect(await screen.findByText(/Describe the change to your character/)).toBeInTheDocument();
     expect(JSON.parse(fetch.mock.calls[fetch.mock.calls.length - 1][1].body).artifact_token).toBe("b".repeat(64));
+});
+
+
+describe("accepted artifacts whose next phase was never introduced", () => {
+    const state = {
+        concept: { name: "Mara", archetype: "Engineer", background: "Age 38. Maintains the old harbor machinery.", appearance: "Gray coat.", suggested_traits: ["allies", "contacts", "patron"], trait_rationales: {} },
+        trait_selection: { selected_traits: ["allies", "contacts", "patron"] },
+        wildcard: { wildcard_name: "The bell", wildcard_description: "She hears the bell before anyone else." },
+    };
+    const interrupted = (accepted: "setting" | "character", introduced: "character" | "seed") => ({
+        ...savedSession,
+        current_phase: introduced,
+        awaiting_introduction: introduced,
+        pending_confirmation: null,
+        // The token binds the entered phase's draft, which does not exist yet.
+        artifact_token: accepted === "character" ? "c".repeat(64) : null,
+        messages: [{ role: "assistant", content: "Anything else?" }, { role: "user", content: "That is everything." }],
+        choices: [],
+        setting_draft: { world_name: "The Waking Wood", genre: "fantasy" },
+        character_state: accepted === "character" ? state : null,
+        character_draft: accepted === "character" ? state : null,
+        character_sheet: accepted === "character" ? { name: "Mara", summary: "Age 38. Maintains the old harbor machinery." } : null,
+    });
+    const cases = [
+        { accepted: "setting" as const, title: "Setting", introduced: "character" as const, nextTitle: "Character", artifact: "The Waking Wood" },
+        { accepted: "character" as const, title: "Character", introduced: "seed" as const, nextTitle: "Introduction", artifact: "Mara" },
+    ];
+
+    it.each(cases)("restores the accepted $accepted and Confirm only requests the $introduced introduction", async ({ accepted, title, introduced, nextTitle, artifact }) => {
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(interrupted(accepted, introduced))))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Your next phase begins here", choices: ["A new possibility", "Another way"] })));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        expect(await screen.findByRole("button", { name: "Confirm" })).toBeEnabled();
+        expect(screen.getByRole("heading", { name: title, level: 3 })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: artifact, level: 4 })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Revise" })).toBeNull();
+        expect(screen.getByTestId("wizard-freeform")).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
+        expect(fetch).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+        expect(await screen.findByText("Your next phase begins here")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: nextTitle, level: 3 })).toBeInTheDocument();
+        expect(screen.getByTestId("wizard-choice-1")).toHaveTextContent("A new possibility");
+        expect(screen.getByTestId("wizard-freeform")).toBeEnabled();
+        // Acceptance was already recorded: no second confirmation, one introduction.
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/chat",
+        ]);
+        expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
+            slot: 5,
+            thread_id: "conv_saved",
+            current_phase: introduced,
+            message_origin: "wizard_control",
+            message: `[SYSTEM] Phase ${accepted} complete. Proceeding to ${introduced}. Please introduce the next phase.`,
+            context_data: { setting: { world_name: "The Waking Wood", genre: "fantasy" } },
+        });
+    });
+
+    // The introduction's reply was saved although its response was lost.
+    const introduced = {
+        ...interrupted("character", "seed"),
+        awaiting_introduction: null,
+        artifact_token: "d".repeat(64),
+        character_sheet: null,
+        messages: [
+            { role: "assistant", content: "Anything else?" },
+            { role: "user", content: "That is everything." },
+            { role: "assistant", content: "Where does her story begin?" },
+        ],
+        choices: ["The harbor", "The lighthouse"],
+    };
+    const alreadyIntroduced = () => new Response(
+        JSON.stringify({ detail: "This phase was already introduced. Resume before continuing." }),
+        { status: 409 },
+    );
+    const expectIntroducedResume = async () => {
+        expect(await screen.findByText("Where does her story begin?")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Introduction", level: 3 })).toBeInTheDocument();
+        expect(screen.getByTestId("wizard-choice-1")).toHaveTextContent("The harbor");
+        expect(screen.getByTestId("wizard-freeform")).toBeEnabled();
+        expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+        expect(screen.queryByRole("alert")).toBeNull();
+    };
+
+    it.each([
+        { accepted: "setting" as const, introduced: "character" as const, title: "Setting", nextTitle: "Character" },
+        { accepted: "character" as const, introduced: "seed" as const, title: "Character", nextTitle: "Introduction" },
+    ])("continues after a lost $accepted confirmation acknowledgement", async ({ accepted, introduced, title, nextTitle }) => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const awaiting = interrupted(accepted, introduced);
+        const pending = { ...awaiting, current_phase: accepted, awaiting_introduction: null, pending_confirmation: accepted, artifact_token: "a".repeat(64) };
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(pending)))
+            // The origin saved the acceptance; the proxy lost its response.
+            .mockResolvedValueOnce(new Response("<html>Bad Gateway</html>", { status: 502 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "This artifact was already confirmed or the wizard phase changed. Resume before continuing." }), { status: 409 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify(awaiting)))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Your next phase begins here", choices: ["A new possibility", "Another way"] })));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("Could not confirm the saved artifact.");
+        // The lost acknowledgement leaves the screen unaware of the acceptance.
+        expect(screen.getByRole("button", { name: "Revise" })).toBeEnabled();
+        expect(screen.getByRole("heading", { name: title, level: 3 })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+        expect(await screen.findByText("Your next phase begins here")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: nextTitle, level: 3 })).toBeInTheDocument();
+        expect(screen.getByTestId("wizard-choice-1")).toHaveTextContent("A new possibility");
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/setup/confirm",
+            "/api/story/new/setup/confirm",
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/chat",
+        ]);
+        expect(JSON.parse(fetch.mock.calls[4][1].body)).toMatchObject({
+            current_phase: introduced,
+            message_origin: "wizard_control",
+            message: `[SYSTEM] Phase ${accepted} complete. Proceeding to ${introduced}. Please introduce the next phase.`,
+        });
+    });
+
+    it("resumes in place when a restored introduction already arrived", async () => {
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(interrupted("character", "seed"))))
+            .mockResolvedValueOnce(alreadyIntroduced())
+            .mockResolvedValueOnce(new Response(JSON.stringify(introduced)));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+        await expectIntroducedResume();
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/chat",
+            "/api/story/new/setup/resume?slot=5",
+        ]);
+    });
+
+    it("resumes in place when Retry finds the lost introduction already saved", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const pending = { ...interrupted("character", "seed"), current_phase: "character", awaiting_introduction: null, pending_confirmation: "character", artifact_token: "a".repeat(64) };
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(pending)))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: "confirmed", phase: "character", next_phase: "seed", thread_id: "conv_saved" })))
+            .mockResolvedValueOnce(new Response("Bad Gateway", { status: 502 }))
+            .mockResolvedValueOnce(alreadyIntroduced())
+            .mockResolvedValueOnce(new Response(JSON.stringify(introduced)));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("Could not start Introduction (502).");
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        await expectIntroducedResume();
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/setup/confirm",
+            "/api/story/new/chat",
+            "/api/story/new/chat",
+            "/api/story/new/setup/resume?slot=5",
+        ]);
+    });
 });

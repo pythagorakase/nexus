@@ -5,13 +5,22 @@ Needs assets.new_story_creator and assets.traits; no provider calls or real save
 
 from contextlib import closing
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
 from nexus.api import setup_endpoints
-from nexus.api.new_story_cache import init_cache, read_cache, write_cache
+from nexus.api.new_story_cache import (
+    IntroductionClaim,
+    claim_wizard_introduction,
+    complete_wizard_introduction,
+    init_cache,
+    read_cache,
+    write_cache,
+    write_wizard_choices,
+)
 from nexus.api.wizard_confirmation import (
     WizardStateConflict,
     begin_character_revision,
@@ -391,3 +400,117 @@ async def test_stale_client_trait_submission_preserves_revised_concept(
     assert after.character.background.startswith("Age 54")
     assert after.character.traits_confirmed
     assert not after.character_revision_pending
+
+
+@pytest.mark.parametrize(
+    ("accepted", "introduced"), [("setting", "character"), ("character", "seed")]
+)
+def test_accepted_transition_awaits_introduction_until_its_reply_persists(
+    offline_gate_db: str, monkeypatch, accepted: str, introduced: str
+) -> None:
+    """Reload after Confirm restores the accepted artifact, not an empty phase."""
+    init_cache(offline_gate_db, "saved-thread", 4)
+    write_cache(
+        dbname=offline_gate_db,
+        setting_draft=sample_setting().model_dump(),
+        character_draft=(
+            character_cache().get_character_state_dict()
+            if accepted == "character"
+            else None
+        ),
+    )
+    if accepted == "character":
+        with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+            cur.execute("UPDATE assets.new_story_creator SET setting_confirmed = TRUE")
+    write_wizard_choices(
+        ["Keep this draft", "Change it"],
+        offline_gate_db,
+        expected_thread_id="saved-thread",
+    )
+    pending = read_cache(offline_gate_db)
+    assert pending.pending_confirmation() == accepted
+    assert pending.awaiting_introduction() is None
+
+    confirm_artifact(
+        offline_gate_db,
+        thread_id="saved-thread",
+        phase=accepted,
+        artifact_token=pending.artifact_token(),
+    )
+    # The introduction's control was written; its reply has not arrived.
+    control = {
+        "role": "user",
+        "content": f"[SYSTEM] Phase {accepted} complete. Proceeding to {introduced}.",
+        "origin": "wizard_control",
+    }
+    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
+    monkeypatch.setattr(
+        setup_endpoints,
+        "ConversationsClient",
+        lambda model: SimpleNamespace(
+            list_messages=lambda *a, **k: [control], client=None
+        ),
+    )
+    app = FastAPI()
+    app.include_router(setup_endpoints.router)
+    client = TestClient(app)
+    interrupted = client.get("/api/story/new/setup/resume?slot=4").json()
+    assert interrupted["current_phase"] == introduced
+    assert interrupted["awaiting_introduction"] == introduced
+    assert interrupted["pending_confirmation"] is None
+    assert interrupted["choices"] == []
+    assert (interrupted["character_sheet"] is not None) is (accepted == "character")
+
+    # A claimed reply is not yet an introduction; only one claim can be taken.
+    claim_id = claim_wizard_introduction(
+        ["Here", "There"],
+        offline_gate_db,
+        expected_thread_id="saved-thread",
+        replaces_claim=None,
+    )
+    claimed = read_cache(offline_gate_db)
+    assert claimed.awaiting_introduction() == introduced
+    assert claimed.introduction_claim == IntroductionClaim(claim_id, ["Here", "There"])
+    assert claimed.choices == []
+    with pytest.raises(WizardStateConflict, match="already introduced"):
+        claim_wizard_introduction(
+            ["Late"],
+            offline_gate_db,
+            expected_thread_id="saved-thread",
+            replaces_claim=None,
+        )
+    assert (
+        client.get("/api/story/new/setup/resume?slot=4").json()["awaiting_introduction"]
+        == introduced
+    )
+
+    # A request that found the claim undelivered replaces exactly that claim.
+    replacement = claim_wizard_introduction(
+        [],
+        offline_gate_db,
+        expected_thread_id="saved-thread",
+        replaces_claim=claim_id,
+    )
+    with pytest.raises(WizardStateConflict):
+        complete_wizard_introduction(
+            claim_id,
+            ["Here", "There"],
+            offline_gate_db,
+            expected_thread_id="saved-thread",
+        )
+
+    # Completion records the reply's choice set, even an empty one.
+    complete_wizard_introduction(
+        replacement, [], offline_gate_db, expected_thread_id="saved-thread"
+    )
+    introduced_state = client.get("/api/story/new/setup/resume?slot=4").json()
+    assert introduced_state["current_phase"] == introduced
+    assert introduced_state["awaiting_introduction"] is None
+    with pytest.raises(WizardStateConflict, match="already introduced"):
+        claim_wizard_introduction(
+            ["A second introduction", "Its twin"],
+            offline_gate_db,
+            expected_thread_id="saved-thread",
+            replaces_claim=replacement,
+        )
+    assert read_cache(offline_gate_db).choices == []
