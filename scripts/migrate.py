@@ -172,12 +172,10 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
     """
     with conn.cursor() as cur:
         # Check if table exists with correct schema
-        cur.execute(
-            """
+        cur.execute("""
             SELECT column_name FROM information_schema.columns
             WHERE table_name = 'schema_migrations' AND table_schema = 'public'
-            """
-        )
+            """)
         columns = {row[0] for row in cur.fetchall()}
 
         if columns and "version" not in columns:
@@ -195,8 +193,7 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
             if dry_run:
                 LOG.info("  [DRY-RUN] Would create schema_migrations table")
                 return False
-            cur.execute(
-                """
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -210,8 +207,7 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
                     'Migration name from the migration filename or bootstrap list.';
                 COMMENT ON COLUMN schema_migrations.applied_at IS
                     'Database transaction timestamp when the migration stamp was inserted.';
-                """
-            )
+                """)
     conn.commit()
     return True
 
@@ -371,7 +367,13 @@ def migrate_database(
     Apply pending migrations to a single database.
 
     Returns (applied_count, skipped_count).
+
+    The migration tree is validated before the database is touched, so a
+    duplicate, misnamed, or unallowlisted migration fails without leaving a
+    tracking table or bootstrap stamps behind.
     """
+    all_migrations = discover_migrations()
+
     if not db_exists(dbname):
         LOG.warning("Database %s does not exist, skipping", dbname)
         return (0, 0)
@@ -395,7 +397,6 @@ def migrate_database(
 
         if not table_ready:
             # In dry-run mode and table doesn't exist - show all migrations as pending
-            all_migrations = discover_migrations()
             LOG.info(
                 "  [DRY-RUN] Would bootstrap %d existing migrations",
                 len(BOOTSTRAP_MIGRATIONS),
@@ -420,8 +421,6 @@ def migrate_database(
         # treat bootstrapped migrations as applied
         if dry_run and bootstrap_needed:
             applied = {v for v, _ in BOOTSTRAP_MIGRATIONS}
-
-        all_migrations = discover_migrations()
 
         pending = [(v, n, p) for v, n, p in all_migrations if v not in applied]
 
@@ -467,12 +466,10 @@ def show_status() -> None:
             conn = get_connection(dbname)
             # Don't modify in status mode - just check if table exists with right schema
             with conn.cursor() as cur:
-                cur.execute(
-                    """
+                cur.execute("""
                     SELECT column_name FROM information_schema.columns
                     WHERE table_name = 'schema_migrations' AND table_schema = 'public'
-                    """
-                )
+                    """)
                 columns = {row[0] for row in cur.fetchall()}
 
             if not columns or "version" not in columns:

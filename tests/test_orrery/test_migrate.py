@@ -65,6 +65,32 @@ def test_discover_migrations_rejects_duplicate_versions(
     assert str(tmp_path / "130_second_change.sql") in str(excinfo.value)
 
 
+def test_migrate_database_validates_the_tree_before_touching_the_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An invalid migration tree aborts before any connection or bootstrap stamp."""
+
+    (tmp_path / "001_baseline.sql").write_text("SELECT 1;")
+    (tmp_path / "130_first_change.sql").write_text("SELECT 1;")
+    (tmp_path / "130_second_change.sql").write_text("SELECT 2;")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+
+    def refuse(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("migrate_database touched the database with an invalid tree")
+
+    for name in (
+        "db_exists",
+        "is_db_locked",
+        "maintenance_connection",
+        "ensure_tracking_table",
+        "bootstrap_migrations",
+    ):
+        monkeypatch.setattr(migrate, name, refuse)
+
+    with pytest.raises(RuntimeError, match="version 130"):
+        migrate.migrate_database("save_05")
+
+
 def test_discover_migrations_rejects_sql_and_python_sharing_a_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1639,8 +1665,7 @@ def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
         clearance_kind_migration.run(conn)
         with conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
+                cur.execute("""
                     INSERT INTO tags (
                         tag, category, is_ephemeral, clearance_kind,
                         reapplication_policy, clear_on, synonym_for,
@@ -1659,8 +1684,7 @@ def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
                         synonym_for = NULL,
                         deprecated = FALSE,
                         description = EXCLUDED.description
-                    """
-                )
+                    """)
 
         migration.run(conn)
         migration.run(conn)
@@ -2043,13 +2067,11 @@ def test_canonical_grieving_migration_executes_against_slot_db() -> None:
         migration.run(conn)
 
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT id, reapplication_policy, deprecated, synonym_for
                 FROM tags
                 WHERE tag = 'grieving'
-                """
-            )
+                """)
             grieving_id, reapply, deprecated, synonym_for = cur.fetchone()
             assert reapply == "extend_expiry"
             assert deprecated is False
