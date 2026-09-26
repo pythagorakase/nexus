@@ -70,8 +70,12 @@ from nexus.api.narrative_generation import (
     generate_bootstrap_narrative,
 )
 from nexus.api.narrative_lease import (
+    GenerationLeaseConflict,
+    GenerationRetryConflict,
+    GenerationRetryContext,
     abandon_generation,
     acquire_generation_lease,
+    associate_accepted_parent,
     bind_generation_parent,
     claim_parent_embedding,
     discard_generation,
@@ -308,6 +312,7 @@ def load_settings():
 from nexus.api.narrative_schemas import (
     ContinueNarrativeRequest,
     ContinueNarrativeResponse,
+    RetryNarrativeRequest,
     GenerationLeaseConflictResponse,
     RegenerateNarrativeRequest,
     ApproveNarrativeRequest,
@@ -410,9 +415,16 @@ def _record_player_response_for_chunk(
     require_response: bool,
     connection: Any = None,
     incubator_session_id: Optional[str] = None,
+    bind_session_id: Optional[str] = None,
 ) -> str:
     """
     Resolve and persist the player's response for an incubator/committed chunk.
+
+    ``bind_session_id`` binds that generation session to this committed chunk
+    in the same transaction that records (or re-confirms) the response, so a
+    later bind failure cannot leave a recorded action without a retryable
+    parent. Callers pass it only for the committed frontier chunk; incubator
+    responses are bound by the incubator commit instead.
 
     Returns:
         The response text that should be sent into the next generation.
@@ -499,6 +511,12 @@ def _record_player_response_for_chunk(
                             status_code=409,
                             detail=f"Choice already selected for chunk {chunk_id}.",
                         )
+                if bind_session_id is not None and chunk_id is not None:
+                    associate_accepted_parent(
+                        cur, session_id=bind_session_id, parent_chunk_id=chunk_id
+                    )
+                    if owns_connection:
+                        conn.commit()
                 return existing_choice_text
 
             has_unresolved_choices = bool(choice_object and choice_object["presented"])
@@ -549,6 +567,10 @@ def _record_player_response_for_chunk(
                 choice_text=resolved.choice_text,
                 incubator_session_id=str(chunk["session_id"]) if is_incubator else None,
             )
+            if bind_session_id is not None and chunk_id is not None:
+                associate_accepted_parent(
+                    cur, session_id=bind_session_id, parent_chunk_id=chunk_id
+                )
 
         if owns_connection:
             conn.commit()
@@ -582,7 +604,7 @@ def _acquire_generation_owner(
         )
     finally:
         conn.close()
-    if conflict is not None:
+    if isinstance(conflict, GenerationLeaseConflict):
         raise HTTPException(
             status_code=409,
             detail={
@@ -624,12 +646,17 @@ def _abandon_generation_owner(
     session_id: str,
     error: str,
     error_class: str = "GenerationError",
+    accepted_parent_candidate: Optional[int] = None,
 ) -> None:
     """Release a route-owned lease after a pre-scheduling failure."""
     conn = get_db_connection(slot)
     try:
         abandon_generation(
-            conn, session_id=session_id, error=error, error_class=error_class
+            conn,
+            session_id=session_id,
+            error=error,
+            error_class=error_class,
+            accepted_parent_candidate=accepted_parent_candidate,
         )
     finally:
         conn.close()
@@ -641,8 +668,14 @@ def _abandon_unscheduled_generation_owner(
     session_id: str,
     error: str,
     error_class: str = "GenerationError",
+    accepted_parent_candidate: Optional[int] = None,
 ) -> None:
-    """Best-effort cleanup for a route that never scheduled its generator."""
+    """Best-effort cleanup for a route that never scheduled its generator.
+
+    ``accepted_parent_candidate`` is the frontier chunk the route acted on; the
+    lease layer binds the failed session to it only if the player's action is
+    durably recorded there, so a later retry can resume that exact action.
+    """
 
     try:
         _abandon_generation_owner(
@@ -650,6 +683,7 @@ def _abandon_unscheduled_generation_owner(
             session_id=session_id,
             error=error,
             error_class=error_class,
+            accepted_parent_candidate=accepted_parent_candidate,
         )
     except Exception as release_exc:
         logger.error(
@@ -668,6 +702,7 @@ def _resolve_and_approve_pending_sync(
     choice: Optional[int],
     accept_fate: bool,
     warning_sink: Optional[List[Dict[str, Any]]] = None,
+    bind_session_id: Optional[str] = None,
 ) -> tuple[str, int]:
     """Resolve and approve a pending choice with worker-owned connection life."""
 
@@ -689,7 +724,7 @@ def _resolve_and_approve_pending_sync(
         )
         if warning_sink is None:
             approved_chunk_id = commit_incubator_to_database_sync(
-                conn, session_id, slot
+                conn, session_id, slot, bind_session_id=bind_session_id
             )
         else:
             approved_chunk_id = commit_incubator_to_database_sync(
@@ -697,6 +732,7 @@ def _resolve_and_approve_pending_sync(
                 session_id,
                 slot,
                 warning_sink=warning_sink,
+                bind_session_id=bind_session_id,
             )
     except HTTPException:
         conn.rollback()
@@ -724,8 +760,14 @@ async def _resolve_and_approve_pending(
     choice: Optional[int],
     accept_fate: bool,
     background_tasks: BackgroundTasks,
+    bind_session_id: Optional[str] = None,
 ) -> tuple[str, int, List[Dict[str, Any]]]:
-    """Resolve and approve without exposing the worker connection to cancellation."""
+    """Resolve and approve without exposing the worker connection to cancellation.
+
+    The worker thread keeps running if this coroutine is cancelled, so the
+    parent binding for ``bind_session_id`` is written by the worker's own
+    transaction rather than by code after this await.
+    """
 
     commit_warnings: List[Dict[str, Any]] = []
     resolved_user_text, approved_chunk_id = await asyncio.to_thread(
@@ -737,6 +779,7 @@ async def _resolve_and_approve_pending(
         choice=choice,
         accept_fate=accept_fate,
         warning_sink=commit_warnings,
+        bind_session_id=bind_session_id,
     )
     return resolved_user_text, approved_chunk_id, commit_warnings
 
@@ -839,6 +882,10 @@ async def continue_narrative(
     accept_warnings: List[Dict[str, Any]] = []
     failure_class = "GenerationError"
     failure_reason = "Narrative request ended before generation was scheduled."
+    # The frontier chunk whose recorded action this request consumes. Acceptance
+    # commits before _bind_generation_owner runs, so a failure in between must
+    # still bind the failed session to this chunk when the action is on disk.
+    accepted_parent_candidate: Optional[int] = None
     try:
         if request.chunk_id is None and state is not None:
             if state.narrative_state is not None:
@@ -866,11 +913,14 @@ async def continue_narrative(
                             choice=request.choice,
                             accept_fate=request.accept_fate,
                             background_tasks=background_tasks,
+                            bind_session_id=session_id,
                         )
                     )
                     request.chunk_id = approved_chunk_id
+                    accepted_parent_candidate = approved_chunk_id
                 else:
                     request.chunk_id = narrative_state.current_chunk_id
+                    accepted_parent_candidate = narrative_state.current_chunk_id
                     if (
                         request.choice is not None
                         or request.accept_fate
@@ -883,6 +933,7 @@ async def continue_narrative(
                             choice=request.choice,
                             accept_fate=request.accept_fate,
                             require_response=bool(narrative_state.choices),
+                            bind_session_id=session_id,
                         )
                 logger.info(
                     "Resolved chunk_id=%s from slot %s",
@@ -890,6 +941,16 @@ async def continue_narrative(
                     request.slot,
                 )
         elif request.chunk_id:
+            # Only an action recorded on the current committed frontier can be
+            # resumed by retry; an explicit older chunk is left unbound.
+            frontier = getattr(state, "narrative_state", None)
+            at_frontier = (
+                frontier is not None
+                and not frontier.has_pending
+                and frontier.current_chunk_id == request.chunk_id
+            )
+            if at_frontier:
+                accepted_parent_candidate = request.chunk_id
             resolved_user_text = _record_player_response_for_chunk(
                 slot=request.slot,
                 chunk_id=request.chunk_id,
@@ -897,6 +958,7 @@ async def continue_narrative(
                 choice=request.choice,
                 accept_fate=request.accept_fate,
                 require_response=False,
+                bind_session_id=session_id if at_frontier else None,
             )
 
         parent_chunk_id = request.chunk_id if request.chunk_id else 0
@@ -950,6 +1012,98 @@ async def continue_narrative(
             status="processing",
             message=message,
             warnings=accept_warnings,
+        )
+    except asyncio.CancelledError:
+        failure_class = "CancelledError"
+        failure_reason = "CancelledError"
+        raise
+    except Exception as exc:
+        failure_class = generation_error_class(exc)
+        failure_reason = str(exc) or type(exc).__name__
+        raise
+    finally:
+        if not scheduled:
+            _abandon_unscheduled_generation_owner(
+                slot=request.slot,
+                session_id=session_id,
+                error=failure_reason,
+                error_class=failure_class,
+                accepted_parent_candidate=accepted_parent_candidate,
+            )
+
+
+@app.post("/api/narrative/retry", response_model=ContinueNarrativeResponse)
+async def retry_narrative(
+    request: RetryNarrativeRequest, background_tasks: BackgroundTasks
+) -> ContinueNarrativeResponse:
+    """Retry a reviewed terminal failure using its unchanged committed action."""
+    from nexus.api.slot_state import get_slot_state
+
+    require_writable_slot(request.slot)
+    if get_slot_state(request.slot).is_wizard_mode:
+        raise HTTPException(status_code=409, detail="The slot is in story setup.")
+    session_id = str(uuid.uuid4())
+    conn = get_db_connection(request.slot)
+    try:
+        acquired = acquire_generation_lease(
+            conn,
+            session_id=session_id,
+            operation="continue",
+            stale_timeout_seconds=get_generation_lease_timeout_seconds(),
+            expected_failed_session_id=request.expected_session_id,
+        )
+    except GenerationRetryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    finally:
+        conn.close()
+    if isinstance(acquired, GenerationLeaseConflict):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Another narrative generation owns this slot.",
+                "active_session_id": acquired.active_session_id,
+            },
+        )
+    if not isinstance(acquired, GenerationRetryContext):
+        raise RuntimeError("Retry lease did not capture a committed action.")
+
+    scheduled = False
+    failure_class = "GenerationError"
+    failure_reason = "Retry ended before generation was scheduled."
+    try:
+        parent_chunk_id = acquired.parent_chunk_id
+        _bind_generation_owner(
+            slot=request.slot,
+            session_id=session_id,
+            parent_chunk_id=parent_chunk_id,
+            claim_embedding=parent_chunk_id != 0,
+        )
+        await manager.send_progress(
+            session_id,
+            "initiated",
+            {
+                "chunk_id": parent_chunk_id,
+                "parent_chunk_id": parent_chunk_id,
+                "is_bootstrap": parent_chunk_id == 0,
+                "slot": request.slot,
+            },
+        )
+        background_tasks.add_task(
+            generate_narrative_async,
+            session_id,
+            parent_chunk_id,
+            acquired.user_text,
+            request.slot,
+            get_db_connection=get_db_connection,
+            load_settings=load_settings,
+            manager=manager,
+            manage_generation_lease=True,
+        )
+        scheduled = True
+        return ContinueNarrativeResponse(
+            session_id=session_id,
+            status="processing",
+            message="Retrying the failed narrative with the recorded action.",
         )
     except asyncio.CancelledError:
         failure_class = "CancelledError"

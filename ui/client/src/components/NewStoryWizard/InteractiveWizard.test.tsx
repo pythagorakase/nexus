@@ -1,6 +1,6 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { InteractiveWizard } from "./InteractiveWizard";
+import { InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
 
 vi.mock("./ArtifactSidePanel", () => ({ ArtifactSidePanel: () => null }));
 vi.mock("@/components/ai", () => ({
@@ -79,5 +79,75 @@ describe("wizard initialization", () => {
         expect(localStorage.getItem("activeSlot")).toBe("5");
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(screen.queryByText("Wrong slot")).toBeNull();
+    });
+});
+
+const resumeData: WizardResumeData = {
+    thread_id: "conv_saved",
+    current_phase: "setting",
+    messages: [{ role: "assistant", content: "Where shall we begin?" }],
+    choices: ["A moonlit harbor"],
+    setting_draft: null,
+    character_draft: null,
+    character_state: null,
+    selected_seed: null,
+    layer_draft: null,
+    zone_draft: null,
+    initial_location: null,
+};
+
+describe("wizard composer recovery", () => {
+    it("restores exact unsent input on resume but isolates a new wizard in the same slot", async () => {
+        const fetch = vi.fn();
+        vi.stubGlobal("fetch", fetch);
+        const draft = "  Begin at the harbor.\n\nLeave the door unlocked.  ";
+        const first = render(<InteractiveWizard {...props} resumeData={resumeData} />);
+        fireEvent.change(await screen.findByTestId("wizard-freeform"), { target: { value: draft } });
+        first.unmount();
+        const resumed = render(<InteractiveWizard {...props} resumeData={resumeData} />);
+        expect(await screen.findByTestId("wizard-freeform")).toHaveValue(draft);
+        expect(fetch).not.toHaveBeenCalled();
+        resumed.unmount();
+        render(<InteractiveWizard {...props} resumeData={{ ...resumeData, thread_id: "conv_replacement" }} />);
+        expect(await screen.findByTestId("wizard-freeform")).toHaveValue("");
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it.each([503, 200])("retains the draft after an unsuccessful or empty response (%s)", async (status) => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status }));
+        vi.stubGlobal("fetch", fetch);
+        const first = render(<InteractiveWizard {...props} resumeData={resumeData} />);
+        const input = await screen.findByTestId("wizard-freeform");
+        fireEvent.change(input, { target: { value: "  Keep the whole draft.\nEven this line.  " } });
+        fireEvent.keyDown(input, { key: "Enter" });
+        expect(await screen.findByTestId("wizard-freeform")).toHaveValue("  Keep the whole draft.\nEven this line.  ");
+        expect(await screen.findByText(/Submission not confirmed/)).toBeInTheDocument();
+        expect(fetch).toHaveBeenCalledTimes(1);
+        first.unmount();
+        render(<InteractiveWizard {...props} resumeData={resumeData} />);
+        expect(await screen.findByTestId("wizard-freeform")).toHaveValue("  Keep the whole draft.\nEven this line.  ");
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("clears acknowledged input after the loading screen remounts the composer", async () => {
+        let finish!: (response: Response) => void;
+        const fetch = vi.fn().mockReturnValue(new Promise<Response>(resolve => { finish = resolve; }));
+        vi.stubGlobal("fetch", fetch);
+        const first = render(<InteractiveWizard {...props} resumeData={resumeData} />);
+        const input = await screen.findByTestId("wizard-freeform");
+        fireEvent.change(input, { target: { value: "  A different harbor.  " } });
+        fireEvent.keyDown(input, { key: "Enter" });
+        expect(screen.queryByTestId("wizard-freeform")).toBeNull();
+        await act(async () => {
+            finish(new Response(JSON.stringify({ message: "Tell me about its people.", choices: ["Quiet smugglers"] })));
+        });
+        await waitFor(() => expect(screen.getByTestId("wizard-freeform")).toHaveValue(""));
+        expect(screen.queryByText(/Submission not confirmed/)).toBeNull();
+        expect(JSON.parse(fetch.mock.calls[0][1].body).message).toBe("A different harbor.");
+        first.unmount();
+        render(<InteractiveWizard {...props} resumeData={resumeData} />);
+        expect(await screen.findByTestId("wizard-freeform")).toHaveValue("");
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 });

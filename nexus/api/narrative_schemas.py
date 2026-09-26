@@ -76,6 +76,17 @@ class ContinueNarrativeResponse(BaseModel):
     )
 
 
+class RetryNarrativeRequest(BaseModel):
+    """Deliberately retry the current failed attempt without a new action."""
+
+    model_config = {"extra": "forbid"}
+
+    slot: StrictInt = Field(ge=1, le=5, description="Explicit target save slot")
+    expected_session_id: str = Field(
+        min_length=1, max_length=100, description="Failed attempt the player reviewed"
+    )
+
+
 class GenerationLeaseConflictDetail(BaseModel):
     """Ownership details returned for a competing generation request."""
 
@@ -255,6 +266,7 @@ class SlotStateResponse(BaseModel):
         default_factory=lambda: load_settings().api.narrative_generation
     )
     slot: int = Field(ge=1, le=5)
+    story_id: Optional[str] = None  # Stable identity across frontier changes
     is_empty: bool
     is_wizard_mode: bool
     phase: Optional[str] = None  # Wizard phase if in wizard mode
