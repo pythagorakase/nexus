@@ -9,7 +9,7 @@ Run the same stdlib-only gate used by CI:
 
 ```sh
 python -S scripts/check_reachability.py --report /tmp/nexus-reachability.json
-python -S scripts/check_reachability.py --explain nexus/api/storyteller.py
+python -S scripts/check_reachability.py --explain nexus/api/orrery_dev_endpoints.py
 python -S scripts/check_reachability.py --explain scripts/api_openai.py --kind operator
 ```
 
@@ -119,10 +119,11 @@ in the report; missing internal module names and unregistered recognized dynamic
 fail the gate.
 
 In particular, a reachable ASGI module does not prove router mounting or HTTP exposure.
-For example, an API package's deferred import can make `storyteller.py` potentially
-reachable without proving that its legacy routes are served. Route retirement requires
-its own mounted-route and consumer evidence. No providers or live services should be
-started merely to refresh this static report.
+For example, the gateway's deferred import makes `orrery_dev_endpoints.py` production
+reachable, but its routes are served only when `[orrery.dashboard] enabled` is true,
+and it is committed false. Route retirement requires its own mounted-route and consumer
+evidence. No providers or live services should be started merely to refresh this
+static report.
 
 The ordinary pytest gate includes `tests/test_reachability.py`; CI also runs the standalone
 checker without installing application dependencies and uploads its JSON evidence.
