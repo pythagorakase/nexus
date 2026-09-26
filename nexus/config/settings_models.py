@@ -887,7 +887,7 @@ class UsageSettings(BaseModel):
         default=".nexus/runtime/usage",
         description=(
             "Shared usage JSONL directory; relative paths resolve against the "
-            "repository root"
+            "runtime home root (NEXUS_HOME when set, otherwise the checkout)"
         ),
     )
     manifest_retention_days: int = Field(
@@ -985,7 +985,8 @@ class RuntimeSettings(BaseModel):
         default=".nexus/runtime",
         description=(
             "Directory for pidfiles and captured service logs. Relative paths "
-            "resolve against the repository root."
+            "resolve against the runtime home root (NEXUS_HOME when set, "
+            "otherwise the checkout)."
         ),
     )
     default_slot: int = Field(

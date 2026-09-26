@@ -8,13 +8,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nexus.api import settings_endpoints
 from nexus.api.settings_endpoints import (
     _build_payload,
     _read_raw_settings,
     router,
 )
 from nexus.config.loader import load_settings
+from nexus.runtime.contract import HOME_ENV, RUNTIME_CONFIG_ENV
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,7 +23,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "nexus.toml"
     shutil.copy2(REPO_ROOT / "nexus.toml", path)
-    monkeypatch.setattr(settings_endpoints, "NEXUS_TOML", path)
+    monkeypatch.delenv(HOME_ENV, raising=False)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(path))
     return path
 
 

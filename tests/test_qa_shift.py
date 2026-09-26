@@ -7,8 +7,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
-import shlex
+import subprocess
 import tomllib
 from typing import Any, Mapping, cast
 
@@ -16,6 +17,7 @@ import pytest
 import tomlkit
 
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
+from nexus.runtime.contract import HOME_ENV
 from scripts.qa_shift import qa_shift
 
 
@@ -309,15 +311,21 @@ def test_generated_runtime_environment_selects_qa_config(
         now=NOW,
     )
     archive = Path(result["archive"])
-    environment_lines = (archive / "runtime_env.sh").read_text().splitlines()
-    runtime_export = next(
-        line
-        for line in environment_lines
-        if line.startswith(f"export {RUNTIME_CONFIG_ENV}=")
+    # An owner's exported runtime home must not survive into the QA lane.
+    owner_home = tmp_path / "owner-home"
+    owner_home.mkdir()
+    sourced = subprocess.run(
+        ["bash", "-c", '. "$1" && env -0', "bash", str(archive / "runtime_env.sh")],
+        capture_output=True,
+        check=True,
+        env={"PATH": os.environ["PATH"], HOME_ENV: str(owner_home)},
     )
-    assignment = shlex.split(runtime_export)[1]
-    name, value = assignment.split("=", 1)
-    monkeypatch.setenv(name, value)
+    environment = dict(
+        item.split("=", 1) for item in sourced.stdout.decode().split("\0") if item
+    )
+    assert HOME_ENV not in environment
+    monkeypatch.delenv(HOME_ENV, raising=False)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, environment[RUNTIME_CONFIG_ENV])
 
     supervisor = Supervisor.from_config()
 

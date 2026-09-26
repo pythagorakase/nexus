@@ -254,10 +254,98 @@ All verbs honor the global `--json` flag for machine-readable output.
 checkouts); spawned services receive its absolute path in the
 `NEXUS_RUNTIME_CONFIG` environment variable so their `/runtime/status`
 describes the config that actually launched them. Story commands use
-`remote.base_url` when the config selected by `NEXUS_RUNTIME_CONFIG` (or the
-working-directory `nexus.toml`) has `profile = "remote"`; an explicit
-`NEXUS_API_URL` still overrides the base URL. Access credentials are attached
-only when that override has the same origin as `remote.base_url`.
+`remote.base_url` when the active config (see The Runtime Home) has
+`profile = "remote"`; an explicit `NEXUS_API_URL` still overrides the base
+URL. Access credentials are attached only when that override has the same
+origin as `remote.base_url`.
+
+## The Runtime Home
+
+The checkout holds code; the runtime home holds the active `nexus.toml` and
+the runtime's mutable data (issue #820). `nexus/runtime/home.py` is the one
+resolver for both: the configuration loader, the supervisor, player
+preferences, local-model state, the usage ledger, the settings endpoint,
+`/runtime/status`, LORE, and the CLI all ask it which config is active and
+what a relative directory is relative to. The working directory never
+selects a configuration.
+
+| `NEXUS_HOME` | `NEXUS_RUNTIME_CONFIG` | Active config | Relative directories resolve under |
+|---|---|---|---|
+| unset | unset | the checkout's `nexus.toml` | the checkout (developer mode) |
+| unset | set | that file | the checkout |
+| set | unset | `$NEXUS_HOME/nexus.toml` | `$NEXUS_HOME` |
+| set | the same file | `$NEXUS_HOME/nexus.toml` | `$NEXUS_HOME` |
+| set | a different file | refused with a `RuntimeError` naming both | — |
+
+- `NEXUS_HOME` locates the home; it is not another configuration system.
+  It must be an absolute path, and an empty value counts as unset.
+- `NEXUS_RUNTIME_CONFIG` stays the supervisor's spawn seam. `--config`
+  outranks it, as before, and is held to the same agreement with
+  `NEXUS_HOME`, so two active configurations cannot exist. Spawned services
+  inherit `NEXUS_HOME` and receive the resolved config in
+  `NEXUS_RUNTIME_CONFIG`, so they resolve the same home.
+- A path passed to `load_settings(path)` or `settings_path_scope` is a
+  per-call override and is not checked against the locators.
+- Absolute configured directories are used as configured; `~` is expanded.
+- Tests that point `NEXUS_RUNTIME_CONFIG` at temporary configs would be
+  refused under an exported `NEXUS_HOME`, so `tests/conftest.py` clears it
+  for the session and the QA lane's generated `runtime_env.sh` unsets it.
+
+| Layout entry | Location | Holds |
+|---|---|---|
+| `state_dir` | `[runtime].state_dir` | pidfiles, `logging.json`, `preferences.toml`, local-model state |
+| `logs_dir` | the same directory | captured `<service>.log` files and rotated segments |
+| `usage_dir` | `[usage].usage_dir` | usage and prompt-window ledgers |
+| `uploads_dir` | `ui/client/public` | `character_portraits/` and `place_images/` |
+| `models_dir` | `models` | model directories named by `local_path` and `model_path` keys |
+| `cache_dir` | `.nexus/cache` | reserved for derived caches |
+| `backups_dir` | `.nexus/backups` | reserved for backups |
+
+The last four have no configuration key yet: each gains one in the slice
+that gives it a runtime owner. Until then the upload endpoints and static
+mounts serve the checkout's `ui/client/public` even when `NEXUS_HOME` is
+set, and model paths stay exactly as configured.
+
+`nexus home plan [--to DIR]` is a read-only dry run of moving the
+checkout's runtime data into a home. Before the move, run it as
+`nexus home plan --to DIR` with `NEXUS_HOME` unset: until `DIR/nexus.toml`
+exists, exporting `NEXUS_HOME=DIR` makes every command, this one included,
+fail on the missing config. Once the home holds its config, the target
+defaults to `NEXUS_HOME`. For the active config, every file under the state,
+usage, cache, backup and upload directories, and every configured model
+directory, it prints a status, the current and proposed paths, and the size
+and SHA-256. A symlink is reported with its target and never followed, in
+the checkout or in the target; that includes a symlinked `nexus.toml`, which
+is reported as the link the locator selected, not as the file it points to.
+`move` means the proposed path is free, `conflict` that it is taken,
+`in-place` that the file stays where it is, and `missing` that a configured
+model is not on disk. A destination is taken when it exists or when a path
+on the way to it inside the target is a file or a symlink; the entry names
+that path (`conflict_with` in `--json`, "blocked by" in text). A file is
+`in-place` when it is already where the target layout puts it, when its
+state or usage directory is configured as an absolute path, or when its
+model directory is outside the checkout (an external drive or a shared
+cache); a model directory inside the checkout moves to
+`<home>/models/<name>`. It also lists the `nexus.toml` keys a move must
+rewrite, and every path has one owner so each rewritten key names a
+directory that receives exactly that model's files. It refuses, before
+checksumming anything:
+
+- a target that is the checkout, sits inside it, contains it, or is or sits
+  beneath an existing file;
+- two model paths that nest or name one directory, directly or through a
+  symlink;
+- a model path that is or contains the checkout, or that overlaps the active
+  config or a state, usage, cache, backup or upload directory;
+- two models that would land on one destination, including a moving model
+  whose destination overlaps a model that stays in place.
+
+It creates nothing. It reads every inventoried file in full to checksum it,
+model weights included, and prints nothing until it finishes, so on a large
+model store it runs for minutes. Moving files, re-anchoring uploads and
+static mounts, slot-namespacing assets (which rewrites asset path rows and
+needs PostgreSQL validation), and teaching the Tauri shell the home are the
+next slices.
 
 ## Model Backends Are Runtime Services
 

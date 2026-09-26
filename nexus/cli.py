@@ -48,7 +48,7 @@ import requests  # type: ignore[import-untyped]
 
 from nexus.config import load_settings
 from nexus.config.settings_models import OrreryRetrogradeWizardSettings, Settings
-from nexus.runtime.contract import RUNTIME_CONFIG_ENV
+from nexus.runtime.home import locate_runtime_home
 from nexus.runtime.remote_auth import build_runtime_request_auth
 from nexus.util.secret_manager import MissingSecretError
 
@@ -73,19 +73,15 @@ FACTION_APPLY_SOURCE_KIND_CHOICES = (
 
 
 def _load_cli_settings() -> Optional[Settings]:
-    """Load explicit, working-directory, or checkout settings when available."""
-    explicit = os.environ.get(RUNTIME_CONFIG_ENV)
-    if explicit:
-        return _load_cli_settings_file(Path(explicit))
+    """Load the runtime home's active config, or None for a bare install.
 
-    working_config = Path("nexus.toml")
-    if working_config.exists():
-        return _load_cli_settings_file(working_config)
-
-    checkout_config = Path(__file__).resolve().parents[1] / "nexus.toml"
-    if checkout_config.exists():
-        return _load_cli_settings_file(checkout_config)
-    return None
+    A config named by NEXUS_HOME or NEXUS_RUNTIME_CONFIG must exist; only the
+    checkout default may be absent (an installed CLI outside any checkout).
+    """
+    location = locate_runtime_home()
+    if location.locator == "checkout" and not location.config_path.exists():
+        return None
+    return _load_cli_settings_file(location.config_path)
 
 
 def _load_cli_settings_file(path: Path) -> Settings:
@@ -3663,6 +3659,21 @@ def run_logs(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(exc)}
 
 
+def run_home(args: argparse.Namespace) -> Dict[str, Any]:
+    """Dry-run the move of the checkout's runtime data into a runtime home."""
+    from nexus.runtime.home import RuntimeHomeError
+    from nexus.runtime.home_plan import HomePlanError, plan_home_move
+
+    try:
+        plan = plan_home_move(args.target)
+    except (RuntimeHomeError, HomePlanError, FileNotFoundError) as exc:
+        return {"success": False, "error": str(exc)}
+    if not args.json:
+        for line in plan.render():
+            print(line)
+    return {"success": True, "home_plan": plan.as_dict()}
+
+
 def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
     """Return provider usage and rendered blocks for one UTC day or run."""
     from nexus.telemetry.usage import read_prompt_windows, summarize_usage
@@ -4095,8 +4106,8 @@ Examples:
         p.add_argument(
             "--config",
             help=(
-                "Path to nexus.toml (default: NEXUS_RUNTIME_CONFIG, then the "
-                "repository's nexus.toml)"
+                "Path to nexus.toml (default: $NEXUS_HOME/nexus.toml, else "
+                "NEXUS_RUNTIME_CONFIG, else the checkout's nexus.toml)"
             ),
         )
 
@@ -4146,6 +4157,20 @@ Examples:
         "-f", "--follow", action="store_true", help="Follow the log"
     )
     _add_config_arg(logs_parser)
+
+    home_parser = subparsers.add_parser(
+        "home", help="Plan a move of runtime data into a runtime home (dry run)"
+    )
+    home_parser.add_argument(
+        "action",
+        choices=("plan",),
+        help="plan: list, checksum and map every runtime file; moves nothing",
+    )
+    home_parser.add_argument(
+        "--to",
+        dest="target",
+        help="Target runtime home directory (default: NEXUS_HOME)",
+    )
 
     usage_parser = subparsers.add_parser(
         "usage",
@@ -4847,6 +4872,8 @@ def main() -> int:
         result = run_status(args)
     elif args.command == "logs":
         result = run_logs(args)
+    elif args.command == "home":
+        result = run_home(args)
     elif args.command == "usage":
         result = run_usage(args)
     elif args.command == "window-replay":

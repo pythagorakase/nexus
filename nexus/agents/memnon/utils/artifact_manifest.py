@@ -26,6 +26,8 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from nexus.config.loader import RUNTIME_CONFIG_ENV, load_settings
 from nexus.config.settings_models import Settings
+from nexus.runtime.contract import HOME_ENV
+from nexus.runtime.home import RuntimeHomeError
 
 MANIFEST_SCHEMA_VERSION = 1
 EMBEDDER_ROLE = "embedder"
@@ -489,10 +491,10 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
     """Run ``nexus models lock`` or ``nexus models verify`` for the CLI.
 
     ``config_path`` is ``--config``; without it, :func:`load_settings` owns the
-    fallback chain (an active settings scope, then NEXUS_RUNTIME_CONFIG, then
-    nexus.toml). Returns the CLI result mapping: ``success`` plus a ``message``
-    on success, or an ``error`` naming every problem and its remediation on
-    failure.
+    fallback chain (an active settings scope, then the runtime-home locator
+    rule: NEXUS_HOME, NEXUS_RUNTIME_CONFIG, the checkout's nexus.toml).
+    Returns the CLI result mapping: ``success`` plus a ``message`` on success,
+    or an ``error`` naming every problem and its remediation on failure.
     """
 
     if command not in ("lock", "verify"):
@@ -503,8 +505,11 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
         return {
             "success": False,
             "error": f"{exc}. Pass --config with the path to nexus.toml, set "
-            f"{RUNTIME_CONFIG_ENV}, or run from the repository root.",
+            f"{HOME_ENV} to a home containing nexus.toml, or set "
+            f"{RUNTIME_CONFIG_ENV} to an existing nexus.toml.",
         }
+    except RuntimeHomeError as exc:
+        return {"success": False, "error": str(exc)}
     lock_path = lock_file_path(settings)
     try:
         specs = production_artifact_specs(settings)

@@ -29,6 +29,13 @@ RUNTIME_STATUS_PATH = "/runtime/status"
 # launched it (test harnesses point this at temp configs).
 RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
 
+# Environment seam: absolute path of the runtime home (issue #820). When set,
+# $NEXUS_HOME/nexus.toml is the active configuration and relative runtime
+# directories resolve under it; NEXUS_RUNTIME_CONFIG, when also set, must name
+# that same file. Unset, the checkout is the home. nexus/runtime/home.py owns
+# the rule.
+HOME_ENV = "NEXUS_HOME"
+
 # Environment seam: run the gateway on an alternate port with isolated
 # runtime state (pidfiles/logs under a per-port subdirectory). This is the
 # designated lane for agent and test sessions, so a live-testing gateway can

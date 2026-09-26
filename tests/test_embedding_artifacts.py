@@ -27,6 +27,7 @@ from nexus.agents.memnon.utils.artifact_manifest import (
     run_models_command,
 )
 from nexus.config.loader import RUNTIME_CONFIG_ENV, settings_path_scope
+from nexus.runtime.contract import HOME_ENV
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
@@ -443,25 +444,30 @@ def test_default_config_follows_the_load_settings_chain(
     assert from_env["lock_file"] == str(workspace.lock)
 
 
-def test_verify_outside_the_repository_without_config_names_the_fix(
-    tmp_path: Path,
-) -> None:
-    """No nexus.toml to find is a clean CLI error, still JSON under --json."""
+def test_verify_without_a_config_to_find_names_the_fix(tmp_path: Path) -> None:
+    """No nexus.toml to find is a clean CLI error, still JSON under --json.
 
+    The working directory no longer selects a config (#820), so the missing
+    case is a runtime home without its nexus.toml.
+    """
+
+    empty_home = tmp_path / "empty-home"
+    empty_home.mkdir()
     env = {key: value for key, value in os.environ.items() if key != RUNTIME_CONFIG_ENV}
     cli = subprocess.run(
         [sys.executable, "-m", "nexus.cli", "models", "verify", "--json"],
         capture_output=True,
         text=True,
         timeout=300,
-        env={**env, "PYTHONPATH": str(REPO_ROOT)},
+        env={**env, "PYTHONPATH": str(REPO_ROOT), HOME_ENV: str(empty_home)},
         cwd=tmp_path,
     )
     assert cli.returncode == 1, cli.stdout + cli.stderr
     assert json.loads(cli.stderr) == {
-        "error": "Configuration file not found: nexus.toml. Pass --config with "
-        f"the path to nexus.toml, set {RUNTIME_CONFIG_ENV}, or run from the "
-        "repository root."
+        "error": "Configuration file not found: "
+        f"{empty_home.resolve() / 'nexus.toml'}. Pass --config with the path to "
+        f"nexus.toml, set {HOME_ENV} to a home containing nexus.toml, or set "
+        f"{RUNTIME_CONFIG_ENV} to an existing nexus.toml."
     }
 
 

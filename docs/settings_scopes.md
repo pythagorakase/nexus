@@ -2,7 +2,7 @@
 
 Design pending owner confirmation; issues #814 and #756.
 
-`nexus.toml` holds defaults and developer tunables. Runtime writes to it raise an error. `GET /api/settings` serves defaults and registry metadata from the effective runtime config; its PATCH route is retired.
+`nexus.toml` holds defaults and developer tunables. Runtime writes to it raise an error. `GET /api/settings` serves defaults and registry metadata from the active config; its PATCH route is retired.
 
 | Scope | Storage | API |
 | --- | --- | --- |
@@ -12,7 +12,11 @@ Design pending owner confirmation; issues #814 and #756.
 
 Story fields are `skald_model` (existing `model` column), `gaia_model`, and `apex_context_window`. Migration 117 adds only the latter two nullable columns with comments. NULL Skald and context pins follow repository defaults; NULL Gaia follows the actual Skald selection, including a request override. Existing rows are not repinned. The old `/api/slot/{n}/model` routes are retired.
 
-Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write materializes all three from repository defaults into an atomically replaced TOML file. Until then, reads use defaults without creating a file. The default state directory is still the gitignored `.nexus/runtime`; relocating runtime home outside the checkout is deferred. An absolute state directory stores preferences outside the checkout today.
+Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write materializes all three from repository defaults into an atomically replaced TOML file. Until then, reads use defaults without creating a file. A relative state directory resolves under the runtime home: the checkout by default (the gitignored `.nexus/runtime`), or `$NEXUS_HOME` when set. An absolute state directory is used as configured.
+
+## The Active Configuration
+
+One rule, in `nexus/runtime/home.py`, selects the `nexus.toml` every reader uses, independent of the working directory. With `NEXUS_HOME` set, the active config is `$NEXUS_HOME/nexus.toml`; `NEXUS_RUNTIME_CONFIG` (set by the supervisor on every service it spawns) or `nexus up --config` may also name it, but naming a different file is refused with a `RuntimeError`, so two active configurations cannot exist. Without `NEXUS_HOME`, `--config` wins, then `NEXUS_RUNTIME_CONFIG`, then the checkout's `nexus.toml`. The same rule anchors relative runtime directories (`[runtime].state_dir`, `[usage].usage_dir`) at the home root. See The Runtime Home in `docs/runtime.md` for the layout and the `nexus home plan` dry run.
 
 ## Resolution and Callers
 

@@ -5,6 +5,7 @@ server/public
 vite.config.ts.*
 *.tar.gz
 client/public/character_portraits/
+client/public/place_images/
 src-tauri/target
 
 # design-sync (staged scripts, build output, machine state)

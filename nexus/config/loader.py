@@ -237,10 +237,12 @@ def load_settings(path: Union[str, Path, None] = None) -> Settings:
     Load and validate NEXUS configuration.
 
     Args:
-        path: Path to configuration file. When omitted, services spawned by
-              the managed runtime honor NEXUS_RUNTIME_CONFIG; otherwise
-              nexus.toml is used. Explicit .json paths are accepted only for
-              legacy ir_eval V1 tooling.
+        path: Path to configuration file. When omitted, an enclosing
+              ``settings_path_scope`` wins; otherwise the runtime-home locator
+              rule in ``nexus/runtime/home.py`` selects the active config
+              (NEXUS_HOME, then NEXUS_RUNTIME_CONFIG, then the checkout's
+              nexus.toml, independent of the working directory). Explicit
+              .json paths are accepted only for legacy ir_eval V1 tooling.
 
     Returns:
         Validated Settings object with type-safe access to configuration
@@ -258,7 +260,13 @@ def load_settings(path: Union[str, Path, None] = None) -> Settings:
         >>> # registry (e.g. whatever openai.default points at).
     """
     if path is None:
-        path = _SETTINGS_PATH.get() or os.environ.get(RUNTIME_CONFIG_ENV, "nexus.toml")
+        path = _SETTINGS_PATH.get()
+    if path is None:
+        # Deferred import: the nexus.runtime package imports the supervisor,
+        # which imports nexus.config, so a module-level import would cycle.
+        from nexus.runtime.home import resolve_config_path
+
+        path = resolve_config_path()
     path = Path(path)
 
     if not path.exists():
