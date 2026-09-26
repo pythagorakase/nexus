@@ -109,7 +109,7 @@ Quality lives in a band whose location shifts by genre. Too tame → closed syst
 
 **Control surface:**
 - **Dev instrument:** a raw CLI float, MidJourney `--weird` style, for calibration. Used to find where each genre's good band sits.
-- **Production interface:** coarse `WEIRD: low | medium | high`. The float is remapped per-genre behind the three labels — **[OPEN]** whether one range with genre-shifted thresholds or several discrete ranges. `medium` means "medium *for this genre*," not a universal number.
+- **Production interface:** coarse `WEIRD: low | medium | high`. The float is remapped per-genre behind the three labels — **[OPEN]** whether one range with genre-shifted thresholds or several discrete ranges. `medium` means "medium *for this genre*," not a universal number. The wizard's Introduction phase offers the three levels as unlabeled glyphs (`PUT /api/story/new/weird`, or `nexus continue --weird`), persisted as `assets.new_story_creator.weird_level` so a failed transition retries at the same level; the transition forwards it to generation and records the resolved profile as `global_variables.genesis_weird` in the world's transaction (#838).
 - **Never expose the float to the player.** Coarseness is a feature: (a) the genre remapping makes a raw number dishonest; (b) high-weird seeds are candidates for later revelation, and fine control invites inspecting surprises whose value depends on not being inspected. The dial is a statement of *appetite* and *consent to be ambushed*, not an audited instruction.
 
 ---

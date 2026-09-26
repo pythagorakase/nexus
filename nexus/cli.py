@@ -1126,6 +1126,7 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
                 "message": f"Slot {args.slot} is in wizard mode.",
                 "phase": data.get("phase"),
                 "choices": data.get("choices", []),
+                "weird_level": data.get("weird_level"),
             }
             if data.get("pending_confirmation") in {"setting", "character"}:
                 phase = data["pending_confirmation"]
@@ -1764,6 +1765,27 @@ def _start_wizard_character_revision(slot: int, state: Mapping[str, Any]) -> str
     return identity["thread_id"]
 
 
+def _record_wizard_weird_level(slot: int, level: str) -> Optional[str]:
+    """Save the new-story strangeness on the slot's wizard.
+
+    Returns:
+        None once the gateway saved ``level``, otherwise the failure detail.
+    """
+    response = _api_request(
+        "put",
+        f"{get_api_url()}/api/story/new/weird",
+        json={"slot": slot, "weird_level": level},
+        timeout=30,
+    )
+    if not 200 <= response.status_code < 300:
+        detail = response.text.strip() or f"HTTP {response.status_code}"
+        return f"Failed to save --weird {level}: {detail}"
+    saved = response.json().get("weird_level")
+    if saved != level:
+        return f"Failed to save --weird {level}: the wizard reports {saved!r}"
+    return None
+
+
 def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Advance the story (wizard or narrative).
@@ -1773,12 +1795,25 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     - Narrative mode: /api/narrative/continue
     """
     retrograde_info: Optional[Dict[str, Any]] = None
+    # --weird belongs to the new-story wizard; direct callers may omit it.
+    weird_level: Optional[str] = getattr(args, "weird", None)
     try:
         # First, get slot state to determine mode
         state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
         state_response = _api_get(state_url, timeout=30)
         state_response.raise_for_status()
         state = state_response.json()
+
+        if weird_level is not None and not (
+            state.get("is_empty") or state.get("is_wizard_mode")
+        ):
+            return {
+                "success": False,
+                "error": (
+                    f"--weird applies only to a new story; slot {args.slot} "
+                    "already holds a story in narrative mode."
+                ),
+            }
 
         if state.get("is_empty"):
             # Initialize via setup/start endpoint. Forward only an explicit
@@ -1799,6 +1834,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
 
             # Use the actual response from the backend
             setup_data = setup_response.json()
+            if weird_level is not None:
+                weird_error = _record_wizard_weird_level(args.slot, weird_level)
+                if weird_error is not None:
+                    return {"success": False, "error": weird_error}
             return {
                 "success": True,
                 "message": setup_data.get("welcome_message")
@@ -1809,6 +1848,15 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
         if state.get("is_wizard_mode"):
+            # Saved before any wizard step, so a call that does not reach the
+            # transition still leaves the level for the one that does.
+            if weird_level is not None:
+                weird_error = _record_wizard_weird_level(args.slot, weird_level)
+                if weird_error is not None:
+                    return {"success": False, "error": weird_error}
+            transition_payload: Dict[str, Any] = {"slot": args.slot}
+            if weird_level is not None:
+                transition_payload["weird_level"] = weird_level
             revision_thread_id = None
             awaiting_introduction = state.get("awaiting_introduction")
             if (
@@ -1882,7 +1930,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 with _echo_retrograde_stages(args.slot, enabled=not args.json):
                     transition_response = _api_post(
                         transition_url,
-                        json={"slot": args.slot},
+                        json=transition_payload,
                         timeout=_transition_timeout_seconds(),
                     )
                 if not transition_response.ok:
@@ -2077,7 +2125,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                             ):
                                 transition_response = _api_post(
                                     transition_url,
-                                    json={"slot": args.slot},
+                                    json=transition_payload,
                                     timeout=_transition_timeout_seconds(),
                                 )
                         except requests.exceptions.Timeout as exc:
@@ -4287,6 +4335,14 @@ Examples:
         help=(
             "Override model for this request "
             "(use a registry ID; see /api/config/models)"
+        ),
+    )
+    continue_parser.add_argument(
+        "--weird",
+        choices=("low", "medium", "high"),
+        help=(
+            "New-story strangeness, saved on the wizard and used by the "
+            "narrative transition (wizard only)"
         ),
     )
 

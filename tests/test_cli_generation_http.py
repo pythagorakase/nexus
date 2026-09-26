@@ -65,6 +65,8 @@ class GenerationScenario:
     failed_reads: set[int] = field(default_factory=set)
     stages_served: Event = field(default_factory=Event)
     transition_error: str | None = None
+    # Detail of a refused strangeness save; None echoes the saved level.
+    weird_error: str | None = None
     ready: bool = False
     transitioned: bool = False
 
@@ -130,6 +132,25 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 )
             else:
                 self._respond({"detail": f"Unexpected POST {self.path}"}, 404)
+
+        def do_PUT(self) -> None:  # noqa: N802 - stdlib handler contract
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            scenario.requests.append(("PUT", self.path, body))
+            if body.get("slot") != 5:
+                self._respond({"detail": "Explicit test slot required"}, 422)
+            elif self.path == "/api/story/new/weird":
+                if scenario.weird_error is not None:
+                    self._respond({"detail": scenario.weird_error}, 409)
+                    return
+                self._respond(
+                    {
+                        "status": "recorded",
+                        "slot": 5,
+                        "weird_level": body["weird_level"],
+                    }
+                )
+            else:
+                self._respond({"detail": f"Unexpected PUT {self.path}"}, 404)
 
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
             scenario.requests.append(("GET", self.path, {}))
@@ -254,7 +275,11 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
 
 
 def _run_cli(
-    scenario: GenerationScenario, tmp_path: Path, *, json_output: bool = True
+    scenario: GenerationScenario,
+    tmp_path: Path,
+    *,
+    json_output: bool = True,
+    extra_args: tuple[str, ...] = (),
 ) -> tuple[int, str, str]:
     """Run the actual command against this isolated gateway and config."""
 
@@ -284,6 +309,7 @@ def _run_cli(
                 "5",
                 "--choice",
                 "1",
+                *extra_args,
                 *(["--json"] if json_output else []),
             ],
             cwd=ROOT,
@@ -646,3 +672,74 @@ def test_cli_reports_an_unreadable_genesis_stage_and_keeps_the_transition(
     # No read follows the failed one, not even after the transition answers.
     assert scenario.stages_read == read
     assert NARRATIVE in stdout
+
+
+def _writes(scenario: GenerationScenario) -> list[tuple[str, str, dict[str, Any]]]:
+    return [request for request in scenario.requests if request[0] != "GET"]
+
+
+def _transition_bodies(scenario: GenerationScenario) -> list[dict[str, Any]]:
+    return [
+        request[2]
+        for request in scenario.requests
+        if request[:2] == ("POST", "/api/story/new/transition")
+    ]
+
+
+@pytest.mark.parametrize("ready", [False, True], ids=["seed-confirm", "ready-resume"])
+def test_cli_weird_saves_the_level_then_posts_it_with_the_transition(
+    tmp_path: Path, ready: bool
+) -> None:
+    """--weird is saved before any wizard step and rides the transition."""
+
+    scenario = GenerationScenario(seed=not ready, ready=ready)
+    code, stdout, stderr = _run_cli(scenario, tmp_path, extra_args=("--weird", "high"))
+    assert code == 0, (stdout, stderr)
+    assert _writes(scenario)[0] == (
+        "PUT",
+        "/api/story/new/weird",
+        {"slot": 5, "weird_level": "high"},
+    )
+    assert _transition_bodies(scenario) == [{"slot": 5, "weird_level": "high"}]
+    payload = json.loads(stdout)
+    assert payload["success"] is True
+    assert payload["session_id"] == SESSION_ID
+
+
+def test_cli_without_weird_leaves_the_stored_level_in_charge(tmp_path: Path) -> None:
+    scenario = GenerationScenario()
+    code, stdout, stderr = _run_cli(scenario, tmp_path)
+    assert code == 0, (stdout, stderr)
+    assert not any(request[0] == "PUT" for request in scenario.requests)
+    assert _transition_bodies(scenario) == [{"slot": 5}]
+
+
+def test_cli_rejects_weird_for_a_story_in_narrative_mode(tmp_path: Path) -> None:
+    scenario = GenerationScenario(seed=False)
+    code, stdout, stderr = _run_cli(scenario, tmp_path, extra_args=("--weird", "low"))
+    assert code == 1, (stdout, stderr)
+    assert stdout == ""
+    assert json.loads(stderr) == {
+        "error": (
+            "--weird applies only to a new story; slot 5 already holds a story "
+            "in narrative mode."
+        )
+    }
+    assert _writes(scenario) == []
+
+
+def test_cli_stops_when_the_wizard_refuses_the_weird_level(tmp_path: Path) -> None:
+    scenario = GenerationScenario(
+        weird_error="The wizard changed while this response was being generated."
+    )
+    code, stdout, stderr = _run_cli(
+        scenario, tmp_path, extra_args=("--weird", "medium")
+    )
+    assert code == 1, (stdout, stderr)
+    error = json.loads(stderr)["error"]
+    assert error.startswith("Failed to save --weird medium: ")
+    assert "The wizard changed while this response was being generated." in error
+    # No wizard step or transition follows a refused save.
+    assert [request[:2] for request in _writes(scenario)] == [
+        ("PUT", "/api/story/new/weird")
+    ]
