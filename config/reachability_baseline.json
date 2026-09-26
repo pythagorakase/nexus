@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register nexus/runtime/logging_config.py as production-reachable (#842 supervisor-owned logging)",
+  "reason": "Retire the orphan Storyteller app and its session layer (#807)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -204,7 +204,6 @@
     "nexus/api/runtime_status.py",
     "nexus/api/save_slots.py",
     "nexus/api/secrets_endpoints.py",
-    "nexus/api/session_manager.py",
     "nexus/api/settings_endpoints.py",
     "nexus/api/setup_endpoints.py",
     "nexus/api/slot_endpoints.py",
@@ -212,7 +211,6 @@
     "nexus/api/slot_state.py",
     "nexus/api/slot_utils.py",
     "nexus/api/static_ui.py",
-    "nexus/api/storyteller.py",
     "nexus/api/summary_errors.py",
     "nexus/api/summary_triggers.py",
     "nexus/api/trait_compiler.py",

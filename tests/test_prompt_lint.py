@@ -171,14 +171,6 @@ PROSE_ALLOWLIST: dict[tuple[str, str], str] = {
         "Slot is in wizard mode. Use /api/story/new/chat for wizard.",
     ): "Application configuration or routing diagnostic for the operator or API client.",
     (
-        "nexus/api/storyteller.py",
-        "Legacy story generation is retired. Use POST /api/narrative/continue with an explicit slot to create a durable generation session.",
-    ): "Application configuration or routing diagnostic for the operator or API client.",
-    (
-        "nexus/api/storyteller.py",
-        "Legacy story regeneration is retired. Use POST /api/narrative/regenerate with an explicit slot to create a durable generation session.",
-    ): "Application configuration or routing diagnostic for the operator or API client.",
-    (
         "nexus/api/wizard_chat.py",
         "Slot is not in wizard mode. Use /api/narrative/continue for narrative mode.",
     ): "Application configuration or routing diagnostic for the operator or API client.",

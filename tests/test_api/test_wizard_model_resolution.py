@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from nexus.api import new_story_flow, setup_endpoints, storyteller
+from nexus.api import new_story_flow, setup_endpoints
 from nexus.api.config_utils import get_new_story_model
 from nexus.api.new_story_cache import read_cache_raw
 from nexus.api.narrative_schemas import ChatRequest, StartSetupRequest
@@ -127,27 +127,6 @@ def test_setup_endpoint_passes_omitted_model_to_core(
             "SELECT choice_object FROM assets.new_story_creator WHERE id = TRUE"
         )
         assert cur.fetchone()[0]["presented"] == result["welcome_choices"]
-
-
-def test_legacy_storyteller_setup_passes_omitted_model_to_core(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The second setup HTTP surface must preserve omission as well."""
-    starts: list[tuple[int, str | None]] = []
-
-    def fake_start_setup(slot: int, model: str | None = None) -> str:
-        starts.append((slot, model))
-        return "thread-operator"
-
-    monkeypatch.setattr(storyteller, "start_new_story_setup", fake_start_setup)
-
-    response = storyteller.new_story_setup_start(
-        storyteller.NewStoryStartRequest(slot=4)
-    )
-
-    assert starts == [(4, None)]
-    assert response.thread_id == "thread-operator"
-    assert response.slot == 4
 
 
 def test_configured_wizard_default_is_not_the_mock() -> None:

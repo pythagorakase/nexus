@@ -15,10 +15,11 @@ Standalone tools bind their provider usage context to the same supplied
 diagnostic UUID; they never mint an additional correlation key.
 
 The legacy `POST /api/story/turn` and `POST /api/story/regenerate` endpoints
-return HTTP 410 before opening session storage or initializing LORE. Their
-conversation IDs were reused across turns and could not identify an attempt.
-Use `POST /api/narrative/continue` or `POST /api/narrative/regenerate` with an
-explicit slot. Existing session, history, and context reading remain available.
+first answered HTTP 410: their conversation IDs were reused across turns and
+could not identify an attempt. #807 then retired them with the rest of the
+Storyteller app, including its session, history, and context reads. Use
+`POST /api/narrative/continue` or `POST /api/narrative/regenerate` with an
+explicit slot.
 
 This is the propagation slice of #764. No manifest, prompt/prose copy, schema,
 or retention policy is added. Accepted chunks still get their own database
