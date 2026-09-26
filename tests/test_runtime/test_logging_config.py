@@ -11,6 +11,7 @@ import http.client
 import json
 import logging
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -286,7 +287,10 @@ def test_supervised_uvicorn_applies_log_config_and_filters_access_noise(
         for target, expected in requests_made.items():
             assert _get(service.port, target) == expected
     finally:
-        supervisor._stop_service("probe")
+        # This test process is the service's parent, so it reaps the child
+        # itself; a detached CLI supervisor leaves that to init.
+        os.kill(int(record["pid"]), signal.SIGTERM)
+        os.waitpid(int(record["pid"]), 0)
 
     written = json.loads(supervisor.log_config_path().read_text())
     assert written == build_logging_config(supervisor.runtime.logs)
