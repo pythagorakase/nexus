@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
@@ -15,16 +14,26 @@ from sqlalchemy import text
 from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.config.story_model import StorySettings
 
+from .baseline_compat import (
+    config_hash,
+    describe_changes,
+    diff_config_snapshots,
+    pass2_baseline_config_fingerprint,
+    snapshot_config,
+)
 from .context_state import (
     ContextPackage,
     ContextStateManager,
     MemoryIdentity,
-    PASS2_BASELINE_PRODUCER,
     RETROGRADE_SUMMARY_ID_PREFIX,
+    Pass2Baseline,
     Pass2BaselineV1,
+    Pass2BaselineV2,
     PassTransition,
     is_retrograde_summary,
     memory_identity,
+    parse_pass2_baseline,
+    restamp_pass2_baseline,
 )
 from .correspondence import correspondence_settings, load_accepted_correspondence
 from .divergence import DivergenceResult
@@ -52,47 +61,168 @@ class MissingPass2BaselineError(RuntimeError):
     """An accepted parent chunk has no durable Pass-2 baseline."""
 
 
-def pass2_baseline_config_fingerprint(settings: Mapping[str, Any]) -> str:
-    """Fingerprint configuration that determines two-pass memory behavior."""
-
-    legacy_agent_settings = settings.get("Agent Settings")
-    legacy_lore_settings = (
-        legacy_agent_settings.get("LORE")
-        if isinstance(legacy_agent_settings, Mapping)
-        else None
-    )
-    lore_settings = (
-        legacy_lore_settings
-        if isinstance(legacy_lore_settings, Mapping)
-        else settings.get("lore", {})
-    )
-    payload = {
-        "memory": settings.get("memory", {}),
-        "lore_token_budget": (
-            lore_settings.get("token_budget", {})
-            if isinstance(lore_settings, Mapping)
-            else {}
-        ),
-    }
-    serialized = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+_WINDOW_SETTING = "lore.token_budget.apex_context_window"
+_REFRESH_COMMAND = (
+    "scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --slot <1-5>"
+)
 
 
-def empty_pass2_baseline(settings: Mapping[str, Any]) -> Pass2BaselineV1:
+def empty_pass2_baseline(settings: Mapping[str, Any]) -> Pass2BaselineV2:
     """Build the explicit empty baseline staged by bootstrap/admin boundary tools."""
 
-    return Pass2BaselineV1(
-        producer=PASS2_BASELINE_PRODUCER,
-        config_fingerprint=pass2_baseline_config_fingerprint(settings),
+    return Pass2BaselineV2.for_settings(
+        settings,
         memory_identities=[],
         prior_token_accounting={},
         remaining_budget=0,
     )
+
+
+def incompatible_pass2_baseline_reason(
+    baseline: Pass2Baseline, settings: Mapping[str, Any]
+) -> Optional[str]:
+    """Explain why a baseline cannot continue under ``settings``.
+
+    Returns ``None`` when the full fingerprints match, or when a schema-2
+    baseline differs only in budget-class settings and may be rebased.
+    """
+
+    if baseline.config_fingerprint == pass2_baseline_config_fingerprint(settings):
+        return None
+    if isinstance(baseline, Pass2BaselineV1):
+        return (
+            "This schema-1 baseline records no settings snapshot, so the change "
+            "cannot be classified. After confirming Pass-2 semantics are "
+            f"unchanged, run {_REFRESH_COMMAND}."
+        )
+    stored = baseline.config_snapshot
+    if config_hash(stored.legacy_payload()) != baseline.config_fingerprint:
+        return (
+            "Its settings snapshot does not reproduce its config fingerprint, so "
+            "the change cannot be classified. Refresh it with "
+            f"{_REFRESH_COMMAND} only after confirming Pass-2 semantics are "
+            "unchanged."
+        )
+    current = snapshot_config(settings)
+    if baseline.semantic_fingerprint == current.semantic_fingerprint():
+        return None
+    changes = diff_config_snapshots(stored, current)
+    semantic = [change for change in changes if change.compatibility == "semantic"]
+    budget = [change for change in changes if change.compatibility == "budget"]
+    return (
+        f"Semantic settings changed: {describe_changes(semantic)}. Budget "
+        f"settings changed: {describe_changes(budget)}. Restore the previous "
+        "semantic values, or accept them for this story as an explicit operator "
+        f"intervention with {_REFRESH_COMMAND} (docs/settings_scopes.md)."
+    )
+
+
+def plan_tail_window_rebase(
+    baseline: Pass2Baseline,
+    *,
+    previous_settings: Mapping[str, Any],
+    current_settings: Mapping[str, Any],
+) -> Optional[Pass2BaselineV2]:
+    """Decide whether a player's window change rewrites the accepted tail.
+
+    Only a tail fingerprinted under exactly the pre-change settings is
+    restamped under the new ones; any other tail is left for restoration to
+    classify (or refuse) loudly.
+    """
+
+    previous_fingerprint = pass2_baseline_config_fingerprint(previous_settings)
+    if previous_fingerprint == pass2_baseline_config_fingerprint(current_settings):
+        return None
+    changes = diff_config_snapshots(
+        snapshot_config(previous_settings), snapshot_config(current_settings)
+    )
+    semantic = [change for change in changes if change.compatibility == "semantic"]
+    if semantic:
+        raise RuntimeError(
+            "A story context-window change altered semantic Pass-2 settings: "
+            f"{describe_changes(semantic)}"
+        )
+    if baseline.config_fingerprint != previous_fingerprint:
+        return None
+    return restamp_pass2_baseline(baseline, current_settings)
+
+
+def rebase_tail_pass2_baseline(
+    cur: Any,
+    *,
+    previous_settings: Mapping[str, Any],
+    current_settings: Mapping[str, Any],
+    target: str,
+) -> Optional[Pass2BaselineV2]:
+    """Rewrite the accepted tail's baseline for a player's window change.
+
+    Runs on the caller's transaction, after the story pin is written, so the
+    pin and the rewritten tail commit or roll back together. Returns the
+    rewritten baseline, or ``None`` when nothing needed rewriting.
+    """
+
+    cur.execute("SELECT id FROM narrative_chunks ORDER BY id DESC LIMIT 1")
+    row = cur.fetchone()
+    if row is None:
+        return None
+    chunk_id = int(row[0])
+    cur.execute(
+        "SELECT schema_version, payload FROM lore_pass_baselines "
+        "WHERE chunk_id = %s FOR UPDATE",
+        (chunk_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        # Restoration names the stamping remedy for a missing baseline.
+        return None
+    baseline = parse_pass2_baseline(row[1])
+    if baseline.parent_chunk_id != chunk_id or baseline.schema_version != row[0]:
+        raise RuntimeError(
+            f"{target} tail chunk {chunk_id} Pass-2 baseline identity or schema "
+            f"mismatch: column={row[0]}, payload={baseline.schema_version}, "
+            f"parent={baseline.parent_chunk_id}"
+        )
+    rebased = plan_tail_window_rebase(
+        baseline,
+        previous_settings=previous_settings,
+        current_settings=current_settings,
+    )
+    if rebased is None:
+        if baseline.config_fingerprint != pass2_baseline_config_fingerprint(
+            current_settings
+        ):
+            logger.warning(
+                "%s tail chunk %s Pass-2 baseline was not fingerprinted under the "
+                "pre-change settings; left unchanged for the next continuation "
+                "to classify",
+                target,
+                chunk_id,
+            )
+        return None
+    cur.execute(
+        "UPDATE lore_pass_baselines SET schema_version = %s, payload = %s::jsonb "
+        "WHERE chunk_id = %s",
+        (
+            rebased.schema_version,
+            json.dumps(rebased.model_dump(mode="json")),
+            chunk_id,
+        ),
+    )
+    old_window = snapshot_config(previous_settings).value(_WINDOW_SETTING)
+    logger.warning(
+        "Player context-window change on %s rebased tail chunk %s Pass-2 "
+        "baseline (schema %s -> %s): window %r -> %r; kept %s memory identities, "
+        "the prior token accounting and remaining budget %s",
+        target,
+        chunk_id,
+        baseline.schema_version,
+        rebased.schema_version,
+        old_window,
+        rebased.config_snapshot.value(_WINDOW_SETTING),
+        len(rebased.memory_identities),
+        rebased.remaining_budget,
+    )
+    return rebased
 
 
 def _storyteller_token_budget(settings: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -504,7 +634,7 @@ class ContextMemoryManager:
             story=self._estimator_story(),
         )
 
-    def export_pass2_baseline(self) -> Pass2BaselineV1:
+    def export_pass2_baseline(self) -> Pass2BaselineV2:
         """Export the current post-trimming Pass-1 state for incubator staging."""
 
         package = self.context_state.context
@@ -544,15 +674,14 @@ class ContextMemoryManager:
                     f"nonnegative integers: {name}={value!r}"
                 )
             prior_token_accounting[name] = value
-        return Pass2BaselineV1(
-            producer=PASS2_BASELINE_PRODUCER,
-            config_fingerprint=pass2_baseline_config_fingerprint(self.settings),
+        return Pass2BaselineV2.for_settings(
+            self.settings,
             memory_identities=identities,
             prior_token_accounting=prior_token_accounting,
             remaining_budget=transition.remaining_budget,
         )
 
-    def restore_pass2_baseline(self, parent_chunk_id: int) -> Pass2BaselineV1:
+    def restore_pass2_baseline(self, parent_chunk_id: int) -> Pass2Baseline:
         """Hydrate Pass-2 state from one accepted parent chunk or fail loudly."""
 
         if (
@@ -603,11 +732,35 @@ class ContextMemoryManager:
                     "scripts/stamp_lore_pass_baseline.py --slot <1-5>, then retry."
                 )
 
-        baseline = Pass2BaselineV1.model_validate(row["payload"])
-        if row["schema_version"] != baseline.schema_version:
+        return self.hydrate_pass2_baseline(
+            parent_chunk_id,
+            schema_version=row["schema_version"],
+            payload=row["payload"],
+            storyteller_text=row["storyteller_text"],
+        )
+
+    def hydrate_pass2_baseline(
+        self,
+        parent_chunk_id: int,
+        *,
+        schema_version: int,
+        payload: Any,
+        storyteller_text: Any,
+    ) -> Pass2Baseline:
+        """Validate one fetched baseline row against current settings and load it.
+
+        An equal config fingerprint proceeds. A schema-2 baseline whose
+        semantic settings are unchanged is rebased: its memory identities and
+        prior accounting are kept, and this turn re-derives the remaining
+        budget from live token counts capped by the new Phase-2 budget. Every
+        other mismatch fails loudly.
+        """
+
+        baseline = parse_pass2_baseline(payload)
+        if schema_version != baseline.schema_version:
             raise RuntimeError(
                 "Pass-2 baseline schema columns disagree for parent chunk "
-                f"{parent_chunk_id}: column={row['schema_version']}, "
+                f"{parent_chunk_id}: column={schema_version}, "
                 f"payload={baseline.schema_version}"
             )
         if baseline.parent_chunk_id != parent_chunk_id:
@@ -616,19 +769,24 @@ class ContextMemoryManager:
                 f"{parent_chunk_id}, payload={baseline.parent_chunk_id}"
             )
         expected_fingerprint = pass2_baseline_config_fingerprint(self.settings)
-        if baseline.config_fingerprint != expected_fingerprint:
+        reason = incompatible_pass2_baseline_reason(baseline, self.settings)
+        if reason is not None:
             raise RuntimeError(
                 "Pass-2 baseline config fingerprint is incompatible for parent "
                 f"chunk {parent_chunk_id}: stored={baseline.config_fingerprint}, "
-                f"current={expected_fingerprint}"
+                f"current={expected_fingerprint}. {reason}"
             )
+        if (
+            isinstance(baseline, Pass2BaselineV2)
+            and baseline.config_fingerprint != expected_fingerprint
+        ):
+            self._log_budget_rebase(parent_chunk_id, baseline)
 
-        storyteller_output = row["storyteller_text"]
-        if not isinstance(storyteller_output, str) or not storyteller_output:
+        if not isinstance(storyteller_text, str) or not storyteller_text:
             raise RuntimeError(
                 f"Accepted parent chunk {parent_chunk_id} has no storyteller output"
             )
-        analysis = self._analyze_storyteller_output(storyteller_output)
+        analysis = self._analyze_storyteller_output(storyteller_text)
         package = ContextPackage(
             baseline_chunks=set(baseline.memory_identities),
             baseline_entities={
@@ -640,13 +798,36 @@ class ContextMemoryManager:
             token_usage=dict(baseline.prior_token_accounting),
         )
         transition = PassTransition(
-            storyteller_output=storyteller_output,
+            storyteller_output=storyteller_text,
             expected_user_themes=analysis.get("expected", []),
             remaining_budget=baseline.remaining_budget,
         )
         self.context_state.store_baseline(package, transition)
         self.query_memory.reset_pass("pass2")
         return baseline
+
+    def _log_budget_rebase(
+        self, parent_chunk_id: int, baseline: Pass2BaselineV2
+    ) -> None:
+        """Record a budget-only rebase with the window and everything kept."""
+
+        current = snapshot_config(self.settings)
+        changes = diff_config_snapshots(baseline.config_snapshot, current)
+        logger.warning(
+            "Rebasing Pass-2 baseline for parent chunk %s in %s after budget-only "
+            "settings changes (%s): window %r -> %r; kept %s memory identities "
+            "and the prior token accounting (%s entries); the stored remaining "
+            "budget %s is re-derived from this turn's token counts and capped by "
+            "the new Phase-2 budget",
+            parent_chunk_id,
+            self.dbname or "unscoped settings",
+            describe_changes(changes),
+            baseline.config_snapshot.value(_WINDOW_SETTING),
+            current.value(_WINDOW_SETTING),
+            len(baseline.memory_identities),
+            len(baseline.prior_token_accounting),
+            baseline.remaining_budget,
+        )
 
     def handle_storyteller_response(
         self,

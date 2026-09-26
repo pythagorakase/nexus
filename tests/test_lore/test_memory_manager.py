@@ -3,16 +3,36 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List, Tuple, Type
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
+from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import MemorySettings, TokenBudgetConfig
+from nexus.config.story_model import StorySettings, story_context_settings
 from nexus.memory import ContextMemoryManager
-from nexus.memory.context_state import Pass2BaselineV1
+from nexus.memory.baseline_compat import (
+    FIELD_COMPATIBILITY,
+    FINGERPRINTED_SECTIONS,
+    config_hash,
+    require_complete_classification,
+    snapshot_config,
+)
+from nexus.memory.context_state import (
+    Pass2BaselineV1,
+    Pass2BaselineV2,
+    bind_pass2_baseline,
+    parse_pass2_baseline,
+)
 from nexus.memory.divergence import DivergenceResult
 from nexus.memory.entity_detector import HighSpecificityEntityDetector
+from nexus.memory.manager import (
+    pass2_baseline_config_fingerprint,
+    plan_tail_window_rebase,
+)
 
 
 @pytest.fixture
@@ -543,3 +563,343 @@ def test_get_memory_summary_reports_state(
     assert summary["pass2"]["divergence_detected"] is True
     assert summary["pass2"]["usage"]["remaining_budget"] >= 0
     assert summary["query_memory"]["history"]["pass2"], "Expected stored pass2 queries"
+
+
+# ---------------------------------------------------------------------------
+# Pass-2 baseline compatibility (#805)
+# ---------------------------------------------------------------------------
+
+PARENT_CHUNK_ID = 41
+
+
+def _story_settings(window: int) -> Dict[str, Any]:
+    """Project the real nexus.toml through one story context-window pin."""
+
+    return story_context_settings(
+        load_settings_as_dict(), StorySettings(apex_context_window=window)
+    )
+
+
+def _accepted_baseline(
+    settings: Dict[str, Any], baseline_inputs: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Run Pass 1 under ``settings`` and return the stored, bound payload."""
+
+    manager = ContextMemoryManager(
+        settings, provider_wire_type="openai", provider_name="openai"
+    )
+    manager.handle_storyteller_response(
+        narrative=baseline_inputs["narrative"],
+        warm_slice=baseline_inputs["warm_slice"],
+        retrieved_passages=baseline_inputs["retrieved"],
+        token_usage=baseline_inputs["token_usage"],
+    )
+    bound = bind_pass2_baseline(manager.export_pass2_baseline(), PARENT_CHUNK_ID)
+    return json.loads(json.dumps(bound.model_dump(mode="json")))
+
+
+def _hydrate(
+    manager: ContextMemoryManager,
+    payload: Dict[str, Any],
+    baseline_inputs: Dict[str, Any],
+) -> Any:
+    return manager.hydrate_pass2_baseline(
+        PARENT_CHUNK_ID,
+        schema_version=payload["schema_version"],
+        payload=payload,
+        storyteller_text=baseline_inputs["narrative"],
+    )
+
+
+def test_every_fingerprinted_setting_has_a_compatibility_class() -> None:
+    """A new [memory] or [lore.token_budget] field must be classified first."""
+
+    leaves = {f"memory.{name}" for name in MemorySettings.model_fields} | {
+        f"lore.token_budget.{name}" for name in TokenBudgetConfig.model_fields
+    }
+    assert set(FIELD_COMPATIBILITY) == leaves
+    assert set(FIELD_COMPATIBILITY.values()) == {"budget", "semantic"}
+
+
+def test_unclassified_setting_fails_instead_of_becoming_budget() -> None:
+    class GrownMemorySettings(MemorySettings):
+        retrieval_temperature: float = 0.5
+
+    grown: Dict[str, Tuple[str, Type[BaseModel]]] = {
+        **FINGERPRINTED_SECTIONS,
+        "memory": ("memory", GrownMemorySettings),
+    }
+    with pytest.raises(
+        RuntimeError, match=r"unclassified=\['memory.retrieval_temperature'\]"
+    ):
+        require_complete_classification(grown)
+    with pytest.raises(RuntimeError, match=r"stale=\['memory.retired_knob'\]"):
+        require_complete_classification(
+            classification={**FIELD_COMPATIBILITY, "memory.retired_knob": "budget"}
+        )
+
+    settings = load_settings_as_dict()
+    settings["memory"]["retrieval_temperature"] = 0.5
+    with pytest.raises(ValueError, match="retrieval_temperature.*compatibility class"):
+        snapshot_config(settings)
+
+
+def test_config_fingerprint_hash_input_is_unchanged() -> None:
+    """Every stored baseline depends on the frozen full-fingerprint input."""
+
+    memory = {
+        "phase2_fraction": 0.1,
+        "raw_search_k": 30,
+        "skip_simple_choices": True,
+        "pass2_budget_reserve": 0.25,
+        "warm_slice_default": True,
+        "max_sql_iterations": 5,
+    }
+    token_budget = {
+        "apex_context_window": 75_000,
+        "system_prompt_tokens": 5000,
+        "prompt_overhead_tokens": 4000,
+        "provider_overrides": {"local": 32_000},
+    }
+    frozen = "a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7"
+    assert (
+        pass2_baseline_config_fingerprint(
+            {"memory": memory, "lore": {"token_budget": token_budget}}
+        )
+        == frozen
+    )
+    assert (
+        pass2_baseline_config_fingerprint(
+            {
+                "memory": memory,
+                "Agent Settings": {"LORE": {"token_budget": token_budget}},
+                "lore": {"token_budget": {"apex_context_window": 1_000}},
+            }
+        )
+        == frozen
+    )
+
+    settings = load_settings_as_dict()
+    snapshot = snapshot_config(settings)
+    assert config_hash(snapshot.legacy_payload()) == (
+        pass2_baseline_config_fingerprint(settings)
+    )
+
+
+def test_v2_baseline_round_trips_and_v1_rows_still_parse(baseline_inputs) -> None:
+    settings = _story_settings(75_000)
+    payload = _accepted_baseline(settings, baseline_inputs)
+
+    baseline = parse_pass2_baseline(payload)
+    assert isinstance(baseline, Pass2BaselineV2)
+    assert baseline.schema_version == 2
+    assert baseline.parent_chunk_id == PARENT_CHUNK_ID
+    assert baseline.memory_identities == [101, 102, 201]
+    assert baseline.config_fingerprint == pass2_baseline_config_fingerprint(settings)
+    assert baseline.config_snapshot == snapshot_config(settings)
+    assert baseline.config_snapshot.budget["lore.token_budget.apex_context_window"] == (
+        75_000
+    )
+    assert baseline.config_snapshot.semantic["memory.raw_search_k"] == (
+        settings["memory"]["raw_search_k"]
+    )
+    assert baseline.model_dump(mode="json") == payload
+
+    legacy = {
+        key: payload[key]
+        for key in (
+            "producer",
+            "config_fingerprint",
+            "parent_chunk_id",
+            "memory_identities",
+            "prior_token_accounting",
+            "remaining_budget",
+        )
+    }
+    assert isinstance(
+        parse_pass2_baseline({"schema_version": 1, **legacy}), Pass2BaselineV1
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda payload: payload["config_snapshot"]["semantic"].update(
+                {"memory.raw_search_k": 31}
+            ),
+            "semantic_fingerprint does not match",
+        ),
+        (
+            lambda payload: payload["config_snapshot"]["budget"].update(
+                {
+                    "memory.raw_search_k": payload["config_snapshot"]["semantic"].pop(
+                        "memory.raw_search_k"
+                    )
+                }
+            ),
+            "recorded as budget but is classified 'semantic'",
+        ),
+        (
+            lambda payload: payload.update({"schema_version": 3}),
+            "does not match any of the expected tags",
+        ),
+    ],
+)
+def test_v2_baseline_rejects_forged_or_unknown_state(
+    baseline_inputs, mutate: Any, message: str
+) -> None:
+    payload = _accepted_baseline(_story_settings(75_000), baseline_inputs)
+    mutate(payload)
+    with pytest.raises(ValidationError, match=message):
+        parse_pass2_baseline(payload)
+
+
+def test_window_change_rebases_v2_baseline_and_rederives_budget(
+    baseline_inputs,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A budget-only change keeps the parent's memory and resizes the turn."""
+
+    payload = _accepted_baseline(_story_settings(75_000), baseline_inputs)
+    # The slot database is the only boundary replaced: its story pin moved.
+    monkeypatch.setattr(
+        "nexus.config.story_model.read_story_settings",
+        lambda dbname: StorySettings(apex_context_window=100_000, dbname=dbname),
+    )
+    manager = ContextMemoryManager(load_settings_as_dict(), dbname="save_05")
+    assert manager.configure_storyteller_budget("openai", "openai") == 100_000
+    assert manager.settings == _story_settings(100_000)
+    assert payload["config_fingerprint"] != pass2_baseline_config_fingerprint(
+        manager.settings
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nexus.memory.manager"):
+        restored = _hydrate(manager, payload, baseline_inputs)
+
+    assert restored.memory_identities == [101, 102, 201]
+    context = manager.context_state.context
+    assert context is not None
+    assert context.baseline_chunks == {101, 102, 201}
+    assert context.token_usage == payload["prior_token_accounting"]
+    assert manager.context_state.get_remaining_budget() == 570
+    [record] = [r for r in caplog.records if "Rebasing Pass-2 baseline" in r.message]
+    assert record.levelno == logging.WARNING
+    assert "save_05" in record.message
+    assert "window 75000 -> 100000" in record.message
+    assert "lore.token_budget.apex_context_window: 75000 -> 100000" in record.message
+    assert "kept 3 memory identities" in record.message
+
+    phase2_fraction = manager.settings["memory"]["phase2_fraction"]
+    assert manager.phase2_budget == int(100_000 * phase2_fraction)
+    live_counts = {
+        "total_available": 90_000,
+        "warm_slice": 30_000,
+        "structured": 20_000,
+        "augmentation": 10_000,
+    }
+    assert manager._compute_available_phase2_budget(live_counts) == min(
+        manager.phase2_budget, 30_000
+    )
+    assert manager.context_state.get_remaining_budget() == 30_000
+
+
+def test_semantic_change_refuses_rebase_and_names_fields(baseline_inputs) -> None:
+    old = _story_settings(75_000)
+    payload = _accepted_baseline(old, baseline_inputs)
+    changed = _story_settings(100_000)
+    before_k = changed["memory"]["raw_search_k"]
+    changed["memory"]["raw_search_k"] = before_k + 10
+    manager = ContextMemoryManager(changed)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _hydrate(manager, payload, baseline_inputs)
+
+    message = str(excinfo.value)
+    assert "config fingerprint is incompatible" in message
+    assert f"memory.raw_search_k: {before_k} -> {before_k + 10}" in message
+    assert "lore.token_budget.apex_context_window: 75000 -> 100000" in message
+    assert "--refresh-fingerprint" in message
+    assert manager.context_state.context is None
+
+
+def test_schema1_mismatch_still_fails_loudly(baseline_inputs) -> None:
+    old = _story_settings(75_000)
+    v2 = _accepted_baseline(old, baseline_inputs)
+    v1 = {
+        key: value
+        for key, value in v2.items()
+        if key not in {"semantic_fingerprint", "config_snapshot"}
+    }
+    v1["schema_version"] = 1
+
+    same = ContextMemoryManager(old)
+    assert isinstance(_hydrate(same, v1, baseline_inputs), Pass2BaselineV1)
+
+    moved = ContextMemoryManager(_story_settings(100_000))
+    with pytest.raises(RuntimeError, match="config fingerprint is incompatible") as exc:
+        _hydrate(moved, v1, baseline_inputs)
+    assert "schema-1 baseline records no settings snapshot" in str(exc.value)
+    assert "--refresh-fingerprint" in str(exc.value)
+    assert moved.context_state.context is None
+
+
+def test_snapshot_that_disowns_its_fingerprint_is_not_rebased(
+    baseline_inputs,
+) -> None:
+    settings = _story_settings(75_000)
+    payload = _accepted_baseline(settings, baseline_inputs)
+    payload["config_fingerprint"] = "0" * 64
+    manager = ContextMemoryManager(settings)
+    with pytest.raises(RuntimeError, match="does not reproduce its config fingerprint"):
+        _hydrate(manager, payload, baseline_inputs)
+
+
+def test_player_window_change_restamps_only_a_matching_tail(
+    baseline_inputs,
+) -> None:
+    """The PATCH path upgrades a schema-1 tail it can vouch for, and no other."""
+
+    old, new = _story_settings(75_000), _story_settings(100_000)
+    v2 = _accepted_baseline(old, baseline_inputs)
+    v1 = Pass2BaselineV1.model_validate(
+        {
+            "schema_version": 1,
+            **{
+                key: value
+                for key, value in v2.items()
+                if key
+                not in {"schema_version", "semantic_fingerprint", "config_snapshot"}
+            },
+        }
+    )
+
+    rebased = plan_tail_window_rebase(v1, previous_settings=old, current_settings=new)
+    assert isinstance(rebased, Pass2BaselineV2)
+    assert rebased.config_fingerprint == pass2_baseline_config_fingerprint(new)
+    assert rebased.config_snapshot == snapshot_config(new)
+    assert rebased.parent_chunk_id == PARENT_CHUNK_ID
+    assert rebased.memory_identities == v1.memory_identities
+    assert rebased.prior_token_accounting == v1.prior_token_accounting
+    assert rebased.remaining_budget == v1.remaining_budget
+
+    # The next continuation then restores it exactly, with no rebase at all.
+    manager = ContextMemoryManager(new)
+    restored = _hydrate(manager, rebased.model_dump(mode="json"), baseline_inputs)
+    assert restored == rebased
+
+    foreign = v1.model_copy(update={"config_fingerprint": "f" * 64})
+    assert (
+        plan_tail_window_rebase(foreign, previous_settings=old, current_settings=new)
+        is None
+    )
+    assert (
+        plan_tail_window_rebase(v1, previous_settings=old, current_settings=old) is None
+    )
+    semantic = copy.deepcopy(new)
+    semantic["memory"]["skip_simple_choices"] = not semantic["memory"][
+        "skip_simple_choices"
+    ]
+    with pytest.raises(RuntimeError, match="memory.skip_simple_choices"):
+        plan_tail_window_rebase(v1, previous_settings=old, current_settings=semantic)

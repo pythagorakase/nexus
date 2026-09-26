@@ -7,6 +7,12 @@ Usage:
 
 Run this once after migration 107 for an existing save whose accepted tail
 predates durable LORE baselines. It never infers a historical retrieval set.
+
+--refresh-fingerprint is the explicit operator intervention for a tail whose
+baseline no longer matches the current settings and cannot be rebased
+automatically (a schema-1 baseline, or a semantic-class change): it
+re-fingerprints the tail under the current settings and keeps its memory
+identities, accounting, and remaining budget.
 """
 
 from __future__ import annotations
@@ -27,6 +33,8 @@ from nexus.database import maintenance_connection  # noqa: E402
 from nexus.memory.context_state import (
     Pass2BaselineV1,
     bind_pass2_baseline,
+    parse_pass2_baseline,
+    restamp_pass2_baseline,
 )  # noqa: E402
 from nexus.memory.manager import (
     empty_pass2_baseline,
@@ -119,9 +127,12 @@ def refresh_tail_fingerprint(
     dbname: str | None = None,
     write_locked_slot: bool = False,
 ) -> tuple[int, str, str]:
-    """Refresh only the accepted tail fingerprint after a compatible config change.
+    """Re-fingerprint only the accepted tail baseline under the current settings.
 
-    The operator must establish that Pass-2 semantics are unchanged. This does
+    The operator decides that the story may continue under these settings. A
+    schema-1 tail keeps its schema and changes only ``config_fingerprint``; a
+    schema-2 tail is restamped (fingerprints and settings snapshot) with its
+    memory identities, accounting, and remaining budget unchanged. This does
     not reconstruct missing baselines or update historical/provisional payloads.
     """
     if (slot is None) == (dbname is None):
@@ -159,16 +170,24 @@ def refresh_tail_fingerprint(
                 f"{target} tail chunk {chunk_id} has no Pass-2 baseline; "
                 "cannot refresh its fingerprint"
             )
-        baseline = Pass2BaselineV1.model_validate(row[1])
+        baseline = parse_pass2_baseline(row[1])
         if baseline.parent_chunk_id != chunk_id or baseline.schema_version != row[0]:
             raise RuntimeError(f"{target} tail baseline identity or schema mismatch")
         old_fingerprint = baseline.config_fingerprint
-        cur.execute(
-            "UPDATE lore_pass_baselines SET payload = "
-            "jsonb_set(payload, '{config_fingerprint}', %s::jsonb, false) "
-            "WHERE chunk_id = %s",
-            (json.dumps(new_fingerprint), chunk_id),
-        )
+        if isinstance(baseline, Pass2BaselineV1):
+            cur.execute(
+                "UPDATE lore_pass_baselines SET payload = "
+                "jsonb_set(payload, '{config_fingerprint}', %s::jsonb, false) "
+                "WHERE chunk_id = %s",
+                (json.dumps(new_fingerprint), chunk_id),
+            )
+        else:
+            refreshed = restamp_pass2_baseline(baseline, settings)
+            cur.execute(
+                "UPDATE lore_pass_baselines SET payload = %s::jsonb "
+                "WHERE chunk_id = %s",
+                (json.dumps(refreshed.model_dump(mode="json")), chunk_id),
+            )
     return chunk_id, old_fingerprint, new_fingerprint
 
 
@@ -182,7 +201,7 @@ def main(argv: Any = None) -> int:
     parser.add_argument(
         "--refresh-fingerprint",
         action="store_true",
-        help="Refresh an existing tail fingerprint after a compatible config change",
+        help="Re-fingerprint the accepted tail under the current settings",
     )
     parser.add_argument(
         "--write-locked-slot",

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#802 turn observation is reachable from nexus inspect-turn",
+  "reason": "#805 baseline compatibility module is reachable from the LORE memory manager",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -239,6 +239,7 @@
     "nexus/jobs/scheduler.py",
     "nexus/jobs/summaries.py",
     "nexus/memory/__init__.py",
+    "nexus/memory/baseline_compat.py",
     "nexus/memory/context_state.py",
     "nexus/memory/correspondence.py",
     "nexus/memory/divergence.py",
