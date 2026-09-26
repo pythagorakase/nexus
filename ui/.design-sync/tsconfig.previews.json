@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["previews/**/*.tsx"],
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": ".cache/tsbuildinfo.previews",
+    "paths": {
+      "@/*": ["./client/src/*"],
+      "@shared/*": ["./shared/*"],
+      "nexus-ui": ["./.design-sync/nexus-ui.ts"]
+    }
+  }
+}
