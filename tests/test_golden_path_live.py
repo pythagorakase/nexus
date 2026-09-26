@@ -71,7 +71,6 @@ from tests import secret_store_guard
 
 SLOT = int(os.environ.get("NEXUS_DISPOSABLE_TEST_SLOT", "0"))
 DBNAME = f"save_{SLOT:02d}"
-DSN = f"postgresql://pythagor@localhost:5432/{DBNAME}"
 # NARRATIVE_API_PORT lets the gate run beside a live dev stack on 8002
 # (agent worktrees); the spawned server subprocess inherits it via env.
 API = f"http://localhost:{os.environ.get('NARRATIVE_API_PORT', '8002')}"
@@ -131,8 +130,15 @@ pytestmark = [
 ]
 
 
+def _dsn() -> str:
+    """Resolve the disposable slot through the shared connection contract."""
+    from nexus.database import database_url
+
+    return database_url(DBNAME)
+
+
 def _query(sql: str, params: Any = None) -> List[Dict[str, Any]]:
-    conn = psycopg2.connect(DSN)
+    conn = psycopg2.connect(_dsn())
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params)
@@ -621,7 +627,7 @@ def test_stage5_retrograde_history_retrievable(golden_path: GoldenPathRun) -> No
         "WHERE we.source = 'retrograde'"
     )
     target = max(events, key=lambda row: len(row["summary"] or ""))
-    memnon = MEMNON(interface=None, db_url=DSN)
+    memnon = MEMNON(interface=None, db_url=_dsn())
     search = memnon.query_memory(query=target["summary"], k=10, use_hybrid=True)
     returned = {
         int(item["summary_id"])
@@ -689,7 +695,7 @@ def test_stage7_runtime_maturation(golden_path: GoldenPathRun) -> None:
 
     pending = manifest.get("embedding_pending_summary_ids") or []
     assert pending, "Maturation produced no summaries"
-    memnon = MEMNON(interface=None, db_url=DSN)
+    memnon = MEMNON(interface=None, db_url=_dsn())
     search = memnon.query_memory(query=job["entity_name"], k=15, use_hybrid=True)
     returned = {
         int(item["summary_id"])
