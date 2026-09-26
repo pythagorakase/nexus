@@ -70,3 +70,14 @@ objects left in the baseline fail, as do new undocumented objects. Run with
 `NEXUS_RUN_POSTGRES=1`; the test migrates disposable template clones and proves
 that schema-only dumps and the actual new-story setup preserve comments. Enums,
 functions, and views are inventoried but not enforced in this slice.
+
+New migrations are also checked offline, before any database exists.
+`scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`)
+requires every table, column, enum, function, view, and materialized view that a
+migration numbered above its watermark (129) creates or replaces, including DDL in
+DO blocks, literal `EXECUTE` strings, and Python migration strings, to have a
+non-blank `COMMENT ON` in the same file. Unqualified names mean `public`; functions
+match by name and argument count. Names built at run time, and columns a statement
+does not list (`AS` without a column list, `PARTITION OF`, `INHERITS`, `LIKE`
+without `INCLUDING COMMENTS`), fail rather than pass. For legacy enums, functions,
+and views, the inventory remains the only record.
