@@ -34,7 +34,16 @@ then run `nexus models verify`.
 
 The production reranker is `[memnon.retrieval.cross_encoder_reranking]
 model_path`; its repository is the `remote_path` of the reranker candidate
-entry with the same `local_path`.
+entry with the same `local_path`. `CrossEncoderReranker` loads exactly that
+folder with `local_files_only=True`: nothing is downloaded and no other folder
+of the same name is substituted, so the folder `nexus models verify` checks is
+the folder that loads. A missing folder, a path that is not a directory, or a
+failed load raises a `RuntimeError` naming the key and the path, followed by
+`hf download <repo> --local-dir <path>` (or, when no candidate names the
+repository, pointing `model_path` at the downloaded folder) and then
+`nexus models verify`. The reranker loads on the first reranked search, and
+MEMNON search still catches that error, logs it, and returns the results
+without reranking.
 
 ### Locking and Verifying Artifacts
 

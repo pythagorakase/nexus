@@ -1830,7 +1830,7 @@ class MEMNON:
             cross_encoder_config.get("enabled", False)
             and len(search_results_initial) > 0
         ):
-            from .utils.cross_encoder import rerank_results
+            from .utils.cross_encoder import rerank_results, reranker_repo_id
 
             try:
                 logger.info("Applying cross-encoder reranking")
@@ -1857,9 +1857,7 @@ class MEMNON:
                 use_sliding_window = cross_encoder_config.get(
                     "use_sliding_window", True
                 )
-                model_path = cross_encoder_config.get(
-                    "model_path", "naver-trecdl22-crossencoder-debertav3"
-                )
+                model_path = cross_encoder_config["model_path"]
                 # api_type must accompany model_path so that swapping production
                 # to a Qwen3-Reranker checkpoint doesn't silently load it as a
                 # SequenceClassification CrossEncoder.
@@ -1881,6 +1879,9 @@ class MEMNON:
                     model_path=model_path,
                     api_type=api_type,
                     use_8bit=use_8bit,
+                    repo_id=reranker_repo_id(
+                        model_path, cross_encoder_config["candidates"]
+                    ),
                 )
 
                 rerank_time = time.time() - rerank_start_time

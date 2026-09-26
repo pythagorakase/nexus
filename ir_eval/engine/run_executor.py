@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from nexus.config import load_settings_as_dict
 from nexus.database import resolved_database_url
-from nexus.agents.memnon.utils.cross_encoder import rerank_results
+from nexus.agents.memnon.utils.cross_encoder import rerank_results, reranker_repo_id
 from nexus.agents.memnon.utils.embedding_manager import EmbeddingManager
 from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary
 from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -297,6 +297,7 @@ class RunExecutor:
         # while running with `--no-cross-encoder` and shouldn't fail validation
         # on a field that won't be consulted.
         reranker_model_path: Optional[str] = None
+        reranker_repo: Optional[str] = None
         reranker_api_type: str = "cross_encoder"
         if run_config.cross_encoder_enabled:
             candidates = cross_encoder_settings.get("candidates", {}) or {}
@@ -309,14 +310,11 @@ class RunExecutor:
                         f"Known: {sorted(candidates.keys())}"
                     )
                 reranker_model_path = str(candidate["local_path"])
+                reranker_repo = str(candidate.get("remote_path") or "") or None
                 reranker_api_type = str(candidate.get("api_type", "cross_encoder"))
             else:
-                reranker_model_path = str(
-                    cross_encoder_settings.get(
-                        "model_path",
-                        "naver-trecdl22-crossencoder-debertav3",
-                    )
-                )
+                reranker_model_path = str(cross_encoder_settings["model_path"])
+                reranker_repo = reranker_repo_id(reranker_model_path, candidates)
                 reranker_api_type = str(
                     cross_encoder_settings.get("api_type", "cross_encoder")
                 )
@@ -362,6 +360,7 @@ class RunExecutor:
                             cross_encoder_settings.get("use_sliding_window", True)
                         ),
                         model_path=reranker_model_path,
+                        repo_id=reranker_repo,
                         api_type=reranker_api_type,
                         use_8bit=bool(cross_encoder_settings.get("use_8bit", False)),
                     )

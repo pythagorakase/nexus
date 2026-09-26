@@ -111,6 +111,12 @@ expression = "import_module(module_name)"
 target = "nexus/agents/orrery/retrograde_persistence.py"
 reason = "The event-source PostgreSQL proof resolves the registered Retrograde producer entrypoint itself so stale writer names fail the contract test."
 
+[[dynamic_edges]]
+source = "tests/test_memnon_cross_encoder_artifact.py:_checkout_with_decoys"
+expression = "importlib.util.spec_from_file_location('checkout_cross_encoder', source)"
+target = "nexus/agents/memnon/utils/cross_encoder.py"
+reason = "The reranker artifact contract test imports a copy of the real cross-encoder source from a temporary checkout layout to prove same-named checkout model folders are never loaded."
+
 [[import_search_paths]]
 source = "scripts/*.py"
 paths = ["scripts"]
