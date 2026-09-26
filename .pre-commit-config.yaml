@@ -33,3 +33,16 @@ repos:
           abort here, not at the next boot), enforces the dev-dashboard ship-off invariant,
           and runs the model-ID drift scan for stale literals lacking a
           "# pin:" comment.
+      - id: check-migration-comments
+        name: Require COMMENT ON for new migration objects
+        entry: poetry run python scripts/check_migration_comments.py
+        language: system
+        pass_filenames: false
+        files: ^(migrations/|scripts/check_migration_comments\.py$)
+        description: >
+          Every table, column, enum, function, and view that a migration
+          numbered above the lint's watermark creates or replaces needs a
+          non-blank COMMENT ON in the same migration. Offline and stdlib-only;
+          .github/workflows/migration-comment-check.yml runs the same check in
+          CI, and the PostgreSQL ratchet in tests/test_schema_documentation_pg.py
+          covers the live catalog.

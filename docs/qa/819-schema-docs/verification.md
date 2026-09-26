@@ -342,3 +342,61 @@ Enums, functions, and views are inventoried only. The 14 baseline columns need
 reader/writer evidence or an explicit retirement decision before documenting
 them. The coordinator applies migration 127 to the template/fleet at land time;
 this PR must not do so. No blocking design question remains.
+
+## Offline Migration Comment Lint
+
+Second slice, branch `claude/819-migration-comment-lint`; no migration, no
+database, no provider call. `scripts/check_migration_comments.py` (stdlib only;
+pre-commit hook `check-migration-comments` for `migrations/` and the script
+itself; CI workflow `migration-comment-check.yml`) requires a non-blank
+`COMMENT ON` in the same file for every table, column, enum, function, view, and
+materialized view that a migration numbered above `WATERMARK = 129` creates or
+replaces. It reads SQL files and SQL string literals in Python migrations,
+recurses into `DO` bodies and `EXECUTE` commands (joining `||` operands and
+adjacent literals), normalizes `public`/`assets`/`CREATE SCHEMA` qualification
+and quoted identifiers, matches functions by name and argument count, and
+reports verbs, object kinds, names, `ALTER TABLE` actions, and `EXECUTE`
+commands built at run time, and undeclared column sources, as findings instead
+of passing them.
+
+```bash
+python scripts/check_migration_comments.py
+```
+
+```text
+OK: every object created after migration 129 has a comment.
+```
+
+`tests/test_migration_comment_lint.py` (27 tests, runnable without PostgreSQL)
+covers each object kind, schema and quoting rules, `CREATE SCHEMA` elements, the
+watermark (pinned at 129), `DO`/`EXECUTE` bodies, `||` and Python `+`/f-string
+concatenation, object kinds filled in at run time, Python migrations, overloads,
+`ARRAY[...]` defaults, blank and NULL comments, undeclared columns including
+`LIKE` option order, migration 129's real SQL renumbered as 130, and the real
+tree. With the
+watermark lowered to 0, the parser reads all 127 historical migrations without a
+lexing error and reports 405 per-file findings in 33 files (319 columns, 23
+enums, 20 tables, 15 functions, 12 views, 16 run-time names or actions). Those
+counts are not a catalog inventory: the lint is per file, so objects documented
+by a later migration such as 127 still appear, and it cannot see DDL issued
+outside `migrations/`.
+
+## Remaining PostgreSQL Follow-Up
+
+The lint only prevents new debt. The following needs a machine with
+`NEXUS_template` (PostGIS installed) and `NEXUS_RUN_POSTGRES=1`:
+
+1. Extend `_inventory` in `tests/test_schema_documentation_pg.py` with
+   `enum:`, `function:`, and `view:` keys drawn from `pg_type`
+   (`typtype = 'e'`), `pg_proc` (`prokind IN ('f', 'w')`, keyed by
+   `pg_get_function_identity_arguments` because overloads share a name), and
+   `pg_class` (`relkind IN ('v', 'm')`) in `public` and `assets`, excluding
+   extension members through `pg_depend` (`classid` of that catalog,
+   `deptype = 'e'`), and widen the `_baseline()` key-prefix assertion.
+2. Recount, then record the enum, function, and view gaps (41, 21, and 5 in the
+   inventory above) in `config/schema_docs_baseline.json`, each with a reason.
+3. Backfill comments in a new migration only where a reader or writer site
+   establishes the semantics, citing that evidence as 127 does, and retire the
+   matching baseline entries in the same change. Objects without such evidence,
+   like the 14 baselined columns, go to the decision ledger (#817) rather than
+   receiving invented descriptions.

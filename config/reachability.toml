@@ -64,6 +64,9 @@ reason = ".pre-commit-config.yaml catalog regeneration."
 target = "scripts/validate_config_commit.py:main"
 reason = ".pre-commit-config.yaml config validation."
 [[operators]]
+target = "scripts/check_migration_comments.py:main"
+reason = ".pre-commit-config.yaml and .github/workflows/migration-comment-check.yml migration COMMENT ON lint."
+[[operators]]
 target = "scripts/check_model_drift.py:main"
 reason = ".github/workflows/model-drift-check.yml and config validation."
 [[operators]]
