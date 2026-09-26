@@ -240,8 +240,8 @@ def test_pending_result_supersedes_recovery() -> None:
     assert state.recovery is None
 
 
-def test_slot_endpoint_reports_recovery_for_the_failed_frontier(monkeypatch) -> None:
-    """The reader and CLI receive the terminal-failure fact from resume state."""
+def _failed_frontier_response(monkeypatch, *, locked: bool) -> Dict[str, Any]:
+    """Serve a failed frontier through the slot route with a known lock state."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -259,11 +259,26 @@ def test_slot_endpoint_reports_recovery_for_the_failed_frontier(monkeypatch) -> 
         model="TEST",
         story_id="player:1:2026-09-25T06:00:00+00:00",
     )
+    lock_checks: List[tuple[int, Optional[str]]] = []
+
+    def is_slot_locked(slot: int, dbname: Optional[str] = None) -> bool:
+        lock_checks.append((slot, dbname))
+        return locked
+
     monkeypatch.setattr(slot_state, "get_slot_state", lambda _slot: state)
+    monkeypatch.setattr(slot_endpoints, "is_slot_locked", is_slot_locked)
     app = FastAPI()
     app.include_router(slot_endpoints.router)
     with TestClient(app) as client:
-        body = client.get("/api/slot/4/state").json()
+        response = client.get("/api/slot/4/state")
+    assert response.status_code == 200
+    assert lock_checks == [(4, "save_04")]
+    return response.json()
+
+
+def test_slot_endpoint_reports_recovery_for_the_failed_frontier(monkeypatch) -> None:
+    """The reader and CLI receive the terminal-failure fact from resume state."""
+    body = _failed_frontier_response(monkeypatch, locked=False)
 
     assert body["has_pending"] is False
     assert body["session_id"] is None
@@ -274,3 +289,12 @@ def test_slot_endpoint_reports_recovery_for_the_failed_frontier(monkeypatch) -> 
         "error": STAGING_ERROR,
         "error_class": "WireContractViolation",
     }
+
+
+def test_locked_slot_never_offers_a_retry_the_route_refuses(monkeypatch) -> None:
+    """POST /api/narrative/retry rejects locked slots, so none is advertised."""
+    body = _failed_frontier_response(monkeypatch, locked=True)
+
+    assert body["recovery"] is None
+    assert body["choices"] == []
+    assert body["has_pending"] is False

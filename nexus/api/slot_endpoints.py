@@ -28,6 +28,7 @@ from nexus.api.narrative_schemas import (
     SlotLockResponse,
     TraitMenuItemResponse,
 )
+from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.narrative_lease import discard_generation
 from nexus.api.new_story_cache import WizardCache
@@ -140,6 +141,10 @@ async def get_slot_state_endpoint(slot: int):
 
         if state.narrative_state:
             recovery = state.narrative_state.recovery
+            # The retry route refuses locked slots before its predicate, so a
+            # locked slot never advertises a retry.
+            if recovery is not None and is_slot_locked(slot, dbname=slot_dbname(slot)):
+                recovery = None
             return SlotStateResponse(
                 slot=slot,
                 is_empty=False,

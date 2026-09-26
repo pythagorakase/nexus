@@ -1791,3 +1791,27 @@ def test_load_reports_a_failed_continuation_instead_of_consumed_choices(
     printed = capsys.readouterr().out
     assert f"[Failed continuation: {error}]" in printed
     assert "Choices:" not in printed
+
+
+def test_load_names_the_session_when_a_failure_recorded_no_detail(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A failure with neither error nor class never prints a bare None."""
+
+    recovery = {
+        "session_id": "failed-8",
+        "parent_chunk_id": 9,
+        "error": None,
+        "error_class": None,
+    }
+    cli.emit_output(
+        {"success": True, "message": "The hearing stalls.", "recovery": recovery},
+        as_json=False,
+    )
+    printed = capsys.readouterr().out
+    assert (
+        "[Failed continuation: Narrative generation failed (session failed-8)]"
+        in printed
+    )
+    assert "None" not in printed

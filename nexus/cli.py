@@ -956,7 +956,12 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
     recovery = payload.get("recovery")
     if recovery:
         # The recorded action above consumed the menu; its continuation failed.
-        print(f"[Failed continuation: {recovery['error'] or recovery['error_class']}]")
+        detail = (
+            recovery["error"]
+            or recovery["error_class"]
+            or f"Narrative generation failed (session {recovery['session_id']})"
+        )
+        print(f"[Failed continuation: {detail}]")
         print()
 
     if payload.get("trait_audit"):
