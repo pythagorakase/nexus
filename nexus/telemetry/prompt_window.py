@@ -235,6 +235,9 @@ class PromptWindowRecord(BaseModel):
     attempt: int = Field(ge=1)
     model: str
     block_tokens: dict[str, int]
+    # block_tokens summed per declared influence role (#744); empty on records
+    # written before roles were declared.
+    influence_tokens: dict[str, int] = Field(default_factory=dict)
     input_tokens: int = Field(ge=0)
     effective_ceiling: int = Field(gt=0)
     policy_headroom: int = Field(ge=0)

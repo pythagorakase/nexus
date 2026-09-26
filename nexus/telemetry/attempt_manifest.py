@@ -14,6 +14,7 @@ from pydantic_core import to_jsonable_python
 from psycopg2 import sql
 from psycopg2.extras import Json, RealDictCursor
 
+from nexus.agents.lore.seat_blocks import influence_role
 from nexus.telemetry.prompt_window import PromptWindowRecord
 
 _connection_factory: ContextVar[Callable[[], Any] | None] = ContextVar(
@@ -31,6 +32,36 @@ def identity_hash(value: Any) -> str:
             ensure_ascii=False,
         ).encode()
     ).hexdigest()
+
+
+def attempt_blocks(
+    blocks: list[tuple[str, str]],
+    text_count: Callable[[str], int],
+    *,
+    system_prompt: str,
+    system_tokens: int,
+    wire_schema: dict[str, Any],
+    framing_tokens: int,
+) -> list[dict[str, Any]]:
+    """Describe one dispatched request as ordered kinds, counts, hashes and roles.
+
+    The system prompt leads and the wire schema's request framing closes. Every
+    entry declares its influence role; an undeclared block kind raises.
+    """
+    entries = [
+        ("system", system_tokens, identity_hash(system_prompt)),
+        *((kind, text_count(text), identity_hash(text)) for kind, text in blocks),
+        ("request framing", framing_tokens, identity_hash(wire_schema)),
+    ]
+    return [
+        {
+            "kind": kind,
+            "tokens": tokens,
+            "sha256": sha256,
+            "influence_role": influence_role(kind),
+        }
+        for kind, tokens, sha256 in entries
+    ]
 
 
 @contextmanager
@@ -69,6 +100,7 @@ def start_attempt(
         window = record.model_dump(
             include={
                 "block_tokens",
+                "influence_tokens",
                 "input_tokens",
                 "effective_ceiling",
                 "policy_headroom",
