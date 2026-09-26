@@ -1727,11 +1727,20 @@ require_classified(app)
 if __name__ == "__main__":
     import uvicorn
 
+    from nexus.config import load_settings as _load_typed_settings
+    from nexus.runtime.logging_config import build_logging_config
+
+    _runtime = _load_typed_settings().runtime
+    if _runtime is None:
+        raise RuntimeError("nexus.toml has no [runtime] section for [runtime.logs]")
+
     # NARRATIVE_API_PORT lets parallel checkouts (agent worktrees, the
     # golden-path gate) boot the gateway without contending for 8002.
     # #415/#458: loopback keeps the Cloudflare tunnel the sole default ingress.
+    # #842: the same [runtime.logs] dictConfig the supervisor hands uvicorn.
     uvicorn.run(
         app,
         host=os.environ.get("NARRATIVE_API_HOST", "127.0.0.1"),
         port=int(os.environ.get("NARRATIVE_API_PORT", "8002")),
+        log_config=build_logging_config(_runtime.logs),
     )
