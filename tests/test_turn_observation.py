@@ -676,6 +676,7 @@ def test_usage_totals_split_the_critical_path_from_background_work() -> None:
         # Compaction reported no cache writes; the renderer no reasoning.
         "cache_creation_tokens": UNKNOWN,
         "reasoning_tokens": UNKNOWN,
+        "legacy_session_keyed": None,
     }
     assert totals["overall"] == {
         "provenance": "provider_usage_ledger",
@@ -739,6 +740,7 @@ def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing() -
         "jobs": 0,
         "jobs_open": 0,
         "jobs_without_usage": 0,
+        "legacy_session_keyed": None,
         **dict.fromkeys(
             (
                 "input_tokens",
@@ -927,6 +929,130 @@ def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
     )
 
 
+def test_session_keyed_background_usage_joins_as_legacy() -> None:
+    """Summary spend recorded under the session before #802 stays visible."""
+    session = str(uuid4())
+    writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
+    record_prompt_window(writer)
+    record_usage_event(
+        _event(
+            session,
+            f"{TODAY}T00:00:12Z",
+            "skald_writer",
+            1,
+            "writer-model",
+            outcome="accepted",
+            input_tokens=20777,
+            output_tokens=2100,
+            total_tokens=22877,
+            cached_input_tokens=12288,
+            reasoning_tokens=800,
+        )
+    )
+    # The old convention: the episode and season summaries of a new_season
+    # turn both recorded (summaries, 1) under the generation session.
+    for ts, input_tokens, cap in (
+        (f"{TODAY}T00:00:31Z", 41000, 8000),
+        (f"{TODAY}T00:00:47Z", 9000, 12000),
+    ):
+        record_usage_event(
+            _event(
+                session,
+                ts,
+                "summaries",
+                1,
+                "summary-model",
+                anthropic=True,
+                outcome="accepted",
+                input_tokens=input_tokens,
+                output_tokens=1500,
+                total_tokens=input_tokens + 1500,
+                cached_input_tokens=0,
+                cache_creation_tokens=0,
+                max_output_tokens=cap,
+            )
+        )
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [
+            {"phase": "writer", "recorded_at": f"{TODAY} 00:00:01+00"},
+            {"phase": "complete", "recorded_at": f"{TODAY} 00:00:20+00"},
+        ],
+        "manifests": [_manifest(writer, provider_outcome="accepted")],
+        "jobs": [
+            _job(
+                session,
+                "narrative_summary",
+                job_id,
+                "succeeded",
+                ENQUEUED,
+                f"{TODAY} 00:00:48+00",
+            )
+            for job_id in (1, 2)
+        ],
+    }
+
+    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+
+    # Kept off the critical path, and never guessed onto a job.
+    assert [(row["seat"], row["attempt"]) for row in observation["attempts"]] == [
+        ("skald_writer", 1)
+    ]
+    totals = observation["usage_totals"]
+    assert totals["critical_path"]["events"] == 1
+    assert totals["critical_path"]["input_tokens"] == 20777
+    jobs = _jobs(observation)
+    assert all(
+        jobs[("narrative_summary", job_id)]["usage"]["provenance"] == UNKNOWN
+        for job_id in (1, 2)
+    )
+    legacy = {
+        "recorded_before": (
+            "Recorded under the generation session before background workers "
+            "recorded under their job id (#802); not attributable to one job."
+        ),
+        "events": 2,
+        "seats": ["summaries"],
+        "ledger_days": [str(TODAY)],
+        "input_tokens": 50000,
+        "output_tokens": 3000,
+        "cached_input_tokens": 0,
+        "cache_creation_tokens": 0,
+        "reasoning_tokens": UNKNOWN,
+    }
+    assert totals["background"] == {
+        "provenance": "provider_usage_ledger",
+        "events": 2,
+        "input_tokens": 50000,
+        "output_tokens": 3000,
+        "cached_input_tokens": 0,
+        "cache_creation_tokens": 0,
+        "reasoning_tokens": UNKNOWN,
+        "jobs": 2,
+        "jobs_open": 0,
+        "jobs_without_usage": 2,
+        "legacy_session_keyed": legacy,
+    }
+    assert totals["overall"]["events"] == 3
+    assert totals["overall"]["input_tokens"] == 20777 + 50000
+    assert totals["overall"]["output_tokens"] == 2100 + 3000
+    assert json.loads(json.dumps(observation)) == observation
+    lines = format_turn_summary(observation).splitlines()
+    legacy_line = lines.index(
+        "Background legacy (session-keyed) in 50,000 · cached 0 · cache write 0 "
+        "· out 3,000 · reasoning unknown · events 2 · seats summaries"
+    )
+    assert lines[legacy_line + 1] == (
+        "Background in 50,000 · cached 0 · cache write 0 · out 3,000 · reasoning "
+        "unknown · events 2 · jobs 2 · open 0 · without usage 2"
+    )
+    # A turn without legacy events renders no legacy line.
+    fresh, _, _ = _two_pass_turn()
+    assert "legacy" not in format_turn_summary(
+        observe_turn(fresh, slot=4, read_at=READ_AT)
+    )
+
+
 def test_join_refuses_rows_it_cannot_attribute() -> None:
     """Foreign runs, unread days, naive clocks, drift and stray seats raise."""
     from nexus.telemetry.turn_observation import job_ledger_days, read_job_ledgers
@@ -971,10 +1097,9 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
     rerouted = [*events, accepted.model_copy(update={"provider": "other-provider"})]
     with pytest.raises(ValueError, match="conflicting provider values"):
         derive(rerouted, job_events)
-    # Background work under the session's run id cannot be tied to its job.
+    # Background work under the session's run id joins as legacy, unguessed.
     legacy = accepted.model_copy(update={"seat": "summaries", "attempt": 1})
-    with pytest.raises(ValueError, match="background seat summaries"):
-        derive([*events, legacy], job_events)
+    derive([*events, legacy], job_events)
     # A call under a listed job's id and slot must name a seat of some queue.
     stray = job_events[0].model_copy(update={"seat": "skald_writer"})
     with pytest.raises(ValueError, match="seat skald_writer under job run"):

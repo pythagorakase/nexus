@@ -29,6 +29,16 @@ same id recorded before a slot reset precede the enqueue and are not its own.
 A job on any other queue has no ``usage`` key: it never calls a provider.
 Background usage never joins ``attempts``.
 
+Legacy correlation: before background workers recorded under their job id,
+summary jobs recorded under the generation session. An event under the
+session's run id with a background seat (``PROVIDER_JOB_SEATS``) therefore
+joins neither ``attempts`` nor a job: ``usage_totals.background`` carries it
+in ``legacy_session_keyed`` (``recorded_before`` names the convention change;
+``events``, ``seats``, ``ledger_days`` and each token field), which is null when
+the turn has none. No job is guessed for it, so a summary job from before the
+change reads ``"unknown"`` usage and counts in ``jobs_without_usage`` while its
+spend appears in the legacy block.
+
 Token counts are renderer or provider truth only: nothing is estimated and
 nothing is priced (Decision 9, #858). Each section names its ``provenance``.
 A value no source recorded reads ``"unknown"``; this includes list-typed fields
@@ -47,21 +57,21 @@ conflicting model or provider on one attempt refuses the join.
 
 ``usage_totals`` has three sums. ``critical_path`` covers the attempts and
 counts ``attempts_without_usage``; ``background`` covers the provider-backed
-jobs and counts ``jobs``, ``jobs_open`` (not terminal, so still spending) and
-``jobs_without_usage`` (terminal, yet no usage found); ``overall`` adds the
-two. Each sums a field over the attempts or jobs that reported usage, and reads
+jobs plus the legacy session-keyed block, and counts ``jobs``, ``jobs_open``
+(not terminal, so still spending) and ``jobs_without_usage`` (terminal, yet no
+usage found under the job's id); ``overall`` adds the two. Each sums a field
+over the attempts, jobs or legacy block that reported usage, and reads
 ``"unknown"`` when none did or one of them lacks the field; the counts say how
-partial a sum is. A turn without provider-backed jobs has a background of 0
-with a null ``provenance``. Providers count differently (OpenAI's
+partial a sum is. A turn without provider-backed jobs or legacy events has a
+background of 0 with a null ``provenance``. Providers count differently (OpenAI's
 ``input_tokens`` includes cached input; Anthropic's excludes cache reads and
 writes), so a total across providers is not one comparable quantity; every
 attempt and job names its provider and transport.
 
 The join refuses, instead of guessing, rows from another session or an unread
 day, conflicting models or providers on one attempt, a timestamp without a UTC
-offset, phases recorded out of order, a background seat under the session's run
-id (background workers record under their job id), and an event under a listed
-job's id and slot whose seat no provider-backed queue records.
+offset, phases recorded out of order, and an event under a listed job's id and
+slot whose seat no provider-backed queue records.
 
 Schema version 1 has these top-level keys: ``schema_version``,
 ``generation_session``, ``read_at`` (UTC), ``ledger_days_read`` (every UTC day
@@ -100,6 +110,10 @@ TERMINAL_JOB_STATES = frozenset({"succeeded", "failed", "stale_rejected"})
 BACKGROUND_SEAT_QUEUES = {
     seat: queue for queue, seats in PROVIDER_JOB_SEATS.items() for seat in seats
 }
+LEGACY_SESSION_KEYED = (
+    "Recorded under the generation session before background workers recorded "
+    "under their job id (#802); not attributable to one job."
+)
 
 Count = Union[int, str]
 AttemptKey = tuple[str, int]
@@ -272,6 +286,7 @@ def derive_turn_observation(
             raise ValueError(f"Duplicate window record for {key} in {session_id}")
         window_records[key] = record
     usage: dict[AttemptKey, list[UsageEvent]] = {}
+    legacy: list[UsageEvent] = []
     for event in usage_events:
         if event.run_id != session_id:
             raise ValueError(
@@ -283,11 +298,10 @@ def derive_turn_observation(
                 f"read: {list(ledger_days)}"
             )
         if event.seat in BACKGROUND_SEAT_QUEUES:
-            raise ValueError(
-                f"Usage event for background seat {event.seat} is recorded under "
-                f"session {session_id}; background workers record under their "
-                "job id, so it cannot be attributed to a job"
-            )
+            # Background work keyed by the session, as workers recorded it
+            # before they recorded under their job id; no job is guessed.
+            legacy.append(event)
+            continue
         usage.setdefault((event.seat, event.attempt), []).append(event)
     attempts = [
         _attempt(
@@ -303,7 +317,7 @@ def derive_turn_observation(
     entries = _job_entries(inspection["jobs"], job_events, job_days, slot=slot)
     phases, wall_time = _phase_spans(session_id, _observed_phases(inspection))
     critical_path = _critical_path_totals(attempts)
-    background = _background_totals(entries)
+    background = _background_totals(entries, legacy)
     return {
         "schema_version": SCHEMA_VERSION,
         "generation_session": session_id,
@@ -625,10 +639,33 @@ def _critical_path_totals(attempts: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _background_totals(entries: list[dict[str, Any]]) -> dict[str, Any]:
+def _legacy_block(events: list[UsageEvent]) -> Optional[dict[str, Any]]:
+    """Sum session-keyed background events; null when there are none."""
+    if not events:
+        return None
+    block: dict[str, Any] = {
+        "recorded_before": LEGACY_SESSION_KEYED,
+        "events": len(events),
+        "seats": sorted({event.seat for event in events}),
+        "ledger_days": sorted({event.quota_day for event in events}),
+    }
+    for field in USAGE_TOKEN_FIELDS:
+        block[field] = _sum_reported(getattr(event, field) for event in events)
+    return block
+
+
+def _background_totals(
+    entries: list[dict[str, Any]], legacy: list[UsageEvent]
+) -> dict[str, Any]:
     jobs = [entry for entry in entries if "usage" in entry]
-    if jobs:
-        totals = _sum_totals([job["usage"] for job in jobs])
+    block = _legacy_block(legacy)
+    sources = [
+        job["usage"] for job in jobs if job["usage"]["provenance"] == USAGE_LEDGER
+    ]
+    if block is not None:
+        sources.append({"provenance": USAGE_LEDGER, **block})
+    if sources or jobs:
+        totals = _sum_totals(sources)
     else:
         # No correlated job calls a provider, so background work spent nothing.
         totals = {
@@ -643,6 +680,7 @@ def _background_totals(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "jobs_without_usage": sum(
             job["terminal"] and job["usage"]["provenance"] == UNKNOWN for job in jobs
         ),
+        "legacy_session_keyed": block,
     }
 
 
@@ -845,7 +883,13 @@ def format_turn_summary(observation: Mapping[str, Any]) -> str:
     for entry in jobs["entries"]:
         if "usage" in entry:
             lines.extend(_job_lines(entry))
-    if background["jobs"]:
+    legacy = background["legacy_session_keyed"]
+    if legacy is not None:
+        lines.append(
+            _totals_line("Background legacy (session-keyed)", legacy)
+            + f" · seats {', '.join(legacy['seats'])}"
+        )
+    if background["jobs"] or legacy is not None:
         lines.append(
             _totals_line("Background", background)
             + f" · jobs {background['jobs']} · open {background['jobs_open']} · "
