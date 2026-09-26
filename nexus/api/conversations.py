@@ -1,8 +1,11 @@
 """
 Conversation storage wrapper for new-story setup flows.
 
-Uses OpenAI Conversations for OpenAI models, file-backed storage for Anthropic models,
-and in-memory storage for TEST mode.
+The registry provider of the wizard model selects the store: the hosted OpenAI
+Conversations API for ``openai`` models, in-memory storage for the ``test``
+provider, and local file storage for every other registered provider
+(Anthropic and OpenAI-compatible servers such as the local llama-server or
+OpenRouter, none of which exposes a Conversations endpoint).
 """
 
 from __future__ import annotations
@@ -12,8 +15,9 @@ import logging
 import threading
 import uuid
 from pathlib import Path
-from typing import Dict, List, NotRequired, Optional, TypedDict
+from typing import Any, Dict, List, Literal, NotRequired, Optional, TypedDict
 
+import openai
 
 from scripts.api_openai import OpenAIProvider
 from nexus.api.wizard_transcript import (
@@ -21,9 +25,19 @@ from nexus.api.wizard_transcript import (
     decode_wizard_message,
     encode_wizard_message,
 )
-from nexus.config.loader import get_provider_for_model
+from nexus.config.loader import load_settings
+from nexus.config.settings_models import Settings
 
 logger = logging.getLogger("nexus.api.conversations")
+
+ConversationStoreMode = Literal["openai", "memory", "file"]
+
+# Only the hosted OpenAI API serves the Conversations endpoint.
+HOSTED_CONVERSATIONS_PROVIDER = "openai"
+# The registry's mock provider keeps wizard history in process memory.
+MEMORY_CONVERSATIONS_PROVIDER = "test"
+
+_FILE_STORE_DIR = Path(__file__).parent.parent.parent / "temp" / "wizard_threads"
 
 
 class Message(TypedDict):
@@ -45,57 +59,121 @@ def _normalized_message(role: str, content: str) -> Message:
     return message
 
 
+def conversation_store_mode(
+    provider: str, settings: Settings | None = None
+) -> ConversationStoreMode:
+    """Choose wizard conversation storage from a registry provider name.
+
+    Args:
+        provider: A provider section name from ``[global.model.api_models]``.
+        settings: Settings whose registry defines the providers; the active
+            runtime configuration when omitted.
+
+    Returns:
+        ``"openai"`` for the hosted Conversations API, ``"memory"`` for the
+        TEST provider, and ``"file"`` for every other registered provider.
+
+    Raises:
+        ValueError: If the provider is not registered.
+    """
+    registry = (settings or load_settings()).global_.model.api_models
+    if provider not in registry:
+        raise ValueError(
+            f"Provider {provider!r} is not registered in "
+            f"[global.model.api_models] ({sorted(registry)}); cannot choose "
+            "wizard conversation storage"
+        )
+    if provider == HOSTED_CONVERSATIONS_PROVIDER:
+        return "openai"
+    if provider == MEMORY_CONVERSATIONS_PROVIDER:
+        return "memory"
+    return "file"
+
+
+def _hosted_conversations_client(model: str, settings: Settings) -> Any:
+    """Return the hosted OpenAI SDK client for an ``openai`` registry model.
+
+    Raises:
+        ValueError: If the model belongs to any other provider. Its requests
+            would otherwise reach the hosted API with the OpenAI credential.
+    """
+    provider = settings.provider_for_model(model)
+    if provider != HOSTED_CONVERSATIONS_PROVIDER:
+        raise ValueError(
+            f"Hosted OpenAI Conversations storage requested for model {model!r} "
+            f"of provider {provider!r}; only provider "
+            f"{HOSTED_CONVERSATIONS_PROVIDER!r} serves that endpoint"
+        )
+    return OpenAIProvider(model=model).client
+
+
 class ConversationsClient:
     """
     Minimal Conversations client (thread create/send/list/delete).
 
-    Provides a lightweight wrapper around OpenAI's Conversations API. The
-    application keeps the name ``thread_id`` for its stored conversation ID.
-
-    In TEST mode, uses in-memory storage instead of the OpenAI Conversations API
-    to enable instant testing without API credentials.
+    The wizard model's registry provider selects the store (see
+    ``conversation_store_mode``). OpenAI models use the hosted Conversations
+    API; the application keeps the name ``thread_id`` for its stored
+    conversation ID. The TEST provider stores history in memory, and every
+    other provider stores it in local files without constructing a hosted
+    client.
     """
 
-    def __init__(self, model: str):
+    def __init__(self, model: str) -> None:
         """Initialize the Conversations client with the specified model.
 
         Args:
             model: Model name (a concrete ID from the api_models registry).
                 Use "TEST" for in-memory mode without API calls.
+
+        Raises:
+            ValueError: If the model or its provider is absent from the registry.
         """
-        from nexus.config.story_model import resolve_story_model
+        from nexus.config.story_model import resolve_seat
 
-        model = resolve_story_model("wizard", override=model)
-        self.model = model
-        self._store_mode = "openai"
+        settings = load_settings()
+        seat = resolve_seat("wizard", settings=settings, override=model)
+        self.model = seat.model
+        self.provider = seat.provider
+        self._store_mode: ConversationStoreMode = conversation_store_mode(
+            seat.provider, settings
+        )
+        self._test_mode = self._store_mode == "memory"
+        self._test_threads: Dict[str, List[Dict[str, str]]] = {}
         self._file_store: Optional[_FileConversationStore] = None
+        self.client: Any = None
 
-        provider = get_provider_for_model(model)
-        if provider is None:
-            raise ValueError(f"Model {model!r} is absent from the registry")
-
-        # TEST mode: use in-memory storage, skip OpenAI entirely
-        if model == "TEST" or provider == "test":
-            self._test_mode = True
-            self._test_threads: Dict[str, List[Dict[str, str]]] = {}
-            self.client = None  # No real client needed
-            self._store_mode = "memory"
+        if self._store_mode == "memory":
             logger.info("[TEST MODE] ConversationsClient using in-memory storage")
-            return
-
-        if provider == "anthropic":
-            self._test_mode = False
-            self._store_mode = "file"
+        elif self._store_mode == "file":
             self._file_store = _FileConversationStore()
-            self.client = None
-            logger.info("ConversationsClient using file storage for %s", model)
-            return
+            logger.info(
+                "ConversationsClient using file storage for %s (provider %s)",
+                self.model,
+                self.provider,
+            )
+        else:
+            # Hosted Conversations replaced Assistants Threads (retired on
+            # August 26, 2026).
+            self.client = _hosted_conversations_client(self.model, settings)
 
-        # Production mode: use the supported Conversations API. Assistants
-        # Threads were retired on August 26, 2026.
-        self._test_mode = False
-        provider_client = OpenAIProvider(model=model)
-        self.client = provider_client.client
+    def _require_file_store(self) -> _FileConversationStore:
+        """Return the local file store, failing loudly if it was never built."""
+        if self._file_store is None:
+            raise RuntimeError(
+                f"ConversationsClient for {self.model!r} is in file storage mode "
+                "without a file store"
+            )
+        return self._file_store
+
+    def _require_hosted_client(self) -> Any:
+        """Return the hosted Conversations client, failing on any other store."""
+        if self._store_mode != "openai" or self.client is None:
+            raise RuntimeError(
+                f"ConversationsClient for {self.model!r} has store mode "
+                f"{self._store_mode!r} and no hosted Conversations client"
+            )
+        return self.client
 
     def create_thread(self) -> str:
         """Create a new conversation thread and return its ID."""
@@ -104,12 +182,12 @@ class ConversationsClient:
             self._test_threads[thread_id] = []
             logger.info("[TEST MODE] Created in-memory thread %s", thread_id)
             return thread_id
-        if self._store_mode == "file" and self._file_store:
-            thread_id = self._file_store.create_thread()
+        if self._store_mode == "file":
+            thread_id = self._require_file_store().create_thread()
             logger.info("Created local thread %s", thread_id)
             return thread_id
 
-        thread = self.client.conversations.create()
+        thread = self._require_hosted_client().conversations.create()
         thread_id = thread.id
         logger.info("Created conversations thread %s", thread_id)
         return thread_id
@@ -149,12 +227,12 @@ class ConversationsClient:
             )
             logger.debug("[TEST MODE] Added %s message to thread %s", role, thread_id)
             return msg_id
-        if self._store_mode == "file" and self._file_store:
-            msg_id = self._file_store.add_message(thread_id, role, content)
+        if self._store_mode == "file":
+            msg_id = self._require_file_store().add_message(thread_id, role, content)
             logger.debug("Added %s message to local thread %s", role, thread_id)
             return msg_id
 
-        items = self.client.conversations.items.create(
+        items = self._require_hosted_client().conversations.items.create(
             conversation_id=thread_id,
             items=[{"type": "message", "role": role, "content": content}],
         )
@@ -178,10 +256,10 @@ class ConversationsClient:
             limited = messages[-limit:] if limit else messages
             limited = list(reversed(limited))
             return [_normalized_message(m["role"], m["content"]) for m in limited]
-        if self._store_mode == "file" and self._file_store:
-            return self._file_store.list_messages(thread_id, limit=limit)
+        if self._store_mode == "file":
+            return self._require_file_store().list_messages(thread_id, limit=limit)
 
-        items = self.client.conversations.items.list(
+        items = self._require_hosted_client().conversations.items.list(
             conversation_id=thread_id,
             order="desc",
             limit=min(limit, 100) if limit else 100,
@@ -221,16 +299,17 @@ class ConversationsClient:
                 return True
             logger.warning("[TEST MODE] Thread %s not found", thread_id)
             return False
-        if self._store_mode == "file" and self._file_store:
-            deleted = self._file_store.delete_thread(thread_id)
+        if self._store_mode == "file":
+            deleted = self._require_file_store().delete_thread(thread_id)
             if deleted:
                 logger.info("Deleted local thread %s", thread_id)
             else:
                 logger.warning("Local thread %s not found", thread_id)
             return deleted
 
+        client = self._require_hosted_client()
         try:
-            self.client.conversations.delete(thread_id)
+            client.conversations.delete(thread_id)
             logger.info("Deleted thread %s", thread_id)
             return True
         except openai.OpenAIError as exc:
@@ -239,12 +318,10 @@ class ConversationsClient:
 
 
 class _FileConversationStore:
-    """File-backed conversation store for non-OpenAI providers."""
+    """File-backed conversation store for providers without hosted storage."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
-        self._base_dir = base_dir or (
-            Path(__file__).parent.parent.parent / "temp" / "wizard_threads"
-        )
+        self._base_dir = base_dir or _FILE_STORE_DIR
         self._base_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
