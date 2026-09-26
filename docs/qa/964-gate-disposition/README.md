@@ -36,7 +36,7 @@ Issue #964 records the isolated full gate on `b0645dafb646bf849a084d6a0eda77c076
 | none | 2 |
 | new-issue | 1 |
 
-Product defects suspected even with a valid fixture: 2 (both low severity; see the rows below). Nodes whose repair needs a runtime confirmation before it can be declared complete: 119.
+Product defects suspected even with a valid fixture: 2 (both low severity; see the rows below). Nodes whose repair needs a runtime confirmation before it can be declared complete: 127.
 
 ## Reading the Groups
 
@@ -430,7 +430,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_orrery/test_knowledge_surfacing_live.py::test_turn_payload_conditionally_attaches_world_knowledge[True]`
 
 - Baseline outcome: failure; signature: `pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits`
-- Route: `other` to none; confidence 0.95
+- Route: `other` to none; confidence 0.95; runtime confirmation needed
 - Cause: Same as the [False] variant: _LiveLoreHarness.settings lacks lore.render_limits, and RenderLimits.model_validate in _select_scene_payload (added in #932) raises 4 validation errors before any knowledge digest is attached.
 - Prerequisite: Harness settings containing lore.render_limits from nexus.toml.
 - Repair steps:
@@ -492,7 +492,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_orrery/test_claim_accounts_live.py::test_latent_sibling_secret_stays_private_until_its_own_gate_fires`
 
 - Baseline outcome: failure; signature: `psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp`
-- Route: `seed_disposable_clone` to #885; confidence 0.93
+- Route: `seed_disposable_clone` to #885; confidence 0.93; runtime confirmation needed
 - Cause: The account_connection fixture opens a rolled-back SQLAlchemy transaction on get_slot_db_url(slot=LIVE_SLOT). LIVE_SLOT=5 is imported from test_claim_propagation_live, so in the baseline this was the private, empty save_05. The fixture then installs schema-local claims tables (migrations 090-092). The first write, _mint_sibling_incident -> _insert_character (tests/test_orrery/test_claim_propagation_live.py:184), inserts an active 'character' entity plus a characters row before any chunk exists. The AFTER INSERT trigger trg_characters_need_state_init (migration 057) calls orrery_sync_character_need_states. Migration 100 (lines 96-103) anchors that function to COALESCE(MAX(chunk_metadata.world_time), global_variables.base_timestamp) and raises when both are NULL. That is always true on a template clone: new_story_setup.ensure_global_variables inserts the row with base_timestamp NULL, and there are no chunks. The test creates every row it later asserts on: two characters, three chunks, a threat_issued event, canonical and variant claims, and two holder_death backstory secrets drained over two ticks. It needs no corpus, only a story clock. #922 recorded the same class-a cause in docs/qa/test-fallout-repair/verification.md:216 and noted that the owner's save_05 is now empty too (0 chunks, 0 characters). No commit since b0645daf touches this file or the code path.
 - Prerequisite: global_variables.base_timestamp is non-NULL (or at least one chunk_metadata row has world_time) before the first characters INSERT. Template seed event_types (threat_issued, claim_propagated) and world_events.world_time (migration 083) are present. No corpus rows are needed.
 - Repair steps:
@@ -502,7 +502,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_orrery/test_claim_accounts_live.py::test_old_divergent_sibling_scopes_raise_during_hydration`
 
 - Baseline outcome: failure; signature: `psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp`
-- Route: `seed_disposable_clone` to #885; confidence 0.92
+- Route: `seed_disposable_clone` to #885; confidence 0.92; runtime confirmation needed
 - Cause: This test uses the same account_connection on hardwired slot 5 (private and empty in the baseline). Its first statement is _mint_sibling_incident -> _insert_character, which runs before _insert_chunk. The characters AFTER INSERT need-state trigger (057 -> orrery_sync_character_need_states, migration 100) finds neither a chunk world_time nor a base_timestamp and raises 'need-clock anchor unavailable'. The expected ValueError ('Sibling claims.*divergent scopes') comes later, from load_epistemics_hydration, so the recorded RaiseException is not the assertion under test. The rows are self-created: one incident, a canonical claim, and a variant claim set to private.
 - Prerequisite: Story clock (global_variables.base_timestamp) before the characters INSERT, plus the migration 090-092 shape installed schema-locally by the fixture. No corpus.
 - Repair steps:
@@ -512,7 +512,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_orrery/test_claim_accounts_live.py::test_scope_promotion_updates_every_sibling_and_hydrates_cleanly`
 
 - Baseline outcome: failure; signature: `psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp`
-- Route: `seed_disposable_clone` to #885; confidence 0.93
+- Route: `seed_disposable_clone` to #885; confidence 0.93; runtime confirmation needed
 - Cause: The fixture uses hardwired slot 5. _mint_sibling_incident(scope='common') inserts the actor character before any chunk, so the characters need-state trigger raises because the empty clone has no chunk_metadata.world_time and no base_timestamp. promote_claim_scope and load_epistemics_hydration never run. The test otherwise seeds its own event, canonical claim, and variant claim.
 - Prerequisite: global_variables.base_timestamp is set (the test's _insert_chunk then stamps deterministic world_time) and the schema-local claims shadow is installed by the fixture. No corpus.
 - Repair steps:
@@ -532,7 +532,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_orrery/test_claim_accounts_live.py::test_sync_variant_rejects_cross_incident_lineage_parent`
 
 - Baseline outcome: failure; signature: `psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp`
-- Route: `seed_disposable_clone` to #885; confidence 0.93
+- Route: `seed_disposable_clone` to #885; confidence 0.93; runtime confirmation needed
 - Cause: The fixture uses hardwired slot 5. _mint_sibling_incident('lineage-source') inserts characters before any chunk, so the need-state trigger raises 'need-clock anchor unavailable' on the empty clone. The expected ValueErrors from mint_account_variant_sync ('belongs to world event', 'Lineage parent claim 999999') are never reached. The test creates two incidents itself.
 - Prerequisite: global_variables.base_timestamp is set and the schema-local 090-092 claims shape is installed. No corpus.
 - Repair steps:
@@ -1076,7 +1076,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt[False-character_experience_jobs]`
 
 - Baseline outcome: failure; signature: `assert False`
-- Route: `seed_disposable_clone` to #885; confidence 0.85
+- Route: `seed_disposable_clone` to #885; confidence 0.85; runtime confirmation needed
 - Cause: The test clones save_04 with disposable_slot_database(source_db='save_04', include_data=True). In the private cluster save_04 is an empty template clone, so the clone has no character_experience_jobs row id=3 and no bound protagonist. 'UPDATE character_experience_jobs SET available_at=clock_timestamp() WHERE id=3' silently updates 0 rows. The scheduler never leases an experience job, so the patched _track_lease never runs and selected.wait(5) returns False, giving 'assert False'. Every drain pass also raises PlayerIdentityNotEstablishedError: drain_experience_render_jobs_sync (nexus/agents/orrery/experiences.py:1822) calls canonical_player_entity_id unconditionally because nexus.toml sets include_player_character=false, and global_variables.user_character is NULL. The owner's save_04 supplies both the job and the protagonist.
 - Prerequisite: global_variables.base_timestamp and user_character bound to a character with an entity row. One queued character_experience_jobs row whose experience_ids point at non-player characters with complete dossiers (at least 2 of summary/background/personality), seeded from world_events at a scene-end chunk, plus a boundary chunk and resolved_model captured at enqueue (clone pinned to TEST). The database name must start with 'qa640_' for route_slot.
 - Repair steps:
@@ -1097,7 +1097,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt[True-character_experience_jobs]`
 
 - Baseline outcome: failure; signature: `assert False`
-- Route: `seed_disposable_clone` to #885; confidence 0.85
+- Route: `seed_disposable_clone` to #885; confidence 0.85; runtime confirmation needed
 - Cause: Same as the [False-character_experience_jobs] node, and the lose_lease branch is never reached. The empty save_04 clone has no experience job id=3 and no user_character, so nothing is leased, selected.wait(5) returns False, and the test fails with 'assert False'.
 - Prerequisite: Same as the [False] variant: a bound protagonist and one queued, renderable, non-player character_experience_jobs row.
 - Repair steps:
@@ -1137,7 +1137,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_api/test_session_truth_pg.py::test_generation_session_preserves_bootstrap_error_class[provider_timeout]`
 
 - Baseline outcome: failure; signature: `AssertionError: {'chunk_id': None, 'created_at': datetime.datetime(2026, 9, 25, 1, 44, 55, 961354, tzinfo=datetime.timezone(datetime.t... narrative: No setting found i...`
-- Route: `seed_disposable_clone` to #885; confidence 0.9
+- Route: `seed_disposable_clone` to #885; confidence 0.9; runtime confirmation needed
 - Cause: The test clones save_04 (include_data=True) and runs generate_narrative_async with parent 0 (bootstrap), expecting the TEST writer delay (2 s) to exceed request_timeout (0.1 s) and record error_class 'ReadTimeout'. The empty clone has global_variables.setting NULL, so generate_bootstrap_narrative raises ValueError('No setting found in global_variables; transition may not have completed') at nexus/api/narrative_generation.py:671, before any provider call. The recorded error_class is ValueError. The recorded state dict ('narrative: No setting found i...') confirms this. Error-class preservation itself worked correctly.
 - Prerequisite: A transitioned story: global_variables.setting JSON with story_seed, a canonical protagonist whose characters.current_location references a places row, base_timestamp, the TEST model pins the test already sets, and the TEST provider (mock_openai_server).
 - Repair steps:

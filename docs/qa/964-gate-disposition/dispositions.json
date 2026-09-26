@@ -464,7 +464,7 @@
    "routed_issue": "none",
    "product_defect_suspected": false,
    "product_defect_detail": "None. Whether the enabled path then attaches a non-empty digest needs a run, but the digest builder tests on the same fixture passed.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.95,
    "outcome": "failure",
    "signature": "pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits",
@@ -579,7 +579,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "The raise is the intended #640 two-clocks contract, pinned by tests/test_orrery/test_need_clock_anchor_pg.py:355: no need clocks without a story clock. The test's own claim and reveal assertions were never reached, so they give no evidence about product behavior.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.93,
    "outcome": "failure",
    "signature": "psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp",
@@ -598,7 +598,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "The failure comes from the fixture prerequisite, and the hydration divergence check was never exercised. The need-clock raise is the documented #640 contract.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.92,
    "outcome": "failure",
    "signature": "psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp",
@@ -617,7 +617,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "No product path was reached. The trigger's refusal is the intended contract.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.93,
    "outcome": "failure",
    "signature": "psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp",
@@ -655,7 +655,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "The writer's lineage validation was not exercised. Its async twin (test_async_variant_primitive_uses_real_postgres) inserts no characters and was not red.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.93,
    "outcome": "failure",
    "signature": "psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp",
@@ -1315,7 +1315,7 @@
    "needs_runtime_confirmation": true,
    "confidence": 0.93,
    "outcome": "failure",
-   "signature": "AssertionError: no audited slot produces resolutions \u2014 winner parity is vacuous; repoint AUDIT_SLOTS at a slot with Orrery activity",
+   "signature": "AssertionError: no audited slot produces resolutions — winner parity is vacuous; repoint AUDIT_SLOTS at a slot with Orrery activity",
    "baseline_group": "Missing authored corpus or slot content signature"
   },
   {
@@ -1334,7 +1334,7 @@
    "needs_runtime_confirmation": true,
    "confidence": 0.88,
    "outcome": "failure",
-   "signature": "AssertionError: sleep debt 500 flipped no off-screen actor's sleep template on any audited slot \u2014 the stack-side what-if assertion is vacuous; repoint AUDIT_SLOTS",
+   "signature": "AssertionError: sleep debt 500 flipped no off-screen actor's sleep template on any audited slot — the stack-side what-if assertion is vacuous; repoint AUDIT_SLOTS",
    "baseline_group": "Empty collection or missing-value assertion"
   },
   {
@@ -1353,7 +1353,7 @@
    "needs_runtime_confirmation": true,
    "confidence": 0.88,
    "outcome": "failure",
-   "signature": "AssertionError: no audited slot yields an actor-only winner gated on NOT(has_inbound_pair_tag(hunting)) \u2014 the what-if kill test is vacuous; repoint AUDIT_SLOTS at a sl...",
+   "signature": "AssertionError: no audited slot yields an actor-only winner gated on NOT(has_inbound_pair_tag(hunting)) — the what-if kill test is vacuous; repoint AUDIT_SLOTS at a sl...",
    "baseline_group": "Missing authored corpus or slot content signature"
   },
   {
@@ -1684,7 +1684,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "The failure is caused by the fixture: nothing was leased. Once a job is seeded, the lease-preservation and refund assertions run against real code for the first time in this environment, so a run is still needed. Adjacent finding (a separate issue, not this node's cause): on a truly empty slot with no protagonist, such as a slot mid-wizard with the gateway running, SlotScheduler._drain raises PlayerIdentityNotEstablishedError from the experience drain on every pass. The owner then stays in 'recovering' with ERROR tracebacks every error_backoff_seconds and never reaches later queues. Other soft sites (nexus/api/narrative.py:1680, save_slots.py:82) already treat an empty pre-protagonist slot as legitimate.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.85,
    "outcome": "failure",
    "signature": "assert False",
@@ -1721,7 +1721,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "The fixture causes this failure. The abandon/refund path (expected ('queued', 0) with no usage jsonl) is unverified until the test runs with a seeded job. See the [False] variant for the adjacent pre-protagonist scheduler loop.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.85,
    "outcome": "failure",
    "signature": "assert False",
@@ -1798,7 +1798,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "No defect indicated: the ValueError was correctly preserved as error_class. Whether a provider ReadTimeout also survives the bootstrap wrapper is unverified until the test runs on a seeded story.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.9,
    "outcome": "failure",
    "signature": "AssertionError: {'chunk_id': None, 'created_at': datetime.datetime(2026, 9, 25, 1, 44, 55, 961354, tzinfo=datetime.timezone(datetime.t... narrative: No setting found i...",
@@ -2036,7 +2036,7 @@
    "needs_runtime_confirmation": false,
    "confidence": 0.95,
    "outcome": "failure",
-   "signature": "AssertionError: no audited slot has adjudication-log rows \u2014 the history assertions are vacuous; repoint HISTORY_SLOTS at a slot with Skald rulings",
+   "signature": "AssertionError: no audited slot has adjudication-log rows — the history assertions are vacuous; repoint HISTORY_SLOTS at a slot with Skald rulings",
    "baseline_group": "Missing authored corpus or slot content signature"
   },
   {
@@ -4258,7 +4258,7 @@
    "repair_route": "parametrize_slot_or_fixture",
    "repair_steps": [
     "Point the test at a disposable_slot_database('tag_library') clone registered in VALID_DBNAMES. Seed base_timestamp and a protagonist (seed_protagonist), 4 more characters or places, one world-time chunk, and a handful of tags on those entities through nexus.agents.orrery.tag_writer.apply_tag_bestowal.",
-    "Keep the completeness and \u226450% assertions unchanged. They are properties of the renderer over the template-seeded registry, which is the same registry save_05 carries.",
+    "Keep the completeness and ≤50% assertions unchanged. They are properties of the renderer over the template-seeded registry, which is the same registry save_05 carries.",
     "Optionally keep the real save_05 size print as a separate corpus-flag-gated probe (e.g. NEXUS_RUN_CORPUS=1).",
     "Switch the skipif to pytestmark requires_postgres to match the gate convention."
    ],
