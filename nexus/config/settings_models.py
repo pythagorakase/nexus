@@ -1668,6 +1668,11 @@ class OrreryExperienceSettings(BaseModel):
         ge=1,
         description="Maximum experience seeds included in one provider call",
     )
+    max_embeddings_per_drain: int = Field(
+        default=12,
+        ge=1,
+        description="Maximum rendered experiences embedded in one scheduler pass",
+    )
 
     @model_validator(mode="after")
     def _validate_eligibility_and_salience(self) -> "OrreryExperienceSettings":

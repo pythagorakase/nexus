@@ -5,6 +5,7 @@ from time import monotonic, sleep
 from uuid import uuid4
 
 import pytest
+from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
 from nexus.api import narrative_lease
@@ -232,6 +233,104 @@ def test_scheduler_milestone_recovery_preserves_anchor_age_and_idempotency(
         assert load_job_queues_sync(conn)["queues"]["relationship_milestone"][
             "counts"
         ] == {"pending": 1}
+
+
+def seed_experiences(dbname):
+    """One rendered valid, one unrendered and one invalidated recollection."""
+    from tests.test_orrery.test_narration_job_fencing_pg import _insert_chunk
+
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        anchor = _insert_chunk(cur, "Experience embedding anchor")
+        cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
+        entity = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO characters (name, entity_id) VALUES ('Courier Vey', %s)",
+            (entity,),
+        )
+        ids = {}
+        for event, (label, text, status) in enumerate(
+            (
+                ("rendered", "I remember the lamps going out.", "valid"),
+                ("unrendered", None, "valid"),
+                ("invalidated", "I remember a night that never was.", "invalidated"),
+            ),
+            start=1,
+        ):
+            rendered = text is not None
+            cur.execute(
+                """INSERT INTO character_experiences (
+                    character_entity_id, anchor_chunk_id, world_event_ids, basis,
+                    seed_summary, salience, source_digest, world_layer,
+                    experience_text, render_model, renderer_version,
+                    render_generation_id, invalidation_status, invalidated_at
+                ) VALUES (
+                    %s, %s, ARRAY[%s]::bigint[], 'participant', %s, 0.5, %s,
+                    'primary', %s, %s, %s, %s::uuid,
+                    %s::character_experience_invalidation_status,
+                    CASE WHEN %s = 'invalidated' THEN now() END
+                ) RETURNING id""",
+                (
+                    entity,
+                    anchor,
+                    event,
+                    f"Courier Vey saw the {label} lamps.",
+                    f"issue-754-{label}",
+                    text,
+                    "fixture-model" if rendered else None,
+                    "fixture-v1" if rendered else None,
+                    str(uuid4()) if rendered else None,
+                    status,
+                    status,
+                ),
+            )
+            ids[label] = cur.fetchone()[0]
+    return ids
+
+
+def test_scheduler_embeds_rendered_experiences_and_skips_the_rest(offline_gate_db):
+    """One pass embeds and stamps only the rendered valid recollection (#754)."""
+    from nexus.agents.memnon.utils.source_embeddings import (
+        CHARACTER_EXPERIENCE_SOURCE,
+        active_memnon_embedding_model_dimensions,
+    )
+
+    ids = seed_experiences(offline_gate_db)
+    with closing(connect(offline_gate_db)) as conn:
+        assert load_job_queues_sync(conn)["unembedded_rendered_experiences"] == 1
+    scheduler = SlotScheduler(4, dbname=offline_gate_db)
+    limits = {"narration_limit": 0, "experience_limit": 0, "maturation_limit": 0}
+    assert scheduler.run_pass(**limits)["character_experience_embeddings"] == 1
+    with closing(connect(offline_gate_db)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, embedding_generated_at IS NOT NULL "
+                "FROM character_experiences WHERE id = ANY(%s)",
+                (list(ids.values()),),
+            )
+            assert dict(cur.fetchall()) == {
+                ids["rendered"]: True,
+                ids["unrendered"]: False,
+                ids["invalidated"]: False,
+            }
+            for model, dimensions in active_memnon_embedding_model_dimensions().items():
+                cur.execute(
+                    sql.SQL(
+                        "SELECT experience_id FROM {} WHERE model = %s "
+                        "ORDER BY experience_id"
+                    ).format(
+                        sql.Identifier(
+                            CHARACTER_EXPERIENCE_SOURCE.table_name_for_dimensions(
+                                dimensions
+                            )
+                        )
+                    ),
+                    (model,),
+                )
+                assert cur.fetchall() == [(ids["rendered"],)]
+        status = load_job_queues_sync(conn)
+    assert status["unembedded_rendered_experiences"] == 0
+    assert status["stamped_without_vectors"]["character_experiences"] == 0
+    assert scheduler.run_pass(**limits)["character_experience_embeddings"] == 0
 
 
 def test_scheduler_gateway_restart_recovers_leased_job(

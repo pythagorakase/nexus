@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#805 baseline compatibility module is reachable from the LORE memory manager",
+  "reason": "#754 experience embedding lane gives experience_embedding.py a caller inside the already-orphaned scheduler; still unreachable from a production root",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -124,6 +124,7 @@
     "nexus/agents/orrery/event_vocabulary.py",
     "nexus/agents/orrery/events.py",
     "nexus/agents/orrery/evidence.py",
+    "nexus/agents/orrery/experience_embedding.py",
     "nexus/agents/orrery/experiences.py",
     "nexus/agents/orrery/explain.py",
     "nexus/agents/orrery/geo.py",

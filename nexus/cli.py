@@ -4025,11 +4025,15 @@ def _print_jobs(payload: Dict[str, Any]) -> None:
         )
     if payload.get("unembedded_accepted_chunks"):
         print(f"unembedded_accepted_chunks: {payload['unembedded_accepted_chunks']}")
-    if "stamped_without_vectors" not in payload:
-        raise RuntimeError(
-            "jobs payload lacks stamped_without_vectors: the gateway that answered "
-            "predates this CLI, so restart it with nexus up and retry"
-        )
+    for field in ("unembedded_rendered_experiences", "stamped_without_vectors"):
+        if field not in payload:
+            raise RuntimeError(
+                f"jobs payload lacks {field}: the gateway that answered "
+                "predates this CLI, so restart it with nexus up and retry"
+            )
+    unembedded_experiences = payload["unembedded_rendered_experiences"]
+    if unembedded_experiences:
+        print(f"unembedded_rendered_experiences: {unembedded_experiences}")
     stamped_without_vectors = payload["stamped_without_vectors"]
     if any(stamped_without_vectors.values()):
         counts = ", ".join(

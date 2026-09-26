@@ -24,6 +24,7 @@ sources:
   - nexus/api/summary_triggers.py
   - nexus/jobs/
   - nexus/agents/orrery/worker.py
+  - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
 verified_commit: "be1c299cb70b3e3a75b514ad7ad34ca45031b8a8"
 ---
@@ -274,6 +275,13 @@ order:
    resolved when each job was enqueued.
 6. Chunk embeddings (`nexus/jobs/embeddings.py`) with the active MEMNON
    embedding model, which stamp `embedding_generated_at`.
+7. Rendered character experience embeddings
+   (`nexus/agents/orrery/experience_embedding.py`), oldest first and one
+   recollection per checkpoint, up to
+   `[orrery.experiences].max_embeddings_per_drain` per pass. Each stamps
+   `embedding_generated_at` only after every active model's vector lands; a
+   failure leaves it unstamped for the next pass. `nexus jobs` reports the
+   backlog as `unembedded_rendered_experiences`.
 
 The scheduler lease and the compaction, summary, and embedding queues are
 configured in `[runtime.scheduler]`; the Orrery queues take their limits from

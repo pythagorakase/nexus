@@ -1,16 +1,17 @@
-"""Offline coverage for the stamped-without-vector embedding audit (#848).
+"""Offline coverage for the embedding audit (#848) and experience backlog (#754).
 
-The audit's counting query runs on SQLite, a real SQL engine, through a thin
-dialect shim that answers PostgreSQL's ``to_regclass`` from ``sqlite_master``
-and swaps ``%s`` placeholders for ``?``. The PostgreSQL proofs live in
-``tests/test_orrery/test_retrograde_embedding_pg.py`` and
-``tests/test_jobs_cli_pg.py``.
+The audit's counting query and the experience drain's selection run on
+SQLite, a real SQL engine, through a thin dialect shim that answers
+PostgreSQL's ``to_regclass`` from ``sqlite_master`` and swaps ``%s``
+placeholders for ``?``. The PostgreSQL proofs live in
+``tests/test_orrery/test_retrograde_embedding_pg.py``,
+``tests/test_jobs_cli_pg.py`` and ``tests/test_api/test_scheduler_pg.py``.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 import pytest
 
@@ -21,6 +22,12 @@ from nexus.agents.memnon.utils.source_embeddings import (
     RETROGRADE_SUMMARY_SOURCE,
     count_stamped_without_vectors,
 )
+from nexus.agents.orrery.experience_embedding import (
+    count_unembedded_rendered_experiences,
+    drain_experience_embeddings_sync,
+    unembedded_rendered_experience_ids,
+)
+from nexus.config import load_settings_as_dict
 
 MODELS = {"alpha": 3, "beta": 5}
 
@@ -43,6 +50,33 @@ class _SqliteCursor:
 
     def fetchone(self) -> Any:
         return self._cursor.fetchone()
+
+    def fetchall(self) -> list[Any]:
+        return self._cursor.fetchall()
+
+    def __enter__(self) -> "_SqliteCursor":
+        return self
+
+    def __exit__(self, *_args: Any) -> Literal[False]:
+        return False
+
+
+class _SqliteConnection:
+    """DBAPI connection over SQLite whose cursors speak PostgreSQL."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def __enter__(self) -> "_SqliteConnection":
+        self._connection.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Literal[False]:
+        self._connection.__exit__(*exc)
+        return False
+
+    def cursor(self) -> _SqliteCursor:
+        return _SqliteCursor(self._connection)
 
 
 @pytest.fixture()
@@ -120,12 +154,94 @@ def test_audit_covers_both_source_owned_corpora() -> None:
     ]
 
 
-def _jobs_payload(stamped_without_vectors: dict[str, int]) -> dict[str, Any]:
+@pytest.fixture()
+def experiences() -> Iterator[sqlite3.Connection]:
+    """Three rendered rows owed vectors among every row the drain must skip."""
+    connection = sqlite3.connect(":memory:")
+    connection.executescript(
+        """
+        CREATE TABLE character_experiences (
+            id INTEGER PRIMARY KEY,
+            experience_text TEXT,
+            invalidation_status TEXT NOT NULL,
+            embedding_generated_at TEXT
+        );
+        INSERT INTO character_experiences VALUES
+            (9, 'I remember the bell.', 'valid', NULL),
+            (4, NULL, 'valid', NULL),
+            (5, 'I remember the rain.', 'valid', NULL),
+            (6, 'I remember a retracted day.', 'invalidated', NULL),
+            (7, 'I remember the fire.', 'valid', '2196-01-01'),
+            (3, 'I remember the flood.', 'valid', NULL);
+        """
+    )
+    yield connection
+    connection.close()
+
+
+def test_drain_selects_oldest_rendered_valid_unstamped_experiences(
+    experiences: sqlite3.Connection,
+) -> None:
+    """Unrendered, invalidated and already-stamped rows are never selected."""
+    cursor = _SqliteCursor(experiences)
+    assert unembedded_rendered_experience_ids(cursor, 2) == [3, 5]
+    assert unembedded_rendered_experience_ids(cursor, 10) == [3, 5, 9]
+    assert count_unembedded_rendered_experiences(cursor) == 3
+
+
+def test_drain_selection_refuses_a_nonpositive_limit(
+    experiences: sqlite3.Connection,
+) -> None:
+    """A zero limit is a caller bug, not an empty drain."""
+    with pytest.raises(ValueError, match="must be positive, got 0"):
+        unembedded_rendered_experience_ids(_SqliteCursor(experiences), 0)
+
+
+def test_drain_without_owed_rows_never_reaches_the_embedder(
+    experiences: sqlite3.Connection,
+) -> None:
+    """Nothing owed means no slot connection and no model load.
+
+    The embedder would open a pooled PostgreSQL connection, which the default
+    gate's connection guard fails loudly, so a clean zero proves the drain
+    never called it.
+    """
+    experiences.execute(
+        "UPDATE character_experiences SET embedding_generated_at = '2196-01-02' "
+        "WHERE experience_text IS NOT NULL"
+    )
+    drained = drain_experience_embeddings_sync(
+        _SqliteConnection(experiences),
+        dbname="save_05",
+        settings=load_settings_as_dict(),
+        limit=12,
+    )
+    assert drained == 0
+    assert count_unembedded_rendered_experiences(_SqliteCursor(experiences)) == 0
+
+
+def test_disabled_experiences_drain_nothing(
+    experiences: sqlite3.Connection,
+) -> None:
+    """A disabled subsystem leaves owed rows alone, like its render lane."""
+    settings = load_settings_as_dict()
+    settings["orrery"]["experiences"]["enabled"] = False
+    drained = drain_experience_embeddings_sync(
+        _SqliteConnection(experiences), dbname="save_05", settings=settings, limit=12
+    )
+    assert drained == 0
+    assert count_unembedded_rendered_experiences(_SqliteCursor(experiences)) == 3
+
+
+def _jobs_payload(
+    stamped_without_vectors: dict[str, int], unembedded_experiences: int = 0
+) -> dict[str, Any]:
     return {
         "scheduler": None,
         "queues": {},
         "non_terminal_jobs": [],
         "unembedded_accepted_chunks": 0,
+        "unembedded_rendered_experiences": unembedded_experiences,
         "stamped_without_vectors": stamped_without_vectors,
     }
 
@@ -147,9 +263,26 @@ def test_jobs_output_names_damage_only_when_present(
     )
 
 
-def test_jobs_output_refuses_a_pre_upgrade_payload() -> None:
+def test_jobs_output_names_owed_experience_vectors_only_when_present(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`nexus jobs` shows the rendered-experience backlog only while it exists."""
+    clean = {"retrograde_summaries": 0, "character_experiences": 0}
+    cli._print_jobs(_jobs_payload(clean))
+    assert "unembedded_rendered_experiences" not in capsys.readouterr().out
+
+    cli._print_jobs(_jobs_payload(clean, unembedded_experiences=3))
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "unembedded_rendered_experiences: 3"
+    )
+
+
+@pytest.mark.parametrize(
+    "field", ["unembedded_rendered_experiences", "stamped_without_vectors"]
+)
+def test_jobs_output_refuses_a_pre_upgrade_payload(field: str) -> None:
     """A gateway older than the CLI is named, not papered over with a default."""
     payload = _jobs_payload({"retrograde_summaries": 0, "character_experiences": 0})
-    del payload["stamped_without_vectors"]
-    with pytest.raises(RuntimeError, match="stamped_without_vectors.*restart"):
+    del payload[field]
+    with pytest.raises(RuntimeError, match=f"{field}.*restart"):
         cli._print_jobs(payload)

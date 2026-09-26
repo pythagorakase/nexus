@@ -436,6 +436,10 @@ class SlotScheduler:
 
     def _drain(self, **limits: Any) -> dict[str, Any]:
         from nexus.agents.orrery import worker
+        from nexus.agents.orrery.experience_embedding import (
+            drain_experience_embeddings_sync,
+        )
+        from nexus.agents.orrery.experiences import experience_settings
         from nexus.agents.orrery.retrograde_maturation import drain_maturation_jobs_sync
         from nexus.jobs.compaction import drain_compaction
         from nexus.jobs.embeddings import drain_embedding, enqueue_locked_embeddings
@@ -561,6 +565,21 @@ class SlotScheduler:
                         result[name] += count
                         if not count:
                             break
+                # Embed rendered recollections after every other lane, one row
+                # per checkpoint, so a failing embedder starves nothing else.
+                embeddings = "character_experience_embeddings"
+                result[embeddings] = 0
+                for _ in range(
+                    experience_settings(self.settings).max_embeddings_per_drain
+                ):
+                    self.checkpoint()
+                    self._report(embeddings)
+                    count = drain_experience_embeddings_sync(
+                        conn, dbname=self.dbname, settings=self.settings, limit=1
+                    )
+                    result[embeddings] += count
+                    if not count:
+                        break
             self._report(None)
             return result
         finally:

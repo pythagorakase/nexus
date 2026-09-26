@@ -13,6 +13,9 @@ from nexus.agents.memnon.utils.source_embeddings import (
     active_memnon_embedding_model_dimensions,
     count_stamped_without_vectors,
 )
+from nexus.agents.orrery.experience_embedding import (
+    count_unembedded_rendered_experiences,
+)
 from nexus.agents.orrery.experiences import load_experience_status_sync
 from nexus.agents.orrery.retrograde_maturation import (
     _connect_for_slot,
@@ -51,9 +54,10 @@ def _queue_status(cur: Any, table: str, queue: str) -> dict[str, Any]:
 def load_job_queues_sync(conn: Any) -> dict[str, Any]:
     """Read each queue atomically so its counts and job list always agree.
 
-    The same snapshot also audits the Retrograde summary and character
-    experience corpora for rows stamped ``embedding_generated_at`` that lack
-    a vector for an active MEMNON model.
+    The same snapshot also counts rendered character experiences still owed
+    vectors, and audits the Retrograde summary and character experience
+    corpora for rows stamped ``embedding_generated_at`` that lack a vector
+    for an active MEMNON model.
     """
     from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 
@@ -109,6 +113,7 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
             (json.dumps([RETROGRADE_PROLOGUE_MARKER]),),
         )
         unembedded = int(cur.fetchone()["count"])
+        unembedded_experiences = count_unembedded_rendered_experiences(cur)
         stamped_without_vectors = {
             spec.table: count_stamped_without_vectors(cur, spec, model_dimensions)
             for spec in AUDITED_SOURCES
@@ -127,6 +132,7 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
         "non_terminal_jobs": jobs,
         "scheduler": dict(scheduler) if scheduler else None,
         "unembedded_accepted_chunks": unembedded,
+        "unembedded_rendered_experiences": unembedded_experiences,
         "stamped_without_vectors": stamped_without_vectors,
     }
 

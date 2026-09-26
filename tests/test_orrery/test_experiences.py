@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 from typing import Any, Iterator, Literal
 
+from pydantic import ValidationError
 import pytest
 
 from nexus.agents.logon.skald_wire import (
@@ -32,6 +33,7 @@ from nexus.agents.orrery.experiences import (
 )
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings
+from nexus.config.settings_models import OrreryExperienceSettings
 from nexus.memory.manager import empty_pass2_baseline
 from nexus.prompts.registry import PromptId, load
 
@@ -107,6 +109,19 @@ def test_experience_config_resolves_model_and_eligibility() -> None:
         + experiences.valence_delta_weight
         + experiences.presence_duration_weight
     ) == pytest.approx(1.0)
+
+
+def test_experience_embedding_drain_bound_is_configured_and_validated() -> None:
+    """The scheduler's per-pass embedding bound is shipped and must be positive."""
+    settings = load_settings("nexus.toml")
+    assert settings.orrery is not None
+    shipped = settings.orrery.experiences
+    assert shipped.max_embeddings_per_drain == 12
+
+    raw = shipped.model_dump()
+    raw["max_embeddings_per_drain"] = 0
+    with pytest.raises(ValidationError, match="max_embeddings_per_drain"):
+        OrreryExperienceSettings.model_validate(raw)
 
 
 def _seed_row() -> dict[str, Any]:
