@@ -70,6 +70,48 @@ def sqlalchemy_url(dbname: str) -> URL:
 
 _connect = connect
 
+_TARGET_IDENTITY_SQL = (
+    "SELECT current_database(), current_setting('port'), "
+    "(pg_postmaster_start_time() AT TIME ZONE 'UTC')::text"
+)
+
+
+def assert_one_target(dbname: str) -> None:
+    """Fail unless fixture, runtime, and URL clients reach one database.
+
+    Fixtures seed through ``connect`` (the PG* environment), while production
+    code resolves ``nexus.database`` directly or through ``database_url``. If
+    the two disagree, a test seeds one server and queries another (issue
+    #804). The server's listening port and postmaster start time identify the
+    instance whether a client arrives over TCP or a Unix socket.
+    """
+
+    from sqlalchemy import text
+
+    from nexus.database import connection_kwargs, create_slot_engine, database_url
+
+    identities: dict[str, tuple[Any, ...]] = {}
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(_TARGET_IDENTITY_SQL)
+        identities["tests.pg_fixtures.connect"] = tuple(cur.fetchone())
+    with closing(psycopg2.connect(**connection_kwargs(dbname))) as conn:
+        with conn.cursor() as cur:
+            cur.execute(_TARGET_IDENTITY_SQL)
+            identities["nexus.database.connection_kwargs"] = tuple(cur.fetchone())
+    engine = create_slot_engine(database_url(dbname))
+    try:
+        with engine.connect() as sa_conn:
+            row = sa_conn.execute(text(_TARGET_IDENTITY_SQL)).one()
+            identities["nexus.database.database_url"] = tuple(row)
+    finally:
+        engine.dispose()
+    if len(set(identities.values())) != 1 or any(
+        identity[0] != dbname for identity in identities.values()
+    ):
+        raise AssertionError(
+            f"PostgreSQL clients disagree on the {dbname!r} target: {identities!r}"
+        )
+
 
 @contextmanager
 def disposable_slot_database(
