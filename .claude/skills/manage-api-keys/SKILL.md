@@ -12,7 +12,8 @@ React Query state.
 ## Choose the Path
 
 - To inspect presence, use the API KEYS card or `GET /api/secrets/status`.
-  Expect only `provider`, `account`, `present`, and at most `last4`.
+  Expect only `provider`, `account`, `present`, at most `last4`, and the
+  seat-derived `required` and `required_by` (seat and model ID) fields.
 - To set or rotate, enter the value in the card and commit it. Runtime code
   must call `nexus.util.secret_manager.set_secret(account, key)`; do not add a
   second writer.
