@@ -154,7 +154,12 @@ def test_scheduler_accepts_summary_and_embeds_once_in_process(
     ]
     summaries = [event for event in events if event["seat"] == "summaries"]
     assert len(summaries) == len(expected)
-    assert summaries[0]["run_id"] == session
+    # Background workers record under their numeric job id (#802), so each
+    # summary's spend joins its own job row rather than the turn.
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT id::text FROM narrative_summary_jobs")
+        job_ids = sorted(row[0] for row in cur.fetchall())
+    assert sorted(event["run_id"] for event in summaries) == job_ids
     print(
         f"In-process embedding: processes={spawned}, chunk={parent}, stamp={stamp}; summary usage={summaries}"
     )

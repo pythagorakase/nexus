@@ -1,5 +1,7 @@
 """Durable correspondence plans; retain journal-based retry and stale checks."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 from uuid import uuid4
 
@@ -9,6 +11,9 @@ from nexus.database import is_connection_failure
 from nexus.config.settings_models import DeferredWorkSettings
 from nexus.config.story_model import persisted_job_model, resolve_enqueued_seat
 from nexus.memory.correspondence import read_accepted_correspondence
+from nexus.telemetry.usage import usage_context
+
+COMPACTION_SEAT = "correspondence_compaction"
 
 
 def enqueue_compaction(cur: Any, *, accepting_chunk_id: int, floor_turns: int) -> None:
@@ -40,7 +45,20 @@ def require_compaction_lease(cur: Any, *, job_id: int, owner: str, nonce: str) -
         raise RuntimeError(f"Compaction job {job_id} lost its lease")
 
 
-def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int:
+@contextmanager
+def compaction_usage(job_id: int, *, slot: int) -> Iterator[None]:
+    """Record a job's provider calls under its seat, slot and numeric job id.
+
+    This is the identity every provider-backed background worker records, so
+    ``nexus inspect-turn`` can attach the job's spend through its job row.
+    """
+    with usage_context(seat=COMPACTION_SEAT, slot=slot, run_id=str(job_id)):
+        yield
+
+
+def drain_compaction(
+    conn: Any, *, cfg: DeferredWorkSettings, owner: str, slot: int
+) -> int:
     """Run one nonce-fenced plan, replanning from the latest accepted exchange."""
     from nexus.api.commit_handler_sync import compact_accepted_correspondence_sync
 
@@ -89,12 +107,13 @@ def drain_compaction(conn: Any, *, cfg: DeferredWorkSettings, owner: str) -> int
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 context = read_accepted_correspondence(cur)
         if context.exchanges:
-            compact_accepted_correspondence_sync(
-                conn,
-                accepting_chunk_id=context.exchanges[-1].chunk_id,
-                completion_fence=fence,
-                resolved_model=model,
-            )
+            with compaction_usage(job["id"], slot=slot):
+                compact_accepted_correspondence_sync(
+                    conn,
+                    accepting_chunk_id=context.exchanges[-1].chunk_id,
+                    completion_fence=fence,
+                    resolved_model=model,
+                )
     except Exception as exc:
         if is_connection_failure(exc):
             raise

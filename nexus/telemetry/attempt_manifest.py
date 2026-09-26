@@ -320,6 +320,24 @@ JOB_TABLES = {
     "narrative_summary": "narrative_summary_jobs",
 }
 
+# The provider-backed queues and the usage seats their workers record. Each such
+# worker records its provider calls with the numeric job id as ``run_id`` and
+# the job's slot. Queues absent here never call a provider: narration writes
+# deterministic descriptors, embeddings run a local model, and relationship
+# milestones are emitted in SQL.
+PROVIDER_JOB_SEATS: dict[str, frozenset[str]] = {
+    "experience_render": frozenset({"experience_renderer"}),
+    "retrograde_maturation": frozenset(
+        {
+            "retrograde_seed_candidates",
+            "retrograde_seed_selection",
+            "retrograde_expansion",
+        }
+    ),
+    "correspondence_compaction": frozenset({"correspondence_compaction"}),
+    "narrative_summary": frozenset({"summaries"}),
+}
+
 
 class NoGenerationSessionError(ValueError):
     """An accepted legacy chunk predates durable session binding."""
@@ -370,14 +388,17 @@ def inspect_turn(
         for queue, table in JOB_TABLES.items():
             cur.execute(
                 sql.SQL(
-                    "SELECT id, state::text, generation_session_id::text FROM {} WHERE generation_session_id=%s ORDER BY id"
+                    """SELECT id, state::text, generation_session_id::text,
+                        created_at::text, updated_at::text
+                    FROM {} WHERE generation_session_id=%s ORDER BY id"""
                 ).format(sql.Identifier(table)),
                 (session,),
             )
             jobs.extend(dict(row, queue=queue) for row in cur.fetchall())
         cur.execute(
             """SELECT version_id AS id, CASE WHEN event_id IS NULL THEN 'pending'
-                ELSE 'succeeded' END AS state, generation_session_id::text
+                ELSE 'succeeded' END AS state, generation_session_id::text,
+                NULL::text AS created_at, NULL::text AS updated_at
             FROM relationship_milestone_queue WHERE generation_session_id=%s ORDER BY version_id""",
             (session,),
         )

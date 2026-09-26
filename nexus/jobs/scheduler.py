@@ -508,7 +508,9 @@ class SlotScheduler:
                     self.checkpoint()
                     self._report("correspondence_compaction_jobs")
                     try:
-                        count = drain_compaction(conn, cfg=self.cfg, owner=self.owner)
+                        count = drain_compaction(
+                            conn, cfg=self.cfg, owner=self.owner, slot=self.slot
+                        )
                     finally:
                         with self._job_lock:
                             self._job = None

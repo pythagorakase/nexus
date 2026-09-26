@@ -337,6 +337,14 @@ def test_manifest_real_test_turn_and_child_job_correlation(
             assert observed["phases"][-1]["phase"] == "complete"
             assert observed["wall_time"]["seconds"] > 0
             assert observed["jobs"]["total"] == len(result["jobs"])
+            # Background spend follows each job's id; it never joins attempts.
+            assert set(joined) >= {("skald_writer", 1), ("gaia", 1)}
+            assert all(
+                entry["usage"]["run_id"] == str(entry["id"])
+                for entry in observed["jobs"]["entries"]
+                if "usage" in entry
+            )
+            assert observed["usage_totals"]["critical_path"]["events"] >= 2
             summary = run_cli(
                 monkeypatch,
                 "inspect-turn",

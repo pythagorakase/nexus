@@ -2,7 +2,8 @@
 
 The usage and prompt-window ledgers are written through the production
 recorders into the conftest-isolated usage directory; the inspection dict has
-the exact shape ``inspect_turn`` returns from PostgreSQL.
+the exact shape ``inspect_turn`` returns from PostgreSQL. The compaction proof
+calls the repository's TEST provider over HTTP.
 """
 
 from __future__ import annotations
@@ -16,7 +17,11 @@ import pytest
 
 from nexus import cli
 from nexus.agents.lore.seat_blocks import influence_role, influence_token_totals
-from nexus.telemetry.attempt_manifest import identity_hash, validation_metadata
+from nexus.telemetry.attempt_manifest import (
+    PROVIDER_JOB_SEATS,
+    identity_hash,
+    validation_metadata,
+)
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.turn_observation import (
     SCHEMA_VERSION,
@@ -27,7 +32,13 @@ from nexus.telemetry.turn_observation import (
     observe_turn,
     read_turn_ledgers,
 )
-from nexus.telemetry.usage import UsageEvent, record_prompt_window, record_usage_event
+from nexus.telemetry.usage import (
+    UsageEvent,
+    record_prompt_window,
+    record_usage_event,
+    summarize_usage,
+)
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 # Read once, so a run that straddles UTC midnight keeps one pair of days.
 TODAY = datetime.now(timezone.utc).date()
@@ -137,11 +148,13 @@ def _manifest(
 
 
 def _event(
-    session: str,
+    run_id: str,
     ts: str,
     seat: str,
     attempt: int,
     model: str,
+    *,
+    slot: int = 4,
     **fields: Any,
 ) -> UsageEvent:
     anthropic = fields.pop("anthropic", False)
@@ -150,16 +163,39 @@ def _event(
         provider="anthropic" if anthropic else "openai",
         model=model,
         seat=seat,
-        slot=4,
-        run_id=session,
+        slot=slot,
+        run_id=run_id,
         attempt=attempt,
         transport="anthropic_messages" if anthropic else "responses",
         **fields,
     )
 
 
+def _job(
+    session: str,
+    queue: str,
+    job_id: int,
+    state: str,
+    created_at: Optional[str],
+    updated_at: Optional[str],
+) -> dict[str, Any]:
+    """Build one job row exactly as ``inspect_turn`` returns it."""
+    return {
+        "id": job_id,
+        "state": state,
+        "generation_session_id": session,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "queue": queue,
+    }
+
+
+# The accepting transaction enqueues the turn's jobs (timestamptz::text).
+ENQUEUED = f"{TODAY} 00:00:20.4+00"
+
+
 def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
-    """Record a writer pass before UTC midnight and three Gaia attempts after it."""
+    """Record a writer pass before UTC midnight, Gaia after it, and its jobs."""
     session = str(uuid4())
     writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
     # Gaia 1 is a manifest written before influence roles were declared.
@@ -227,10 +263,11 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
             max_output_tokens=4000,
         )
     )
+    # Background workers record under their numeric job id, after acceptance.
     record_usage_event(
         _event(
-            session,
-            f"{TODAY}T00:00:20.200000Z",
+            "2",
+            f"{TODAY}T00:00:28Z",
             "correspondence_compaction",
             1,
             "compaction-model",
@@ -244,6 +281,84 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
             max_output_tokens=2000,
         )
     )
+    record_usage_event(
+        _event(
+            "7",
+            f"{TODAY}T00:00:45Z",
+            "experience_renderer",
+            1,
+            "experience-model",
+            anthropic=True,
+            outcome="accepted",
+            input_tokens=2400,
+            output_tokens=600,
+            total_tokens=3000,
+            cached_input_tokens=0,
+            cache_creation_tokens=1200,
+            max_output_tokens=4000,
+        )
+    )
+    # Maturation job 7 shares its number with experience job 7; seats tell.
+    for ts, seat, input_tokens, output_tokens in (
+        ("00:01:10", "retrograde_seed_candidates", 8000, 1200),
+        ("00:01:20", "retrograde_seed_selection", 3000, 200),
+        ("00:01:50", "retrograde_expansion", 9000, 2500),
+    ):
+        record_usage_event(
+            _event(
+                "7",
+                f"{TODAY}T{ts}Z",
+                seat,
+                1,
+                "maturation-model",
+                outcome="accepted",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+                cached_input_tokens=0,
+                reasoning_tokens=100,
+                reasoning_effort="medium",
+                max_output_tokens=6000,
+            )
+        )
+    record_usage_event(
+        _event(
+            "1",
+            f"{TODAY}T00:02:40Z",
+            "summaries",
+            1,
+            "summary-model",
+            anthropic=True,
+            outcome="accepted",
+            input_tokens=41000,
+            output_tokens=1500,
+            total_tokens=42500,
+            cached_input_tokens=0,
+            cache_creation_tokens=0,
+            max_output_tokens=8000,
+        )
+    )
+    # Not this turn's: another slot's job 7, a job 7 that ran before a slot
+    # reset recycled the id, and compaction job 1 (not summary job 1).
+    for run_id, ts, seat, slot in (
+        ("7", "00:00:46", "experience_renderer", 5),
+        ("7", "00:00:05", "experience_renderer", 4),
+        ("1", "00:02:00", "correspondence_compaction", 4),
+    ):
+        record_usage_event(
+            _event(
+                run_id,
+                f"{TODAY}T{ts}Z",
+                seat,
+                1,
+                "noise-model",
+                slot=slot,
+                outcome="accepted",
+                input_tokens=888888,
+                output_tokens=1,
+                total_tokens=888889,
+            )
+        )
     # Another run on a read day, and this run on a day no phase spans.
     record_usage_event(
         _event(
@@ -298,31 +413,58 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
             _manifest(gaia[2], provider_outcome="accepted"),
             _manifest(writer, provider_outcome="accepted"),
         ],
+        # The order inspect_turn reads the queues in.
         "jobs": [
-            {
-                "id": 2,
-                "state": "queued",
-                "generation_session_id": session,
-                "queue": "correspondence_compaction",
-            },
-            {
-                "id": 7,
-                "state": "succeeded",
-                "generation_session_id": session,
-                "queue": "experience_render",
-            },
-            {
-                "id": 8,
-                "state": "queued",
-                "generation_session_id": session,
-                "queue": "experience_render",
-            },
-            {
-                "id": 9,
-                "state": "succeeded",
-                "generation_session_id": session,
-                "queue": "experience_render",
-            },
+            _job(
+                session,
+                "experience_render",
+                7,
+                "succeeded",
+                ENQUEUED,
+                f"{TODAY} 00:01:00+00",
+            ),
+            _job(session, "experience_render", 8, "queued", ENQUEUED, ENQUEUED),
+            _job(
+                session,
+                "experience_render",
+                9,
+                "succeeded",
+                ENQUEUED,
+                f"{TODAY} 00:01:30+00",
+            ),
+            _job(
+                session,
+                "retrograde_maturation",
+                7,
+                "succeeded",
+                ENQUEUED,
+                f"{TODAY} 00:02:00+00",
+            ),
+            _job(
+                session,
+                "correspondence_compaction",
+                2,
+                "succeeded",
+                ENQUEUED,
+                f"{TODAY} 00:00:30+00",
+            ),
+            _job(
+                session,
+                "narration",
+                3,
+                "succeeded",
+                ENQUEUED,
+                f"{TODAY} 00:00:31+00",
+            ),
+            _job(
+                session,
+                "narrative_summary",
+                1,
+                "succeeded",
+                ENQUEUED,
+                f"{TODAY} 00:03:00+00",
+            ),
+            _job(session, "relationship_milestone", 88, "pending", None, None),
         ],
     }
     return inspection, session, other
@@ -335,10 +477,16 @@ def _by_key(observation: dict[str, Any]) -> dict[tuple[str, int], dict[str, Any]
     }
 
 
+def _jobs(observation: dict[str, Any]) -> dict[tuple[str, int], dict[str, Any]]:
+    return {
+        (entry["queue"], entry["id"]): entry for entry in observation["jobs"]["entries"]
+    }
+
+
 def test_observation_joins_each_attempt_with_its_provider_usage() -> None:
     """Manifest windows, validation codes and ledger tokens join per attempt."""
     inspection, session, _ = _two_pass_turn()
-    observation = observe_turn(inspection, read_at=READ_AT)
+    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
 
     assert observation["schema_version"] == SCHEMA_VERSION == 1
     assert observation["generation_session"] == session
@@ -346,9 +494,9 @@ def test_observation_joins_each_attempt_with_its_provider_usage() -> None:
     assert observation["ledger_days_read"] == [str(YESTERDAY), str(TODAY)]
     assert observation["terminal_outcome"] == "accepted"
     attempts = _by_key(observation)
-    # Sorted, stable keys; the run on an unspanned day never joins.
+    # Sorted, stable keys; the run on an unspanned day never joins, and no
+    # background job's work joins the critical path.
     assert list(attempts) == [
-        ("correspondence_compaction", 1),
         ("gaia", 1),
         ("gaia", 2),
         ("gaia", 3),
@@ -422,45 +570,194 @@ def test_observation_joins_each_attempt_with_its_provider_usage() -> None:
     ]
     assert repaired["usage"]["cache_creation_tokens"] == 0
 
-    compaction = attempts[("correspondence_compaction", 1)]
-    assert compaction["model"] == "compaction-model"
-    assert compaction["outcome"] == UNKNOWN
-    assert compaction["window"]["provenance"] == UNKNOWN
-    assert compaction["validation"]["provenance"] == UNKNOWN
-    assert compaction["usage"]["reasoning_effort"] == "low"
-
     assert json.loads(json.dumps(observation)) == observation
     assert "private" not in json.dumps(observation)
 
 
-def test_usage_totals_stay_unknown_where_any_attempt_went_unreported() -> None:
-    """Totals sum provider truth only; one unreported field makes it unknown."""
-    inspection, _, _ = _two_pass_turn()
-    observation = observe_turn(inspection, read_at=READ_AT)
+def test_background_jobs_carry_the_usage_recorded_under_their_job_ids() -> None:
+    """Summary, maturation, experience and compaction spend follow the job rows."""
+    inspection, session, _ = _two_pass_turn()
+    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    jobs = _jobs(observation)
 
-    assert observation["usage_totals"] == {
+    # Sorted by queue and id; every row keeps its identity and UTC times.
+    assert list(jobs) == [
+        ("correspondence_compaction", 2),
+        ("experience_render", 7),
+        ("experience_render", 8),
+        ("experience_render", 9),
+        ("narration", 3),
+        ("narrative_summary", 1),
+        ("relationship_milestone", 88),
+        ("retrograde_maturation", 7),
+    ]
+    compaction = jobs[("correspondence_compaction", 2)]
+    assert {key: compaction[key] for key in compaction if key != "usage"} == {
+        "queue": "correspondence_compaction",
+        "id": 2,
+        "state": "succeeded",
+        "terminal": True,
+        "created_at": f"{TODAY}T00:00:20.400000Z",
+        "updated_at": f"{TODAY}T00:00:30Z",
+    }
+    assert compaction["usage"] == {
+        "run_id": "2",
+        "ledger_days": [str(TODAY)],
         "provenance": "provider_usage_ledger",
-        "events": 4,
+        "events": 1,
+        "seats": ["correspondence_compaction"],
+        "model": "compaction-model",
+        "provider": "openai",
+        "transport": "responses",
+        "outcomes": ["accepted"],
+        "input_tokens": 5000,
+        "output_tokens": 300,
+        "cached_input_tokens": 0,
+        "cache_creation_tokens": UNKNOWN,
+        "reasoning_tokens": 0,
+        "reasoning_effort": "low",
+        "max_output_tokens": 2000,
+    }
+    # Only its own slot's calls after its enqueue, not the recycled id's.
+    experience = jobs[("experience_render", 7)]["usage"]
+    assert experience["events"] == 1
+    assert experience["seats"] == ["experience_renderer"]
+    assert (experience["provider"], experience["transport"]) == (
+        "anthropic",
+        "anthropic_messages",
+    )
+    assert (experience["input_tokens"], experience["output_tokens"]) == (2400, 600)
+    assert experience["cache_creation_tokens"] == 1200
+    assert experience["reasoning_effort"] is None
+    maturation = jobs[("retrograde_maturation", 7)]["usage"]
+    assert maturation["run_id"] == "7"
+    assert maturation["events"] == 3
+    assert maturation["seats"] == sorted(PROVIDER_JOB_SEATS["retrograde_maturation"])
+    assert maturation["model"] == "maturation-model"
+    assert maturation["outcomes"] == ["accepted"] * 3
+    assert (maturation["input_tokens"], maturation["output_tokens"]) == (20000, 3900)
+    assert maturation["reasoning_tokens"] == 300
+    summary = jobs[("narrative_summary", 1)]["usage"]
+    assert (summary["run_id"], summary["seats"]) == ("1", ["summaries"])
+    assert (summary["input_tokens"], summary["output_tokens"]) == (41000, 1500)
+    assert summary["max_output_tokens"] == 8000
+    # A seat names exactly one queue, so a shared job number cannot mix spend.
+    seats = [seat for queue in PROVIDER_JOB_SEATS.values() for seat in queue]
+    assert len(seats) == len(set(seats))
+    assert "noise-model" not in json.dumps(observation)
+    assert all(attempt["seat"] not in seats for attempt in observation["attempts"])
+
+
+def test_usage_totals_split_the_critical_path_from_background_work() -> None:
+    """Critical-path and background sums stay apart; overall adds the two."""
+    inspection, _, _ = _two_pass_turn()
+    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+
+    totals = observation["usage_totals"]
+    assert totals["critical_path"] == {
+        "provenance": "provider_usage_ledger",
+        "events": 3,
         "attempts_without_usage": 1,
-        "input_tokens": 20777 + 3000 + 3100 + 5000,
-        "output_tokens": 2100 + 900 + 950 + 300,
-        "cached_input_tokens": 12288 + 13000 + 13000 + 0,
+        "input_tokens": 20777 + 3000 + 3100,
+        "output_tokens": 2100 + 900 + 950,
+        "cached_input_tokens": 12288 + 13000 + 13000,
         "cache_creation_tokens": UNKNOWN,
         "reasoning_tokens": UNKNOWN,
     }
-    assert observation["jobs"] == {
-        "total": 4,
-        "by_queue": {
-            "correspondence_compaction": {"queued": 1},
-            "experience_render": {"queued": 1, "succeeded": 2},
-        },
+    assert totals["background"] == {
+        "provenance": "provider_usage_ledger",
+        "events": 6,
+        "jobs": 6,
+        "jobs_open": 1,
+        "jobs_without_usage": 1,
+        "input_tokens": 5000 + 2400 + 20000 + 41000,
+        "output_tokens": 300 + 600 + 3900 + 1500,
+        "cached_input_tokens": 0,
+        # Compaction reported no cache writes; the renderer no reasoning.
+        "cache_creation_tokens": UNKNOWN,
+        "reasoning_tokens": UNKNOWN,
     }
+    assert totals["overall"] == {
+        "provenance": "provider_usage_ledger",
+        "events": 9,
+        "input_tokens": 26877 + 68400,
+        "output_tokens": 3950 + 6300,
+        "cached_input_tokens": 38288,
+        "cache_creation_tokens": UNKNOWN,
+        "reasoning_tokens": UNKNOWN,
+    }
+    assert observation["jobs"]["total"] == 8
+    assert observation["jobs"]["by_queue"] == {
+        "correspondence_compaction": {"succeeded": 1},
+        "experience_render": {"queued": 1, "succeeded": 2},
+        "narration": {"succeeded": 1},
+        "narrative_summary": {"succeeded": 1},
+        "relationship_milestone": {"pending": 1},
+        "retrograde_maturation": {"succeeded": 1},
+    }
+
+
+def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing() -> None:
+    """A finished provider-backed job without usage is unknown, never zero."""
+    inspection, _, _ = _two_pass_turn()
+    jobs = _jobs(observe_turn(inspection, slot=4, read_at=READ_AT))
+
+    finished = jobs[("experience_render", 9)]
+    assert finished["terminal"] is True
+    assert finished["usage"]["provenance"] == UNKNOWN
+    assert finished["usage"]["events"] == 0
+    assert finished["usage"]["ledger_days"] == [str(TODAY)]
+    assert all(
+        finished["usage"][field] == UNKNOWN
+        for field in ("seats", "model", "outcomes", "input_tokens", "output_tokens")
+    )
+    queued = jobs[("experience_render", 8)]
+    assert (queued["state"], queued["terminal"]) == ("queued", False)
+    assert queued["usage"]["provenance"] == UNKNOWN
+    # Queues that never call a provider carry no spend field at all.
+    assert "usage" not in jobs[("narration", 3)]
+    milestone = jobs[("relationship_milestone", 88)]
+    assert "usage" not in milestone
+    assert (milestone["created_at"], milestone["terminal"]) == (None, False)
+
+    # A turn whose jobs never call a provider spent nothing in the background.
+    session = str(uuid4())
+    quiet = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [{"phase": "retrieval", "recorded_at": f"{TODAY} 00:00:01+00"}],
+        "manifests": [],
+        "jobs": [
+            _job(session, "narration", 4, "succeeded", ENQUEUED, ENQUEUED),
+            _job(session, "narrative_embedding", 5, "queued", ENQUEUED, ENQUEUED),
+        ],
+    }
+    observation = observe_turn(quiet, slot=4, read_at=READ_AT)
+    background = observation["usage_totals"]["background"]
+    assert background == {
+        "provenance": None,
+        "events": 0,
+        "jobs": 0,
+        "jobs_open": 0,
+        "jobs_without_usage": 0,
+        **dict.fromkeys(
+            (
+                "input_tokens",
+                "output_tokens",
+                "cached_input_tokens",
+                "cache_creation_tokens",
+                "reasoning_tokens",
+            ),
+            0,
+        ),
+    }
+    assert all("usage" not in entry for entry in observation["jobs"]["entries"])
+    assert format_turn_summary(observation).splitlines()[-2] == "Background none"
 
 
 def test_phase_spans_cross_utc_midnight_and_offsets() -> None:
     """Consecutive transitions become spans; the last one stays open."""
     inspection, _, _ = _two_pass_turn()
-    observation = observe_turn(inspection, read_at=READ_AT)
+    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
 
     assert [(span["phase"], span["seconds"]) for span in observation["phases"]] == [
         ("retrieval", 8.25),
@@ -493,7 +790,7 @@ def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
         "jobs": [],
     }
 
-    observation = observe_turn(inspection, read_at=READ_AT)
+    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
 
     assert observation["terminal_outcome"] is None
     assert observation["ledger_days_read"] == [str(TODAY)]
@@ -511,46 +808,27 @@ def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
         "rejection_codes": ["wire-contract-violation"],
     }
     assert "private" not in json.dumps(observation)
-    assert observation["usage_totals"]["provenance"] == UNKNOWN
-    assert observation["usage_totals"]["input_tokens"] == UNKNOWN
-    assert observation["jobs"] == {"total": 0, "by_queue": {}}
+    critical_path = observation["usage_totals"]["critical_path"]
+    assert critical_path["provenance"] == UNKNOWN
+    assert critical_path["input_tokens"] == UNKNOWN
+    assert observation["usage_totals"]["overall"]["input_tokens"] == UNKNOWN
+    assert observation["jobs"] == {"total": 0, "by_queue": {}, "entries": []}
 
 
-def test_session_without_phases_reads_no_ledger_day() -> None:
-    """Without observed transitions nothing names a ledger day to read."""
+def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
+    """Summary jobs that finish after UTC midnight are read from their own days."""
     session = str(uuid4())
     record = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
-    inspection = {
-        "session": {"session_id": session, "terminal_outcome": "accepted"},
-        "phases": [],
-        "manifests": [_manifest(record, provider_outcome="accepted")],
-        "jobs": [],
-    }
-
-    assert ledger_days(inspection) == []
-    observation = observe_turn(inspection, read_at=READ_AT)
-    assert observation["ledger_days_read"] == []
-    assert observation["phases"] == []
-    assert observation["wall_time"] == {
-        "started_at": UNKNOWN,
-        "ended_at": UNKNOWN,
-        "seconds": UNKNOWN,
-    }
-    assert observation["attempts"][0]["usage"]["provenance"] == UNKNOWN
-
-
-def test_summary_jobs_sharing_an_attempt_number_join_after_midnight() -> None:
-    """Episode and season summaries share attempt 1 but not their output cap."""
-    session = str(uuid4())
-    # The turn completes before UTC midnight; a new_season transition queues an
-    # episode and a season summary that the worker runs after it.
-    for ts, input_tokens, cap in (
-        (f"{TODAY}T00:00:31Z", 41000, 8000),
-        (f"{TODAY}T00:00:47Z", 9000, 12000),
+    enqueued = f"{YESTERDAY} 23:59:58+00"
+    # A new_season transition queues an episode and a season summary that the
+    # worker runs after midnight; each records under its own job id.
+    for job_id, ts, input_tokens, cap in (
+        (1, f"{TODAY}T00:00:31Z", 41000, 8000),
+        (2, f"{TODAY}T00:00:47Z", 9000, 12000),
     ):
         record_usage_event(
             _event(
-                session,
+                str(job_id),
                 ts,
                 "summaries",
                 1,
@@ -565,62 +843,93 @@ def test_summary_jobs_sharing_an_attempt_number_join_after_midnight() -> None:
         )
     inspection = {
         "session": {"session_id": session, "terminal_outcome": "accepted"},
-        "phases": [
-            {"phase": "retrieval", "recorded_at": f"{YESTERDAY} 23:59:40+00"},
-            {"phase": "complete", "recorded_at": f"{YESTERDAY} 23:59:58+00"},
-        ],
-        "manifests": [],
+        "phases": [],
+        "manifests": [_manifest(record, provider_outcome="accepted")],
         "jobs": [
-            {
-                "id": job_id,
-                "state": "succeeded",
-                "generation_session_id": session,
-                "queue": "narrative_summary",
-            }
-            for job_id in (1, 2)
+            _job(
+                session,
+                "narrative_summary",
+                1,
+                "succeeded",
+                enqueued,
+                f"{TODAY} 00:00:32+00",
+            ),
+            _job(
+                session,
+                "narrative_summary",
+                2,
+                "succeeded",
+                enqueued,
+                f"{TODAY} 00:00:48+00",
+            ),
         ],
     }
 
-    # A read before midnight names only the phases' day; nothing ran yet.
-    before = datetime.combine(YESTERDAY, time(23, 59, 59), tzinfo=timezone.utc)
-    early = observe_turn(inspection, read_at=before)
-    assert early["ledger_days_read"] == [str(YESTERDAY)]
-    assert early["attempts"] == []
-
-    observation = observe_turn(inspection, read_at=READ_AT)
+    assert ledger_days(inspection) == []
+    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    # No phase names a day for the turn; the jobs' own days are still read.
     assert observation["ledger_days_read"] == [str(YESTERDAY), str(TODAY)]
-    (summaries,) = observation["attempts"]
-    assert (summaries["seat"], summaries["attempt"]) == ("summaries", 1)
-    assert summaries["model"] == "summary-model"
-    usage = summaries["usage"]
-    assert usage["events"] == 2
-    assert usage["provider"] == "anthropic"
-    assert usage["transport"] == "anthropic_messages"
-    assert usage["reasoning_effort"] is None
-    assert usage["max_output_tokens"] == [8000, 12000]
-    assert (usage["input_tokens"], usage["output_tokens"]) == (50000, 3000)
-    assert observation["usage_totals"]["input_tokens"] == 50000
-    assert json.loads(json.dumps(observation)) == observation
-    summary = format_turn_summary(observation)
-    assert f"ledger {YESTERDAY} to {TODAY}" in summary.splitlines()[0]
+    assert observation["phases"] == []
+    assert observation["wall_time"] == {
+        "started_at": UNKNOWN,
+        "ended_at": UNKNOWN,
+        "seconds": UNKNOWN,
+    }
+    assert observation["attempts"][0]["usage"]["provenance"] == UNKNOWN
+    jobs = _jobs(observation)
+    episode = jobs[("narrative_summary", 1)]["usage"]
+    season = jobs[("narrative_summary", 2)]["usage"]
     assert (
-        "  usage in 50,000 · cached unknown · cache write unknown · out 3,000 · "
-        "reasoning unknown · effort - · max out 8,000/12,000 "
-        "[provider_usage_ledger ×2]"
-    ) in summary.splitlines()
+        episode["ledger_days"]
+        == season["ledger_days"]
+        == [
+            str(YESTERDAY),
+            str(TODAY),
+        ]
+    )
+    assert (episode["input_tokens"], episode["max_output_tokens"]) == (41000, 8000)
+    assert (season["input_tokens"], season["max_output_tokens"]) == (9000, 12000)
+    assert observation["usage_totals"]["background"]["input_tokens"] == 50000
+    assert observation["usage_totals"]["overall"]["input_tokens"] == UNKNOWN
+    assert json.loads(json.dumps(observation)) == observation
+    summary = format_turn_summary(observation).splitlines()
+    assert f"ledger {YESTERDAY} to {TODAY}" in summary[0]
+    assert summary[
+        summary.index("narrative_summary #2 summary-model · succeeded") + 1
+    ] == (
+        "  usage in 9,000 · cached unknown · cache write unknown · out 1,500 · "
+        "reasoning unknown · effort - · max out 12,000 [provider_usage_ledger ×1]"
+    )
 
 
 def test_join_refuses_rows_it_cannot_attribute() -> None:
-    """Foreign sessions, unread days, naive clocks, model or provider drift raise."""
+    """Foreign runs, unread days, naive clocks, drift and stray seats raise."""
+    from nexus.telemetry.turn_observation import job_ledger_days, read_job_ledgers
+
     inspection, session, other = _two_pass_turn()
     days = ledger_days(inspection)
     events, windows = read_turn_ledgers(session, days)
     foreign, _ = read_turn_ledgers(other, days)
+    job_events = read_job_ledgers(job_ledger_days(inspection, read_at=READ_AT))
 
+    def derive(usage: list[UsageEvent], background: list[UsageEvent]) -> None:
+        derive_turn_observation(
+            inspection,
+            usage,
+            windows,
+            ledger_days=days,
+            job_events=background,
+            slot=4,
+            read_at=READ_AT,
+        )
+
+    derive(events, job_events)
     with pytest.raises(ValueError, match=f"belongs to run {other}"):
-        derive_turn_observation(inspection, events + foreign, windows, ledger_days=days)
+        derive(events + foreign, job_events)
     with pytest.raises(ValueError, match="outside the ledger days read"):
-        derive_turn_observation(inspection, events, windows, ledger_days=days[1:])
+        derive_turn_observation(
+            inspection, events, windows, ledger_days=days[1:], slot=4
+        )
     drifted = [
         (
             event.model_copy(update={"model": "other-model"})
@@ -630,13 +939,28 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
         for event in events
     ]
     with pytest.raises(ValueError, match="conflicting models"):
-        derive_turn_observation(inspection, drifted, windows, ledger_days=days)
+        derive(drifted, job_events)
     accepted = next(
         event for event in events if (event.seat, event.attempt) == ("gaia", 3)
     )
     rerouted = [*events, accepted.model_copy(update={"provider": "other-provider"})]
     with pytest.raises(ValueError, match="conflicting provider values"):
-        derive_turn_observation(inspection, rerouted, windows, ledger_days=days)
+        derive(rerouted, job_events)
+    # Background work under the session's run id cannot be tied to its job.
+    legacy = accepted.model_copy(update={"seat": "summaries", "attempt": 1})
+    with pytest.raises(ValueError, match="background seat summaries"):
+        derive([*events, legacy], job_events)
+    # A call under a listed job's id and slot must name a seat of some queue.
+    stray = job_events[0].model_copy(update={"seat": "skald_writer"})
+    with pytest.raises(ValueError, match="seat skald_writer under job run"):
+        derive(events, [*job_events, stray])
+    with pytest.raises(ValueError, match="not a provider-backed job"):
+        derive(events, [*job_events, foreign[0]])
+    unread = job_events[0].model_copy(
+        update={"ts": f"{YESTERDAY - timedelta(days=1)}T12:00:00Z"}
+    )
+    with pytest.raises(ValueError, match="outside the job ledger days read"):
+        derive(events, [*job_events, UsageEvent.model_validate(unread.model_dump())])
     naive = {
         **inspection,
         "phases": [{"phase": "retrieval", "recorded_at": "2026-09-24 21:24:10"}],
@@ -646,9 +970,9 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
 
 
 def test_summary_renders_one_concise_read_of_the_turn() -> None:
-    """The --summary text states freshness, spans, each attempt and totals."""
+    """The --summary text states freshness, spans, attempts, jobs and totals."""
     inspection, session, _ = _two_pass_turn()
-    summary = format_turn_summary(observe_turn(inspection, read_at=READ_AT))
+    summary = format_turn_summary(observe_turn(inspection, slot=4, read_at=READ_AT))
     lines = summary.splitlines()
 
     assert lines[0] == (
@@ -681,25 +1005,110 @@ def test_summary_renders_one_concise_read_of_the_turn() -> None:
         "  validation repairs 2 · rejections 0 "
         "(active-extend-expiry, scene-reset-crossings) [attempt_manifest]"
     ) in lines
-    compaction = lines.index(
-        "correspondence_compaction #1 compaction-model · outcome unknown · "
-        "provider unknown"
-    )
-    assert lines[compaction + 1 : compaction + 4] == [
-        "  window unknown",
-        "  usage in 5,000 · cached 0 · cache write unknown · out 300 · "
-        "reasoning 0 · effort low · max out 2,000 [provider_usage_ledger ×1]",
-        "  validation unknown",
-    ]
     timed_out = lines.index("gaia #1 gaia-model · outcome accepted · provider error")
     assert lines[timed_out + 2] == "  usage unknown"
-    assert lines[-2] == (
-        "Usage in 31,877 · cached 38,288 · cache write unknown · out 4,250 · "
-        "reasoning unknown · events 4 · attempts without usage 1"
+    assert lines[writer + 5 :] == [
+        "Critical path in 26,877 · cached 38,288 · cache write unknown · out "
+        "3,950 · reasoning unknown · events 3 · attempts without usage 1",
+        "correspondence_compaction #2 compaction-model · succeeded",
+        "  usage in 5,000 · cached 0 · cache write unknown · out 300 · reasoning 0 "
+        "· effort low · max out 2,000 [provider_usage_ledger ×1]",
+        "experience_render #7 experience-model · succeeded",
+        "  usage in 2,400 · cached 0 · cache write 1,200 · out 600 · reasoning "
+        "unknown · effort - · max out 4,000 [provider_usage_ledger ×1]",
+        "experience_render #8 · queued",
+        "  usage unknown",
+        "experience_render #9 · succeeded",
+        "  usage unknown",
+        "narrative_summary #1 summary-model · succeeded",
+        "  usage in 41,000 · cached 0 · cache write 0 · out 1,500 · reasoning "
+        "unknown · effort - · max out 8,000 [provider_usage_ledger ×1]",
+        "retrograde_maturation #7 maturation-model · succeeded",
+        "  usage in 20,000 · cached 0 · cache write unknown · out 3,900 · "
+        "reasoning 300 · effort medium · max out 6,000 [provider_usage_ledger ×3]",
+        "Background in 68,400 · cached 0 · cache write unknown · out 6,300 · "
+        "reasoning unknown · events 6 · jobs 6 · open 1 · without usage 1",
+        "Overall in 95,277 · cached 38,288 · cache write unknown · out 10,250 · "
+        "reasoning unknown · events 9",
+        "Jobs 8 · correspondence_compaction succeeded 1 · experience_render "
+        "queued 1, succeeded 2 · narration succeeded 1 · narrative_summary "
+        "succeeded 1 · relationship_milestone pending 1 · retrograde_maturation "
+        "succeeded 1",
+    ]
+
+
+def test_compaction_records_usage_under_its_job_id(
+    request: pytest.FixtureRequest,
+) -> None:
+    """A compaction call through the TEST provider joins its job, not the turn."""
+    from nexus.jobs.compaction import compaction_usage
+    from nexus.memory.correspondence import (
+        CorrespondenceDigestWire,
+        load_compaction_system_prompt,
     )
-    assert lines[-1] == (
-        "Jobs 4 · correspondence_compaction queued 1 · "
-        "experience_render queued 1, succeeded 2"
+    from scripts.api_openai import OpenAIProvider
+
+    session = str(uuid4())
+    # The seat comes from the job's usage identity, as drain_compaction sets it.
+    provider = OpenAIProvider(
+        model="TEST",
+        api_key="test-key",
+        base_url=request.getfixturevalue("mock_openai_server"),
+        system_prompt=load_compaction_system_prompt(max_digest_tokens=2000),
+        usage_provider_name="test",
+        structured_output_retries=0,
+    )
+    days = {datetime.now(timezone.utc).date().isoformat()}
+    try:
+        with compaction_usage(12, slot=4):
+            digest, _ = provider.get_structured_completion(
+                "Aging exchanges.", CorrespondenceDigestWire
+            )
+    finally:
+        provider.client.close()
+    assert isinstance(digest, CorrespondenceDigestWire) and digest.digest
+
+    days.add(datetime.now(timezone.utc).date().isoformat())
+    (event,) = [
+        event for day in sorted(days) for event in summarize_usage(day=day)["events"]
+    ]
+    assert (event["seat"], event["run_id"], event["slot"]) == (
+        "correspondence_compaction",
+        "12",
+        4,
+    )
+    assert event["seat"] in PROVIDER_JOB_SEATS["correspondence_compaction"]
+    assert (event["provider"], event["model"]) == ("test", "TEST")
+    recorded_at = datetime.fromisoformat(event["ts"])
+    enqueued = (recorded_at - timedelta(seconds=5)).isoformat()
+    finished = (recorded_at + timedelta(seconds=1)).isoformat()
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [{"phase": "complete", "recorded_at": enqueued}],
+        "manifests": [],
+        "jobs": [
+            _job(
+                session,
+                "correspondence_compaction",
+                12,
+                "succeeded",
+                enqueued,
+                finished,
+            )
+        ],
+    }
+    observation = observe_turn(
+        inspection, slot=4, read_at=recorded_at + timedelta(seconds=2)
+    )
+    assert observation["attempts"] == []
+    (job,) = observation["jobs"]["entries"]
+    usage = job["usage"]
+    assert (usage["provenance"], usage["events"]) == ("provider_usage_ledger", 1)
+    # The TEST Responses mock reports exact counts and no cache details.
+    assert (usage["input_tokens"], usage["output_tokens"]) == (1000, 800)
+    assert observation["usage_totals"]["background"]["input_tokens"] == 1000
+    assert "correspondence_compaction #12 TEST · succeeded" in format_turn_summary(
+        observation
     )
 
 

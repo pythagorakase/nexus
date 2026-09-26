@@ -3788,7 +3788,7 @@ def run_inspect_turn(args: argparse.Namespace) -> Dict[str, Any]:
     if args.json or args.summary:
         from nexus.telemetry.turn_observation import observe_turn
 
-        payload["observation"] = observe_turn(result)
+        payload["observation"] = observe_turn(result, slot=args.slot)
     return payload
 
 

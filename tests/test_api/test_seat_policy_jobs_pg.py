@@ -151,3 +151,69 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
                     for row in before[table]
                     for record in caplog.records
                 ), table
+            # Each queue's provider calls land in the ledger under the numeric
+            # job id, and inspect-turn attaches them to the job row (#802).
+            from nexus.telemetry import usage
+            from nexus.telemetry.attempt_manifest import PROVIDER_JOB_SEATS
+
+            events = [
+                json.loads(line)
+                for path in usage._config.usage_dir.glob("usage-*.jsonl")
+                for line in path.read_text().splitlines()
+            ]
+            background = {
+                seat for seats in PROVIDER_JOB_SEATS.values() for seat in seats
+            }
+            assert not [
+                event
+                for event in events
+                if event["run_id"] == session and event["seat"] in background
+            ]
+            observation = json.loads(
+                run_cli(
+                    monkeypatch,
+                    "inspect-turn",
+                    "--slot",
+                    "4",
+                    "--session",
+                    session,
+                    "--json",
+                )
+            )["observation"]
+            entries = {
+                (entry["queue"], entry["id"]): entry
+                for entry in observation["jobs"]["entries"]
+            }
+            joined = 0
+            for queue, table in (
+                ("experience_render", "character_experience_jobs"),
+                ("retrograde_maturation", "orrery_maturation_jobs"),
+                ("correspondence_compaction", "correspondence_compaction_jobs"),
+                ("narrative_summary", "narrative_summary_jobs"),
+            ):
+                for job_id, _, _ in before[table]:
+                    own = [
+                        event
+                        for event in events
+                        if event["run_id"] == str(job_id)
+                        and event["slot"] == 4
+                        and event["seat"] in PROVIDER_JOB_SEATS[queue]
+                    ]
+                    job_usage = entries[(queue, job_id)]["usage"]
+                    assert job_usage["run_id"] == str(job_id)
+                    assert job_usage["events"] == len(own), (queue, job_id, own)
+                    if own:
+                        joined += 1
+                        assert job_usage["provenance"] == "provider_usage_ledger"
+                        assert job_usage["model"] == "TEST"
+                        assert job_usage["input_tokens"] == sum(
+                            event["input_tokens"] for event in own
+                        )
+            assert joined, "No provider-backed job of this turn recorded usage"
+            totals = observation["usage_totals"]
+            assert totals["background"]["events"] == sum(
+                entry["usage"]["events"]
+                for entry in entries.values()
+                if "usage" in entry
+            )
+            print("Background usage: " + json.dumps(totals["background"]), flush=True)
