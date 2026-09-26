@@ -289,6 +289,26 @@ def test_projections_share_exception_handlers_and_middleware(
     assert preflight.headers["access-control-allow-origin"] == origin
 
 
+def test_projections_carry_the_source_app_metadata() -> None:
+    """A proxied gateway keeps its root path and schema metadata."""
+    tags = [{"name": "narrative", "description": "Turns"}]
+    source = FastAPI(
+        debug=True,
+        title="Probe",
+        description="Route projection probe",
+        version="9.9.9",
+        openapi_tags=tags,
+        root_path="/nexus",
+    )
+    for projection in (build_player_app(source), build_operator_app(source)):
+        assert projection.debug is True
+        assert projection.title == "Probe"
+        assert projection.description == "Route projection probe"
+        assert projection.version == "9.9.9"
+        assert projection.openapi_tags == tags
+        assert projection.root_path == "/nexus"
+
+
 def test_projection_runs_the_gateway_lifespan_against_the_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -380,13 +400,38 @@ def test_registry_has_no_stale_entries(
         ("POST", "/api/slot/{slot}/undo"),
         ("POST", "/api/story/new/setup/start"),
         ("POST", "/api/story/new/chat"),
+        ("POST", "/api/story/new/transition"),
         ("PATCH", "/api/preferences"),
         ("WS", "/ws/narrative"),
     ],
 )
-def test_bounded_play_is_on_the_player_plane(key: RouteKey) -> None:
+def test_play_is_on_the_player_plane(key: RouteKey) -> None:
     """The issue's ruling keeps narrative turns, the wizard, and preferences."""
     assert ROUTE_CAPABILITIES[key].plane == "player"
+
+
+def test_destructive_routes_are_pinned() -> None:
+    """Exactly these routes can irreversibly wipe data, whatever their plane.
+
+    The wizard admits any unlocked slot: ``setup/start`` discards an occupied
+    slot's in-progress wizard and ``transition`` deletes its world, so both
+    are destructive on the player plane. Everything else destructive is
+    operator-only.
+    """
+    destructive = {
+        key: capability.plane
+        for key, capability in ROUTE_CAPABILITIES.items()
+        if capability.destructive
+    }
+    assert destructive == {
+        ("PUT", "/api/secrets/{provider}"): "operator",
+        ("POST", "/api/story/new/setup/reset"): "operator",
+        ("DELETE", "/api/characters/{character_id}/images/{image_id}"): "operator",
+        ("DELETE", "/api/places/{place_id}/images/{image_id}"): "operator",
+        ("POST", "/api/local-models/delete"): "operator",
+        ("POST", "/api/story/new/setup/start"): "player",
+        ("POST", "/api/story/new/transition"): "player",
+    }
 
 
 def test_unclassified_route_fails_the_gateway_import() -> None:

@@ -123,20 +123,30 @@ in one table, `ROUTE_CAPABILITIES` in `nexus/api/route_capabilities.py`,
 keyed by `(method, path template)`, `("WS", path)`, or `("MOUNT", path)`.
 Handlers are not decorated. Each entry records the plane, a capability group,
 the slot mode (`none`, `read`, `write`), whether the request can start
-model-provider work, and whether it can irreversibly wipe a story, uploaded
-images, a stored credential, or a downloaded model.
+model-provider work, and whether it can irreversibly wipe a story, an
+in-progress wizard, uploaded images, a stored credential, or a downloaded
+model.
 
 | Plane | Serves |
 |---|---|
-| Player | Liveness (`/health`, `/status`), reading routes, narrative turns (continue, retry, regenerate, approve, select-choice, undo, discarding the pending turn), the new-story wizard for an empty slot, preferences, `/ws/narrative`, the upload mounts, and the app shell |
+| Player | Liveness (`/health`, `/status`), reading routes, narrative turns (continue, retry, regenerate, approve, select-choice, undo, discarding the pending turn), the new-story wizard, preferences, `/ws/narrative`, the upload mounts, and the app shell |
 | Operator | The player plane plus secrets, `/api/settings`, local models, diagnostics (`/runtime/status`, `/api/dev/*`, the OpenAPI schema and docs), slot lock, unlock, and model pins, `setup/reset`, `slot/select`, and asset uploads, main-image changes, and deletes |
+
+The player plane can overwrite any unlocked slot through the wizard, occupied
+or not; the slot lock is the only guard. `setup/start` discards the slot's
+in-progress wizard and trait selections and persists the resolved wizard model
+as the slot's Skald pin, so its `model` override replaces the pin that
+`PATCH /api/slot/{slot}/settings` otherwise sets only on the operator plane.
+`transition` deletes the slot's existing world. The registry marks both routes
+destructive.
 
 `build_player_app(app)` and `build_operator_app(app)` project new FastAPI
 apps from the gateway. Each reuses the gateway's route objects in
-registration order (the app-shell catch-all stays last), its middleware, and
-its exception handlers, and runs the gateway's lifespan against the gateway
-app itself so shared handlers see one scheduler; only one projection may run
-that lifespan at a time.
+registration order (the app-shell catch-all stays last), its middleware,
+exception handlers, metadata, and root path, and runs the gateway's lifespan
+against the gateway app itself so shared handlers see one scheduler; only one
+projection may run that lifespan at a time. Serving the gateway app itself
+beside a projection in one process is not yet detected.
 
 The registry rule: a route enters the gateway only with an entry.
 `nexus.api.narrative` calls `require_classified(app)` at import, so an

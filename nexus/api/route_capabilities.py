@@ -9,9 +9,10 @@ the gateway import (:func:`require_classified`).
 
 Two planes project from the one shared app:
 
-- **player** — what the remote tunnel may reach: reading and bounded play
+- **player** — what the remote tunnel may reach: reading and play
   (narrative turns, undo, the new-story wizard, preferences, static images,
-  and the app shell).
+  and the app shell). The wizard can overwrite an unlocked occupied slot,
+  so its start and transition routes are marked destructive.
 - **operator** — the whole runtime, player routes included, for loopback:
   secrets, settings, local models, diagnostics, slot administration, resets,
   and asset management.
@@ -62,10 +63,10 @@ class RouteCapability:
             transcripts, credential verification), directly, in a background
             task, or by waking the deferred-work loop; or the local inference
             server's lifecycle.
-        destructive: True when the route can irreversibly wipe a story,
-            uploaded images, a stored credential, or a downloaded model.
-            Discarding a pending turn or the latest wizard draft is bounded
-            play, not destruction.
+        destructive: True when the route can irreversibly wipe a story, an
+            in-progress wizard, uploaded images, a stored credential, or a
+            downloaded model. Discarding a pending turn or the latest wizard
+            draft is bounded play, not destruction.
     """
 
     plane: Plane
@@ -122,6 +123,9 @@ _NARRATIVE_TURN = _player("narrative.play", "write", provider_effect=True)
 _NARRATIVE_EDIT = _player("narrative.play", "write")
 _WIZARD_TURN = _player("wizard.play", "write", provider_effect=True)
 _WIZARD_EDIT = _player("wizard.play", "write")
+_WIZARD_OVERWRITE = _player(
+    "wizard.play", "write", provider_effect=True, destructive=True
+)
 _ASSETS_READ = _player("assets.read", "read")
 _ASSETS_FILES = _player("assets.read")
 _UI_SHELL = _player("ui.shell")
@@ -165,9 +169,12 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("PATCH", "/api/slot/{slot}/settings"): _operator("slot.pins", "write"),
         ("POST", "/api/slot/{slot}/lock"): _operator("slot.lock", "write"),
         ("POST", "/api/slot/{slot}/unlock"): _operator("slot.lock", "write"),
-        # setup_endpoints. The player plane admits the wizard for an empty
-        # slot; overwriting an occupied slot goes through setup/reset.
-        ("POST", "/api/story/new/setup/start"): _WIZARD_TURN,
+        # setup_endpoints. The wizard admits any unlocked slot, occupied or
+        # not; the slot lock is the only guard. Starting it discards the
+        # slot's in-progress wizard and trait selections and persists the
+        # resolved wizard model as the slot's Skald pin, so a request's model
+        # override replaces an operator-set pin.
+        ("POST", "/api/story/new/setup/start"): _WIZARD_OVERWRITE,
         ("GET", "/api/story/new/setup/resume"): _player(
             "wizard.read", "read", provider_effect=True
         ),
@@ -183,7 +190,8 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         # wizard_chat
         ("POST", "/api/story/new/chat"): _WIZARD_TURN,
         ("POST", "/api/story/new/chat/stream"): _WIZARD_TURN,
-        ("POST", "/api/story/new/transition"): _WIZARD_TURN,
+        # Deletes the slot's existing world and restarts its id sequences.
+        ("POST", "/api/story/new/transition"): _WIZARD_OVERWRITE,
         ("GET", "/api/story/new/retrograde/status"): _player("wizard.read"),
         # reader_endpoints
         ("GET", "/status"): _HEALTH,
@@ -413,8 +421,12 @@ def _build_projection(source_app: FastAPI, plane: Plane) -> FastAPI:
         )
     serve_docs = bool(framework_planes) and framework_planes <= admitted
     projection = FastAPI(
+        debug=source_app.debug,
         title=source_app.title,
+        description=source_app.description,
         version=source_app.version,
+        openapi_tags=source_app.openapi_tags,
+        root_path=source_app.root_path,
         lifespan=_shared_lifespan(source_app, plane),
         exception_handlers=dict(source_app.exception_handlers),
         middleware=list(source_app.user_middleware),
