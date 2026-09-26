@@ -69,6 +69,11 @@ from nexus.memory.correspondence import (
     persist_staged_correspondence,
     plan_correspondence_compaction,
 )
+from nexus.presence.name_reveals import (
+    bind_staged_name_reveal_identities,
+    ordinary_declarations,
+    apply_name_reveals,
+)
 from nexus.presence.identity import (
     read_identity_index,
     require_character_identity,
@@ -371,6 +376,17 @@ def commit_incubator_to_database_sync(
                     raise ValueError(
                         f"No incubator data found for session {session_id}"
                     )
+                if any(
+                    declaration.get("same_as") is not None
+                    for declaration in incubator.get("new_entities") or []
+                ):
+                    cur.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext(current_database()), "
+                        "hashtext('character-identity'))"
+                    )
+                    incubator = bind_staged_name_reveal_identities(
+                        incubator, read_identity_index(conn)
+                    )
                 from nexus.api.draft_validation import validate_commit_draft_sync
 
                 validate_commit_draft_sync(conn, dict(incubator, session_id=session_id))
@@ -453,8 +469,15 @@ def commit_incubator_to_database_sync(
                 if parent_id:
                     frontier = read_roster(conn, parent_id)
                     scene_location = continuation_setting(frontier, parent_id).name
+                with conn.cursor() as identity_cur:
+                    identity_cur.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext(current_database()), "
+                        "hashtext('character-identity'))"
+                    )
                 for declaration in declarations:
-                    if declaration["kind"] == "character":
+                    if declaration["kind"] == "character" and not declaration.get(
+                        "same_as"
+                    ):
                         require_character_identity(
                             conn,
                             declaration["name"],
@@ -466,6 +489,7 @@ def commit_incubator_to_database_sync(
                     declarations,
                     read_identity_index(conn),
                     scene_location=scene_location,
+                    narrative=incubator.get("storyteller_text") or "",
                 )
 
             # Step 4: Insert narrative chunk
@@ -573,11 +597,19 @@ def commit_incubator_to_database_sync(
             # child. Use this exact trigger-authored child clock for declaration
             # hints and ordinary state writes; never derive either from parent time.
 
+            apply_name_reveals(
+                conn,
+                declarations,
+                narrative=storyteller_text,
+                chunk_id=chunk_id,
+                generation_session_id=str(session_id),
+            )
+
             # Step 6: Process declarations before name-reference resolution.
             declarations = incubator.get("new_entities") or []
             maturation_result = enqueue_declared_entity_maturations(
                 conn,
-                declarations=declarations,
+                declarations=ordinary_declarations(declarations),
                 scene_location=scene_location,
                 chunk_id=chunk_id,
                 raw_text=raw_text,

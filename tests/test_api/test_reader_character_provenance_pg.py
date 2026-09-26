@@ -110,3 +110,71 @@ def test_character_card_reads_preserve_provenance_and_later_facts(
         assert nell["background"] == "A former shipwright."
         assert nell["currentActivity"] == "Sorting repair slips."
         assert nell["extraData"] == stored["extra_data"]
+
+
+def test_renamed_legacy_card_reads_prior_names_only_from_its_rulings(
+    character_slot: str,
+) -> None:
+    """The real reader join protects renamed legacy cards without rewriting prose."""
+    summary = (
+        "Retrograde-generated character stub for Nell Rourke. "
+        "Created so Skald-selected setup history can resolve to canonical rows."
+    )
+    with closing(connect(character_slot, cursor_factory=RealDictCursor)) as conn:
+        with conn, conn.cursor() as cur:
+            assert _insert_character_stub(cur, entity_ref="Nell Rourke", sources=[])
+            cur.execute(
+                "UPDATE characters SET name = 'Anika Sayegh', summary = %s "
+                "WHERE name = 'Nell Rourke' RETURNING *",
+                (summary,),
+            )
+            stored = dict(cur.fetchone())
+            cur.execute(
+                "INSERT INTO narrative_chunks (raw_text) "
+                "VALUES ('The witness says, Anika Sayegh.') RETURNING id"
+            )
+            chunk_id = cur.fetchone()["id"]
+            cur.execute(
+                """
+                INSERT INTO character_identity_rulings (
+                    source_chunk_id, character_id, entity_id, decision,
+                    previous_name, new_name, evidence, generation_session_id
+                ) VALUES (%s, %s, %s, 'same_as', %s, %s, %s, %s)
+                """,
+                (
+                    chunk_id,
+                    stored["id"],
+                    stored["entity_id"],
+                    "Nell Rourke",
+                    "Anika Sayegh",
+                    "The witness says, Anika Sayegh.",
+                    "reader-name-reveal-fixture",
+                ),
+            )
+            assert _insert_character_stub(
+                cur, entity_ref="Unrelated character", sources=[]
+            )
+            cur.execute(
+                "UPDATE characters SET summary = %s WHERE name = 'Unrelated character' "
+                "RETURNING id",
+                (summary,),
+            )
+            unrelated_id = cur.fetchone()["id"]
+
+    app = FastAPI()
+    app.include_router(reader_endpoints.router)
+    for _ in range(2):
+        with TestClient(app) as client:
+            response = client.get("/api/characters?slot=4")
+            assert response.status_code == 200, response.text
+            rows = {row["id"]: row for row in response.json()}
+            assert rows[stored["id"]]["name"] == "Anika Sayegh"
+            assert rows[stored["id"]]["summary"] is None
+            assert rows[stored["id"]]["extraData"] == stored["extra_data"]
+            assert rows[unrelated_id]["summary"] == summary
+            assert "identity_previous_names" not in rows[stored["id"]]
+
+    with closing(connect(character_slot, cursor_factory=RealDictCursor)) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM characters WHERE id = %s", (stored["id"],))
+            assert dict(cur.fetchone()) == stored

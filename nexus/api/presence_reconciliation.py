@@ -35,6 +35,10 @@ from nexus.presence.roster import (
     character_identity_index,
     roster_from_baseline,
 )
+from nexus.presence.name_reveals import (
+    CharacterNameRevealConflict,
+    project_name_reveals,
+)
 from nexus.util.log_safety import quote_log_value
 
 
@@ -352,6 +356,14 @@ def _reconcile_declared_character_mentions(
     declared_rows: List[Any] = []
     for declaration in declarations:
         name = declaration.name
+        if declaration.same_as is not None:
+            target = rows_by_id.get(declaration.same_as.character_id)
+            if target is None or target["name"] != name:
+                raise CharacterNameRevealConflict(
+                    "Name reveal must be persisted before accepted prose reconciliation"
+                )
+            declared_rows.append(target)
+            continue
         result = resolve_character_declaration(
             declaration.model_dump(),
             index,
@@ -447,6 +459,7 @@ def validate_character_declarations(
     *,
     index: IdentityIndex | None = None,
     scene_location: str | None = None,
+    narrative: str | None = None,
 ) -> None:
     """Reject ambiguous identity before a provider repair or staging mutation."""
     if index is None:
@@ -457,6 +470,7 @@ def validate_character_declarations(
         [declaration.model_dump() for declaration in declarations],
         index,
         scene_location=scene_location,
+        narrative=narrative,
     )
 
 
@@ -483,7 +497,30 @@ def reconcile_prose_mentions(
             if presence_baseline and presence_baseline.setting
             else None
         ),
+        narrative=wire.narrative,
     )
+    index, reveals = project_name_reveals(
+        [declaration.model_dump() for declaration in wire.new_entities],
+        index,
+        narrative=wire.narrative,
+    )
+    if reveals:
+        # Prose detection and roster hydration must share the prospective identity.
+        # This is an in-memory view; canon changes only in accepted commit.
+        renamed = {reveal.target.id: reveal.new_name for reveal in reveals}
+        roster_rows = CharacterRosterRows(
+            characters=[
+                {**dict(row), "name": renamed.get(int(row["id"]), row["name"])}
+                for row in roster_rows.characters
+            ],
+            aliases=[
+                *roster_rows.aliases,
+                *[
+                    {"character_id": reveal.target.id, "alias": reveal.target.name}
+                    for reveal in reveals
+                ],
+            ],
+        )
     if presence_baseline is not None:
         presence_baseline.present = [
             CharacterRef(kind="character", id=resolved.id, name=resolved.name)

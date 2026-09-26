@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Record the versioned wizard transcript module reached by production conversation transport and resume paths.",
+  "reason": "Preserve production paths for character name reveals, wizard transcripts and place validation after integrating the reviewed QA fixes.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -252,6 +252,7 @@
     "nexus/presence/__init__.py",
     "nexus/presence/cues.py",
     "nexus/presence/identity.py",
+    "nexus/presence/name_reveals.py",
     "nexus/presence/normalization.py",
     "nexus/presence/roster.py",
     "nexus/prompts/__init__.py",

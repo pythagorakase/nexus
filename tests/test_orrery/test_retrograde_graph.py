@@ -350,6 +350,7 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
             "declaration": {"summary": "A test entity."},
         },
         context={
+            "canonical_name": "Test Subject",
             "entity_summary": "A test entity.",
             "scene_entities": SCAFFOLDS["core_entities"],
             "chunk_excerpt": "The subject appeared.",
