@@ -355,8 +355,9 @@ replaces. It reads SQL files and SQL string literals in Python migrations,
 recurses into `DO` bodies and `EXECUTE` commands (joining `||` operands and
 adjacent literals), normalizes `public`/`assets`/`CREATE SCHEMA` qualification
 and quoted identifiers, matches functions by name and argument count, and
-reports names, `ALTER TABLE` actions, and `EXECUTE` commands built at run time,
-and undeclared column sources, as findings instead of passing them.
+reports verbs, object kinds, names, `ALTER TABLE` actions, and `EXECUTE`
+commands built at run time, and undeclared column sources, as findings instead
+of passing them.
 
 ```bash
 python scripts/check_migration_comments.py
@@ -366,11 +367,13 @@ python scripts/check_migration_comments.py
 OK: every object created after migration 129 has a comment.
 ```
 
-`tests/test_migration_comment_lint.py` (22 tests, runnable without PostgreSQL)
+`tests/test_migration_comment_lint.py` (26 tests, runnable without PostgreSQL)
 covers each object kind, schema and quoting rules, `CREATE SCHEMA` elements, the
 watermark (pinned at 129), `DO`/`EXECUTE` bodies, `||` and Python `+`/f-string
-concatenation, Python migrations, overloads, blank and NULL comments, undeclared
-columns, migration 129's real SQL renumbered as 130, and the real tree. With the
+concatenation, object kinds filled in at run time, Python migrations, overloads,
+`ARRAY[...]` defaults, blank and NULL comments, undeclared columns including
+`LIKE` option order, migration 129's real SQL renumbered as 130, and the real
+tree. With the
 watermark lowered to 0, the parser reads all 127 historical migrations without a
 lexing error and reports 405 per-file findings in 33 files (319 columns, 23
 enums, 20 tables, 15 functions, 12 views, 16 run-time names or actions). Those

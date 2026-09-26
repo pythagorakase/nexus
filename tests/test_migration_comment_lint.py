@@ -365,6 +365,128 @@ def run(cur, prefix, action) -> None:
     ]
 
 
+def test_run_time_object_kind_in_execute_fails(tmp_path: Path) -> None:
+    """``'CREATE ' || kind`` matches no DDL pattern, so it must fail, not pass."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_kinds.sql",
+        """
+DO $$
+BEGIN
+    EXECUTE 'CREATE ' || v_kind || ' hidden (id int)';
+    EXECUTE 'CREATE OR REPLACE ' || v_kind || ' hidden_view AS SELECT 1';
+    EXECUTE 'ALTER ' || v_kind || ' scene ADD COLUMN hidden int';
+    EXECUTE format('CREATE %s hidden_fmt (id int)', v_kind);
+    EXECUTE 'CREATE INDEX ' || v_name || ' ON scene (id)';
+    EXECUTE 'ALTER TABLE scene ALTER COLUMN id SET DEFAULT ' || v_default;
+END
+$$;
+""",
+    )
+
+    run_time = "is filled in at run time; its schema changes cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_kinds.sql:3: CREATE object kind '{{}}' {run_time}",
+        f"{NEXT}_kinds.sql:4: CREATE object kind '{{}}' {run_time}",
+        f"{NEXT}_kinds.sql:5: ALTER object kind '{{}}' {run_time}",
+        f"{NEXT}_kinds.sql:6: CREATE object kind '%s' {run_time}",
+    ]
+
+
+def test_python_run_time_object_kind_fails(tmp_path: Path) -> None:
+    """f-strings, split-keyword ``+``, and ``%`` cannot hide the object kind."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_kinds.py",
+        """
+def run(cur, kind, verb, statement, value) -> None:
+    cur.execute(f"CREATE {kind} hidden (id int)")
+    cur.execute("CREATE " + kind + " hidden_plus (id int)")
+    ddl = "ALTER " + kind + " scene ADD COLUMN hidden int"
+    cur.execute(ddl)
+    create = "CREATE " + kind + " hidden_var (id int)"
+    cur.execute(create)
+    cur.execute("CREATE %s hidden_mod (id int)" % kind)
+    cur.execute(" ".join(["CREATE", kind, "hidden_join (id int)"]))
+    cur.execute(f"{statement}")
+    cur.execute(f"DO $$ BEGIN {verb} TABLE hidden_do (id int); END $$")
+    cur.execute(f"SELECT CASE WHEN true THEN {value} ELSE 0 END")
+    cur.execute("SELECT 1 FROM pg_type WHERE typname = %s", (kind,))
+""",
+    )
+
+    run_time = "is filled in at run time; its schema changes cannot be verified"
+    begins = "which is filled in at run time; its schema changes cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_kinds.py:2: CREATE object kind '{{}}' {run_time}",
+        f"{NEXT}_kinds.py:3: CREATE object kind '{{}}' {run_time}",
+        f"{NEXT}_kinds.py:4: ALTER object kind '{{}}' {run_time}",
+        f"{NEXT}_kinds.py:6: CREATE object kind '{{}}' {run_time}",
+        f"{NEXT}_kinds.py:8: CREATE object kind '%s' {run_time}",
+        f"{NEXT}_kinds.py:9: CREATE names no object kind, so it is a fragment of a "
+        "command assembled at run time; its schema changes cannot be verified",
+        f"{NEXT}_kinds.py:10: statement begins with '{{}}', {begins}",
+        f"{NEXT}_kinds.py:11: statement begins with '{{}}', {begins}",
+    ]
+
+
+def test_like_options_apply_left_to_right(tmp_path: Path) -> None:
+    """Only an effective INCLUDING of COMMENTS (or ALL) copies column comments."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_likes.sql",
+        """
+CREATE TABLE copy_a (LIKE source INCLUDING ALL EXCLUDING COMMENTS);
+CREATE TABLE copy_b (LIKE source EXCLUDING COMMENTS INCLUDING ALL);
+CREATE TABLE copy_c (LIKE source INCLUDING COMMENTS EXCLUDING ALL);
+CREATE TABLE copy_d (LIKE source EXCLUDING ALL INCLUDING COMMENTS);
+CREATE TABLE copy_e (LIKE source INCLUDING COMMENTS EXCLUDING DEFAULTS);
+COMMENT ON TABLE copy_a IS 'Copy.';
+COMMENT ON TABLE copy_b IS 'Copy.';
+COMMENT ON TABLE copy_c IS 'Copy.';
+COMMENT ON TABLE copy_d IS 'Copy.';
+COMMENT ON TABLE copy_e IS 'Copy.';
+""",
+    )
+
+    unverified = "copies columns with LIKE but without INCLUDING COMMENTS"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_likes.sql:1: CREATE TABLE public.copy_a {unverified}; they cannot "
+        "be verified",
+        f"{NEXT}_likes.sql:3: CREATE TABLE public.copy_c {unverified}; they cannot "
+        "be verified",
+    ]
+
+
+def test_array_defaults_do_not_split_lists(tmp_path: Path) -> None:
+    """Commas inside ARRAY[...] belong to one column or one argument."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_arrays.sql",
+        """
+CREATE TABLE tagged (
+    id int,
+    tags text[] NOT NULL DEFAULT ARRAY['a', 'b'],
+    weights int[] DEFAULT ARRAY[1, 2, 3]
+);
+COMMENT ON TABLE tagged IS 'Tagged rows.';
+COMMENT ON COLUMN tagged.id IS 'Row key.';
+COMMENT ON COLUMN tagged.tags IS 'Tag names.';
+COMMENT ON COLUMN tagged.weights IS 'Tag weights.';
+CREATE FUNCTION pick(a int[] DEFAULT ARRAY[1, 2], b int) RETURNS int
+    LANGUAGE sql AS 'SELECT b';
+COMMENT ON FUNCTION pick(int[], int) IS 'Two arguments, one with an ARRAY default.';
+ALTER TABLE tagged ADD COLUMN flags bool[] DEFAULT ARRAY[true, false],
+    ADD COLUMN extra int;
+COMMENT ON COLUMN tagged.flags IS 'Flags.';
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_arrays.sql:14: column public.tagged.extra has no COMMENT ON COLUMN",
+    ]
+
+
 def test_create_schema_elements_belong_to_that_schema(tmp_path: Path) -> None:
     """CREATE SCHEMA s CREATE TABLE t creates s.t, not public.t."""
     _migration(

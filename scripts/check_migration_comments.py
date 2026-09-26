@@ -24,15 +24,17 @@ identifiers fold to lower case, quoted identifiers keep their exact spelling.
 Temporary tables and views are exempt because they end with the migration
 session.
 
-DDL that cannot be verified statically fails rather than passing: names and
-ALTER TABLE actions built at run time (f-strings, ``+`` or ``||`` with a
-non-literal operand, psycopg2 placeholders, format('%I')); an EXECUTE whose
-command does not start with literal text, such as EXECUTE of a variable; an
-ALTER TABLE that names no action, which can only be a fragment of a command
-assembled at run time; and columns a statement does not declare (CREATE TABLE
-... AS without a column list, PARTITION OF, OF type, INHERITS, LIKE without
-INCLUDING COMMENTS). A COMMENT that is NULL or blank is reported as removed
-documentation.
+DDL that cannot be verified statically fails rather than passing: verbs,
+object kinds, names, and ALTER TABLE actions built at run time (f-strings,
+``+`` or ``||`` with a non-literal operand, psycopg2 placeholders,
+format('%I')), including a Python string passed straight to execute() whose
+command starts with a placeholder; an EXECUTE whose command does not start
+with literal text, such as EXECUTE of a variable; a CREATE, ALTER, or ALTER
+TABLE that names no object kind or action, which can only be a fragment of a
+command assembled at run time; and columns a statement does not declare
+(CREATE TABLE ... AS without a column list, PARTITION OF, OF type, INHERITS,
+LIKE whose options, applied left to right, do not include COMMENTS). A
+COMMENT that is NULL or blank is reported as removed documentation.
 
 Usage
 -----
@@ -112,17 +114,46 @@ _EXECUTE = re.compile(
 _EXECUTE_END = re.compile(r"\b(?:INTO|USING|LOOP)\b", _I)
 # Values filled in at run time: str.format and f-strings (rendered as {}),
 # psycopg2 parameters, and format() specifiers.
-_PLACEHOLDER = re.compile(r"\{[^{}\s]*\}|%(?:\(\w+\)|\d+\$)?[sIL]")
+_PLACEHOLDER_SOURCE = r"(?:\{[^{}\s]*\}|%(?:\(\w+\)|\d+\$)?[sIL])"
+_PLACEHOLDER = re.compile(_PLACEHOLDER_SOURCE)
+# Where a command's verb stands: the statement start, or a PL/pgSQL statement
+# after one of these words inside a DO body.
+_VERB_POSITION = re.compile(r"\b(?:BEGIN|THEN|ELSE|LOOP)\b", _I)
+# Words between CREATE and the object kind (CREATE OR REPLACE TEMP VIEW, ...).
+_CREATE_MODIFIERS = {
+    "OR",
+    "REPLACE",
+    "GLOBAL",
+    "LOCAL",
+    "TEMP",
+    "TEMPORARY",
+    "UNLOGGED",
+    "RECURSIVE",
+    "MATERIALIZED",
+    "UNIQUE",
+    "CONSTRAINT",
+    "DEFAULT",
+    "TRUSTED",
+    "PROCEDURAL",
+}
+_DDL_AFTER_PLACEHOLDER = re.compile(
+    r"\s+(?:\S+\s+){0,2}(?:TABLE|VIEW|TYPE|FUNCTION|COLUMN)\b", _I
+)
 _INHERITS = re.compile(r"\bINHERITS\b", _I)
-_LIKE_WITH_COMMENTS = re.compile(r"\bINCLUDING\s+(?:ALL|COMMENTS)\b", _I)
+_LIKE_OPTION = re.compile(r"\b(INCLUDING|EXCLUDING)\s+(\w+)", _I)
 
 # Table elements and ALTER TABLE ... ADD targets that are not columns.
 _NON_COLUMN_WORDS = {"CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "EXCLUDE"}
 
 # A Python string can only create or document an object if it matches one of
-# these; other literals (log text, error messages) are not lexed as SQL.
+# these; other literals (log text, error messages) are not lexed as SQL. The
+# first argument of these methods is SQL by construction and always lexed.
+_EXECUTION_METHODS = {"execute", "executemany"}
 _PY_SQL_HINT = re.compile(
     r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:\w+\s+){0,3}(?:TABLE|TYPE|FUNCTION|VIEW)\b"
+    r"|^\s*(?:CREATE|ALTER)\b"
+    rf"|\b(?:CREATE|ALTER)\s+(?:\w+\s+){{0,3}}{_PLACEHOLDER_SOURCE}"
+    rf"|{_PLACEHOLDER_SOURCE}\s+(?:\w+\s+){{0,3}}(?:TABLE|TYPE|FUNCTION|VIEW|COLUMN)\b"
     r"|\bALTER\s+TABLE\b|\bADD\s+COLUMN\b|\bCOMMENT\s+ON\b"
     r"|\bDO\s+(?:LANGUAGE\s+\w+\s+)?(?:\$|E?')"
     r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')",
@@ -314,7 +345,7 @@ def _statements(masked: str) -> Iterator[tuple[int, int]]:
 
 
 def _split_top_level(text: str, separator: str = ",") -> list[tuple[int, str]]:
-    """Split on separator outside parentheses and quoted identifiers."""
+    """Split on separator outside parentheses, brackets, and quoted identifiers."""
     parts: list[tuple[int, str]] = []
     depth, quoted, start, index = 0, False, 0, 0
     while index < len(text):
@@ -323,9 +354,9 @@ def _split_top_level(text: str, separator: str = ",") -> list[tuple[int, str]]:
             quoted = not quoted
         elif quoted:
             pass
-        elif char == "(":
+        elif char in "([":
             depth += 1
-        elif char == ")":
+        elif char in ")]":
             depth -= 1
         elif depth == 0 and text.startswith(separator, index):
             parts.append((start, text[start:index]))
@@ -413,6 +444,27 @@ def _element_schema(statement: str) -> str:
     return parts[0] if parts is not None and len(parts) == 1 else "public"
 
 
+def _like_copies_comments(element: str) -> bool:
+    """Whether a LIKE element's options, applied left to right, copy comments.
+
+    ALL stands for every option, so a later EXCLUDING COMMENTS undoes an
+    earlier INCLUDING ALL and vice versa.
+    """
+    copies = False
+    for verb, option in _LIKE_OPTION.findall(element):
+        if option.upper() in ("ALL", "COMMENTS"):
+            copies = verb.upper() == "INCLUDING"
+    return copies
+
+
+def _next_token(text: str, pos: int) -> tuple[int, str]:
+    """Return (offset, raw token) of the first token at or after pos."""
+    while pos < len(text) and text[pos].isspace():
+        pos += 1
+    match = _RAW_TOKEN.match(text, pos)
+    return pos, match.group() if match else ""
+
+
 def _first_token(text: str) -> tuple[int, str]:
     """Return (offset, raw token) of the first token in a list element."""
     stripped = len(text) - len(text.lstrip())
@@ -478,7 +530,7 @@ class _SqlScanner:
         for start, end in _statements(self.masked):
             statement = self.masked[start:end]
             self.schema = _element_schema(statement)
-            self._run_time_statement(statement, start)
+            self._run_time_heads(statement, start)
             self._create_table(statement, start)
             self._alter_table(statement, start)
             self._create_named(statement, start)
@@ -516,16 +568,60 @@ class _SqlScanner:
                 return run
             begin = literal.end + len(gap) - len(gap.lstrip())
 
-    def _run_time_statement(self, statement: str, start: int) -> None:
-        """Report a statement whose first word is filled in at run time."""
-        lead, _ = _first_token(statement)
-        placeholder = _PLACEHOLDER.match(statement, lead)
-        if placeholder:
-            self.finding(
-                start + lead,
-                f"statement begins with {placeholder.group()!r}, which is filled "
-                "in at run time; its schema changes cannot be verified",
+    def _run_time_heads(self, statement: str, start: int) -> None:
+        """Report commands whose verb or object kind is filled in at run time.
+
+        ``'CREATE ' || kind || ' t (id int)'`` becomes ``CREATE {} t (id int)``,
+        which no DDL pattern matches, so it would otherwise pass. A verb
+        position is the statement start, where any placeholder fails, or the
+        word after BEGIN/THEN/ELSE/LOOP in a DO body, where a placeholder fails
+        only before DDL words because ``CASE ... THEN {}`` is an expression.
+        """
+        positions = [(0, True)] + [
+            (match.end(), False) for match in _VERB_POSITION.finditer(statement)
+        ]
+        for position, at_start in positions:
+            offset, verb = _next_token(statement, position)
+            end = offset + len(verb)
+            placeholder = _PLACEHOLDER.match(statement, offset) or _PLACEHOLDER.search(
+                verb
             )
+            if placeholder:
+                if at_start or _DDL_AFTER_PLACEHOLDER.match(statement, end):
+                    self.finding(
+                        start + offset,
+                        f"statement begins with {placeholder.group()!r}, which is "
+                        "filled in at run time; its schema changes cannot be "
+                        "verified",
+                    )
+                continue
+            if not _is_keyword(verb, {"CREATE", "ALTER"}):
+                continue
+            label = verb.upper()
+            kind_offset, kind = _next_token(statement, end)
+            while label == "CREATE" and _is_keyword(kind, _CREATE_MODIFIERS):
+                kind_offset, kind = _next_token(statement, kind_offset + len(kind))
+            placeholder = _PLACEHOLDER.match(
+                statement, kind_offset
+            ) or _PLACEHOLDER.search(kind)
+            if placeholder:
+                self.finding(
+                    start + offset,
+                    f"{label} object kind {placeholder.group()!r} is filled in at "
+                    "run time; its schema changes cannot be verified",
+                )
+            elif not kind:
+                self.finding(
+                    start + offset,
+                    f"{label} names no object kind, so it is a fragment of a "
+                    "command assembled at run time; its schema changes cannot be "
+                    "verified",
+                )
+            elif label == "CREATE" and _is_keyword(kind, {"SCHEMA"}):
+                schema = _CREATE_SCHEMA.match(statement, offset)
+                raw, parts, _ = _read_name(statement, schema.end() if schema else end)
+                if parts is None:
+                    self.unresolvable(start + offset, "CREATE SCHEMA", raw)
 
     def _execute(self, statement: str, start: int, match: re.Match[str]) -> None:
         """Scan the command an EXECUTE runs, joining its ``||`` operands.
@@ -597,7 +693,7 @@ class _SqlScanner:
                 if not token or _is_keyword(token, _NON_COLUMN_WORDS):
                     continue
                 if _is_keyword(token, {"LIKE"}):
-                    if not _LIKE_WITH_COMMENTS.search(element):
+                    if not _like_copies_comments(element):
                         self.finding(
                             element_offset,
                             f"{label} copies columns with LIKE but without "
@@ -771,7 +867,9 @@ def python_sql_literals(source: str) -> list[tuple[str, int]]:
     """Return (sql, first line) for each SQL-bearing string in a Python migration.
 
     Docstrings are skipped; ``+`` concatenations and f-strings are rendered as
-    one literal with ``{}`` for each run-time value.
+    one literal with ``{}`` for each run-time value. A string passed straight
+    to ``execute`` or ``executemany`` is SQL whatever its words, so it is always
+    returned, and a command whose verb is filled in at run time is reported.
     """
     tree = ast.parse(source)
     docstrings = {
@@ -785,12 +883,22 @@ def python_sql_literals(source: str) -> list[tuple[str, int]]:
         and isinstance(node.body[0].value, ast.Constant)
         and isinstance(node.body[0].value.value, str)
     }
+    executed = {
+        id(node.args[0])
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _EXECUTION_METHODS
+        and node.args
+    }
     found: list[tuple[str, int]] = []
 
     def visit(node: ast.AST) -> None:
         rendered = _render_string(node)
         if rendered is not None:
-            if id(node) not in docstrings and _PY_SQL_HINT.search(rendered):
+            if id(node) in executed or (
+                id(node) not in docstrings and _PY_SQL_HINT.search(rendered)
+            ):
                 found.append((rendered, getattr(node, "lineno", 1)))
             return
         for child in ast.iter_child_nodes(node):
