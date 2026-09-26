@@ -1115,7 +1115,7 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
                 "success": True,
                 "message": f"Slot {args.slot} is in wizard mode.",
                 "phase": data.get("phase"),
-                "choices": [],
+                "choices": data.get("choices", []),
             }
             if data.get("pending_confirmation") in {"setting", "character"}:
                 phase = data["pending_confirmation"]

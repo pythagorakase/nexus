@@ -2,6 +2,7 @@
 
 import json
 from copy import deepcopy
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -878,6 +879,7 @@ def test_cli_uses_the_delivered_introduction_after_a_crash(
 
     loaded = cli.run_load(arguments())
     assert "awaiting_introduction" not in loaded
+    assert loaded["choices"] == ["Here", "There"]
     # Without input there is no introduction left to request.
     idle = cli.run_continue(arguments())
     assert idle["success"] is False
@@ -889,3 +891,70 @@ def test_cli_uses_the_delivered_introduction_after_a_crash(
         ("story/new/chat", "Here")
     ]
     assert "message_origin" not in posts[0][1]
+
+
+@pytest.mark.parametrize(
+    "endpoint", ["/api/story/new/chat", "/api/story/new/chat/stream"]
+)
+def test_concurrent_settlement_of_a_delivered_claim_is_stale_state(
+    monkeypatch: pytest.MonkeyPatch, endpoint: str
+) -> None:
+    """Losing the race to settle a delivered claim is a 409, before any stream."""
+    from nexus.api.wizard_confirmation import WizardStateConflict
+
+    routes = introduction_routes(
+        monkeypatch,
+        "character",
+        "seed",
+        [WizardResponse(message="Where does it begin?", choices=["Here", "There"])],
+    )
+    routes.faults["complete"] = RuntimeError("Process terminated")
+    assert (
+        routes.client.post("/api/story/new/chat", json=routes.introduction).status_code
+        == 500
+    )
+    # Another request settles the same claim at the same moment.
+    routes.faults["complete"] = WizardStateConflict(
+        "The introduction changed while it was saved. Resume before continuing."
+    )
+    response = routes.client.post(endpoint, json=routes.introduction)
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "The introduction changed while it was saved. Resume before continuing."
+    )
+    assert assistant_messages(routes) == ["Where does it begin?"]
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_reconciliation_closes_its_transcript_client(
+    monkeypatch: pytest.MonkeyPatch, fails: bool
+) -> None:
+    """The claim's transcript client is closed, even when the read fails."""
+    cache = accepted_cache("character", reply_recorded=False)
+    cache.introduction_claim = IntroductionClaim("c1", ["Here", "There"])
+    close = Mock()
+
+    def list_messages(thread_id, limit):
+        if fails:
+            raise RuntimeError("Conversation store unavailable")
+        return [{"role": "user", "content": "[SYSTEM]", "origin": "wizard_control"}]
+
+    store = SimpleNamespace(
+        list_messages=list_messages, client=SimpleNamespace(close=close)
+    )
+    monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: store)
+    monkeypatch.setattr(wizard_chat, "resolve_wizard_model", lambda *a: "TEST")
+    reconcile = partial(
+        wizard_chat._reconcile_introduction,
+        cache,
+        "wizard_control",
+        slot=4,
+        request_model=None,
+        slot_model="TEST",
+    )
+    if fails:
+        with pytest.raises(RuntimeError, match="unavailable"):
+            reconcile()
+    else:
+        assert reconcile() == "c1"
+    close.assert_called_once_with()

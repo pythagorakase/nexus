@@ -175,7 +175,11 @@ def _reconcile_introduction(
         raise WizardStateConflict("The saved wizard is missing its conversation.")
     # The same store the introduction's control and reply were written to.
     client = ConversationsClient(model=resolve_wizard_model(request_model, slot_model))
-    transcript = client.list_messages(thread_id, limit=0)
+    try:
+        transcript = client.list_messages(thread_id, limit=0)
+    finally:
+        if client.client is not None:
+            client.client.close()
     if introduction_delivered(list(reversed(transcript))):
         complete_wizard_introduction(
             claim.id, claim.choices, slot_dbname(slot), expected_thread_id=thread_id
@@ -893,13 +897,18 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             status_code=409,
             detail="Use the non-streaming wizard route to confirm or revise this artifact.",
         )
-    replaces_claim = _reconcile_introduction(
-        persisted_cache,
-        request.message_origin,
-        slot=request.slot,
-        request_model=request.model,
-        slot_model=state.model,
-    )
+    try:
+        # Settling a claim can race another request; that is stale state (409),
+        # and it happens before the stream commits its status.
+        replaces_claim = _reconcile_introduction(
+            persisted_cache,
+            request.message_origin,
+            slot=request.slot,
+            request_model=request.model,
+            slot_model=state.model,
+        )
+    except WizardStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     introduction = _is_introduction(persisted_cache, request.message_origin)
 
     request.context_data = _hydrate_character_context(request)
