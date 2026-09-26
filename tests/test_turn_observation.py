@@ -611,6 +611,18 @@ def test_summary_renders_one_concise_read_of_the_turn() -> None:
         "  validation repairs 2 · rejections 0 "
         "(active-extend-expiry, scene-reset-crossings) [attempt_manifest]"
     ) in lines
+    compaction = lines.index(
+        "correspondence_compaction #1 compaction-model · outcome unknown · "
+        "provider unknown"
+    )
+    assert lines[compaction + 1 : compaction + 4] == [
+        "  window unknown",
+        "  usage in 5,000 · cached 0 · cache write unknown · out 300 · "
+        "reasoning 0 · effort low · max out 2,000 [provider_usage_ledger ×1]",
+        "  validation unknown",
+    ]
+    timed_out = lines.index("gaia #1 gaia-model · outcome accepted · provider error")
+    assert lines[timed_out + 2] == "  usage unknown"
     assert lines[-2] == (
         "Usage in 31,877 · cached 38,288 · cache write unknown · out 4,250 · "
         "reasoning unknown · events 4 · attempts without usage 1"

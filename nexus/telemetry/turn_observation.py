@@ -400,6 +400,57 @@ def _duration(value: Any) -> str:
     return f"{value:.3f}s" if isinstance(value, float) else str(value)
 
 
+def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
+    """Render one attempt; a section no source recorded collapses to unknown."""
+    window, usage = attempt["window"], attempt["usage"]
+    validation = attempt["validation"]
+    lines = [
+        f"{attempt['seat']} #{attempt['attempt']} {attempt['model']} · "
+        f"outcome {attempt['outcome'] or 'open'} · provider "
+        f"{attempt['provider_outcome'] or 'open'}"
+    ]
+    if window["provenance"] == UNKNOWN:
+        lines.append(f"  window {UNKNOWN}")
+    else:
+        lines.append(
+            f"  window {_tokens(window['input_tokens'])} / "
+            f"{_tokens(window['effective_ceiling'])} · headroom "
+            f"{_tokens(window['headroom'])} [{window['provenance']}]"
+        )
+        influence = window["influence_tokens"]
+        if isinstance(influence, dict):
+            lines.append(
+                "  roles "
+                + " · ".join(
+                    f"{role} {_tokens(tokens)}" for role, tokens in influence.items()
+                )
+            )
+    if usage["provenance"] == UNKNOWN:
+        lines.append(f"  usage {UNKNOWN}")
+    else:
+        lines.append(
+            f"  usage in {_tokens(usage['input_tokens'])} · cached "
+            f"{_tokens(usage['cached_input_tokens'])} · cache write "
+            f"{_tokens(usage['cache_creation_tokens'])} · out "
+            f"{_tokens(usage['output_tokens'])} · reasoning "
+            f"{_tokens(usage['reasoning_tokens'])} · effort "
+            f"{usage['reasoning_effort'] or '-'} · max out "
+            f"{_tokens(usage['max_output_tokens'] or '-')} "
+            f"[{usage['provenance']} ×{usage['events']}]"
+        )
+    if validation["provenance"] == UNKNOWN:
+        lines.append(f"  validation {UNKNOWN}")
+    else:
+        codes = [*validation["repair_codes"], *validation["rejection_codes"]]
+        lines.append(
+            f"  validation repairs {validation['repairs']} · rejections "
+            f"{validation['rejections']}"
+            + (f" ({', '.join(codes)})" if codes else "")
+            + f" [{validation['provenance']}]"
+        )
+    return lines
+
+
 def format_turn_summary(observation: Mapping[str, Any]) -> str:
     """Render the observation as a few concise lines of text, in tokens."""
     days = ", ".join(observation["ledger_days_read"]) or "none"
@@ -419,47 +470,7 @@ def format_turn_summary(observation: Mapping[str, Any]) -> str:
         ),
     ]
     for attempt in observation["attempts"]:
-        window, usage = attempt["window"], attempt["usage"]
-        validation = attempt["validation"]
-        lines.append(
-            f"{attempt['seat']} #{attempt['attempt']} {attempt['model']} · "
-            f"outcome {attempt['outcome'] or 'open'} · provider "
-            f"{attempt['provider_outcome'] or 'open'}"
-        )
-        lines.append(
-            f"  window {_tokens(window['input_tokens'])} / "
-            f"{_tokens(window['effective_ceiling'])} · headroom "
-            f"{_tokens(window['headroom'])} [{window['provenance']}]"
-        )
-        influence = window["influence_tokens"]
-        if isinstance(influence, dict):
-            lines.append(
-                "  roles "
-                + " · ".join(
-                    f"{role} {_tokens(tokens)}" for role, tokens in influence.items()
-                )
-            )
-        lines.append(
-            f"  usage in {_tokens(usage['input_tokens'])} · cached "
-            f"{_tokens(usage['cached_input_tokens'])} · cache write "
-            f"{_tokens(usage['cache_creation_tokens'])} · out "
-            f"{_tokens(usage['output_tokens'])} · reasoning "
-            f"{_tokens(usage['reasoning_tokens'])} · effort "
-            f"{usage['reasoning_effort'] or '-'} · max out "
-            f"{_tokens(usage['max_output_tokens'] or '-')} "
-            f"[{usage['provenance']} ×{usage['events']}]"
-        )
-        codes = (
-            []
-            if validation["provenance"] == UNKNOWN
-            else [*validation["repair_codes"], *validation["rejection_codes"]]
-        )
-        lines.append(
-            f"  validation repairs {validation['repairs']} · rejections "
-            f"{validation['rejections']}"
-            + (f" ({', '.join(codes)})" if codes else "")
-            + f" [{validation['provenance']}]"
-        )
+        lines.extend(_attempt_lines(attempt))
     totals = observation["usage_totals"]
     lines.append(
         f"Usage in {_tokens(totals['input_tokens'])} · cached "
