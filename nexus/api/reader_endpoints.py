@@ -558,6 +558,43 @@ async def get_character_psychology(
 # ---------------------------------------------------------------------------
 
 
+def _place_payload(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Project place facts without rewriting legacy diagnostic-only stubs."""
+    summary = row["summary"]
+    current_status = row["current_status"]
+    provenance = row["extra_data"] or {}
+    if (
+        isinstance(provenance, dict)
+        and provenance.get("source") == "retrograde"
+        and provenance.get("stub_kind") == "retrograde_expansion_ref"
+    ):
+        # Frozen legacy signatures, independent of current producer wording.
+        # Check each field separately so later story facts remain visible.
+        if summary == (
+            f"Retrograde-generated place stub for {row['name']}. "
+            "Created so Skald-selected setup history can resolve to canonical rows."
+        ):
+            summary = None
+        if current_status == "latent in generated backstory":
+            current_status = None
+
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "type": row["type"],
+        "zone": row["zone"],
+        "summary": summary,
+        "inhabitants": row["inhabitants"],
+        "history": row["history"],
+        "currentStatus": current_status,
+        "secrets": row["secrets"],
+        "extraData": row["extra_data"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+        "geometry": row["geometry"],
+    }
+
+
 @router.get("/api/places")
 async def get_places(slot: Optional[int] = None) -> List[Dict[str, Any]]:
     """All places, with coordinates extracted as GeoJSON from PostGIS."""
@@ -583,24 +620,7 @@ async def get_places(slot: Optional[int] = None) -> List[Dict[str, Any]]:
         ORDER BY id
         """,
     )
-    return [
-        {
-            "id": row["id"],
-            "name": row["name"],
-            "type": row["type"],
-            "zone": row["zone"],
-            "summary": row["summary"],
-            "inhabitants": row["inhabitants"],
-            "history": row["history"],
-            "currentStatus": row["current_status"],
-            "secrets": row["secrets"],
-            "extraData": row["extra_data"],
-            "createdAt": row["created_at"],
-            "updatedAt": row["updated_at"],
-            "geometry": row["geometry"],
-        }
-        for row in rows
-    ]
+    return [_place_payload(row) for row in rows]
 
 
 @router.get("/api/current-place")

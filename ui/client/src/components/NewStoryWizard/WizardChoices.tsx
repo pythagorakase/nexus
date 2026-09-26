@@ -8,12 +8,13 @@ import {
     useCallback,
     useEffect,
     useRef,
-    useState,
     type KeyboardEvent,
 } from "react";
 import { cn } from "@/lib/utils";
 import { InlineMarkdown } from "@/components/nexus/ProseMarkdown";
 import { Textarea } from "@/components/ui/textarea";
+import { useWizardDraft } from "@/hooks/useWizardDraft";
+import type { WizardDraftScope } from "@/lib/wizard-draft";
 
 /**
  * Normalize backend choice payloads into display strings.
@@ -50,8 +51,9 @@ export function normalizeChoices(choices: unknown): string[] {
 interface WizardChoicesProps {
     /** Structured choices from the wizard turn contract (may be empty). */
     choices: string[];
-    /** Called with the chosen or typed text; the parent sends it as the turn. */
-    onSubmit: (text: string) => void;
+    /** True acknowledges the turn; errors or uncertain delivery retain input. */
+    onSubmit: (text: string) => boolean | Promise<boolean>;
+    draftScope?: WizardDraftScope | null;
     /** Disable interaction while a turn is in flight or an artifact is pending. */
     disabled?: boolean;
 }
@@ -59,28 +61,27 @@ interface WizardChoicesProps {
 export function WizardChoices({
     choices,
     onSubmit,
+    draftScope = null,
     disabled = false,
 }: WizardChoicesProps) {
-    const [freeform, setFreeform] = useState("");
+    const draft = useWizardDraft(draftScope);
+    const freeform = draft.text;
     const freeformRef = useRef<HTMLTextAreaElement>(null);
 
-    // Choice selection clears any freeform draft so it cannot leak into the
-    // next turn's input.
+    // A choice only replaces a typed alternative after the server acknowledges it.
     const submitChoice = useCallback(
         (text: string) => {
             if (disabled) return;
-            setFreeform("");
-            onSubmit(text);
+            void draft.submit(async () => await onSubmit(text), false);
         },
-        [disabled, onSubmit],
+        [disabled, onSubmit, draft.submit],
     );
 
     const submitFreeform = useCallback(() => {
         const text = freeform.trim();
         if (!text || disabled) return;
-        setFreeform("");
-        onSubmit(text);
-    }, [freeform, disabled, onSubmit]);
+        void draft.submit(async () => await onSubmit(text), true);
+    }, [freeform, disabled, onSubmit, draft.submit]);
 
     const handleFreeformKeyDown = useCallback(
         (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -116,6 +117,25 @@ export function WizardChoices({
 
     return (
         <div className="space-y-1.5" data-testid="wizard-choices">
+            {draft.storageError && (
+                <p role="alert" className="px-4 text-sm text-destructive">
+                    Your browser could not save this draft. Keep a copy before leaving.
+                </p>
+            )}
+            {draft.hasUnconfirmedAction && (
+                <p role="status" className="px-4 text-sm text-muted-foreground">
+                    Submission not confirmed. Check the conversation before sending it again.
+                </p>
+            )}
+            {draft.previousActions.map((action) => (
+                <div key={action.attempt} className="space-y-2 border border-border/30 p-4">
+                    <p className="text-sm text-muted-foreground">Earlier unconfirmed wizard input</p>
+                    <p className="whitespace-pre-wrap font-serif text-sm">{action.text}</p>
+                    <button type="button" className="text-sm underline" onClick={() => draft.dismissAction(action.attempt)}>
+                        Dismiss saved input
+                    </button>
+                </div>
+            ))}
             {choices.map((text, i) => (
                 <button
                     key={`${i}-${text}`}
@@ -148,7 +168,7 @@ export function WizardChoices({
                     rows={1}
                     value={freeform}
                     placeholder="…or something else"
-                    onChange={(e) => setFreeform(e.target.value)}
+                    onChange={(e) => draft.update(e.target.value)}
                     onKeyDown={handleFreeformKeyDown}
                     disabled={disabled}
                     data-testid="wizard-freeform"

@@ -1537,6 +1537,16 @@ def build_storyteller_tag_validator(
                                 "Storyteller tag validation anchor world_time has "
                                 f"an unexpected type: chunk_id={anchor_chunk_id}"
                             )
+                from nexus.agents.logon.place_reference_validation import (
+                    validate_place_references,
+                )
+
+                validate_place_references(
+                    getattr(output, "presence", None),
+                    getattr(output, "new_entities", None) or [],
+                    cur,
+                    allow_declarations=allow_same_turn_faction_declarations,
+                )
                 resolve_place_updates(
                     output,
                     cur,

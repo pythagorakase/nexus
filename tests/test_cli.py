@@ -542,6 +542,7 @@ def test_free_text_trait_confirmation_exposes_wildcard_intro(monkeypatch) -> Non
     assert len(posts) == 2
     assert posts[0]["message"] == "Exactly those three: 1, 2, 3."
     assert "Proceeding to wildcard" in posts[1]["message"]
+    assert posts[1]["message_origin"] == "wizard_control"
 
 
 def test_deterministic_trait_confirmation_exposes_wildcard_intro(monkeypatch) -> None:
@@ -606,6 +607,7 @@ def test_deterministic_trait_confirmation_exposes_wildcard_intro(monkeypatch) ->
     assert posts[0]["message"] == ""
     assert posts[0]["trait_choice"] == 0
     assert "Proceeding to wildcard" in posts[1]["message"]
+    assert posts[1]["message_origin"] == "wizard_control"
 
 
 def test_trait_confirmation_intro_failure_exposes_recovery(monkeypatch) -> None:

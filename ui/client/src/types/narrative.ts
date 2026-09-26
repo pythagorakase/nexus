@@ -52,6 +52,8 @@ export interface GenerationSession {
   terminal_outcome: "accepted" | "superseded" | "discarded" | "error" | null;
   replaced_by_session_id: string | null;
   chunk_id: number | null;
+  /** Null until the committed action is bound; a retry needs a bound parent. */
+  parent_chunk_id: number | null;
   created_at: string;
   heartbeat_at: string;
   expires_at: string | null;
@@ -62,6 +64,7 @@ export interface GenerationSession {
 export interface SlotState {
   narrative_generation: GenerationSettings;
   slot: number;
+  story_id?: string | null;
   is_empty: boolean;
   is_wizard_mode: boolean;
   phase: string | null;

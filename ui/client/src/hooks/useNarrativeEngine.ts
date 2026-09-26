@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import {
   continueNarrative,
+  retryNarrative,
   getSlotState,
   getActiveGeneration,
   getGenerationStatus,
@@ -23,6 +24,7 @@ import {
   ACTIVE_GENERATION_PHASES,
   type NarrativePhase,
   type GenerationSettings,
+  type GenerationSession,
   type NarrativeProgressPayload,
   type SkaldStatus,
   type SlotState,
@@ -43,10 +45,14 @@ export interface NarrativeEngine {
   skaldStatus: SkaldStatus;
   elapsedMs: number;
   generationError: string | null;
+  failedGeneration: GenerationSession | null;
+  isRecoveryLoading: boolean;
+  retryGeneration: () => Promise<boolean>;
   isGenerating: boolean;
   /** Increments on completion to restore frontier scrolling and input focus. */
   completedGenerations: number;
-  submitTurn: (params: { choice?: number; userText?: string }) => Promise<void>;
+  /** True only after the server acknowledged this submission. */
+  submitTurn: (params: { choice?: number; userText?: string }) => Promise<boolean>;
 }
 
 export function useNarrativeEngine(slot: number | null): NarrativeEngine {
@@ -54,6 +60,8 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
 
   const [phase, setPhase] = useState<NarrativePhase | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [failedGeneration, setFailedGeneration] = useState<GenerationSession | null>(null);
+  const [isRecoveryLoading, setIsRecoveryLoading] = useState(true);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [backendReachable, setBackendReachable] = useState(true);
   const [receiving, setReceiving] = useState(false);
@@ -138,6 +146,8 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     phaseRef.current = null;
     setPhase(null);
     setGenerationError(null);
+    setFailedGeneration(null);
+    setIsRecoveryLoading(true);
     setReceiving(false);
     stopClock();
     if (slot === null) return;
@@ -193,16 +203,24 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           if (obsolete()) return;
           invalidateNarrativeQueries();
         }
+        // The bound parent is part of a failure's identity: a session that was
+        // abandoned before its worker committed gains its parent on a later
+        // poll, and that transition must re-enter recovery.
         const terminalKey = active
-          ? `${active.session_id}:${active.status}:${active.terminal_outcome}`
+          ? `${active.session_id}:${active.status}:${active.terminal_outcome}:${active.parent_chunk_id ?? "null"}`
           : "";
         const state =
           active && (active.status === "initiated" || terminalKey !== lastTerminal)
             ? await read((signal) => getGenerationStatus(slot, active.session_id, signal))
             : active;
         if (obsolete()) return;
+        if (state && (state.slot !== slot || state.session_id !== active?.session_id)) {
+          throw new Error("Generation response identity mismatch");
+        }
+        setIsRecoveryLoading(false);
         setBackendReachable(true);
         if (!state) {
+          setFailedGeneration(null);
           if (lastTerminal) {
             lastTerminal = "";
             invalidateNarrativeQueries();
@@ -220,6 +238,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           if (sessionRef.current !== state.session_id) {
             startClock(Date.parse(state.created_at));
           }
+          setFailedGeneration(null);
           sessionRef.current = state.session_id;
           phaseRef.current = state.phase;
           setPhase(state.phase);
@@ -230,23 +249,38 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           phaseRef.current = null;
           setPhase(null);
           stopClock();
-          const terminal = `${state.session_id}:${state.status}:${state.terminal_outcome}`;
+          const failure = `${state.session_id}:${state.status}:${state.terminal_outcome}:`;
+          const terminal = `${failure}${state.parent_chunk_id ?? "null"}`;
           if (terminal !== lastTerminal) {
+            // Same failure, newly bound parent: update recovery, no second toast.
+            const parentArrived = lastTerminal.startsWith(failure);
             lastTerminal = terminal;
             invalidateNarrativeQueries();
             if (state.terminal_outcome === "discarded") {
+              setFailedGeneration(null);
               setGenerationError(null);
               setReceiving(false);
             } else if (state.terminal_outcome === "error" || state.status === "error") {
+              // Only a failure bound to a recorded action can be retried
+              // server-side. The server binds parent_chunk_id whenever the
+              // player's action is durably recorded, including failures between
+              // acceptance and binding. A NULL parent therefore means no action
+              // is on disk: normal input stays open, with the draft retained,
+              // instead of a Retry the server would always reject.
+              setFailedGeneration(state.parent_chunk_id == null ? null : state);
+              setReceiving(false);
               const message =
                 state.error || state.error_class || "Narrative generation failed";
               setGenerationError(message);
-              toast({
-                title: "Generation Failed",
-                description: message,
-                variant: "destructive",
-              });
+              if (!parentArrived) {
+                toast({
+                  title: "Generation Failed",
+                  description: message,
+                  variant: "destructive",
+                });
+              }
             } else {
+              setFailedGeneration(null);
               setGenerationError(null);
               setCompletedGenerations((n) => n + 1);
               setReceiving(true);
@@ -361,15 +395,15 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     };
   }, []);
 
-  const submitTurn = useCallback(
-    async (params: { choice?: number; userText?: string }) => {
+  const submitRequest = useCallback(
+    async (params: { choice?: number; userText?: string }, retrySession?: string) => {
       if (slot === null) throw new Error("No active slot");
       if (submittingRef.current || isActivePhase(phaseRef.current)) {
         toast({
           title: "Generation Active",
           description: "Wait for the current turn to finish.",
         });
-        return;
+        return false;
       }
 
       submissionEpochRef.current += 1;
@@ -381,25 +415,27 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
       startClock();
 
       try {
-        if (slotState?.has_pending && !slotState.session_id) {
+        if (!retrySession && slotState?.has_pending && !slotState.session_id) {
           throw new Error("Pending turn is missing its session ID");
         }
-        const result = await continueNarrative({
+        const result = retrySession ? await retryNarrative(slot, retrySession) : await continueNarrative({
           slot,
           ...params,
           sessionId: slotState?.has_pending
             ? slotState.session_id ?? undefined
             : undefined,
         });
-        if (activeSlotRef.current !== slot) return;
+        if (activeSlotRef.current !== slot) return true;
+        setFailedGeneration(null);
         sessionRef.current = result.session_id;
         submittingRef.current = false;
         recoverRef.current();
         // Continue accepts the previous draft before starting generation.
         // Refresh its frontier clock now, without waiting for the next draft.
         invalidateNarrativeQueries();
+        return true;
       } catch (error) {
-        if (activeSlotRef.current !== slot) return;
+        if (activeSlotRef.current !== slot) return false;
         submittingRef.current = false;
         stopClock();
         phaseRef.current = null;
@@ -416,10 +452,22 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           description: message,
           variant: "destructive",
         });
+        return false;
       }
     },
     [slot, slotState, startClock, stopClock, invalidateNarrativeQueries],
   );
+
+  const submitTurn = useCallback(
+    (params: { choice?: number; userText?: string }) => {
+      if (failedGeneration && !slotState?.has_pending) return Promise.resolve(false);
+      return submitRequest(params);
+    }, [failedGeneration, slotState?.has_pending, submitRequest],
+  );
+  const retryGeneration = useCallback(() => {
+    if (!failedGeneration || slotState?.has_pending) return Promise.resolve(false);
+    return submitRequest({}, failedGeneration.session_id);
+  }, [failedGeneration, slotState?.has_pending, submitRequest]);
 
   let skaldStatus: SkaldStatus = "READY";
   if (!backendReachable) {
@@ -443,6 +491,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     skaldStatus,
     elapsedMs,
     generationError: generationError ?? recoverySettingsError?.message ?? null,
+    failedGeneration,
+    isRecoveryLoading,
+    retryGeneration,
     isGenerating: isActivePhase(phase),
     completedGenerations,
     submitTurn,

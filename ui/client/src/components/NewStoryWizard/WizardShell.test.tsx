@@ -171,6 +171,35 @@ describe("automatic wizard resume", () => {
 });
 
 describe("confirming wizard phases", () => {
+    it("tags artifact continuation without changing the player's submitted choice", async () => {
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                ...savedSession, current_phase: "character", character_state: null,
+                messages: [{ role: "assistant", content: "Choose your traits" }],
+                choices: ["Confirm these traits"],
+            })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                subphase_complete: true, artifact_type: "submit_trait_selection",
+                data: { selected_traits: ["contacts", "status", "obligations"] },
+            })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                message: "Choose your wildcard", choices: ["A well-worn notebook"],
+            })));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        fireEvent.click(await screen.findByTestId("wizard-choice-1"));
+
+        expect(await screen.findByText("Choose your wildcard")).toBeInTheDocument();
+        expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({ message: "Confirm these traits" });
+        expect(JSON.parse(fetch.mock.calls[1][1].body).message_origin).toBeUndefined();
+        expect(JSON.parse(fetch.mock.calls[2][1].body)).toMatchObject({
+            message: "[SYSTEM] Artifact submit_trait_selection confirmed. Proceed to next step.",
+            message_origin: "wizard_control",
+        });
+        expect(screen.queryByText("[SYSTEM] Artifact submit_trait_selection confirmed. Proceed to next step.")).toBeNull();
+    });
+
     it.each([
         { phase: "setting", title: "Setting", nextPhase: "character", nextTitle: "Character", type: "submit_world_document", artifact: { world_name: "The Waking Wood" } },
         { phase: "character", title: "Character", nextPhase: "seed", nextTitle: "Introduction", type: "submit_character_sheet", artifact: { name: "Rowan", summary: "Keeper of the gate" } },
@@ -201,6 +230,7 @@ describe("confirming wizard phases", () => {
         expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
         expect(JSON.parse(fetch.mock.calls[2][1].body)).toMatchObject({
             slot: 5, thread_id: "conv_saved", current_phase: nextPhase,
+            message_origin: "wizard_control",
             context_data: { [phase]: artifact, character_state: null },
         });
 

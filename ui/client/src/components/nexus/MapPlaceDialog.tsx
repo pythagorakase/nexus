@@ -53,7 +53,7 @@ function DialogSection({
   title: string;
   body: string | null | undefined;
 }) {
-  if (!body) return null;
+  if (!body?.trim()) return null;
   return (
     <section className="char-section">
       <span className="eyebrow">{title}</span>
@@ -81,6 +81,10 @@ export function MapPlaceDialog({
   const mainImage =
     images?.find((img) => img.isMain === 1) ?? images?.[0] ?? null;
   const inhabitants = parseInhabitants(place.inhabitants);
+  const hasDetails =
+    [place.summary, place.history, place.currentStatus, place.secrets].some(
+      (body) => Boolean(body?.trim()),
+    ) || inhabitants.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,6 +121,7 @@ export function MapPlaceDialog({
         <DecoDivider variant="glyph" />
 
         <div className="char-sections map-dialog-sections">
+          {!hasDetails && <p>No details recorded yet.</p>}
           <DialogSection title="Summary" body={place.summary} />
           <DialogSection title="History" body={place.history} />
           <DialogSection title="Current Status" body={place.currentStatus} />

@@ -88,6 +88,7 @@ class SlotState:
     wizard_state: Optional[WizardState]
     narrative_state: Optional[NarrativeState]
     model: Optional[str]  # Current model for this slot
+    story_id: Optional[str] = None  # Stable creation identity, not the story clock
 
 
 def get_slot_state(slot: int) -> SlotState:
@@ -157,8 +158,9 @@ def get_slot_state(slot: int) -> SlotState:
                 """
             )
             global_row = cur.fetchone()
+            player_character_id = None
             try:
-                canonical_player_character_id(cur)
+                player_character_id = canonical_player_character_id(cur)
                 has_player_character = True
             except PlayerIdentityNotEstablishedError:
                 if (
@@ -198,6 +200,23 @@ def get_slot_state(slot: int) -> SlotState:
             elif has_narrative_data:
                 # Narrative mode: chunks or incubator exist
                 narrative_state = _get_narrative_state(cur)
+                # The transition recreates the canonical protagonist for every
+                # story while it keeps the slot's global_variables row, so the
+                # protagonist's non-null row creation timestamp is the identity
+                # that is stable within a story and renewed when the slot is
+                # overwritten. Sequence resets can repeat the id; the
+                # transaction-time timestamp cannot.
+                cur.execute(
+                    "SELECT created_at FROM characters WHERE id = %s",
+                    (player_character_id,),
+                )
+                player_row = cur.fetchone()
+                if not player_row or player_row.get("created_at") is None:
+                    raise RuntimeError("Story has no stable creation identity")
+                story_id = (
+                    f"player:{player_character_id}:"
+                    f"{player_row['created_at'].isoformat()}"
+                )
                 return SlotState(
                     slot=slot,
                     is_empty=False,
@@ -205,6 +224,7 @@ def get_slot_state(slot: int) -> SlotState:
                     wizard_state=None,
                     narrative_state=narrative_state,
                     model=current_model,
+                    story_id=story_id,
                 )
             else:
                 # Empty slot: no wizard cache and no narrative

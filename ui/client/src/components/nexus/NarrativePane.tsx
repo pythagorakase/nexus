@@ -27,7 +27,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type KeyboardEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -50,6 +49,7 @@ import {
   type ReaderNav,
 } from "@/lib/narrative-nav";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
+import { useReaderDraft } from "@/hooks/useReaderDraft";
 import {
   PHASE_LABELS,
   type ChunkContext,
@@ -153,7 +153,8 @@ export function NarrativePane({
 }: NarrativePaneProps) {
   const { slotState, isGenerating, completedGenerations, submitTurn, phase } =
     engine;
-  const [freeform, setFreeform] = useState("");
+  const draft = useReaderDraft(slotState);
+  const freeform = draft.text;
   const freeformRef = useRef<HTMLTextAreaElement>(null);
   const tailRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLElement>(null);
@@ -207,7 +208,8 @@ export function NarrativePane({
   const chunks = episodeChunks?.chunks ?? [];
   const hasPending = slotState?.has_pending ?? false;
   const pendingText = hasPending ? slotState?.storyteller_text ?? null : null;
-  const choices = slotState?.choices ?? [];
+  const choices = hasPending ? slotState?.choices ?? [] : [];
+  const needsRecovery = !!engine.failedGeneration && !hasPending;
   const isBootstrapNeeded =
     !!slotState &&
     !slotState.is_empty &&
@@ -306,23 +308,22 @@ export function NarrativePane({
       ? historicalGrounding
       : null;
 
-  const canSubmit = !isGenerating && !!slotState && !slotState.is_wizard_mode;
+  const canSubmit = !isGenerating && !engine.isRecoveryLoading && !needsRecovery
+    && !!slotState && !slotState.is_wizard_mode;
 
   const handleChoice = useCallback(
     (index: number) => {
       if (!canSubmit) return;
-      setFreeform("");
-      void submitTurn({ choice: index });
+      void draft.submit(() => submitTurn({ choice: index }), false);
     },
-    [canSubmit, submitTurn],
+    [canSubmit, submitTurn, draft.submit],
   );
 
   const handleFreeformSubmit = useCallback(() => {
     const text = freeform.trim();
     if (!text || !canSubmit) return;
-    setFreeform("");
-    void submitTurn({ userText: text });
-  }, [freeform, canSubmit, submitTurn]);
+    void draft.submit(() => submitTurn({ userText: text }), true);
+  }, [freeform, canSubmit, submitTurn, draft.submit]);
 
   const handleFreeformKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -544,7 +545,63 @@ export function NarrativePane({
             </div>
           )}
 
-          {isBootstrapNeeded && !isGenerating && (
+          <div className="choices">
+              {draft.previousActions.map((action) => (
+                <details key={action.attempt} data-testid="unconfirmed-action">
+                  <summary>Unconfirmed previous action</summary>
+                  <p>
+                    Its send was not confirmed. Check the latest scene before
+                    using this text again.
+                  </p>
+                  <Textarea
+                    readOnly
+                    autoSize
+                    value={action.text}
+                    aria-label="Saved unconfirmed action"
+                  />
+                  <button type="button" onClick={() => draft.dismissAction(action.attempt)}>
+                    Dismiss saved action
+                  </button>
+                </details>
+              ))}
+              {draft.storageError && (
+                <p role="alert">
+                  This draft could not be saved in your browser. Keep this page
+                  open or copy your text before leaving.
+                </p>
+              )}
+          </div>
+
+          {needsRecovery && !isGenerating && (
+            <section className="choices" data-testid="generation-recovery" role="alert">
+              <h3>The next scene could not be completed.</h3>
+              <p>
+                {isBootstrapNeeded
+                  ? "Your story setup is saved. You can try beginning the story again."
+                  : "Your last accepted action is saved. Retry continues from that action without choosing or saving it again."}
+              </p>
+              <p>Nothing will be retried until you choose to continue.</p>
+              <details>
+                <summary>Failure details</summary>
+                <p>{engine.generationError || engine.failedGeneration?.error}</p>
+              </details>
+              <button
+                className="choice"
+                onClick={() => void engine.retryGeneration()}
+                disabled={engine.isRecoveryLoading}
+                data-testid="button-retry-generation"
+              >
+                <span className="choice-glyph">◆</span>
+                <span className="choice-text">Retry continuation</span>
+              </button>
+            </section>
+          )}
+
+          {engine.isRecoveryLoading && !isGenerating && !needsRecovery && (
+            <p role="status">Checking the latest continuation…</p>
+          )}
+
+          {isBootstrapNeeded && canSubmit && (
             <section className="choices">
               <button
                 className="choice"
@@ -559,7 +616,7 @@ export function NarrativePane({
 
           {/* Freeform slot 0 stays available even when the storyteller
               presented no numbered choices (matches the CLI continue flow). */}
-          {!isGenerating && !isBootstrapNeeded && (
+          {!isGenerating && !isBootstrapNeeded && !needsRecovery && (
             <section className="choices" data-testid="story-choices">
               {choices.map((text, i) => (
                 <button
@@ -585,7 +642,7 @@ export function NarrativePane({
                   value={freeform}
                   placeholder={freeformPresent.placeholder}
                   autoFocus={freeformPresent.autoFocus}
-                  onChange={(e) => setFreeform(e.target.value)}
+                  onChange={(e) => draft.update(e.target.value)}
                   onKeyDown={handleFreeformKeyDown}
                   disabled={!canSubmit}
                   data-testid="input-freeform"

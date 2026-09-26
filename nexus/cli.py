@@ -1376,6 +1376,7 @@ def _apply_traits_to_wildcard_transition(
             "[SYSTEM] Phase character subphase traits complete. "
             "Proceeding to wildcard. Please introduce the next subphase."
         ),
+        "message_origin": "wizard_control",
         "current_phase": "character",
     }
     if model:
@@ -1647,6 +1648,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                                 f"Proceeding to {next_phase}. "
                                 "Please introduce the next phase."
                             ),
+                            "message_origin": "wizard_control",
                             "current_phase": next_phase,
                         }
                         if model_to_use:

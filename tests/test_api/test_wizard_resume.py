@@ -204,13 +204,22 @@ def test_resume_rejects_missing_session(
 
 @pytest.mark.parametrize("streaming", [False, True])
 @pytest.mark.parametrize("reply", ["choices", "debug", "artifact"])
+@pytest.mark.parametrize("message_origin", ["user", "wizard_control"])
 def test_resume_keeps_only_choices_from_the_latest_turn(
-    monkeypatch: pytest.MonkeyPatch, streaming: bool, reply: str
+    monkeypatch: pytest.MonkeyPatch, streaming: bool, reply: str, message_origin: str
 ) -> None:
     """Both chat transports must replace old choices, including with an empty set."""
     storage = ConversationsClient("TEST")
     thread_id = storage.create_thread()
     storage.add_message(thread_id, "assistant", "Welcome")
+    # An old control and a new player message can have identical text. Only the
+    # explicitly attributed player message should survive the resume projection.
+    message = (
+        "[SYSTEM] Phase setting complete. Proceeding to character. "
+        "Please introduce the next phase."
+    )
+    storage.add_message(thread_id, "user", message)
+    seen_history = []
     cache = WizardCache(thread_id=thread_id, choices=["Old option"])
     state = SlotState(
         slot=4,
@@ -251,10 +260,12 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
                 context.last_tool_result = {"phase_complete": True, "data": {}}
 
         async def run(self, *args: Any, **kwargs: Any) -> Any:
+            seen_history.extend(kwargs["message_history"])
             self.set_artifact(kwargs["deps"])
             return SimpleNamespace(output=output)
 
         async def run_stream(self, *args: Any, **kwargs: Any):
+            seen_history.extend(kwargs["message_history"])
             self.set_artifact(kwargs["deps"])
             yield GeneratedTurn()
 
@@ -285,11 +296,81 @@ def test_resume_keeps_only_choices_from_the_latest_turn(
     client = TestClient(app)
 
     endpoint = "/api/story/new/chat/stream" if streaming else "/api/story/new/chat"
-    response = client.post(
-        endpoint, json={"slot": 4, "message": "A forest", "dev": reply == "debug"}
-    )
+    payload = {"slot": 4, "message": message, "dev": reply == "debug"}
+    if message_origin == "wizard_control":
+        payload["message_origin"] = message_origin
+    response = client.post(endpoint, json=payload)
     assert response.status_code == 200, response.text
     resumed = client.get("/api/story/new/setup/resume?slot=4")
     assert resumed.status_code == 200, resumed.text
     assert resumed.json()["choices"] == expected_choices
-    assert {"role": "user", "content": "A forest"} in resumed.json()["messages"]
+    assert resumed.json()["messages"].count({"role": "user", "content": message}) == (
+        1 if message_origin == "user" else 0
+    )
+    # Controls retain the same user role and original text for inference; the
+    # storage envelope must not become another model prompt or raise authority.
+    assert seen_history[-1].parts[0].part_kind == "user-prompt"
+    assert seen_history[-1].parts[0].content == message
+
+
+def test_resume_projects_legacy_controls_without_rewriting_history(
+    monkeypatch: pytest.MonkeyPatch, resume_client: TestClient
+) -> None:
+    """Only known historical controls disappear; user prose remains verbatim."""
+    messages = [
+        {"role": "assistant", "content": "[SYSTEM] This is a fictional notice."},
+        {"role": "user", "content": "The terminal displays [SYSTEM].\nKeep that."},
+        {
+            "role": "user",
+            "content": "[SYSTEM] Artifact submit_trait_selection confirmed. "
+            "Proceed to next step.",
+        },
+        {
+            "role": "user",
+            "content": "[SYSTEM] Artifact submit_wildcard_trait confirmed. "
+            "Proceed to next step.",
+        },
+        {
+            "role": "user",
+            "content": "[SYSTEM] Phase character subphase traits complete. "
+            "Proceeding to wildcard. Please introduce the next subphase.",
+        },
+        {
+            "role": "user",
+            "content": "[SYSTEM] Phase character complete. Proceeding to seed. "
+            "Please introduce the next phase.",
+        },
+        {
+            "role": "user",
+            "content": "[SYSTEM] Phase setting complete. Proceeding to character. "
+            "Please introduce the next phase.",
+        },
+        {
+            "role": "user",
+            "content": "[SYSTEM] Artifact submit_character_concept confirmed. "
+            "Proceed to next step.",
+        },
+        {
+            "role": "user",
+            "content": "[SYSTEM] Phase something else complete. Proceeding elsewhere.",
+        },
+        {
+            "role": "user",
+            "content": "Quoted: [SYSTEM] Artifact submit_trait_selection confirmed. "
+            "Proceed to next step.",
+        },
+    ]
+    storage = ConversationsClient("TEST")
+    thread_id = storage.create_thread()
+    for message in messages:
+        storage.add_message(thread_id, message["role"], message["content"])
+    cache = WizardCache(thread_id=thread_id, choices=["Keep this option"])
+    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
+    monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
+    before = storage.list_messages(thread_id, limit=0)
+    for _ in range(2):
+        response = resume_client.get("/api/story/new/setup/resume?slot=4")
+        assert response.status_code == 200
+        assert response.json()["messages"] == messages[:2] + messages[-2:]
+        assert response.json()["choices"] == ["Keep this option"]
+    assert storage.list_messages(thread_id, limit=0) == before

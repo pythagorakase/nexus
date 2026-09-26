@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Record the explicit character name reveal module reached by production validation, reconciliation, and acceptance paths.",
+  "reason": "Preserve production paths for character name reveals, wizard transcripts and place validation after integrating the reviewed QA fixes.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -83,6 +83,7 @@
     "nexus/agents/logon/apex_schema.py",
     "nexus/agents/logon/gaia_registry_schema.py",
     "nexus/agents/logon/orrery_tag_validation.py",
+    "nexus/agents/logon/place_reference_validation.py",
     "nexus/agents/logon/skald_wire.py",
     "nexus/agents/lore/__init__.py",
     "nexus/agents/lore/logon_utility.py",
@@ -221,6 +222,7 @@
     "nexus/api/trait_input_derivation.py",
     "nexus/api/wizard_agent.py",
     "nexus/api/wizard_chat.py",
+    "nexus/api/wizard_transcript.py",
     "nexus/cli.py",
     "nexus/config/__init__.py",
     "nexus/config/loader.py",

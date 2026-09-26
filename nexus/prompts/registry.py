@@ -131,6 +131,7 @@ class PromptId(str, Enum):
     RETRY_FACTION_DECLARATION_DISABLED = "retry/faction_declaration_disabled"
     RETRY_FACTION_EXACT_NAME = "retry/faction_exact_name"
     RETRY_FACTION_NEW_NAME = "retry/faction_new_name"
+    RETRY_PLACE_REFERENCES = "retry/place_references"
     RETRY_STRUCTURED_OUTPUT = "retry/structured_output"
     STORYTELLER_BOOTSTRAP = "storyteller_bootstrap"
     STORYTELLER_CORE = "storyteller_core"
@@ -643,6 +644,11 @@ PROMPTS: Mapping[PromptId, PromptSpec] = MappingProxyType(
         ),
         PromptId.RETRY_FACTION_NEW_NAME: PromptSpec(
             "retry/faction_new_name.md", ("gaia", "skald_single_pass"), frozenset(())
+        ),
+        PromptId.RETRY_PLACE_REFERENCES: PromptSpec(
+            "retry/place_references.md",
+            ("gaia", "skald_single_pass"),
+            frozenset(("FORMATTED",)),
         ),
         PromptId.RETRY_STRUCTURED_OUTPUT: PromptSpec(
             "retry/structured_output.md", ("all",), frozenset(("PROMPT", "MESSAGE"))
