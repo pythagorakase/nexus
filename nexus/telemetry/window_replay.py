@@ -1,0 +1,130 @@
+"""Provider-free counterfactual replay of recorded per-attempt prompt windows.
+
+Every rendered generation attempt leaves a ``PromptWindowRecord`` in the usage
+ledger: its exact input tokens, per-block counts, and the seat ceiling it was
+admitted against. A replay keeps those recorded tokens and recomputes only the
+seat window under candidate settings through the same ``resolve_seat_window``
+arithmetic the trimming pass and the final guard use. Nothing is re-rendered,
+re-counted, or sent to a provider, and nothing is priced: tokens only, per
+Decision 9 (#858).
+"""
+
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+from pydantic import BaseModel, ConfigDict
+
+from nexus.agents.lore.seat_blocks import BlockId
+from nexus.config.seat_window import resolve_seat_window
+from nexus.telemetry.prompt_window import PromptWindowRecord
+from nexus.telemetry.usage import read_prompt_windows, validate_usage_day
+
+# The block kinds the storyteller trimming pass may drop
+# (``TurnCycleManager._enforce_context_payload_budget``). Their counts also
+# include each section heading and the protected newest scene, which the pass
+# never drops, so ``ReplayRow.feasible`` is an upper bound.
+TRIMMABLE_BLOCKS: tuple[BlockId, ...] = (
+    "recent narrative",
+    "historical context",
+    "recalled scenes",
+)
+
+
+class NoPromptWindowsError(LookupError):
+    """The usage ledger holds no rendered attempts for the requested run."""
+
+
+class ReplayRow(BaseModel):
+    """One recorded attempt's window under candidate settings, in tokens."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    generation_session: str
+    seat: str
+    attempt: int
+    recorded_model: str
+    candidate_model: str
+    window: int
+    recorded_input_tokens: int
+    recorded_ceiling: int
+    candidate_ceiling: int
+    candidate_policy_headroom: int
+    headroom_delta: int
+    overflow_tokens: int
+    trimmable_tokens: int
+    feasible: bool
+    freed_tokens: int
+
+
+def recorded_window(record: PromptWindowRecord) -> int:
+    """Return the prompt spend the recorded ceiling was carved from.
+
+    The guard admits ``min(window, model maximum input) - policy headroom``, so
+    adding the recorded headroom back recovers the spend the attempt ran under.
+    """
+    return record.effective_ceiling + record.policy_headroom
+
+
+def replay_record(
+    record: PromptWindowRecord,
+    settings: Mapping[str, Any],
+    *,
+    model: str | None = None,
+    window: int | None = None,
+) -> ReplayRow:
+    """Recompute one attempt's seat window under candidate settings.
+
+    ``model`` replaces the recorded model and ``window`` replaces the recorded
+    prompt spend; both default to what the attempt ran under. The recorded
+    token counts are kept as measured, including under a candidate model with a
+    different tokenizer. Resolution errors (an unregistered model, an output
+    allowance above the model maximum) propagate unchanged.
+    """
+    candidate_model = record.model if model is None else model
+    spend = recorded_window(record) if window is None else window
+    budget = resolve_seat_window(
+        settings, candidate_model, seat=record.seat, window=spend
+    )
+    ceiling = budget.input_ceiling
+    overflow = max(0, record.input_tokens - ceiling)
+    # A kind absent from the record was not rendered for this attempt.
+    trimmable = sum(record.block_tokens.get(kind, 0) for kind in TRIMMABLE_BLOCKS)
+    return ReplayRow(
+        generation_session=record.generation_session,
+        seat=record.seat,
+        attempt=record.attempt,
+        recorded_model=record.model,
+        candidate_model=candidate_model,
+        window=spend,
+        recorded_input_tokens=record.input_tokens,
+        recorded_ceiling=record.effective_ceiling,
+        candidate_ceiling=ceiling,
+        candidate_policy_headroom=budget.policy_headroom,
+        headroom_delta=ceiling - record.effective_ceiling,
+        overflow_tokens=overflow,
+        trimmable_tokens=trimmable,
+        feasible=overflow <= trimmable,
+        freed_tokens=max(0, ceiling - record.input_tokens),
+    )
+
+
+def replay_run(
+    run_id: str,
+    day: str,
+    settings: Mapping[str, Any],
+    *,
+    model: str | None = None,
+    window: int | None = None,
+) -> list[ReplayRow]:
+    """Replay every recorded attempt of one generation run on one UTC day."""
+    validate_usage_day(day)
+    records = read_prompt_windows(run_id, day)
+    if not records:
+        raise NoPromptWindowsError(
+            f"No prompt window records for run {run_id!r} on UTC day {day}"
+        )
+    return [
+        replay_record(record, settings, model=model, window=window)
+        for record in records
+    ]
