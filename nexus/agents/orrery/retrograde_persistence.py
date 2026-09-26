@@ -3190,12 +3190,10 @@ def _insert_place_stub(
         INSERT INTO places (
             name, type, summary, current_status, extra_data, zone
         )
-        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb, %s)
+        VALUES (%s, 'other'::place_type, NULL, NULL, %s::jsonb, %s)
         """,
         (
             entity_ref,
-            _stub_summary(entity_ref, "place"),
-            "latent in generated backstory",
             json.dumps(_stub_extra_data(sources)),
             zone_id,
         ),
