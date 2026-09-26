@@ -131,15 +131,17 @@
   font-weight: 600;
   font-family: var(--font-menu);
 }
+/* The player character's name is content: it renders as stored, never
+   uppercased or tracked out like the SLOT chrome around it (#777). */
 .slot-label em {
   color: var(--fg);
   font-style: normal;
   font-family: var(--font-menu);
   font-size: 12px;
-  letter-spacing: 0.18em;
+  letter-spacing: normal;
   font-weight: 600;
   margin-left: 2px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 .topbar .frontier-clock {
   font-family: var(--font-menu);
@@ -309,13 +311,12 @@
   display: block;
   margin-bottom: 10px;
 }
-/* Scene title is the menu font — never the marquee. */
+/* Scene title is the menu font — never the marquee. It names the scene's
+   places, which are content: natural case, no chrome tracking (#777). */
 .scene-title {
   font-family: var(--font-menu);
   font-size: 38px;
-  letter-spacing: 0.18em;
   font-weight: 600;
-  text-transform: uppercase;
   color: var(--brass-bright);
   text-shadow: var(--glow-soft);
   margin: 0 0 12px;
@@ -2263,4 +2264,40 @@
   .scene-title { font-size: 26px; }
   .charspane { grid-template-columns: 1fr; }
   .mappane { grid-template-columns: 1fr; grid-template-rows: 220px 1fr; }
+}
+
+/* ─── Reduced motion (#777) ───
+   One guard for the whole shell. Every keyframe animation stops (pulses,
+   shimmers, spinners, the backstage drawer and row entrances, the quant
+   list's slide), and every transition that moves or resizes something (the
+   memory and progress fills, the lever knob, the chevron turn) lands at once.
+   Color, opacity and shadow fades are not motion and stay. A new animation or
+   moving transition in this file joins this block; shell-accessibility.test.ts
+   fails until it does. */
+@media (prefers-reduced-motion: reduce) {
+  .nexus-shell .topbar .field .v.generating,
+  .nexus-shell .topbar .mem-fill.loading,
+  .nexus-shell .reader-status .glyph,
+  .nexus-shell .phase-row.active .phase-glyph,
+  .nexus-shell .phase-strip-bar,
+  .nexus-shell .char-upload-spin,
+  .nexus-shell .nexus-backstage-sigil-dot,
+  .nexus-shell .nexus-backstage-drawer,
+  .nexus-shell .nexus-backstage-live-dot,
+  .nexus-shell .nexus-backstage-resolving,
+  .nexus-shell .nexus-backstage-bubble,
+  .nexus-shell .nexus-backstage-write-row,
+  .nexus-shell .nexus-backstage-orrery-row,
+  .nexus-shell .lm-quants[data-state="open"],
+  .nexus-shell .lm-quants[data-state="closed"],
+  .nexus-shell .lm-dot.loading {
+    animation: none;
+  }
+  .nexus-shell .topbar .mem-fill,
+  .nexus-shell .phase-strip-bar,
+  .nexus-shell .lever-knob,
+  .nexus-shell .lm-chevron svg,
+  .nexus-shell .lm-bar-fill {
+    transition: none;
+  }
 }

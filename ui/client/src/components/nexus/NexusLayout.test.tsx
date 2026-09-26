@@ -5,8 +5,29 @@ import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
 import type { BackstageTurnResponse } from "@/types/backstage";
+import type { GenerationSession } from "@/types/narrative";
 import type { SettingsPayload } from "@/types/settings";
 import { NexusLayout } from "./NexusLayout";
+
+const engine = vi.hoisted(() => {
+  const failedGeneration: GenerationSession = {
+    slot: 4,
+    session_id: "failed-8",
+    status: "error",
+    phase: "writer",
+    terminal_outcome: "error",
+    replaced_by_session_id: null,
+    chunk_id: null,
+    parent_chunk_id: 9,
+    created_at: "2026-09-26T08:00:00Z",
+    heartbeat_at: "2026-09-26T08:01:00Z",
+    expires_at: null,
+    error: "Writer timed out",
+    error_class: "TimeoutError",
+  };
+  return { failedGeneration };
+});
+const topBar = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
 
 vi.mock("@/hooks/useNarrativeEngine", () => ({
   useNarrativeEngine: () => ({
@@ -17,6 +38,7 @@ vi.mock("@/hooks/useNarrativeEngine", () => ({
     skaldStatus: "READY",
     elapsedMs: 0,
     generationError: null,
+    failedGeneration: engine.failedGeneration,
     isGenerating: false,
     completedGenerations: 0,
     submitTurn: vi.fn(),
@@ -27,7 +49,12 @@ vi.mock("@/lib/narrative-api", () => ({
   getUserCharacter: () => Promise.resolve(null),
 }));
 
-vi.mock("./TopBar", () => ({ TopBar: () => <header data-testid="mock-topbar" /> }));
+vi.mock("./TopBar", () => ({
+  TopBar: (props: Record<string, unknown>) => {
+    topBar.props.push(props);
+    return <header data-testid="mock-topbar" />;
+  },
+}));
 vi.mock("./NarrativePane", () => ({
   NarrativePane: () => <div data-testid="mock-narrative" />,
 }));
@@ -244,5 +271,25 @@ describe("NexusLayout Backstage", () => {
       expect(screen.queryByTestId("backstage-drawer")).not.toBeInTheDocument(),
     );
     input.remove();
+  });
+});
+
+describe("NexusLayout operator strip", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem("activeSlot", "4");
+    topBar.props.length = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 404 })),
+    );
+  });
+
+  it("hands the strip the engine's durable failure for its announcer", () => {
+    renderLayout({ ui: { theme: "veil" } });
+
+    const latest = topBar.props[topBar.props.length - 1];
+    expect(latest.failedGeneration).toBe(engine.failedGeneration);
+    expect(latest.skaldStatus).toBe("READY");
   });
 });

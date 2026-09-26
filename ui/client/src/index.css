@@ -1468,3 +1468,25 @@ html {
     @apply bg-background text-foreground;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REDUCED MOTION (#777)
+   The theme effects above loop forever (flicker, scanlines, shimmers, pulses,
+   the progress marquee). Under prefers-reduced-motion each consumer holds
+   still. Outside any @layer so it is always emitted, and after the layered
+   rules with matching selectors so it wins without !important. slow-pulse
+   has no consumer yet; one that adopts it joins this list. The shell's own
+   animations are guarded in components/nexus/nexus-layout.css.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .terminal-flicker,
+  .terminal-loading::after,
+  .status-bar-loading::after,
+  .status-bar-progress-bar,
+  .dark.theme-vector .terminal-generating::after,
+  .deco-pulse,
+  .deco-shimmer::after,
+  .veil-shimmer::after {
+    animation: none;
+  }
+}

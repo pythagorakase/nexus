@@ -25,6 +25,7 @@ export const Active = () => (
       slot={2}
       characterName="Mira Vale"
       skaldStatus="READY"
+      failedGeneration={null}
       frontierClock={frontierClock}
     />
   </Shell>
@@ -34,7 +35,13 @@ export const Active = () => (
 // is no frontier to clock.
 export const NoCharacter = () => (
   <Shell>
-    <TopBar slot={5} characterName={null} skaldStatus="READY" frontierClock={null} />
+    <TopBar
+      slot={5}
+      characterName={null}
+      skaldStatus="READY"
+      failedGeneration={null}
+      frontierClock={null}
+    />
   </Shell>
 );
 
@@ -46,6 +53,7 @@ export const Offline = () => (
       slot={2}
       characterName="Mira Vale"
       skaldStatus="OFFLINE"
+      failedGeneration={null}
       frontierClock={frontierClock}
     />
   </Shell>

@@ -1,9 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
 import type { LocalModelsStatus } from "@/types/localModels";
-import type { SlotState } from "@/types/narrative";
+import type {
+  GenerationSession,
+  SkaldStatus,
+  SlotState,
+} from "@/types/narrative";
 import { TopBar } from "./TopBar";
 
 const MODELS_DIR = "/models";
@@ -53,6 +60,7 @@ function renderTopBar(
       slot={1}
       characterName={null}
       skaldStatus="READY"
+      failedGeneration={null}
       frontierClock={frontierClock}
     />,
     {
@@ -80,6 +88,7 @@ describe("TopBar frontier clock", () => {
         slot={1}
         characterName={null}
         skaldStatus="GENERATING"
+        failedGeneration={null}
         frontierClock={{
           instant: "2189-10-17T22:42:00Z",
           face: "17 Oct 2189 · 22:42",
@@ -95,6 +104,7 @@ describe("TopBar frontier clock", () => {
         slot={2}
         characterName={null}
         skaldStatus="READY"
+        failedGeneration={null}
         frontierClock={null}
       />,
     );
@@ -193,5 +203,215 @@ describe("TopBar memory meter", () => {
     });
 
     expect(screen.getByTestId("mem-text")).toHaveTextContent("— / 48 gb");
+  });
+});
+
+/** A durable attempt that ended in error, as the engine reports it. */
+function failedAttempt(
+  sessionId: string,
+  parentChunkId: number | null = null,
+): GenerationSession {
+  return {
+    slot: 3,
+    session_id: sessionId,
+    status: "error",
+    phase: "writer",
+    terminal_outcome: "error",
+    replaced_by_session_id: null,
+    chunk_id: null,
+    parent_chunk_id: parentChunkId,
+    created_at: "2026-09-26T08:00:00Z",
+    heartbeat_at: "2026-09-26T08:01:00Z",
+    expires_at: null,
+    error: "Writer timed out",
+    error_class: "TimeoutError",
+  };
+}
+
+function renderStrip(
+  skaldStatus: SkaldStatus,
+  characterName: string | null,
+  failedGeneration: GenerationSession | null = null,
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], BASE);
+  let engine = { skaldStatus, failedGeneration };
+  const strip = () => (
+    <div className="nexus-shell">
+      <TopBar
+        slot={3}
+        characterName={characterName}
+        skaldStatus={engine.skaldStatus}
+        failedGeneration={engine.failedGeneration}
+        frontierClock={null}
+      />
+    </div>
+  );
+  const view = render(strip(), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+  // Every message the live region presents, in order. Re-setting the same
+  // text is no DOM change, so assistive technology hears it once.
+  const spoken: string[] = [];
+  const listen = () => {
+    const text = screen.getByRole("status").textContent ?? "";
+    if (text && text !== spoken[spoken.length - 1]) spoken.push(text);
+  };
+  const update = (next: Partial<typeof engine>) => {
+    engine = { ...engine, ...next };
+    view.rerender(strip());
+    listen();
+  };
+  listen();
+  return {
+    ...view,
+    spoken,
+    setEngine: update,
+    setStatus: (status: SkaldStatus) => update({ skaldStatus: status }),
+    setFailure: (failure: GenerationSession | null) =>
+      update({ failedGeneration: failure }),
+  };
+}
+
+describe("TopBar slot label case", () => {
+  // The shell stylesheet, loaded as the app loads it. jsdom cascades declared
+  // values but does not inherit text-transform, so resolve inheritance here.
+  let sheet: HTMLStyleElement;
+  beforeEach(() => {
+    sheet = document.createElement("style");
+    sheet.textContent = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "nexus-layout.css"),
+      "utf-8",
+    );
+    document.head.appendChild(sheet);
+  });
+  afterEach(() => sheet.remove());
+
+  function inherited(element: Element, property: "textTransform" | "letterSpacing") {
+    for (let node: Element | null = element; node; node = node.parentElement) {
+      const value = getComputedStyle(node)[property];
+      if (value) return value;
+    }
+    return "";
+  }
+
+  it("renders the player character's name as stored inside uppercase chrome", () => {
+    renderStrip("READY", "Mira de la Vale");
+    const label = screen.getByTestId("text-slot-label");
+    const name = label.querySelector("em") as HTMLElement;
+
+    expect(name.textContent).toBe("Mira de la Vale");
+    expect(inherited(name, "textTransform")).toBe("none");
+    expect(inherited(name, "letterSpacing")).toBe("normal");
+    // The SLOT chrome label keeps its uppercase tracking.
+    expect(inherited(label, "textTransform")).toBe("uppercase");
+  });
+});
+
+describe("TopBar generation announcer", () => {
+  const announcer = () => screen.getByRole("status");
+
+  it("is a polite, visually hidden region that is silent at rest", () => {
+    renderStrip("READY", "Mira de la Vale");
+
+    expect(announcer()).toHaveAttribute("aria-live", "polite");
+    expect(announcer()).toHaveClass("sr-only");
+    expect(announcer()).toBeEmptyDOMElement();
+  });
+
+  it("announces a turn's start once and its completion", () => {
+    const { setStatus, spoken } = renderStrip("READY", null);
+
+    setStatus("TRANSMITTING");
+    expect(announcer()).toHaveTextContent("Generation started");
+    setStatus("GENERATING");
+    expect(announcer()).toHaveTextContent("Generation started");
+    setStatus("RECEIVING");
+    expect(announcer()).toHaveTextContent("Generation complete");
+    // The receiving hold lapsing back to rest is not a new outcome.
+    setStatus("READY");
+    expect(announcer()).toHaveTextContent("Generation complete");
+
+    setStatus("TRANSMITTING");
+    expect(announcer()).toHaveTextContent("Generation started");
+    expect(spoken).toEqual([
+      "Generation started",
+      "Generation complete",
+      "Generation started",
+    ]);
+  });
+
+  it("keeps a turn in flight when READY flashes during its submission", () => {
+    // A read that lands while the continue request is pending sees no
+    // active session and clears the optimistic phase; the request then
+    // succeeds and the turn runs to completion. No failure was reported.
+    const { setStatus, spoken } = renderStrip("READY", null);
+
+    setStatus("TRANSMITTING");
+    setStatus("READY");
+    expect(announcer()).toHaveTextContent("Generation started");
+    setStatus("GENERATING");
+    setStatus("RECEIVING");
+
+    expect(spoken).toEqual(["Generation started", "Generation complete"]);
+  });
+
+  it("announces the engine's failure for a turn it saw start, once", () => {
+    const { setEngine, setStatus, setFailure, spoken } = renderStrip("READY", null);
+
+    setStatus("TRANSMITTING");
+    setStatus("GENERATING");
+    // The engine clears the phase and reports the durable failure together.
+    setEngine({ skaldStatus: "READY", failedGeneration: failedAttempt("failed-8") });
+    expect(announcer()).toHaveTextContent("Generation failed");
+    // The same failure re-reported once its parent chunk binds is not new.
+    setFailure(failedAttempt("failed-8", 9));
+    expect(spoken).toEqual(["Generation started", "Generation failed"]);
+
+    // The failure closed that turn, so the retry is a new one.
+    setStatus("TRANSMITTING");
+    expect(spoken).toEqual([
+      "Generation started",
+      "Generation failed",
+      "Generation started",
+    ]);
+  });
+
+  it("stays silent for a failure it never saw start", () => {
+    const { setFailure, spoken } = renderStrip(
+      "READY",
+      null,
+      failedAttempt("failed-7"),
+    );
+
+    // Another attempt failing is not a turn this surface observed either.
+    setFailure(failedAttempt("failed-8"));
+
+    expect(announcer()).toBeEmptyDOMElement();
+    expect(spoken).toEqual([]);
+  });
+
+  it("stays silent for the finished session replayed on load", () => {
+    const { setStatus } = renderStrip("READY", null);
+
+    setStatus("RECEIVING");
+    setStatus("READY");
+    expect(announcer()).toBeEmptyDOMElement();
+  });
+
+  it("holds a running turn through an outage and reports its outcome", () => {
+    const { setStatus } = renderStrip("READY", null);
+
+    setStatus("GENERATING");
+    setStatus("OFFLINE");
+    expect(announcer()).toHaveTextContent("Generation started");
+    setStatus("GENERATING");
+    expect(announcer()).toHaveTextContent("Generation started");
+    setStatus("RECEIVING");
+    expect(announcer()).toHaveTextContent("Generation complete");
   });
 });
