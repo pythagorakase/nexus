@@ -17,7 +17,13 @@
  * size against detected system RAM - live process telemetry cannot see
  * Metal-wired mmap pages, so static catalog sizes are the honest signal
  * (see _system_ram_gb in local_models_endpoints.py).
+ *
+ * The strip also carries the generation announcer (#777): a visually hidden
+ * polite status region that tells assistive technology when a turn starts,
+ * completes, or fails. It has no visible text, so it adds nothing to the
+ * quiet chrome.
  */
+import { useEffect, useReducer } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   LOCAL_MODELS_KNOB_DEFAULTS,
@@ -32,6 +38,76 @@ interface TopBarProps {
   characterName: string | null;
   skaldStatus: SkaldStatus;
   frontierClock: FrontierClock | null;
+}
+
+/** Spoken by the generation announcer; never rendered visibly. */
+const GENERATION_ANNOUNCEMENTS = {
+  started: "Generation started",
+  complete: "Generation complete",
+  failed: "Generation failed",
+} as const;
+
+interface AnnouncerState {
+  /** A turn this surface saw start has not yet reached an outcome. */
+  inFlight: boolean;
+  message: string;
+}
+
+/**
+ * Fold one operator-status observation into the announcer.
+ *
+ * The engine derives SkaldStatus from its generation state: TRANSMITTING and
+ * GENERATING while a turn runs, RECEIVING (held briefly) only when the turn
+ * completed, and READY once the phase clears without completion, which is
+ * the failed-turn path (a durable error or a submission that never started).
+ * An outcome is announced only for a turn seen starting, so the RECEIVING
+ * flash that replays the latest finished session on load stays silent.
+ * OFFLINE is connectivity, not an outcome: the turn stays in flight and is
+ * resolved by whatever status follows reconnection.
+ */
+function announce(state: AnnouncerState, status: SkaldStatus): AnnouncerState {
+  switch (status) {
+    case "TRANSMITTING":
+    case "GENERATING":
+      return state.inFlight
+        ? state
+        : { inFlight: true, message: GENERATION_ANNOUNCEMENTS.started };
+    case "RECEIVING":
+      return state.inFlight
+        ? { inFlight: false, message: GENERATION_ANNOUNCEMENTS.complete }
+        : state;
+    case "READY":
+      return state.inFlight
+        ? { inFlight: false, message: GENERATION_ANNOUNCEMENTS.failed }
+        : state;
+    case "OFFLINE":
+      return state;
+  }
+}
+
+/**
+ * Visually hidden live region for the generation lifecycle. It is mounted
+ * empty and filled from an effect, so screen readers observe each message as
+ * a change to an existing polite region.
+ */
+function GenerationAnnouncer({ skaldStatus }: { skaldStatus: SkaldStatus }) {
+  const [state, observe] = useReducer(announce, {
+    inFlight: false,
+    message: "",
+  });
+  useEffect(() => {
+    observe(skaldStatus);
+  }, [skaldStatus]);
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className="sr-only"
+      data-testid="generation-announcer"
+    >
+      {state.message}
+    </span>
+  );
 }
 
 function MemoryMeter() {
@@ -140,6 +216,7 @@ export function TopBar({
           </span>
         )}
       </div>
+      <GenerationAnnouncer skaldStatus={skaldStatus} />
     </header>
   );
 }
