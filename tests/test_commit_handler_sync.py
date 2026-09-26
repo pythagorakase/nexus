@@ -451,7 +451,7 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
         for sql, params in conn.statements
         if sql.startswith("INSERT INTO lore_pass_baselines")
     ]
-    assert baseline_writes[0][:2] == (conn.chunk_id, 1)
+    assert baseline_writes[0][:2] == (conn.chunk_id, 2)
     assert json.loads(baseline_writes[0][2])["parent_chunk_id"] == conn.chunk_id
     assert any(
         "FROM incubator" in sql and "FOR UPDATE" in sql

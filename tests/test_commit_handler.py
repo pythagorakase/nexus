@@ -324,7 +324,7 @@ async def test_async_commit_links_same_turn_character_declaration(monkeypatch):
         for sql, args in conn.statements
         if sql.startswith("INSERT INTO lore_pass_baselines")
     ]
-    assert baseline_writes[0][:2] == (conn.chunk_id, 1)
+    assert baseline_writes[0][:2] == (conn.chunk_id, 2)
     assert json.loads(baseline_writes[0][2])["parent_chunk_id"] == conn.chunk_id
 
 
