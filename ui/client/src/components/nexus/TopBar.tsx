@@ -20,8 +20,9 @@
  *
  * The strip also carries the generation announcer (#777): a visually hidden
  * polite status region that tells assistive technology when a turn starts,
- * completes, or fails. It has no visible text, so it adds nothing to the
- * quiet chrome.
+ * completes, or fails. Start and completion follow the operator status;
+ * failure follows the engine's explicit durable failure, never a status
+ * drop. It has no visible text, so it adds nothing to the quiet chrome.
  */
 import { useEffect, useReducer } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -31,12 +32,18 @@ import {
 } from "@/hooks/useLocalModels";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type { SettingsPayload } from "@/types/settings";
-import type { FrontierClock, SkaldStatus } from "@/types/narrative";
+import type {
+  FrontierClock,
+  GenerationSession,
+  SkaldStatus,
+} from "@/types/narrative";
 
 interface TopBarProps {
   slot: number | null;
   characterName: string | null;
   skaldStatus: SkaldStatus;
+  /** The engine's latest durable attempt that ended in error, if any. */
+  failedGeneration: GenerationSession | null;
   frontierClock: FrontierClock | null;
 }
 
@@ -50,36 +57,58 @@ const GENERATION_ANNOUNCEMENTS = {
 interface AnnouncerState {
   /** A turn this surface saw start has not yet reached an outcome. */
   inFlight: boolean;
+  /** Session of the failure last reported, so a re-report is not new. */
+  failure: string | null;
   message: string;
 }
 
+type AnnouncerEvent =
+  | { kind: "status"; status: SkaldStatus }
+  | { kind: "failure"; sessionId: string | null };
+
 /**
- * Fold one operator-status observation into the announcer.
+ * Fold one engine observation into the announcer.
  *
- * The engine derives SkaldStatus from its generation state: TRANSMITTING and
- * GENERATING while a turn runs, RECEIVING (held briefly) only when the turn
- * completed, and READY once the phase clears without completion, which is
- * the failed-turn path (a durable error or a submission that never started).
- * An outcome is announced only for a turn seen starting, so the RECEIVING
- * flash that replays the latest finished session on load stays silent.
- * OFFLINE is connectivity, not an outcome: the turn stays in flight and is
- * resolved by whatever status follows reconnection.
+ * Start and completion come from the operator status: TRANSMITTING and
+ * GENERATING while a turn runs, RECEIVING (held briefly) only when it
+ * completed. Failure comes only from the engine's durable failure changing
+ * to a session not reported before; a failure is keyed by session because
+ * the engine re-reports the same one when its parent chunk binds later.
+ *
+ * READY is never an outcome: the engine clears its optimistic phase when a
+ * read lands while a submission is still in flight, so a running turn can
+ * read READY and then resume. OFFLINE is connectivity, not an outcome.
+ * Either way the turn stays in flight until it completes or fails. An
+ * outcome is announced only for a turn seen starting, so the RECEIVING
+ * flash and the failure that replay the latest attempt on load stay silent.
+ * A request refused before the server records an attempt has no durable
+ * failure; its toast reports it, and the turn stays open until an outcome.
  */
-function announce(state: AnnouncerState, status: SkaldStatus): AnnouncerState {
-  switch (status) {
+function announce(
+  state: AnnouncerState,
+  event: AnnouncerEvent,
+): AnnouncerState {
+  if (event.kind === "failure") {
+    if (event.sessionId === state.failure) return state;
+    return event.sessionId !== null && state.inFlight
+      ? {
+          inFlight: false,
+          failure: event.sessionId,
+          message: GENERATION_ANNOUNCEMENTS.failed,
+        }
+      : { ...state, failure: event.sessionId };
+  }
+  switch (event.status) {
     case "TRANSMITTING":
     case "GENERATING":
       return state.inFlight
         ? state
-        : { inFlight: true, message: GENERATION_ANNOUNCEMENTS.started };
+        : { ...state, inFlight: true, message: GENERATION_ANNOUNCEMENTS.started };
     case "RECEIVING":
       return state.inFlight
-        ? { inFlight: false, message: GENERATION_ANNOUNCEMENTS.complete }
+        ? { ...state, inFlight: false, message: GENERATION_ANNOUNCEMENTS.complete }
         : state;
     case "READY":
-      return state.inFlight
-        ? { inFlight: false, message: GENERATION_ANNOUNCEMENTS.failed }
-        : state;
     case "OFFLINE":
       return state;
   }
@@ -87,17 +116,28 @@ function announce(state: AnnouncerState, status: SkaldStatus): AnnouncerState {
 
 /**
  * Visually hidden live region for the generation lifecycle. It is mounted
- * empty and filled from an effect, so screen readers observe each message as
- * a change to an existing polite region.
+ * empty and filled from effects, so screen readers observe each message as
+ * a change to an existing polite region. The failure present at mount is
+ * already known, never new.
  */
-function GenerationAnnouncer({ skaldStatus }: { skaldStatus: SkaldStatus }) {
-  const [state, observe] = useReducer(announce, {
-    inFlight: false,
-    message: "",
-  });
+function GenerationAnnouncer({
+  skaldStatus,
+  failedSessionId,
+}: {
+  skaldStatus: SkaldStatus;
+  failedSessionId: string | null;
+}) {
+  const [state, observe] = useReducer(
+    announce,
+    failedSessionId,
+    (failure): AnnouncerState => ({ inFlight: false, failure, message: "" }),
+  );
   useEffect(() => {
-    observe(skaldStatus);
+    observe({ kind: "status", status: skaldStatus });
   }, [skaldStatus]);
+  useEffect(() => {
+    observe({ kind: "failure", sessionId: failedSessionId });
+  }, [failedSessionId]);
   return (
     <span
       role="status"
@@ -179,6 +219,7 @@ export function TopBar({
   slot,
   characterName,
   skaldStatus,
+  failedGeneration,
   frontierClock,
 }: TopBarProps) {
   return (
@@ -216,7 +257,10 @@ export function TopBar({
           </span>
         )}
       </div>
-      <GenerationAnnouncer skaldStatus={skaldStatus} />
+      <GenerationAnnouncer
+        skaldStatus={skaldStatus}
+        failedSessionId={failedGeneration?.session_id ?? null}
+      />
     </header>
   );
 }

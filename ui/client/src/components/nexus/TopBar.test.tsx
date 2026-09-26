@@ -6,7 +6,11 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LOCAL_MODELS_STATUS_KEY } from "@/hooks/useLocalModels";
 import type { LocalModelsStatus } from "@/types/localModels";
-import type { SkaldStatus, SlotState } from "@/types/narrative";
+import type {
+  GenerationSession,
+  SkaldStatus,
+  SlotState,
+} from "@/types/narrative";
 import { TopBar } from "./TopBar";
 
 const MODELS_DIR = "/models";
@@ -56,6 +60,7 @@ function renderTopBar(
       slot={1}
       characterName={null}
       skaldStatus="READY"
+      failedGeneration={null}
       frontierClock={frontierClock}
     />,
     {
@@ -83,6 +88,7 @@ describe("TopBar frontier clock", () => {
         slot={1}
         characterName={null}
         skaldStatus="GENERATING"
+        failedGeneration={null}
         frontierClock={{
           instant: "2189-10-17T22:42:00Z",
           face: "17 Oct 2189 · 22:42",
@@ -98,6 +104,7 @@ describe("TopBar frontier clock", () => {
         slot={2}
         characterName={null}
         skaldStatus="READY"
+        failedGeneration={null}
         frontierClock={null}
       />,
     );
@@ -199,27 +206,75 @@ describe("TopBar memory meter", () => {
   });
 });
 
-function renderStrip(skaldStatus: SkaldStatus, characterName: string | null) {
+/** A durable attempt that ended in error, as the engine reports it. */
+function failedAttempt(
+  sessionId: string,
+  parentChunkId: number | null = null,
+): GenerationSession {
+  return {
+    slot: 3,
+    session_id: sessionId,
+    status: "error",
+    phase: "writer",
+    terminal_outcome: "error",
+    replaced_by_session_id: null,
+    chunk_id: null,
+    parent_chunk_id: parentChunkId,
+    created_at: "2026-09-26T08:00:00Z",
+    heartbeat_at: "2026-09-26T08:01:00Z",
+    expires_at: null,
+    error: "Writer timed out",
+    error_class: "TimeoutError",
+  };
+}
+
+function renderStrip(
+  skaldStatus: SkaldStatus,
+  characterName: string | null,
+  failedGeneration: GenerationSession | null = null,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], BASE);
-  const strip = (status: SkaldStatus) => (
+  let engine = { skaldStatus, failedGeneration };
+  const strip = () => (
     <div className="nexus-shell">
       <TopBar
         slot={3}
         characterName={characterName}
-        skaldStatus={status}
+        skaldStatus={engine.skaldStatus}
+        failedGeneration={engine.failedGeneration}
         frontierClock={null}
       />
     </div>
   );
-  const view = render(strip(skaldStatus), {
+  const view = render(strip(), {
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
   });
-  return { ...view, setStatus: (status: SkaldStatus) => view.rerender(strip(status)) };
+  // Every message the live region presents, in order. Re-setting the same
+  // text is no DOM change, so assistive technology hears it once.
+  const spoken: string[] = [];
+  const listen = () => {
+    const text = screen.getByRole("status").textContent ?? "";
+    if (text && text !== spoken[spoken.length - 1]) spoken.push(text);
+  };
+  const update = (next: Partial<typeof engine>) => {
+    engine = { ...engine, ...next };
+    view.rerender(strip());
+    listen();
+  };
+  listen();
+  return {
+    ...view,
+    spoken,
+    setEngine: update,
+    setStatus: (status: SkaldStatus) => update({ skaldStatus: status }),
+    setFailure: (failure: GenerationSession | null) =>
+      update({ failedGeneration: failure }),
+  };
 }
 
 describe("TopBar slot label case", () => {
@@ -269,7 +324,7 @@ describe("TopBar generation announcer", () => {
   });
 
   it("announces a turn's start once and its completion", () => {
-    const { setStatus } = renderStrip("READY", null);
+    const { setStatus, spoken } = renderStrip("READY", null);
 
     setStatus("TRANSMITTING");
     expect(announcer()).toHaveTextContent("Generation started");
@@ -283,15 +338,61 @@ describe("TopBar generation announcer", () => {
 
     setStatus("TRANSMITTING");
     expect(announcer()).toHaveTextContent("Generation started");
+    expect(spoken).toEqual([
+      "Generation started",
+      "Generation complete",
+      "Generation started",
+    ]);
   });
 
-  it("announces a failure when a running turn clears without completing", () => {
-    const { setStatus } = renderStrip("READY", null);
+  it("keeps a turn in flight when READY flashes during its submission", () => {
+    // A read that lands while the continue request is pending sees no
+    // active session and clears the optimistic phase; the request then
+    // succeeds and the turn runs to completion. No failure was reported.
+    const { setStatus, spoken } = renderStrip("READY", null);
+
+    setStatus("TRANSMITTING");
+    setStatus("READY");
+    expect(announcer()).toHaveTextContent("Generation started");
+    setStatus("GENERATING");
+    setStatus("RECEIVING");
+
+    expect(spoken).toEqual(["Generation started", "Generation complete"]);
+  });
+
+  it("announces the engine's failure for a turn it saw start, once", () => {
+    const { setEngine, setStatus, setFailure, spoken } = renderStrip("READY", null);
 
     setStatus("TRANSMITTING");
     setStatus("GENERATING");
-    setStatus("READY");
+    // The engine clears the phase and reports the durable failure together.
+    setEngine({ skaldStatus: "READY", failedGeneration: failedAttempt("failed-8") });
     expect(announcer()).toHaveTextContent("Generation failed");
+    // The same failure re-reported once its parent chunk binds is not new.
+    setFailure(failedAttempt("failed-8", 9));
+    expect(spoken).toEqual(["Generation started", "Generation failed"]);
+
+    // The failure closed that turn, so the retry is a new one.
+    setStatus("TRANSMITTING");
+    expect(spoken).toEqual([
+      "Generation started",
+      "Generation failed",
+      "Generation started",
+    ]);
+  });
+
+  it("stays silent for a failure it never saw start", () => {
+    const { setFailure, spoken } = renderStrip(
+      "READY",
+      null,
+      failedAttempt("failed-7"),
+    );
+
+    // Another attempt failing is not a turn this surface observed either.
+    setFailure(failedAttempt("failed-8"));
+
+    expect(announcer()).toBeEmptyDOMElement();
+    expect(spoken).toEqual([]);
   });
 
   it("stays silent for the finished session replayed on load", () => {
