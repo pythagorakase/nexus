@@ -15,17 +15,24 @@ NNN_*.py migration, numbered above WATERMARK, the lint finds:
 * CREATE [OR REPLACE] FUNCTION, matched by name and argument count;
 * CREATE [OR REPLACE] VIEW and CREATE MATERIALIZED VIEW;
 
-including DDL inside DO blocks and literal EXECUTE strings, and requires a
-non-blank COMMENT ON TABLE/COLUMN/TYPE/FUNCTION/VIEW/MATERIALIZED VIEW for each
-in the same file. Unqualified names resolve to ``public``; unquoted identifiers
-fold to lower case, quoted identifiers keep their exact spelling. Temporary
-tables and views are exempt because they end with the migration session.
+including DDL inside DO blocks and EXECUTE commands (``||`` operands are
+joined, with ``{}`` standing for each operand that is not a literal), and
+requires a non-blank COMMENT ON TABLE/COLUMN/TYPE/FUNCTION/VIEW/MATERIALIZED
+VIEW for each in the same file. Unqualified names resolve to ``public``, or to
+the schema a CREATE SCHEMA statement creates for its own elements; unquoted
+identifiers fold to lower case, quoted identifiers keep their exact spelling.
+Temporary tables and views are exempt because they end with the migration
+session.
 
-DDL that cannot be verified statically fails rather than passing: names built
-at run time (f-strings, psycopg2 placeholders, format('%I')) and columns a
-statement does not declare (CREATE TABLE ... AS without a column list,
-PARTITION OF, OF type, INHERITS, LIKE without INCLUDING COMMENTS). A COMMENT
-that is NULL or blank is reported as removed documentation.
+DDL that cannot be verified statically fails rather than passing: names and
+ALTER TABLE actions built at run time (f-strings, ``+`` or ``||`` with a
+non-literal operand, psycopg2 placeholders, format('%I')); an EXECUTE whose
+command does not start with literal text, such as EXECUTE of a variable; an
+ALTER TABLE that names no action, which can only be a fragment of a command
+assembled at run time; and columns a statement does not declare (CREATE TABLE
+... AS without a column list, PARTITION OF, OF type, INHERITS, LIKE without
+INCLUDING COMMENTS). A COMMENT that is NULL or blank is reported as removed
+documentation.
 
 Usage
 -----
@@ -92,8 +99,20 @@ _COMMENT_ON = re.compile(
     _I,
 )
 _IS = re.compile(r"\s*IS\b", _I)
+_CREATE_SCHEMA = re.compile(
+    r"\s*CREATE\s+SCHEMA\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:AUTHORIZATION\s+)?", _I
+)
 _DO = re.compile(r"\bDO\s+(?:LANGUAGE\s+\w+\s+)?", _I)
-_EXECUTE = re.compile(r"\bEXECUTE\s+(?:format\s*\(\s*)?", _I)
+# PL/pgSQL EXECUTE, not trigger EXECUTE FUNCTION/PROCEDURE or GRANT EXECUTE ON.
+_EXECUTE = re.compile(
+    r"\bEXECUTE(?!\s*(?:(?:FUNCTION|PROCEDURE|ON)\b|,))\s+"
+    r"(?P<format>format\s*\(\s*)?",
+    _I,
+)
+_EXECUTE_END = re.compile(r"\b(?:INTO|USING|LOOP)\b", _I)
+# Values filled in at run time: str.format and f-strings (rendered as {}),
+# psycopg2 parameters, and format() specifiers.
+_PLACEHOLDER = re.compile(r"\{[^{}\s]*\}|%(?:\(\w+\)|\d+\$)?[sIL]")
 _INHERITS = re.compile(r"\bINHERITS\b", _I)
 _LIKE_WITH_COMMENTS = re.compile(r"\bINCLUDING\s+(?:ALL|COMMENTS)\b", _I)
 
@@ -104,7 +123,8 @@ _NON_COLUMN_WORDS = {"CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "EXC
 # these; other literals (log text, error messages) are not lexed as SQL.
 _PY_SQL_HINT = re.compile(
     r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:\w+\s+){0,3}(?:TABLE|TYPE|FUNCTION|VIEW)\b"
-    r"|\bALTER\s+TABLE\b|\bCOMMENT\s+ON\b|\bDO\s+(?:LANGUAGE\s+\w+\s+)?(?:\$|E?')"
+    r"|\bALTER\s+TABLE\b|\bADD\s+COLUMN\b|\bCOMMENT\s+ON\b"
+    r"|\bDO\s+(?:LANGUAGE\s+\w+\s+)?(?:\$|E?')"
     r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')",
     _I,
 )
@@ -141,11 +161,12 @@ class Finding:
 
 @dataclass(frozen=True)
 class _Literal:
-    """A string literal's content span and quoting style."""
+    """A string literal's content span, quoting style, and closing offset."""
 
     content_start: int
     content_end: int
     kind: str  # "quote", "escape" (E'...'), or "dollar"
+    end: int  # offset just past the closing delimiter
 
     def text(self, source: str) -> str:
         raw = source[self.content_start : self.content_end]
@@ -251,7 +272,7 @@ def _lex(sql: str) -> tuple[str, dict[int, _Literal]]:
                 else:
                     cursor += 1
             kind = "escape" if escape else "quote"
-            literals[index] = _Literal(index + 1, cursor, kind)
+            literals[index] = _Literal(index + 1, cursor, kind, cursor + 1)
             blank(index + 1, cursor)
             index = cursor + 1
         elif char == '"':
@@ -274,9 +295,10 @@ def _lex(sql: str) -> tuple[str, dict[int, _Literal]]:
             close = sql.find(tag.group(), tag.end())
             if close == -1:
                 raise _LexError(index, "unterminated dollar-quoted string")
-            literals[index] = _Literal(tag.end(), close, "dollar")
+            end = close + len(tag.group())
+            literals[index] = _Literal(tag.end(), close, "dollar", end)
             blank(tag.end(), close)
-            index = close + len(tag.group())
+            index = end
         else:
             index += 1
     return "".join(masked), literals
@@ -291,22 +313,25 @@ def _statements(masked: str) -> Iterator[tuple[int, int]]:
     yield start, len(masked)
 
 
-def _split_top_level(text: str) -> list[tuple[int, str]]:
-    """Split on commas outside parentheses and quoted identifiers."""
+def _split_top_level(text: str, separator: str = ",") -> list[tuple[int, str]]:
+    """Split on separator outside parentheses and quoted identifiers."""
     parts: list[tuple[int, str]] = []
-    depth, quoted, start = 0, False, 0
-    for index, char in enumerate(text):
+    depth, quoted, start, index = 0, False, 0, 0
+    while index < len(text):
+        char = text[index]
         if char == '"':
             quoted = not quoted
         elif quoted:
-            continue
+            pass
         elif char == "(":
             depth += 1
         elif char == ")":
             depth -= 1
-        elif char == "," and depth == 0:
+        elif depth == 0 and text.startswith(separator, index):
             parts.append((start, text[start:index]))
-            start = index + 1
+            start = index = index + len(separator)
+            continue
+        index += 1
     parts.append((start, text[start:]))
     return parts
 
@@ -355,12 +380,14 @@ def _read_name(text: str, pos: int) -> tuple[str, tuple[str, ...] | None, int]:
     return match.group(), None, match.end()
 
 
-def _qualify(parts: tuple[str, ...] | None, size: int) -> tuple[str, ...] | None:
-    """Qualify a name of `size` unqualified parts with the public schema."""
+def _qualify(
+    parts: tuple[str, ...] | None, size: int, schema: str
+) -> tuple[str, ...] | None:
+    """Qualify a name of `size` unqualified parts with the default schema."""
     if parts is None:
         return None
     if len(parts) == size:
-        return ("public", *parts)
+        return (schema, *parts)
     if len(parts) == size + 1:
         return parts
     return None
@@ -371,6 +398,19 @@ def _display(key: tuple[str, ...]) -> str:
         part if _PLAIN_NAME.fullmatch(part) else '"' + part.replace('"', '""') + '"'
         for part in key
     )
+
+
+def _element_schema(statement: str) -> str:
+    """Return the schema that unqualified names in one statement belong to.
+
+    ``CREATE SCHEMA s CREATE TABLE t (...)`` creates ``s.t``; every other
+    statement resolves unqualified names to ``public``.
+    """
+    match = _CREATE_SCHEMA.match(statement)
+    if match is None:
+        return "public"
+    _, parts, _ = _read_name(statement, match.end())
+    return parts[0] if parts is not None and len(parts) == 1 else "public"
 
 
 def _first_token(text: str) -> tuple[int, str]:
@@ -412,6 +452,7 @@ class _SqlScanner:
         self.first_line = first_line
         self.scan = scan
         self.masked, self.literals = _lex(sql)
+        self.schema = "public"
 
     def line_at(self, offset: int) -> int:
         return self.first_line + self.sql.count("\n", 0, offset)
@@ -436,24 +477,93 @@ class _SqlScanner:
     def run(self) -> None:
         for start, end in _statements(self.masked):
             statement = self.masked[start:end]
+            self.schema = _element_schema(statement)
+            self._run_time_statement(statement, start)
             self._create_table(statement, start)
             self._alter_table(statement, start)
             self._create_named(statement, start)
             self._comments(statement, start)
-            for pattern in (_DO, _EXECUTE):
-                for match in pattern.finditer(statement):
-                    literal = self._literal_at(start + match.end())
-                    if literal is not None:
-                        _scan_sql(
-                            literal.text(self.sql),
-                            self.line_at(literal.content_start),
-                            self.scan,
-                        )
+            for match in _DO.finditer(statement):
+                literal = self._literal_at(start + match.end())
+                if literal is not None:
+                    _scan_sql(
+                        literal.text(self.sql),
+                        self.line_at(literal.content_start),
+                        self.scan,
+                    )
+            for match in _EXECUTE.finditer(statement):
+                self._execute(statement, start, match)
 
     def _literal_at(self, pos: int) -> _Literal | None:
         if self.masked[pos : pos + 2] in ("E'", "e'"):
             pos += 1
         return self.literals.get(pos)
+
+    def _literal_run(self, begin: int, finish: int) -> list[_Literal] | None:
+        """Return the literals spanning begin..finish, or None for any other text.
+
+        Adjacent literals separated only by whitespace are one constant, as in
+        ``'DELETE FROM t '`` on one line and ``'WHERE ...'`` on the next.
+        """
+        run: list[_Literal] = []
+        while True:
+            literal = self._literal_at(begin)
+            if literal is None:
+                return None
+            run.append(literal)
+            gap = self.masked[literal.end : finish]
+            if not gap.strip():
+                return run
+            begin = literal.end + len(gap) - len(gap.lstrip())
+
+    def _run_time_statement(self, statement: str, start: int) -> None:
+        """Report a statement whose first word is filled in at run time."""
+        lead, _ = _first_token(statement)
+        placeholder = _PLACEHOLDER.match(statement, lead)
+        if placeholder:
+            self.finding(
+                start + lead,
+                f"statement begins with {placeholder.group()!r}, which is filled "
+                "in at run time; its schema changes cannot be verified",
+            )
+
+    def _execute(self, statement: str, start: int, match: re.Match[str]) -> None:
+        """Scan the command an EXECUTE runs, joining its ``||`` operands.
+
+        Operands that are not a single literal become ``{}``, so a name or
+        action assembled at run time is reported where it lands. A command
+        that does not start with literal text cannot be read at all.
+        """
+        pos = match.end()
+        if match.group("format"):
+            paren = statement.index("(", match.start("format"))
+            close = _matching_paren(statement, paren)
+            arguments = statement[pos : len(statement) if close is None else close]
+            end = pos + len(_split_top_level(arguments)[0][1])
+        else:
+            stop = _EXECUTE_END.search(statement, pos)
+            end = len(statement) if stop is None else stop.start()
+        pieces: list[str] = []
+        first_line = self.line_at(start + pos)
+        for relative, operand in _split_top_level(statement[pos:end], "||"):
+            begin = start + pos + relative + len(operand) - len(operand.lstrip())
+            finish = start + pos + relative + len(operand.rstrip())
+            run = self._literal_run(begin, finish)
+            if run is not None:
+                if not pieces:
+                    first_line = self.line_at(run[0].content_start)
+                pieces.append("".join(literal.text(self.sql) for literal in run))
+            elif pieces:
+                pieces.append("{}")
+            else:
+                expression = " ".join(self.sql[begin:finish].split())
+                self.finding(
+                    begin,
+                    f"EXECUTE {expression!r} runs a command built at run time; "
+                    "its schema changes cannot be verified",
+                )
+                return
+        _scan_sql("".join(pieces), first_line, self.scan)
 
     def _create_table(self, statement: str, start: int) -> None:
         for match in _CREATE_TABLE.finditer(statement):
@@ -461,7 +571,7 @@ class _SqlScanner:
                 continue
             offset = start + match.start()
             raw, parts, pos = _read_name(statement, match.end())
-            table = _qualify(parts, 1)
+            table = _qualify(parts, 1, self.schema)
             if table is None:
                 self.unresolvable(offset, "CREATE TABLE", raw)
                 continue
@@ -508,11 +618,33 @@ class _SqlScanner:
         for match in _ALTER_TABLE.finditer(statement):
             offset = start + match.start()
             raw, parts, pos = _read_name(statement, match.end())
-            table = _qualify(parts, 1)
+            table = _qualify(parts, 1, self.schema)
+            if table is None:
+                self.unresolvable(offset, "ALTER TABLE", raw)
+                continue
+            label = f"ALTER TABLE {_display(table)}"
             star = re.match(r"\s*\*", statement[pos:])
             if star:
                 pos += star.end()
-            for relative, action in _split_top_level(statement[pos:]):
+            actions = _split_top_level(statement[pos:])
+            if not any(action.strip() for _, action in actions):
+                self.finding(
+                    offset,
+                    f"{label} names no action, so it is a fragment of a command "
+                    "assembled at run time; its changes cannot be verified",
+                )
+                continue
+            for relative, action in actions:
+                lead = len(action) - len(action.lstrip())
+                action_offset = start + pos + relative + lead
+                placeholder = _PLACEHOLDER.match(action, lead)
+                if placeholder:
+                    self.finding(
+                        action_offset,
+                        f"{label} action {placeholder.group()!r} is filled in at "
+                        "run time; its changes cannot be verified",
+                    )
+                    continue
                 add = _ADD_ACTION.match(action)
                 if add is None:
                     continue
@@ -520,19 +652,9 @@ class _SqlScanner:
                 token = token_match.group() if token_match else ""
                 if not add.group("column") and _is_keyword(token, _NON_COLUMN_WORDS):
                     continue
-                if table is None:
-                    self.unresolvable(offset, "ALTER TABLE", raw)
-                    break
-                action_offset = (
-                    start + pos + relative + len(action) - len(action.lstrip())
-                )
                 column = _parse_name(token)
                 if column is None or len(column) != 1:
-                    self.unresolvable(
-                        action_offset,
-                        f"ALTER TABLE {_display(table)} ADD COLUMN",
-                        token,
-                    )
+                    self.unresolvable(action_offset, f"{label} ADD COLUMN", token)
                     continue
                 self.require("column", (*table, column[0]), action_offset)
 
@@ -576,7 +698,7 @@ class _SqlScanner:
         match: re.Match[str],
         arity: int | None = None,
     ) -> None:
-        key = _qualify(parts, 1)
+        key = _qualify(parts, 1, self.schema)
         offset = start + match.start()
         if key is None:
             self.unresolvable(offset, statement_label, raw)
@@ -588,7 +710,7 @@ class _SqlScanner:
             label = " ".join(match.group("kind").upper().split())
             kind = _DOCUMENTED_KINDS[label]
             raw, parts, pos = _read_name(statement, match.end())
-            key = _qualify(parts, 2 if kind == "column" else 1)
+            key = _qualify(parts, 2 if kind == "column" else 1, self.schema)
             arity = None
             if kind == "function":
                 arity, pos = _arguments(statement, pos)

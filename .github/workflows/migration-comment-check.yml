@@ -1,0 +1,31 @@
+name: Migration comment check
+
+# Runs scripts/check_migration_comments.py on every push and PR, so a commit
+# made with --no-verify, or on a machine without the pre-commit hooks, cannot
+# land a migration that creates an undocumented table, column, enum, function,
+# or view. See issue #819 and docs/database.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  migration-comments:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The lint is stdlib-only; no `poetry install` required.
+      - name: Run migration comment lint
+        run: python -S scripts/check_migration_comments.py

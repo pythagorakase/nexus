@@ -68,16 +68,25 @@ from reader/writer code, cite that evidence in the comment migration, add the
 comment, and remove the baseline entry in the same change; documented or removed
 objects left in the baseline fail, as do new undocumented objects. Run with
 `NEXUS_RUN_POSTGRES=1`; the test migrates disposable template clones and proves
-that schema-only dumps and the actual new-story setup preserve comments. Enums,
-functions, and views are inventoried but not enforced in this slice.
+that schema-only dumps and the actual new-story setup preserve comments. This
+ratchet enforces tables and columns; it only inventories enums, functions, and
+views, which the offline lint below enforces for new migrations.
 
 New migrations are also checked offline, before any database exists.
-`scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`)
-requires every table, column, enum, function, view, and materialized view that a
-migration numbered above its watermark (129) creates or replaces, including DDL in
-DO blocks, literal `EXECUTE` strings, and Python migration strings, to have a
-non-blank `COMMENT ON` in the same file. Unqualified names mean `public`; functions
-match by name and argument count. Names built at run time, and columns a statement
-does not list (`AS` without a column list, `PARTITION OF`, `INHERITS`, `LIKE`
-without `INCLUDING COMMENTS`), fail rather than pass. For legacy enums, functions,
-and views, the inventory remains the only record.
+`scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`
+and the `migration-comment-check.yml` CI workflow) requires every table, column,
+enum, function, view, and materialized view that a migration numbered above its
+watermark (129) creates or replaces, including DDL in DO blocks, `EXECUTE`
+commands, and Python migration strings, to have a non-blank `COMMENT ON` in the
+same file. `CREATE OR REPLACE` counts as a change, so the migration restates the
+comment even though PostgreSQL would keep the old one. Unqualified names mean
+`public`, or the schema a `CREATE SCHEMA` statement creates for its own elements;
+functions match by name and argument count. What cannot be read statically fails
+rather than passes: names and `ALTER TABLE` actions built at run time (f-strings,
+`+` or `||` with a non-literal operand, `{}` and `%I` placeholders), an `EXECUTE`
+of a variable or of anything not starting with literal text, and columns a
+statement does not list (`AS` without a column list, `PARTITION OF`, `INHERITS`,
+`LIKE` without `INCLUDING COMMENTS`). Not covered: procedures, domains, composite
+types, triggers, indexes, sequences, and DDL inside a function body, even when
+the migration calls that function. For legacy enums, functions, and views, the
+inventory remains the only record.

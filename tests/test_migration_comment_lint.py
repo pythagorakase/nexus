@@ -286,6 +286,106 @@ def run(conn) -> None:
     ]
 
 
+def test_concatenated_execute_commands_are_joined_or_fail(tmp_path: Path) -> None:
+    """EXECUTE joins ``||`` operands; run-time names, actions, and verbs fail."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_dynamic.sql",
+        """
+DO $$
+DECLARE
+    ddl text := 'CREATE TABLE foo (id int)';
+BEGIN
+    EXECUTE 'ALTER TABLE ' || 'scene' || ' ADD COLUMN joined int';
+    EXECUTE 'ALTER TABLE ' || quote_ident(t) || ' ADD COLUMN x int';
+    EXECUTE 'ALTER TABLE scene ' || v_action;
+    EXECUTE ddl;
+    EXECUTE format('%s ADD COLUMN z int', v_prefix);
+    EXECUTE 'ALTER TABLE scene'
+        ' ADD COLUMN documented int';
+    EXECUTE 'UPDATE ' || quote_ident(t) || ' SET x = 1';
+    EXECUTE format(
+        'DELETE FROM scene '
+        'WHERE id = %L', 1);
+    FOR r IN EXECUTE 'SELECT 1' LOOP NULL; END LOOP;
+END
+$$;
+COMMENT ON COLUMN scene.documented IS 'Joined from adjacent literals.';
+GRANT EXECUTE  ON FUNCTION touch_row() TO PUBLIC;
+CREATE TRIGGER scene_touch BEFORE UPDATE ON scene
+    FOR EACH ROW EXECUTE
+    FUNCTION touch_row();
+""",
+    )
+
+    run_time = "its schema changes cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_dynamic.sql:5: column public.scene.joined has no COMMENT ON COLUMN",
+        f"{NEXT}_dynamic.sql:6: ALTER TABLE names '{{}}', which is not a literal "
+        "identifier; name the object literally so its COMMENT can be verified",
+        f"{NEXT}_dynamic.sql:7: ALTER TABLE public.scene action '{{}}' is filled in "
+        "at run time; its changes cannot be verified",
+        f"{NEXT}_dynamic.sql:8: EXECUTE 'ddl' runs a command built at run time; "
+        f"{run_time}",
+        f"{NEXT}_dynamic.sql:9: statement begins with '%s', which is filled in at "
+        f"run time; {run_time}",
+    ]
+
+
+def test_python_concatenated_ddl_fails_instead_of_passing(tmp_path: Path) -> None:
+    """A Python ``+`` or f-string cannot hide an ALTER TABLE target or action."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_seat_pins.py",
+        """
+PREFIX = "ALTER TABLE seat_notes"
+ADD = " ADD COLUMN pinned boolean"
+
+
+def run(cur, prefix, action) -> None:
+    cur.execute("ALTER TABLE seat_notes" + ADD)
+    cur.execute(PREFIX + ADD)
+    cur.execute(f"{prefix} ADD COLUMN note text")
+    cur.execute("ALTER TABLE seat_notes %s" % action)
+    cur.execute("ALTER TABLE seat_notes ALTER COLUMN id SET DEFAULT %s", (0,))
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_seat_pins.py:1: ALTER TABLE public.seat_notes names no action, so "
+        "it is a fragment of a command assembled at run time; its changes cannot "
+        "be verified",
+        f"{NEXT}_seat_pins.py:6: ALTER TABLE names 'seat_notes{{}}', which is not "
+        "a literal identifier; name the object literally so its COMMENT can be "
+        "verified",
+        f"{NEXT}_seat_pins.py:8: statement begins with '{{}}', which is filled in "
+        "at run time; its schema changes cannot be verified",
+        f"{NEXT}_seat_pins.py:9: ALTER TABLE public.seat_notes action '%s' is "
+        "filled in at run time; its changes cannot be verified",
+    ]
+
+
+def test_create_schema_elements_belong_to_that_schema(tmp_path: Path) -> None:
+    """CREATE SCHEMA s CREATE TABLE t creates s.t, not public.t."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_lore_schema.sql",
+        """
+CREATE SCHEMA IF NOT EXISTS lore
+    CREATE TABLE lore_notes (id int)
+    CREATE VIEW lore_view AS SELECT 1 AS one;
+COMMENT ON TABLE lore.lore_notes IS 'Notes in the new schema.';
+COMMENT ON COLUMN lore.lore_notes.id IS 'Row key.';
+COMMENT ON VIEW lore.lore_view IS 'View in the new schema.';
+CREATE TABLE after_schema (id int);
+COMMENT ON TABLE public.after_schema IS 'Later statements are public again.';
+COMMENT ON COLUMN after_schema.id IS 'Row key.';
+""",
+    )
+
+    assert _findings(tmp_path) == []
+
+
 def test_function_comments_match_argument_count(tmp_path: Path) -> None:
     """An overload needs its own comment; a bare name documents any arity."""
     _migration(
@@ -355,6 +455,11 @@ COMMENT ON TABLE mood_full IS 'Copies source comments.';
         f"{NEXT}_copies.sql:3: CREATE TABLE public.mood_child INHERITS columns "
         "that cannot be verified",
     ]
+
+
+def test_watermark_is_pinned() -> None:
+    """Raising the watermark exempts new migrations, so it must change in review."""
+    assert WATERMARK == 129
 
 
 def test_repository_migrations_pass() -> None:
