@@ -26,6 +26,7 @@ from nexus.util.secret_manager import (
     set_secret,
     use_secret_backend,
 )
+from tests import secret_store_guard
 
 TEST_ACCOUNT = "test-secret-455"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -198,10 +199,11 @@ def test_child_processes_inherit_environment_only_mode(
 ) -> None:
     """Children stay env-only in a fresh session, whatever its opt-in flags.
 
-    The inner session starts with an explicit ``NEXUS_KEYRING_DISABLE=0`` (the
-    documented opt-out), so only its own guard can put the child back into
-    env-only mode. The child only reports its environment; it never touches a
-    secret store, so this probe stays safe even if the rule regresses.
+    The inner session starts with ``NEXUS_KEYRING_DISABLE=0`` through
+    ``store_access_env`` (the only opt-out), so only its own guard can put the
+    child back into env-only mode. The child only reports its environment; it
+    never touches a secret store, so this probe stays safe even if the rule
+    regresses.
     """
     inner = tmp_path / "test_inner_child_env.py"
     inner.write_text(INNER_CHILD_TEST)
@@ -213,6 +215,8 @@ def test_child_processes_inherit_environment_only_mode(
     env["NEXUS_KEYRING_DISABLE"] = "0"
     if flag is not None:
         env[flag] = "1"
+    # The inner session must start outside env-only mode to prove its own
+    # guard restores it for the grandchild; the probe touches no store.
     result = subprocess.run(
         [
             sys.executable,
@@ -226,7 +230,7 @@ def test_child_processes_inherit_environment_only_mode(
             str(inner),
         ],
         cwd=REPO_ROOT,
-        env=env,
+        env=secret_store_guard.store_access_env(env),
         capture_output=True,
         text=True,
         timeout=180.0,

@@ -14,23 +14,34 @@ re-applies it around every test. It has three layers:
   passes only as an argv list whose subcommand, service (never ``nexus-api``
   unless the scope is a live-session read of it) and keychain path exactly
   match the open scope. Command strings that mention ``security`` always fail.
-  The ``keyring`` password functions likewise need a scope for their service.
+  Any argv element whose basename is ``security``, or that holds it as a
+  word, counts as a mention, so an unrelated argument such as
+  ``/etc/security`` also fails the test. That noise is deliberate: an
+  allowlist of wrapper commands would fail open for every wrapper it missed.
+  The ``keyring`` password functions, and the password methods of every
+  ``keyring`` backend class (including classes defined after install, such as
+  the lazily loaded macOS backend), likewise need a scope for their service.
   These tripwires catch test code that bypasses the backends, as the tests
   behind #963 did with their own ``security delete-generic-password`` helpers.
 * The same spawn tripwires put ``NEXUS_KEYRING_DISABLE=1`` into every child's
-  environment, whatever the opt-in flags. A child inherits none of the
-  in-process patches, so env-only credential mode is its protection. A test
-  that genuinely needs a child with store access must pass an explicit
-  ``env`` that sets ``NEXUS_KEYRING_DISABLE`` itself and say why; only an
-  explicit value is honored.
+  environment, whatever the opt-in flags and whatever the caller's ``env``
+  says. A child inherits none of the in-process patches, so env-only
+  credential mode is its protection. The only opt-out is an ``env`` built
+  with :func:`store_access_env`, with the reason in a comment at the call.
 
 The opt-in flags are read once, when this module is first imported by the
 root conftest. Editing the environment mid-session (for example unsetting
 ``NEXUS_KEYRING_DISABLE`` or setting ``NEXUS_RUN_SECRET_STORE``) cannot lift
 the guard.
 
+Disposable keychains live only under pytest's base temp directory, which
+the root conftest registers with :func:`set_disposable_root` at session start.
+
 Not covered: ``os.exec*`` and ``os.fork`` followed by an exec, ``pty.spawn``,
-and multiprocessing's internal ``fork_exec``. The guard covers
+multiprocessing's internal ``fork_exec``, a copy or link of ``security``
+under another name, a child process that runs ``security`` itself (env-only
+mode does not stop a direct CLI call), and calls into the Security framework
+through ``ctypes``, including ``keyring.backends.macOS.api``. The guard covers
 credential-store access only. It is not a protected-path write guard, and
 there is no launcher preflight outside pytest.
 """
@@ -43,7 +54,6 @@ import inspect
 import os
 import shlex
 import subprocess
-import tempfile
 import threading
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
@@ -51,6 +61,7 @@ from pathlib import Path
 from typing import Any, NoReturn
 
 import keyring
+import keyring.backend
 import keyring.core
 import pytest
 
@@ -71,7 +82,12 @@ REAL_BACKENDS: tuple[type[RealBackend], ...] = (
     KeyringLibraryBackend,
 )
 OPERATIONS = ("read", "write", "delete")
-KEYRING_FUNCTIONS = ("get_password", "set_password", "delete_password")
+KEYRING_FUNCTIONS = (
+    "get_password",
+    "set_password",
+    "delete_password",
+    "get_credential",
+)
 OS_SPAWN_FUNCTIONS = tuple(
     name
     for name in (
@@ -90,6 +106,7 @@ OS_POSIX_SPAWN_FUNCTIONS = tuple(
     name for name in ("posix_spawn", "posix_spawnp") if hasattr(os, name)
 )
 GUARD_MARKER = "__nexus_secret_store_guard__"
+_ENV_ONLY_KEYS = (ENV_ONLY_FLAG, os.fsencode(ENV_ONLY_FLAG))
 
 # ``security`` subcommands each backend operation issues, and the ones the
 # disposable-keychain integration fixture needs. Nothing else may run.
@@ -109,6 +126,7 @@ _SETUP_SUBCOMMANDS = frozenset(
 )
 
 _permission = threading.local()
+_disposable_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -121,20 +139,30 @@ class Scope:
     keyring_service: str | None = None
 
 
+def set_disposable_root(root: Path) -> None:
+    """Record pytest's base temp directory as the only disposable location.
+
+    pytest owns that directory and deletes old copies of it, unlike the
+    system temp root, which ``TMPDIR`` can point anywhere (even at home).
+    """
+    global _disposable_root
+    _disposable_root = root.resolve()
+
+
 def is_disposable_keychain(keychain: Path | None) -> bool:
-    """Return whether ``keychain`` is an explicit file under the temp root.
+    """Return whether ``keychain`` is an explicit file under pytest's temp dir.
 
     ``None`` means the user's keychain search list, which is the owner's
-    login Keychain, so it is never disposable. Nothing under
-    ``~/Library`` is disposable either, even when ``TMPDIR`` points at one of
-    its ancestors.
+    login Keychain, so it is never disposable. Before the root conftest
+    registers pytest's base temp directory nothing is disposable, and nothing
+    under ``~/Library`` ever is.
     """
-    if keychain is None:
+    if keychain is None or _disposable_root is None:
         return False
     resolved = keychain.resolve()
     if resolved.is_relative_to((Path.home() / "Library").resolve()):
         return False
-    return resolved.is_relative_to(Path(tempfile.gettempdir()).resolve())
+    return resolved.is_relative_to(_disposable_root)
 
 
 def access_allowed(backend: RealBackend, operation: str) -> bool:
@@ -144,7 +172,7 @@ def access_allowed(backend: RealBackend, operation: str) -> bool:
     session (``NEXUS_RUN_LIVE_LLM=1``) may read it, and no test session may
     write or delete it. Any other real access needs
     ``NEXUS_RUN_SECRET_STORE=1`` and a store proven disposable, which means a
-    Keychain backend bound to a keychain file under the temp root. The
+    Keychain backend bound to a keychain file under pytest's temp dir. The
     ``keyring`` library's default store is the owner's login store, so it has
     no disposable form.
     """
@@ -204,14 +232,14 @@ def _current_scope() -> Scope | None:
 def disposable_keychain_setup(keychain: Path) -> Iterator[None]:
     """Permit the ``security`` commands that manage one disposable keychain.
 
-    Only an opted-in session may use it, only for a keychain file under the
-    temp root, and only for commands that name exactly that file (plus the
-    read-only ``list-keychains -d user``).
+    Only an opted-in session may use it, only for a keychain file under
+    pytest's temp dir, and only for commands that name exactly that file
+    (plus the read-only ``list-keychains -d user``).
     """
     if not SECRET_STORE_OPT_IN:
         _deny("Test attempted disposable keychain setup without opt-in.")
     if not is_disposable_keychain(keychain):
-        _deny(f"Keychain {keychain} is not under the temp root.")
+        _deny(f"Keychain {keychain} is not under pytest's temp dir.")
     with _active_scope(keychain_setup_scope(keychain)):
         yield
 
@@ -354,27 +382,29 @@ def _check_spawn(program: Any, args: Any, *, shell: bool = False) -> None:
         _deny(problem)
 
 
+class StoreAccessEnv(dict[str, str]):
+    """A child environment a test deliberately exempts from env-only mode."""
+
+
+def store_access_env(env: Mapping[str, str]) -> StoreAccessEnv:
+    """Mark ``env`` as a child environment that keeps secret-store access.
+
+    The spawn tripwires otherwise force ``NEXUS_KEYRING_DISABLE=1`` into every
+    child, overriding any value ``env`` holds, so a copy of an environment
+    that happens to carry ``NEXUS_KEYRING_DISABLE=0`` cannot hand a child the
+    owner's store by accident. The child is unguarded: say why at the call.
+    """
+    return StoreAccessEnv(env)
+
+
 def _child_env(env: Mapping[Any, Any] | None) -> Mapping[Any, Any]:
-    """Return ``env`` with env-only credential mode unless it sets it itself."""
-    if env is None:
-        return {**os.environ, ENV_ONLY_FLAG: "1"}
-    if ENV_ONLY_FLAG in env or os.fsencode(ENV_ONLY_FLAG) in env:
+    """Return the environment a child gets: env-only mode unless exempted."""
+    if isinstance(env, StoreAccessEnv):
         return env
-    return {**env, ENV_ONLY_FLAG: "1"}
-
-
-@contextlib.contextmanager
-def _inherited_env_only() -> Iterator[None]:
-    """Force env-only mode for spawns that inherit ``os.environ``."""
-    previous = os.environ.get(ENV_ONLY_FLAG)
-    os.environ[ENV_ONLY_FLAG] = "1"
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop(ENV_ONLY_FLAG, None)
-        else:
-            os.environ[ENV_ONLY_FLAG] = previous
+    source = os.environ if env is None else env
+    forced = {key: value for key, value in source.items() if key not in _ENV_ONLY_KEYS}
+    forced[ENV_ONLY_FLAG] = "1"
+    return forced
 
 
 def _guard_backend(operation: str, original: Callable[..., Any]) -> Callable[..., Any]:
@@ -440,13 +470,17 @@ def _guard_popen(original: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _guard_system(original: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap ``os.system``: refuse ``security``, force env-only inheritance."""
+    """Wrap ``os.system``: refuse ``security``, force env-only in the shell.
+
+    ``os.system`` cannot take an environment, so the shell exports the flag
+    itself rather than this process editing ``os.environ`` under other
+    threads.
+    """
 
     @functools.wraps(original)
     def guarded(command: Any) -> Any:
         _check_spawn(None, command, shell=True)
-        with _inherited_env_only():
-            return original(command)
+        return original(f"export {ENV_ONLY_FLAG}=1\n{os.fsdecode(command)}")
 
     setattr(guarded, GUARD_MARKER, True)
     return guarded
@@ -464,8 +498,14 @@ def _guard_posix_spawn(original: Callable[..., Any]) -> Callable[..., Any]:
     return guarded
 
 
-def _guard_os_spawn(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap one ``os.spawn*`` function: scope-check, force env-only."""
+def _guard_os_spawn(
+    name: str, original: Callable[..., Any], with_env: Callable[..., Any]
+) -> Callable[..., Any]:
+    """Wrap one ``os.spawn*`` function: scope-check, force env-only.
+
+    ``with_env`` is the function's ``e`` form, which an env-less call goes
+    through with an explicit environment instead of the inherited one.
+    """
     list_form = name.startswith("spawnl")
     takes_env = name.endswith("e")
 
@@ -478,15 +518,34 @@ def _guard_os_spawn(name: str, original: Callable[..., Any]) -> Callable[..., An
             argv = list(rest[0])
             env = rest[1] if takes_env else None
         _check_spawn(file, argv)
-        if not takes_env:
-            with _inherited_env_only():
-                return original(mode, file, *rest)
         if list_form:
-            return original(mode, file, *argv, _child_env(env))
-        return original(mode, file, argv, _child_env(env))
+            return with_env(mode, file, *argv, _child_env(env))
+        return with_env(mode, file, argv, _child_env(env))
 
     setattr(guarded, GUARD_MARKER, True)
     return guarded
+
+
+def _keyring_service(args: tuple[Any, ...], kwargs: Mapping[str, Any]) -> Any:
+    """Return the service a ``keyring`` call names (``None`` if it names none)."""
+    if args:
+        return args[0]
+    for key in ("service_name", "service", "system"):
+        if key in kwargs:
+            return kwargs[key]
+    return None
+
+
+def _check_keyring(label: str, service: Any) -> None:
+    """Fail the test unless a ``keyring`` call is inside a scope for ``service``."""
+    scope = _current_scope()
+    if scope is None or scope.keyring_service is None:
+        _deny(f"Test attempted {label} outside a permitted secret-store call.")
+    if service != scope.keyring_service:
+        _deny(
+            f"Test attempted {label} for service {service!r} inside a scope for "
+            f"{scope.keyring_service!r}."
+        )
 
 
 def _guard_keyring(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
@@ -494,18 +553,69 @@ def _guard_keyring(name: str, original: Callable[..., Any]) -> Callable[..., Any
 
     @functools.wraps(original)
     def guarded(*args: Any, **kwargs: Any) -> Any:
-        scope = _current_scope()
-        service = args[0] if args else kwargs.get("service_name")
-        if scope is None or scope.keyring_service is None:
-            _deny(
-                f"Test attempted keyring.{name} outside a permitted secret-store call."
-            )
-        elif service != scope.keyring_service:
-            _deny(
-                f"Test attempted keyring.{name} for service {service!r} inside a "
-                f"scope for {scope.keyring_service!r}."
-            )
+        _check_keyring(f"keyring.{name}", _keyring_service(args, kwargs))
         return original(*args, **kwargs)
+
+    setattr(guarded, GUARD_MARKER, True)
+    return guarded
+
+
+def _guard_keyring_method(
+    name: str, original: Callable[..., Any]
+) -> Callable[..., Any]:
+    """Wrap one password method of a ``keyring`` backend class."""
+
+    @functools.wraps(original)
+    def guarded(self: Any, *args: Any, **kwargs: Any) -> Any:
+        _check_keyring(
+            f"keyring backend {type(self).__name__}.{name}",
+            _keyring_service(args, kwargs),
+        )
+        return original(self, *args, **kwargs)
+
+    setattr(guarded, GUARD_MARKER, True)
+    return guarded
+
+
+def keyring_backend_classes() -> list[type[Any]]:
+    """Return ``KeyringBackend`` and every subclass defined so far."""
+    found: list[type[Any]] = []
+    pending: list[type[Any]] = [keyring.backend.KeyringBackend]
+    while pending:
+        cls = pending.pop()
+        if cls not in found:
+            found.append(cls)
+            pending.extend(cls.__subclasses__())
+    return found
+
+
+def _unguarded_keyring_methods(cls: type[Any]) -> Iterator[tuple[str, Any]]:
+    """Yield the password methods ``cls`` itself defines that lack a guard."""
+    for name in KEYRING_FUNCTIONS:
+        method = cls.__dict__.get(name)
+        if callable(method) and not getattr(method, GUARD_MARKER, False):
+            yield name, method
+
+
+def _guard_keyring_class(
+    cls: type[Any], setattr_fn: Callable[[Any, str, Any], object]
+) -> None:
+    """Guard every password method ``cls`` itself defines."""
+    for name, method in list(_unguarded_keyring_methods(cls)):
+        setattr_fn(cls, name, _guard_keyring_method(name, method))
+
+
+def _guard_keyring_meta(original: Callable[..., Any]) -> Callable[..., Any]:
+    """Wrap ``KeyringBackendMeta.__init__`` so later backend classes are guarded.
+
+    ``keyring`` loads its platform backends (macOS included) lazily, on the
+    first ``get_keyring``, so most backend classes do not exist at install.
+    """
+
+    @functools.wraps(original)
+    def guarded(cls: type[Any], *args: Any, **kwargs: Any) -> None:
+        original(cls, *args, **kwargs)
+        _guard_keyring_class(cls, setattr)
 
     setattr(guarded, GUARD_MARKER, True)
     return guarded
@@ -536,7 +646,11 @@ _GUARDED: dict[tuple[Any, str], Callable[..., Any]] = {
         for name in OS_POSIX_SPAWN_FUNCTIONS
     },
     **{
-        (os, name): _guard_os_spawn(name, _unguarded(os, name))
+        (os, name): _guard_os_spawn(
+            name,
+            _unguarded(os, name),
+            _unguarded(os, name if name.endswith("e") else f"{name}e"),
+        )
         for name in OS_SPAWN_FUNCTIONS
     },
     **{
@@ -544,6 +658,9 @@ _GUARDED: dict[tuple[Any, str], Callable[..., Any]] = {
         for module in (keyring, keyring.core)
         for name in KEYRING_FUNCTIONS
     },
+    (keyring.backend.KeyringBackendMeta, "__init__"): _guard_keyring_meta(
+        _unguarded(keyring.backend.KeyringBackendMeta, "__init__")
+    ),
 }
 
 
@@ -555,12 +672,16 @@ def install(setattr_fn: Callable[[Any, str, Any], object]) -> None:
     """
     for (owner, name), guarded in _GUARDED.items():
         setattr_fn(owner, name, guarded)
+    for cls in keyring_backend_classes():
+        _guard_keyring_class(cls, setattr_fn)
 
 
 def installed() -> bool:
     """Return whether every real store entry point is currently guarded."""
     return all(
         getattr(owner, name) is guarded for (owner, name), guarded in _GUARDED.items()
+    ) and not any(
+        next(_unguarded_keyring_methods(cls), None) for cls in keyring_backend_classes()
     )
 
 

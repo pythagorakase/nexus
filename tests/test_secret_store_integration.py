@@ -75,9 +75,12 @@ def disposable_keychain(tmp_path: Path) -> Iterator[MacOSKeychainBackend]:
     assert secret_store_guard.is_disposable_keychain(keychain)
     login_keychains = (Path.home() / "Library" / "Keychains").resolve()
     assert not keychain.resolve().is_relative_to(login_keychains)
-    assert backend._argv("find-generic-password", "probe")[-1] == str(keychain)
+    assert backend.keychain == keychain and backend.service == service
     for operation in secret_store_guard.OPERATIONS:
         assert secret_store_guard.access_allowed(backend, operation)
+        # The guard refuses any security spawn outside this exact scope.
+        scope = secret_store_guard.backend_scope(backend, operation)
+        assert scope.keychain == str(keychain) and scope.service == service
     search_list_before = _user_search_list(keychain)
 
     _security(keychain, "create-keychain", "-p", password, str(keychain))

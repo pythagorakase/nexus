@@ -17,16 +17,33 @@ more specific instructions.
   `NEXUS_API_URL` unset. The PostgreSQL-gated tests are where fixture debt
   accumulates; a run that skips them is not the gate.
 - The secret-store guard is a mandatory part of the gate. `tests/conftest.py`
-  installs it before collection and stops the session if collection removes
-  it. Before trusting a gate result, confirm the final terminal summary (or
-  the run header, which `-q` hides) reads `secret-store guard: active;
-  nexus-api: denied`, which requires `NEXUS_RUN_LIVE_LLM` to be unset. Never
-  pass `--noconftest`. The guard covers credential-store access only: backend
-  calls and `security`/`keyring` use in the pytest process, plus
-  `NEXUS_KEYRING_DISABLE=1` in every child process whatever the opt-in
-  flags. `os.exec*` and fork-then-exec are not covered. It is not a
-  protected-path write guard, and no launcher preflight runs outside
-  pytest; those parts of #963 are not implemented yet.
+  installs `tests/secret_store_guard.py` before collection and stops the
+  session (exit 4) if collection removes it or if CPython's private
+  `subprocess.Popen._execute_child` hook has changed shape. Before trusting a
+  gate result, confirm the final terminal summary (or the run header, which
+  `-q` hides) reads `secret-store guard: active; nexus-api: denied`, which
+  requires `NEXUS_RUN_LIVE_LLM` to be unset. Never pass `--noconftest`.
+  - Tests use the `in_memory_secret_store` fixture.
+    `NEXUS_RUN_SECRET_STORE=1` enables only the macOS integration test, whose
+    keychain file must sit under pytest's base temp directory.
+    `NEXUS_RUN_LIVE_LLM=1` sessions may read `nexus-api`, never write it.
+    Both flags count only when set before pytest starts.
+  - In the pytest process the guard covers the real backends, the `keyring`
+    password functions, the password methods of every `keyring` backend
+    class, and `security` spawns through `subprocess`, `os.system`,
+    `os.posix_spawn*`, and `os.spawn*`. A `security` spawn runs only as an
+    argv list that exactly matches an open backend or disposable-keychain
+    scope, and never with `-s nexus-api` outside a live read. Any argument
+    that merely names `security` (`/etc/security`, say) also fails the test.
+  - Every child process gets `NEXUS_KEYRING_DISABLE=1`, whatever the opt-in
+    flags and whatever its `env` says. A test whose child genuinely needs
+    store access, such as the golden-path gate's API server, passes
+    `env=secret_store_guard.store_access_env(...)` and says why.
+  - Not covered: `os.exec*`, fork-then-exec, `pty.spawn`, multiprocessing's
+    `fork_exec`, a renamed or linked copy of `security`, a child that runs
+    `security` itself, and `ctypes` calls into the Security framework. The
+    guard is not a protected-path write guard, and no launcher preflight runs
+    outside pytest; those parts of #963 are not implemented yet.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 

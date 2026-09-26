@@ -79,6 +79,14 @@ def _forbid_unopted_secret_store_access(monkeypatch: pytest.MonkeyPatch) -> None
     secret_store_guard.install(monkeypatch.setattr)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _register_disposable_keychain_root(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Make pytest's base temp dir the only home of disposable keychains."""
+    secret_store_guard.set_disposable_root(tmp_path_factory.getbasetemp())
+
+
 @pytest.fixture
 def in_memory_secret_store(
     monkeypatch: pytest.MonkeyPatch,

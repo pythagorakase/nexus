@@ -11,15 +11,19 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import keyring
+import keyring.backend
 import keyring.core
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from keyring.backends import macOS, null
 
 from nexus.api import secrets_endpoints
 from nexus.api.secrets_endpoints import SecretProvider, router
@@ -132,6 +136,20 @@ def test_disposable_keychain_needs_session_opt_in(
         getattr(backend, operation)(PROBE_ACCOUNT, *args)
 
 
+def test_every_keyring_backend_password_method_is_wrapped() -> None:
+    """Including the macOS backend, which keyring defines only on demand."""
+    classes = secret_store_guard.keyring_backend_classes()
+    assert macOS.Keyring in classes and null.Keyring in classes
+    for cls in classes:
+        for name in secret_store_guard.KEYRING_FUNCTIONS:
+            method = cls.__dict__.get(name)
+            if method is not None:
+                assert getattr(method, secret_store_guard.GUARD_MARKER, False), (
+                    cls,
+                    name,
+                )
+
+
 def test_keychain_outside_the_temp_root_is_never_disposable() -> None:
     login = Path.home() / "Library" / "Keychains" / "login.keychain-db"
     assert not secret_store_guard.is_disposable_keychain(login)
@@ -141,16 +159,40 @@ def test_keychain_outside_the_temp_root_is_never_disposable() -> None:
         assert not secret_store_guard.access_allowed(backend, operation)
 
 
-def test_library_is_never_disposable_even_under_the_temp_root(
+def test_only_pytest_basetemp_is_disposable(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    """A ``TMPDIR`` above ``~/Library`` cannot make the login keychain disposable."""
+    """``TMPDIR`` pointing at home cannot make anything under home disposable."""
+    assert secret_store_guard.is_disposable_keychain(tmp_path / "probe.keychain-db")
     monkeypatch.setattr(tempfile, "tempdir", str(Path.home()))
     assert tempfile.gettempdir() == str(Path.home())
+    for outside in (
+        Path.home() / "nexus-secret-it" / "probe.keychain-db",
+        Path.home() / "Library" / "Keychains" / "login.keychain-db",
+    ):
+        assert not secret_store_guard.is_disposable_keychain(outside)
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    sibling = Path(tempfile.gettempdir()) / "nexus-secret-it" / "probe.keychain-db"
+    assert not secret_store_guard.is_disposable_keychain(sibling)
+
+
+def test_library_is_never_disposable_even_under_the_disposable_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A base temp dir above ``~/Library`` cannot expose the login keychain."""
+    monkeypatch.setattr(secret_store_guard, "_disposable_root", Path.home().resolve())
     login = Path.home() / "Library" / "Keychains" / "login.keychain-db"
     assert not secret_store_guard.is_disposable_keychain(login)
-    scratch = Path.home() / "nexus-secret-it" / "probe.keychain-db"
-    assert secret_store_guard.is_disposable_keychain(scratch)
+    assert secret_store_guard.is_disposable_keychain(Path.home() / "x.keychain-db")
+
+
+def test_nothing_is_disposable_before_the_root_is_registered(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(secret_store_guard, "_disposable_root", None)
+    assert not secret_store_guard.is_disposable_keychain(tmp_path / "x.keychain-db")
 
 
 def test_keyword_call_reaches_the_guard() -> None:
@@ -224,6 +266,7 @@ def test_other_subprocesses_still_run() -> None:
         ("get_password", (SERVICE_NAME, PROBE_ACCOUNT)),
         ("set_password", (SERVICE_NAME, PROBE_ACCOUNT, "never-stored")),
         ("delete_password", (SERVICE_NAME, PROBE_ACCOUNT)),
+        ("get_credential", (SERVICE_NAME, PROBE_ACCOUNT)),
     ],
 )
 def test_direct_keyring_call_is_denied(
@@ -399,6 +442,67 @@ def test_keyring_scope_binds_the_service() -> None:
     ):
         with pytest.raises(pytest.fail.Exception, match="inside a scope"):
             keyring.get_password(SERVICE_NAME, PROBE_ACCOUNT)
+        with pytest.raises(pytest.fail.Exception, match="inside a scope"):
+            keyring.get_keyring().get_password(SERVICE_NAME, PROBE_ACCOUNT)
+        with pytest.raises(pytest.fail.Exception, match="inside a scope"):
+            null.Keyring().get_password(service=SERVICE_NAME, username="x")
+        # The scope's own service still reaches the backend.
+        assert null.Keyring().get_password(DISPOSABLE_SERVICE, PROBE_ACCOUNT) is None
+
+
+KEYRING_BACKEND_CALLS = [
+    ("get_password", (SERVICE_NAME, PROBE_ACCOUNT)),
+    ("set_password", (SERVICE_NAME, PROBE_ACCOUNT, "never-stored")),
+    ("delete_password", (SERVICE_NAME, PROBE_ACCOUNT)),
+    ("get_credential", (SERVICE_NAME, PROBE_ACCOUNT)),
+]
+
+
+@pytest.mark.parametrize("name,args", KEYRING_BACKEND_CALLS)
+def test_resolved_keyring_backend_is_denied(name: str, args: tuple[str, ...]) -> None:
+    """``keyring.get_keyring()`` is the owner's store; its methods are guarded."""
+    with pytest.raises(pytest.fail.Exception, match=f"keyring backend .*{name}"):
+        getattr(keyring.get_keyring(), name)(*args)
+
+
+@pytest.mark.parametrize("name,args", KEYRING_BACKEND_CALLS)
+@pytest.mark.parametrize(
+    "backend",
+    [macOS.Keyring, null.Keyring],
+    ids=["macOS", "null"],
+)
+def test_directly_built_keyring_backend_is_denied(
+    backend: type[keyring.backend.KeyringBackend],
+    name: str,
+    args: tuple[str, ...],
+) -> None:
+    with pytest.raises(pytest.fail.Exception, match=f"keyring backend .*{name}"):
+        getattr(backend(), name)(*args)
+
+
+def test_keyring_backend_defined_after_install_is_guarded() -> None:
+    class LateKeyring(keyring.backend.KeyringBackend):
+        priority = 0  # type: ignore[assignment]
+
+        def get_password(self, service: str, username: str) -> str | None:
+            raise AssertionError("the guard must refuse before the backend runs")
+
+        def set_password(self, service: str, username: str, password: str) -> None:
+            raise AssertionError("the guard must refuse before the backend runs")
+
+    try:
+        assert secret_store_guard.installed()
+        for call in (
+            lambda: LateKeyring().get_password(SERVICE_NAME, PROBE_ACCOUNT),
+            lambda: LateKeyring().set_password(SERVICE_NAME, PROBE_ACCOUNT, "x"),
+            lambda: LateKeyring().get_credential(SERVICE_NAME, PROBE_ACCOUNT),
+        ):
+            with pytest.raises(pytest.fail.Exception, match="LateKeyring"):
+                call()
+    finally:
+        # keyring registers every concrete backend class; keep this one out of
+        # later backend detection.
+        keyring.backend.KeyringBackend._classes.discard(LateKeyring)
 
 
 def test_path_like_popen_args_are_checked() -> None:
@@ -502,16 +606,77 @@ def test_every_child_starts_in_environment_only_mode(
     assert "NEXUS_KEYRING_DISABLE" not in os.environ
 
 
-def test_explicit_child_env_override_is_honored(tmp_path: Path) -> None:
-    """A test that needs store access in a child must say so in its env."""
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"NEXUS_KEYRING_DISABLE": "0"},
+        {"NEXUS_KEYRING_DISABLE": ""},
+        {b"NEXUS_KEYRING_DISABLE": b"0"},
+    ],
+    ids=["zero", "empty", "bytes-key"],
+)
+def test_a_copied_env_cannot_lift_environment_only_mode(
+    env: dict[Any, Any],
+    tmp_path: Path,
+) -> None:
+    """An ``env`` that merely carries the flag (say, a shell copy) is overridden."""
     report = tmp_path / "child-env.txt"
     subprocess.run(
         [sys.executable, "-c", CHILD_REPORT, str(report)],
-        env={"PATH": os.environ.get("PATH", ""), "NEXUS_KEYRING_DISABLE": "0"},
+        env={"PATH": os.environ.get("PATH", ""), **env},
+        check=True,
+        timeout=30.0,
+    )
+    assert report.read_text() == "1"
+
+
+def test_store_access_env_is_the_only_opt_out(tmp_path: Path) -> None:
+    """A test that needs store access in a child must mark the env itself."""
+    report = tmp_path / "child-env.txt"
+    subprocess.run(
+        [sys.executable, "-c", CHILD_REPORT, str(report)],
+        env=secret_store_guard.store_access_env(
+            {"PATH": os.environ.get("PATH", ""), "NEXUS_KEYRING_DISABLE": "0"}
+        ),
         check=True,
         timeout=30.0,
     )
     assert report.read_text() == "0"
+
+
+WAIT_FOR_GO = """
+import pathlib, sys, time
+pathlib.Path(sys.argv[1]).touch()
+deadline = time.monotonic() + 30
+while not pathlib.Path(sys.argv[2]).exists() and time.monotonic() < deadline:
+    time.sleep(0.01)
+"""
+
+
+@pytest.mark.parametrize("spawn", ["os.system", "os.spawnv"])
+def test_env_less_spawns_leave_this_process_environment_alone(
+    spawn: str,
+    tmp_path: Path,
+) -> None:
+    """Other threads never see ``os.environ`` edited while a child runs."""
+    started, go = tmp_path / "started", tmp_path / "go"
+    argv = [sys.executable, "-c", WAIT_FOR_GO, str(started), str(go)]
+    if spawn == "os.system":
+        child = threading.Thread(target=os.system, args=(shlex.join(argv),))
+    else:
+        child = threading.Thread(
+            target=os.spawnv, args=(os.P_WAIT, sys.executable, argv)
+        )
+    child.start()
+    try:
+        deadline = time.monotonic() + 30
+        while not started.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert started.exists()
+        assert "NEXUS_KEYRING_DISABLE" not in os.environ
+    finally:
+        go.touch()
+        child.join(timeout=30)
 
 
 def test_check_spawn_hook_accepts_this_python() -> None:
