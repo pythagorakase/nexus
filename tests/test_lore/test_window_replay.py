@@ -137,13 +137,18 @@ def test_raised_output_allowance_tightens_a_model_limited_writer(
 def test_overflow_beyond_trimmable_memory_is_infeasible(tmp_path: Path) -> None:
     """Overflow the memory blocks cannot absorb is reported as infeasible."""
     settings = load_settings(REPO_CONFIG)
-    budget = _local_budget(settings, "skald_writer")
+    budget = resolve_seat_window(
+        settings.model_dump(),
+        settings.apex.model,
+        seat="skald_writer",
+        window=settings.lore.token_budget.apex_context_window,
+    )
     record = _record(budget, input_tokens=budget.input_ceiling - 500)
     trimmable = sum(TRIMMABLE.values())
-    # One token more output than the memory blocks can pay for in input.
-    raised = settings.apex.max_output_tokens + trimmable + 500 + 1
+    # One token more headroom than the memory blocks can pay for in input.
+    raised = settings.apex.response_reserve_tokens + trimmable + 500 + 1
     candidate = load_settings(
-        _candidate(tmp_path, "harsh", max_output_tokens=raised)
+        _candidate(tmp_path, "harsh", response_reserve_tokens=raised)
     ).model_dump()
 
     row = replay_record(record, candidate)
