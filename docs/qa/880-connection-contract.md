@@ -203,8 +203,8 @@ REVIEW marks nonmechanical behavior or validation work. Other entries are resolv
 - `scripts/simple_update.py` — Use the contract for the default CLI URL and normalize explicit URLs.
 - `scripts/stamp_lore_pass_baseline.py` — Redirect connection or URL construction through the shared resolver.
 - `scripts/summarize_narrative.py` — REVIEW: retire duplicate DB_* resolution and implicit NEXUS default; normalize worker URLs.
-- `scripts/test_narrative_simple.py` — Redirect connection or URL construction through the shared resolver.
-- `scripts/test_narrative_turn.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/test_narrative_simple.py` — Redirect connection or URL construction through the shared resolver. (Deleted in the #809 configuration-surface slice; nothing to remediate.)
+- `scripts/test_narrative_turn.py` — Redirect connection or URL construction through the shared resolver. (Deleted in the #809 configuration-surface slice; nothing to remediate.)
 - `scripts/trim_oversized_contexts.py` — Redirect connection or URL construction through the shared resolver.
 - `scripts/update_raw_text.py` — REVIEW: remove implicit NEXUS fallback and credential-bearing URL logging; normalize explicit URLs.
 - `scripts/update_scene_numbers.py` — Redirect connection or URL construction through the shared resolver.
