@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 import multiprocessing
 from pathlib import Path
+from threading import Thread
 from types import SimpleNamespace
+from typing import Any, Iterator
 
 from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import (
+    OpenAIChatModel,
+    OpenAIChatModelSettings,
+    OpenAIResponsesModel,
+    OpenAIResponsesModelSettings,
+)
+from pydantic_ai.providers.openai import OpenAIProvider as PydanticOpenAIProvider
+from pydantic_ai.settings import ModelSettings
 import pytest
 
 from nexus import cli
@@ -19,8 +32,10 @@ from nexus.telemetry.usage import (
     UsageReadError,
     record_pydantic_ai_result,
     record_usage_event,
+    request_generation_profile,
     summarize_usage,
 )
+from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 from tests.model_registry_helpers import registry_model
 
@@ -207,6 +222,239 @@ def test_two_provider_passes_keep_seats_models_and_sum(tmp_path: Path) -> None:
     assert summary["providers"]["openai"]["total"] == 25
 
 
+def test_usage_line_records_the_generation_profile_each_request_sent(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    responses = iter(
+        [
+            _response("gaia", input_tokens=8, output_tokens=3, response_id="r1"),
+            _response("mock", input_tokens=8, output_tokens=3, response_id="r2"),
+        ]
+    )
+
+    class FakeResponses:
+        def create(self, **_kwargs: object) -> SimpleNamespace:
+            return next(responses)
+
+    # TEST declares no reasoning, so its request carries no effort at all.
+    providers = [
+        OpenAIProvider(
+            model=model,
+            api_key="test-key",
+            reasoning_effort="high",
+            max_output_tokens=allowance,
+            usage_provider_name="openai",
+            usage_seat="gaia",
+        )
+        for model, allowance in ((registry_model("openai"), 1234), ("TEST", 4321))
+    ]
+    with caplog.at_level(logging.INFO, logger="nexus.usage"):
+        for provider in providers:
+            provider.client = SimpleNamespace(responses=FakeResponses())
+            provider.get_structured_completion("prompt", _StructuredAnswer)
+
+    summary = summarize_usage(usage_dir=tmp_path / "usage")
+    assert [
+        (event["seat"], event["reasoning_effort"], event["max_output_tokens"])
+        for event in summary["events"]
+    ] == [("gaia", "high", 1234), ("gaia", None, 4321)]
+    assert "seat=gaia" in caplog.text
+    assert "effort=high max_output=1234" in caplog.text
+    assert "effort=- max_output=4321" in caplog.text
+
+
+def test_generation_profile_reads_anthropic_and_chat_request_bodies() -> None:
+    anthropic = AnthropicProvider(
+        model=registry_model("anthropic"),
+        api_key="test-key",
+        reasoning_effort="low",
+        max_tokens=2048,
+    )
+    chat = OpenAIProvider(
+        model=registry_model("local"),
+        api_key="test-key",
+        base_url="http://127.0.0.1:1234/v1",
+        structured_transport="chat_completions",
+        max_output_tokens=512,
+        request_params={"reasoning": {"effort": "low"}},
+    )
+
+    assert request_generation_profile(
+        anthropic._build_prompted_structured_request_params("prompt")
+    ) == ("low", 2048)
+    assert request_generation_profile(
+        chat._build_chat_structured_request_params("prompt", _StructuredAnswer)
+    ) == ("low", 512)
+    assert request_generation_profile(None) == (None, None)
+
+
+@contextmanager
+def _capturing_openai_server(bodies: list[dict[str, Any]]) -> Iterator[str]:
+    """Serve minimal OpenAI envelopes over loopback and keep each request body."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            bodies.append(body)
+            message = {"role": "assistant", "content": "Done"}
+            if self.path.endswith("chat/completions"):
+                response: dict[str, Any] = {
+                    "id": "chatcmpl-profile",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": body["model"],
+                    "choices": [
+                        {"index": 0, "message": message, "finish_reason": "stop"}
+                    ],
+                    "usage": {
+                        "prompt_tokens": 5,
+                        "completion_tokens": 1,
+                        "total_tokens": 6,
+                    },
+                }
+            else:
+                response = {
+                    "id": "resp_profile",
+                    "object": "response",
+                    "created_at": 1,
+                    "model": body["model"],
+                    "status": "completed",
+                    "usage": {
+                        "input_tokens": 5,
+                        "output_tokens": 1,
+                        "total_tokens": 6,
+                    },
+                    "output": [
+                        {
+                            "id": "msg_profile",
+                            "type": "message",
+                            "role": "assistant",
+                            "status": "completed",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": "Done",
+                                    "annotations": [],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            payload = json.dumps(response).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args: object) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/v1"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _sent_wire_profile(body: dict[str, Any]) -> tuple[str | None, int | None]:
+    """Read the effort and output allowance from a Pydantic AI request body."""
+
+    if "messages" in body:
+        return body.get("reasoning_effort"), body.get("max_completion_tokens")
+    return (body.get("reasoning") or {}).get("effort"), body.get("max_output_tokens")
+
+
+@pytest.mark.parametrize(
+    ("model_class", "model_settings"),
+    [
+        pytest.param(
+            OpenAIResponsesModel,
+            ModelSettings(max_tokens=321),
+            id="responses-allowance-only",
+        ),
+        pytest.param(
+            OpenAIResponsesModel,
+            OpenAIResponsesModelSettings(max_tokens=321, openai_reasoning_effort="low"),
+            id="responses-effort",
+        ),
+        pytest.param(
+            OpenAIChatModel,
+            ModelSettings(max_tokens=321),
+            id="chat-allowance-only",
+        ),
+        pytest.param(
+            OpenAIChatModel,
+            OpenAIChatModelSettings(max_tokens=321, openai_reasoning_effort="high"),
+            id="chat-effort",
+        ),
+    ],
+)
+def test_pydantic_ai_usage_records_the_profile_the_run_sent(
+    model_class: Any,
+    model_settings: ModelSettings,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A real Pydantic AI run's ledger profile matches the bodies it posted.
+
+    The loopback server stands in for the provider; the Pydantic AI client,
+    request construction, and HTTP exchange are real.
+    """
+
+    bodies: list[dict[str, Any]] = []
+    with _capturing_openai_server(bodies) as base_url:
+        model = model_class(
+            "TEST",
+            provider=PydanticOpenAIProvider(base_url=base_url, api_key="test-key"),
+        )
+        result = Agent(model).run_sync("Continue.", model_settings=model_settings)
+        with caplog.at_level(logging.INFO, logger="nexus.usage"):
+            record_pydantic_ai_result(
+                result,
+                provider="test",
+                model="TEST",
+                seat="wizard",
+                model_settings=model_settings,
+            )
+
+    assert len(bodies) == 1
+    sent_effort, sent_allowance = _sent_wire_profile(bodies[0])
+    assert (sent_effort, sent_allowance) == (
+        model_settings.get("openai_reasoning_effort"),
+        321,
+    )
+    event = summarize_usage(usage_dir=tmp_path / "usage")["events"][0]
+    assert event["transport"] == "pydantic_ai"
+    assert (event["reasoning_effort"], event["max_output_tokens"]) == (
+        sent_effort,
+        sent_allowance,
+    )
+    assert f"effort={sent_effort or '-'} max_output=321" in caplog.text
+
+
+def test_pydantic_ai_usage_requires_the_run_output_allowance() -> None:
+    """Without max_tokens the ledger could not state what the run sent."""
+
+    result = SimpleNamespace(
+        usage=lambda: SimpleNamespace(
+            requests=1, input_tokens=5, output_tokens=1, total_tokens=6, details={}
+        )
+    )
+    with pytest.raises(ValueError, match="requires the run's max_tokens"):
+        record_pydantic_ai_result(
+            result,
+            provider="anthropic",
+            model="wizard-model",
+            seat="wizard",
+            model_settings=ModelSettings(),
+        )
+
+
 def test_repair_loop_records_rejected_then_accepted(tmp_path: Path) -> None:
     responses = iter(
         [
@@ -306,6 +554,7 @@ def test_pydantic_ai_all_zero_usage_is_unknown_not_zero(tmp_path: Path) -> None:
         provider="openai",
         model="wizard-model",
         seat="wizard",
+        model_settings=ModelSettings(max_tokens=64),
     )
 
     summary = summarize_usage(usage_dir=tmp_path / "usage")
@@ -335,6 +584,7 @@ def test_pydantic_ai_aggregate_records_internal_request_count(
         provider="openai",
         model="wizard-model",
         seat="wizard",
+        model_settings=ModelSettings(max_tokens=64),
         slot=2,
         run_id="thread-1",
     )

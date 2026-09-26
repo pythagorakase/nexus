@@ -1,13 +1,15 @@
 """Policy/source contracts against the actual repository model registry."""
 
 from dataclasses import FrozenInstanceError
+import re
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
 from nexus.config import load_settings
 from nexus.config.preferences import save_preferences
-from nexus.config.settings_models import Settings
+from nexus.config.settings_models import GaiaSeatPolicy, Settings
 from nexus.config.story_model import (
     AUXILIARY_SEATS,
     StorySettings,
@@ -147,3 +149,91 @@ def test_compaction_route_uses_persisted_model_without_resolving_story():
         LogonUtility(
             load_settings_as_dict(), persisted_model="TEST", model_override="TEST"
         )
+
+
+def _registry_entry(raw: dict[str, Any], model: str) -> dict[str, Any]:
+    """Return one raw roster entry from a dumped settings document."""
+    return next(
+        entry
+        for provider in raw["global"]["model"]["api_models"].values()
+        for entry in provider["models"]
+        if entry["id"] == model
+    )
+
+
+def _other_openai_model(settings: Settings) -> str:
+    """Pick a registered OpenAI model that is not the configured Skald default."""
+    return next(
+        entry.id
+        for entry in settings.global_.model.api_models["openai"].models
+        if entry.id != settings.apex.model
+    )
+
+
+def test_gaia_profile_requires_a_declared_reasoning_effort():
+    """[apex.gaia] carries its own validated effort, never an inherited one."""
+    assert isinstance(load_settings().apex.gaia, GaiaSeatPolicy)
+    raw = load_settings().model_dump()
+    raw["apex"]["gaia"]["reasoning_effort"] = "extreme"
+    with pytest.raises(ValidationError, match="apex.gaia.reasoning_effort"):
+        Settings.model_validate(raw)
+    del raw["apex"]["gaia"]["reasoning_effort"]
+    with pytest.raises(ValidationError, match="apex.gaia.reasoning_effort"):
+        Settings.model_validate(raw)
+
+
+@pytest.mark.parametrize("param", ["reasoning_effort", "reasoning"])
+def test_gaia_default_model_rejecting_effort_fails_settings_load(param):
+    """A Gaia model that rejects or strips effort fails at load, not at a turn."""
+    raw = load_settings().model_dump()
+    gaia_model = raw["apex"]["gaia_model"] or raw["apex"]["model"]
+    _registry_entry(raw, gaia_model)["unsupported_params"].append(param)
+    message = f"[apex.gaia] configures reasoning_effort, but model '{gaia_model}' "
+    with pytest.raises(ValidationError, match=re.escape(message) + ".*" + param):
+        Settings.model_validate(raw)
+
+
+def test_gaia_default_model_without_reasoning_fails_settings_load():
+    """A declared non-reasoning Gaia model cannot silently drop the effort."""
+    raw = load_settings().model_dump()
+    gaia_model = raw["apex"]["gaia_model"] or raw["apex"]["model"]
+    _registry_entry(raw, gaia_model)["reasoning_accounting"] = "none"
+    with pytest.raises(ValidationError, match="reasoning_accounting = 'none'"):
+        Settings.model_validate(raw)
+
+
+def test_pinned_gaia_model_is_checked_in_place_of_the_skald_default():
+    """With apex.gaia_model set, load validates that pin against the profile."""
+    settings = load_settings()
+    raw = settings.model_dump()
+    pinned = _other_openai_model(settings)
+    raw["apex"]["gaia_model"] = pinned
+    assert Settings.model_validate(raw).apex.gaia_model == pinned
+    _registry_entry(raw, pinned)["unsupported_params"].append("reasoning_effort")
+    with pytest.raises(ValidationError, match=re.escape(f"model '{pinned}'")):
+        Settings.model_validate(raw)
+
+
+def test_test_provider_gaia_stays_self_contained():
+    """The TEST mock declares no reasoning and remains a valid Gaia default."""
+    raw = load_settings().model_dump()
+    raw["apex"]["model"] = "TEST"
+    assert Settings.model_validate(raw).apex.model == "TEST"
+    story = StorySettings(skald_model="TEST")
+    assert resolve_seat("gaia", story=story).model == "TEST"
+
+
+@pytest.mark.parametrize("route", ["story_pin", "story_follow"])
+def test_gaia_story_route_rejecting_effort_fails_seat_resolution(route):
+    """Pins and slot following are checked where the Gaia model is resolved."""
+    settings = load_settings().model_copy(deep=True)
+    rejecting = _other_openai_model(settings)
+    settings.model_entry(rejecting).unsupported_params.append("reasoning_effort")
+    story = (
+        StorySettings(skald_model=settings.apex.model, gaia_model=rejecting)
+        if route == "story_pin"
+        else StorySettings(skald_model=rejecting)
+    )
+    message = f"[apex.gaia] ({route}) configures reasoning_effort"
+    with pytest.raises(ValueError, match=re.escape(message)):
+        resolve_seat("gaia", settings=settings, story=story)

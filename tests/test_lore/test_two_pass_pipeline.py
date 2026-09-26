@@ -48,10 +48,19 @@ from nexus.api.native_structured_output import (
 )
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from nexus.api.slot_utils import require_slot_dbname
-from nexus.config import load_settings
+from nexus.config import (
+    get_openai_compatible_endpoint,
+    load_settings,
+    load_settings_as_dict,
+)
 from nexus.config.story_model import StorySettings
 from nexus.memory.correspondence import CorrespondenceDigestWire
 from nexus.prompts.registry import PromptId, load
+from nexus.telemetry.attempt_manifest import identity_hash
+from nexus.telemetry.usage import request_generation_profile
+from scripts.api_anthropic import AnthropicProvider
+from scripts.api_openai import OpenAIProvider
+from tests.model_registry_helpers import registry_model
 
 
 PINNED_GAIA_MODEL = next(
@@ -335,6 +344,7 @@ def _utility(
                 "turn_pipeline": "two_pass",
                 "anthropic_storyteller_transport": (anthropic_transport or "prompted"),
                 "tag_library": {"schema_enums": False},
+                "gaia": load_settings().apex.gaia.model_dump(),
             }
         },
         "storyteller": {
@@ -1393,3 +1403,197 @@ def test_gaia_schema_enum_gate_off_is_byte_identical_to_static_schema() -> None:
     ).encode(
         "utf-8"
     )
+
+
+GAIA_PROFILE_WIRES = [
+    pytest.param("openai", None, id="openai"),
+    pytest.param("anthropic", "prompted", id="anthropic"),
+]
+
+
+def _divergent_gaia_profile_utility(
+    writer_provider: str,
+    *,
+    model: str | None = None,
+    endpoint: dict[str, Any] | None = None,
+) -> tuple[LogonUtility, dict[str, Any]]:
+    """Build the real writer provider under a Gaia profile unlike the writer's."""
+
+    settings = load_settings_as_dict()
+    apex = settings["apex"]
+    apex["turn_pipeline"] = "two_pass"
+    apex["anthropic_storyteller_transport"] = "prompted"
+    apex["gaia"].update(
+        reasoning_effort=next(
+            effort
+            for effort in ("low", "medium", "high")
+            if effort != apex["reasoning_effort"]
+        ),
+        max_output_tokens=apex["max_output_tokens"] // 2,
+    )
+    model = model or registry_model(writer_provider)
+    utility = LogonUtility(
+        settings, model_override=model, story_settings=StorySettings()
+    )
+    wire = "local" if endpoint is not None else writer_provider
+    utility._initialize_provider(
+        False,
+        resolved_route=(model, writer_provider, endpoint, cast(Any, wire)),
+    )
+    return utility, apex
+
+
+def _sent_profile(provider: Any) -> tuple[str | None, int | None]:
+    """Return the effort and output allowance the real request builder sends."""
+
+    if isinstance(provider, AnthropicProvider):
+        request = provider._build_prompted_structured_request_params("Continue.")
+    else:
+        request = provider._build_native_structured_request_params(
+            "Continue.", SkaldGaiaWire
+        )
+    return request_generation_profile(request)
+
+
+@pytest.mark.parametrize(("provider_type", "transport"), GAIA_PROFILE_WIRES)
+def test_slot_following_gaia_clone_sends_the_gaia_profile(
+    provider_type: str, transport: str | None
+) -> None:
+    """The live clone path shares the writer's model, never its profile."""
+
+    utility, apex = _divergent_gaia_profile_utility(provider_type)
+    shared = utility.provider
+    assert shared is not None
+    writer = utility._clone_provider_for_two_pass(
+        system_prompt="Writer",
+        output_validator=None,
+        usage_seat="skald_writer",
+        anthropic_transport=cast(Any, transport),
+    )
+    gaia = utility._clone_provider_for_two_pass(
+        system_prompt="Gaia",
+        output_validator=None,
+        usage_seat="gaia",
+        anthropic_transport=cast(Any, transport),
+    )
+
+    writer_profile = (apex["reasoning_effort"], apex["max_output_tokens"])
+    gaia_profile = (apex["gaia"]["reasoning_effort"], apex["gaia"]["max_output_tokens"])
+    assert type(gaia) is type(shared) and gaia.model == shared.model
+    assert _sent_profile(gaia) == gaia_profile
+    assert _sent_profile(writer) == writer_profile
+    assert _sent_profile(shared) == writer_profile
+
+
+@pytest.mark.parametrize(("provider_type", "transport"), GAIA_PROFILE_WIRES)
+def test_pinned_gaia_provider_sends_the_gaia_profile(
+    provider_type: str, transport: str | None
+) -> None:
+    """A pinned Gaia seat builds from [apex.gaia]; the writer keeps apex values."""
+
+    utility, apex = _divergent_gaia_profile_utility("openai")
+    model = (
+        PINNED_GAIA_MODEL
+        if provider_type == "openai"
+        else registry_model(provider_type)
+    )
+    gaia = utility._build_gaia_provider(
+        (model, provider_type, None, cast(Any, provider_type)),
+        system_prompt="Gaia",
+        output_validator=None,
+        anthropic_transport=cast(Any, transport),
+    )
+
+    assert gaia.model == model and gaia.usage_seat == "gaia"
+    assert _sent_profile(gaia) == (
+        apex["gaia"]["reasoning_effort"],
+        apex["gaia"]["max_output_tokens"],
+    )
+    assert _sent_profile(utility.provider) == (
+        apex["reasoning_effort"],
+        apex["max_output_tokens"],
+    )
+
+
+def test_gaia_profile_source_is_the_hashed_attempt_config() -> None:
+    """config_sha256 hashes the same settings the Gaia provider reads."""
+
+    utility, apex = _divergent_gaia_profile_utility("openai")
+    before = identity_hash(utility.settings)
+    assert utility._gaia_seat_policy().model_dump() == apex["gaia"]
+
+    apex["gaia"]["reasoning_effort"] = apex["reasoning_effort"]
+    assert identity_hash(utility.settings) != before
+    assert utility._gaia_seat_policy().reasoning_effort == apex["reasoning_effort"]
+
+
+def test_gaia_clone_requires_a_declared_gaia_profile() -> None:
+    """A settings view without [apex.gaia] fails before any Gaia request."""
+
+    utility, _provider = _utility("openai", [])
+    del utility.settings["API Settings"]["apex"]["gaia"]
+    with pytest.raises(ValueError, match=r"\[apex\.gaia\] table is missing"):
+        utility._clone_provider_for_two_pass(
+            system_prompt="Gaia", output_validator=None, usage_seat="gaia"
+        )
+
+
+# Per chat-completions provider, one model whose registry request_params carry
+# an effort and one whose requests carry none.
+CHAT_ROUTE_GAIA_MODELS = sorted(
+    {
+        (name, "reasoning" in entry.request_params): entry.id
+        for name, provider in load_settings().global_.model.api_models.items()
+        if provider.structured_transport == "chat_completions"
+        for entry in provider.models
+    }.values()
+)
+
+
+@pytest.mark.parametrize("model", CHAT_ROUTE_GAIA_MODELS)
+def test_chat_route_gaia_sends_the_registry_effort_not_the_gaia_profile(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Chat Completions carries Gaia's output allowance, never its effort.
+
+    On both Gaia routes the request's effort is the registry request_params
+    value, or none, exactly as for the writer; [apex.gaia].reasoning_effort
+    reaches the Responses and Anthropic transports only.
+    """
+
+    monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
+    provider_type = load_settings().provider_for_model(model)
+    monkeypatch.setenv(f"{provider_type.upper()}_API_KEY", "test-key")
+    endpoint = get_openai_compatible_endpoint(model)
+    assert endpoint is not None
+    assert endpoint["structured_transport"] == "chat_completions"
+    registry_effort = (endpoint["request_params"].get("reasoning") or {}).get("effort")
+    slot_utility, apex = _divergent_gaia_profile_utility(
+        provider_type, model=model, endpoint=endpoint
+    )
+    pinned_utility, pinned_apex = _divergent_gaia_profile_utility("openai")
+    for profile in (apex, pinned_apex):
+        profile["gaia"]["reasoning_effort"] = next(
+            effort
+            for effort in ("low", "medium", "high")
+            if effort not in {profile["reasoning_effort"], registry_effort}
+        )
+    slot_following = slot_utility._clone_provider_for_two_pass(
+        system_prompt="Gaia", output_validator=None, usage_seat="gaia"
+    )
+    pinned = pinned_utility._build_gaia_provider(
+        (model, provider_type, endpoint, "local"),
+        system_prompt="Gaia",
+        output_validator=None,
+        anthropic_transport=None,
+    )
+
+    for gaia, profile in ((slot_following, apex), (pinned, pinned_apex)):
+        assert isinstance(gaia, OpenAIProvider)
+        assert gaia.structured_transport == "chat_completions"
+        assert gaia.reasoning_effort == profile["gaia"]["reasoning_effort"]
+        request = gaia._build_chat_structured_request_params("Continue.", SkaldGaiaWire)
+        assert request_generation_profile(request) == (
+            registry_effort,
+            profile["gaia"]["max_output_tokens"],
+        )

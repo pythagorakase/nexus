@@ -162,11 +162,11 @@ class APIModelEntry(BaseModel):
         default_factory=list,
         description=(
             "Request parameters this model's API rejects outright (e.g. "
-            "'temperature' on reasoning-class models). Config load refuses any "
-            "consumer field that configures one of these params for this model "
-            "(see Settings._validate_param_capabilities); request builders only "
-            "send explicitly configured params, so a rejected parameter can "
-            "never reach the provider."
+            "'temperature' on reasoning-class models). Request builders omit "
+            "listed params, so a rejected parameter can never reach the "
+            "provider. Config load and Gaia seat resolution refuse a Gaia "
+            "model that lists reasoning_effort or reasoning here (see "
+            "require_reasoning_effort_support)."
         ),
     )
     native_structured_output: Optional[bool] = Field(
@@ -212,6 +212,40 @@ class APIModelEntry(BaseModel):
                 f"request keys: {sorted(reserved)}"
             )
         return self
+
+
+# Parameter names that carry a reasoning effort. Listing either in a model's
+# unsupported_params means the provider rejects it, or request filtering would
+# strip it before the call.
+REASONING_EFFORT_PARAMS = frozenset({"reasoning_effort", "reasoning"})
+
+
+def require_reasoning_effort_support(
+    entry: APIModelEntry, *, provider: str, source: str
+) -> None:
+    """Refuse a Gaia model that cannot take a reasoning effort.
+
+    The configured [apex.gaia] effort reaches the OpenAI Responses and
+    Anthropic transports. Chat Completions routes (OpenAI-compatible base_url
+    providers) never send it; there the check still holds Gaia to a reasoning
+    model whose registry request_params effort is not stripped. The TEST mock
+    is exempt: TEST-provider slots stay self-contained, run no inference, and
+    declare no reasoning by design.
+    """
+    if provider == "test":
+        return
+    rejected = sorted(REASONING_EFFORT_PARAMS & set(entry.unsupported_params))
+    if rejected:
+        raise ValueError(
+            f"{source} configures reasoning_effort, but model {entry.id!r} "
+            f"declares {rejected} unsupported (unsupported_params in "
+            "[global.model.api_models]). Choose a model that accepts it."
+        )
+    if entry.reasoning_accounting == "none":
+        raise ValueError(
+            f"{source} configures reasoning_effort, but model {entry.id!r} "
+            "declares reasoning_accounting = 'none'. Choose a reasoning model."
+        )
 
 
 class ProviderModels(BaseModel):
@@ -3423,12 +3457,37 @@ class SeatWindowPolicy(BaseModel):
     response_reserve_tokens: int = Field(..., ge=0, strict=True)
 
 
+class GaiaSeatPolicy(SeatWindowPolicy):
+    """Gaia's own generation profile: window policy plus reasoning effort.
+
+    Gaia's model follows story resolution (its story pin, else the Skald
+    selection), while this profile stays developer-scoped. One profile applies
+    to every turn; workload-driven profile selection waits on real-entry-point
+    evidence (issue #758).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reasoning_effort: Literal["low", "medium", "high"] = Field(
+        ...,
+        description=(
+            "Reasoning effort sent with every Gaia request on the OpenAI "
+            "Responses and Anthropic transports. Chat Completions routes "
+            "(OpenAI-compatible base_url providers such as local and "
+            "OpenRouter) do not send it: as for the writer, their effort is the "
+            "model's registry request_params value, or none. The Gaia model "
+            "must declare reasoning and must not list reasoning_effort (or its "
+            "wire key, reasoning) in unsupported_params."
+        ),
+    )
+
+
 class APEXSettings(SeatWindowPolicy):
     """APEX API configuration for story generation."""
 
     model_config = ConfigDict(extra="forbid")
 
-    gaia: SeatWindowPolicy
+    gaia: GaiaSeatPolicy
     provider: str = Field(..., pattern="^(openai|anthropic|local)$")
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
@@ -4135,6 +4194,23 @@ class Settings(BaseModel):
                 "[memnon.models] must mark exactly one embedder is_active = true "
                 f"(the production embedder); {found}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_param_capabilities(self) -> "Settings":
+        """Refuse configured request params that the resolved model rejects.
+
+        Runs after ``_validate_model_ids`` (Pydantic executes model validators
+        in definition order), so every checked model is a registered ID. The
+        Gaia seat's configured default is ``apex.gaia_model``, else
+        ``apex.model``; story pins are checked again in ``resolve_seat``.
+        """
+        gaia_model = self.apex.gaia_model or self.apex.model
+        require_reasoning_effort_support(
+            self.model_entry(gaia_model),
+            provider=self.provider_for_model(gaia_model),
+            source="[apex.gaia]",
+        )
         return self
 
     @model_validator(mode="after")

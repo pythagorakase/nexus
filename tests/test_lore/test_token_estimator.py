@@ -298,17 +298,25 @@ def test_token_drift_real_pydantic_ai_exchange(tmp_path, caplog) -> None:
     from pydantic_ai import Agent
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider as PydanticOpenAIProvider
+    from pydantic_ai.settings import ModelSettings
     from nexus.telemetry.usage import record_pydantic_ai_result
 
+    model_settings = ModelSettings(max_tokens=64)
     with token_test_server() as base_url:
         model = OpenAIChatModel(
             "TEST",
             provider=PydanticOpenAIProvider(base_url=base_url, api_key="test-key"),
         )
-        result = Agent(model, system_prompt="Count this sentence.").run_sync(SENTENCE)
+        result = Agent(model, system_prompt="Count this sentence.").run_sync(
+            SENTENCE, model_settings=model_settings
+        )
         with caplog.at_level(logging.INFO, logger="nexus.usage"):
             record_pydantic_ai_result(
-                result, provider="test", model="TEST", seat="wizard"
+                result,
+                provider="test",
+                model="TEST",
+                seat="wizard",
+                model_settings=model_settings,
             )
     lines = [
         record.message
