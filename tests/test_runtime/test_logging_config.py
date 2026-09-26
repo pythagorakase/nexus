@@ -8,6 +8,7 @@ real supervisor, and import side effects are observed in a fresh interpreter.
 from __future__ import annotations
 
 import http.client
+import importlib.util
 import json
 import logging
 import os
@@ -17,7 +18,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Dict, List, Optional, cast
 
 import pytest
 import tomlkit
@@ -41,6 +42,8 @@ UVICORN_ACCESS_MSG = '%s - "%s %s HTTP/%s" %d'
 
 # A dependency-free ASGI app: answers every path with ?status=<code> (default
 # 200) and logs one application record per request through a nexus logger.
+# A WebSocket connection (only with a WebSocket library installed) is accepted
+# and closed.
 PROBE_APP = """
 import logging
 from urllib.parse import parse_qs
@@ -57,6 +60,11 @@ async def app(scope, receive, send):
             elif message["type"] == "lifespan.shutdown":
                 await send({"type": "lifespan.shutdown.complete"})
                 return
+    if scope["type"] == "websocket":
+        await receive()
+        await send({"type": "websocket.accept"})
+        await send({"type": "websocket.close", "code": 1000})
+        return
     query = parse_qs(scope["query_string"].decode())
     status = int(query.get("status", ["200"])[0])
     logger.info("probe handled %s", scope["path"])
@@ -285,13 +293,36 @@ def _get(port: int, target: str) -> int:
         connection.close()
 
 
+def _websocket_upgrade(port: int, target: str) -> int:
+    """Send a real WebSocket upgrade request; return the response status code."""
+    request = (
+        f"GET {target} HTTP/1.1\r\n"
+        f"Host: 127.0.0.1:{port}\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+        "Sec-WebSocket-Version: 13\r\n\r\n"
+    )
+    with socket.create_connection(("127.0.0.1", port), timeout=10) as sock:
+        sock.sendall(request.encode("ascii"))
+        with sock.makefile("rb") as response:
+            status_line = response.readline()
+    return int(status_line.split()[1])
+
+
 def _serve_probe(
-    tmp_path: Path, level: str, requests_made: Dict[str, int]
-) -> Tuple[Supervisor, Dict[str, Any], List[str]]:
+    tmp_path: Path,
+    level: str,
+    requests_made: Dict[str, int],
+    websocket_upgrades: Optional[Dict[str, int]] = None,
+) -> List[str]:
     """Start the probe under the real supervisor, make requests, return its log.
 
-    Each target in ``requests_made`` must answer with its mapped status. The
-    service is stopped before its captured log is read.
+    Each target in ``requests_made`` (plain GET) and ``websocket_upgrades``
+    (WebSocket upgrade) must answer with its mapped status. The service is
+    stopped before its captured log (stdout and stderr) is read, and that log
+    must hold no logging error: a filter or formatter that raises would print
+    ``--- Logging error ---`` there on every record.
     """
     supervisor = _probe_supervisor(tmp_path, level)
     service = supervisor.runtime.services["probe"]
@@ -300,6 +331,8 @@ def _serve_probe(
     try:
         for target, expected in requests_made.items():
             assert _get(service.port, target) == expected
+        for target, expected in (websocket_upgrades or {}).items():
+            assert _websocket_upgrade(service.port, target) == expected
     finally:
         # This test process is the service's parent, so it reaps the child
         # itself; a detached CLI supervisor leaves that to init.
@@ -310,7 +343,8 @@ def _serve_probe(
     assert written == build_logging_config(supervisor.runtime.logs)
     assert record["command"][-1] == str(supervisor.log_config_path())
     lines = supervisor.log_path("probe").read_text(encoding="utf-8").splitlines()
-    return supervisor, record, lines
+    assert "--- Logging error ---" not in lines
+    return lines
 
 
 def _access_request_lines(lines: List[str]) -> List[str]:
@@ -325,7 +359,7 @@ def test_supervised_uvicorn_applies_log_config_and_filters_access_noise(
 ) -> None:
     """uvicorn --log-config {log_config}: one format, noise out, failures in."""
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
-    _, _, lines = _serve_probe(
+    lines = _serve_probe(
         tmp_path,
         "INFO",
         {
@@ -366,7 +400,7 @@ def test_supervised_uvicorn_keeps_access_records_above_info_level(
     still honour WARNING, so their INFO records are gone.
     """
     monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
-    _, _, lines = _serve_probe(
+    lines = _serve_probe(
         tmp_path,
         "WARNING",
         {
@@ -385,6 +419,36 @@ def test_supervised_uvicorn_keeps_access_records_above_info_level(
     assert not any("GET /health HTTP" in line for line in lines)
     assert not any("uvicorn.error|Uvicorn running on" in line for line in lines)
     assert not any("probe handled" in line for line in lines)
+
+
+def test_supervised_uvicorn_websocket_upgrade_keeps_the_access_log_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real WebSocket upgrade never reaches the access filter malformed.
+
+    uvicorn (pinned < 0.35) logs WebSocket handshakes on uvicorn.error, never
+    uvicorn.access. Without a WebSocket library (uvicorn is locked without its
+    ``standard`` extra) the upgrade is served as plain HTTP and logged as an
+    ordinary access record. Either way the filter never sees another shape.
+    """
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    websocket_library = any(
+        importlib.util.find_spec(name) is not None for name in ("websockets", "wsproto")
+    )
+
+    lines = _serve_probe(
+        tmp_path,
+        "INFO",
+        {},
+        websocket_upgrades={"/ws/probe": 101 if websocket_library else 200},
+    )
+
+    if websocket_library:
+        assert '"WebSocket /ws/probe" [accepted]' in "\n".join(lines)
+        assert _access_request_lines(lines) == []
+    else:
+        assert "WARNING|uvicorn.error|Unsupported upgrade request." in lines
+        assert _access_request_lines(lines) == ["GET /ws/probe HTTP/1.1"]
 
 
 # ---------------------------------------------------------------------------

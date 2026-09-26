@@ -40,6 +40,11 @@ ACCESS_LOGGER_LEVEL = "INFO"
 # uvicorn's h11 and httptools protocols log each response on uvicorn.access as
 # '%s - "%s %s HTTP/%s" %d' with args
 # (client_addr, method, path_with_query_string, http_version, status_code).
+# In uvicorn 0.34 (pinned < 0.35) those are the only uvicorn.access writers:
+# RequestResponseCycle.send in protocols/http/h11_impl.py and httptools_impl.py.
+# protocols/websockets/websockets_impl.py and wsproto_impl.py log handshakes on
+# uvicorn.error, and without a WebSocket library an upgrade is served as plain
+# HTTP, so a WebSocket connection never brings this filter another shape.
 _ACCESS_ARG_COUNT = 5
 _ACCESS_PATH_INDEX = 2
 _ACCESS_STATUS_INDEX = 4

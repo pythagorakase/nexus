@@ -1737,7 +1737,9 @@ if __name__ == "__main__":
     # NARRATIVE_API_PORT lets parallel checkouts (agent worktrees, the
     # golden-path gate) boot the gateway without contending for 8002.
     # #415/#458: loopback keeps the Cloudflare tunnel the sole default ingress.
-    # #842: the same [runtime.logs] dictConfig the supervisor hands uvicorn.
+    # #842: direct launches (`python -m nexus.api.narrative`: docs/cli.md and
+    # the golden-path gate, whose stage 8 reads this stdout) bypass the
+    # supervisor's --log-config argv, so apply the same dictConfig here.
     uvicorn.run(
         app,
         host=os.environ.get("NARRATIVE_API_HOST", "127.0.0.1"),
