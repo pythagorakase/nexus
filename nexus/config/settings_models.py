@@ -239,12 +239,14 @@ def require_reasoning_effort_support(
         raise ValueError(
             f"{source} configures reasoning_effort, but model {entry.id!r} "
             f"declares {rejected} unsupported (unsupported_params in "
-            "[global.model.api_models]). Choose a model that accepts it."
+            "[global.model.api_models]), so that seat needs a model that "
+            "accepts reasoning_effort."
         )
     if entry.reasoning_accounting == "none":
         raise ValueError(
             f"{source} configures reasoning_effort, but model {entry.id!r} "
-            "declares reasoning_accounting = 'none'. Choose a reasoning model."
+            "declares reasoning_accounting = 'none', so that seat needs a "
+            "reasoning model."
         )
 
 
