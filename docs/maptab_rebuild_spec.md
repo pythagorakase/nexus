@@ -114,7 +114,7 @@ Inside the `<svg>`, in order back-to-front:
 <circle
   cx={coords.x}
   cy={coords.y}
-  r={3 / zoom}
+  r={PIN_RADIUS_PX / zoom}
   fill={pinColor}
   filter={`drop-shadow(0 0 ${8 / zoom}px ${pinColor})`}
 />
