@@ -2781,7 +2781,10 @@ class LogonUtility:
                     ):
                         value = rel[column]
                         if value is not None and value.strip():
-                            sections.append(f"  {label}: {value.strip()}")
+                            # An embedded newline continues the sub-line, so
+                            # the continuation keeps the dossier indent.
+                            text = value.strip().replace("\n", "\n    ")
+                            sections.append(f"  {label}: {text}")
 
             events = entity_data.get("events", [])
             if events:

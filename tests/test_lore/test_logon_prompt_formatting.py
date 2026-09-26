@@ -940,6 +940,21 @@ def test_relationship_renders_only_the_populated_column(
     assert block == f"Relationships:\n{_BARE_RELATIONSHIP_LINE}\n{detail}"
 
 
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+def test_relationship_prose_continuation_lines_keep_the_indent(seat: str) -> None:
+    """An embedded newline continues the sub-line under the dossier indent."""
+    block = _relationships_block(
+        _fetched_relationship("Wary.\nStill owes Ivo.", " Paid.\nLeft town. "), seat
+    )
+
+    assert block == (
+        "Relationships:\n"
+        f"{_BARE_RELATIONSHIP_LINE}\n"
+        "  Dynamic: Wary.\n    Still owes Ivo.\n"
+        "  Recent Events: Paid.\n    Left town.\n"
+    )
+
+
 @pytest.mark.parametrize("column", ["dynamic", "recent_events"])
 def test_relationship_missing_prose_column_fails_loudly(column: str) -> None:
     """A row without the fetched column shape raises instead of rendering."""
