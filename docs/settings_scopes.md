@@ -46,10 +46,59 @@ A pin naming a removed registry ID is readable but fails resolution. No automati
 
 Migration 117 is applied to disposable databases during QA only. The coordinator applies fleet/template migrations at land time.
 
+## Pass-2 Baseline Compatibility
+
+Each accepted chunk stores a Pass-2 baseline (`lore_pass_baselines`): the
+memory identities and token accounting of that turn's context, fingerprinted
+against the `[memory]` and `[lore.token_budget]` settings in effect, with the
+story's window pin applied. Schema 2 keeps the full `config_fingerprint`
+unchanged for audit and schema-1 comparison and adds `config_snapshot` (every
+fingerprinted value under its class) and `semantic_fingerprint` (a hash of the
+semantic class only). Every field carries an explicit class in
+`nexus/memory/baseline_compat.py`; an unclassified field fails at import and in
+the test suite.
+
+| Setting | Class | Why |
+| --- | --- | --- |
+| `lore.token_budget.apex_context_window` | budget | Each turn resolves the window, then recomputes `total_available` and the Phase-2 cap. |
+| `lore.token_budget.provider_overrides` | budget | Per-provider reductions of the same window. |
+| `lore.token_budget.system_prompt_tokens` | budget | Allocation hint read by the live budget calculation. |
+| `lore.token_budget.prompt_overhead_tokens` | budget | Legacy allocation hint; nothing stored derives from it. |
+| `memory.phase2_fraction` | budget | Multiplies the live window into the Phase-2 cap, exactly like a window change. |
+| `memory.raw_search_k` | semantic | Pass-2 retrieval breadth: the candidate pool, not a token amount. |
+| `memory.skip_simple_choices` | semantic | Whether Pass 2 runs at all for a bare choice. |
+| `memory.pass2_budget_reserve` | semantic | Baked into the stored accounting (`reserved_for_pass2`, `reserve_shortfall`). |
+| `memory.warm_slice_default` | semantic | Warm-slice expansion behavior. |
+| `memory.max_sql_iterations` | semantic | Query iteration cap that shapes retrieval. |
+
+On continuation:
+
+- An equal full fingerprint proceeds.
+- A schema-2 baseline whose semantic fingerprint still matches is rebased: its
+  memory identities and prior accounting are kept, and the turn re-derives the
+  remaining budget from live token counts, capped by the new Phase-2 budget. A
+  `WARNING` names the database, the old and new window, every changed budget
+  field, and what was kept.
+- A semantic change fails and names each changed field with its stored and
+  current values. Restore the previous values, or accept them for the story
+  with the refresh below.
+- A schema-1 baseline records no snapshot, so any mismatch fails as before and
+  names the refresh.
+
+A window change through `PATCH /api/slot/{n}/settings` is an explicit player
+intervention. In the same transaction as the new pin, the accepted tail's
+baseline is rewritten as schema 2 under the new window when it was
+fingerprinted under the pre-change settings; a schema-1 tail is upgraded. A
+tail fingerprinted under other settings is left unchanged for the next
+continuation to rebase or refuse. Historical rows and provisional drafts are
+not rewritten; a schema-2 draft staged under the old window is rebased when
+the turn after its acceptance continues from it.
+
 ## Refreshing a Pass-2 Fingerprint
 
-After a deliberate configuration-shape change that leaves Pass-2 semantics
-unchanged (such as removing an unused memory setting), run:
+After a deliberate configuration change that the story may continue under
+(such as removing an unused memory setting, or accepting a semantic change for
+an existing story), run:
 
 ```sh
 PYTHONPATH=$PWD python scripts/stamp_lore_pass_baseline.py --refresh-fingerprint --slot N --write-locked-slot
@@ -61,12 +110,14 @@ Run with turns stopped for that target. This explicit compatibility operation
 uses the current settings projected through the target story's context-window
 pin. For a locked target, `--write-locked-slot` overrides read-only policy only in
 the maintenance session; leave the database locked throughout. It prints the old
-and new hashes and updates only `config_fingerprint` in
-the accepted tail's existing baseline payload. Memory identities, accounting,
-budget, historical rows, and provisional drafts remain unchanged. Missing or
-malformed baselines are errors; refresh never stamps an empty replacement.
-Do not use refresh to bypass an actual change in retrieval semantics. The
-coordinator runs it for affected saves at landing after deploying this change.
+and new hashes. A schema-1 tail keeps its schema and changes only
+`config_fingerprint`; a schema-2 tail is re-fingerprinted and re-snapshotted.
+Memory identities, accounting, budget, historical rows, and provisional drafts
+remain unchanged. Missing or malformed baselines are errors; refresh never
+stamps an empty replacement. Refreshing past a semantic change is an operator
+decision that the story continues under the new retrieval semantics; budget-only
+changes to a schema-2 tail need no refresh. The coordinator runs it for affected
+saves at landing after deploying this change.
 
 ## Replaying Recorded Prompt Windows
 
