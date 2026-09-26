@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NarrativePane } from "@/components/nexus/NarrativePane";
-import type { GenerationSession, SlotState } from "@/types/narrative";
+import type { GenerationSession, NarrativeRecovery, SlotState } from "@/types/narrative";
 import * as api from "@/lib/narrative-api";
 import { useNarrativeEngine } from "./useNarrativeEngine";
 
@@ -24,13 +24,21 @@ const failure: GenerationSession = {
   created_at: "2026-09-25T08:00:00Z", heartbeat_at: "2026-09-25T08:01:00Z",
   expires_at: null, error: "Unresolved place state update", error_class: "WireContractViolation",
 };
+// The server's retry predicate holds: the failure is latest, bound to the
+// unchanged frontier, whose recorded action consumed its menu.
+const recovery: NarrativeRecovery = {
+  session_id: "failed-8", parent_chunk_id: 9,
+  error: "Unresolved place state update", error_class: "WireContractViolation",
+};
 const state: SlotState = {
   slot: 4, story_id: "story-951", is_empty: false, is_wizard_mode: false,
   phase: null, subphase: null, thread_id: null, current_chunk_id: 9, has_pending: false,
   frontier_clock: null, storyteller_text: "The preceding scene.",
-  choices: ["Already consumed choice"], session_id: null, model: "TEST",
+  choices: [], session_id: null, recovery, model: "TEST",
   narrative_generation: settings,
 };
+// The same frontier with no recorded action: its menu is a live decision.
+const openFrontier: SlotState = { ...state, choices: ["Live choice"], recovery: null };
 let currentState: SlotState;
 let currentSession: GenerationSession | null;
 let engine: ReturnType<typeof useNarrativeEngine>;
@@ -65,6 +73,7 @@ const boundary = () => act(() => { document.dispatchEvent(new Event("visibilityc
 
 async function expectFailure() {
   await waitFor(() => expect(screen.getByTestId("generation-recovery")).toBeInTheDocument());
+  expect(screen.getByTestId("generation-failure")).toHaveTextContent("The next scene failed.");
   expect(screen.queryByTestId("choice-1")).not.toBeInTheDocument();
   expect(screen.queryByTestId("input-freeform")).not.toBeInTheDocument();
 }
@@ -82,6 +91,65 @@ describe("durable reader generation recovery", () => {
     expect(api.continueNarrative).not.toHaveBeenCalled();
     await act(async () => { expect(await engine.submitTurn({ choice: 1 })).toBe(false); });
     expect(api.continueNarrative).not.toHaveBeenCalled();
+  });
+
+  it("presents the failure as one short line and one Retry control", async () => {
+    mount();
+    await expectFailure();
+    const line = screen.getByTestId("generation-failure");
+    expect(line).toHaveAttribute("title", "Unresolved place state update");
+    const section = screen.getByTestId("generation-recovery");
+    expect(section).toHaveTextContent(/^◆Retry$/);
+    expect(section.querySelectorAll("p, h3, details")).toHaveLength(0);
+  });
+
+  it("offers the committed menu as a live decision when no action is recorded", async () => {
+    currentSession = null;
+    currentState = { ...openFrontier };
+    vi.mocked(api.continueNarrative).mockResolvedValue({ session_id: "next-10", status: "processing", message: "started" });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("choice-1")).toBeEnabled());
+    expect(screen.getByTestId("choice-1")).toHaveTextContent("Live choice");
+    expect(screen.queryByTestId("generation-failure")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("choice-1"));
+    await waitFor(() => expect(api.continueNarrative).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.continueNarrative).mock.calls[0][0]).toMatchObject({ slot: 4, choice: 1 });
+  });
+
+  it("never offers a Retry the server would reject once the recorded action is gone", async () => {
+    // A restart or undo cleared the action; the failed session still names it.
+    currentState = { ...openFrontier };
+    mount();
+    await waitFor(() => expect(screen.getByTestId("choice-1")).toBeEnabled());
+    expect(screen.getByTestId("generation-failure")).toBeInTheDocument();
+    expect(screen.queryByTestId("button-retry-generation")).not.toBeInTheDocument();
+    await act(async () => { expect(await engine.retryGeneration()).toBe(false); });
+    expect(api.retryNarrative).not.toHaveBeenCalled();
+    vi.mocked(api.continueNarrative).mockResolvedValue({ session_id: "next-10", status: "processing", message: "started" });
+    await act(async () => { expect(await engine.submitTurn({ choice: 1 })).toBe(true); });
+    expect(api.continueNarrative).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps input closed until the failed frontier has been re-read", async () => {
+    currentSession = { ...failure, status: "initiated", phase: "writer", terminal_outcome: null, error: null };
+    currentState = { ...state, recovery: null };
+    mount();
+    await waitFor(() => expect(engine.phase).toBe("writer"));
+    const pending: Array<(value: SlotState) => void> = [];
+    vi.mocked(api.getSlotState).mockImplementation(
+      () => new Promise<SlotState>((resolve) => { pending.push(resolve); }),
+    );
+    currentSession = { ...failure };
+    boundary();
+    await waitFor(() => expect(screen.getByTestId("generation-failure")).toBeInTheDocument());
+    expect(engine.isRecoveryLoading).toBe(true);
+    expect(screen.getByTestId("input-freeform")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("input-freeform"), { target: { value: "Too soon" } });
+    fireEvent.keyDown(screen.getByTestId("input-freeform"), { key: "Enter" });
+    expect(api.continueNarrative).not.toHaveBeenCalled();
+    await act(async () => { pending.forEach((resolve) => resolve(state)); });
+    await expectFailure();
+    expect(engine.isRecoveryLoading).toBe(false);
   });
 
   it("retries only the displayed failed session and restores choices after success", async () => {
@@ -122,15 +190,19 @@ describe("durable reader generation recovery", () => {
 
   it("leaves normal input open for a failure recorded before a committed action", async () => {
     currentSession = { ...failure, parent_chunk_id: null, error: "Ambiguous acceptance result" };
+    currentState = { ...openFrontier };
     vi.mocked(api.continueNarrative).mockImplementation(async () => {
       currentSession = { ...failure, session_id: "again-10", status: "initiated", phase: "writer", terminal_outcome: null, error: null };
       return { session_id: "again-10", status: "processing", message: "started" };
     });
     mount();
     await waitFor(() => expect(engine.generationError).toBe("Ambiguous acceptance result"));
-    expect(engine.failedGeneration).toBeNull();
+    // The failure stays visible, but nothing recorded means nothing to retry.
+    expect(screen.getByTestId("generation-failure")).toHaveAttribute("title", "Ambiguous acceptance result");
     expect(screen.queryByTestId("generation-recovery")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("input-freeform")).toBeEnabled());
+    expect(screen.getByTestId("choice-1")).toHaveTextContent("Live choice");
+    expect(screen.getByTestId("choice-1")).toBeEnabled();
     await act(async () => { expect(await engine.submitTurn({ userText: "Try the door" })).toBe(true); });
     expect(api.continueNarrative).toHaveBeenCalledTimes(1);
     expect(api.retryNarrative).not.toHaveBeenCalled();
@@ -139,12 +211,14 @@ describe("durable reader generation recovery", () => {
   it("enters recovery when the same failed session gains its parent on a later poll", async () => {
     const { toast } = await import("@/hooks/use-toast");
     currentSession = { ...failure, parent_chunk_id: null, error: "CancelledError" };
+    currentState = { ...openFrontier };
     mount();
     await waitFor(() => expect(engine.generationError).toBe("CancelledError"));
-    expect(engine.failedGeneration).toBeNull();
+    expect(screen.queryByTestId("generation-recovery")).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("input-freeform")).toBeEnabled());
     // The cancelled route abandoned first; the worker's commit binds the parent afterwards.
     currentSession = { ...failure, parent_chunk_id: 9, error: "CancelledError" };
+    currentState = { ...state, recovery: { ...recovery, error: "CancelledError" } };
     boundary();
     await waitFor(() => expect(screen.getByTestId("generation-recovery")).toBeInTheDocument());
     expect(engine.failedGeneration?.parent_chunk_id).toBe(9);
@@ -166,10 +240,11 @@ describe("durable reader generation recovery", () => {
 
   it("rejects a mismatched terminal status and leaves controls disabled", async () => {
     vi.mocked(api.getGenerationStatus).mockResolvedValue({ ...failure, session_id: "another-session" });
+    currentState = { ...openFrontier };
     mount();
     await waitFor(() => expect(engine.generationError).toBe("Generation response identity mismatch"));
     expect(engine.failedGeneration).toBeNull();
-    expect(screen.queryByTestId("choice-1")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("choice-1")).toBeDisabled());
     expect(screen.getByTestId("input-freeform")).toBeDisabled();
     expect(api.retryNarrative).not.toHaveBeenCalled();
   });

@@ -603,6 +603,11 @@
   color: var(--brass);
   animation: nexus-pulse 1.2s infinite;
 }
+/* A durable failed turn: the same status line, held still in the error hue. */
+.reader-status.failed .glyph {
+  color: hsl(var(--destructive));
+  animation: none;
+}
 
 /* ═══ RIGHT LEDGER ═══ */
 .rail-right {

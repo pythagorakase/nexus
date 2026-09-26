@@ -45,8 +45,12 @@ export interface NarrativeEngine {
   skaldStatus: SkaldStatus;
   elapsedMs: number;
   generationError: string | null;
+  /** The latest durable attempt ended in error and nothing has replaced it. */
   failedGeneration: GenerationSession | null;
+  /** True until the first durable read, and while the frontier is re-read
+   * after a terminal transition, so stale slot state never accepts input. */
   isRecoveryLoading: boolean;
+  /** Explicitly retry the failure slot state reports as retryable. */
   retryGeneration: () => Promise<boolean>;
   isGenerating: boolean;
   /** Increments on completion to restore frontier scrolling and input focus. */
@@ -66,6 +70,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
   const [backendReachable, setBackendReachable] = useState(true);
   const [receiving, setReceiving] = useState(false);
   const [completedGenerations, setCompletedGenerations] = useState(0);
+  // When a terminal transition was observed; the frontier it changed must be
+  // re-read before slot state may offer choices, input or recovery again.
+  const [frontierChangedAt, setFrontierChangedAt] = useState(0);
 
   const sessionRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
@@ -101,6 +108,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     data: slotState,
     error: slotStateError,
     isLoading: isSlotStateLoading,
+    dataUpdatedAt: slotStateUpdatedAt,
   } = useQuery<SlotState, Error>({
     queryKey: ["/api/slot/state", slot],
     queryFn: ({ signal }) => getSlotState(slot as number, signal),
@@ -223,6 +231,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
           setFailedGeneration(null);
           if (lastTerminal) {
             lastTerminal = "";
+            setFrontierChangedAt(Date.now());
             invalidateNarrativeQueries();
           }
           setGenerationError(null);
@@ -255,19 +264,18 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
             // Same failure, newly bound parent: update recovery, no second toast.
             const parentArrived = lastTerminal.startsWith(failure);
             lastTerminal = terminal;
+            setFrontierChangedAt(Date.now());
             invalidateNarrativeQueries();
             if (state.terminal_outcome === "discarded") {
               setFailedGeneration(null);
               setGenerationError(null);
               setReceiving(false);
             } else if (state.terminal_outcome === "error" || state.status === "error") {
-              // Only a failure bound to a recorded action can be retried
-              // server-side. The server binds parent_chunk_id whenever the
-              // player's action is durably recorded, including failures between
-              // acceptance and binding. A NULL parent therefore means no action
-              // is on disk: normal input stays open, with the draft retained,
-              // instead of a Retry the server would always reject.
-              setFailedGeneration(state.parent_chunk_id == null ? null : state);
+              // The failure stays visible until a later attempt replaces it.
+              // Whether it can be retried is the frontier's fact, reported by
+              // slot state with the same predicate the retry route enforces;
+              // a failure with no recorded action leaves normal input open.
+              setFailedGeneration(state);
               setReceiving(false);
               const message =
                 state.error || state.error_class || "Narrative generation failed";
@@ -458,16 +466,19 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     [slot, slotState, startClock, stopClock, invalidateNarrativeQueries],
   );
 
+  // A recorded action awaiting its retry consumed the frontier's menu: only
+  // the explicit retry of that reported failure may continue from it.
+  const recovery = slotState?.has_pending ? null : slotState?.recovery ?? null;
   const submitTurn = useCallback(
     (params: { choice?: number; userText?: string }) => {
-      if (failedGeneration && !slotState?.has_pending) return Promise.resolve(false);
+      if (recovery) return Promise.resolve(false);
       return submitRequest(params);
-    }, [failedGeneration, slotState?.has_pending, submitRequest],
+    }, [recovery, submitRequest],
   );
   const retryGeneration = useCallback(() => {
-    if (!failedGeneration || slotState?.has_pending) return Promise.resolve(false);
-    return submitRequest({}, failedGeneration.session_id);
-  }, [failedGeneration, slotState?.has_pending, submitRequest]);
+    if (!recovery) return Promise.resolve(false);
+    return submitRequest({}, recovery.session_id);
+  }, [recovery, submitRequest]);
 
   let skaldStatus: SkaldStatus = "READY";
   if (!backendReachable) {
@@ -492,7 +503,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     elapsedMs,
     generationError: generationError ?? recoverySettingsError?.message ?? null,
     failedGeneration,
-    isRecoveryLoading,
+    isRecoveryLoading: isRecoveryLoading || slotStateUpdatedAt < frontierChangedAt,
     retryGeneration,
     isGenerating: isActivePhase(phase),
     completedGenerations,
