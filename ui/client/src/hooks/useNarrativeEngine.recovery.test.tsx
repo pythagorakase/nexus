@@ -112,8 +112,12 @@ describe("durable reader generation recovery", () => {
     expect(screen.getByTestId("choice-1")).toHaveTextContent("Live choice");
     expect(screen.queryByTestId("generation-failure")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("choice-1"));
+    expect(api.continueNarrative).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByTestId("input-freeform"), { key: "Enter" });
     await waitFor(() => expect(api.continueNarrative).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.continueNarrative).mock.calls[0][0]).toMatchObject({ slot: 4, choice: 1 });
+    expect(vi.mocked(api.continueNarrative).mock.calls[0][0]).toMatchObject({
+      slot: 4, choice: 1, userText: "Live choice",
+    });
   });
 
   it("never offers a Retry the server would reject once the recorded action is gone", async () => {

@@ -20,6 +20,12 @@
  * choice-text line. When a chunk presents no structured choices the freeform
  * input has no placeholder and takes focus, so the blinking caret is the
  * invitation to type.
+ *
+ * Selecting a choice (click or its number key) never sends a turn: it loads
+ * the choice into slot 0 as an editable draft that remembers which choice it
+ * came from. Only Enter or the send glyph commits the draft - as the choice
+ * number plus its (possibly edited) text, or as freeform text once the draft
+ * is cleared and retyped.
  */
 import {
   Fragment,
@@ -27,6 +33,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type KeyboardEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -317,29 +324,55 @@ export function NarrativePane({
   const canSubmit = !isGenerating && !engine.isRecoveryLoading && !needsRecovery
     && !!slotState && !slotState.is_wizard_mode;
 
-  const handleChoice = useCallback(
+  // Selecting loads the choice into the draft, caret at its end, and never
+  // submits. The epoch re-focuses even when the same choice is reselected.
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
+  const handleSelect = useCallback(
     (index: number) => {
       if (!canSubmit) return;
-      void draft.submit(() => submitTurn({ choice: index }), false);
+      draft.select(index, choices[index - 1]);
+      setSelectionEpoch((epoch) => epoch + 1);
     },
-    [canSubmit, submitTurn, draft.submit],
+    [canSubmit, choices, draft.select],
   );
+  useEffect(() => {
+    if (selectionEpoch === 0) return;
+    const field = freeformRef.current;
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  }, [selectionEpoch]);
 
-  const handleFreeformSubmit = useCallback(() => {
+  // The one commit path. A draft that came from a choice sends its number and
+  // text together; the server records an edit only when the text differs.
+  const selectedChoice = draft.choice;
+  const handleSend = useCallback(() => {
     const text = freeform.trim();
     if (!text || !canSubmit) return;
-    void draft.submit(() => submitTurn({ userText: text }), true);
-  }, [freeform, canSubmit, submitTurn, draft.submit]);
+    void draft.submit(
+      () => submitTurn(
+        selectedChoice === null
+          ? { userText: text }
+          : { choice: selectedChoice, userText: text },
+      ),
+      true,
+    );
+  }, [freeform, selectedChoice, canSubmit, submitTurn, draft.submit]);
 
   const handleFreeformKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.key === "Enter" && !event.shiftKey) {
+      if (
+        event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing
+      ) {
         event.preventDefault();
-        handleFreeformSubmit();
+        handleSend();
       }
     },
-    [handleFreeformSubmit],
+    [handleSend],
   );
+  const selectedEdited =
+    selectedChoice !== null
+    && freeform.trim() !== (choices[selectedChoice - 1] ?? "").trim();
 
   // Number keys 1-N select choices when focus is outside the freeform field.
   // Inert while reading history - no submission affordances exist there.
@@ -357,12 +390,13 @@ export function NarrativePane({
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
       const n = parseInt(event.key, 10);
       if (!isNaN(n) && n >= 1 && n <= choices.length) {
-        handleChoice(n);
+        event.preventDefault();
+        handleSelect(n);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [choices.length, handleChoice, isHistorical]);
+  }, [choices.length, handleSelect, isHistorical]);
 
   // Keep the frontier in view when new content lands or generation starts.
   useEffect(() => {
@@ -627,36 +661,55 @@ export function NarrativePane({
               presented no numbered choices (matches the CLI continue flow). */}
           {!isGenerating && !isBootstrapNeeded && !needsRecovery && (
             <section className="choices" data-testid="story-choices">
-              {choices.map((text, i) => (
+              {choices.map((text, i) => {
+                const isSelected = selectedChoice === i + 1;
+                const state = isSelected
+                  ? selectedEdited ? " selected edited" : " selected"
+                  : "";
+                return (
+                  <button
+                    key={`${i}-${text}`}
+                    className={`choice${state}`}
+                    onClick={() => handleSelect(i + 1)}
+                    disabled={!canSubmit}
+                    aria-pressed={isSelected}
+                    data-testid={`choice-${i + 1}`}
+                  >
+                    <span className="choice-key">{i + 1}</span>
+                    <span className="choice-glyph">◆</span>
+                    <span className="choice-text">
+                      <InlineMarkdown text={text} />
+                    </span>
+                  </button>
+                );
+              })}
+              <div className="freeform-row">
+                <label className="choice freeform">
+                  <Textarea
+                    ref={freeformRef}
+                    autoSize
+                    className="choice-input"
+                    rows={1}
+                    value={freeform}
+                    placeholder={freeformPresent.placeholder}
+                    autoFocus={freeformPresent.autoFocus}
+                    onChange={(e) => draft.update(e.target.value)}
+                    onKeyDown={handleFreeformKeyDown}
+                    disabled={!canSubmit}
+                    data-testid="input-freeform"
+                  />
+                </label>
                 <button
-                  key={`${i}-${text}`}
-                  className="choice"
-                  onClick={() => handleChoice(i + 1)}
-                  disabled={!canSubmit}
-                  data-testid={`choice-${i + 1}`}
+                  type="button"
+                  className="reader-nav-btn freeform-send"
+                  onClick={handleSend}
+                  disabled={!canSubmit || !freeform.trim()}
+                  aria-label="Send"
+                  data-testid="button-send-turn"
                 >
-                  <span className="choice-key">{i + 1}</span>
-                  <span className="choice-glyph">◆</span>
-                  <span className="choice-text">
-                    <InlineMarkdown text={text} />
-                  </span>
+                  ↵
                 </button>
-              ))}
-              <label className="choice freeform">
-                <Textarea
-                  ref={freeformRef}
-                  autoSize
-                  className="choice-input"
-                  rows={1}
-                  value={freeform}
-                  placeholder={freeformPresent.placeholder}
-                  autoFocus={freeformPresent.autoFocus}
-                  onChange={(e) => draft.update(e.target.value)}
-                  onKeyDown={handleFreeformKeyDown}
-                  disabled={!canSubmit}
-                  data-testid="input-freeform"
-                />
-              </label>
+              </div>
             </section>
           )}
 

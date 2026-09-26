@@ -14,6 +14,8 @@ export interface DraftScope {
 export interface InputDraft {
   revision: string;
   text: string;
+  /** The presented choice (1-indexed) this text started from, if any. */
+  choice?: number;
 }
 
 export interface UnconfirmedAction extends InputDraft {
@@ -54,8 +56,13 @@ export function createDraftStore(name: string): DraftStore {
 
   const readDraft = (key: string): InputDraft | null => {
     const record = readRecord(key);
-    return record && typeof record.revision === "string" && typeof record.text === "string"
-      ? { revision: record.revision, text: record.text }
+    if (!record || typeof record.revision !== "string" || typeof record.text !== "string") {
+      return null;
+    }
+    if (record.choice === undefined) return { revision: record.revision, text: record.text };
+    // A choice identity that is not a menu position is not a draft either.
+    return Number.isInteger(record.choice) && (record.choice as number) >= 1
+      ? { revision: record.revision, text: record.text, choice: record.choice as number }
       : null;
   };
 

@@ -179,8 +179,10 @@ export function getIncubator(slot: number): Promise<IncubatorPayload> {
  *
  * The backend resolves the current chunk from slot state, records the
  * player's response on the pending chunk (auto-approving incubator content),
- * and kicks off generation of the next chunk. Exactly one of `choice`
- * (1-indexed) or `userText` (freeform, slot 0) should be provided.
+ * and kicks off generation of the next chunk. `userText` alone is freeform;
+ * `choice` (1-indexed) with `userText` is one edited-choice payload - the
+ * server keeps the number and records the text as an edit only when it
+ * differs from the presented choice.
  */
 export async function continueNarrative(params: {
   slot: number;

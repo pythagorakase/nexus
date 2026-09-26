@@ -513,6 +513,18 @@
   box-shadow: 0 0 14px hsl(320 55% 50% / .2);
 }
 .choice:disabled { opacity: .5; cursor: not-allowed; }
+/* The choice loaded into the draft holds its hover glow; the border breaks
+   to dashes once the draft's text departs from it. */
+.choice.selected {
+  border-color: var(--brass);
+  color: var(--brass-bright);
+  background: hsl(320 55% 50% / .05);
+  box-shadow: 0 0 14px hsl(320 55% 50% / .2);
+}
+.choice.selected.edited {
+  border-style: dashed;
+  box-shadow: none;
+}
 .choice-key {
   flex-shrink: 0;
   width: 30px;
@@ -585,6 +597,16 @@
 .choice.freeform:focus-within {
   border-color: var(--brass);
   box-shadow: 0 0 18px hsl(320 55% 50% / .25);
+}
+/* Slot 0's send glyph rides the pill's right edge on its last line; dimmed
+   while there is nothing to send. */
+.freeform-row { position: relative; }
+.freeform-row .choice.freeform { padding-right: 52px; }
+.freeform-send {
+  position: absolute;
+  right: 4px;
+  bottom: 10px;
+  height: 56px;
 }
 
 /* Pending-generation note inside the reader. */

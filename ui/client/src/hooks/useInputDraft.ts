@@ -71,8 +71,8 @@ export function useInputDraft(store: DraftStore, scope: DraftScope | null) {
     };
   }, [store, key, actionKey]);
 
-  const update = useCallback((text: string) => {
-    const draft = { revision: crypto.randomUUID(), text };
+  const write = useCallback((draft: InputDraft) => {
+    draftRef.current = draft;
     let storageError = false;
     try {
       if (key !== null) store.writeDraft(key, draft);
@@ -82,6 +82,19 @@ export function useInputDraft(store: DraftStore, scope: DraftScope | null) {
     }
     setState((previous) => ({ ...previous, key, draft, storageError }));
   }, [store, key]);
+
+  // Editing keeps the selected choice's identity; clearing the text drops it.
+  const update = useCallback((text: string) => {
+    const choice = text.trim() ? draftRef.current.choice : undefined;
+    write(choice === undefined
+      ? { revision: crypto.randomUUID(), text }
+      : { revision: crypto.randomUUID(), text, choice });
+  }, [write]);
+
+  /** Load a presented choice into the draft; selecting never submits. */
+  const select = useCallback((choice: number, text: string) => {
+    write({ revision: crypto.randomUUID(), text, choice });
+  }, [write]);
 
   const submit = useCallback(async (
     send: () => Promise<boolean>,
@@ -136,7 +149,9 @@ export function useInputDraft(store: DraftStore, scope: DraftScope | null) {
 
   return {
     text: current.draft.text,
+    choice: current.draft.choice ?? null,
     update,
+    select,
     submit,
     // A response may advance the frontier or phase before its acknowledgement
     // arrives. Keep uncertain submissions readable, without replaying them as
