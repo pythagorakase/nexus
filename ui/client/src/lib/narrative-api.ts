@@ -26,6 +26,7 @@ import type {
   SlotState,
 } from "@/types/narrative";
 import { parseNarrativePhase } from "@/types/narrative";
+import type { SettingsPayload } from "@/types/settings";
 import type { OutlineRow } from "@/lib/narrative-nav";
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -230,4 +231,94 @@ export async function getActiveGeneration(slot: number, signal: AbortSignal): Pr
 export async function getGenerationStatus(slot: number, session: string, signal: AbortSignal): Promise<GenerationSession> {
   const state = await getJson<GenerationSession>(`/api/narrative/status/${encodeURIComponent(session)}?slot=${slot}`, signal);
   return { ...state, phase: parseNarrativePhase(state.phase) };
+}
+
+/**
+ * Wizard-time Retrograde stages in pipeline order: RETROGRADE_WIZARD_STAGES
+ * in nexus/agents/orrery/retrograde_orchestrator.py, less its terminal "done".
+ */
+export const RETROGRADE_STAGES = [
+  "packet",
+  "seed_candidates",
+  "expansion",
+  "persistence",
+  "embedding",
+] as const;
+export type RetrogradeStage = (typeof RETROGRADE_STAGES)[number];
+
+/** One stage transition recorded by the gateway during a transition run. */
+export interface RetrogradeStageRecord {
+  stage: RetrogradeStage | "done" | "failed";
+  at: string;
+  detail: Record<string, unknown>;
+}
+
+/**
+ * GET /api/story/new/retrograde/status. "idle" means this gateway process has
+ * recorded no stage for the slot's current run; "failed" names the stage
+ * that failed in detail.stage.
+ */
+export type RetrogradeStatus =
+  | { stage: "idle"; stages: RetrogradeStageRecord[] }
+  | {
+      stage: RetrogradeStage | "done";
+      stages: RetrogradeStageRecord[];
+      detail: Record<string, unknown>;
+    }
+  | {
+      stage: "failed";
+      stages: RetrogradeStageRecord[];
+      detail: Record<string, unknown> & { stage: RetrogradeStage };
+    };
+
+const RETROGRADE_STATUS_STAGES: readonly string[] = [
+  ...RETROGRADE_STAGES,
+  "done",
+  "failed",
+  "idle",
+];
+
+/** Read the in-flight transition's Retrograde stage for a slot. */
+export async function getRetrogradeStatus(
+  slot: number,
+  signal?: AbortSignal,
+): Promise<RetrogradeStatus> {
+  const status = await getJson<RetrogradeStatus>(
+    `/api/story/new/retrograde/status?slot=${slot}`,
+    signal,
+  );
+  if (!RETROGRADE_STATUS_STAGES.includes(status?.stage) || !Array.isArray(status.stages)) {
+    throw new Error(`Unrecognized Retrograde status: ${JSON.stringify(status)}`);
+  }
+  if (
+    status.stage === "failed" &&
+    !(RETROGRADE_STAGES as readonly unknown[]).includes(status.detail?.stage)
+  ) {
+    throw new Error(`Retrograde failure names no known stage: ${JSON.stringify(status.detail)}`);
+  }
+  return status;
+}
+
+/**
+ * The pipeline stage a status places the run at: the stage in progress, or
+ * the stage that failed. Null while idle and once done.
+ */
+export function retrogradeStageOf(status: RetrogradeStatus): RetrogradeStage | null {
+  if (status.stage === "idle" || status.stage === "done") return null;
+  return status.stage === "failed" ? status.detail.stage : status.stage;
+}
+
+/**
+ * Seconds between Retrograde status reads while a transition is in flight:
+ * nexus.toml [orrery.retrograde.wizard] status_poll_interval_seconds.
+ */
+export async function getRetrogradeStatusPollSeconds(signal?: AbortSignal): Promise<number> {
+  const settings = await getJson<SettingsPayload>("/api/settings", signal);
+  const seconds = settings.orrery?.retrograde?.wizard?.status_poll_interval_seconds;
+  if (typeof seconds !== "number" || !(seconds > 0)) {
+    throw new Error(
+      "nexus.toml [orrery.retrograde.wizard] status_poll_interval_seconds must be a positive number",
+    );
+  }
+  return seconds;
 }

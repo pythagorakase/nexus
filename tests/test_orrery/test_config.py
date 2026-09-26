@@ -30,6 +30,7 @@ from nexus.config.settings_models import (
     OrreryRetrogradeProjectSettings,
     OrreryRetrogradeWeirdGenreBands,
     OrreryRetrogradeWeirdSettings,
+    OrreryRetrogradeWizardSettings,
     OrrerySunhelmSettings,
 )
 
@@ -399,6 +400,16 @@ def test_orrery_dashboard_defaults_to_disabled() -> None:
     assert OrreryDashboardSettings().enabled is False
     assert OrreryDashboardSettings().backstage_poll_busy_ms == 2000
     assert OrreryDashboardSettings().backstage_poll_idle_ms == 8000
+
+
+def test_retrograde_wizard_stage_poll_interval_is_positive() -> None:
+    """The UI/CLI genesis stage poll ships at one second and rejects zero."""
+
+    wizard = load_settings().orrery.retrograde.wizard
+    assert wizard.status_poll_interval_seconds == 1
+    assert OrreryRetrogradeWizardSettings().status_poll_interval_seconds == 1
+    with pytest.raises(ValidationError, match="status_poll_interval_seconds"):
+        OrreryRetrogradeWizardSettings(status_poll_interval_seconds=0)
 
 
 def test_orrery_bleed_accepts_deprecated_selection_keys() -> None:

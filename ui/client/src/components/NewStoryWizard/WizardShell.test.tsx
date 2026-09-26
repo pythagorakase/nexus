@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NewStoryWizard } from "./WizardShell";
 
@@ -145,6 +145,9 @@ describe("automatic wizard resume", () => {
                 layer_draft: { name: "Mortal world" }, zone_draft: { name: "The wood" },
                 initial_location: { name: "The gate", summary: "An ancient arch" },
             })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                orrery: { retrograde: { wizard: { status_poll_interval_seconds: 1 } } },
+            })))
             .mockReturnValueOnce(new Promise(() => {}));
         vi.stubGlobal("fetch", fetch);
         render(<NewStoryWizard resumeSlot={5} />);
@@ -154,9 +157,11 @@ describe("automatic wizard resume", () => {
         expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
         expect(fetch).toHaveBeenCalledTimes(1);
         fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-        expect(fetch).toHaveBeenCalledTimes(2);
-        expect(fetch.mock.calls[1][0]).toBe("/api/story/new/transition");
-        expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ slot: 5 });
+        // The stage waiter reads its poll interval before the transition starts.
+        await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+        expect(fetch.mock.calls[1][0]).toBe("/api/settings");
+        expect(fetch.mock.calls[2][0]).toBe("/api/story/new/transition");
+        expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({ slot: 5 });
     });
 
     it("ignores a resume response after leaving the wizard", async () => {

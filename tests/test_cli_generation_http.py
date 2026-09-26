@@ -42,6 +42,15 @@ class GenerationScenario:
     release_response: Event = field(default_factory=Event)
     status_body: bytes | None = None
     state_body: bytes | None = None
+    # Retrograde stage payloads served in order while the transition is held;
+    # the last one repeats. None serves no stage endpoint at all.
+    stage_script: list[dict[str, Any]] | None = None
+    stage_reads: int = 0
+    stage_failure: bool = False
+    stages_served: Event = field(default_factory=Event)
+    transition_error: str | None = None
+    ready: bool = False
+    transitioned: bool = False
 
 
 @contextmanager
@@ -77,6 +86,14 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     }
                 )
             elif self.path == "/api/story/new/transition":
+                if scenario.stage_script is not None:
+                    # Hold the transition like a live Retrograde run until the
+                    # CLI has read every scripted stage.
+                    assert scenario.stages_served.wait(timeout=10), "stages unread"
+                if scenario.transition_error is not None:
+                    self._respond({"detail": scenario.transition_error}, 400)
+                    return
+                scenario.transitioned = True
                 self._respond({"retrograde": {"status": "complete"}})
             elif self.path == "/api/narrative/continue":
                 if scenario.result == "schedule_error":
@@ -98,7 +115,22 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
             scenario.requests.append(("GET", self.path, {}))
             url = urlparse(self.path)
-            if url.path == f"/api/narrative/status/{SESSION_ID}":
+            if (
+                url.path == "/api/story/new/retrograde/status"
+                and scenario.stage_script is not None
+            ):
+                if parse_qs(url.query) != {"slot": ["5"]}:
+                    self._respond({"detail": "Explicit test slot required"}, 422)
+                    return
+                scenario.stage_reads += 1
+                script = scenario.stage_script
+                if scenario.stage_reads >= len(script):
+                    scenario.stages_served.set()
+                if scenario.stage_failure:
+                    self._respond({"detail": "Gateway worker restarted"}, 502)
+                    return
+                self._respond(script[min(scenario.stage_reads, len(script)) - 1])
+            elif url.path == f"/api/narrative/status/{SESSION_ID}":
                 scenario.status_reads += 1
                 scenario.waiting.set()
                 if parse_qs(url.query) != {"slot": ["5"]}:
@@ -131,7 +163,11 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 )
             elif url.path == "/api/slot/5/state":
                 scenario.state_reads += 1
-                if not scenario.scheduled:
+                if scenario.ready and not scenario.transitioned:
+                    self._respond(
+                        {"is_empty": False, "is_wizard_mode": True, "phase": "ready"}
+                    )
+                elif not scenario.scheduled:
                     self._respond(
                         {
                             "is_empty": False,
@@ -183,13 +219,16 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
         thread.join(timeout=5)
 
 
-def _run_cli(scenario: GenerationScenario, tmp_path: Path) -> tuple[int, str, str]:
+def _run_cli(
+    scenario: GenerationScenario, tmp_path: Path, *, json_output: bool = True
+) -> tuple[int, str, str]:
     """Run the actual command against this isolated gateway and config."""
 
     config = tomlkit.parse((ROOT / "nexus.toml").read_text())
     config["apex"]["generation_timeout_seconds"] = (
         1 if scenario.result in {"timeout", "response_timeout"} else 5
     )
+    config["orrery"]["retrograde"]["wizard"]["status_poll_interval_seconds"] = 0.02
     config_path = tmp_path / "nexus.toml"
     config_path.write_text(tomlkit.dumps(config))
     with _gateway(scenario) as base_url:
@@ -210,7 +249,7 @@ def _run_cli(scenario: GenerationScenario, tmp_path: Path) -> tuple[int, str, st
                 "5",
                 "--choice",
                 "1",
-                "--json",
+                *(["--json"] if json_output else []),
             ],
             cwd=ROOT,
             env=env,
@@ -248,6 +287,8 @@ def test_cli_waits_for_real_generation_response_shape(
         assert payload["retrograde"] == {"status": "complete"}
     assert scenario.status_reads == 2
     assert scenario.state_reads == 2
+    # JSON callers get the transition outcome alone; no stage reads.
+    assert not any("/retrograde/status" in request[1] for request in scenario.requests)
     scheduled = [
         request
         for request in scenario.requests
@@ -372,3 +413,95 @@ def test_generation_response_failures_keep_session_recovery(
             == payload["generation_error"]["detail"]
         )
         assert "next_phase_intro" not in payload
+
+
+def _stage(name: str, **detail: Any) -> dict[str, Any]:
+    """One gateway-shaped Retrograde status payload for slot 5."""
+
+    return {"slot": 5, "stage": name, "detail": detail, "stages": []}
+
+
+GENESIS_SCRIPT = [
+    {"slot": 5, "stage": "idle", "stages": []},
+    _stage("packet"),
+    _stage("packet"),
+    _stage("seed_candidates", weird="medium"),
+    _stage("expansion", candidates=6, selected=3),
+    _stage("expansion", candidates=6, selected=3),
+    _stage("persistence"),
+    _stage("embedding", pending_summaries=4),
+    _stage("done", embedded_summaries=4),
+]
+
+
+def _stage_lines(stdout: str) -> list[str]:
+    return [line for line in stdout.splitlines() if line.startswith("Genesis stage")]
+
+
+@pytest.mark.parametrize("ready", [False, True], ids=["seed-confirm", "ready-resume"])
+def test_cli_prints_each_genesis_stage_once_while_transition_runs(
+    tmp_path: Path, ready: bool
+) -> None:
+    """Human output names each Retrograde stage once, in order, then stops."""
+
+    scenario = GenerationScenario(
+        seed=not ready, ready=ready, stage_script=GENESIS_SCRIPT
+    )
+    code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
+    assert code == 0, (stdout, stderr)
+    assert stderr == ""
+    assert _stage_lines(stdout) == [
+        "Genesis stage: packet",
+        "Genesis stage: seed_candidates",
+        "Genesis stage: expansion",
+        "Genesis stage: persistence",
+        "Genesis stage: embedding",
+        "Genesis stage: done",
+    ]
+    # "done" is terminal: the reader stopped on it, not on a later read.
+    assert scenario.stage_reads == len(GENESIS_SCRIPT)
+    assert NARRATIVE in stdout
+    assert stdout.index("Genesis stage: done") < stdout.index(NARRATIVE)
+
+
+def test_cli_prints_the_failed_genesis_stage_and_the_transition_error(
+    tmp_path: Path,
+) -> None:
+    """A failure record names its stage once; the transition error stays loud."""
+
+    scenario = GenerationScenario(
+        stage_script=[
+            _stage("packet"),
+            _stage("expansion", candidates=6, selected=3),
+            _stage("failed", stage="persistence"),
+        ],
+        transition_error="Retrograde persistence blocked: 2 unresolved refs",
+    )
+    code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
+    assert code == 1, (stdout, stderr)
+    assert _stage_lines(stdout) == [
+        "Genesis stage: packet",
+        "Genesis stage: expansion",
+        "Genesis stage: failed (persistence)",
+    ]
+    assert scenario.stage_reads == 3
+    assert "the narrative transition failed" in stderr
+    assert not any(
+        request[:2] == ("POST", "/api/narrative/continue")
+        for request in scenario.requests
+    )
+
+
+def test_cli_reports_an_unreadable_genesis_stage_and_keeps_the_transition(
+    tmp_path: Path,
+) -> None:
+    """A failed stage read is reported once; the transition outcome stands."""
+
+    scenario = GenerationScenario(stage_script=[_stage("packet")], stage_failure=True)
+    code, stdout, stderr = _run_cli(scenario, tmp_path, json_output=False)
+    assert code == 0, (stdout, stderr)
+    assert _stage_lines(stdout) == []
+    assert stderr.count("Genesis stage unavailable:") == 1
+    assert "502" in stderr
+    assert scenario.stage_reads == 1
+    assert NARRATIVE in stdout

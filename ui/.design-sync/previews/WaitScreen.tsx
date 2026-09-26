@@ -8,14 +8,26 @@ const Frame = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
+// The genesis stages the new-story wizard waits on, in pipeline order.
+const STAGES = [
+  "packet",
+  "seed_candidates",
+  "expansion",
+  "persistence",
+  "embedding",
+  "bootstrap",
+] as const;
+
 // The generating state shown while the story is being built: status line, a
-// large MM:SS timer counting up, a progress strip, and Cancel / Retry.
+// large MM:SS timer counting up, the stage track (two stages done, the third
+// glowing), and Cancel / Retry.
 export const Generating = () => (
   <Frame>
     <WaitScreen
       statusText="Initializing Your World"
       elapsedSeconds={87}
-      maxSeconds={600}
+      stages={STAGES}
+      currentStage="expansion"
       onRetry={() => {}}
       onCancel={() => {}}
     />
@@ -23,15 +35,17 @@ export const Generating = () => (
 );
 
 // The error state: the heading flips to "Generation Failed", an error chip
-// appears, and the Retry button is emphasized (filled + pulsing).
+// appears, the failed stage's pip turns the danger colour, and the Retry
+// button is emphasized (filled + pulsing).
 export const Failed = () => (
   <Frame>
     <WaitScreen
-      statusText="Starting Narrative Generation"
+      statusText="Initializing Your World"
       elapsedSeconds={142}
-      maxSeconds={600}
+      stages={STAGES}
+      currentStage="persistence"
       hasError
-      errorMessage="The narrative engine timed out. Check your connection and try again."
+      errorMessage="Retrograde persistence is blocked by 2 unresolved references."
       onRetry={() => {}}
       onCancel={() => {}}
     />

@@ -58,6 +58,29 @@ def test_progress_registry_round_trip() -> None:
     assert get_retrograde_progress(4) is None
 
 
+def test_transition_run_reports_idle_before_its_first_fallible_step(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """A retry never re-reports the previous attempt's terminal stage.
+
+    Stage pollers stop on "failed", so a stale record read while the new run
+    derives trait inputs (or fails before its first stage) would freeze the
+    waiter on the old failure.
+    """
+
+    from nexus.api.new_story_flow import perform_transition_with_retrograde
+    from nexus.api.new_story_schemas import TransitionData
+
+    record_retrograde_progress(5, "failed", {"stage": "persistence"})
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(tmp_path / "unreadable.toml"))
+    try:
+        with pytest.raises(FileNotFoundError, match="unreadable.toml"):
+            perform_transition_with_retrograde(5, TransitionData.model_construct())
+        assert get_retrograde_progress(5) is None
+    finally:
+        reset_retrograde_progress(5)
+
+
 def test_progress_registry_rejects_unknown_stage() -> None:
     """Stage names outside the published vocabulary fail loudly."""
 

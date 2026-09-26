@@ -31,6 +31,7 @@ all other state (wizard phase, current chunk, thread ID) automatically.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime
 import functools
 import json
@@ -38,14 +39,15 @@ import logging
 import os
 from pathlib import Path
 import sys
+import threading
 import time
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional
 import uuid
 
 import requests  # type: ignore[import-untyped]
 
 from nexus.config import load_settings
-from nexus.config.settings_models import Settings
+from nexus.config.settings_models import OrreryRetrogradeWizardSettings, Settings
 from nexus.runtime.contract import RUNTIME_CONFIG_ENV
 from nexus.runtime.remote_auth import build_runtime_request_auth
 from nexus.util.secret_manager import MissingSecretError
@@ -1190,6 +1192,19 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def _retrograde_wizard_settings(
+    settings: Settings, purpose: str
+) -> OrreryRetrogradeWizardSettings:
+    """Return [orrery.retrograde.wizard], naming the CLI purpose if absent."""
+
+    orrery_settings = settings.orrery
+    if orrery_settings is None:
+        raise ValueError(
+            f"nexus.toml is missing the [orrery] section required for the {purpose}"
+        )
+    return orrery_settings.retrograde.wizard
+
+
 def _transition_timeout_seconds() -> int:
     """Read the wizard transition HTTP timeout from nexus.toml.
 
@@ -1198,15 +1213,96 @@ def _transition_timeout_seconds() -> int:
     budget is minutes, not the seconds ordinary wizard turns need.
     """
 
-    from nexus.config import load_settings
+    return _retrograde_wizard_settings(
+        load_settings(), "wizard transition timeout"
+    ).transition_timeout_seconds
 
-    orrery_settings = load_settings().orrery
-    if orrery_settings is None:
+
+def _retrograde_status_stage(status: Any) -> Optional[str]:
+    """Validate a Retrograde status payload and name the stage it reports.
+
+    Returns None while idle, the stage in progress, ``done``, or
+    ``failed (<stage>)`` naming the stage that failed.
+    """
+
+    from nexus.agents.orrery.retrograde_orchestrator import RETROGRADE_WIZARD_STAGES
+
+    stage = status.get("stage") if isinstance(status, dict) else None
+    if stage == "idle":
+        return None
+    if stage == "failed":
+        detail = status.get("detail")
+        failed = detail.get("stage") if isinstance(detail, dict) else None
+        if failed not in RETROGRADE_WIZARD_STAGES or failed == "done":
+            raise ValueError(f"Retrograde failure names no known stage: {status!r}")
+        return f"failed ({failed})"
+    if stage not in RETROGRADE_WIZARD_STAGES:
+        raise ValueError(f"Unrecognized Retrograde status: {status!r}")
+    return str(stage)
+
+
+def _print_retrograde_stages(
+    slot: int,
+    interval_seconds: float,
+    read_timeout_seconds: float,
+    stopped: threading.Event,
+) -> None:
+    """Print each Retrograde stage change once until stopped or terminal."""
+
+    url = f"{get_api_url()}/api/story/new/retrograde/status"
+    printed: Optional[str] = None
+    while not stopped.wait(interval_seconds):
+        try:
+            response = _api_get(
+                url, params={"slot": slot}, timeout=read_timeout_seconds
+            )
+            response.raise_for_status()
+            status = response.json()
+            stage = _retrograde_status_stage(status)
+        except (requests.RequestException, ValueError) as exc:
+            print(f"Genesis stage unavailable: {exc}", file=sys.stderr, flush=True)
+            return
+        if stage is not None and stage != printed:
+            print(f"Genesis stage: {stage}", flush=True)
+            printed = stage
+        if status["stage"] in {"done", "failed"}:
+            return
+
+
+@contextmanager
+def _echo_retrograde_stages(slot: int, *, enabled: bool) -> Iterator[None]:
+    """Print Retrograde stage changes while the wizard transition is in flight.
+
+    Human output only: JSON callers receive the transition outcome alone.
+    """
+
+    if not enabled:
+        yield
+        return
+    settings = load_settings()
+    if settings.api is None:
         raise ValueError(
-            "nexus.toml is missing the [orrery] section required for the "
-            "wizard transition timeout"
+            "nexus.toml is missing the [api] section required for the wizard "
+            "stage poll"
         )
-    return orrery_settings.retrograde.wizard.transition_timeout_seconds
+    interval = _retrograde_wizard_settings(
+        settings, "wizard stage poll"
+    ).status_poll_interval_seconds
+    # Each stage read gets the configured per-request budget of a status read.
+    read_timeout = settings.api.narrative_generation.request_timeout_seconds
+    stopped = threading.Event()
+    reader = threading.Thread(
+        target=_print_retrograde_stages,
+        args=(slot, interval, read_timeout, stopped),
+        name="retrograde-stage-echo",
+        daemon=True,
+    )
+    reader.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        reader.join()
 
 
 def _generation_timeout_seconds() -> int:
@@ -1737,11 +1833,12 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 # cold-start generation runs inside the transition, so the
                 # timeout comes from orrery.retrograde.wizard settings.
                 transition_url = f"{get_api_url()}/api/story/new/transition"
-                transition_response = _api_post(
-                    transition_url,
-                    json={"slot": args.slot},
-                    timeout=_transition_timeout_seconds(),
-                )
+                with _echo_retrograde_stages(args.slot, enabled=not args.json):
+                    transition_response = _api_post(
+                        transition_url,
+                        json={"slot": args.slot},
+                        timeout=_transition_timeout_seconds(),
+                    )
                 if not transition_response.ok:
                     return {
                         "success": False,
@@ -1918,11 +2015,14 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         # Seed phase complete → transition to narrative mode
                         transition_url = f"{get_api_url()}/api/story/new/transition"
                         try:
-                            transition_response = _api_post(
-                                transition_url,
-                                json={"slot": args.slot},
-                                timeout=_transition_timeout_seconds(),
-                            )
+                            with _echo_retrograde_stages(
+                                args.slot, enabled=not args.json
+                            ):
+                                transition_response = _api_post(
+                                    transition_url,
+                                    json={"slot": args.slot},
+                                    timeout=_transition_timeout_seconds(),
+                                )
                         except requests.exceptions.Timeout as exc:
                             return _seed_transition_failure(
                                 result=result,
