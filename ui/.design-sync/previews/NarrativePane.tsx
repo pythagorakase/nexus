@@ -44,6 +44,7 @@ function makeEngine(overrides: Record<string, unknown> = {}) {
     isGenerating: false,
     completedGenerations: 0,
     submitTurn: noAsync,
+    regenerateTurn: noAsync,
     ...overrides,
   } as never;
 }

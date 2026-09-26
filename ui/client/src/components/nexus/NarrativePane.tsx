@@ -26,6 +26,11 @@
  * came from. Only Enter or the send glyph commits the draft - as the choice
  * number plus its (possibly edited) text, or as freeform text once the draft
  * is cleared and retyped.
+ *
+ * The pending block carries a quiet regenerate glyph while nothing is
+ * generating. It opens one optional note; Enter or its send glyph re-rolls
+ * the draft. The pending prose stays on screen until the replacement lands,
+ * and a failed re-roll leaves it there beneath a failure line.
  */
 import {
   Fragment,
@@ -42,6 +47,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
 import {
+  REGENERATE_NOTE_MAX_CHARS,
   getChunk,
   getChunkContext,
   getEpisodeChunks,
@@ -222,7 +228,15 @@ export function NarrativePane({
   // also covers a failed attempt that recorded no action (input stays open).
   const recovery = hasPending ? null : slotState?.recovery ?? null;
   const needsRecovery = recovery !== null;
-  const failure = hasPending ? null : recovery ?? engine.failedGeneration;
+  // A pending draft outliving the latest attempt means that attempt was a
+  // re-roll which failed and left the draft in place.
+  const regenerationFailure =
+    hasPending && engine.failedGeneration?.operation === "regenerate"
+      ? engine.failedGeneration
+      : null;
+  const failure = hasPending
+    ? regenerationFailure
+    : recovery ?? engine.failedGeneration;
   const isBootstrapNeeded =
     !!slotState &&
     !slotState.is_empty &&
@@ -323,6 +337,41 @@ export function NarrativePane({
 
   const canSubmit = !isGenerating && !engine.isRecoveryLoading && !needsRecovery
     && !!slotState && !slotState.is_wizard_mode;
+
+  // Regenerate: pending-only, idle-only, one optional note. The note survives
+  // a failed re-roll and is dropped once a different draft is pending.
+  const pendingSessionId = hasPending ? slotState?.session_id ?? null : null;
+  const canRegenerate = canSubmit && pendingSessionId !== null;
+  const [regenerateOpen, setRegenerateOpen] = useState(false);
+  const [regenerateNote, setRegenerateNote] = useState("");
+  const regenerating = useRef(false);
+  useEffect(() => {
+    setRegenerateOpen(false);
+    setRegenerateNote("");
+  }, [pendingSessionId]);
+  const handleRegenerate = useCallback(async () => {
+    if (!canRegenerate || regenerating.current) return;
+    regenerating.current = true;
+    try {
+      const note = regenerateNote.trim();
+      if (await engine.regenerateTurn(note || undefined)) setRegenerateOpen(false);
+    } finally {
+      regenerating.current = false;
+    }
+  }, [canRegenerate, regenerateNote, engine.regenerateTurn]);
+  const handleRegenerateKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Escape") {
+        setRegenerateOpen(false);
+      } else if (
+        event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing
+      ) {
+        event.preventDefault();
+        void handleRegenerate();
+      }
+    },
+    [handleRegenerate],
+  );
 
   // Selecting loads the choice into the draft, caret at its end, and never
   // submits. The epoch re-focuses even when the same choice is reselected.
@@ -573,6 +622,43 @@ export function NarrativePane({
                     <ProseMarkdown text={pendingText} />
                   </div>
                 </div>
+                {canRegenerate && (
+                  <div className="regenerate-row">
+                    {regenerateOpen && (
+                      <>
+                        <input
+                          className="choice-input regenerate-note"
+                          value={regenerateNote}
+                          maxLength={REGENERATE_NOTE_MAX_CHARS}
+                          onChange={(e) => setRegenerateNote(e.target.value)}
+                          onKeyDown={handleRegenerateKeyDown}
+                          autoFocus
+                          aria-label="Note for the regenerated scene"
+                          data-testid="input-regenerate-note"
+                        />
+                        <button
+                          type="button"
+                          className="reader-nav-btn"
+                          onClick={() => void handleRegenerate()}
+                          aria-label="Regenerate now"
+                          data-testid="button-confirm-regenerate"
+                        >
+                          ↵
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className="reader-nav-btn regenerate-toggle"
+                      onClick={() => setRegenerateOpen((open) => !open)}
+                      aria-label="Regenerate"
+                      aria-expanded={regenerateOpen}
+                      data-testid="button-regenerate"
+                    >
+                      ↻
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -626,7 +712,11 @@ export function NarrativePane({
               data-testid="generation-failure"
             >
               <span className="glyph">✕</span>
-              <span>The next scene failed.</span>
+              <span>
+                {regenerationFailure
+                  ? "The regeneration failed."
+                  : "The next scene failed."}
+              </span>
             </div>
           )}
 

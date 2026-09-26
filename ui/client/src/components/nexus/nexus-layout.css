@@ -609,6 +609,31 @@
   height: 56px;
 }
 
+/* Pending-only regenerate: a quiet glyph under the draft's prose. Its one
+   optional note and send glyph open beside it. */
+.regenerate-row {
+  max-width: 65ch;
+  margin: 2px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.regenerate-row .reader-nav-btn {
+  font-size: 18px;
+  padding: 2px 8px;
+}
+.regenerate-toggle { opacity: .45; }
+.regenerate-toggle:hover,
+.regenerate-toggle:focus-visible,
+.regenerate-toggle[aria-expanded="true"] { opacity: 1; }
+.regenerate-note {
+  flex: 1;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.regenerate-note:focus { border-bottom-color: var(--brass); }
+
 /* Pending-generation note inside the reader. */
 .reader-status {
   margin: 28px auto 0;

@@ -218,6 +218,33 @@ export async function retryNarrative(slot: number, expectedSessionId: string): P
   return res.json();
 }
 
+/** Mirrors RegenerateNarrativeRequest.note's max_length on the server. */
+export const REGENERATE_NOTE_MAX_CHARS = 500;
+
+/**
+ * Re-roll the pending turn named by `sessionId`, with an optional
+ * out-of-character note. The server keeps that draft until the replacement
+ * is staged, so a failed re-roll leaves it in place.
+ */
+export async function regenerateNarrative(params: {
+  slot: number;
+  sessionId: string;
+  note?: string;
+}): Promise<ContinueNarrativeResponse> {
+  const body: Record<string, unknown> = {
+    slot: params.slot,
+    session_id: params.sessionId,
+  };
+  if (params.note !== undefined) body.note = params.note;
+  const res = await fetch("/api/narrative/regenerate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${(await res.text()) || res.statusText}`);
+  return res.json();
+}
+
 /** Bootstrap timing independently of slot/database reads. */
 export function getRecoveryPreferences(signal: AbortSignal): Promise<{ narrative_generation: GenerationSettings }> {
   return getJson("/api/preferences", signal);

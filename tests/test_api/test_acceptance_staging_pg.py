@@ -181,7 +181,9 @@ async def test_staging_bleed_regenerate_and_acceptance(acceptance_slot) -> None:
         status = await narrative.get_narrative_status(regenerated.session_id, slot=5)
         assert status.status == "complete" and status.chunk_id is None
         assert status.phase == "complete" and status.terminal_outcome is None
+        assert status.operation == "regenerate"
         replaced = await narrative.get_narrative_status(session, slot=5)
+        assert replaced.operation == "continue"
         assert replaced.terminal_outcome == "superseded"
         assert replaced.replaced_by_session_id == regenerated.session_id
         selected = narrative._record_player_response_for_chunk(

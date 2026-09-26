@@ -150,6 +150,9 @@ class NarrativeStatus(BaseModel):
     """Status of a narrative generation session"""
 
     session_id: str
+    operation: Literal["continue", "regenerate"] = Field(
+        description="Whether the attempt continues the story or re-rolls a draft"
+    )
     status: str
     slot: int
     phase: str

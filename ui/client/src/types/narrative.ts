@@ -47,6 +47,8 @@ export interface GenerationSettings {
 export interface GenerationSession {
   slot: number;
   session_id: string;
+  /** What started the attempt: a player turn (or its retry) or a re-roll. */
+  operation: "continue" | "regenerate";
   status: "initiated" | "complete" | "error";
   phase: NarrativePhase;
   terminal_outcome: "accepted" | "superseded" | "discarded" | "error" | null;

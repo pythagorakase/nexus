@@ -41,6 +41,7 @@ function mount(
     slotState: state, slotStateError: null, isSlotStateLoading: false,
     phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
     isGenerating: false, completedGenerations: 0, submitTurn: send,
+    regenerateTurn: vi.fn(async () => true),
   };
   return render(
     <QueryClientProvider client={client}>
