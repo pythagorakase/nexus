@@ -22,6 +22,10 @@ from nexus.agents.memnon.utils.db_access import (
 from nexus.agents.memnon.utils.embedding_tables import (
     retrograde_summary_table_name_for_dimensions,
 )
+from nexus.agents.memnon.utils.source_embeddings import (
+    RETROGRADE_SUMMARY_SOURCE,
+    count_stamped_without_vectors,
+)
 from nexus.agents.orrery.retrograde_embedding import (
     active_memnon_embedding_model_dimensions,
     embed_retrograde_summaries,
@@ -398,3 +402,61 @@ def test_repaired_summary_participates_in_dedicated_vector_join(
                 assert repaired["source"] == "vector_search"
     finally:
         conn.close()
+
+
+def _stamped_without_vectors(dbname: str) -> int:
+    """Run the read-only audit on a plain tuple cursor."""
+    conn = _connect(dbname)
+    try:
+        with conn.cursor() as cur:
+            return count_stamped_without_vectors(
+                cur,
+                RETROGRADE_SUMMARY_SOURCE,
+                active_memnon_embedding_model_dimensions(),
+            )
+    finally:
+        conn.close()
+
+
+def test_stamped_without_vector_audit_follows_damage_and_repair(
+    disposable_db: str,
+    route_disposable_db: None,
+) -> None:
+    """The audit counts stamped summaries missing any active vector (#848).
+
+    ``tests/test_jobs_cli_pg.py`` covers the same audit through ``nexus jobs``.
+    """
+    baseline = _stamped_without_vectors(disposable_db)
+    stamped_id = _insert_retrograde_summaries(
+        disposable_db,
+        ["The audited ferry log was stamped before any vector existed."],
+        stamped=True,
+    )[0]
+    _insert_retrograde_summaries(
+        disposable_db,
+        ["An unstamped summary is pending work, not damage."],
+    )
+
+    assert _stamped_without_vectors(disposable_db) == baseline + 1
+
+    embed_retrograde_summaries(disposable_db, [stamped_id])
+    assert _stamped_without_vectors(disposable_db) == baseline
+
+    model, dimensions = next(iter(active_memnon_embedding_model_dimensions().items()))
+    conn = _connect(disposable_db)
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        "DELETE FROM {} WHERE summary_id = %s AND model = %s"
+                    ).format(
+                        sql.Identifier(
+                            retrograde_summary_table_name_for_dimensions(dimensions)
+                        )
+                    ),
+                    (stamped_id, model),
+                )
+    finally:
+        conn.close()
+    assert _stamped_without_vectors(disposable_db) == baseline + 1

@@ -635,17 +635,8 @@ def test_embedding_upsert_binds_each_correct_experience_id(
         FakeManager,
     )
     monkeypatch.setattr(
-        "nexus.agents.orrery.retrograde_embedding."
-        "active_memnon_embedding_model_dimensions",
-        lambda: {"test-embed": 2},
-    )
-    monkeypatch.setattr(
-        experience_embedding, "_memnon_settings", lambda: {"models": {}}
-    )
-    monkeypatch.setattr(
-        experience_embedding,
-        "ensure_character_experience_embedding_table",
-        lambda _cursor, _dimensions: "character_experience_embeddings_0002d",
+        "nexus.agents.memnon.utils.source_embeddings.load_memnon_settings",
+        lambda: {"models": {"test-embed": {"is_active": True, "dimensions": 2}}},
     )
 
     result = experience_embedding.embed_character_experiences("qa677", [11, 22])

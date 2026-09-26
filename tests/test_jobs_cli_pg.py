@@ -399,3 +399,98 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
             "experience_render",
             "retrograde_maturation",
         }
+
+
+def test_jobs_cli_reports_experiences_stamped_without_vectors(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A stamp with no active-model vector surfaces in `nexus jobs` (#848)."""
+
+    from nexus.agents.memnon.utils.source_embeddings import (
+        CHARACTER_EXPERIENCE_SOURCE,
+        active_memnon_embedding_model_dimensions,
+    )
+
+    with _disposable_jobs_db() as dbname:
+        conn = _connect(dbname)
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO narrative_chunks (raw_text) VALUES (%s) "
+                        "RETURNING id",
+                        ("Issue 848 disposable anchor",),
+                    )
+                    chunk_id = int(cur.fetchone()[0])
+                    cur.execute(
+                        "INSERT INTO entities (kind) "
+                        "VALUES ('character'::entity_kind) RETURNING id"
+                    )
+                    entity_id = int(cur.fetchone()[0])
+                    experience_ids = []
+                    for index, stamped in enumerate((True, False), start=1):
+                        cur.execute(
+                            """
+                            INSERT INTO character_experiences (
+                                character_entity_id, anchor_chunk_id,
+                                world_event_ids, basis, seed_summary, salience,
+                                source_digest, world_layer, experience_text,
+                                render_model, renderer_version,
+                                render_generation_id, embedding_generated_at
+                            ) VALUES (
+                                %s, %s, ARRAY[%s]::bigint[], 'participant',
+                                %s, 0.5, %s, 'primary', %s,
+                                'fixture-model', 'fixture-v1', %s::uuid,
+                                CASE WHEN %s THEN now() END
+                            ) RETURNING id
+                            """,
+                            (
+                                entity_id,
+                                chunk_id,
+                                index,
+                                f"Seed {index}",
+                                f"qa848-experience-{index}",
+                                f"I remembered stamp case {index}.",
+                                str(uuid.uuid4()),
+                                stamped,
+                            ),
+                        )
+                        experience_ids.append(int(cur.fetchone()[0]))
+                    # Only a stamped row missing its vector is damage.
+                    for (
+                        model,
+                        dimensions,
+                    ) in active_memnon_embedding_model_dimensions().items():
+                        table_name = (
+                            CHARACTER_EXPERIENCE_SOURCE.table_name_for_dimensions(
+                                dimensions
+                            )
+                        )
+                        cur.execute("SELECT to_regclass(%s)", (f"public.{table_name}",))
+                        if cur.fetchone()[0] is not None:
+                            cur.execute(
+                                sql.SQL(
+                                    "DELETE FROM {} WHERE experience_id = ANY(%s)"
+                                ).format(sql.Identifier(table_name)),
+                                (experience_ids,),
+                            )
+        finally:
+            conn.close()
+
+        monkeypatch.setattr(
+            slot_utils,
+            "require_slot_dbname",
+            lambda *, slot: dbname,
+        )
+        payload = cli.run_jobs(argparse.Namespace(slot=4))
+
+        assert payload["stamped_without_vectors"] == {
+            "retrograde_summaries": 0,
+            "character_experiences": 1,
+        }
+        cli.emit_output(payload, as_json=False)
+        assert (
+            "stamped_without_vectors: retrograde_summaries=0, "
+            "character_experiences=1"
+        ) in capsys.readouterr().out

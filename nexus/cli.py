@@ -4004,6 +4004,17 @@ def _print_jobs(payload: Dict[str, Any]) -> None:
         )
     if payload.get("unembedded_accepted_chunks"):
         print(f"unembedded_accepted_chunks: {payload['unembedded_accepted_chunks']}")
+    if "stamped_without_vectors" not in payload:
+        raise RuntimeError(
+            "jobs payload lacks stamped_without_vectors: the gateway that answered "
+            "predates this CLI, so restart it with nexus up and retry"
+        )
+    stamped_without_vectors = payload["stamped_without_vectors"]
+    if any(stamped_without_vectors.values()):
+        counts = ", ".join(
+            f"{table}={count}" for table, count in stamped_without_vectors.items()
+        )
+        print(f"stamped_without_vectors: {counts}")
 
 
 def _add_global_output_args(parser: argparse.ArgumentParser) -> None:

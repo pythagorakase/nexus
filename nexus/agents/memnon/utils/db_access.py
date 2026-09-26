@@ -24,14 +24,15 @@ from .embedding_tables import (
 )
 
 from .idf_dictionary import IDFDictionary, IDFStateError
+from .results import (
+    narrative_metadata,
+    narrative_result,
+    retrograde_summary_memory_id,
+    retrograde_summary_result,
+)
 
 # Set up logging
 logger = logging.getLogger("nexus.memnon.db_access")
-
-
-def retrograde_summary_memory_id(summary_id: int) -> str:
-    """Return the typed public identity for a Retrograde summary."""
-    return f"retrograde_summary:{int(summary_id)}"
 
 
 def _retrograde_summaries_exist(cursor) -> bool:
@@ -71,41 +72,6 @@ def _presence_boosts_for_narrative_results(
         str(chunk_id): presence_boost_factor
         for chunk_id, roster in read_rosters(cursor, narrative_chunk_ids).items()
         if roster.present_character_ids & present_ids
-    }
-
-
-def _retrograde_summary_result(
-    summary_id: int,
-    summary_text: str,
-    world_event_id: int,
-    recorded_at_chunk_id: Optional[int],
-    chronology: Any,
-    created_at: Any,
-) -> Dict[str, Any]:
-    """Build a retrieval result without inventing a narrative chunk id."""
-    memory_id = retrograde_summary_memory_id(summary_id)
-    serialized_created_at = (
-        created_at.isoformat() if hasattr(created_at, "isoformat") else created_at
-    )
-    return {
-        "id": memory_id,
-        "memory_id": memory_id,
-        "summary_id": int(summary_id),
-        "world_event_id": int(world_event_id),
-        "text": summary_text,
-        "content_type": "retrograde_summary",
-        "metadata": {
-            "summary_id": int(summary_id),
-            "world_event_id": int(world_event_id),
-            "recorded_at_chunk_id": (
-                int(recorded_at_chunk_id) if recorded_at_chunk_id is not None else None
-            ),
-            "chronology": chronology,
-            "created_at": serialized_created_at,
-        },
-        "model_scores": {},
-        "text_score": 0.0,
-        "vector_score": 0.0,
     }
 
 
@@ -152,23 +118,20 @@ def _execute_retrograde_summary_vector_search(
             created_at,
             score,
         ) = row
-        result = _retrograde_summary_result(
-            summary_id,
-            summary_text,
-            world_event_id,
-            recorded_at_chunk_id,
-            chronology,
-            created_at,
-        )
         numeric_score = float(score) if score is not None else 0.0
-        result.update(
-            {
-                "model_scores": {model_key: numeric_score},
-                "score": numeric_score,
-                "source": "vector_search",
-            }
+        results.append(
+            retrograde_summary_result(
+                summary_id,
+                summary_text,
+                world_event_id,
+                recorded_at_chunk_id,
+                chronology,
+                created_at,
+                model_scores={model_key: numeric_score},
+                score=numeric_score,
+                source="vector_search",
+            )
         )
-        results.append(result)
     return results
 
 
@@ -365,21 +328,16 @@ def execute_vector_search(
                     chunk_id = str(chunk_id)
 
                     if chunk_id not in results:
-                        results[chunk_id] = {
-                            "id": chunk_id,
-                            "chunk_id": chunk_id,
-                            "text": raw_text,
-                            "content_type": "narrative",
-                            "metadata": {
-                                "season": season,
-                                "episode": episode,
-                                "scene_number": scene_number,
-                                "world_time": world_time,
-                            },
-                            "model_scores": {},
-                            "score": float(score) if score is not None else 0.0,
-                            "source": "vector_search",
-                        }
+                        results[chunk_id] = narrative_result(
+                            chunk_id,
+                            raw_text,
+                            narrative_metadata(
+                                season, episode, scene_number, world_time=world_time
+                            ),
+                            model_scores={},
+                            score=float(score) if score is not None else 0.0,
+                            source="vector_search",
+                        )
 
                     # Store score from this model
                     results[chunk_id]["model_scores"][model_key] = (
@@ -827,24 +785,20 @@ def execute_multi_model_hybrid_search(
                     chunk_id = str(chunk_id)
 
                     if chunk_id not in results:
-                        results[chunk_id] = {
-                            "id": chunk_id,
-                            "chunk_id": chunk_id,
-                            "text": raw_text,
-                            "content_type": "narrative",
-                            "metadata": {
-                                "season": season,
-                                "episode": episode,
-                                "scene_number": scene_number,
-                                "world_time": world_time,
-                            },
-                            "model_scores": {},  # Will store scores for each model
-                            "text_score": 0.0,  # Will be normalized
-                            "vector_score": 0.0,  # Will be calculated as weighted average of model scores
-                            "raw_text_score": text_score,  # Keep raw score temporarily
-                        }
-                    else:
-                        results[chunk_id]["raw_text_score"] = text_score
+                        # model_scores fills per model; text_score is normalized
+                        # and vector_score becomes the weighted model average.
+                        results[chunk_id] = narrative_result(
+                            chunk_id,
+                            raw_text,
+                            narrative_metadata(
+                                season, episode, scene_number, world_time=world_time
+                            ),
+                            model_scores={},
+                            text_score=0.0,
+                            vector_score=0.0,
+                        )
+                    # Keep the raw score until every corpus is normalized.
+                    results[chunk_id]["raw_text_score"] = text_score
 
                 # Summaries use their own corpus frequencies, with both corpora
                 # pinned to this retrieval transaction's snapshot.
@@ -903,7 +857,7 @@ def execute_multi_model_hybrid_search(
                         text_score = float(text_score)
                         all_text_scores.append(text_score)
                         memory_id = retrograde_summary_memory_id(summary_id)
-                        summary_result = _retrograde_summary_result(
+                        summary_result = retrograde_summary_result(
                             summary_id,
                             summary_text,
                             world_event_id,
@@ -970,21 +924,19 @@ def execute_multi_model_hybrid_search(
                             ) = row
                             chunk_id = str(chunk_id)
                             if chunk_id not in results:
-                                results[chunk_id] = {
-                                    "id": chunk_id,
-                                    "chunk_id": chunk_id,
-                                    "text": raw_text,
-                                    "content_type": "narrative",
-                                    "metadata": {
-                                        "season": season,
-                                        "episode": episode,
-                                        "scene_number": scene_number,
-                                        "world_time": world_time,
-                                    },
-                                    "model_scores": {},
-                                    "text_score": 0.05,
-                                    "vector_score": 0.0,
-                                }
+                                results[chunk_id] = narrative_result(
+                                    chunk_id,
+                                    raw_text,
+                                    narrative_metadata(
+                                        season,
+                                        episode,
+                                        scene_number,
+                                        world_time=world_time,
+                                    ),
+                                    model_scores={},
+                                    text_score=0.05,
+                                    vector_score=0.0,
+                                )
 
                         if _retrograde_summaries_allowed(
                             filters
@@ -1005,8 +957,9 @@ def execute_multi_model_hybrid_search(
                                 (single, top_k * 3),
                             )
                             for row in cursor.fetchall():
-                                summary_result = _retrograde_summary_result(*row)
-                                summary_result["text_score"] = 0.05
+                                summary_result = retrograde_summary_result(
+                                    *row, text_score=0.05
+                                )
                                 results[summary_result["id"]] = summary_result
 
                 # Now run vector searches for each model
@@ -1103,25 +1056,20 @@ def execute_multi_model_hybrid_search(
                                         else 0.0
                                     )
 
-                                summary_result = _retrograde_summary_result(
+                                results[memory_id] = retrograde_summary_result(
                                     summary_id,
                                     summary_text,
                                     world_event_id,
                                     recorded_at_chunk_id,
                                     chronology,
                                     created_at,
+                                    model_scores={model_key: vector_score},
+                                    text_score=float(
+                                        calculated_text_score / max_text_score
+                                        if max_text_score > 0
+                                        else 0.0
+                                    ),
                                 )
-                                summary_result.update(
-                                    {
-                                        "model_scores": {model_key: vector_score},
-                                        "text_score": float(
-                                            calculated_text_score / max_text_score
-                                            if max_text_score > 0
-                                            else 0.0
-                                        ),
-                                    }
-                                )
-                                results[memory_id] = summary_result
 
                     table_name = resolve_dimension_table(dimensions)
                     if not _embedding_table_exists(cursor, table_name):
@@ -1228,21 +1176,16 @@ def execute_multi_model_hybrid_search(
                                     else 0.0
                                 )
 
-                                # Add to results with this model's score
-                                results[chunk_id] = {
-                                    "id": chunk_id,
-                                    "chunk_id": chunk_id,
-                                    "text": raw_text,
-                                    "content_type": "narrative",
-                                    "metadata": {
-                                        "season": season,
-                                        "episode": episode,
-                                        "scene_number": scene_number,
-                                    },
-                                    "model_scores": {model_key: vector_score},
-                                    "text_score": float(normalized_text_score),
-                                    "vector_score": 0.0,  # Will be calculated next
-                                }
+                                # Add to results with this model's score;
+                                # vector_score is calculated next.
+                                results[chunk_id] = narrative_result(
+                                    chunk_id,
+                                    raw_text,
+                                    narrative_metadata(season, episode, scene_number),
+                                    model_scores={model_key: vector_score},
+                                    text_score=float(normalized_text_score),
+                                    vector_score=0.0,
+                                )
 
                 presence_boosts: Dict[str, float] = {}
                 if normalized_present_ids and presence_boost_factor > 0.0:
