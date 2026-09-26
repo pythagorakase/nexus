@@ -63,7 +63,6 @@ READONLY_SQL_ALLOWED_TABLES = {
     "characters",
     "episodes",
     "seasons",
-    "events",
     "factions",
     "places",
     "chunk_metadata",
@@ -315,59 +314,6 @@ class MEMNON:
         logger.debug(
             f"Retrieval settings: {json.dumps(self.retrieval_settings, indent=2)}"
         )
-
-        # Memory type registry - maps virtual memory tier to actual storage
-        self.memory_tiers = {
-            "strategic": {
-                "type": "database",
-                "tables": ["events", "threats", "ai_notebook"],
-            },
-            "entity": {
-                "type": "database",
-                "tables": ["characters", "places", "factions", "items"],
-            },
-            "narrative": {
-                "type": "vector",
-                "collections": ["narrative_chunks", "retrograde_summaries"],
-            },
-        }
-
-        # Query type registry - Simplified, used for rule-based planning
-        self.query_types = {
-            "character": {
-                "primary_tier": "entity",
-                "primary_tables": ["characters"],
-                "secondary_tier": "narrative",
-                "secondary_search": "hybrid_search",  # Default to hybrid
-            },
-            "location": {
-                "primary_tier": "entity",
-                "primary_tables": ["places"],
-                "secondary_tier": "narrative",
-                "secondary_search": "hybrid_search",
-            },
-            "event": {
-                "primary_tier": "narrative",  # Events likely in narrative text
-                "primary_tables": [],  # Assuming no dedicated event table for now
-                "secondary_tier": "entity",  # Related characters/places
-                "secondary_search": "hybrid_search",
-            },
-            "theme": {"primary_tier": "narrative", "primary_search": "hybrid_search"},
-            "relationship": {
-                "primary_tier": "entity",
-                "primary_tables": ["characters"],  # Primarily search characters
-                "secondary_tier": "narrative",
-                "secondary_search": "hybrid_search",
-            },
-            "narrative": {
-                "primary_tier": "narrative",
-                "primary_search": "hybrid_search",
-            },
-            "general": {  # Default fallback
-                "primary_tier": "narrative",
-                "primary_search": "hybrid_search",
-            },
-        }
 
         logger.info("MEMNON agent initialized (Headless Mode - No LLM)")
 
