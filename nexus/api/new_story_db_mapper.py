@@ -22,6 +22,7 @@ from nexus.api.new_story_schemas import (
     StorySeed,
     TransitionData,
 )
+from nexus.api.config_utils import get_wizard_settings
 from nexus.api.db_pool import get_connection
 from nexus.api.new_story_cache import clear_cache
 from nexus.api.trait_compiler import (
@@ -368,6 +369,7 @@ class NewStoryDatabaseMapper:
                 f"Invalid coordinates: ({lat}, {lon}). "
                 f"Latitude must be -90 to 90, longitude must be -180 to 180."
             )
+        zone_radius_m = get_wizard_settings().geo.default_zone_radius_m
 
         def _execute_hierarchy(cur):
             """Internal helper to execute hierarchy creation with given cursor"""
@@ -450,9 +452,9 @@ class NewStoryDatabaseMapper:
             if any(tag_counters.values()):
                 logger.info(f"Tag bestowal for place {place.name}: {tag_counters}")
 
-            # Generate a default circular boundary for the zone
-            # Using a 50-mile radius (approximately 80km) centered on the place
-            self._create_default_zone_boundary(cur, zone_id, lat, lon)
+            # Bound the zone with the configured synthetic circle around the
+            # place; Orrery zone resolution requires a boundary to exist.
+            self._create_default_zone_boundary(cur, zone_id, lat, lon, zone_radius_m)
 
             logger.info(
                 f"Created location hierarchy: {layer.name} (ID: {layer_id}) "
@@ -740,40 +742,44 @@ class NewStoryDatabaseMapper:
         return extra_data
 
     def _create_default_zone_boundary(
-        self, cursor: Any, zone_id: int, lat: float, lon: float
+        self, cursor: Any, zone_id: int, lat: float, lon: float, radius_m: float
     ) -> None:
         """
-        Create a default circular boundary for a zone.
+        Write the zone's synthetic circular boundary.
 
-        Creates a 50-mile radius circle as a MultiPolygon centered on the place coordinates.
+        Stores a circle of ``radius_m`` meters, as a MultiPolygon, centered on
+        the place coordinates. The boundary is required: Orrery resolves a
+        point's zone through ``ST_Covers(zones.boundary, point)``, so a failed
+        write raises and rolls back the surrounding genesis transaction.
 
         Args:
             cursor: Database cursor
             zone_id: ID of the zone to update
             lat: Latitude for the center point
             lon: Longitude for the center point
+            radius_m: Circle radius in meters (``[wizard.geo]
+                default_zone_radius_m``)
         """
-        try:
-            # Create a 50-mile (approximately 80.47 km) radius circle
-            # PostGIS ST_Buffer with geography type handles the spherical calculations
-
-            cursor.execute(
-                """
-                UPDATE zones
-                SET boundary = ST_Multi(
-                    ST_Buffer(
-                        ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
-                        80467  -- 50 miles in meters
-                    )::geometry
-                )
-                WHERE id = %s
-            """,
-                (lon, lat, zone_id),
-            )  # Note: PostGIS takes (lon, lat)
-
-            logger.info(
-                f"Created default 50-mile radius boundary for zone {zone_id} centered at ({lat}, {lon})"
+        # ST_Buffer on geography takes its distance in meters.
+        cursor.execute(
+            """
+            UPDATE zones
+            SET boundary = ST_Multi(
+                ST_Buffer(
+                    ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
+                    %s::double precision
+                )::geometry
             )
-        except Exception as e:
-            # Log but don't fail - boundary is optional
-            logger.warning(f"Could not create default boundary for zone {zone_id}: {e}")
+            WHERE id = %s
+        """,
+            (lon, lat, radius_m, zone_id),
+        )  # Note: PostGIS takes (lon, lat)
+
+        logger.info(
+            "Zone %s boundary is a synthetic %s m radius circle centered at "
+            "(%s, %s), not authored geography",
+            zone_id,
+            radius_m,
+            lat,
+            lon,
+        )

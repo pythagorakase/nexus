@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any, Iterator
 import uuid
 
@@ -19,6 +20,7 @@ from nexus.agents.orrery.events import (
     NeedDebtScoreDomainError,
     _apply_need_fulfillment_sync,
 )
+from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.agents.orrery.needs import load_need_tuning
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import (
@@ -30,6 +32,8 @@ from nexus.api.new_story_cache import read_cache, write_cache
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_flow import build_transition_data_from_cache
 from nexus.api.slot_utils import VALID_DBNAMES
+from nexus.config import load_settings
+from nexus.config.loader import settings_path_scope
 from scripts import migrate
 
 
@@ -1624,3 +1628,135 @@ def test_atomic_transition_replaces_stale_clock_before_protagonist_trigger(
     assert set(anchors) == {STORY_BASE}
     assert STALE_STORY_BASE not in anchors
     assert POISONED_WALL_TIME not in anchors
+
+    # Issue #840: the same atomic transition leaves the genesis zone bounded
+    # around its opening place, so Orrery zone resolution can find it.
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            _assert_genesis_zone_bounds_place(
+                cur,
+                zone_id=result["zone_id"],
+                place_id=result["place_id"],
+                radius_m=load_settings().wizard.geo.default_zone_radius_m,
+            )
+
+
+RADIUS_SETTING_PATTERN = re.compile(r"^default_zone_radius_m = .*$", re.MULTILINE)
+
+
+def _prepare_stale_clock_transition(dbname: str) -> Any:
+    """Stage the atomic-transition fixture over a stale story clock."""
+
+    _apply_migration_100(dbname)
+    transition = _build_story_transition(dbname)
+    with _transaction(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, STALE_STORY_BASE)
+    return transition
+
+
+def _assert_genesis_zone_bounds_place(
+    cur: Any, *, zone_id: int, place_id: int, radius_m: float
+) -> None:
+    """Assert the genesis zone boundary is a covering circle of ``radius_m``."""
+
+    cur.execute(
+        """
+        SELECT z.boundary IS NOT NULL,
+               ST_Covers(z.boundary, p.coordinates::geometry),
+               ST_X(p.coordinates::geometry),
+               ST_Y(p.coordinates::geometry),
+               (
+                   SELECT min(ST_Distance(dp.geom::geography, p.coordinates))
+                   FROM ST_DumpPoints(z.boundary) AS dp
+               ),
+               (
+                   SELECT max(ST_Distance(dp.geom::geography, p.coordinates))
+                   FROM ST_DumpPoints(z.boundary) AS dp
+               )
+        FROM zones z
+        JOIN places p ON p.zone = z.id
+        WHERE z.id = %s AND p.id = %s
+        """,
+        (zone_id, place_id),
+    )
+    row = cur.fetchone()
+    assert row is not None
+    bounded, covers, longitude, latitude, nearest_m, farthest_m = row
+    assert bounded is True
+    assert covers is True
+    assert (
+        resolve_zone_for_point(cur, longitude=longitude, latitude=latitude) == zone_id
+    )
+    # Buffer vertices lie on the circle; 1% absorbs the planar projection
+    # PostGIS buffers geography in.
+    assert nearest_m == pytest.approx(radius_m, rel=0.01)
+    assert farthest_m == pytest.approx(radius_m, rel=0.01)
+
+
+def test_atomic_transition_bounds_zone_with_configured_radius(
+    disposable_need_clock_db: str, tmp_path: Path
+) -> None:
+    """Issue #840: [wizard.geo] sizes the genesis zone circle, not a literal."""
+
+    radius_m = 5000.0
+    config = tmp_path / "nexus.toml"
+    source, replaced = RADIUS_SETTING_PATTERN.subn(
+        f"default_zone_radius_m = {radius_m}", (ROOT / "nexus.toml").read_text()
+    )
+    assert replaced == 1
+    config.write_text(source)
+    transition = _prepare_stale_clock_transition(disposable_need_clock_db)
+
+    with settings_path_scope(config):
+        result = NewStoryDatabaseMapper(
+            dbname=disposable_need_clock_db
+        ).perform_transition(transition)
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            _assert_genesis_zone_bounds_place(
+                cur,
+                zone_id=result["zone_id"],
+                place_id=result["place_id"],
+                radius_m=radius_m,
+            )
+
+
+def test_atomic_transition_rolls_back_when_zone_boundary_write_fails(
+    disposable_need_clock_db: str,
+) -> None:
+    """Issue #840: a rejected zone boundary aborts genesis, not a warning.
+
+    The boundary UPDATE's own error must surface. Swallowing it left the
+    transaction aborted, so the next statement failed with a misleading
+    ``InFailedSqlTransaction`` instead.
+    """
+
+    transition = _prepare_stale_clock_transition(disposable_need_clock_db)
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "ALTER TABLE zones ADD CONSTRAINT qa840_boundary_rejected "
+                "CHECK (boundary IS NULL) NOT VALID"
+            )
+
+    with pytest.raises(psycopg2.errors.CheckViolation, match="qa840_boundary_rejected"):
+        NewStoryDatabaseMapper(dbname=disposable_need_clock_db).perform_transition(
+            transition
+        )
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM zones WHERE name = %s", (transition.zone.name,)
+            )
+            assert cur.fetchone()[0] == 0
+            cur.execute(
+                "SELECT count(*) FROM characters WHERE name = %s",
+                (transition.character.name,),
+            )
+            assert cur.fetchone()[0] == 0
+            cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
+            assert cur.fetchone()[0] == STALE_STORY_BASE

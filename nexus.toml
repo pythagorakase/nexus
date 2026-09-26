@@ -180,6 +180,14 @@ enable_streaming = true
 derive_at_transition = true
 max_tokens = 4096
 
+[wizard.geo]
+# Genesis writes one zone around the opening place. Until region planning
+# authors real zone geometry, the zone boundary is a synthetic circle of this
+# radius (meters; 80467 is 50 miles) centered on that place. Orrery resolves a
+# point's zone by ST_Covers against it, so the boundary write is mandatory and
+# a failure rolls back the whole transition.
+default_zone_radius_m = 80467
+
 # =============================================================================
 # API Settings
 # =============================================================================

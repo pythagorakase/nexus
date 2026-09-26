@@ -3631,6 +3631,28 @@ class WizardTraitInputsSettings(BaseModel):
     )
 
 
+class WizardGeoSettings(BaseModel):
+    """Genesis geography policy for the wizard -> narrative transition.
+
+    Genesis writes one zone and one placed location. Until region planning
+    authors real zone geometry, the zone boundary is a synthetic circle of
+    this radius centered on the opening place, which Orrery zone resolution
+    (``ST_Covers`` against ``zones.boundary``) requires to exist.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_zone_radius_m: float = Field(
+        ...,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Radius in meters of the synthetic circular boundary written for "
+            "the genesis zone around the opening place"
+        ),
+    )
+
+
 class WizardSettings(BaseModel):
     """Wizard configuration for new story setup and structured responses."""
 
@@ -3656,6 +3678,10 @@ class WizardSettings(BaseModel):
     trait_inputs: WizardTraitInputsSettings = Field(
         default_factory=WizardTraitInputsSettings,
         description="Transition-time trait input derivation settings",
+    )
+    geo: WizardGeoSettings = Field(
+        ...,
+        description="Genesis geography policy (zone boundary radius)",
     )
 
 
