@@ -119,7 +119,8 @@ poetry run nexus continue --slot 5 --choice 2
 poetry run nexus continue --slot 5 --user-text "I search the room"
 
 # Send your edited version of a numbered choice (one request: the number
-# is kept and the edited text is recorded as the player's action)
+# is kept and the edited text is recorded as the player's action). Narrative
+# mode only; the wizard refuses --choice with --text.
 poetry run nexus continue --slot 5 --choice 2 --text "Ask Sana, quietly, about the torn page"
 
 # Auto-advance without input (Accept Fate)

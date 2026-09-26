@@ -53,6 +53,8 @@ export interface GenerationSession {
   phase: NarrativePhase;
   terminal_outcome: "accepted" | "superseded" | "discarded" | "error" | null;
   replaced_by_session_id: string | null;
+  /** The pending draft a re-roll set out to replace; null for a continue. */
+  supersedes_session_id: string | null;
   chunk_id: number | null;
   /** Null until the committed action is bound; a retry needs a bound parent. */
   parent_chunk_id: number | null;

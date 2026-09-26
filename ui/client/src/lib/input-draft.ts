@@ -59,11 +59,12 @@ export function createDraftStore(name: string): DraftStore {
     if (!record || typeof record.revision !== "string" || typeof record.text !== "string") {
       return null;
     }
-    if (record.choice === undefined) return { revision: record.revision, text: record.text };
-    // A choice identity that is not a menu position is not a draft either.
-    return Number.isInteger(record.choice) && (record.choice as number) >= 1
-      ? { revision: record.revision, text: record.text, choice: record.choice as number }
-      : null;
+    // Only a menu position is a choice identity. Any other stored value is
+    // dropped, and the player's text survives as freeform.
+    const { choice } = record;
+    return typeof choice === "number" && Number.isInteger(choice) && choice >= 1
+      ? { revision: record.revision, text: record.text, choice }
+      : { revision: record.revision, text: record.text };
   };
 
   const readUnconfirmedActions = (key: string): UnconfirmedAction[] => {

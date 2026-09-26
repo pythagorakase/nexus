@@ -1,8 +1,9 @@
-"""The durable attempt routes name what started each attempt.
+"""The durable attempt routes name what started each attempt and its target.
 
-The reader tells a failed re-roll (whose pending draft survives) from a failed
-continuation by this field. PostgreSQL coverage of the real rows lives in
-test_acceptance_staging_pg.py; here the database read is the only double.
+The reader tells a failed re-roll of the pending draft (which survives) from a
+failed continuation by ``supersedes_session_id``. PostgreSQL coverage of the
+real rows lives in test_acceptance_staging_pg.py; here the database read is
+the only double.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from nexus.api import narrative
+from nexus.api import narrative, narrative_lease
 
 
 def _session_row(operation: str) -> dict[str, Any]:
@@ -28,6 +29,7 @@ def _session_row(operation: str) -> dict[str, Any]:
         "phase": "writer",
         "terminal_outcome": "error",
         "replaced_by_session_id": None,
+        "supersedes_session_id": "draft-12" if operation == "regenerate" else None,
         "error_class": "WireContractViolation",
         "error": "Writer refused the draft",
         "heartbeat_at": now,
@@ -61,6 +63,9 @@ def test_attempt_routes_expose_the_operation(
 
     assert response.status_code == 200
     assert response.json()["operation"] == operation
+    assert response.json()["supersedes_session_id"] == (
+        "draft-12" if operation == "regenerate" else None
+    )
 
 
 def test_attempt_routes_reject_an_unknown_operation(
@@ -80,3 +85,21 @@ def test_attempt_routes_reject_an_unknown_operation(
 
     with pytest.raises(ValidationError, match="operation"):
         TestClient(narrative.app).get("/api/narrative/active", params={"slot": 4})
+
+
+@pytest.mark.parametrize(
+    ("operation", "supersedes"),
+    [("regenerate", None), ("continue", "draft-12")],
+)
+def test_lease_refuses_a_mismatched_regeneration_link(
+    operation: str, supersedes: str | None
+) -> None:
+    """Only a re-roll names a draft to supersede, and a re-roll always does."""
+    with pytest.raises(ValueError, match="supersedes_session_id"):
+        narrative_lease.acquire_generation_lease(
+            SimpleNamespace(),
+            session_id="regen-13",
+            operation=operation,
+            stale_timeout_seconds=60,
+            supersedes_session_id=supersedes,
+        )

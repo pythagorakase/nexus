@@ -158,6 +158,9 @@ class NarrativeStatus(BaseModel):
     phase: str
     terminal_outcome: Optional[str]
     replaced_by_session_id: Optional[str]
+    supersedes_session_id: Optional[str] = Field(
+        description="Pending draft session a regenerate attempt set out to replace"
+    )
     error_class: Optional[str]
     heartbeat_at: datetime
     expires_at: Optional[datetime] = None

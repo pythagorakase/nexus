@@ -25,7 +25,7 @@ sources:
   - nexus/jobs/
   - nexus/agents/orrery/worker.py
   - nexus.toml
-verified_commit: "b289aba03d9a63b405902424fa536cf356438926"
+verified_commit: "be1c299cb70b3e3a75b514ad7ad34ca45031b8a8"
 ---
 
 # The Turn Cycle
@@ -47,7 +47,8 @@ send glyph commits: `continueNarrative` (`ui/client/src/lib/narrative-api.ts`)
 posts `slot`, the draft as `choice` plus `user_text` (one edited-choice
 payload) or as freeform `user_text` alone, and any pending draft's `session_id`
 to `POST /api/narrative/continue`. The `nexus continue` CLI command uses the
-same endpoint; `--choice K --text "..."` sends an edited choice.
+same endpoint; `--choice K --text "..."` sends an edited choice (the wizard
+refuses that combination).
 
 While a generation runs, the pane follows phase events on
 `/ws/narrative?slot=N` and reconciles with the durable session through
@@ -208,10 +209,12 @@ The pending draft appears in the Narrative pane. From there:
   continuing.
 - **Regenerate.** `POST /api/narrative/regenerate` reruns generation from the
   same parent and player text, with an optional author's note, under a new
-  session. The pane offers it as a glyph on the pending block while nothing
-  generates. The current draft stays until its replacement is staged; when the
-  re-roll fails the draft remains, and the session's `operation`
-  (`regenerate`) lets the pane report that failure.
+  session, which records the draft it set out to replace in
+  `supersedes_session_id` when it acquires the slot. The pane offers it as a
+  glyph on the pending block while nothing generates. The current draft stays
+  until its replacement is staged; when the re-roll fails the draft remains,
+  and the failed session's `supersedes_session_id` naming that draft lets the
+  pane report the failure.
 - **Discard.** `DELETE /api/narrative/incubator` removes the draft and marks
   its session discarded.
 - **Retry.** After a failed generation, `POST /api/narrative/retry` with the

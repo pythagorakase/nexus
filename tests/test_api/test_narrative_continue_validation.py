@@ -513,6 +513,59 @@ def test_edited_choice_text_obeys_the_choice_text_limit(
     assert generation_calls == []
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_object", "expected_text"),
+    [
+        (
+            EDITED_DOOR,
+            {"presented": DOOR_CHOICES, "selected": 1, "edited": True},
+            EDITED_DOOR,
+        ),
+        (
+            "  Open the door. ",
+            {"presented": DOOR_CHOICES, "selected": 1},
+            "Open the door.",
+        ),
+    ],
+    ids=["edited", "unchanged"],
+)
+def test_select_choice_records_an_edit_like_continue(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    expected_object: dict[str, Any],
+    expected_text: str,
+) -> None:
+    """The older select route writes the same canonical edited-choice shape."""
+    connection = ChoiceConnection(
+        {
+            "id": 17,
+            "storyteller_text": "The door waits.",
+            "choice_object": {"presented": DOOR_CHOICES, "selected": None},
+            "choice_text": None,
+        }
+    )
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+
+    response = TestClient(narrative.app).post(
+        "/api/narrative/select-choice",
+        json={
+            "slot": 3,
+            "chunk_id": 17,
+            "selection": {"label": 1, "text": text, "edited": True},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert _chunk_response_writes(connection) == [
+        (
+            expected_object,
+            expected_text,
+            f"The door waits.\n\n{expected_text}",
+            17,
+        )
+    ]
+
+
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     """Open a direct PostgreSQL connection for a disposable clone."""
     return psycopg2.connect(

@@ -162,8 +162,23 @@ def acquire_generation_lease(
     operation: str,
     stale_timeout_seconds: int,
     expected_failed_session_id: Optional[str] = None,
+    supersedes_session_id: Optional[str] = None,
 ) -> Optional[GenerationLeaseConflict | GenerationRetryContext]:
-    """Acquire the slot singleton, replacing only an expired owner."""
+    """Acquire the slot singleton, replacing only an expired owner.
+
+    A regenerate attempt names the pending draft it was started to replace in
+    ``supersedes_session_id``, recorded with the session row so a failed or
+    abandoned re-roll still says which draft it targeted.
+
+    Raises:
+        ValueError: If a regenerate attempt omits the draft it supersedes, or a
+            continue attempt names one.
+    """
+    if (operation == "regenerate") != (supersedes_session_id is not None):
+        raise ValueError(
+            "supersedes_session_id is required for regenerate attempts and "
+            f"forbidden otherwise (operation={operation!r})"
+        )
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Row locking cannot serialize the empty-table case. This table is
@@ -214,17 +229,24 @@ def acquire_generation_lease(
             cur.execute(
                 """
                 INSERT INTO narrative_generation_sessions (
-                    session_id, operation, status, parent_chunk_id
-                ) VALUES (%s, %s, 'initiated', %s)
+                    session_id, operation, status, parent_chunk_id,
+                    supersedes_session_id
+                ) VALUES (%s, %s, 'initiated', %s, %s)
                 ON CONFLICT (session_id) DO UPDATE
                 SET operation = EXCLUDED.operation,
                     parent_chunk_id = NULL,
                     status = 'initiated',
                     chunk_id = NULL,
                     error = NULL,
+                    supersedes_session_id = EXCLUDED.supersedes_session_id,
                     updated_at = NOW()
                 """,
-                (session_id, operation, retry.parent_chunk_id if retry else None),
+                (
+                    session_id,
+                    operation,
+                    retry.parent_chunk_id if retry else None,
+                    supersedes_session_id,
+                ),
             )
             cur.execute(
                 """
@@ -626,8 +648,9 @@ def read_generation_session(
                 return None
             row = dict(row)
             row["session_id"] = str(row["session_id"])
-            if row["replaced_by_session_id"] is not None:
-                row["replaced_by_session_id"] = str(row["replaced_by_session_id"])
+            for lineage in ("replaced_by_session_id", "supersedes_session_id"):
+                if row[lineage] is not None:
+                    row[lineage] = str(row[lineage])
             return row
 
 

@@ -239,6 +239,26 @@ describe("number-key choice shortcuts", () => {
     expect(input()).toHaveValue("");
   });
 
+  it.each(["select", "contenteditable"])("leaves a digit typed into a %s to it", async (kind) => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    const control = document.createElement(kind === "select" ? "select" : "div");
+    if (kind === "contenteditable") {
+      control.setAttribute("contenteditable", "true");
+      // jsdom does not derive isContentEditable from the attribute.
+      Object.defineProperty(control, "isContentEditable", { value: true });
+    }
+    document.body.appendChild(control);
+    try {
+      expect(fireEvent.keyDown(control, { key: "1", code: "Digit1" })).toBe(true);
+      await act(async () => {});
+      expect(input()).toHaveValue("");
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      control.remove();
+    }
+  });
+
   it("loads a plain digit's choice into the draft without sending", async () => {
     const send = vi.fn(async () => true);
     mount(base, send);
@@ -350,12 +370,12 @@ describe("deliberate choice drafts", () => {
   });
 
   it.each([0, 1.5, "2", null])(
-    "treats a stored choice identity of %j as no draft at all",
+    "keeps the text but drops a stored choice identity of %j",
     (stored) => {
       const key = readerDraftScope(base)!.draftKey;
       localStorage.setItem(key, JSON.stringify({ revision: "r1", text: "Ask Sana", choice: stored }));
       mount();
-      expect(input()).toHaveValue("");
+      expect(input()).toHaveValue("Ask Sana");
       expect(choice(2)).toHaveAttribute("aria-pressed", "false");
     },
   );

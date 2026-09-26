@@ -21,7 +21,8 @@ const settings = {
 };
 const failure: GenerationSession = {
   slot: 4, session_id: "failed-8", operation: "continue", status: "error", phase: "staging",
-  terminal_outcome: "error", replaced_by_session_id: null, chunk_id: null, parent_chunk_id: 9,
+  terminal_outcome: "error", replaced_by_session_id: null, supersedes_session_id: null,
+  chunk_id: null, parent_chunk_id: 9,
   created_at: "2026-09-25T08:00:00Z", heartbeat_at: "2026-09-25T08:01:00Z",
   expires_at: null, error: "Unresolved place state update", error_class: "WireContractViolation",
 };

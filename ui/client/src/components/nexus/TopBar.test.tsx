@@ -214,10 +214,12 @@ function failedAttempt(
   return {
     slot: 3,
     session_id: sessionId,
+    operation: "continue",
     status: "error",
     phase: "writer",
     terminal_outcome: "error",
     replaced_by_session_id: null,
+    supersedes_session_id: null,
     chunk_id: null,
     parent_chunk_id: parentChunkId,
     created_at: "2026-09-26T08:00:00Z",

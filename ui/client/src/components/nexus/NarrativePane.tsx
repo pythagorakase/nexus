@@ -228,10 +228,12 @@ export function NarrativePane({
   // also covers a failed attempt that recorded no action (input stays open).
   const recovery = hasPending ? null : slotState?.recovery ?? null;
   const needsRecovery = recovery !== null;
-  // A pending draft outliving the latest attempt means that attempt was a
-  // re-roll which failed and left the draft in place.
+  // A failed attempt that set out to supersede the draft still pending is a
+  // re-roll which failed and left that draft in place.
+  const pendingSessionId = hasPending ? slotState?.session_id ?? null : null;
   const regenerationFailure =
-    hasPending && engine.failedGeneration?.operation === "regenerate"
+    pendingSessionId !== null &&
+    engine.failedGeneration?.supersedes_session_id === pendingSessionId
       ? engine.failedGeneration
       : null;
   const failure = hasPending
@@ -340,7 +342,6 @@ export function NarrativePane({
 
   // Regenerate: pending-only, idle-only, one optional note. The note survives
   // a failed re-roll and is dropped once a different draft is pending.
-  const pendingSessionId = hasPending ? slotState?.session_id ?? null : null;
   const canRegenerate = canSubmit && pendingSessionId !== null;
   const [regenerateOpen, setRegenerateOpen] = useState(false);
   const [regenerateNote, setRegenerateNote] = useState("");
@@ -435,8 +436,12 @@ export function NarrativePane({
         || event.isComposing
       ) return;
       if (document.activeElement === freeformRef.current) return;
+      // A digit typed into any editable control belongs to that control.
       const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      if (
+        target
+        && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)
+      ) return;
       const n = parseInt(event.key, 10);
       if (!isNaN(n) && n >= 1 && n <= choices.length) {
         event.preventDefault();

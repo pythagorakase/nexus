@@ -26,7 +26,7 @@ const pendingState: SlotState = {
 const session = (overrides: Partial<GenerationSession>): GenerationSession => ({
   slot: 4, session_id: "draft-12", operation: "continue", status: "complete",
   phase: "complete", terminal_outcome: null, replaced_by_session_id: null,
-  chunk_id: null, parent_chunk_id: 9, created_at: "2026-09-26T08:00:00Z",
+  supersedes_session_id: null, chunk_id: null, parent_chunk_id: 9, created_at: "2026-09-26T08:00:00Z",
   heartbeat_at: "2026-09-26T08:01:00Z", expires_at: null, error: null,
   error_class: null, ...overrides,
 });
@@ -55,7 +55,7 @@ beforeEach(() => {
   regenerateBodies = [];
   regenerate = () => {
     sessions.set("regen-13", session({
-      session_id: "regen-13", operation: "regenerate", status: "initiated",
+      session_id: "regen-13", operation: "regenerate", supersedes_session_id: "draft-12", status: "initiated",
       phase: "writer", created_at: "2026-09-26T08:02:00Z",
     }));
     latest = "regen-13";
@@ -147,7 +147,7 @@ describe("pending-turn regeneration", () => {
     expect(screen.queryByTestId("choice-1")).not.toBeInTheDocument();
     // The replacement is staged: the next durable read swaps the prose.
     sessions.set("regen-13", session({
-      session_id: "regen-13", operation: "regenerate", created_at: "2026-09-26T08:02:00Z",
+      session_id: "regen-13", operation: "regenerate", supersedes_session_id: "draft-12", created_at: "2026-09-26T08:02:00Z",
     }));
     slotState = { ...pendingState, session_id: "regen-13", storyteller_text: REPLACEMENT };
     boundary();
@@ -189,7 +189,7 @@ describe("pending-turn regeneration", () => {
     fireEvent.keyDown(field, { key: "Enter" });
     await waitFor(() => expect(engine.phase).toBe("writer"));
     sessions.set("regen-13", session({
-      session_id: "regen-13", operation: "regenerate", status: "error", phase: "writer",
+      session_id: "regen-13", operation: "regenerate", supersedes_session_id: "draft-12", status: "error", phase: "writer",
       terminal_outcome: "error", error: "Writer refused the draft",
       error_class: "WireContractViolation", created_at: "2026-09-26T08:02:00Z",
     }));
@@ -205,6 +205,29 @@ describe("pending-turn regeneration", () => {
     await waitFor(() => expect(screen.getByTestId("choice-1")).toBeEnabled());
     fireEvent.click(toggle());
     expect(note()).toHaveValue("Vienna, not Prague");
+  });
+
+  it.each([
+    ["names the pending draft", "draft-12", true],
+    ["names another draft", "draft-11", false],
+    ["names no draft", null, false],
+  ] as const)("on load, reports a failed attempt as a failed re-roll only when it %s", async (_case, supersedes, reported) => {
+    sessions.set("regen-13", session({
+      session_id: "regen-13", operation: supersedes ? "regenerate" : "continue",
+      supersedes_session_id: supersedes, status: "error", phase: "writer",
+      terminal_outcome: "error", error: "Writer refused the draft",
+      error_class: "WireContractViolation", created_at: "2026-09-26T08:02:00Z",
+    }));
+    latest = "regen-13";
+    mount();
+    await waitFor(() => expect(engine.failedGeneration?.session_id).toBe("regen-13"));
+    await waitFor(() => expect(screen.getByTestId("choice-1")).toBeEnabled());
+    expect(pending()).toHaveTextContent(INCUMBENT);
+    if (reported) {
+      expect(screen.getByTestId("generation-failure")).toHaveTextContent("The regeneration failed.");
+    } else {
+      expect(screen.queryByTestId("generation-failure")).not.toBeInTheDocument();
+    }
   });
 
   it("keeps the note open and the incumbent when the server refuses the re-roll", async () => {

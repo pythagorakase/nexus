@@ -32,6 +32,7 @@ class Gateway:
     """The pending draft the CLI acts on, and every request it made."""
 
     scheduled: str | None = None
+    wizard: bool = False
     requests: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
 
 
@@ -72,7 +73,7 @@ def _gateway(gateway: Gateway) -> Iterator[str]:
                 self._respond(
                     {
                         "is_empty": False,
-                        "is_wizard_mode": False,
+                        "is_wizard_mode": gateway.wizard,
                         "has_pending": True,
                         "current_chunk_id": 17,
                         "session_id": gateway.scheduled or "draft-17",
@@ -160,6 +161,18 @@ def test_continue_sends_the_choice_and_its_edited_text_as_one_payload(
     assert payload["success"] is True
     assert payload["session_id"] == "next-18"
     assert payload["message"] == NEXT
+
+
+def test_wizard_continue_refuses_a_choice_with_text() -> None:
+    """The wizard has no edited choice, so the CLI refuses rather than drop text."""
+    gateway = Gateway(wizard=True)
+    code, payload = _run_cli(
+        gateway, "continue", "--slot", "5", "--choice", "2", "--text", EDITED
+    )
+
+    assert code == 1
+    assert "not both" in payload["error"]
+    assert [method for method, _url, _body in gateway.requests] == ["GET"]
 
 
 @pytest.mark.parametrize(
