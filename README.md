@@ -151,11 +151,14 @@ poetry run pytest                          # offline tier (default)
 NEXUS_RUN_POSTGRES=1 poetry run pytest     # + PostgreSQL integration tests
 NEXUS_RUN_LIVE_LLM=1 poetry run pytest     # + live model endpoints
 NEXUS_RUN_SECRET_STORE=1 poetry run pytest # + disposable macOS keychain test
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 poetry run pytest # + owner-corpus probes
 ```
 
-Tests marked `requires_postgres`, `live`, `live_llm`, and
+Tests marked `requires_postgres`, `requires_corpus`, `live`, `live_llm`, and
 `requires_secret_store` skip unless their flag is set, so the default sweep
-runs fast with no services required.
+runs fast with no services required. `requires_corpus` probes check the
+owner's golden-master content on disposable data clones of it; they are
+intentional exclusions from the PostgreSQL gate.
 Formatting and linting: `poetry run black .`, `poetry run flake8`,
 `poetry run mypy .`.
 

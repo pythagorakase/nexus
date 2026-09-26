@@ -13,10 +13,12 @@ from typing import Any
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import make_dsn
+from sqlalchemy import text
 from sqlalchemy.engine import URL
 
 from nexus.api import db_pool
 from nexus.config.story_model import StorySettings, write_story_settings
+from nexus.database import connection_kwargs, create_slot_engine, database_url
 from scripts import migrate, new_story_setup
 
 
@@ -84,11 +86,12 @@ def assert_one_target(dbname: str) -> None:
     the two disagree, a test seeds one server and queries another (issue
     #804). The server's listening port and postmaster start time identify the
     instance whether a client arrives over TCP or a Unix socket.
+
+    The pooled client checked here is the ``create_slot_engine`` SQLAlchemy
+    engine built from ``database_url``. ``db_pool`` accepts only ``save_0N``
+    names, so it is not checked out; its parameters come from the same
+    ``connection_kwargs`` call that is checked.
     """
-
-    from sqlalchemy import text
-
-    from nexus.database import connection_kwargs, create_slot_engine, database_url
 
     identities: dict[str, tuple[Any, ...]] = {}
     with closing(connect(dbname)) as conn, conn.cursor() as cur:
@@ -136,6 +139,10 @@ def disposable_slot_database(
 
     if story_pin is None and os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
         raise ValueError("story_pin=None requires NEXUS_RUN_LIVE_LLM=1")
+    # The clone is created and migrated through nexus.database but dropped
+    # through the PG* admin connection below. Prove both reach one server
+    # before creating anything, so a clone cannot outlive its fixture.
+    assert_one_target("postgres")
 
     def pin_clone() -> None:
         if story_pin is not None:
@@ -264,3 +271,40 @@ def seed_protagonist(
             )
             assert cur.rowcount == 1
     return character_id, entity_id
+
+
+def seed_committed_chunk(
+    dbname: str,
+    *,
+    raw_text: str,
+    season: int = 1,
+    episode: int = 1,
+    scene: int = 1,
+) -> int:
+    """Insert one committed chunk with its primary-layer metadata; return its ID."""
+
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+            "VALUES (%s, %s) RETURNING id",
+            (raw_text, raw_text),
+        )
+        chunk_id = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            INSERT INTO chunk_metadata (
+                chunk_id, season, episode, scene, world_layer,
+                time_delta, generation_date, slug
+            ) VALUES (
+                %s, %s, %s, %s, 'primary', interval '1 minute', now(), %s
+            )
+            """,
+            (
+                chunk_id,
+                season,
+                episode,
+                scene,
+                f"S{season:02d}E{episode:02d}_{scene:03d}",
+            ),
+        )
+    return chunk_id

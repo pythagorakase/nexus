@@ -10,51 +10,46 @@ import psycopg2
 import tiktoken
 from pathlib import Path
 
-from nexus.api.slot_utils import require_slot_dbname
 from nexus.database import connection_kwargs
 from tests.pg_fixtures import assert_one_target
 
 pytestmark = [pytest.mark.requires_postgres]
 
+REQUIRED_TABLES_SQL = """
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+    AND (table_name IN ('narrative_chunks', 'chunk_metadata')
+         OR table_name LIKE 'chunk_embeddings_%')
+    ORDER BY table_name
+"""
+
 
 class TestInfrastructure:
     """Test that all required infrastructure is available."""
 
-    def test_postgresql_connection(self):
-        """The runtime connection contract reaches the active slot's schema."""
-        expected_db = require_slot_dbname()
+    def test_postgresql_connection(self, lore_infra_database):
+        """The runtime connection contract reaches the disposable clone's schema."""
         # Fixtures (tests.pg_fixtures) and runtime clients must share one target.
-        assert_one_target(expected_db)
+        assert_one_target(lore_infra_database)
 
         # This should fail hard if PostgreSQL is not available
-        conn = psycopg2.connect(**connection_kwargs())
-        cursor = conn.cursor()
+        conn = psycopg2.connect(**connection_kwargs(lore_infra_database))
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT current_database()")
+                db_name = cursor.fetchone()[0]
+                cursor.execute(REQUIRED_TABLES_SQL)
+                tables = [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close()
 
-        cursor.execute("SELECT current_database()")
-        db_name = cursor.fetchone()[0]
-        assert db_name == expected_db, f"Connected to wrong database: {db_name}"
-
-        # Verify required tables exist
-        cursor.execute(
-            """
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND (table_name IN ('narrative_chunks', 'chunk_metadata')
-                 OR table_name LIKE 'chunk_embeddings_%')
-            ORDER BY table_name
-        """
-        )
-
-        tables = [row[0] for row in cursor.fetchall()]
+        assert db_name == lore_infra_database, f"Connected to wrong database: {db_name}"
         assert "narrative_chunks" in tables, "narrative_chunks table missing"
         assert "chunk_metadata" in tables, "chunk_metadata table missing"
         # Embedding tables are created lazily by active embedding write paths.
         embeddings_tables = [t for t in tables if t.startswith("chunk_embeddings_")]
         assert all(t.endswith("d") for t in embeddings_tables)
-
-        cursor.close()
-        conn.close()
 
     def test_narrative_view_exists(self, db_connection):
         """Test that narrative_view is available and functional."""
@@ -167,8 +162,9 @@ class TestInfrastructure:
             full_path = lore_path / file_path
             assert full_path.exists(), f"Required file missing: {full_path}"
 
+    @pytest.mark.requires_corpus
     def test_test_scenes_available(self, sample_chunks, test_scenes):
-        """Verify all 18 test scenes are available in database."""
+        """All 18 curated scenes exist in a disposable clone of the golden master."""
         # Check we got all expected chunks
         assert len(sample_chunks) == len(
             test_scenes

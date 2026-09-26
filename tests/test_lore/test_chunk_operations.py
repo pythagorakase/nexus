@@ -4,7 +4,7 @@ Unit tests for chunk_operations.py
 Tests deterministic chunk selection, assembly, and chronological sorting.
 """
 
-import pytest
+import json
 from pathlib import Path
 import sys
 
@@ -23,6 +23,14 @@ from nexus.agents.lore.utils.chunk_operations import (
     get_apex_model_encoding,
 )
 
+# Verbatim save_01 chunk 2 (S01E01_002, the dialogue offer scene), committed so
+# the narrative token check needs no database.
+DIALOGUE_OFFER_TEXT = json.loads(
+    (
+        Path(__file__).parent.parent / "fixtures/prose_metrics/save_01_excerpts.json"
+    ).read_text()
+)["2"]
+
 
 class TestTokenCalculation:
     """Test token counting functionality."""
@@ -38,13 +46,9 @@ class TestTokenCalculation:
         """Test empty string token count."""
         assert calculate_chunk_tokens("") == 0
 
-    @pytest.mark.requires_postgres
-    def test_calculate_chunk_tokens_narrative(self, sample_chunks):
+    def test_calculate_chunk_tokens_narrative(self):
         """Test token counting on real narrative text."""
-        # A slot without the dialogue scene fails here instead of passing vacuously.
-        chunk = sample_chunks.get("dialogue_offer")
-        assert chunk is not None, "The active slot lacks narrative_view id 2"
-        token_count = calculate_chunk_tokens(chunk["raw_text"])
+        token_count = calculate_chunk_tokens(DIALOGUE_OFFER_TEXT)
         assert token_count > 50  # Real narrative should have substantial tokens
         assert token_count < 5000  # Single chunk shouldn't be huge
 
