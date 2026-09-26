@@ -79,6 +79,7 @@ from nexus.api.presence_reconciliation import (  # noqa: E402
 from nexus.config.loader import get_provider_for_model  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
+    GaiaSeatPolicy,
     OrreryRetrogradeMaturationSettings,
     RenderLimits,
 )
@@ -1149,7 +1150,25 @@ class LogonUtility:
             raise ValueError(
                 "Anthropic transport cannot be set for a non-Anthropic provider"
             )
+        if usage_seat == "gaia":
+            # Slot-following Gaia shares the writer's model, not its profile.
+            gaia = self._gaia_seat_policy()
+            pass_provider.reasoning_effort = gaia.reasoning_effort
+            if self._provider_wire_type == "anthropic":
+                cast(AnthropicProvider, pass_provider).max_tokens = (
+                    gaia.max_output_tokens
+                )
+            else:
+                cast(OpenAIProvider, pass_provider).max_output_tokens = (
+                    gaia.max_output_tokens
+                )
         return pass_provider
+
+    def _gaia_seat_policy(self) -> GaiaSeatPolicy:
+        """Return the validated [apex.gaia] generation profile."""
+
+        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        return GaiaSeatPolicy.model_validate(apex_settings["gaia"])
 
     def _writer_system_prompt(self) -> str:
         """Return the storyteller system prompt scoped to the writer pass.
@@ -1245,22 +1264,21 @@ class LogonUtility:
     ) -> "OpenAIProvider | AnthropicProvider":
         """Construct a fresh provider for the pinned gaia seat.
 
-        Mirrors _initialize_provider's constructor arguments so the gaia
-        inherits the same apex generation settings as the writer, differing
-        only in model, endpoint, and transport.
+        Mirrors _initialize_provider's constructor arguments, except that the
+        output allowance and reasoning effort come from the [apex.gaia]
+        profile rather than the writer's apex values.
         """
         gaia_model, provider_type, endpoint, gaia_wire = gaia_route
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        gaia = self._gaia_seat_policy()
         structured_output_retries = apex_settings.get("structured_output_retries", 3)
         if gaia_wire == "anthropic":
             if anthropic_transport is None:
                 raise ValueError("Anthropic gaia seat requires an explicit transport")
             return AnthropicProvider(
                 model=gaia_model,
-                max_tokens=apex_settings.get(
-                    "max_output_tokens", apex_settings.get("max_tokens", 4000)
-                ),
-                reasoning_effort=apex_settings.get("reasoning_effort"),
+                max_tokens=gaia.max_output_tokens,
+                reasoning_effort=gaia.reasoning_effort,
                 system_prompt=system_prompt,
                 structured_transport=anthropic_transport,
                 structured_output_retries=structured_output_retries,
@@ -1278,8 +1296,8 @@ class LogonUtility:
         return OpenAIProvider(
             model=gaia_model,
             temperature=apex_settings.get("temperature", 0.7),
-            max_output_tokens=apex_settings.get("max_output_tokens", 25000),
-            reasoning_effort=apex_settings.get("reasoning_effort", "medium"),
+            max_output_tokens=gaia.max_output_tokens,
+            reasoning_effort=gaia.reasoning_effort,
             system_prompt=system_prompt,
             base_url=base_url,
             api_key=api_key,

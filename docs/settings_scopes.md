@@ -26,6 +26,14 @@ Player fields are `theme`, per-theme `fonts`, and `wizard_model`. First write ma
 
 `LogonUtility(story_settings=...)` and bootstrap's `story_settings` input accept explicit snapshots for already-resolved callers and offline tests. With no snapshot, production reads use the shared pool and propagate errors.
 
+## Gaia Generation Profile
+
+Gaia's model follows story resolution; its generation profile does not. The developer-scoped `[apex.gaia]` table holds Gaia's `reasoning_effort`, `max_output_tokens`, and reserve fields, and the writer keeps `[apex]`. A Gaia resolved to a model other than the writer's builds a fresh provider from `[apex.gaia]`; the slot-following clone of the writer's provider takes its effort and output allowance from `[apex.gaia]`. The shipped profile equals the writer's.
+
+Settings load rejects a configured Gaia default (`apex.gaia_model`, else `apex.model`) whose registry entry lists `reasoning_effort` or `reasoning` in `unsupported_params`, or declares `reasoning_accounting = "none"`. Gaia seat resolution applies the same check to story pins and slot following. The TEST mock is exempt.
+
+Every turn uses this one profile; workload-driven selection waits on real-entry-point A/B evidence (issue #758). `generation_attempt_manifests.config_sha256` hashes the full effective settings, `[apex.gaia]` included. Each usage-ledger event (`reasoning_effort`, `max_output_tokens`) and its `USAGE` log line (`effort=`, `max_output=`) record what the request actually sent; the log line shows `-` when a request sent none.
+
 ## Retired Pins
 
 A pin naming a removed registry ID is readable but fails resolution. No automatic clearing occurs. Use `nexus model --slot N --clear`, or PATCH the corresponding model field to NULL. `nexus model --slot N --set ID` assigns a registered Skald pin.

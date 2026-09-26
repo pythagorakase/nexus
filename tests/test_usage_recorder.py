@@ -19,8 +19,10 @@ from nexus.telemetry.usage import (
     UsageReadError,
     record_pydantic_ai_result,
     record_usage_event,
+    request_generation_profile,
     summarize_usage,
 )
+from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 from tests.model_registry_helpers import registry_model
 
@@ -205,6 +207,73 @@ def test_two_provider_passes_keep_seats_models_and_sum(tmp_path: Path) -> None:
         "TEST",
     ]
     assert summary["providers"]["openai"]["total"] == 25
+
+
+def test_usage_line_records_the_generation_profile_each_request_sent(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    responses = iter(
+        [
+            _response("gaia", input_tokens=8, output_tokens=3, response_id="r1"),
+            _response("mock", input_tokens=8, output_tokens=3, response_id="r2"),
+        ]
+    )
+
+    class FakeResponses:
+        def create(self, **_kwargs: object) -> SimpleNamespace:
+            return next(responses)
+
+    # TEST declares no reasoning, so its request carries no effort at all.
+    providers = [
+        OpenAIProvider(
+            model=model,
+            api_key="test-key",
+            reasoning_effort="high",
+            max_output_tokens=allowance,
+            usage_provider_name="openai",
+            usage_seat="gaia",
+        )
+        for model, allowance in ((registry_model("openai"), 1234), ("TEST", 4321))
+    ]
+    with caplog.at_level(logging.INFO, logger="nexus.usage"):
+        for provider in providers:
+            provider.client = SimpleNamespace(responses=FakeResponses())
+            provider.get_structured_completion("prompt", _StructuredAnswer)
+
+    summary = summarize_usage(usage_dir=tmp_path / "usage")
+    assert [
+        (event["seat"], event["reasoning_effort"], event["max_output_tokens"])
+        for event in summary["events"]
+    ] == [("gaia", "high", 1234), ("gaia", None, 4321)]
+    assert "seat=gaia" in caplog.text
+    assert "effort=high max_output=1234" in caplog.text
+    assert "effort=- max_output=4321" in caplog.text
+
+
+def test_generation_profile_reads_anthropic_and_chat_request_bodies() -> None:
+    anthropic = AnthropicProvider(
+        model=registry_model("anthropic"),
+        api_key="test-key",
+        reasoning_effort="low",
+        max_tokens=2048,
+    )
+    chat = OpenAIProvider(
+        model=registry_model("local"),
+        api_key="test-key",
+        base_url="http://127.0.0.1:1234/v1",
+        structured_transport="chat_completions",
+        max_output_tokens=512,
+        request_params={"reasoning": {"effort": "low"}},
+    )
+
+    assert request_generation_profile(
+        anthropic._build_prompted_structured_request_params("prompt")
+    ) == ("low", 2048)
+    assert request_generation_profile(
+        chat._build_chat_structured_request_params("prompt", _StructuredAnswer)
+    ) == ("low", 512)
+    assert request_generation_profile(None) == (None, None)
 
 
 def test_repair_loop_records_rejected_then_accepted(tmp_path: Path) -> None:

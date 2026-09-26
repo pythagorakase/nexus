@@ -116,6 +116,9 @@ class UsageEvent(BaseModel):
     service_tier: Optional[str] = None
     aggregate: bool = False
     requests: Optional[int] = Field(default=None, ge=0)
+    # Generation profile the request actually sent; None when it sent none.
+    reasoning_effort: Optional[str] = None
+    max_output_tokens: Optional[int] = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _derive_quota_day(self) -> "UsageEvent":
@@ -281,7 +284,8 @@ def record_usage_event(event: UsageEvent) -> None:
 
     logger.info(
         "USAGE provider=%s model=%s seat=%s slot=%s run=%s attempt=%s "
-        "outcome=%s in=%s out=%s total=%s cached=%s reasoning=%s tier=%s",
+        "outcome=%s in=%s out=%s total=%s cached=%s reasoning=%s tier=%s "
+        "effort=%s max_output=%s",
         event.provider,
         event.model,
         event.seat or "unknown",
@@ -295,11 +299,43 @@ def record_usage_event(event: UsageEvent) -> None:
         _display_unknown(event.cached_input_tokens),
         _display_unknown(event.reasoning_tokens),
         _display_unknown(event.service_tier),
+        _display_unsent(event.reasoning_effort),
+        _display_unsent(event.max_output_tokens),
     )
 
 
 def _display_unknown(value: object) -> object:
     return "?" if value is None else value
+
+
+def _display_unsent(value: object) -> object:
+    return "-" if value is None else value
+
+
+def request_generation_profile(
+    request: Optional[Dict[str, Any]],
+) -> tuple[Optional[str], Optional[int]]:
+    """Return the reasoning effort and output allowance a request sent.
+
+    Reads the exact provider kwargs: OpenAI Responses ``reasoning.effort``,
+    Anthropic ``output_config.effort``, or registry request params merged into
+    a Chat Completions ``extra_body``. A request that sent no effort reports
+    None, so an unsent effort stays visible in the usage line.
+    """
+    if request is None:
+        return None, None
+    extra_body = request.get("extra_body") or {}
+    effort: Optional[str] = None
+    for container in (
+        request.get("reasoning"),
+        request.get("output_config"),
+        extra_body.get("reasoning"),
+    ):
+        if isinstance(container, dict) and container.get("effort") is not None:
+            effort = str(container["effort"])
+            break
+    allowance = request.get("max_output_tokens", request.get("max_tokens"))
+    return effort, allowance
 
 
 def _empty_totals() -> Dict[str, int]:
@@ -439,6 +475,8 @@ def make_usage_event(
     requests: Optional[int] = None,
     slot: Optional[int] = None,
     run_id: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+    max_output_tokens: Optional[int] = None,
 ) -> UsageEvent:
     """Build an event using ambient correlation only when explicit values are absent."""
 
@@ -462,6 +500,8 @@ def make_usage_event(
         service_tier=service_tier,
         aggregate=aggregate,
         requests=requests,
+        reasoning_effort=reasoning_effort,
+        max_output_tokens=max_output_tokens,
     )
 
 
@@ -555,6 +595,7 @@ def record_openai_response(
     total_tokens = getattr(usage, "total_tokens", None)
     if total_tokens is None and input_tokens is not None and output_tokens is not None:
         total_tokens = input_tokens + output_tokens
+    reasoning_effort, max_output_tokens = request_generation_profile(request)
     event = make_usage_event(
         provider=provider,
         model=model,
@@ -569,6 +610,8 @@ def record_openai_response(
         cached_input_tokens=cached_input_tokens,
         reasoning_tokens=reasoning_tokens,
         service_tier=getattr(response, "service_tier", None),
+        reasoning_effort=reasoning_effort,
+        max_output_tokens=max_output_tokens,
     )
     record_usage_event(event)
     if request is not None:
@@ -595,6 +638,7 @@ def record_anthropic_response(
         if input_tokens is not None and output_tokens is not None
         else None
     )
+    reasoning_effort, max_output_tokens = request_generation_profile(request)
     event = make_usage_event(
         provider=provider,
         model=model,
@@ -608,6 +652,8 @@ def record_anthropic_response(
         total_tokens=total_tokens,
         cached_input_tokens=getattr(usage, "cache_read_input_tokens", None),
         cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", None),
+        reasoning_effort=reasoning_effort,
+        max_output_tokens=max_output_tokens,
     )
     record_usage_event(event)
     if request is not None:

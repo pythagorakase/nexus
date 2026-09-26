@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from nexus.api.db_pool import get_connection
 from nexus.config.loader import load_settings
 from nexus.config.preferences import load_preferences, preferences_path
-from nexus.config.settings_models import Settings
+from nexus.config.settings_models import Settings, require_reasoning_effort_support
 
 
 class StorySettings(BaseModel):
@@ -177,6 +177,12 @@ def resolve_seat(
     ):
         raise ValueError(f"{seat} requires OpenAI structured output; got {provider!r}")
     entry = settings.model_entry(selected).require_window_capabilities()
+    if seat == "gaia":
+        # Story pins and slot following reach models the load-time check of
+        # the configured default never saw.
+        require_reasoning_effort_support(
+            entry, provider=provider, source=f"[apex.gaia] ({source})"
+        )
     if (
         seat in {"skald", "gaia", "wizard"}
         and story is not None
