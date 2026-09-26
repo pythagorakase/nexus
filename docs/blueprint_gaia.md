@@ -1,3 +1,8 @@
+---
+status: historical
+verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
+---
+
 # GAIA Utility Module Blueprint (World State Tracking)
 
 ## Overview

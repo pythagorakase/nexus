@@ -1,77 +1,278 @@
-# 01 User Input
-1. Simple chat-like interface within Terminal-based UI displays recent narrative in markdown format. (See `gui_mockup.rtf`)
-2. User inputs next passage.
+---
+status: canonical
+sources:
+  - ui/client/src/hooks/useNarrativeEngine.ts
+  - ui/client/src/lib/narrative-api.ts
+  - nexus/api/slot_state.py
+  - nexus/api/narrative.py
+  - nexus/api/choice_handling.py
+  - nexus/api/narrative_lease.py
+  - nexus/api/narrative_generation.py
+  - nexus/agents/lore/lore.py
+  - nexus/agents/lore/utils/turn_cycle.py
+  - nexus/memory/manager.py
+  - nexus/memory/correspondence.py
+  - nexus/agents/memnon/memnon.py
+  - nexus/agents/lore/logon_utility.py
+  - nexus/agents/lore/seat_blocks.py
+  - nexus/agents/logon/skald_wire.py
+  - nexus/config/story_model.py
+  - nexus/api/lore_adapter.py
+  - nexus/api/draft_validation.py
+  - nexus/api/commit_handler_sync.py
+  - nexus/agents/orrery/events.py
+  - nexus/api/summary_triggers.py
+  - nexus/jobs/
+  - nexus/agents/orrery/worker.py
+  - nexus.toml
+verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
+---
 
-# 02 Warm Context
-1. `LORE` retrieves recent narrative chunks (warm slice) from the database.
-2. If a parent/target chunk is known, it is anchored first and marked as the
-   target for raw-text retrieval.
-3. Phase metadata records chunk ids; no local LLM analysis runs here.
+# The Turn Cycle
 
-# 03 World State Report - Programmatic Entity Queries
-1. `LORE` queries character, location, and faction baselines and featured dossiers
-   using `[lore.entity_inclusion]` in `nexus.toml`.
-2. Warm-slice references select featured characters; the canonical player is
-   always featured.
-3. Relationships between featured characters are included when configured.
-4. Featured-character locations receive their location dossiers.
-5. Limits include `warm_slice_lookback_chunks`, `max_characters_from_warm_slice`,
-   and `max_locations_from_warm_slice`; `include_all_relationships` controls the
-   relationship query. Provider overrides retain the existing budget behavior.
-6. The nonexistent legacy `events` and `threats` tables are no longer queried.
-   Canonical Orrery `world_events` remain on their existing dedicated paths.
+One turn takes one player action to one pending draft, and the next action
+accepts that draft into the story. Nothing a turn generates becomes part of the
+story before acceptance: the draft waits in the slot's single-row `incubator`
+until the player moves on. The code paths in the front matter are
+authoritative; this document is their map.
 
-# 04 Deep Queries
-1. The full target/latest chunk text is used as the first retrieval query when available.
-2. MEMNON's QueryAnalyzer classifies the raw chunk query for optimal search strategy.
-3. Queries are sent to `MEMNON` for retrieval. If no raw text is available, the
-   phase skips instead of summoning a local LLM fallback.
+## 1. The Player Acts
 
-# 05 Cold Distillation
-1. For each query, `MEMNON` performs hybrid search combining vector similarity and text search.
-2. Results are reranked using cross-encoder models to narrow candidate pool.
-3. Top results suitable for context payload are selected.
+The IRIS Narrative pane (`ui/client/src/hooks/useNarrativeEngine.ts`) polls
+`GET /api/slot/{slot}/state` for the newest passage, which is the pending draft
+when one exists, and its choices. The player picks a choice or writes freeform
+text, and `continueNarrative` (`ui/client/src/lib/narrative-api.ts`) posts
+`slot`, `choice` or `user_text`, and any pending draft's `session_id` to
+`POST /api/narrative/continue`. The `nexus continue` CLI command uses the same
+endpoint.
 
-# 06 Payload Assembly
-1. `LORE` calculates the API payload budget from the current Apex AI model's TPM limit, and subtracting variables it cannot control and must include regardless:
-	- user input
-	- system prompt
-2. `LORE` dynamically determines percentage allotment for each component of API call within parameters. These parameters may be adjusted frequently during unit testing. Example limits:
-	- structured/summarized/hidden information: 10-25%
-	- contextual augmentation passages: 25-40%
-	- warm slice: 40-70%
-3. For contextual augmentation passages, `LORE` converts token budget into an overall character budget then makes final selections with the following logic:
-	1. orders chunks from most relevant to least relevant
-	2. removes the least relevant chunk and continues until the remainder is less than the character budget
-	3. rendering is shared by the writer and Gaia: RECENT NARRATIVE contains only the selected warm scene, sorted by ascending numeric chunk id and ending at the parent. Selection fetches up to `warm_slice_initial` playable chunks with `id <= target_chunk_id` before applying the count, so an older continuation receives the configured window leading into its parent; an unspecified parent uses the frontier. Each identity renders once, with RECENT NARRATIVE taking priority over RECALLED SCENES, then HISTORICAL CONTEXT; the parent appears only in the recent scene. Cross-source deduplication precedes the historical render cap, so the next distinct ranked candidate fills a freed slot. ENTITY DOSSIER and the ranked historical passages precede the scene. The narrative block order is HISTORICAL CONTEXT → RECALLED SCENES → RECENT NARRATIVE → the writer's roster line → USER INPUT.
-	4. RECALLED SCENES follows the historical passages. It contains Pass-2 additions (including coverage additions) and all selected Retrograde summaries, never interleaved with the warm scene. Narrative entries sort by chunk id and display `chunk <id> · <clock face>`. Summaries sort by recording anchor and display `recorded at chunk <id> · <clock face>`; unanchored summaries follow. Clock hydration runs only on the deduplicated, capped selection. Any entry without its own clock or its recording anchor's clock renders undated with its id only. Every face uses the shared UTC story-clock formatter, never storage time. The lane has its own prompt-window block kind and labels count toward rendered coverage tokens.
-4. For warm slice, `LORE` starts with user input and most recent chunk, then goes backwards until this character budget is filled.
+While a generation runs, the pane follows phase events on
+`/ws/narrative?slot=N` and reconciles with the durable session through
+`GET /api/narrative/active` and `GET /api/narrative/status/{session_id}`, so a
+reader who disconnects still finds the finished draft. The OFFLINE status
+reflects gateway reachability alone.
 
-# 07 Apex AI Generation
-1. `LOGON` receives API payload from `LORE` and attempts to establish connection with Apex AI.
-2. Checkpoint = Connectivity: If Apex API cannot be reached or fails to return valid response after a fixed amount of time, system enters offline mode. In this state, the narrative is frozen, but existing narrative history and character profiles may be browsed. `LOGON` continues to check for connectivity and retry API calls until a valid response is received.
-3. Apex AI returns a structured response (`StoryTurnResponse`) with the following components:
-	- narrative: new narrative passage
-	- metadata: chronology updates, arc position, narrative vector updates
-	- referenced_entities: entities present or mentioned in the narrative
-	- state_updates: character state updates and relationship changes
-	- operations: requests for summaries, regeneration, or side tasks
-	- reasoning: AI's reasoning about narrative choices (for debugging)
-4. Checkpoint = Quality Control: Present user with new narrative passage and prompt user to (A) accept or (B) reject new content.
-	- If user rejects new content, provide option to (A) resend same API payload for regeneration, or (B) revise last user input and roll back to phase 02.
-	- If user accepts new content, proceed to next phase
-5. If user accepts new content, provide option to accept or reject new episode division.
+## 2. The Gateway Claims the Slot
 
-# 08 Narrative Integration
-1. `GAIA` processes any explicit changes to database information directed by Apex AI.
-	   - "Change `location_status` of `Sullivan` from 'hiding under bed' to 'sleeping in laundry hamper'"
-	   - "Change `internal_state` of `Pete` from 'resents being overlooked/underutilized' to 'determined to demonstrate he is invaluable and irreplaceable to team'"
-	   - "Change `status` of `Pete_Silo` from 'abandoned' to 'occupied by squatters'"
-2. `LORE` interprets new narrative for factual/event-based changes to databases.
-3. `GAIA` interprets new narrative for character/relationship changes.
-4. New chunk is embedded and enriched with metadata.
-5. New chunk is added to user-viewable markdown-format chat interface. 
+`continue_narrative` in `nexus/api/narrative.py`:
 
-# 09 Idle State
-1. System notifies user that integration processing is complete.
-2. System awaits next user input.
+1. Rejects locked slots, a request carrying both `choice` and `accept_fate`,
+   a model override missing from the registry, and slots still in the
+   new-story wizard.
+2. Returns 409 when a supplied `session_id` no longer matches the pending
+   draft, before any session or lease exists.
+3. Mints a session UUID and acquires the slot's durable generation lease
+   (`nexus/api/narrative_lease.py`): the singleton `narrative_generation_lease`
+   row plus a `narrative_generation_sessions` record. A live owner returns 409
+   with its session id; an owner past `[api.narrative_generation]
+   stale_lease_timeout_seconds` is recorded as `GenerationLeaseExpired` and
+   replaced.
+4. With a draft pending, records the player's response on it and accepts it
+   through `commit_incubator_to_database_sync` (step 7), binding the new
+   session to the accepted chunk in the same transaction. Without a pending
+   draft, the response is recorded on the committed frontier chunk. A
+   numbered `choice`, or `accept_fate` (which takes the first presented
+   choice), resolves to that choice's full text, which the chunk records and
+   generation receives as the player's input; freeform `user_text` is recorded
+   as written.
+5. Binds the session to its parent chunk and claims the parent's embedding
+   trigger, which enqueues every playable chunk older than the parent that
+   lacks embeddings (`nexus/jobs/embeddings.py`). Embedding therefore trails
+   acceptance by one turn.
+6. Schedules `generate_narrative_async` (`nexus/api/narrative_generation.py`)
+   as a background task and returns the session id. A failure before
+   scheduling releases the lease and records the error on the session.
+
+The background task renews the lease every third of the stale timeout and
+records the durable phase: `retrieval`, `assembly`, `writer`, `gaia`,
+`staging`, then `complete`.
+
+## 3. LORE Assembles Context
+
+Each turn builds a fresh `LORE` (`nexus/agents/lore/lore.py`) and closes it
+afterward. `process_turn` restores the Pass-2 baseline staged when the parent
+was accepted (`lore_pass_baselines`), failing loudly if it is missing, then
+runs the phases in `nexus/agents/lore/utils/turn_cycle.py`. No language model
+runs before the storyteller seats; retrieval embeds and reranks raw text.
+
+### User Input and Pass 2
+
+LOGON resolves the storyteller route (model, wire class, provider), which fixes
+the effective context window and the token budget. `handle_user_input` in
+`nexus/memory/manager.py` then runs Pass 2: deterministic entity detection
+reports every known character, place, and faction named in the input as a
+divergence gap. Unless the input is a bare choice number or letter
+(`[memory] skip_simple_choices`) or no budget remains, a raw vector search over
+the input keeps the results that fit the Pass-2 budget (`[memory]
+phase2_fraction` of the context window).
+
+### Warm Slice
+
+MEMNON loads a window of up to `[lore.chunk_parameters] warm_slice_initial`
+playable chunks ending at the parent. Pass-2 additions join as recalled chunks.
+An empty warm slice is fatal.
+
+### Entity Dossiers
+
+Baseline rows cover every character, place, and faction. Entities referenced
+in the warm slice are featured with full detail, together with featured
+characters' current locations and the relationships among them, within the
+limits of `[lore.entity_inclusion]` and its provider overrides.
+
+### Deep Retrieval
+
+The query is the full parent chunk followed by the current input, never an
+LLM rewrite (`docs/retrieval_query_bakeoff_2026_05_18.md`). MEMNON's
+`query_memory` (`nexus/agents/memnon/memnon.py`) classifies the query type,
+runs hybrid vector and full-text search (`[memnon.retrieval.hybrid_search]`),
+and reranks with the cross-encoder
+(`[memnon.retrieval.cross_encoder_reranking]`).
+
+### Orrery Preview and Intertitle
+
+With `[orrery] enabled`, `resolve_dry_run` resolves behavior packages at the
+parent chunk without canonical writes. The resulting proposal carries draft
+resolutions, scene pressures, ambient seeds, joint beats, and scene
+conditions. The intertitle (season, episode, scene, world layer, world clock,
+and the protagonist's location) loads on every turn, independent of Orrery.
+
+### Payload Assembly and Trimming
+
+Assembly adds the Orrery bleed menu (earlier off-screen outcomes offered for
+uptake), the knowledge digest for entities present in the scene when
+`[orrery.knowledge]` is enabled, recent Orrery rulings, the rendered Orrery
+cards, and the private writer–Gaia correspondence
+(`nexus/memory/correspondence.py`). Warm and retrieved memories are
+deduplicated against each other and capped by `[lore.render_limits]`. LOGON
+then renders and measures the real request for each seat. While any seat
+exceeds its target, the oldest warm chunks are dropped first (never the
+parent), then the lowest-ranked retrieved passages, and each dropped chunk is
+released from Pass-2 state. A core that cannot fit fails at the final
+prompt-window guard.
+
+## 4. LOGON Runs the Storyteller Seats
+
+`LogonUtility` (`nexus/agents/lore/logon_utility.py`) composes each seat's
+prompt from the block manifest in `nexus/agents/lore/seat_blocks.py`; every
+seat opens with the same scene blocks, from the intertitle through recent
+narrative. `[apex] turn_pipeline` selects the pipeline:
+
+- **`two_pass`** (default). The writer seat returns `SkaldWriterWire`
+  (`nexus/agents/logon/skald_wire.py`): prose, two to four choices, scene and
+  presence deltas, runtime operations, and a private letter to Gaia. The Gaia
+  seat then reads its own rendering of the turn context plus the writer's
+  finished output and letter, and returns `SkaldGaiaWire`: durable state
+  updates, rulings on the Orrery proposal, new-entity declarations, and a
+  reply letter. Gaia uses the story's pinned Gaia model or follows the
+  writer's (`resolve_seat` in `nexus/config/story_model.py`).
+  `combine_two_pass` merges both halves.
+- **`single_pass`**. One call returns `SkaldTurnWire`, carrying both halves.
+
+The merged wire is hydrated into a `StoryTurnResponse` against the scene's
+presence baseline and character roster. Validation failures are retried up to
+`[apex] structured_output_retries` times; an exhausted budget or a provider
+error fails the turn.
+
+## 5. The Draft Is Staged
+
+`response_to_incubator` (`nexus/api/lore_adapter.py`) maps the response to an
+incubator row: prose and choices; metadata, entity, and reference updates; the
+Orrery proposal and bleed offers; Gaia's adjudications and declarations; both
+letters; the Pass-1 baseline for the next turn; and the generating model.
+`write_to_incubator` (`nexus/api/narrative_generation.py`) then:
+
+1. Dry-runs acceptance validation (`validate_commit_draft_sync` in
+   `nexus/api/draft_validation.py`) inside a savepoint that is always rolled
+   back.
+2. Confirms the session still holds the lease for this parent.
+3. Writes the singleton `incubator` row. A regeneration replaces only the draft
+   it expects and marks that session superseded.
+4. Marks the session complete and releases the lease in the same transaction,
+   which wakes the deferred-work scheduler.
+
+A failure at any point marks the session `error` with its error class,
+releases the lease, and emits an `error` event.
+
+## 6. Review
+
+The pending draft appears in the Narrative pane. From there:
+
+- **Accept.** The next `POST /api/narrative/continue` accepts the draft before
+  generating (step 2). `POST /api/narrative/approve` commits it without
+  continuing.
+- **Regenerate.** `POST /api/narrative/regenerate` reruns generation from the
+  same parent and player text, with an optional author's note, under a new
+  session. The current draft stays until its replacement is staged.
+- **Discard.** `DELETE /api/narrative/incubator` removes the draft and marks
+  its session discarded.
+- **Retry.** After a failed generation, `POST /api/narrative/retry` with the
+  failed session id replays the recorded player action, provided that failure
+  is still the latest session and nothing is pending.
+
+## 7. Acceptance Commits the Turn
+
+`commit_incubator_to_database_sync` (`nexus/api/commit_handler_sync.py`) runs
+one transaction:
+
+1. Locks the incubator row, reruns draft validation, and binds staged
+   name-reveal identities.
+2. Derives chronology from the parent's `chunk_metadata`: the scene number
+   advances, and an episode or season transition plans summary jobs.
+3. Checks declared characters against the identity index.
+4. Inserts the `narrative_chunks` row (prose plus the enacted choice), marks
+   the session accepted, persists the Pass-1 baseline to `lore_pass_baselines`,
+   and stores both private letters.
+5. Inserts `chunk_metadata` with its `SxxEyy_zzz` slug and reads back the
+   accepting chunk's world clock.
+6. Applies name reveals. New-entity declarations create stubs and enqueue
+   Retrograde maturation jobs.
+7. Resolves character, place, and faction references, reconciles roster
+   mentions, and writes the scene's presence roster.
+8. Applies Gaia's state updates at the accepting chunk's clock.
+9. Commits the Orrery tick (`commit_orrery_tick_sync` in
+   `nexus/agents/orrery/events.py`): the previewed proposal is materialized
+   with Gaia's adjudications applied, then bleed offers and uptake are
+   recorded.
+10. Seeds character experiences, enqueues experience rendering at scene
+    boundaries, and captures interval state checkpoints.
+11. Enqueues correspondence compaction, binds attempt-manifest exposures, and
+    enqueues planned summaries (`nexus/api/summary_triggers.py`).
+12. Deletes the incubator row.
+
+After the commit, the optional presence audit runs and the gateway wakes the
+scheduler.
+
+## 8. Deferred Work
+
+A gateway started with `NEXUS_SLOT` runs one `SlotScheduler`
+(`nexus/jobs/scheduler.py`) for that slot. It holds the durable
+`deferred_work_scheduler` lease, observes locked slots without draining them,
+and before every job and provider call waits until no generation lease is
+live, so background inference never competes with a turn. Each pass drains, in
+order:
+
+1. Orrery promotion (`promote_pending_resolutions_sync` in
+   `nexus/agents/orrery/worker.py`), by the deterministic thresholds in
+   `[orrery.promote]`.
+2. The narration outbox, which records deterministic perceptual descriptors
+   without a provider call (`docs/offscreen_narration_retirement.md`).
+3. Character experience rendering and Retrograde maturation.
+4. Relationship milestone recovery and correspondence compaction.
+5. Episode and season summaries (`nexus/jobs/summaries.py`), on the model
+   resolved when each job was enqueued.
+6. Chunk embeddings (`nexus/jobs/embeddings.py`) with the active MEMNON
+   embedding model, which stamp `embedding_generated_at`.
+
+The scheduler lease and the compaction, summary, and embedding queues are
+configured in `[runtime.scheduler]`; the Orrery queues take their limits from
+their own `[orrery]` tables. `python -m nexus.agents.orrery.worker` runs one
+pass under the same ownership.
+
+## Bootstrap Turns
+
+A story's first turn has parent chunk 0. The new-story wizard posts to the
+same endpoint, but `generate_bootstrap_narrative` replaces LORE: it reads the
+setting from `global_variables` and the canonical player character, calls
+LOGON with the bootstrap schema, and stages the result like any other draft.
+Acceptance starts at season 1, episode 1, scene 1, and no embedding is
+claimed.

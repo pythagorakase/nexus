@@ -1,3 +1,8 @@
+---
+status: historical
+verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
+---
+
 # Orrery Slot 2 Backfill Plan
 
 **Status:** post-apply checkpoint for issue #326. This document records the
