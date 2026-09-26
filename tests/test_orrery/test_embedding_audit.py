@@ -145,3 +145,11 @@ def test_jobs_output_names_damage_only_when_present(
     assert capsys.readouterr().out.splitlines()[-1] == (
         "stamped_without_vectors: retrograde_summaries=12, character_experiences=0"
     )
+
+
+def test_jobs_output_refuses_a_pre_upgrade_payload() -> None:
+    """A gateway older than the CLI is named, not papered over with a default."""
+    payload = _jobs_payload({"retrograde_summaries": 0, "character_experiences": 0})
+    del payload["stamped_without_vectors"]
+    with pytest.raises(RuntimeError, match="stamped_without_vectors.*restart"):
+        cli._print_jobs(payload)
