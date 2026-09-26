@@ -31,6 +31,181 @@ def test_discover_migrations_includes_python_and_skips_seed_script(
     ]
 
 
+# Holes in the version sequence when #810 froze it. Filling one would apply out
+# of order on every database already past it, so both kinds of drift fail.
+KNOWN_GAPS = frozenset({"013", "119"})
+
+
+def _on_disk_versions() -> dict[str, Path]:
+    """Map every migration version in the real migrations/ to its file."""
+
+    discovered = {
+        version: path for version, _name, path in migrate.discover_migrations()
+    }
+    for version in migrate.SCRIPT_ONLY_MIGRATIONS:
+        (script,) = migrate.MIGRATIONS_DIR.glob(f"{version}_*")
+        discovered[version] = script
+    return discovered
+
+
+def test_discover_migrations_rejects_duplicate_versions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two files sharing a version abort discovery and name both paths."""
+
+    (tmp_path / "001_baseline.sql").write_text("SELECT 1;")
+    (tmp_path / "130_first_change.sql").write_text("SELECT 1;")
+    (tmp_path / "130_second_change.sql").write_text("SELECT 2;")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+
+    with pytest.raises(RuntimeError, match="version 130") as excinfo:
+        migrate.discover_migrations()
+
+    assert str(tmp_path / "130_first_change.sql") in str(excinfo.value)
+    assert str(tmp_path / "130_second_change.sql") in str(excinfo.value)
+
+
+def test_discover_migrations_rejects_sql_and_python_sharing_a_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An allowlisted Python version cannot also ship as SQL."""
+
+    (tmp_path / "023_orrery_schema.py").write_text("def run(conn): pass")
+    (tmp_path / "023_orrery_schema_again.sql").write_text("SELECT 1;")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+
+    with pytest.raises(RuntimeError, match="version 023") as excinfo:
+        migrate.discover_migrations()
+
+    assert str(tmp_path / "023_orrery_schema.py") in str(excinfo.value)
+    assert str(tmp_path / "023_orrery_schema_again.sql") in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "stray",
+    [
+        "README.md",
+        "130-add_widget.sql",
+        "130_add_widget.sql.bak",
+        "130_Add_Widget.sql",
+        "13_add_widget.sql",
+        "130_add_widget.SQL",
+    ],
+)
+def test_discover_migrations_rejects_unrecognized_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stray: str
+) -> None:
+    """A misnamed file fails loudly instead of being silently never applied."""
+
+    (tmp_path / "001_baseline.sql").write_text("SELECT 1;")
+    (tmp_path / stray).write_text("SELECT 1;")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+
+    with pytest.raises(RuntimeError, match="Unrecognized entry") as excinfo:
+        migrate.discover_migrations()
+
+    assert str(tmp_path / stray) in str(excinfo.value)
+
+
+def test_discover_migrations_rejects_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only interpreter and OS artifacts may sit beside migration files."""
+
+    (tmp_path / "001_baseline.sql").write_text("SELECT 1;")
+    (tmp_path / "130_add_widget.sql").mkdir()
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+
+    with pytest.raises(RuntimeError, match="Unrecognized entry"):
+        migrate.discover_migrations()
+
+
+def test_discover_migrations_ignores_interpreter_and_os_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bytecode caches and Finder metadata are not migrations."""
+
+    (tmp_path / "001_baseline.sql").write_text("SELECT 1;")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "023_orrery_schema.cpython-311.pyc").write_bytes(b"")
+    (tmp_path / ".DS_Store").write_bytes(b"")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+
+    discovered = migrate.discover_migrations()
+
+    assert [(version, name) for version, name, _path in discovered] == [
+        ("001", "baseline")
+    ]
+
+
+def test_discover_migrations_rejects_unallowlisted_python(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """New migrations are SQL unless their version is allowlisted."""
+
+    (tmp_path / "001_baseline.sql").write_text("SELECT 1;")
+    (tmp_path / "130_add_widget.py").write_text("def run(conn): pass")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+    assert "130" not in migrate.PYTHON_MIGRATION_ALLOWLIST
+
+    with pytest.raises(RuntimeError, match="PYTHON_MIGRATION_ALLOWLIST") as excinfo:
+        migrate.discover_migrations()
+
+    assert str(tmp_path / "130_add_widget.py") in str(excinfo.value)
+
+
+def test_python_migration_allowlist_matches_files_on_disk() -> None:
+    """Every Python migration is allowlisted, and no allowlist entry is stale."""
+
+    python_versions = {path.name[:3] for path in migrate.MIGRATIONS_DIR.glob("*.py")}
+
+    assert python_versions == migrate.PYTHON_MIGRATION_ALLOWLIST
+
+
+def test_migration_versions_are_unique_and_strictly_increasing() -> None:
+    """The real migrations/ directory passes discovery in version order."""
+
+    versions = [version for version, _name, _path in migrate.discover_migrations()]
+
+    assert versions
+    assert all(earlier < later for earlier, later in zip(versions, versions[1:]))
+    assert all(len(version) == 3 and version.isdigit() for version in versions)
+
+
+def test_migration_sequence_has_only_known_gaps() -> None:
+    """A new hole or a reused historical hole in the numbering fails."""
+
+    versions = _on_disk_versions()
+    head = max(int(version) for version in versions)
+    missing = {f"{number:03d}" for number in range(1, head + 1)} - set(versions)
+
+    assert missing == KNOWN_GAPS
+
+
+def test_bootstrap_migrations_name_sql_files_on_disk() -> None:
+    """Pre-tracking stamps match the discovered SQL files exactly."""
+
+    discovered = {
+        version: (name, path) for version, name, path in migrate.discover_migrations()
+    }
+
+    for version, name in migrate.BOOTSTRAP_MIGRATIONS:
+        assert version in discovered, version
+        assert discovered[version][0] == name
+        assert discovered[version][1].suffix == ".sql"
+
+
+def test_script_only_migrations_exist_and_are_not_discovered() -> None:
+    """Each script-only version names exactly one Python file that never runs."""
+
+    discovered = {version for version, _name, _path in migrate.discover_migrations()}
+
+    for version in migrate.SCRIPT_ONLY_MIGRATIONS:
+        matches = sorted(migrate.MIGRATIONS_DIR.glob(f"{version}_*"))
+        assert [path.suffix for path in matches] == [".py"], matches
+        assert version not in discovered
+
+
 def test_relationship_valence_migration_uses_explicit_mapping() -> None:
     """Issue #213's view column uses an explicit enum-to-int contract."""
 

@@ -39,6 +39,22 @@ engine references remain registered after disposal so repeated resets invalidate
 their replacement pools too. Replacement must quiesce work using that database;
 disposal does not coordinate transactions in other processes.
 
+## Migration Ownership
+
+`scripts/migrate.py` is the only migration runner: it discovers, applies, and
+stamps migrations in each database's `schema_migrations` table, and
+`scripts/new_story_setup.py` calls it for fresh slots. Do not apply migration SQL
+with `psql` or ad hoc scripts; an unstamped change is invisible to the runner.
+Discovery fails loudly when an entry in `migrations/` is not an
+`NNN_name.sql` or `NNN_name.py` file (bytecode caches and `.DS_Store` excepted),
+when two files share a version, or when a Python migration's version is missing
+from `PYTHON_MIGRATION_ALLOWLIST`. New migrations are SQL and take the next free
+number. Python is reserved for mechanics a single transaction cannot express,
+such as `CREATE INDEX CONCURRENTLY`; allowlist such a version with a comment
+giving the reason. Offline tests in `tests/test_orrery/test_migrate.py` pin the
+allowlist to the Python files on disk, keep versions unique and increasing, and
+fail on any numbering gap beyond the historical `KNOWN_GAPS` (013 and 119).
+
 ## Schema Documentation
 
 PostgreSQL comments are the schema reference (`\d+` in psql or

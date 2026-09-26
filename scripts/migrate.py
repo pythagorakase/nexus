@@ -2,8 +2,10 @@
 """
 Database migration runner for NEXUS.
 
-Applies SQL migrations to all slot databases and the template database.
-Tracks applied migrations in a per-database `schema_migrations` table.
+The sole migration runner: applies migrations to all slot databases and the
+template database, and tracks applied migrations in a per-database
+`schema_migrations` table. New migrations are SQL; Python migrations run only
+when their version is in PYTHON_MIGRATION_ALLOWLIST.
 
 Usage:
     python scripts/migrate.py --status          # Show pending migrations
@@ -41,9 +43,60 @@ logging.basicConfig(
 
 # Migration directory relative to this script
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
+# Every migration is a file named NNN_name.sql or NNN_name.py.
+MIGRATION_FILENAME = re.compile(r"^([0-9]{3})_([a-z0-9_]+)\.(sql|py)$")
+# Interpreter and operating-system artifacts tolerated beside the migrations.
+IGNORED_MIGRATION_ENTRIES = frozenset({"__pycache__", ".DS_Store"})
 SCRIPT_ONLY_MIGRATIONS = {
     "008",  # migrations/008_populate_mock_database.py is a manual seed script.
 }
+# New migrations are SQL. Python is reserved for mechanics one SQL transaction
+# cannot express (for example CREATE INDEX CONCURRENTLY); a new entry needs a
+# comment giving its reason. Unlisted Python migrations abort discovery.
+PYTHON_MIGRATION_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # Historical Python migrations, preserved as written (#810).
+        "008",
+        "023",
+        "025",
+        "027",
+        "028",
+        "029",
+        "030",
+        "031",
+        "032",
+        "033",
+        "034",
+        "035",
+        "036",
+        "037",
+        "038",
+        "039",
+        "042",
+        "043",
+        "045",
+        "046",
+        "047",
+        "048",
+        "049",
+        "050",
+        "051",
+        "052",
+        "053",
+        "054",
+        "055",
+        "056",
+        "057",
+        "058",
+        "059",
+        "060",
+        "061",
+        "062",
+        "078",
+        "114",
+        "126",
+    }
+)
 
 # All target databases
 TEMPLATE_DB = "NEXUS_template"
@@ -204,18 +257,44 @@ def discover_migrations() -> List[Tuple[str, str, Path]]:
     """
     Discover SQL and managed Python migration files.
 
+    Every entry in MIGRATIONS_DIR other than IGNORED_MIGRATION_ENTRIES must be a
+    file matching MIGRATION_FILENAME whose version no other file uses, and every
+    Python migration's version must be in PYTHON_MIGRATION_ALLOWLIST.
+
     Returns list of (version, name, path) tuples sorted by version.
+
+    Raises:
+        RuntimeError: If an entry is not a migration file, two files share a
+            version, or a Python migration is not allowlisted.
     """
     migrations = []
-    pattern = re.compile(r"^(\d{3})_(.+)\.(sql|py)$")
+    seen: dict[str, Path] = {}
 
-    for path in MIGRATIONS_DIR.iterdir():
-        match = pattern.match(path.name)
-        if match:
-            version, name, _extension = match.groups()
-            if version in SCRIPT_ONLY_MIGRATIONS:
-                continue
-            migrations.append((version, name, path))
+    for path in sorted(MIGRATIONS_DIR.iterdir()):
+        if path.name in IGNORED_MIGRATION_ENTRIES:
+            continue
+        match = MIGRATION_FILENAME.match(path.name)
+        if match is None or not path.is_file():
+            raise RuntimeError(
+                f"Unrecognized entry in {MIGRATIONS_DIR}: {path}. Migrations are "
+                "files named NNN_name.sql or NNN_name.py (lowercase snake_case)."
+            )
+        version, name, extension = match.groups()
+        if version in seen:
+            raise RuntimeError(
+                f"Migration version {version} is used by both {seen[version]} "
+                f"and {path}"
+            )
+        seen[version] = path
+        if extension == "py" and version not in PYTHON_MIGRATION_ALLOWLIST:
+            raise RuntimeError(
+                f"Python migration {path} is not in PYTHON_MIGRATION_ALLOWLIST. "
+                "New migrations are SQL; allowlist Python in scripts/migrate.py "
+                "only with a reason comment."
+            )
+        if version in SCRIPT_ONLY_MIGRATIONS:
+            continue
+        migrations.append((version, name, path))
 
     return sorted(migrations, key=lambda x: x[0])
 
