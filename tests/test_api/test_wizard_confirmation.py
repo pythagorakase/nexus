@@ -1,5 +1,6 @@
 """Draft completion, revision and player confirmation are distinct transitions."""
 
+import json
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -475,41 +476,57 @@ def test_resume_restores_accepted_artifact_while_its_introduction_is_missing(
     assert introduced_data["character_sheet"] is None
 
 
-@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
-def test_interrupted_introduction_is_retried_once_then_refused(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
-) -> None:
-    """A failed introduction stays requestable; a recorded one cannot repeat."""
+def introduction_routes(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str, replies: list
+) -> SimpleNamespace:
+    """Mount the chat and resume routes on an accepted, unintroduced wizard.
+
+    Choice writes follow the database contract: an introduction claim succeeds
+    only while no reply has recorded choices, and a release withdraws it.
+    """
+    from nexus.api.wizard_confirmation import WizardStateConflict
+
     cache = accepted_cache(accepted, reply_recorded=False)
     storage = ConversationsClient("TEST")
     thread_id = storage.create_thread()
     cache.thread_id = thread_id
     storage.add_message(thread_id, "assistant", "Anything else before we finish?")
     storage.add_message(thread_id, "user", "That is everything.")
-    control = (
-        f"[SYSTEM] Phase {accepted} complete. Proceeding to {introduced}. "
-        "Please introduce the next phase."
-    )
-    replies: list[Exception | WizardResponse] = [
-        RuntimeError("Provider unavailable"),
-        WizardResponse(
-            message="Where does it begin?", choices=["The harbor", "The lighthouse"]
-        ),
-        WizardResponse(
-            message="Tell me about the harbor.", choices=["Its lamps", "Its debts"]
-        ),
-    ]
+    released: list[list[str]] = []
 
     class Agent:
         async def run(self, *args, **kwargs):
             reply = replies.pop(0)
             if isinstance(reply, Exception):
                 raise reply
-            return SimpleNamespace(output=reply)
+            return SimpleNamespace(output=reply() if callable(reply) else reply)
 
-    def record_choices(choices, dbname, **kwargs):
+        async def run_stream(self, *args, **kwargs):
+            output = (await self.run()).output
+
+            class Turn:
+                async def stream_output(self):
+                    yield output
+
+                async def get_output(self):
+                    return output
+
+            yield Turn()
+
+    def record_choices(choices, dbname, *, expected_thread_id, **kwargs):
+        assert expected_thread_id == thread_id
+        if kwargs.get("claim_introduction") and cache.choices_recorded:
+            raise WizardStateConflict(
+                "This phase was already introduced. Resume before continuing."
+            )
         cache.choices = choices
         cache.choices_recorded = True
+
+    def release(choices, dbname, *, expected_thread_id):
+        assert expected_thread_id == thread_id
+        released.append(choices)
+        cache.choices = []
+        cache.choices_recorded = False
 
     state = SlotState(
         slot=4,
@@ -538,20 +555,57 @@ def test_interrupted_introduction_is_retried_once_then_refused(
     )
     monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
     monkeypatch.setattr(wizard_chat, "write_wizard_choices", record_choices)
+    monkeypatch.setattr(wizard_chat, "release_wizard_introduction", release)
     monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
     monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
     monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
     app = FastAPI()
     app.include_router(wizard_chat.router)
     app.include_router(setup_endpoints.router)
-    client = TestClient(app, raise_server_exceptions=False)
-    introduction = {
-        "slot": 4,
-        "thread_id": thread_id,
-        "current_phase": introduced,
-        "message": control,
-        "message_origin": "wizard_control",
-    }
+    return SimpleNamespace(
+        client=TestClient(app, raise_server_exceptions=False),
+        cache=cache,
+        storage=storage,
+        thread_id=thread_id,
+        released=released,
+        introduction={
+            "slot": 4,
+            "thread_id": thread_id,
+            "current_phase": introduced,
+            "message": (
+                f"[SYSTEM] Phase {accepted} complete. Proceeding to {introduced}. "
+                "Please introduce the next phase."
+            ),
+            "message_origin": "wizard_control",
+        },
+    )
+
+
+def assistant_messages(routes: SimpleNamespace) -> list[str]:
+    """Transcript replies, excluding the two seeded before acceptance."""
+    return [
+        message["content"]
+        for message in routes.storage.list_messages(routes.thread_id, limit=0)
+        if message["role"] == "assistant"
+    ][1:]
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_interrupted_introduction_is_retried_once_then_refused(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+) -> None:
+    """A failed introduction stays requestable; a recorded one cannot repeat."""
+    replies: list = [
+        RuntimeError("Provider unavailable"),
+        WizardResponse(
+            message="Where does it begin?", choices=["The harbor", "The lighthouse"]
+        ),
+        WizardResponse(
+            message="Tell me about the harbor.", choices=["Its lamps", "Its debts"]
+        ),
+    ]
+    routes = introduction_routes(monkeypatch, accepted, introduced, replies)
+    client, introduction = routes.client, routes.introduction
 
     assert client.post("/api/story/new/chat", json=introduction).status_code == 500
     interrupted = client.get("/api/story/new/setup/resume?slot=4").json()
@@ -570,12 +624,12 @@ def test_interrupted_introduction_is_retried_once_then_refused(
         "content": "Where does it begin?",
     }
 
-    before = storage.list_messages(thread_id, limit=0)
+    before = routes.storage.list_messages(routes.thread_id, limit=0)
     for endpoint in ("/api/story/new/chat", "/api/story/new/chat/stream"):
         repeated = client.post(endpoint, json=introduction)
         assert repeated.status_code == 409
         assert "already introduced" in repeated.json()["detail"]
-    assert storage.list_messages(thread_id, limit=0) == before
+    assert routes.storage.list_messages(routes.thread_id, limit=0) == before
     assert len(replies) == 1
 
     # The refusal is specific to the application's introduction control.
@@ -586,3 +640,66 @@ def test_interrupted_introduction_is_retried_once_then_refused(
     )
     assert player.status_code == 200, player.text
     assert replies == []
+    assert routes.released == []
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_introduction_that_loses_the_claim_never_reaches_the_transcript(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str, stream: bool
+) -> None:
+    """Concurrent introductions: only the reply that records choices is kept."""
+    routes: SimpleNamespace
+
+    def concurrent_winner_lands_first() -> WizardResponse:
+        # Another request introduced the phase while this model call ran.
+        routes.cache.choices = ["The winner's option", "Another"]
+        routes.cache.choices_recorded = True
+        return WizardResponse(
+            message="A second introduction.", choices=["Late one", "Late two"]
+        )
+
+    routes = introduction_routes(
+        monkeypatch, accepted, introduced, [concurrent_winner_lands_first]
+    )
+    endpoint = "/api/story/new/chat" + ("/stream" if stream else "")
+    response = routes.client.post(endpoint, json=routes.introduction)
+    if stream:
+        assert response.status_code == 200
+        record = json.loads(response.text.strip().splitlines()[-1])
+        assert (record["type"], record["status_code"]) == ("error", 409)
+        assert "already introduced" in record["detail"]
+    else:
+        assert response.status_code == 409
+        assert "already introduced" in response.json()["detail"]
+    assert assistant_messages(routes) == []
+    assert routes.cache.choices == ["The winner's option", "Another"]
+    assert routes.released == []
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_transcript_failure_withdraws_the_introduction_claim(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+) -> None:
+    """A claimed introduction that never reached the transcript stays requestable."""
+    routes = introduction_routes(
+        monkeypatch,
+        accepted,
+        introduced,
+        [WizardResponse(message="Lost on the way.", choices=["One", "Two"])],
+    )
+    add_message = routes.storage.add_message
+
+    def failing_assistant_write(thread_id, role, content, **kwargs):
+        if role == "assistant":
+            raise RuntimeError("Conversation store unavailable")
+        return add_message(thread_id, role, content, **kwargs)
+
+    routes.storage.add_message = failing_assistant_write
+    response = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert response.status_code == 500
+    assert "Conversation store unavailable" in response.json()["detail"]
+    assert routes.released == [["One", "Two"]]
+    resumed = routes.client.get("/api/story/new/setup/resume?slot=4").json()
+    assert resumed["awaiting_introduction"] == introduced
+    assert assistant_messages(routes) == []

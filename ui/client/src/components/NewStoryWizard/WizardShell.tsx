@@ -299,6 +299,10 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
                             slot={selectedSlot!}
                             onComplete={handleComplete}
                             onCancel={handleAbort}
+                            onResumeRequired={() => {
+                                setResumeError(false);
+                                setResumeRequest(selectedSlot);
+                            }}
                             onPhaseChange={handleInteractivePhaseChange}
                             onArtifactConfirmed={handleArtifactConfirmed}
                             wizardData={wizardData}

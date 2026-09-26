@@ -37,6 +37,7 @@ from nexus.api.new_story_cache import (
     clear_suggested_traits,
     guarded_wizard_write,
     read_cache,
+    release_wizard_introduction,
     write_wizard_choices,
 )
 from nexus.api.new_story_flow import (
@@ -155,6 +156,46 @@ def _reject_repeated_introduction(
             status_code=409,
             detail="This phase was already introduced. Resume before continuing.",
         )
+
+
+def _is_introduction(cache: Optional[WizardCache], message_origin: str) -> bool:
+    """Whether this control message requests an accepted phase's introduction."""
+    return bool(
+        cache is not None
+        and message_origin == "wizard_control"
+        and cache.awaiting_introduction()
+    )
+
+
+def _record_text_reply(
+    client: ConversationsClient,
+    *,
+    slot: int,
+    thread_id: str,
+    message: str,
+    choices: List[str],
+    introduction: bool,
+) -> None:
+    """Persist a text reply's transcript message and presented choices.
+
+    Recorded choices are the durable proof that an introduction arrived, and the
+    conversation store cannot share their transaction. An introduction therefore
+    claims them first, only while none are recorded, so one reply wins; the
+    claim is withdrawn if the transcript write then fails.
+    """
+    dbname = slot_dbname(slot)
+    if not introduction:
+        client.add_message(thread_id, "assistant", message)
+        write_wizard_choices(choices, dbname, expected_thread_id=thread_id)
+        return
+    write_wizard_choices(
+        choices, dbname, expected_thread_id=thread_id, claim_introduction=True
+    )
+    try:
+        client.add_message(thread_id, "assistant", message)
+    except Exception:
+        release_wizard_introduction(choices, dbname, expected_thread_id=thread_id)
+        raise
 
 
 def _accept_fate_prompt(message: Optional[str]) -> str:
@@ -349,6 +390,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 detail="Confirm or revise the completed character before continuing.",
             )
         _reject_repeated_introduction(persisted_cache, request.message_origin)
+        introduction = _is_introduction(persisted_cache, request.message_origin)
         state_subphase = _wizard_subphase_for_state(
             state_phase,
             has_concept=state.wizard_state.has_concept,
@@ -737,16 +779,19 @@ async def new_story_chat_endpoint(request: ChatRequest):
         def prepare_choices_for_ui(raw_choices: List[str]) -> List[str]:
             return [c.strip() for c in raw_choices if isinstance(c, str) and c.strip()]
 
-        client.add_message(request.thread_id, "assistant", wizard_response.message)
         ui_choices = prepare_choices_for_ui(wizard_response.choices)
         logger.info(
             "Wizard response: message_len=%d choices=%s",
             len(wizard_response.message or ""),
             ui_choices,
         )
-
-        write_wizard_choices(
-            ui_choices, slot_dbname(request.slot), expected_thread_id=request.thread_id
+        _record_text_reply(
+            client,
+            slot=request.slot,
+            thread_id=request.thread_id,
+            message=wizard_response.message,
+            choices=ui_choices,
+            introduction=introduction,
         )
 
         return {
@@ -815,6 +860,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             detail="Use the non-streaming wizard route to confirm or revise this artifact.",
         )
     _reject_repeated_introduction(persisted_cache, request.message_origin)
+    introduction = _is_introduction(persisted_cache, request.message_origin)
 
     request.context_data = _hydrate_character_context(request)
 
@@ -1092,16 +1138,18 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 ) + "\n"
                 return
 
-            client.add_message(request.thread_id, "assistant", final_output.message)
             ui_choices = [
                 c.strip()
                 for c in final_output.choices
                 if isinstance(c, str) and c.strip()
             ]
-            write_wizard_choices(
-                ui_choices,
-                slot_dbname(request.slot),
-                expected_thread_id=request.thread_id,
+            _record_text_reply(
+                client,
+                slot=request.slot,
+                thread_id=request.thread_id,
+                message=final_output.message,
+                choices=ui_choices,
+                introduction=introduction,
             )
             yield json.dumps(
                 {

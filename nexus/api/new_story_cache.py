@@ -1627,7 +1627,11 @@ def write_cache(
 
 
 def write_wizard_choices(
-    choices: List[str], dbname: str, *, expected_thread_id: Optional[str] = None
+    choices: List[str],
+    dbname: str,
+    *,
+    expected_thread_id: Optional[str] = None,
+    claim_introduction: bool = False,
 ) -> None:
     """
     Store wizard choices in new_story_creator for CLI --choice resolution.
@@ -1637,31 +1641,53 @@ def write_wizard_choices(
     Args:
         choices: List of choice strings presented to user
         dbname: Database name (e.g., "save_05")
+        expected_thread_id: Refuse the write if another conversation replaced it.
+        claim_introduction: Write only while no reply has recorded choices since
+            the last acceptance, so exactly one phase introduction persists.
     """
-    import json
+    from nexus.api.wizard_confirmation import WizardStateConflict
 
+    if claim_introduction and expected_thread_id is None:
+        raise ValueError("An introduction claim must name its conversation")
     choice_object = {"presented": choices, "selected": None}
+    conditions = ["id = TRUE"]
+    params: List[Any] = [json.dumps(choice_object)]
+    if expected_thread_id is not None:
+        conditions.append("thread_id = %s")
+        params.append(expected_thread_id)
+    if claim_introduction:
+        conditions.append("choice_object IS NULL")
 
     with _cache_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                UPDATE assets.new_story_creator
-                SET choice_object = %s, updated_at = NOW()
-                WHERE id = TRUE
-                """
-                + (" AND thread_id = %s" if expected_thread_id is not None else ""),
-                (
-                    (json.dumps(choice_object), expected_thread_id)
-                    if expected_thread_id is not None
-                    else (json.dumps(choice_object),)
-                ),
+                "UPDATE assets.new_story_creator "
+                "SET choice_object = %s, updated_at = NOW() WHERE "
+                + " AND ".join(conditions),
+                tuple(params),
             )
+            if claim_introduction and cur.rowcount != 1:
+                raise WizardStateConflict(
+                    "This phase was already introduced. Resume before continuing."
+                )
             if expected_thread_id is not None and cur.rowcount != 1:
-                from nexus.api.wizard_confirmation import WizardStateConflict
-
                 raise WizardStateConflict(
                     "The wizard conversation changed before its choices could be saved."
                 )
 
     logger.debug("Stored %d wizard choices in %s", len(choices), dbname)
+
+
+def release_wizard_introduction(
+    choices: List[str], dbname: str, *, expected_thread_id: str
+) -> None:
+    """Withdraw an introduction claim whose reply never reached the transcript."""
+    choice_object = {"presented": choices, "selected": None}
+    with _cache_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE assets.new_story_creator "
+                "SET choice_object = NULL, updated_at = NOW() "
+                "WHERE id = TRUE AND thread_id = %s AND choice_object = %s::jsonb",
+                (expected_thread_id, json.dumps(choice_object)),
+            )

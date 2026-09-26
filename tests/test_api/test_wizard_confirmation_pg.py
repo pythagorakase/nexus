@@ -15,6 +15,7 @@ from nexus.api import setup_endpoints
 from nexus.api.new_story_cache import (
     init_cache,
     read_cache,
+    release_wizard_introduction,
     write_cache,
     write_wizard_choices,
 )
@@ -450,8 +451,27 @@ def test_accepted_transition_awaits_introduction_until_its_reply_persists(
     assert interrupted["choices"] == []
     assert (interrupted["character_sheet"] is not None) is (accepted == "character")
 
-    # The introduction's reply records its choice set, even an empty one.
-    write_wizard_choices([], offline_gate_db, expected_thread_id="saved-thread")
+    # The introduction claims its choice set, even an empty one, exactly once.
+    write_wizard_choices(
+        [], offline_gate_db, expected_thread_id="saved-thread", claim_introduction=True
+    )
     introduced_state = client.get("/api/story/new/setup/resume?slot=4").json()
     assert introduced_state["current_phase"] == introduced
     assert introduced_state["awaiting_introduction"] is None
+    with pytest.raises(WizardStateConflict, match="already introduced"):
+        write_wizard_choices(
+            ["A second introduction", "Its twin"],
+            offline_gate_db,
+            expected_thread_id="saved-thread",
+            claim_introduction=True,
+        )
+    assert read_cache(offline_gate_db).choices == []
+
+    # Withdrawing another reply's choices is a no-op; withdrawing its own
+    # claim makes the introduction requestable again.
+    release_wizard_introduction(
+        ["Not this reply"], offline_gate_db, expected_thread_id="saved-thread"
+    )
+    assert read_cache(offline_gate_db).awaiting_introduction() is None
+    release_wizard_introduction([], offline_gate_db, expected_thread_id="saved-thread")
+    assert read_cache(offline_gate_db).awaiting_introduction() == introduced

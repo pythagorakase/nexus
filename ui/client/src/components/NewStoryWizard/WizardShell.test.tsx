@@ -436,20 +436,71 @@ describe("accepted artifacts whose next phase was never introduced", () => {
         });
     });
 
-    it("reports an introduction that already arrived instead of repeating it", async () => {
-        vi.spyOn(console, "error").mockImplementation(() => {});
+    // The introduction's reply was saved although its response was lost.
+    const introduced = {
+        ...interrupted("character", "seed"),
+        awaiting_introduction: null,
+        artifact_token: "d".repeat(64),
+        character_sheet: null,
+        messages: [
+            { role: "assistant", content: "Anything else?" },
+            { role: "user", content: "That is everything." },
+            { role: "assistant", content: "Where does her story begin?" },
+        ],
+        choices: ["The harbor", "The lighthouse"],
+    };
+    const alreadyIntroduced = () => new Response(
+        JSON.stringify({ detail: "This phase was already introduced. Resume before continuing." }),
+        { status: 409 },
+    );
+    const expectIntroducedResume = async () => {
+        expect(await screen.findByText("Where does her story begin?")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Introduction", level: 3 })).toBeInTheDocument();
+        expect(screen.getByTestId("wizard-choice-1")).toHaveTextContent("The harbor");
+        expect(screen.getByTestId("wizard-freeform")).toBeEnabled();
+        expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull();
+        expect(screen.queryByRole("alert")).toBeNull();
+    };
+
+    it("resumes in place when a restored introduction already arrived", async () => {
         const fetch = vi.fn()
             .mockResolvedValueOnce(new Response(JSON.stringify(interrupted("character", "seed"))))
-            .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "This phase was already introduced. Resume before continuing." }), { status: 409 }));
+            .mockResolvedValueOnce(alreadyIntroduced())
+            .mockResolvedValueOnce(new Response(JSON.stringify(introduced)));
         vi.stubGlobal("fetch", fetch);
         render(<NewStoryWizard resumeSlot={5} />);
 
         fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
-        expect(await screen.findByRole("alert")).toHaveTextContent("This phase was already introduced. Resume before continuing.");
-        expect(screen.getByRole("heading", { name: "Character", level: 3 })).toBeInTheDocument();
+        await expectIntroducedResume();
         expect(fetch.mock.calls.map(([url]) => url)).toEqual([
             "/api/story/new/setup/resume?slot=5",
             "/api/story/new/chat",
+            "/api/story/new/setup/resume?slot=5",
+        ]);
+    });
+
+    it("resumes in place when Retry finds the lost introduction already saved", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const pending = { ...interrupted("character", "seed"), current_phase: "character", awaiting_introduction: null, pending_confirmation: "character", artifact_token: "a".repeat(64) };
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(pending)))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: "confirmed", phase: "character", next_phase: "seed", thread_id: "conv_saved" })))
+            .mockResolvedValueOnce(new Response("Bad Gateway", { status: 502 }))
+            .mockResolvedValueOnce(alreadyIntroduced())
+            .mockResolvedValueOnce(new Response(JSON.stringify(introduced)));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("Could not start Introduction (502).");
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        await expectIntroducedResume();
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/setup/confirm",
+            "/api/story/new/chat",
+            "/api/story/new/chat",
+            "/api/story/new/setup/resume?slot=5",
         ]);
     });
 });

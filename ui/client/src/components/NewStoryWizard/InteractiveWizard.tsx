@@ -56,6 +56,8 @@ interface InteractiveWizardProps {
     slot: number;
     onComplete: () => void;
     onCancel: () => void;
+    // Reload the saved wizard in place, exactly as resuming the slot would.
+    onResumeRequired: () => void;
     onPhaseChange: (phase: Phase) => void;
     onArtifactConfirmed?: (type: "setting" | "character" | "seed", data: any) => void;
     wizardData: any;
@@ -72,6 +74,10 @@ export const ACCEPTED_BEFORE_INTRODUCTION: Record<"character" | "seed", Phase> =
     character: "setting",
     seed: "character",
 };
+
+// The server holds newer wizard state than the screen (409), such as an
+// introduction whose reply arrived although its response was lost.
+class StaleWizardState extends Error {}
 
 // User-facing phase titles; the seed phase is presented as "Introduction"
 // throughout the wizard (see WizardShell's PHASES and the artifact modal).
@@ -129,6 +135,7 @@ export function InteractiveWizard({
     slot,
     onComplete,
     onCancel,
+    onResumeRequired,
     onPhaseChange,
     onArtifactConfirmed,
     wizardData,
@@ -917,6 +924,11 @@ export function InteractiveWizard({
                     }
                 }
             } catch (error) {
+                if (error instanceof StaleWizardState) {
+                    // Show the saved state instead of a dead-end retry.
+                    onResumeRequired();
+                    return;
+                }
                 console.error("Next phase trigger error:", error);
                 setPhaseTransitionError(
                     error instanceof Error ? error.message : "Could not start the next phase.",
@@ -951,6 +963,7 @@ export function InteractiveWizard({
             }),
         });
         const data = await res.json().catch(() => null);
+        if (res.status === 409) throw new StaleWizardState(data?.detail);
         if (!res.ok) {
             throw new Error(
                 typeof data?.detail === "string"
