@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Integrate all seven adversarial QA fixes while preserving wizard confirmation, transcript filtering and character identity",
+  "reason": "Delete the unreachable retry and resilient OpenAI facades (#813)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -30,7 +30,6 @@
     "nexus/agents/memnon/utils/temporal_search.py",
     "nexus/agents/memnon/utils/temporal_search_example.py",
     "nexus/api/models.py",
-    "nexus/api/resilient_openai.py",
     "scripts/assemble_context.py",
     "scripts/backfill_routine_anchors.py",
     "scripts/checkpoint_state.py",

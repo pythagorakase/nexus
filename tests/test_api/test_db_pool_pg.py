@@ -13,7 +13,6 @@ import pytest
 from sqlalchemy import text
 
 from nexus.api import db_pool, slot_utils
-from nexus.api.retry_handler import retry_with_backoff
 from nexus.database import AmbiguousCommit, connection_kwargs, create_slot_engine
 
 pytestmark = pytest.mark.requires_postgres
@@ -45,7 +44,8 @@ def database(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[str]:
                 "COMMENT ON TABLE writes IS 'Disposable connection proof writes'"
             )
             cur.execute(
-                "COMMENT ON COLUMN writes.id IS 'Nontransactional sequence witnesses replay'"
+                "COMMENT ON COLUMN writes.id IS "
+                "'Nontransactional sequence witnesses replay'"
             )
             cur.execute("COMMENT ON COLUMN writes.value IS 'Proof value'")
         yield name
@@ -109,26 +109,19 @@ def test_body_connection_error_discards(database: str) -> None:
         print(f"body_failure_discarded=True new_pid={fresh.get_backend_pid()}")
 
 
-def test_ambiguous_commit_is_never_replayed(database: str) -> None:
-    attempts = []
-
-    @retry_with_backoff()
-    def mutation() -> None:
-        attempts.append(1)
+def test_terminated_commit_raises_ambiguous_commit_once(database: str) -> None:
+    with pytest.raises(AmbiguousCommit, match=database) as caught:
         with db_pool.get_connection(database) as conn, conn.cursor() as cur:
             cur.execute("INSERT INTO writes(value) VALUES ('once')")
             terminate(conn)
-
-    with pytest.raises(AmbiguousCommit, match=database) as caught:
-        mutation()
     assert isinstance(caught.value.__cause__, psycopg2.OperationalError)
-    assert len(attempts) == 1
     with db_pool.get_connection(database) as conn, conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM writes")
         assert cur.fetchone() == (0,)
+        # The nontransactional sequence witnesses exactly one INSERT attempt.
         cur.execute("SELECT last_value, is_called FROM writes_id_seq")
         assert cur.fetchone() == (1, True)
-    print(f"{caught.value}; mutation_attempts=1 sequence_last_value=1 committed_rows=0")
+    print(f"{caught.value}; sequence_last_value=1 committed_rows=0")
 
 
 def test_engine_pre_ping_replaces_backend(database: str) -> None:
@@ -228,19 +221,12 @@ def test_rollback_failure_preserves_body_error_and_discards(database: str) -> No
 
 
 @pytest.mark.parametrize("raw_commit", [False, True])
-@pytest.mark.parametrize("async_fallback", [False, True])
-def test_fallback_and_scheduler_do_not_replay(
-    database: str, raw_commit: bool, async_fallback: bool
+def test_scheduler_does_not_replay_wrapped_connection_failure(
+    database: str, raw_commit: bool
 ) -> None:
-    import asyncio
-
-    from nexus.api.retry_handler import FallbackChain
     from nexus.jobs.scheduler import SlotScheduler
 
-    attempts = []
-
-    def first() -> None:
-        attempts.append("first")
+    with pytest.raises(RuntimeError, match="domain wrapper") as caught:
         try:
             with db_pool.get_connection(database) as conn, conn.cursor() as cur:
                 cur.execute("INSERT INTO writes(value) VALUES ('first')")
@@ -249,30 +235,12 @@ def test_fallback_and_scheduler_do_not_replay(
                     conn.commit()
         except Exception as exc:
             raise RuntimeError("domain wrapper") from exc
-
-    def second() -> None:
-        attempts.append("second")
-
-    async def async_first() -> None:
-        first()
-
-    async def async_second() -> None:
-        second()
-
-    with pytest.raises(RuntimeError, match="domain wrapper") as caught:
-        if async_fallback:
-            asyncio.run(FallbackChain([async_first, async_second]).async_execute())
-        else:
-            FallbackChain([first, second]).execute()
-    assert attempts == ["first"]
     scheduler = SlotScheduler(4, dbname=database)
     scheduler._recover(caught.value)
     assert scheduler.stopping.is_set()
     assert scheduler._lost.is_set()
     assert scheduler.state == "failed"
-    print(
-        f"fallback_async={async_fallback} raw_commit={raw_commit} attempts=1 scheduler=failed"
-    )
+    print(f"raw_commit={raw_commit} scheduler=failed")
 
 
 def test_replacement_failure_surfaces_without_loop(database: str, caplog: Any) -> None:
