@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FontProvider, KEEPERS } from "@/contexts/FontContext";
-import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import {
   LOCAL_MODELS_DOWNLOAD_KEY,
@@ -387,5 +387,52 @@ describe("preference save failures (#961)", () => {
     await waitFor(() => expect(screen.getByTestId("theme-gilded")).toHaveAttribute("aria-pressed", "true"));
     expect(screen.queryByTestId("theme-save-error")).not.toBeInTheDocument();
     expect(document.documentElement.classList.contains("theme-gilded")).toBe(true);
+  });
+});
+
+
+describe("stale theme save errors from other theme switchers (#961 review)", () => {
+  function OutsideSwitcher() {
+    const { setTheme } = useTheme();
+    return <button onClick={() => setTheme("gilded")}>outside-gilded</button>;
+  }
+
+  it("does not attribute an earlier nav/splash failure to the pane's THEME card", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    queryClient.setQueryData([...SETTINGS_QUERY_KEY], SETTINGS);
+    queryClient.setQueryData([...PREFERENCES_QUERY_KEY], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
+    queryClient.setQueryData(["/api/slot/4/settings"], { skald_model: null, gaia_model: null, apex_context_window: null });
+    queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
+    queryClient.setQueryData(["/api/dev/backstage/health"], false);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    const tree = (withPane: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <DeveloperModeProvider>
+            <FontProvider>
+              <OutsideSwitcher />
+              {withPane && <SettingsPane slot={4} />}
+            </FontProvider>
+          </DeveloperModeProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(false));
+    // A theme switch from the nav menu or splash screen fails while the pane is closed.
+    fireEvent.click(screen.getByText("outside-gilded"));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(document.documentElement.classList.contains("theme-gilded")).toBe(false));
+
+    // Opening Settings later must not present that failure as the THEME card's own.
+    view.rerender(tree(true));
+    await screen.findByTestId("theme-veil");
+    expect(screen.queryByTestId("theme-save-error")).not.toBeInTheDocument();
+
+    // A failure caused in the pane still reports there.
+    fireEvent.click(screen.getByTestId("theme-gilded"));
+    await screen.findByTestId("theme-save-error");
+    expect(screen.getByTestId("theme-veil")).toHaveAttribute("aria-pressed", "true");
   });
 });

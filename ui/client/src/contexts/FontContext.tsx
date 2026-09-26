@@ -29,6 +29,8 @@ interface FontContextType {
   resetToKeepers: () => void;
   /** Message of the most recent rejected save; null once a save succeeds. */
   saveError: string | null;
+  /** Forget a rejected save so a surface only reports failures it caused. */
+  clearSaveError: () => void;
   // Convenience getters for the active theme
   currentBodyFont: string;
   currentMenuFont: string;
@@ -107,6 +109,7 @@ export function FontProvider({ children }: { children: ReactNode }) {
         // The mutation rolls the cache back on failure, so the matrix above is
         // still the last saved one; the pane needs the reason as well.
         saveError: mutation.error?.message ?? null,
+        clearSaveError: mutation.reset,
         currentBodyFont: active.body,
         currentMenuFont: active.menu,
         currentDisplayFont: active.display,

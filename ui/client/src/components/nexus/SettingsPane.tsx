@@ -110,6 +110,10 @@ function ThemeSection({
   saveError: string | null;
 }) {
   const { fonts } = useFonts();
+  const { clearSaveError } = useTheme();
+  // The theme mutation is shared with the nav and splash switchers, which
+  // render no error. Only failures caused during this visit belong here.
+  useEffect(() => clearSaveError(), [clearSaveError]);
 
   return (
     <SettingsCard id="theme" label="THEME">
@@ -209,9 +213,11 @@ function FontSlot({
 
 function TypographySection() {
   const { theme } = useTheme();
-  const { fonts, setFont, resetToKeepers, saveError } = useFonts();
+  const { fonts, setFont, resetToKeepers, saveError, clearSaveError } = useFonts();
   const themeId = theme as ThemeId;
   const slots = fonts[themeId];
+  // Same rule as THEME: an alert here describes an action from this visit.
+  useEffect(() => clearSaveError(), [clearSaveError]);
 
   return (
     <SettingsCard

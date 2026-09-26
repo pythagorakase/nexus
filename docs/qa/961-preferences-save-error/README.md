@@ -2,7 +2,7 @@
 
 A font or theme save that failed used to roll the preferences cache back silently: the selection returned to its saved value and nothing said why. The rollback was correct; the font and theme providers held their own mutation instances and never exposed the error, and the pane's WRITE REJECTED block watched only the story-settings mutation.
 
-Both providers now expose the most recent save error. The THEME and TYPOGRAPHY cards render an accessible WRITE REJECTED alert with that message next to the control that failed. The saved selection is unchanged because the cache rollback still applies, and a successful retry clears the alert because the mutation resets. Model and story settings are untouched.
+Both providers now expose the most recent save error. The THEME and TYPOGRAPHY cards render an accessible WRITE REJECTED alert with that message next to the control that failed. The saved selection is unchanged because the cache rollback still applies, and a successful retry clears the alert because the mutation resets. Model and story settings are untouched. Because the theme mutation is shared with the nav and splash theme switchers, which render no error, each card forgets any earlier rejection when it mounts, so an alert always describes an action taken during the current Settings visit.
 
 ## Rendered verification
 
