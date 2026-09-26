@@ -4,7 +4,11 @@ import { cn } from "@/lib/utils";
 import { rememberActiveSlot } from "@/lib/active-slot";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
-import { InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
+import {
+    ACCEPTED_BEFORE_INTRODUCTION,
+    InteractiveWizard,
+    type WizardResumeData,
+} from "./InteractiveWizard";
 import { useLocation, Link } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -141,8 +145,11 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
                 if (!resumeData.thread_id || !Array.isArray(resumeData.messages) || !Array.isArray(resumeData.choices)) {
                     throw new Error("The saved wizard response is incomplete");
                 }
-                const inferredPhase: WizardPhase = resumeData.current_phase === "ready"
-                    ? "seed" : resumeData.current_phase;
+                // An accepted artifact whose next phase was never introduced
+                // stays on its own phase, as it did before the interruption.
+                const inferredPhase: WizardPhase = resumeData.awaiting_introduction
+                    ? ACCEPTED_BEFORE_INTRODUCTION[resumeData.awaiting_introduction]
+                    : resumeData.current_phase === "ready" ? "seed" : resumeData.current_phase;
 
                 setResumeData(resumeData);
                 setWizardData({
@@ -157,7 +164,7 @@ export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
                 // Restore confirmed artifacts from resumed data
                 setConfirmedArtifacts({
                     setting: inferredPhase !== "setting" ? resumeData.setting_draft ?? undefined : undefined,
-                    character: ["seed", "ready"].includes(resumeData.current_phase) ? resumeData.character_sheet ?? resumeData.character_draft ?? undefined : undefined,
+                    character: inferredPhase === "seed" ? resumeData.character_sheet ?? resumeData.character_draft ?? undefined : undefined,
                 });
 
                 rememberActiveSlot(resumeRequest);

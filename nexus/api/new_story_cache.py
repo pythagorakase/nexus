@@ -59,6 +59,7 @@ def _write_snapshot(cache: "WizardCache") -> Dict[str, Any]:
     snapshot = asdict(cache)
     snapshot.pop("updated_at")
     snapshot.pop("choices")
+    snapshot.pop("choices_recorded")
     return snapshot
 
 
@@ -314,6 +315,9 @@ class WizardCache:
     base_timestamp: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     choices: List[str] = field(default_factory=list)
+    # Every wizard reply records its (possibly empty) choice set; accepting an
+    # artifact clears it. False therefore means no reply since that acceptance.
+    choices_recorded: bool = True
     setting_confirmed: bool = False
     character_confirmed: bool = False
     character_revision_pending: bool = False
@@ -357,6 +361,26 @@ class WizardCache:
         ):
             return "character"
         return None
+
+    def phase_untouched(self) -> bool:
+        """Whether the accepted-into phase has no draft of its own yet."""
+        phase = self.current_phase()
+        if phase == "character":
+            return not self.character.has_concept()
+        if phase == "seed":
+            return self.base_timestamp is None and not any(asdict(self.seed).values())
+        return False
+
+    def awaiting_introduction(self) -> Optional[Literal["character", "seed"]]:
+        """Name the accepted-into phase whose introduction was never recorded.
+
+        Acceptance clears the recorded choices and every wizard reply records
+        them again, so an untouched phase without them has not been introduced.
+        """
+        if self.choices_recorded or not self.phase_untouched():
+            return None
+        # Only the character and seed phases can be untouched.
+        return "character" if self.current_phase() == "character" else "seed"
 
     def confirmation_metadata(self) -> Dict[str, Any]:
         """Capture acceptance metadata alongside the artifact that was persisted."""
@@ -645,6 +669,7 @@ def _row_to_cache(
         thread_id=row.get("thread_id"),
         target_slot=row.get("target_slot"),
         choices=extract_presented_choices(row.get("choice_object")),
+        choices_recorded=row.get("choice_object") is not None,
         setting=SettingData(
             genre=row.get("setting_genre"),
             secondary_genres=_parse_pg_array(row.get("setting_secondary_genres")),

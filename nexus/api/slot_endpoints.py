@@ -78,6 +78,7 @@ async def get_slot_state_endpoint(slot: int):
             cache = read_cache(slot_dbname(slot))
             if cache is not None:
                 response.pending_confirmation = cache.pending_confirmation()
+                response.awaiting_introduction = cache.awaiting_introduction()
                 response.artifact_token = cache.artifact_token()
                 response.character_revision_pending = cache.character_revision_pending
 

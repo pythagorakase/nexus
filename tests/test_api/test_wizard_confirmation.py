@@ -10,11 +10,13 @@ from pydantic_ai import CallDeferred, ModelRetry
 import pytest
 
 from nexus.api import setup_endpoints, wizard_agent, wizard_chat, slot_state
+from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import (
     WizardCache,
     CharacterData,
     SettingData,
     SuggestedTrait,
+    _row_to_cache,
 )
 from nexus.api.new_story_schemas import WizardResponse, CharacterCreationState
 from nexus.api.slot_state import SlotState, WizardState, _get_wizard_state_from_row
@@ -369,3 +371,218 @@ async def test_accept_fate_prose_fallback_carries_committed_confirmation_metadat
         assert result[key] == value, key
     # The same consistency gate every other artifact path passes through.
     assert wizard_chat._artifact_response(result, 4, cache.thread_id) is result
+
+
+# Each accepted checkpoint and the phase its acceptance enters (#955).
+CHECKPOINTS = [("setting", "character"), ("character", "seed")]
+
+
+def accepted_cache(accepted: str, *, reply_recorded: bool) -> WizardCache:
+    """A saved wizard whose `accepted` artifact was confirmed by the player."""
+    cache = character_cache()
+    if accepted == "setting":
+        cache.character = CharacterData()
+    else:
+        cache.character_confirmed = True
+    cache.choices_recorded = reply_recorded
+    return cache
+
+
+def accepted_row(accepted: str, choice_object: object) -> WizardCache:
+    """Read an accepted checkpoint through the database row adapter."""
+    character = accepted == "character"
+    return _row_to_cache(
+        {
+            "thread_id": "saved-thread",
+            "setting_genre": "fantasy",
+            "setting_confirmed": True,
+            "character_name": "Mara" if character else None,
+            "character_confirmed": character,
+            "choice_object": choice_object,
+        },
+        traits_confirmed=character,
+        wildcard_row=(
+            {"name": "The bell", "rationale": "She hears it first."}
+            if character
+            else None
+        ),
+    )
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_acceptance_awaits_the_next_introduction_until_a_reply_is_recorded(
+    accepted: str, introduced: str
+) -> None:
+    """Acceptance clears the choices; only a recorded reply introduces the phase."""
+    waiting = accepted_row(accepted, None)
+    assert waiting.current_phase() == introduced
+    assert waiting.pending_confirmation() is None
+    assert waiting.awaiting_introduction() == introduced
+
+    # An introduction that offered no choices still recorded its reply.
+    replied = accepted_row(accepted, {"presented": [], "selected": None})
+    assert replied.current_phase() == introduced
+    assert replied.awaiting_introduction() is None
+
+    # Completion without acceptance is a pending confirmation, never a transition.
+    unaccepted = accepted_row(accepted, None)
+    setattr(unaccepted, f"{accepted}_confirmed", False)
+    assert unaccepted.pending_confirmation() == accepted
+    assert unaccepted.awaiting_introduction() is None
+
+    # A draft in the entered phase proves it was already introduced.
+    drafted = accepted_row(accepted, None)
+    if introduced == "character":
+        drafted.character.name = "Mara"
+    else:
+        drafted.seed.seed_type = "mystery"
+    assert drafted.awaiting_introduction() is None
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_resume_restores_accepted_artifact_while_its_introduction_is_missing(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+) -> None:
+    """An interrupted transition resumes as accepted, not as an empty next phase."""
+    cache = accepted_cache(accepted, reply_recorded=False)
+    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
+    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **kw: "TEST")
+    monkeypatch.setattr(
+        setup_endpoints,
+        "ConversationsClient",
+        lambda *a, **kw: SimpleNamespace(
+            list_messages=lambda *a, **kw: [], client=None
+        ),
+    )
+    app = FastAPI()
+    app.include_router(setup_endpoints.router)
+    client = TestClient(app)
+
+    data = client.get("/api/story/new/setup/resume?slot=4").json()
+    assert data["current_phase"] == data["awaiting_introduction"] == introduced
+    assert data["pending_confirmation"] is None
+    assert data["choices"] == []
+    assert data["setting_draft"]["genre"] == "fantasy"
+    if accepted == "character":
+        assert data["character_sheet"]["name"] == "Mara"
+    else:
+        assert data["character_sheet"] is None
+
+    cache.choices_recorded = True
+    introduced_data = client.get("/api/story/new/setup/resume?slot=4").json()
+    assert introduced_data["current_phase"] == introduced
+    assert introduced_data["awaiting_introduction"] is None
+    assert introduced_data["character_sheet"] is None
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_interrupted_introduction_is_retried_once_then_refused(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+) -> None:
+    """A failed introduction stays requestable; a recorded one cannot repeat."""
+    cache = accepted_cache(accepted, reply_recorded=False)
+    storage = ConversationsClient("TEST")
+    thread_id = storage.create_thread()
+    cache.thread_id = thread_id
+    storage.add_message(thread_id, "assistant", "Anything else before we finish?")
+    storage.add_message(thread_id, "user", "That is everything.")
+    control = (
+        f"[SYSTEM] Phase {accepted} complete. Proceeding to {introduced}. "
+        "Please introduce the next phase."
+    )
+    replies: list[Exception | WizardResponse] = [
+        RuntimeError("Provider unavailable"),
+        WizardResponse(
+            message="Where does it begin?", choices=["The harbor", "The lighthouse"]
+        ),
+        WizardResponse(
+            message="Tell me about the harbor.", choices=["Its lamps", "Its debts"]
+        ),
+    ]
+
+    class Agent:
+        async def run(self, *args, **kwargs):
+            reply = replies.pop(0)
+            if isinstance(reply, Exception):
+                raise reply
+            return SimpleNamespace(output=reply)
+
+    def record_choices(choices, dbname, **kwargs):
+        cache.choices = choices
+        cache.choices_recorded = True
+
+    state = SlotState(
+        slot=4,
+        is_empty=False,
+        is_wizard_mode=True,
+        wizard_state=WizardState(
+            phase=introduced,
+            thread_id=thread_id,
+            choices=[],
+            has_concept=accepted == "character",
+            has_traits=accepted == "character",
+            has_wildcard=accepted == "character",
+        ),
+        narrative_state=None,
+        model="TEST",
+    )
+    monkeypatch.setattr(slot_state, "get_slot_state", lambda slot: state)
+    monkeypatch.setattr(wizard_agent, "read_cache", lambda dbname: cache)
+    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
+    monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
+    monkeypatch.setattr(wizard_chat, "ConversationsClient", lambda model: storage)
+    monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
+    monkeypatch.setattr(wizard_chat, "get_wizard_streaming_enabled", lambda: True)
+    monkeypatch.setattr(
+        wizard_chat, "build_pydantic_ai_model_with_provider", lambda m: (None, "test")
+    )
+    monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
+    monkeypatch.setattr(wizard_chat, "write_wizard_choices", record_choices)
+    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
+    monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
+    monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
+    app = FastAPI()
+    app.include_router(wizard_chat.router)
+    app.include_router(setup_endpoints.router)
+    client = TestClient(app, raise_server_exceptions=False)
+    introduction = {
+        "slot": 4,
+        "thread_id": thread_id,
+        "current_phase": introduced,
+        "message": control,
+        "message_origin": "wizard_control",
+    }
+
+    assert client.post("/api/story/new/chat", json=introduction).status_code == 500
+    interrupted = client.get("/api/story/new/setup/resume?slot=4").json()
+    assert interrupted["awaiting_introduction"] == introduced
+    assert interrupted["messages"][-1]["content"] == "That is everything."
+
+    retried = client.post("/api/story/new/chat", json=introduction)
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["choices"] == ["The harbor", "The lighthouse"]
+    resumed = client.get("/api/story/new/setup/resume?slot=4").json()
+    assert resumed["current_phase"] == introduced
+    assert resumed["awaiting_introduction"] is None
+    assert resumed["choices"] == ["The harbor", "The lighthouse"]
+    assert resumed["messages"][-1] == {
+        "role": "assistant",
+        "content": "Where does it begin?",
+    }
+
+    before = storage.list_messages(thread_id, limit=0)
+    for endpoint in ("/api/story/new/chat", "/api/story/new/chat/stream"):
+        repeated = client.post(endpoint, json=introduction)
+        assert repeated.status_code == 409
+        assert "already introduced" in repeated.json()["detail"]
+    assert storage.list_messages(thread_id, limit=0) == before
+    assert len(replies) == 1
+
+    # The refusal is specific to the application's introduction control.
+    player = client.post(
+        "/api/story/new/chat",
+        json=introduction
+        | {"message": "Start at the harbor.", "message_origin": "user"},
+    )
+    assert player.status_code == 200, player.text
+    assert replies == []

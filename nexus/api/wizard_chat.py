@@ -33,6 +33,7 @@ from nexus.api.narrative_schemas import (
     TransitionResponse,
 )
 from nexus.api.new_story_cache import (
+    WizardCache,
     clear_suggested_traits,
     guarded_wizard_write,
     read_cache,
@@ -132,6 +133,28 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
     cache = read_cache(slot_dbname(request.slot))
     char_state = cache.get_character_state_dict() if cache else None
     return {**(context or {}), "character_state": char_state}
+
+
+def _reject_repeated_introduction(
+    cache: Optional[WizardCache], message_origin: str
+) -> None:
+    """Introduce an accepted phase once, before its application control repeats.
+
+    Until a character concept or seed draft exists, the only wizard control
+    message is the introduction that artifact acceptance requests. Acceptance
+    clears the recorded choices and every reply records them again, so recorded
+    choices mean the introduction already arrived, even if its response was lost.
+    """
+    if (
+        cache is not None
+        and message_origin == "wizard_control"
+        and cache.phase_untouched()
+        and cache.choices_recorded
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This phase was already introduced. Resume before continuing.",
+        )
 
 
 def _accept_fate_prompt(message: Optional[str]) -> str:
@@ -325,6 +348,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 status_code=409,
                 detail="Confirm or revise the completed character before continuing.",
             )
+        _reject_repeated_introduction(persisted_cache, request.message_origin)
         state_subphase = _wizard_subphase_for_state(
             state_phase,
             has_concept=state.wizard_state.has_concept,
@@ -790,6 +814,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             status_code=409,
             detail="Use the non-streaming wizard route to confirm or revise this artifact.",
         )
+    _reject_repeated_introduction(persisted_cache, request.message_origin)
 
     request.context_data = _hydrate_character_context(request)
 

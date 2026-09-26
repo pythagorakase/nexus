@@ -228,6 +228,8 @@ describe("confirming wizard phases", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent("The next prompt could not be generated");
         expect(screen.getByRole("heading", { name: title, level: 3 })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
+        // The acceptance is durable, so the artifact can no longer be revised.
+        expect(screen.queryByRole("button", { name: "Revise" })).toBeNull();
         expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
         expect(JSON.parse(fetch.mock.calls[3][1].body)).toMatchObject({
             slot: 5, thread_id: "conv_saved", current_phase: nextPhase,
@@ -371,4 +373,83 @@ it.each(["setting confirmation", "accept fate"])("uses the concept token when %s
     fireEvent.click(screen.getByRole("button", { name: "Revise" }));
     expect(await screen.findByText(/Describe the change to your character/)).toBeInTheDocument();
     expect(JSON.parse(fetch.mock.calls[fetch.mock.calls.length - 1][1].body).artifact_token).toBe("b".repeat(64));
+});
+
+
+describe("accepted artifacts whose next phase was never introduced", () => {
+    const state = {
+        concept: { name: "Mara", archetype: "Engineer", background: "Age 38. Maintains the old harbor machinery.", appearance: "Gray coat.", suggested_traits: ["allies", "contacts", "patron"], trait_rationales: {} },
+        trait_selection: { selected_traits: ["allies", "contacts", "patron"] },
+        wildcard: { wildcard_name: "The bell", wildcard_description: "She hears the bell before anyone else." },
+    };
+    const interrupted = (accepted: "setting" | "character", introduced: "character" | "seed") => ({
+        ...savedSession,
+        current_phase: introduced,
+        awaiting_introduction: introduced,
+        pending_confirmation: null,
+        // The token binds the entered phase's draft, which does not exist yet.
+        artifact_token: accepted === "character" ? "c".repeat(64) : null,
+        messages: [{ role: "assistant", content: "Anything else?" }, { role: "user", content: "That is everything." }],
+        choices: [],
+        setting_draft: { world_name: "The Waking Wood", genre: "fantasy" },
+        character_state: accepted === "character" ? state : null,
+        character_draft: accepted === "character" ? state : null,
+        character_sheet: accepted === "character" ? { name: "Mara", summary: "Age 38. Maintains the old harbor machinery." } : null,
+    });
+    const cases = [
+        { accepted: "setting" as const, title: "Setting", introduced: "character" as const, nextTitle: "Character", artifact: "The Waking Wood" },
+        { accepted: "character" as const, title: "Character", introduced: "seed" as const, nextTitle: "Introduction", artifact: "Mara" },
+    ];
+
+    it.each(cases)("restores the accepted $accepted and Confirm only requests the $introduced introduction", async ({ accepted, title, introduced, nextTitle, artifact }) => {
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(interrupted(accepted, introduced))))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Your next phase begins here", choices: ["A new possibility", "Another way"] })));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        expect(await screen.findByRole("button", { name: "Confirm" })).toBeEnabled();
+        expect(screen.getByRole("heading", { name: title, level: 3 })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: artifact, level: 4 })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Revise" })).toBeNull();
+        expect(screen.getByTestId("wizard-freeform")).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
+        expect(fetch).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+        expect(await screen.findByText("Your next phase begins here")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: nextTitle, level: 3 })).toBeInTheDocument();
+        expect(screen.getByTestId("wizard-choice-1")).toHaveTextContent("A new possibility");
+        expect(screen.getByTestId("wizard-freeform")).toBeEnabled();
+        // Acceptance was already recorded: no second confirmation, one introduction.
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/chat",
+        ]);
+        expect(JSON.parse(fetch.mock.calls[1][1].body)).toMatchObject({
+            slot: 5,
+            thread_id: "conv_saved",
+            current_phase: introduced,
+            message_origin: "wizard_control",
+            message: `[SYSTEM] Phase ${accepted} complete. Proceeding to ${introduced}. Please introduce the next phase.`,
+            context_data: { setting: { world_name: "The Waking Wood", genre: "fantasy" } },
+        });
+    });
+
+    it("reports an introduction that already arrived instead of repeating it", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const fetch = vi.fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify(interrupted("character", "seed"))))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "This phase was already introduced. Resume before continuing." }), { status: 409 }));
+        vi.stubGlobal("fetch", fetch);
+        render(<NewStoryWizard resumeSlot={5} />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("This phase was already introduced. Resume before continuing.");
+        expect(screen.getByRole("heading", { name: "Character", level: 3 })).toBeInTheDocument();
+        expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+            "/api/story/new/setup/resume?slot=5",
+            "/api/story/new/chat",
+        ]);
+    });
 });

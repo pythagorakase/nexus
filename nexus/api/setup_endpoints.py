@@ -112,18 +112,26 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
         finally:
             if client.client is not None:
                 client.client.close()
+        awaiting_introduction = data.awaiting_introduction()
+        # The character card is restored while it awaits acceptance and while
+        # its accepted transition still lacks the introduction it requested.
+        restores_character_card = (
+            data.pending_confirmation() == "character"
+            or awaiting_introduction == "seed"
+        )
         return ResumeSetupResponse(
             thread_id=data.thread_id,
             target_slot=slot,
             current_phase=data.current_phase(),
             pending_confirmation=data.pending_confirmation(),
+            awaiting_introduction=awaiting_introduction,
             artifact_token=data.artifact_token(),
             character_revision_pending=data.character_revision_pending,
             character_sheet=(
                 CharacterCreationState.model_validate(data.get_character_dict())
                 .to_character_sheet()
                 .model_dump()
-                if data.pending_confirmation() == "character"
+                if restores_character_card
                 else None
             ),
             messages=visible_wizard_messages(list(reversed(messages))),
