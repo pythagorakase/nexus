@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from nexus.database import AmbiguousCommit, connection_kwargs
 
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -419,11 +420,33 @@ def record_drafts(
     logger.info("Updated drafts for slot %s", slot_number)
 
 
+def _record_genesis_weird(cur: Any, weird: Optional[Dict[str, Any]]) -> None:
+    """Write the story's genesis strangeness provenance on the transition cursor.
+
+    ``weird`` is the profile Retrograde resolved (level, genre, band source,
+    raw bounds), or None for a story that began without Retrograde history;
+    None also replaces an earlier story's provenance on an overwritten slot.
+
+    Raises:
+        RuntimeError: If the slot has no global_variables row to record it on.
+    """
+    cur.execute(
+        "UPDATE global_variables SET genesis_weird = %s::jsonb WHERE id = TRUE",
+        (json.dumps(weird) if weird is not None else None,),
+    )
+    if cur.rowcount != 1:
+        raise RuntimeError(
+            "The transition found no global_variables row for the genesis "
+            "strangeness provenance"
+        )
+
+
 def perform_transition_with_retrograde(
     slot_number: int,
     transition_data: "TransitionData",
     *,
     model: Optional[str] = None,
+    weird_level: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run the wizard -> narrative transition with Retrograde cold-start history.
@@ -445,6 +468,10 @@ def perform_transition_with_retrograde(
        stay pending and retryable via
        ``nexus retrograde-embed-history --slot N --execute``.
 
+    The resolved strangeness profile is recorded as
+    ``global_variables.genesis_weird`` in the world's transaction; a story
+    that begins without Retrograde history records none.
+
     Retrograde is skipped (plain transition) when the [orrery] section is
     disabled, when [orrery.retrograde.wizard].enabled is false, or when the
     slot ran the wizard against the mock TEST model.
@@ -454,6 +481,9 @@ def perform_transition_with_retrograde(
         transition_data: Validated transition package built from the cache
         model: Optional model override for the Retrograde Skald calls
             (defaults to the slot's configured model, then the wizard default)
+        weird_level: The player's genesis strangeness (low, medium, or high).
+            None resolves to [orrery.retrograde.weird].default_level when
+            Retrograde maps it onto the story genre's band.
 
     Returns:
         Dictionary with created IDs plus a "retrograde" outcome block
@@ -532,7 +562,12 @@ def perform_transition_with_retrograde(
             slot_number,
             skip_reason,
         )
-        result: Dict[str, Any] = dict(mapper.perform_transition(transition_data))
+        result: Dict[str, Any] = dict(
+            mapper.perform_transition(
+                transition_data,
+                in_transaction=lambda cur: _record_genesis_weird(cur, None),
+            )
+        )
         result["retrograde"] = {"enabled": False, "skip_reason": skip_reason}
         result["trait_inputs"] = trait_inputs_outcome or {"derived": False}
         return result
@@ -558,6 +593,7 @@ def perform_transition_with_retrograde(
         settings=settings,
         model_name=effective_model,
         max_tokens=orrery_settings.retrograde.wizard.max_tokens,
+        weird_level=weird_level,
         progress=_progress,
         trait_compile_inputs=(
             derived_inputs.model_dump(mode="json", exclude_none=True)
@@ -575,6 +611,8 @@ def perform_transition_with_retrograde(
             settings=settings,
             progress=_progress,
         )
+        # Provenance commits with the history it describes, or not at all.
+        _record_genesis_weird(cur, bundle.weird)
 
     try:
         result = dict(

@@ -439,6 +439,7 @@ def test_retired_chunk_state_route_is_not_served() -> None:
         ("POST", "/api/slot/{slot}/undo"),
         ("POST", "/api/story/new/setup/start"),
         ("POST", "/api/story/new/chat"),
+        ("PUT", "/api/story/new/weird"),
         ("POST", "/api/story/new/transition"),
         ("PATCH", "/api/preferences"),
         ("WS", "/ws/narrative"),

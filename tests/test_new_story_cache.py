@@ -379,3 +379,22 @@ def test_weird_level_round_trips_and_only_a_new_wizard_clears_it() -> None:
         init_cache(dbname, "thread-838-next", 4)
         fresh = read_cache(dbname)
         assert fresh is not None and fresh.weird_level is None
+
+
+@pytest.mark.requires_postgres
+def test_genesis_provenance_writes_on_the_transition_cursor() -> None:
+    """The transition hook stores the resolved profile, or clears a stale one."""
+    from nexus.api import new_story_flow
+    from tests.pg_fixtures import connect
+
+    profile = {"level": "high", "genre": "fantasy", "raw_min": 0.55, "raw_max": 0.82}
+    with _migrated_slot_clone("qa838_genesis_weird") as dbname:
+        with closing(connect(dbname)) as conn:
+            with conn, conn.cursor() as cur:
+                new_story_flow._record_genesis_weird(cur, profile)
+                cur.execute("SELECT genesis_weird FROM global_variables")
+                assert cur.fetchall() == [(profile,)]
+            with conn, conn.cursor() as cur:
+                new_story_flow._record_genesis_weird(cur, None)
+                cur.execute("SELECT genesis_weird FROM global_variables")
+                assert cur.fetchall() == [(None,)]

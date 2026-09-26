@@ -91,6 +91,7 @@ async def get_slot_state_endpoint(slot: int):
                 thread_id=state.wizard_state.thread_id,
                 choices=state.wizard_state.choices,
                 model=state.model,
+                weird_level=state.wizard_state.weird_level,
             )
 
             from nexus.api.new_story_cache import read_cache
