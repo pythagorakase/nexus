@@ -41,12 +41,12 @@ class TestTokenCalculation:
     @pytest.mark.requires_postgres
     def test_calculate_chunk_tokens_narrative(self, sample_chunks):
         """Test token counting on real narrative text."""
-        # Use a dialogue scene
+        # A slot without the dialogue scene fails here instead of passing vacuously.
         chunk = sample_chunks.get("dialogue_offer")
-        if chunk and "raw_text" in chunk:
-            token_count = calculate_chunk_tokens(chunk["raw_text"])
-            assert token_count > 50  # Real narrative should have substantial tokens
-            assert token_count < 5000  # Single chunk shouldn't be huge
+        assert chunk is not None, "The active slot lacks narrative_view id 2"
+        token_count = calculate_chunk_tokens(chunk["raw_text"])
+        assert token_count > 50  # Real narrative should have substantial tokens
+        assert token_count < 5000  # Single chunk shouldn't be huge
 
     def test_apex_model_encoding(self):
         """Test that encoding uses correct model from settings."""

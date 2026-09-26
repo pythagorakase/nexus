@@ -10,30 +10,28 @@ import psycopg2
 import tiktoken
 from pathlib import Path
 
+from nexus.api.slot_utils import require_slot_dbname
+from nexus.database import connection_kwargs
+from tests.pg_fixtures import assert_one_target
+
 pytestmark = [pytest.mark.requires_postgres]
 
 
 class TestInfrastructure:
     """Test that all required infrastructure is available."""
 
-    def test_postgresql_connection(self, settings):
-        """Test that PostgreSQL is accessible with correct database."""
-        db_config = settings.get("Database", {})
+    def test_postgresql_connection(self):
+        """The runtime connection contract reaches the active slot's schema."""
+        expected_db = require_slot_dbname()
+        # Fixtures (tests.pg_fixtures) and runtime clients must share one target.
+        assert_one_target(expected_db)
 
         # This should fail hard if PostgreSQL is not available
-        conn = psycopg2.connect(
-            dbname=db_config.get("name", "NEXUS"),
-            user=db_config.get("user", "pythagor"),
-            host=db_config.get("host", "localhost"),
-            port=db_config.get("port", 5432),
-        )
-
+        conn = psycopg2.connect(**connection_kwargs())
         cursor = conn.cursor()
 
-        # Verify NEXUS database exists
         cursor.execute("SELECT current_database()")
         db_name = cursor.fetchone()[0]
-        expected_db = db_config.get("name", db_name)
         assert db_name == expected_db, f"Connected to wrong database: {db_name}"
 
         # Verify required tables exist

@@ -12,7 +12,8 @@ from typing import Dict, Any, Generator
 from unittest.mock import MagicMock
 import sys
 
-TEST_DB_CONNECT_TIMEOUT_SECONDS = 2
+from nexus.api.slot_utils import require_slot_dbname
+from tests.pg_fixtures import connect
 
 # Configure logging for tests
 logging.basicConfig(
@@ -78,18 +79,9 @@ def test_scenes() -> Dict[str, int]:
 
 
 @pytest.fixture
-def db_connection(settings) -> Generator[psycopg2.extensions.connection, None, None]:
-    """Provide database connection for tests."""
-    # Get database config from settings
-    db_config = settings.get("Database", {})
-
-    conn = psycopg2.connect(
-        dbname=db_config.get("name", "NEXUS"),
-        user=db_config.get("user", "pythagor"),
-        host=db_config.get("host", "localhost"),
-        port=db_config.get("port", 5432),
-        connect_timeout=TEST_DB_CONNECT_TIMEOUT_SECONDS,
-    )
+def db_connection() -> Generator[psycopg2.extensions.connection, None, None]:
+    """Connect to the active slot through the shared test connection contract."""
+    conn = connect(require_slot_dbname())
 
     try:
         yield conn
