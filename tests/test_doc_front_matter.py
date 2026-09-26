@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 from typing import Any
 
@@ -25,8 +26,9 @@ KNOWN_KEYS = frozenset(
     {"status", "sources", "verified_commit", "supersedes", "superseded_by"}
 )
 COMMIT_SHA = re.compile(r"[0-9a-f]{7,40}")
-# A Markdown path token; the lookbehind keeps URLs and mid-token matches out.
-MARKDOWN_REFERENCE = re.compile(r"(?<![\w./*:-])\w[\w./*-]*\.md\b")
+# A Markdown path token, optionally ./ or ../ relative; the lookbehind keeps
+# URLs and mid-token matches out.
+MARKDOWN_REFERENCE = re.compile(r"(?<![\w./*:-])(?:\.\.?/)*\w[\w./*-]*\.md\b")
 
 # The classification landed by #817. Changing one is a deliberate edit here.
 CLASSIFIED = {
@@ -181,12 +183,12 @@ def _validate_document(
         if status != "superseded":
             errors.append(f"{path}: superseded_by requires status: superseded")
         target = documents.get(successor) if isinstance(successor, str) else None
+        # A successor may itself be superseded later: each link keeps the
+        # replacement history, and the chain check below finds the end.
         if target is None:
             errors.append(
                 f"{path}: superseded_by {successor!r} is not a classified document"
             )
-        elif target.get("status") == "superseded":
-            errors.append(f"{path}: superseded_by {successor!r} is itself superseded")
         elif path not in (target.get("supersedes") or []):
             errors.append(
                 f"{path}: {successor} does not list this document under supersedes"
@@ -215,6 +217,22 @@ def _validate_document(
     return errors
 
 
+def _chain_errors(path: str, documents: dict[str, dict[str, Any]]) -> list[str]:
+    """Follow ``superseded_by`` links and fail when they loop without an end."""
+    seen = [path]
+    current = documents[path]
+    while current.get("status") == "superseded":
+        successor = current.get("superseded_by")
+        if not isinstance(successor, str) or successor not in documents:
+            return []  # The missing link is reported by _validate_document.
+        if successor in seen:
+            chain = " -> ".join([*seen, successor])
+            return [f"{path}: supersession chain loops ({chain})"]
+        seen.append(successor)
+        current = documents[successor]
+    return []
+
+
 def classify(root: Path, paths: frozenset[str]) -> Classification:
     """Read every classified document under ``root`` and validate the contract."""
     result = Classification()
@@ -236,6 +254,7 @@ def classify(root: Path, paths: frozenset[str]) -> Classification:
         result.errors.extend(
             _validate_document(path, front_matter, result.documents, paths, directories)
         )
+        result.errors.extend(_chain_errors(path, result.documents))
     return result
 
 
@@ -248,10 +267,18 @@ def readme_reference_errors(
     for number, line in enumerate(text.splitlines(), start=1):
         for match in MARKDOWN_REFERENCE.finditer(line):
             reference = match.group(0)
-            if "*" in reference:
-                targets = sorted(path for path in paths if fnmatchcase(path, reference))
+            normalized = posixpath.normpath(reference)
+            if normalized == ".." or normalized.startswith("../"):
+                errors.append(
+                    f"README.md:{number}: {reference} points outside the repository"
+                )
+                continue
+            if "*" in normalized:
+                targets = sorted(
+                    path for path in paths if fnmatchcase(path, normalized)
+                )
             else:
-                targets = [reference] if reference in paths else []
+                targets = [normalized] if normalized in paths else []
             if not targets:
                 errors.append(f"README.md:{number}: {reference} does not exist")
             for target in targets:
@@ -402,6 +429,45 @@ def test_supersession_must_agree_in_both_directions(tmp_path: Path) -> None:
     ]
 
 
+def _superseded(successor: str, supersedes: tuple[str, ...] = ()) -> str:
+    """Render a superseded document pointing at ``successor``."""
+    replaced = "".join(f"  - {old}\n" for old in supersedes)
+    return _document(
+        'status: superseded\nverified_commit: "abc1234"\n'
+        f"superseded_by: {successor}\n"
+        + (f"supersedes:\n{replaced}" if replaced else "")
+    )
+
+
+def test_supersession_chains_keep_their_history(tmp_path: Path) -> None:
+    """A -> B -> C stays valid without rewriting A to point at C."""
+    _write(tmp_path, "src/app.py", "")
+    _write(tmp_path, "docs/a.md", _superseded("docs/b.md"))
+    _write(tmp_path, "docs/b.md", _superseded("docs/c.md", ("docs/a.md",)))
+    _write(
+        tmp_path,
+        "docs/c.md",
+        _document(VALID + "supersedes:\n  - docs/b.md\n"),
+    )
+    paths = repository_paths(tmp_path)
+    assert classify(tmp_path, paths).errors == []
+
+    _write(tmp_path, "docs/b.md", _superseded("docs/c.md"))
+    assert classify(tmp_path, paths).errors == [
+        "docs/a.md: docs/b.md does not list this document under supersedes"
+    ]
+
+
+def test_supersession_chain_must_end_at_a_current_document(tmp_path: Path) -> None:
+    """Superseded documents that only replace each other leave no successor."""
+    _write(tmp_path, "docs/a.md", _superseded("docs/b.md", ("docs/b.md",)))
+    _write(tmp_path, "docs/b.md", _superseded("docs/a.md", ("docs/a.md",)))
+    assert classify(tmp_path, repository_paths(tmp_path)).errors == [
+        "docs/a.md: supersession chain loops (docs/a.md -> docs/b.md -> docs/a.md)",
+        "docs/b.md: supersession chain loops (docs/b.md -> docs/a.md -> docs/b.md)",
+    ]
+
+
 def test_scope_is_root_and_docs_markdown(tmp_path: Path) -> None:
     """Front matter elsewhere (prompts, skills) follows other contracts."""
     broken = _document("status: draft\n")
@@ -462,4 +528,37 @@ def test_readme_rules_reject_missing_superseded_and_unlabeled_historical(
         "README.md:4: docs/retired_a.md is historical and must be labeled "
         "historical on the line that references it",
         "README.md:5: docs/missing.md does not exist",
+    ]
+
+
+def test_readme_checks_dot_relative_links(tmp_path: Path) -> None:
+    """./-relative links resolve from the root; ../ links leave the repository."""
+    _write(tmp_path, "src/app.py", "")
+    _write(tmp_path, "docs/current.md", _document(VALID))
+    _write(
+        tmp_path,
+        "docs/retired.md",
+        _document('status: historical\nverified_commit: "abc1234"\n'),
+    )
+    _write(
+        tmp_path,
+        "README.md",
+        "\n".join(
+            [
+                "- [guide](./docs/current.md)",
+                "- [plan](./docs/retired.md) — historical plan",
+                "- [guide](./docs/missing.md)",
+                "- [plan](./docs/retired.md)",
+                "- [outside](../elsewhere/notes.md)",
+                "",
+            ]
+        ),
+    )
+    paths = repository_paths(tmp_path)
+    documents = classify(tmp_path, paths).documents
+    assert readme_reference_errors(tmp_path, paths, documents) == [
+        "README.md:3: ./docs/missing.md does not exist",
+        "README.md:4: docs/retired.md is historical and must be labeled "
+        "historical on the line that references it",
+        "README.md:5: ../elsewhere/notes.md points outside the repository",
     ]

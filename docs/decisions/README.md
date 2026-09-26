@@ -33,7 +33,7 @@ verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 | `status` | always | `canonical`, `historical`, or `superseded`. |
 | `verified_commit` | always | The commit whose tree the document was last checked against: 7 to 40 lowercase hex characters, quoted so YAML keeps it a string. A commit cannot name itself, so this is usually the base of the change that edits the document. |
 | `sources` | when `canonical` | Repository-relative paths (files, or directories with a trailing slash) that the document describes. Every path must exist. Optional for the other statuses. |
-| `superseded_by` | when `superseded` | The repository-relative path of the replacing document, which must list this document under `supersedes`. Not allowed with any other status. |
+| `superseded_by` | when `superseded` | The repository-relative path of the replacing document, which must list this document under `supersedes`. The replacement may itself be superseded later; links are never rewritten, and following them must reach a document that is not superseded. Not allowed with any other status. |
 | `supersedes` | no | Documents this one replaces. Each must be `superseded` with `superseded_by` naming this document. |
 
 No other keys are accepted.
@@ -47,8 +47,8 @@ No other keys are accepted.
   modules that were never built, dated plans and checkpoints, and notes on
   configurations since replaced. Kept for provenance, never edited to track the
   current system, and labeled historical wherever `README.md` references it.
-- **superseded** — replaced by the document named in `superseded_by`.
-  `README.md` never references it.
+- **superseded** — replaced by the document named in `superseded_by`, whose
+  own successor, if any, continues the chain. `README.md` never references it.
 
 Documents without front matter are unclassified. Classify a document when you
 verify it against its sources or retire it. Generated documents, such as
@@ -59,10 +59,12 @@ their freshness.
 
 `tests/test_doc_front_matter.py` checks every Markdown file at the repository
 root and under `docs/`: the keys and values above, that every `sources` path
-exists, that supersession links agree in both directions, and that every
-Markdown path `README.md` references exists, is not superseded, and is labeled
-historical on its line when its status is historical. It does not yet fail when
-a listed source changes after `verified_commit`.
+exists, that supersession links agree in both directions and every chain ends
+at a document that is not superseded, and that every Markdown path `README.md`
+references, including `./`-relative links, exists inside the repository, is not
+superseded, and is labeled historical on its line when its status is
+historical. It does not yet fail when a listed source changes after
+`verified_commit`.
 
 ## Decision and Parked-Work Records
 
