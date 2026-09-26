@@ -197,12 +197,13 @@ processes, and they fail loudly in other profiles.
   `<service>.log.1` (older segments shift up to `backup_count`, the oldest
   is dropped) and the service starts on a fresh file; a long-running
   service's capture grows until its next spawn. `nexus logs -n N` continues
-  into the rotated segments when the current file is shorter than `N`, and
-  `-f` follows across a restart's rotation.
+  into the rotated segments when the current file is shorter than `N`,
+  reading at most `max_tail_bytes` of log text in all, and `-f` follows
+  across a restart's rotation.
 - `{log_config}` expands to `<state_dir>/logging.json`, a
   `logging.config.dictConfig` document the supervisor writes from
-  `[runtime.logs]` before spawning. The gateway passes it to uvicorn as
-  `--log-config`: application and uvicorn loggers write to stdout (never a
+  `[runtime.logs]` before spawning. The gateway and the mock OpenAI server
+  pass it to uvicorn as `--log-config`: application and uvicorn loggers write to stdout (never a
   file of their own) through one `format` at one `level`, and successful
   (below 400) access records for `access_success_exclude_paths` are dropped
   while every 4xx and 5xx is kept.

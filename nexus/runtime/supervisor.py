@@ -25,7 +25,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import requests
 
@@ -179,48 +179,90 @@ def _rotate_log(path: Path, max_bytes: int, backup_count: int) -> bool:
     return True
 
 
-def _read_last_lines(path: Path, count: int) -> List[str]:
+def _read_last_lines(
+    path: Path, count: int, max_read_bytes: int, end: Optional[int] = None
+) -> Tuple[List[str], int, bool]:
     """Return the last ``count`` lines of one file, reading backwards in blocks.
 
-    Returns every line when the file holds fewer than ``count``, so callers
-    can tell the whole file was consumed.
+    Reads at most ``max_read_bytes`` bytes, ending at byte ``end`` (the end of
+    the file when None). A line cut by the start of the window is dropped, not
+    returned as a fragment. Returns the lines, the bytes read, and whether the
+    read reached the start of the file (every line before ``end`` was seen), so
+    callers can tell when to continue into an older segment.
     """
+    blocks: List[bytes] = []
+    newlines = 0
     with open(path, "rb") as handle:
-        position = handle.seek(0, os.SEEK_END)
-        data = b""
-        while position > 0 and data.count(b"\n") <= count:
-            step = min(_TAIL_BLOCK_BYTES, position)
+        size = handle.seek(0, os.SEEK_END)
+        position = size if end is None else min(end, size)
+        stop = position
+        while position > 0 and newlines <= count and stop - position < max_read_bytes:
+            step = min(_TAIL_BLOCK_BYTES, position, max_read_bytes - (stop - position))
             position -= step
             handle.seek(position)
-            data = handle.read(step) + data
-    lines = data.decode("utf-8", errors="replace").splitlines()
-    if position > 0:
-        # The first line of a mid-file window may be a fragment.
+            block = handle.read(step)
+            blocks.append(block)
+            newlines += block.count(b"\n")
+        # A mid-file window starts on a line boundary only when the byte
+        # before it is a newline; otherwise its first line is a fragment.
+        whole_first_line = position == 0
+        if not whole_first_line:
+            handle.seek(position - 1)
+            whole_first_line = handle.read(1) == b"\n"
+    lines = b"".join(reversed(blocks)).decode("utf-8", errors="replace").splitlines()
+    if not whole_first_line:
         lines = lines[1:]
-    return lines[-count:]
+    return lines[-count:], stop - position, position == 0
 
 
-def _tail_lines(path: Path, count: int, backup_count: int = 0) -> List[str]:
+def _tail_lines(
+    path: Path,
+    count: int,
+    *,
+    max_read_bytes: int,
+    backup_count: int = 0,
+    end: Optional[int] = None,
+) -> List[str]:
     """Return the last ``count`` lines of a captured log.
 
     When the current file holds fewer than ``count`` lines, reading continues
     backwards through the rotated segments ``.1 .. .backup_count`` (newest
-    first) and stops at the first missing segment. Lines come back in
-    chronological order.
+    first) and stops at the first missing segment. At most ``max_read_bytes``
+    are read in all ([runtime.logs].max_tail_bytes), so a huge ``count`` never
+    loads every retained segment. ``end`` bounds the read of the current file
+    at a byte offset a follower has pinned. Lines come back in chronological
+    order.
     """
     if count < 1:
         raise ValueError("Log line count must be a positive integer")
+    if max_read_bytes < 1:
+        raise ValueError(
+            f"Log read bound must be a positive byte count, got {max_read_bytes}"
+        )
     segments = [path] + [
         rotated_segment(path, index) for index in range(1, backup_count + 1)
     ]
     collected: List[str] = []
+    budget = max_read_bytes
     for segment in segments:
         if not segment.exists():
             break
-        collected = _read_last_lines(segment, count - len(collected)) + collected
-        if len(collected) >= count:
+        lines, consumed, reached_start = _read_last_lines(
+            segment,
+            count - len(collected),
+            budget,
+            end if segment == path else None,
+        )
+        collected = lines + collected
+        budget -= consumed
+        if not reached_start or len(collected) >= count or budget < 1:
             break
     return collected
+
+
+def _terminated(data: bytes) -> bytes:
+    """``data`` ending in a newline: a closed segment's fragment is its own line."""
+    return data + b"\n" if data and not data.endswith(b"\n") else data
 
 
 class _LogFollower:
@@ -228,13 +270,14 @@ class _LogFollower:
 
     Spawn-time rotation renames ``<name>.log`` to ``<name>.log.1`` and opens a
     fresh file. The follower tracks the file identity it was reading; when the
-    path names a new file it drains the rest of the renamed segment first, so
-    a restart neither strands the reader on the old file nor drops the dead
-    process's last lines.
+    path names a new file it drains the rest of the renamed segment (and any
+    segment rotated after it) first, so a restart neither strands the reader
+    on the old file nor drops the dead process's last lines.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, backup_count: int) -> None:
         self.path = path
+        self.backup_count = backup_count
         self._inode: Optional[int] = None
         self._offset = 0
         self._partial = b""
@@ -242,6 +285,11 @@ class _LogFollower:
             stat = path.stat()
             self._inode = stat.st_ino
             self._offset = stat.st_size
+
+    @property
+    def offset(self) -> int:
+        """Byte offset in the current capture that following starts from."""
+        return self._offset
 
     def read_lines(self) -> List[str]:
         """Return the complete lines appended since the previous call."""
@@ -252,12 +300,8 @@ class _LogFollower:
             inode = os.fstat(handle.fileno()).st_ino
             if inode != self._inode:
                 if self._inode is not None:
-                    # The old segment is closed for good: its trailing
-                    # fragment, if any, is a line of its own.
-                    finished = self._partial + self._drain_rotated()
+                    finished = self._drain_rotated()
                     self._partial = b""
-                    if finished and not finished.endswith(b"\n"):
-                        finished += b"\n"
                 self._inode = inode
                 self._offset = 0
             handle.seek(self._offset)
@@ -270,15 +314,29 @@ class _LogFollower:
         return complete.decode("utf-8", errors="replace").split("\n")
 
     def _drain_rotated(self) -> bytes:
-        """Unread bytes of the segment this follower was reading, if rotated."""
-        previous = rotated_segment(self.path, 1)
-        if not previous.exists():
-            return b""
-        with open(previous, "rb") as handle:
-            if os.fstat(handle.fileno()).st_ino != self._inode:
-                return b""
-            handle.seek(self._offset)
-            return handle.read()
+        """Unread bytes of the rotated segment this follower was reading.
+
+        Each respawn past ``max_bytes`` shifts segments up by one, so within
+        one poll the file being read may have moved past ``.1``. Its unread
+        tail comes first, then every newer segment in full; each segment is
+        closed for good, so its trailing fragment ends a line of its own.
+        """
+        for index in range(1, self.backup_count + 1):
+            segment = rotated_segment(self.path, index)
+            if not segment.exists():
+                continue
+            with open(segment, "rb") as handle:
+                if os.fstat(handle.fileno()).st_ino != self._inode:
+                    continue
+                handle.seek(self._offset)
+                pieces = [self._partial + handle.read()]
+            pieces.extend(
+                rotated_segment(self.path, newer).read_bytes()
+                for newer in range(index - 1, 0, -1)
+            )
+            return b"".join(_terminated(piece) for piece in pieces)
+        # The segment was rotated out of retention before it could be read.
+        return _terminated(self._partial)
 
 
 class Supervisor:
@@ -505,13 +563,23 @@ class Supervisor:
             )
         return process.pid
 
+    def _startup_excerpt(self, name: str) -> str:
+        """The last lines a service wrote during a failed start (current file)."""
+        return "\n".join(
+            _tail_lines(
+                self.log_path(name),
+                30,
+                max_read_bytes=self.runtime.logs.max_tail_bytes,
+            )
+        )
+
     def _await_healthy(self, name: str, service: RuntimeServiceSettings, pid: int):
         health = self.runtime.health
         url = f"http://{service.host}:{service.port}{service.health_path}"
         deadline = time.monotonic() + health.startup_deadline_seconds
         while True:
             if not _pid_alive(pid):
-                excerpt = "\n".join(_tail_lines(self.log_path(name), 30))
+                excerpt = self._startup_excerpt(name)
                 raise RuntimeError_(
                     f"Service '{name}' exited during startup. Last log lines:\n"
                     f"{excerpt}"
@@ -522,7 +590,7 @@ class Supervisor:
             except requests.RequestException:
                 pass
             if time.monotonic() > deadline:
-                excerpt = "\n".join(_tail_lines(self.log_path(name), 30))
+                excerpt = self._startup_excerpt(name)
                 self._stop_pid(pid)
                 raise RuntimeError_(
                     f"Service '{name}' failed to become healthy at {url} within "
@@ -892,11 +960,19 @@ class Supervisor:
                 f"No captured log for service '{service}' at {log_path}. "
                 f"Known services: {sorted(self.runtime.services)}"
             )
-        count = lines if lines is not None else self.runtime.logs.tail_lines
-        tail = _tail_lines(log_path, count, self.runtime.logs.backup_count)
-        # Pin the follow position with the tail read, not after the caller has
-        # consumed the tail, so nothing written meanwhile is skipped.
-        follower = _LogFollower(log_path) if follow else None
+        settings = self.runtime.logs
+        count = lines if lines is not None else settings.tail_lines
+        # Pin the follow position first and read the tail up to exactly that
+        # offset, so a line written meanwhile is followed: never skipped and
+        # never repeated.
+        follower = _LogFollower(log_path, settings.backup_count) if follow else None
+        tail = _tail_lines(
+            log_path,
+            count,
+            max_read_bytes=settings.max_tail_bytes,
+            backup_count=settings.backup_count,
+            end=None if follower is None else follower.offset,
+        )
         yield from tail
         if follower is None:
             return
@@ -915,7 +991,10 @@ class Supervisor:
         """Tail service logs to the console and supervise until interrupted."""
         restarts: Dict[str, int] = {}
         services = self.enabled_services()
-        followers = {name: _LogFollower(self.log_path(name)) for name in services}
+        followers = {
+            name: _LogFollower(self.log_path(name), self.runtime.logs.backup_count)
+            for name in services
+        }
 
         interrupted = {"flag": False}
 

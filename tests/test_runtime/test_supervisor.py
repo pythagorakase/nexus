@@ -19,6 +19,7 @@ from nexus.runtime.supervisor import _LogFollower, _tail_lines, rotated_segment
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
 LOG_LINE_COUNT_ERROR = "Log line count must be a positive integer"
+UNBOUNDED_READ = 1024 * 1024
 
 
 def _write_config(tmp_path: Path, name: str = "runtime.toml") -> Path:
@@ -35,7 +36,7 @@ def _write_config(tmp_path: Path, name: str = "runtime.toml") -> Path:
 def test_tail_lines_rejects_non_positive_counts(tmp_path: Path, count: int) -> None:
     """The low-level tail helper loudly rejects invalid counts."""
     with pytest.raises(ValueError, match=f"^{LOG_LINE_COUNT_ERROR}$"):
-        _tail_lines(tmp_path / "missing.log", count)
+        _tail_lines(tmp_path / "missing.log", count, max_read_bytes=UNBOUNDED_READ)
 
 
 @pytest.mark.parametrize(
@@ -56,7 +57,7 @@ def test_tail_lines_returns_requested_slice(
         "".join(f"line-{index}\n" for index in range(120)), encoding="utf-8"
     )
 
-    assert _tail_lines(log_path, count) == expected
+    assert _tail_lines(log_path, count, max_read_bytes=UNBOUNDED_READ) == expected
 
 
 def test_from_config_explicit_path_beats_runtime_environment(
@@ -146,6 +147,7 @@ def _logging_supervisor(
     max_bytes: int,
     backup_count: int,
     command: list[str] | None = None,
+    max_tail_bytes: int | None = None,
 ) -> Supervisor:
     """A real supervisor with an 'echo' service and tiny rotation limits."""
     document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
@@ -153,6 +155,8 @@ def _logging_supervisor(
     runtime["state_dir"] = str(tmp_path / "state")
     runtime["logs"]["max_bytes"] = max_bytes
     runtime["logs"]["backup_count"] = backup_count
+    if max_tail_bytes is not None:
+        runtime["logs"]["max_tail_bytes"] = max_tail_bytes
     echo = tomlkit.table()
     echo["command"] = command or [
         "{python}",
@@ -293,9 +297,72 @@ def test_tail_lines_reads_multiple_blocks_without_gaps(tmp_path: Path) -> None:
     _write_lines(log_path, current)
     assert log_path.stat().st_size > 3 * 64 * 1024
 
-    assert _tail_lines(log_path, 3999) == current[-3999:]
-    assert _tail_lines(log_path, 5000, backup_count=1) == older[-1000:] + current
-    assert _tail_lines(log_path, 5000) == current
+    assert _tail_lines(log_path, 3999, max_read_bytes=UNBOUNDED_READ) == (
+        current[-3999:]
+    )
+    assert (
+        _tail_lines(log_path, 5000, max_read_bytes=UNBOUNDED_READ, backup_count=1)
+        == older[-1000:] + current
+    )
+    assert _tail_lines(log_path, 5000, max_read_bytes=UNBOUNDED_READ) == current
+
+
+@pytest.mark.parametrize(
+    "max_read_bytes,expected_older",
+    ((50, ["b-8", "b-9"]), (55, ["b-8", "b-9"]), (60, ["b-7", "b-8", "b-9"])),
+    ids=("window-on-line-boundary", "window-cuts-a-line", "next-boundary"),
+)
+def test_tail_lines_read_bound_spans_segments(
+    tmp_path: Path, max_read_bytes: int, expected_older: list[str]
+) -> None:
+    """The byte bound covers every segment read and drops a cut first line."""
+    log_path = tmp_path / "gateway.log"
+    # Ten-byte lines: 'b-N' plus padding plus the newline.
+    older = [f"b-{index}".ljust(9, ".") for index in range(10)]
+    current = [f"c-{index}".ljust(9, ".") for index in range(3)]
+    _write_lines(rotated_segment(log_path, 1), older)
+    _write_lines(log_path, current)
+
+    tail = _tail_lines(log_path, 100, max_read_bytes=max_read_bytes, backup_count=1)
+
+    assert tail == [line.ljust(9, ".") for line in expected_older] + current
+
+
+@pytest.mark.parametrize("max_read_bytes", (0, -1))
+def test_tail_lines_rejects_non_positive_read_bound(
+    tmp_path: Path, max_read_bytes: int
+) -> None:
+    """A read bound that cannot read anything fails loudly."""
+    with pytest.raises(ValueError, match="read bound"):
+        _tail_lines(tmp_path / "missing.log", 1, max_read_bytes=max_read_bytes)
+
+
+def test_logs_honors_configured_max_tail_bytes(tmp_path: Path) -> None:
+    """[runtime.logs].max_tail_bytes bounds what nexus logs -n reads."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1024, backup_count=1, max_tail_bytes=30
+    )
+    log_path = supervisor.log_path("echo")
+    _write_lines(rotated_segment(log_path, 1), ["b-1".ljust(9, ".")])
+    _write_lines(log_path, [f"c-{index}".ljust(9, ".") for index in range(5)])
+
+    assert list(supervisor.logs("echo", lines=100)) == [
+        f"c-{index}".ljust(9, ".") for index in range(2, 5)
+    ]
+
+
+def test_tail_lines_stops_at_a_pinned_end_offset(tmp_path: Path) -> None:
+    """A tail pinned at a follower's offset leaves later bytes to the follower."""
+    log_path = tmp_path / "gateway.log"
+    _write_lines(log_path, ["a", "b"])
+    follower = _LogFollower(log_path, backup_count=1)
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write("c\n")
+
+    assert _tail_lines(
+        log_path, 10, max_read_bytes=UNBOUNDED_READ, end=follower.offset
+    ) == ["a", "b"]
+    assert follower.read_lines() == ["c"]
 
 
 def test_logs_follow_crosses_spawn_rotation(tmp_path: Path) -> None:
@@ -316,12 +383,30 @@ def test_logs_follow_crosses_spawn_rotation(tmp_path: Path) -> None:
     assert [next(stream) for _ in range(3)] == ["old-2", "old-3", "run-1"]
 
 
+def test_logs_follow_crosses_two_rotations_within_one_poll(tmp_path: Path) -> None:
+    """A segment pushed past .1 before the next poll is still drained in order."""
+    supervisor = _logging_supervisor(tmp_path, max_bytes=1, backup_count=3)
+    log_path = supervisor.log_path("echo")
+    _write_lines(log_path, ["old-1"])
+
+    stream = supervisor.logs("echo", lines=1, follow=True)
+    assert next(stream) == "old-1"
+
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write("old-2\nold-3")
+    _spawn_to_exit(supervisor, "1")
+    _spawn_to_exit(supervisor, "2")
+    assert rotated_segment(log_path, 2).read_text(encoding="utf-8").endswith("old-3")
+
+    assert [next(stream) for _ in range(4)] == ["old-2", "old-3", "run-1", "run-2"]
+
+
 def test_log_follower_holds_fragments_and_picks_up_a_new_capture(
     tmp_path: Path,
 ) -> None:
     """The foreground follower emits whole lines only, from a file born later."""
     log_path = tmp_path / "gateway.log"
-    follower = _LogFollower(log_path)
+    follower = _LogFollower(log_path, backup_count=1)
     assert follower.read_lines() == []
 
     log_path.write_text("first\nsecond-part", encoding="utf-8")

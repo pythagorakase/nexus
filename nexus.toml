@@ -1345,6 +1345,7 @@ port_release_timeout_seconds = 5.0 # swap waits this long for the old llama-serv
 # service's stdout+stderr in <state_dir>/<service>.log and rotates at spawn.
 tail_lines = 100          # default for `nexus logs`
 follow_poll_seconds = 0.5 # poll interval for `nexus logs -f`
+max_tail_bytes = 262144   # most log text one `nexus logs` tail reads, across segments
 # Applied to root + uvicorn loggers of services whose argv uses {log_config}.
 level = "INFO"            # DEBUG | INFO | WARNING | ERROR | CRITICAL
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -1364,7 +1365,7 @@ health_path = "/health"
 autorestart = "on-failure"  # honored by the foreground supervisor only
 
 [runtime.services.mock_openai]
-command = ["{python}", "-m", "uvicorn", "nexus.api.mock_openai:app", "--host", "{host}", "--port", "{port}"]
+command = ["{python}", "-m", "uvicorn", "nexus.api.mock_openai:app", "--host", "{host}", "--port", "{port}", "--log-config", "{log_config}"]
 host = "127.0.0.1"
 port = 5102  # must match [global.model.api_models.test] base_url (validated)
 health_path = "/health"

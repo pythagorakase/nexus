@@ -559,6 +559,15 @@ class RuntimeLogsSettings(BaseModel):
     follow_poll_seconds: float = Field(
         default=0.5, gt=0, description="Poll interval for nexus logs -f"
     )
+    max_tail_bytes: int = Field(
+        default=262_144,
+        gt=0,
+        description=(
+            "Most bytes of log text one tail read loads (nexus logs -n and "
+            "startup-failure excerpts), across the current file and its "
+            "rotated segments"
+        ),
+    )
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
         description=(
