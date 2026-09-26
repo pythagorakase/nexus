@@ -40,6 +40,15 @@ MEMORY_CONVERSATIONS_PROVIDER = "test"
 _FILE_STORE_DIR = Path(__file__).parent.parent.parent / "temp" / "wizard_threads"
 
 
+class ConversationThreadNotFoundError(LookupError):
+    """A wizard thread ID has no record in the local conversation file store.
+
+    ``create_thread`` always writes the thread file, so a missing file means
+    the ID belongs to another store (for example, a hosted ``conv_*`` ID after
+    a switch to a file-backed provider) or the thread was deleted.
+    """
+
+
 class Message(TypedDict):
     """Type definition for conversation messages."""
 
@@ -124,7 +133,8 @@ class ConversationsClient:
 
         Args:
             model: Model name (a concrete ID from the api_models registry).
-                Use "TEST" for in-memory mode without API calls.
+                Models of the ``test`` registry provider select in-memory
+                storage and make no API calls.
 
         Raises:
             ValueError: If the model or its provider is absent from the registry.
@@ -212,6 +222,9 @@ class ConversationsClient:
 
         Returns:
             The ID of the created message
+
+        Raises:
+            ConversationThreadNotFoundError: If a file-backed thread is absent.
         """
         if origin is not None:
             if role != "user":
@@ -249,6 +262,9 @@ class ConversationsClient:
 
         Returns:
             List of Message TypedDicts with 'role' and 'content' fields
+
+        Raises:
+            ConversationThreadNotFoundError: If a file-backed thread is absent.
         """
         if self._store_mode == "memory":
             messages = self._test_threads.get(thread_id, [])
@@ -291,6 +307,9 @@ class ConversationsClient:
 
         Returns:
             True if successful, False otherwise
+
+        Raises:
+            ConversationThreadNotFoundError: If a file-backed thread is absent.
         """
         if self._store_mode == "memory":
             if thread_id in self._test_threads:
@@ -300,12 +319,9 @@ class ConversationsClient:
             logger.warning("[TEST MODE] Thread %s not found", thread_id)
             return False
         if self._store_mode == "file":
-            deleted = self._require_file_store().delete_thread(thread_id)
-            if deleted:
-                logger.info("Deleted local thread %s", thread_id)
-            else:
-                logger.warning("Local thread %s not found", thread_id)
-            return deleted
+            self._require_file_store().delete_thread(thread_id)
+            logger.info("Deleted local thread %s", thread_id)
+            return True
 
         client = self._require_hosted_client()
         try:
@@ -328,10 +344,19 @@ class _FileConversationStore:
     def _thread_path(self, thread_id: str) -> Path:
         return self._base_dir / f"{thread_id}.json"
 
-    def _load(self, thread_id: str) -> List[Dict[str, str]]:
+    def _existing_thread_path(self, thread_id: str) -> Path:
+        """Return a created thread's file, raising when the store lacks it."""
         path = self._thread_path(thread_id)
         if not path.exists():
-            return []
+            raise ConversationThreadNotFoundError(
+                f"Wizard conversation thread {thread_id!r} does not exist in the "
+                f"local file store {self._base_dir}; it was created in another "
+                "conversation store or deleted"
+            )
+        return path
+
+    def _load(self, thread_id: str) -> List[Dict[str, str]]:
+        path = self._existing_thread_path(thread_id)
         with path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
 
@@ -364,8 +389,6 @@ class _FileConversationStore:
         return [_normalized_message(m["role"], m["content"]) for m in limited]
 
     def delete_thread(self, thread_id: str) -> bool:
-        path = self._thread_path(thread_id)
-        if not path.exists():
-            return False
-        path.unlink()
+        with self._lock:
+            self._existing_thread_path(thread_id).unlink()
         return True

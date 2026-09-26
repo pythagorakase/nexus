@@ -14,7 +14,11 @@ import openai
 import pytest
 
 from nexus.api import conversations
-from nexus.api.conversations import ConversationsClient, _FileConversationStore
+from nexus.api.conversations import (
+    ConversationsClient,
+    ConversationThreadNotFoundError,
+    _FileConversationStore,
+)
 from nexus.api.wizard_transcript import MessageOrigin
 from nexus.config import load_settings
 from nexus.config.provider_guard import ProviderForbiddenInTests
@@ -27,6 +31,11 @@ REGISTRY_PROVIDERS = sorted(load_settings().global_.model.api_models)
 # The storage contract: only hosted OpenAI has a Conversations endpoint, and
 # the mock provider keeps history in memory. Every other provider uses files.
 EXPECTED_STORE_MODE = {"openai": "openai", "test": "memory"}
+FILE_STORE_PROVIDERS = [
+    provider
+    for provider in REGISTRY_PROVIDERS
+    if EXPECTED_STORE_MODE.get(provider, "file") == "file"
+]
 
 
 def test_openai_conversation_protocol() -> None:
@@ -328,6 +337,36 @@ def test_wizard_conversations_follow_registry_provider(
         ]
     assert client.delete_thread(thread_id)
     assert not thread_file.exists()
+
+
+@pytest.mark.parametrize("provider", FILE_STORE_PROVIDERS)
+def test_file_conversations_reject_unknown_threads(
+    provider: str, offline_registry: Path
+) -> None:
+    """A thread the file store never created, or deleted, fails loudly.
+
+    A hosted ``conv_*`` ID reaching a file-backed provider must not resume as
+    an empty transcript or silently start a new file under that ID.
+    """
+    client = ConversationsClient(registry_model(provider))
+    hosted_id = "conv_created_by_hosted_store"
+    unknown = re.escape(repr(hosted_id)) + ".*" + re.escape(str(offline_registry))
+    operations = (
+        lambda: client.list_messages(hosted_id, limit=0),
+        lambda: client.add_message(hosted_id, "assistant", "Welcome"),
+        lambda: client.delete_thread(hosted_id),
+    )
+    for operation in operations:
+        with pytest.raises(ConversationThreadNotFoundError, match=unknown):
+            operation()
+    assert not (offline_registry / f"{hosted_id}.json").exists()
+
+    thread_id = client.create_thread()
+    assert client.delete_thread(thread_id)
+    with pytest.raises(
+        ConversationThreadNotFoundError, match=re.escape(repr(thread_id))
+    ):
+        client.list_messages(thread_id)
 
 
 @pytest.mark.parametrize(
