@@ -22,8 +22,27 @@ function load(store: DraftStore, scope: DraftScope | null): DraftState {
   }
 }
 
-/** Persist exact input synchronously; no restore path ever submits a request. */
-export function useInputDraft(store: DraftStore, scope: DraftScope | null) {
+/**
+ * A choice identity names a position on the menu presented now. One the menu
+ * lacks (a reload onto a shorter menu, a menu consumed or replaced after the
+ * draft was stored) is dropped, and the text stays as a freeform draft.
+ */
+function onMenu(draft: InputDraft, choiceCount: number): InputDraft {
+  if (draft.choice === undefined || draft.choice <= choiceCount) return draft;
+  return { revision: draft.revision, text: draft.text };
+}
+
+/**
+ * Persist exact input synchronously; no restore path ever submits a request.
+ *
+ * `choiceCount` is the number of choices presented now; the draft exposes,
+ * edits and submits a choice identity only while it is one of them.
+ */
+export function useInputDraft(
+  store: DraftStore,
+  scope: DraftScope | null,
+  choiceCount = 0,
+) {
   const key = scope?.draftKey ?? null;
   const actionKey = scope?.actionKey ?? null;
   const [state, setState] = useState(() => load(store, scope));
@@ -32,9 +51,12 @@ export function useInputDraft(store: DraftStore, scope: DraftScope | null) {
   // and avoiding an effect which could overwrite restored text on mount.
   if (state.key !== key) setState(load(store, scope));
   const current = state.key === key ? state : load(store, scope);
+  // Every reader of the draft - render, edit, submit - sees only an identity
+  // the current menu presents, from the first frame.
+  const draft = onMenu(current.draft, choiceCount);
   // Memoized callbacks read the draft as it is at call time, not at memo time.
-  const draftRef = useRef(current.draft);
-  draftRef.current = current.draft;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
   useEffect(() => {
     if (key === null || actionKey === null) return;
@@ -82,6 +104,13 @@ export function useInputDraft(store: DraftStore, scope: DraftScope | null) {
     }
     setState((previous) => ({ ...previous, key, draft, storageError }));
   }, [store, key]);
+
+  // Persist the drop so a menu that grows back cannot revive a stale identity.
+  // The revision is kept: the text is unchanged, and an acknowledgement for a
+  // send made before the menu was consumed must still clear it.
+  useEffect(() => {
+    if (draft !== current.draft) write(draft);
+  }, [draft, current.draft, write]);
 
   // Editing keeps the selected choice's identity; clearing the text drops it.
   const update = useCallback((text: string) => {
@@ -148,8 +177,8 @@ export function useInputDraft(store: DraftStore, scope: DraftScope | null) {
   }, [store, actionKey]);
 
   return {
-    text: current.draft.text,
-    choice: current.draft.choice ?? null,
+    text: draft.text,
+    choice: draft.choice ?? null,
     update,
     select,
     submit,

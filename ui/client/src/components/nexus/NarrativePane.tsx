@@ -420,9 +420,10 @@ export function NarrativePane({
     },
     [handleSend],
   );
+  // The draft names only a choice on this menu (useReaderDraft validates it).
   const selectedEdited =
     selectedChoice !== null
-    && freeform.trim() !== (choices[selectedChoice - 1] ?? "").trim();
+    && freeform.trim() !== choices[selectedChoice - 1].trim();
 
   // Number keys 1-N select choices when focus is outside the freeform field.
   // Inert while reading history - no submission affordances exist there.

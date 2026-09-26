@@ -27,6 +27,7 @@ beforeAll(() => {
 });
 beforeEach(() => localStorage.clear());
 
+/** Render the pane; `show` re-renders it with a later slot state. */
 function mount(
   state: SlotState = base,
   send: NarrativeEngine["submitTurn"] = vi.fn(async () => true),
@@ -37,19 +38,23 @@ function mount(
   client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
   client.setQueryData(["/api/narrative/latest-chunk", state.slot], null);
   client.setQueryData(["/api/narrative/outline", state.slot], []);
-  const engine: NarrativeEngine = {
-    slotState: state, slotStateError: null, isSlotStateLoading: false,
-    phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
-    isGenerating: false, completedGenerations: 0, submitTurn: send,
-    regenerateTurn: vi.fn(async () => true),
+  const tree = (current: SlotState) => {
+    const engine: NarrativeEngine = {
+      slotState: current, slotStateError: null, isSlotStateLoading: false,
+      phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
+      isGenerating: false, completedGenerations: 0, submitTurn: send,
+      regenerateTurn: vi.fn(async () => true),
+    };
+    return (
+      <QueryClientProvider client={client}>
+        <ThemeProvider>
+          <NarrativePane slot={current.slot} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
   };
-  return render(
-    <QueryClientProvider client={client}>
-      <ThemeProvider>
-        <NarrativePane slot={state.slot} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />
-      </ThemeProvider>
-    </QueryClientProvider>,
-  );
+  const view = render(tree(state));
+  return Object.assign(view, { show: (next: SlotState) => view.rerender(tree(next)) });
 }
 
 const input = () => screen.getByTestId("input-freeform");
@@ -379,6 +384,87 @@ describe("deliberate choice drafts", () => {
       expect(choice(2)).toHaveAttribute("aria-pressed", "false");
     },
   );
+
+  describe("a choice identity outside the presented menu", () => {
+    const key = readerDraftScope(base)!.draftKey;
+    const store = (draft: object) => localStorage.setItem(key, JSON.stringify(draft));
+    const stored = () => JSON.parse(localStorage.getItem(key) ?? "null");
+    const pressed = () => screen.queryAllByRole("button", { pressed: true });
+    const three: SlotState = {
+      ...base, choices: ["Read the ledger", "Ask Sana", "Leave the crew"],
+    };
+
+    it("restores as freeform text and sends only the text", async () => {
+      store({ revision: "r1", text: "Ask Sana twice", choice: 999 });
+      const send = vi.fn(async () => true);
+      mount(base, send);
+      expect(input()).toHaveValue("Ask Sana twice");
+      expect(pressed()).toHaveLength(0);
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ userText: "Ask Sana twice" });
+    });
+
+    it("keeps a stored choice the menu still presents", async () => {
+      store({ revision: "r1", text: "Ask Sana twice", choice: 2 });
+      const send = vi.fn(async () => true);
+      mount(base, send);
+      expect(input()).toHaveValue("Ask Sana twice");
+      expect(pressed()).toEqual([choice(2)]);
+      expect(choice(2)).toHaveClass("selected", "edited");
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ choice: 2, userText: "Ask Sana twice" });
+    });
+
+    it("drops a stored choice the shorter menu no longer has", async () => {
+      store({ revision: "r1", text: "Ask Sana twice", choice: 2 });
+      const send = vi.fn(async () => true);
+      const view = mount({ ...base, choices: ["Read the ledger"] }, send);
+      expect(input()).toHaveValue("Ask Sana twice");
+      expect(pressed()).toHaveLength(0);
+      await waitFor(() => expect(stored()).toEqual({ revision: "r1", text: "Ask Sana twice" }));
+      view.show(base);
+      expect(choice(2)).toHaveAttribute("aria-pressed", "false");
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ userText: "Ask Sana twice" });
+    });
+
+    it("drops a live selection when the menu shrinks below it", async () => {
+      const send = vi.fn(async () => true);
+      const view = mount(three, send);
+      fireEvent.click(choice(3));
+      type("Leave the crew at dawn");
+      expect(choice(3)).toHaveAttribute("aria-pressed", "true");
+      view.show(base);
+      expect(input()).toHaveValue("Leave the crew at dawn");
+      expect(pressed()).toHaveLength(0);
+      await waitFor(() => expect(stored()).not.toHaveProperty("choice"));
+      view.show(three);
+      expect(choice(3)).toHaveAttribute("aria-pressed", "false");
+      type("Leave the crew at dusk");
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ userText: "Leave the crew at dusk" });
+    });
+
+    it("still clears a sent choice when its menu is consumed before the acknowledgement", async () => {
+      const committed: SlotState = { ...base, has_pending: false, session_id: null };
+      const committedKey = readerDraftScope(committed)!.draftKey;
+      let accept!: (accepted: boolean) => void;
+      const send = vi.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+      const view = mount(committed, send);
+      fireEvent.click(choice(1));
+      submit();
+      expect(send).toHaveBeenCalledWith({ choice: 1, userText: "Read the ledger" });
+      view.show({ ...committed, choices: [] });
+      await act(async () => {});
+      await act(async () => { accept(true); });
+      expect(input()).toHaveValue("");
+      expect(localStorage.getItem(committedKey)).toBeNull();
+    });
+  });
 
   it("replaces the draft when another choice is selected", async () => {
     const send = vi.fn(async () => true);

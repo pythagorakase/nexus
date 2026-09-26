@@ -60,7 +60,8 @@ export function createDraftStore(name: string): DraftStore {
       return null;
     }
     // Only a menu position is a choice identity. Any other stored value is
-    // dropped, and the player's text survives as freeform.
+    // dropped, and the player's text survives as freeform. useInputDraft
+    // drops, in turn, a position beyond the menu presented now.
     const { choice } = record;
     return typeof choice === "number" && Number.isInteger(choice) && choice >= 1
       ? { revision: record.revision, text: record.text, choice }
