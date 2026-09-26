@@ -1204,6 +1204,68 @@ def init_cache(
     )
 
 
+def repoint_wizard_conversation(
+    dbname: str,
+    *,
+    expected_thread_id: str,
+    thread_id: str,
+    expected_model: str,
+    model: str,
+) -> None:
+    """Persist a wizard model switch and its conversation thread together.
+
+    Both rows live in the slot database, so the thread ID and the slot model
+    commit in one transaction or neither changes.
+
+    Args:
+        dbname: Slot database holding the wizard cache and global_variables.
+        expected_thread_id: Thread ID the caller read before switching.
+        thread_id: Thread ID the wizard continues in (unchanged for a switch
+            within one conversation store).
+        expected_model: Slot model the caller read before switching.
+        model: Newly selected wizard model.
+
+    Raises:
+        WizardStateConflict: If either value changed since the caller read it.
+    """
+    from nexus.api.wizard_confirmation import WizardStateConflict
+
+    with _cache_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE assets.new_story_creator
+                SET thread_id = %s, updated_at = NOW()
+                WHERE id = TRUE AND thread_id = %s
+                """,
+                (thread_id, expected_thread_id),
+            )
+            if cur.rowcount != 1:
+                raise WizardStateConflict(
+                    f"The wizard conversation changed from {expected_thread_id!r} "
+                    "before the model switch was saved. Resume before retrying."
+                )
+            cur.execute(
+                """
+                UPDATE global_variables SET model = %s
+                WHERE id = TRUE AND model = %s
+                """,
+                (model, expected_model),
+            )
+            if cur.rowcount != 1:
+                raise WizardStateConflict(
+                    f"The slot model changed from {expected_model!r} before the "
+                    "wizard model switch was saved. Resume before retrying."
+                )
+    logger.info(
+        "Switched wizard in %s to model %s with thread %s (was %s)",
+        dbname,
+        model,
+        thread_id,
+        expected_thread_id,
+    )
+
+
 def clear_cache(dbname: Optional[str] = None) -> None:
     """
     Clear the new-story setup cache.

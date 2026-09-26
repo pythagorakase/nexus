@@ -4,14 +4,35 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+import re
+from typing import Any, cast
 
 import httpx
 import openai
 import pytest
 
-from nexus.api.conversations import ConversationsClient, _FileConversationStore
+from nexus.api import conversations
+from nexus.api.conversations import (
+    ConversationsClient,
+    ConversationThreadNotFoundError,
+    _FileConversationStore,
+)
+from nexus.api.wizard_transcript import MessageOrigin
 from nexus.config import load_settings
+from nexus.config.provider_guard import ProviderForbiddenInTests
+from tests.model_registry_helpers import registry_model
+
+# Every provider section in nexus.toml, so a newly registered provider is
+# covered without editing this file.
+REGISTRY_PROVIDERS = sorted(load_settings().global_.model.api_models)
+# The storage contract: only hosted OpenAI has a Conversations endpoint, and
+# the mock provider keeps history in memory. Every other provider uses files.
+EXPECTED_STORE_MODE = {"openai": "openai", "test": "memory"}
+LOCAL_STORE_PROVIDERS = [
+    provider
+    for provider in REGISTRY_PROVIDERS
+    if EXPECTED_STORE_MODE.get(provider, "file") != "openai"
+]
 
 
 def test_openai_conversation_protocol() -> None:
@@ -35,6 +56,7 @@ def test_openai_conversation_protocol() -> None:
                 return httpx.Response(200, json={"data": [{"id": "msg_welcome"}]})
             assert request.url.params["order"] == "desc"
             assert request.url.params["limit"] == "2"
+            data: list[dict[str, Any]]
             if "after" not in request.url.params:
                 data = [
                     {"id": "tool_1", "type": "function_call", "name": "submit"},
@@ -113,7 +135,7 @@ def _write_origin_examples(
                 thread_id,
                 message["role"],
                 message["content"],
-                origin=message["origin"],
+                origin=cast(MessageOrigin, message["origin"]),
             )
         else:
             client.add_message(thread_id, message["role"], message["content"])
@@ -137,7 +159,7 @@ def test_local_conversation_origins_and_literal_envelope_round_trip(
     stored = (
         json.loads(path.read_text())
         if backend == "file"
-        else client._test_threads[thread_id]
+        else conversations._MEMORY_STORE.threads[thread_id]
     )
     assert stored[1]["content"] == messages[1]["content"]
     literal = stored[2]["content"]
@@ -228,6 +250,128 @@ def test_openai_conversation_origins_survive_storage_and_new_client() -> None:
             reversed(messages)
         )
         assert resumed.list_messages("conv_origins", limit=1) == [messages[-1]]
+
+
+@pytest.mark.parametrize("provider", REGISTRY_PROVIDERS)
+def test_conversation_store_mode_follows_registry_provider(provider: str) -> None:
+    """Only hosted OpenAI selects Conversations; TEST is memory; others use files."""
+    expected = EXPECTED_STORE_MODE.get(provider, "file")
+    assert conversations.conversation_store_mode(provider) == expected
+
+
+def test_conversation_store_mode_rejects_unregistered_provider() -> None:
+    """A provider name outside the registry fails instead of choosing a store."""
+    unregistered = "unregistered-" + "-".join(REGISTRY_PROVIDERS)
+    with pytest.raises(ValueError, match="is not registered"):
+        conversations.conversation_store_mode(unregistered)
+
+
+@pytest.mark.parametrize("provider", REGISTRY_PROVIDERS)
+def test_wizard_conversations_follow_registry_provider(
+    provider: str, offline_registry: Path
+) -> None:
+    """Build each provider's store with no credentials and no network access.
+
+    The hosted client for ``openai`` stops at the test-provider guard, which
+    proves that path; every other provider must store the round trip locally
+    without ever constructing a hosted client.
+    """
+    model = registry_model(provider)
+    expected = EXPECTED_STORE_MODE.get(provider, "file")
+    if expected == "openai":
+        with pytest.raises(ProviderForbiddenInTests, match=re.escape(repr(model))):
+            ConversationsClient(model)
+        assert not offline_registry.exists()
+        return
+
+    client = ConversationsClient(model)
+    assert (client.model, client.provider) == (model, provider)
+    assert client._store_mode == expected
+    assert client.client is None
+    thread_id = client.create_thread()
+    thread_file = offline_registry / f"{thread_id}.json"
+    assert thread_file.exists() is (expected == "file")
+    client.add_message(thread_id, "assistant", "Welcome")
+    client.add_message(thread_id, "user", "A moonlit harbor.")
+    assert client.list_messages(thread_id, limit=0) == [
+        {"role": "user", "content": "A moonlit harbor."},
+        {"role": "assistant", "content": "Welcome"},
+    ]
+    if expected == "file":
+        # A new wrapper, as a later wizard request builds, reads the same file.
+        resumed = ConversationsClient(model)
+        assert resumed.list_messages(thread_id, limit=1) == [
+            {"role": "user", "content": "A moonlit harbor."}
+        ]
+    assert client.delete_thread(thread_id)
+    assert not thread_file.exists()
+
+
+@pytest.mark.parametrize("provider", LOCAL_STORE_PROVIDERS)
+def test_local_conversations_reject_unknown_threads(
+    provider: str, offline_registry: Path
+) -> None:
+    """A thread the local store never created, or deleted, fails loudly.
+
+    A hosted ``conv_*`` ID reaching a file or memory store must not resume as
+    an empty transcript or silently start a new thread under that ID.
+    """
+    client = ConversationsClient(registry_model(provider))
+    in_memory = EXPECTED_STORE_MODE.get(provider) == "memory"
+    store = "in-memory TEST store" if in_memory else str(offline_registry)
+    hosted_id = "conv_created_by_hosted_store"
+    unknown = re.escape(repr(hosted_id)) + ".*" + re.escape(store)
+    operations = (
+        lambda: client.list_messages(hosted_id, limit=0),
+        lambda: client.add_message(hosted_id, "assistant", "Welcome"),
+        lambda: client.delete_thread(hosted_id),
+    )
+    for operation in operations:
+        with pytest.raises(ConversationThreadNotFoundError, match=unknown):
+            operation()
+    assert hosted_id not in conversations._MEMORY_STORE.threads
+    assert not (offline_registry / f"{hosted_id}.json").exists()
+
+    thread_id = client.create_thread()
+    assert client.delete_thread(thread_id)
+    with pytest.raises(
+        ConversationThreadNotFoundError, match=re.escape(repr(thread_id))
+    ):
+        client.list_messages(thread_id)
+
+
+@pytest.mark.parametrize("provider", LOCAL_STORE_PROVIDERS)
+def test_local_conversations_delete_single_messages(
+    provider: str, offline_registry: Path
+) -> None:
+    """One message leaves its thread; an absent one fails instead of passing."""
+    client = ConversationsClient(registry_model(provider))
+    thread_id = client.create_thread()
+    welcome = client.add_message(thread_id, "assistant", "Welcome")
+    client.add_message(thread_id, "user", "A harbor")
+
+    client.delete_message(thread_id, welcome)
+
+    assert client.list_messages(thread_id, limit=0) == [
+        {"role": "user", "content": "A harbor"}
+    ]
+    with pytest.raises(LookupError, match=re.escape(repr(welcome))):
+        client.delete_message(thread_id, welcome)
+    with pytest.raises(ConversationThreadNotFoundError):
+        client.delete_message("conv_created_by_hosted_store", welcome)
+    assert client.delete_thread(thread_id)
+
+
+@pytest.mark.parametrize(
+    "provider", [provider for provider in REGISTRY_PROVIDERS if provider != "openai"]
+)
+def test_hosted_conversations_client_rejects_other_providers(
+    provider: str, offline_registry: Path
+) -> None:
+    """Asking for hosted storage with a non-OpenAI model fails before any client."""
+    model = registry_model(provider)
+    with pytest.raises(ValueError, match=f"of provider {provider!r}"):
+        conversations._hosted_conversations_client(model, load_settings())
 
 
 @pytest.mark.live_llm
