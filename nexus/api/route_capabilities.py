@@ -197,7 +197,6 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("GET", "/api/narrative/chunks/{chunk_id}"): _NARRATIVE_READ,
         ("GET", "/api/characters"): _NARRATIVE_READ,
         ("GET", "/api/characters/{character_id}/relationships"): _NARRATIVE_READ,
-        ("GET", "/api/characters/{character_id}/psychology"): _NARRATIVE_READ,
         ("GET", "/api/places"): _NARRATIVE_READ,
         ("GET", "/api/current-place"): _NARRATIVE_READ,
         ("GET", "/api/zones"): _NARRATIVE_READ,
