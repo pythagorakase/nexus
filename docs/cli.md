@@ -139,8 +139,9 @@ creates the world carries it too. It is the player's appetite for surprise,
 not a promise of bizarre content: Retrograde maps the level onto the story
 genre's band in `[orrery.retrograde.weird.bands_by_genre]`, and a wizard with
 no selection uses `[orrery.retrograde.weird].default_level`. The transition
-records the resolved level, genre, and band as
-`global_variables.genesis_weird`, and `load --json` shows the stored level.
+records the selected level (null when none was chosen) beside the resolved
+level, genre, and band as `global_variables.genesis_weird`, and `load --json`
+shows the stored level.
 A slot already in narrative mode rejects the flag.
 
 ### `retry` — Retry a Failed Continuation

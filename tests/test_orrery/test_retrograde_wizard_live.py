@@ -83,7 +83,10 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
     genre = retrograde["weird"]["genre"]
     band = settings.orrery.retrograde.weird.bands_by_genre[genre].high
     [provenance] = _query("SELECT genesis_weird FROM global_variables")
-    assert provenance["genesis_weird"] == retrograde["weird"]
+    assert provenance["genesis_weird"] == {
+        **retrograde["weird"],
+        "selected_level": "high",
+    }
     assert provenance["genesis_weird"]["level"] == "high"
     assert provenance["genesis_weird"]["source"] == "configured_band"
     assert (

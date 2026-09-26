@@ -383,18 +383,27 @@ def test_weird_level_round_trips_and_only_a_new_wizard_clears_it() -> None:
 
 @pytest.mark.requires_postgres
 def test_genesis_provenance_writes_on_the_transition_cursor() -> None:
-    """The transition hook stores the resolved profile, or clears a stale one."""
+    """The transition hook stores the resolved profile, or clears a stale one.
+
+    The stored JSON keeps the selected level beside the resolved one; a
+    transition that ran on the default stores an explicit null selection.
+    """
     from nexus.api import new_story_flow
     from tests.pg_fixtures import connect
 
     profile = {"level": "high", "genre": "fantasy", "raw_min": 0.55, "raw_max": 0.82}
     with _migrated_slot_clone("qa838_genesis_weird") as dbname:
         with closing(connect(dbname)) as conn:
+            for selected in ("high", None):
+                with conn, conn.cursor() as cur:
+                    new_story_flow._record_genesis_weird(
+                        cur, profile, selected_level=selected
+                    )
+                    cur.execute("SELECT genesis_weird FROM global_variables")
+                    assert cur.fetchall() == [
+                        ({**profile, "selected_level": selected},)
+                    ]
             with conn, conn.cursor() as cur:
-                new_story_flow._record_genesis_weird(cur, profile)
-                cur.execute("SELECT genesis_weird FROM global_variables")
-                assert cur.fetchall() == [(profile,)]
-            with conn, conn.cursor() as cur:
-                new_story_flow._record_genesis_weird(cur, None)
+                new_story_flow._record_genesis_weird(cur, None, selected_level=None)
                 cur.execute("SELECT genesis_weird FROM global_variables")
                 assert cur.fetchall() == [(None,)]

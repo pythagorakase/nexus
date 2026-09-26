@@ -504,7 +504,12 @@ def transition_boundaries(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 def test_transition_forwards_the_level_and_records_genesis_provenance(
     transition_boundaries: SimpleNamespace, level: WeirdLevel | None
 ) -> None:
-    """The selected level reaches Retrograde and its band commits with history."""
+    """The selected level reaches Retrograde and its band commits with history.
+
+    The stored provenance keeps the level the wizard carried in
+    (``selected_level``, null when the player chose none) beside the level
+    Retrograde resolved, so a choice is distinguishable from the default.
+    """
     from nexus.config import load_settings
 
     settings = load_settings()
@@ -528,10 +533,39 @@ def test_transition_forwards_the_level_and_records_genesis_provenance(
     assert statements[0][0] == "INSERT INTO world_events DEFAULT VALUES"
     assert statements[-1][0] == GENESIS_SQL
     provenance = json.loads(statements[-1][1][0])
-    assert provenance == result["retrograde"]["weird"]
+    assert provenance == {**result["retrograde"]["weird"], "selected_level": level}
+    assert provenance["selected_level"] == level
     assert provenance["level"] == expected_level
     assert provenance["genre"] == "cyberpunk"
     assert (provenance["raw_min"], provenance["raw_max"]) == (band.min, band.max)
+
+
+def test_provenance_tells_the_default_apart_from_choosing_it(
+    transition_boundaries: SimpleNamespace,
+) -> None:
+    """Choosing the default level and choosing nothing resolve alike but differ."""
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    assert settings.orrery is not None
+    default_level = settings.orrery.retrograde.weird.default_level
+
+    stored: list[dict[str, Any]] = []
+    for selected in (default_level, None):
+        new_story_flow.perform_transition_with_retrograde(
+            4,
+            new_story_flow.build_transition_data_from_cache(ready_cache()),
+            weird_level=selected,
+        )
+        stored.append(json.loads(TransactionMapper.cursor.statements[-1][1][0]))
+
+    chosen, defaulted = stored
+    assert chosen["level"] == defaulted["level"] == default_level
+    assert (chosen["selected_level"], defaulted["selected_level"]) == (
+        default_level,
+        None,
+    )
+    assert {**chosen, "selected_level": None} == defaulted
 
 
 def test_a_story_without_retrograde_history_records_no_provenance(
@@ -557,5 +591,5 @@ def test_a_story_without_retrograde_history_records_no_provenance(
 def test_genesis_provenance_requires_the_global_variables_row() -> None:
     with pytest.raises(RuntimeError, match="no global_variables row"):
         new_story_flow._record_genesis_weird(
-            RecordingCursor(rows_matched=0), {"level": "high"}
+            RecordingCursor(rows_matched=0), {"level": "high"}, selected_level="high"
         )
