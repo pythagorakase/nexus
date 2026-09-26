@@ -22,6 +22,7 @@ import requests  # type: ignore[import-untyped]
 
 from nexus.config import get_local_models_settings, load_settings
 from nexus.config.settings_models import Settings
+from nexus.runtime.home import resolve_runtime_home
 from nexus.util.gguf_inspect import inspect_gguf
 
 STATE_FILENAME = "local-model.pid.json"
@@ -44,17 +45,18 @@ class LocalInferenceError(RuntimeError):
     """A loud, user-facing local inference lifecycle failure."""
 
 
-def _repo_root() -> Path:
-    """Return the repository root containing the active nexus package."""
-    return Path(__file__).resolve().parents[2]
-
-
 def _state_dir(settings: Settings) -> Path:
-    """Resolve the shared managed-runtime state directory."""
+    """Resolve the shared managed-runtime state directory in the runtime home."""
     if settings.runtime is None:
         raise LocalInferenceError("[runtime] is required for local model process state")
-    configured = Path(settings.runtime.state_dir).expanduser()
-    return configured if configured.is_absolute() else _repo_root() / configured
+    return resolve_runtime_home(settings).state_dir
+
+
+def _logs_dir(settings: Settings) -> Path:
+    """Resolve the runtime home's captured-log directory."""
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for local model process logs")
+    return resolve_runtime_home(settings).logs_dir
 
 
 def _state_path(settings: Settings) -> Path:
@@ -327,7 +329,7 @@ def _read_active(settings: Settings) -> dict[str, Any] | None:
         record["failed_at"] = datetime.now(timezone.utc).isoformat()
         record["error"] = (
             "llama-server exited before becoming ready; see "
-            f"{_state_dir(settings) / LOG_FILENAME}"
+            f"{_logs_dir(settings) / LOG_FILENAME}"
         )
         _write_json(_state_path(settings), record)
         return {
@@ -461,9 +463,9 @@ def activate(gguf_path: str) -> dict[str, Any]:
             str(port),
             *extra_flags,
         ]
-        state_dir = _state_dir(settings)
-        state_dir.mkdir(parents=True, exist_ok=True)
-        log_path = state_dir / LOG_FILENAME
+        logs_dir = _logs_dir(settings)
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_path = logs_dir / LOG_FILENAME
         try:
             with log_path.open("ab") as log_handle:
                 process = subprocess.Popen(
@@ -552,8 +554,8 @@ def start_download(
 
         resolved_dir = Path(local_dir).expanduser().resolve()
         resolved_dir.mkdir(parents=True, exist_ok=True)
-        state_dir = _state_dir(settings)
-        state_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir = _logs_dir(settings)
+        logs_dir.mkdir(parents=True, exist_ok=True)
         command = [
             sys.executable,
             "-m",
@@ -572,7 +574,7 @@ def start_download(
             # a cancelled multi-GB pull needs.
             worker_env["HF_HUB_DISABLE_XET"] = "1"
         try:
-            with (state_dir / DOWNLOAD_LOG_FILENAME).open("ab") as log_handle:
+            with (logs_dir / DOWNLOAD_LOG_FILENAME).open("ab") as log_handle:
                 process = subprocess.Popen(
                     command,
                     stdin=subprocess.DEVNULL,
@@ -641,11 +643,7 @@ def _downloaded_bytes(record: dict[str, Any]) -> int:
 def _download_error(settings: Settings) -> str:
     """Return the final non-empty worker log line, if the worker wrote one."""
     try:
-        lines = (
-            (Path(_state_dir(settings)) / DOWNLOAD_LOG_FILENAME)
-            .read_text()
-            .splitlines()
-        )
+        lines = (_logs_dir(settings) / DOWNLOAD_LOG_FILENAME).read_text().splitlines()
     except FileNotFoundError:
         lines = []
     return next(

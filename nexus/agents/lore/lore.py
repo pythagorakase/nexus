@@ -34,7 +34,6 @@ Each directive gets 5 SQL queries by default (configurable via nexus.toml: [lore
 import asyncio
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -43,7 +42,7 @@ from uuid import UUID
 
 # Import NEXUS configuration loader
 from nexus.config import load_settings_as_dict
-from nexus.config.loader import RUNTIME_CONFIG_ENV
+from nexus.runtime.home import resolve_config_path
 from nexus.telemetry.generation import report_generation_phase
 from nexus.telemetry.usage import usage_context
 
@@ -116,7 +115,8 @@ class LORE:
 
         Args:
             settings_path: Path to nexus.toml. Explicit paths take precedence;
-                otherwise NEXUS_RUNTIME_CONFIG is honored before the repo root.
+                otherwise the runtime-home locator rule selects the active
+                config (NEXUS_HOME, NEXUS_RUNTIME_CONFIG, then the checkout).
             debug: Enable debug logging
             enable_logon: Whether to enable LOGON utility
             dbname: Database name (save_01 through save_05).
@@ -165,12 +165,7 @@ class LORE:
         """
         raw_settings_path: Union[str, Path]
         if settings_path is None:
-            runtime_settings_path = os.environ.get(RUNTIME_CONFIG_ENV)
-            if runtime_settings_path is not None:
-                raw_settings_path = runtime_settings_path
-            else:
-                config_dir = Path(__file__).parent.parent.parent.parent
-                raw_settings_path = config_dir / "nexus.toml"
+            raw_settings_path = resolve_config_path()
         else:
             raw_settings_path = settings_path
 

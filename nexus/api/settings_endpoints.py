@@ -1,9 +1,7 @@
 """Read-only repository defaults and registry metadata for the settings card."""
 
 import logging
-import os
 import re
-from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import APIRouter, Response
@@ -19,19 +17,20 @@ from nexus.config.settings_models import (
     APEXSettings,
     materialize_model_selections,
 )
+from nexus.runtime.home import resolve_config_path
 
 logger = logging.getLogger("nexus.api.settings_endpoints")
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-# Resolved relative to the process CWD, matching every other load_settings()
-# caller in the API layer (the narrative service runs from the repo root).
-NEXUS_TOML = Path("nexus.toml")
-
 
 def _read_raw_settings() -> Dict[str, Any]:
-    """Load the persisted roster and settings as a plain dict."""
-    path = Path(os.environ.get("NEXUS_RUNTIME_CONFIG", NEXUS_TOML))
+    """Load the active config's roster and settings as a plain dict.
+
+    The runtime-home locator rule picks the file, so this serves the same
+    config load_settings() validates, whatever the working directory.
+    """
+    path = resolve_config_path()
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
     with open(path, "rb") as f:

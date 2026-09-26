@@ -41,6 +41,12 @@ from nexus.runtime.contract import (
     RUNTIME_STATUS_PATH,
     gateway_port_override,
 )
+from nexus.runtime.home import (
+    RuntimeHomeError,
+    repo_root,
+    resolve_config_path,
+    resolve_runtime_home,
+)
 from nexus.runtime.logging_config import build_logging_config
 from nexus.runtime.remote_auth import build_runtime_request_auth
 
@@ -51,11 +57,6 @@ _TAIL_BLOCK_BYTES = 64 * 1024
 
 class RuntimeError_(Exception):
     """Supervisor-level failure with a user-facing message."""
-
-
-def repo_root() -> Path:
-    """The repository root, derived from the nexus package location."""
-    return Path(__file__).resolve().parents[2]
 
 
 def _pid_alive(pid: int) -> bool:
@@ -351,9 +352,15 @@ class Supervisor:
         self.settings = settings
         self.runtime: RuntimeSettings = settings.runtime
         self.config_path = config_path.resolve()
+        try:
+            self.home = resolve_runtime_home(settings, config_path=self.config_path)
+        except RuntimeHomeError as exc:
+            raise RuntimeError_(str(exc)) from exc
+        # The checkout holds the code: spawned services run from it and import
+        # its nexus package. Runtime data lives in the home.
         self.root = repo_root()
-        state_dir = Path(self.runtime.state_dir)
-        self.state_dir = state_dir if state_dir.is_absolute() else self.root / state_dir
+        self.state_dir = self.home.state_dir
+        self.logs_dir = self.home.logs_dir
         # NEXUS_GATEWAY_PORT: run this instance's gateway on an alternate
         # port with fully isolated state (pidfiles, logs, slot bookkeeping),
         # so agent/test sessions and the desktop app can coexist on one
@@ -383,17 +390,19 @@ class Supervisor:
                     )
             gateway.port = self._gateway_port_override
             self.state_dir = self.state_dir / f"gateway-{gateway.port}"
+            self.logs_dir = self.logs_dir / f"gateway-{gateway.port}"
 
     @classmethod
     def from_config(cls, config_path: Optional[Path] = None) -> "Supervisor":
-        """Build a supervisor from an explicit, runtime, or repository config."""
-        runtime_config = os.environ.get(RUNTIME_CONFIG_ENV)
-        if config_path is not None:
-            path = Path(config_path)
-        elif runtime_config:
-            path = Path(runtime_config)
-        else:
-            path = repo_root() / "nexus.toml"
+        """Build a supervisor from the config the runtime-home locators select.
+
+        An explicit path outranks NEXUS_RUNTIME_CONFIG; NEXUS_HOME, when set,
+        must agree with whichever is given (nexus/runtime/home.py).
+        """
+        try:
+            path = resolve_config_path(config_path)
+        except RuntimeHomeError as exc:
+            raise RuntimeError_(str(exc)) from exc
         return cls(load_settings(path), path)
 
     # ------------------------------------------------------------------
@@ -423,7 +432,7 @@ class Supervisor:
         return self.state_dir / f"{name}.pid.json"
 
     def log_path(self, name: str) -> Path:
-        return self.state_dir / f"{name}.log"
+        return self.logs_dir / f"{name}.log"
 
     def log_config_path(self) -> Path:
         """The dictConfig JSON substituted for the ``{log_config}`` placeholder."""
@@ -691,6 +700,7 @@ class Supervisor:
             return self._check_remote()
 
         self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
         resolved_slot = self._resolve_slot(slot)
         ui_index = self.root / "ui" / "dist" / "public" / "index.html"
         if echo and not ui_index.exists():

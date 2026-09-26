@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Add the shared MEMNON retrieval result builders and source-embedding orchestrator (#848)",
+  "reason": "#820 runtime home resolver and home plan are reachable from the supervisor and CLI",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -257,6 +257,7 @@
     "nexus/prompts/registry.py",
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",
+    "nexus/runtime/home.py",
     "nexus/runtime/logging_config.py",
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",

@@ -13,18 +13,16 @@ import tomlkit
 
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import PreferencesSettings, Settings
+from nexus.runtime.home import resolve_runtime_home
 
 _write_lock = threading.Lock()
 
 
 def preferences_path(settings: Settings) -> Path:
-    """Resolve the player file using the runtime supervisor's state-dir rule."""
+    """Resolve the player file in the runtime home's state directory."""
     if settings.runtime is None:
         raise RuntimeError("Player preferences require [runtime].state_dir")
-    state_dir = Path(settings.runtime.state_dir).expanduser()
-    if not state_dir.is_absolute():
-        state_dir = Path(__file__).resolve().parents[2] / state_dir
-    return state_dir / "preferences.toml"
+    return resolve_runtime_home(settings).state_dir / "preferences.toml"
 
 
 def load_preferences(settings: Settings | None = None) -> PreferencesSettings:

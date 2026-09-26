@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.config import load_settings
+from nexus.runtime.home import anchor_path, locate_runtime_home
 
 
 if TYPE_CHECKING:
@@ -140,23 +141,15 @@ _config: Optional[_RecorderConfig] = None
 _config_lock = Lock()
 
 
-def _repo_root() -> Path:
-    """The repository root, derived from the nexus package location.
-
-    Mirrors nexus.runtime.supervisor.repo_root without importing the
-    supervisor from this leaf module. Relative usage_dir values must anchor
-    here — never to the NEXUS_RUNTIME_CONFIG file's directory — so alternate
-    runtime configs (QA lanes) share one account-level usage ledger.
-    """
-
-    return Path(__file__).resolve().parents[2]
-
-
 def _load_recorder_config() -> _RecorderConfig:
+    """Read the recorder settings, anchoring usage_dir at the runtime home.
+
+    Relative usage_dir values anchor at the home root — the checkout unless
+    NEXUS_HOME is set — never at the NEXUS_RUNTIME_CONFIG file's directory,
+    so alternate runtime configs (QA lanes) share one account-level ledger.
+    """
     settings = load_settings()
-    usage_dir = Path(settings.usage.usage_dir)
-    if not usage_dir.is_absolute():
-        usage_dir = _repo_root() / usage_dir
+    usage_dir = anchor_path(locate_runtime_home().root, settings.usage.usage_dir)
     return _RecorderConfig(
         enabled=settings.usage.enabled,
         usage_dir=usage_dir,

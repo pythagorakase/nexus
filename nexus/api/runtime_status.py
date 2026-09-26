@@ -13,7 +13,6 @@ SPA mount registers a catch-all route and must come last.
 from __future__ import annotations
 
 import asyncio
-import os
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Dict
 
@@ -23,7 +22,6 @@ from fastapi import FastAPI
 from nexus.config import load_settings
 from nexus.runtime.contract import (
     NEXUS_AUTH_HEADER,
-    RUNTIME_CONFIG_ENV,
     RUNTIME_STATUS_PATH,
     gateway_port_override,
 )
@@ -70,8 +68,7 @@ def _database_status() -> Dict[str, Any]:
 
 def build_runtime_status() -> Dict[str, Any]:
     """Aggregate runtime health (sync; called from the async endpoint)."""
-    config_path = os.environ.get(RUNTIME_CONFIG_ENV, "nexus.toml")
-    settings = load_settings(config_path)
+    settings = load_settings()
     runtime = settings.runtime
 
     try:

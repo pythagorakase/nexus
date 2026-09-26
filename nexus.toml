@@ -1300,7 +1300,7 @@ max_choice_text_length = 1000  # Maximum length of choice text
 [usage]
 enabled = true
 manifest_retention_days = 30 # only nexus prune-manifests deletes expired manifests
-usage_dir = ".nexus/runtime/usage"  # relative paths resolve against the repo root; shared by gateway/CLI/worker processes
+usage_dir = ".nexus/runtime/usage"  # relative paths resolve against the runtime home (NEXUS_HOME, else the checkout); shared by gateway/CLI/worker processes
 
 [usage.daily_allowance]
 # Per-provider daily API-token allowances (UTC day), used for readout only —
@@ -1319,7 +1319,7 @@ openai = 10000000
 # external — attach to already-running services: health-check + status only
 # remote   — hosted runtime; status hits <remote.base_url>/runtime/status
 profile = "local"
-state_dir = ".nexus/runtime"  # relative paths resolve against the repo root
+state_dir = ".nexus/runtime"  # relative paths resolve against the runtime home (NEXUS_HOME, else the checkout)
 default_slot = 1              # NEXUS_SLOT for spawned services (--slot/env override)
 
 [runtime.gateway]
