@@ -263,7 +263,7 @@ def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
                 (character1_id, character2_id, relationship_type, valence_current,
                  dynamic, recent_events, history)
                 VALUES (:first, :second, 'complex', -0.18181818181818181818,
-                        'Fixture', 'Fixture', 'Fixture')"""
+                        ' Guarded trust. ', 'Shared the night watch.', 'Fixture')"""
                 ),
                 {"first": character_id, "second": other_id},
             )
@@ -303,8 +303,9 @@ def test_dossier_place_and_relationship_names(dossier_database, caplog) -> None:
                 assert "- Untagged Observer" in lines
                 assert (
                     f"- {baseline['name']} → Untagged Observer: complex (valence -0.18)"
-                    in prompt
-                )
+                    "\n  Dynamic: Guarded trust."
+                    "\n  Recent Events: Shared the night watch."
+                ) in prompt
 
             # Deliberately corrupt only this disposable transaction. The normal
             # FK prevents absent endpoints; dropping it exercises the defect guard.
