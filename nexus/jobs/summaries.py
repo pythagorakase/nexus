@@ -46,15 +46,9 @@ def drain_summary(
                 dry_run=True,
                 prompt_on_conflict=False,
             )
-            with usage_context(
-                seat="summaries",
-                slot=slot,
-                run_id=(
-                    str(job["generation_session_id"])
-                    if job["generation_session_id"]
-                    else None
-                ),
-            ):
+            # Like every provider-backed background worker, record under the
+            # numeric job id; the job row carries its generation session.
+            with usage_context(seat="summaries", slot=slot, run_id=str(job["id"])):
                 summary = (
                     generator.generate_episode_summary(job["season"], job["episode"])
                     if episode

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#820 runtime home resolver and home plan are reachable from the supervisor and CLI",
+  "reason": "#802 turn observation is reachable from nexus inspect-turn",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -266,6 +266,7 @@
     "nexus/telemetry/attempt_manifest.py",
     "nexus/telemetry/generation.py",
     "nexus/telemetry/prompt_window.py",
+    "nexus/telemetry/turn_observation.py",
     "nexus/telemetry/usage.py",
     "nexus/telemetry/window_replay.py",
     "nexus/util/__init__.py",

@@ -97,7 +97,7 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
             error = exc
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT kind, state::text, attempts, generation_session_id::text FROM narrative_summary_jobs ORDER BY id"
+                "SELECT kind, state::text, attempts, generation_session_id::text, id::text FROM narrative_summary_jobs ORDER BY id"
             )
             jobs = cur.fetchall()
             cur.execute(
@@ -134,9 +134,12 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
         assert all(row[1:3] == ("succeeded", 1) for row in jobs)
         assert len(lengths) == 2 and all(lengths)
         assert len(events) == 2, events
+        assert all(row[3] == session for row in jobs)
+        # Each summary records under its numeric job id (#802).
+        assert sorted(event["run_id"] for event in events) == sorted(
+            row[4] for row in jobs
+        )
         assert all(
-            event["provider"] != "test"
-            and event["total_tokens"] > 0
-            and event["run_id"] == session
+            event["provider"] != "test" and event["total_tokens"] > 0
             for event in events
         )
