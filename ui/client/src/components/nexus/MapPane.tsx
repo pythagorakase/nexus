@@ -30,6 +30,11 @@
  *                       d3 fit the sphere-complement (i.e. the whole
  *                       globe), which shipped in the original rebuild
  *
+ * Resizes keep the reader's pan and zoom (preserveViewAcrossRefit), and
+ * places sharing a point fan out onto a small ring with a hairline back
+ * to the true point (offsetCoincidentPins) — display only: centering and
+ * the place dialog always use the true coordinates.
+ *
  * Geography: ALL NEXUS worlds are Earth-shaped by design — GIS
  * coordinates are real-Earth positions regardless of genre (deliberate
  * cognitive offloading for LLM spatial reasoning: latitude implies
@@ -42,6 +47,7 @@
  */
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -55,11 +61,16 @@ import {
   beginDragSession,
   centerViewBoxOn,
   clampZoom,
+  COINCIDENT_PIN_EPSILON_PX,
+  COINCIDENT_PIN_RING_PX,
   computeLabelVisibility,
   computeMapBounds,
   endDragSession,
   extractCoordinates,
+  offsetCoincidentPins,
   panViewBox,
+  PIN_RADIUS_PX,
+  preserveViewAcrossRefit,
   zoomViewBoxAtCursor,
   type DragSession,
   type LabelCandidate,
@@ -143,10 +154,12 @@ export function MapPane({ slot }: MapPaneProps) {
       if (!entry) return;
       const width = Math.max(entry.contentRect.width, 1);
       const height = Math.max(entry.contentRect.height, 1);
-      setMapDimensions({ width, height });
-      // Reset the window on resize — the projection refits to the new
-      // canvas, so a stale viewBox would show the wrong region.
-      setViewBox({ x: 0, y: 0, width, height });
+      // The window itself is carried across the refit below, never reset.
+      setMapDimensions((previous) =>
+        previous.width === width && previous.height === height
+          ? previous
+          : { width, height },
+      );
     });
 
     observer.observe(canvas);
@@ -184,6 +197,32 @@ export function MapPane({ slot }: MapPaneProps) {
   const panBoundsRef = useRef(panBounds);
   panBoundsRef.current = panBounds;
 
+  // ── Resize: carry pan/zoom across the projection refit ──────────────
+  // The projection refits to every canvas size, so the viewBox's SVG
+  // numbers change meaning on resize. Re-express the window in the new
+  // fit (same geographic center, same zoom) before the browser paints.
+  // Refits from a change in the charted extent are not resizes: the
+  // current-place centering below handles those.
+  const fitFrameRef = useRef<{
+    dimensions: typeof mapDimensions;
+    world: PanBounds;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const previous = fitFrameRef.current;
+    fitFrameRef.current = { dimensions: mapDimensions, world: panBounds };
+    if (!previous || previous.dimensions === mapDimensions) return;
+    setViewBox((prev) =>
+      preserveViewAcrossRefit(
+        prev,
+        previous.dimensions.width,
+        previous.world,
+        mapDimensions.width,
+        mapDimensions.height,
+        panBounds,
+      ),
+    );
+  }, [mapDimensions, panBounds]);
+
   const worldCountries = useMemo(() => {
     return worldOutline.features
       .map((feature, index) => ({
@@ -207,20 +246,65 @@ export function MapPane({ slot }: MapPaneProps) {
     return cache;
   }, [places, transformCoordinates]);
 
+  // Center on the narrative's current place when the slot, the current
+  // place, or the charted extent changes — not on a bare resize, which
+  // the refit above already carried across, nor on a places refetch that
+  // leaves the extent as it was (re-centering there would throw away the
+  // reader's pan). The extent is compared by value: every refetch that
+  // changes any place rebuilds the mapBounds object.
   const firstCurrentPlaceId = currentPlaces[0]?.placeId;
+  const boundsKey = mapBounds
+    ? [
+        mapBounds.minLng,
+        mapBounds.maxLng,
+        mapBounds.minLat,
+        mapBounds.maxLat,
+      ].join(",")
+    : null;
+  const centeredOnRef = useRef<{
+    slot: number | null;
+    placeId: number;
+    boundsKey: string | null;
+  } | null>(null);
   useEffect(() => {
     if (firstCurrentPlaceId === undefined) return;
-    const coordinates = placeCoordinates.get(firstCurrentPlaceId);
-    if (coordinates) {
-      setViewBox((previous) => centerViewBoxOn(coordinates, previous, panBounds));
+    const last = centeredOnRef.current;
+    if (
+      last &&
+      last.slot === slot &&
+      last.placeId === firstCurrentPlaceId &&
+      last.boundsKey === boundsKey
+    ) {
+      return;
     }
-  }, [slot, firstCurrentPlaceId, placeCoordinates, panBounds]);
+    const coordinates = placeCoordinates.get(firstCurrentPlaceId);
+    if (!coordinates) return;
+    centeredOnRef.current = {
+      slot,
+      placeId: firstCurrentPlaceId,
+      boundsKey,
+    };
+    setViewBox((previous) => centerViewBoxOn(coordinates, previous, panBounds));
+  }, [slot, firstCurrentPlaceId, boundsKey, placeCoordinates, panBounds]);
+
+  // Where each pin is DRAWN: coincident pins fan out onto a small ring
+  // (screen-constant, hence / zoom). Pins, labels and hit targets use
+  // these; centering and the place dialog keep the true coordinates.
+  const pinCoordinates = useMemo(
+    () =>
+      offsetCoincidentPins(
+        placeCoordinates,
+        COINCIDENT_PIN_EPSILON_PX / zoom,
+        COINCIDENT_PIN_RING_PX / zoom,
+      ),
+    [placeCoordinates, zoom],
+  );
 
   // ── Label culling (failure mode 1) ──────────────────────────────────
   const labelVisibility = useMemo(() => {
     const candidates: LabelCandidate[] = [];
     places.forEach((place, index) => {
-      const coords = placeCoordinates.get(place.id);
+      const coords = pinCoordinates.get(place.id);
       if (!coords) return;
 
       let priority = 1;
@@ -237,7 +321,7 @@ export function MapPane({ slot }: MapPaneProps) {
       });
     });
     return computeLabelVisibility(candidates, zoom);
-  }, [places, placeCoordinates, zoom, selectedId, hoveredId, currentPlaceIds]);
+  }, [places, pinCoordinates, zoom, selectedId, hoveredId, currentPlaceIds]);
 
   // ── Zoom (failure mode 2): native non-passive wheel listener ────────
   useEffect(() => {
@@ -541,9 +625,33 @@ export function MapPane({ slot }: MapPaneProps) {
             />
           ))}
 
+          {/* Leaders: a hairline from each fanned-out pin back to its
+              true point. Beneath the pins, never a hit target. */}
+          <g pointerEvents="none">
+            {places.map((place) => {
+              const shown = pinCoordinates.get(place.id);
+              const actual = placeCoordinates.get(place.id);
+              if (!shown || !actual) return null;
+              if (shown.x === actual.x && shown.y === actual.y) return null;
+              return (
+                <line
+                  key={place.id}
+                  x1={actual.x}
+                  y1={actual.y}
+                  x2={shown.x}
+                  y2={shown.y}
+                  stroke={PIN_COLOR[pinState(place)]}
+                  strokeWidth={0.75 / zoom}
+                  opacity={0.5}
+                  data-testid={`map-pin-leader-${place.id}`}
+                />
+              );
+            })}
+          </g>
+
           {/* Place pins */}
           {places.map((place) => {
-            const coords = placeCoordinates.get(place.id);
+            const coords = pinCoordinates.get(place.id);
             if (!coords) return null;
 
             const state = pinState(place);
@@ -569,7 +677,7 @@ export function MapPane({ slot }: MapPaneProps) {
                 <circle
                   cx={coords.x}
                   cy={coords.y}
-                  r={3 / zoom}
+                  r={PIN_RADIUS_PX / zoom}
                   fill={pinColor}
                   style={{
                     filter: `drop-shadow(0 0 ${8 / zoom}px ${pinColor})`,
