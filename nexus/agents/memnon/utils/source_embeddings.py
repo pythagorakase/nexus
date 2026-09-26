@@ -15,8 +15,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from nexus.agents.memnon.utils.embedding_tables import (
+    character_experience_table_name_for_dimensions,
     ensure_character_experience_embedding_table,
     ensure_retrograde_summary_embedding_table,
+    retrograde_summary_table_name_for_dimensions,
 )
 
 ModelVectors = List[Tuple[str, List[float]]]
@@ -37,6 +39,7 @@ class EmbeddingSource:
             also the id key of :func:`embed_source_rows`' payload.
         ensure_table: Creates the dimension table on a DBAPI cursor and
             returns its name.
+        table_name_for_dimensions: Names the dimension table without DDL.
         validity_predicate: Extra SQL condition a row must satisfy to be
             loaded and stamped, or ``None``.
     """
@@ -48,6 +51,7 @@ class EmbeddingSource:
     text_column: str
     embedding_fk_column: str
     ensure_table: Callable[[Any, int], str]
+    table_name_for_dimensions: Callable[[int], str]
     validity_predicate: Optional[str] = None
 
     def validity_sql(self) -> str:
@@ -65,6 +69,7 @@ RETROGRADE_SUMMARY_SOURCE = EmbeddingSource(
     text_column="summary_text",
     embedding_fk_column="summary_id",
     ensure_table=ensure_retrograde_summary_embedding_table,
+    table_name_for_dimensions=retrograde_summary_table_name_for_dimensions,
 )
 
 CHARACTER_EXPERIENCE_SOURCE = EmbeddingSource(
@@ -75,8 +80,15 @@ CHARACTER_EXPERIENCE_SOURCE = EmbeddingSource(
     text_column="experience_text",
     embedding_fk_column="experience_id",
     ensure_table=ensure_character_experience_embedding_table,
+    table_name_for_dimensions=character_experience_table_name_for_dimensions,
     validity_predicate="invalidation_status = 'valid'",
 )
+
+AUDITED_SOURCES: Tuple[EmbeddingSource, ...] = (
+    RETROGRADE_SUMMARY_SOURCE,
+    CHARACTER_EXPERIENCE_SOURCE,
+)
+"""Corpora whose stamps :func:`count_stamped_without_vectors` audits."""
 
 
 def load_memnon_settings() -> Dict[str, Any]:
@@ -346,3 +358,58 @@ def embed_source_rows(
         }
         for row_id in requested_ids
     ]
+
+
+def _first_value(row: Any, key: str) -> Any:
+    """Read one column from a dict-style or tuple-style cursor row."""
+    return row[key] if isinstance(row, Mapping) else row[0]
+
+
+def count_stamped_without_vectors(
+    cursor: Any,
+    spec: EmbeddingSource,
+    model_dimensions: Mapping[str, int],
+) -> int:
+    """Count stamped rows that lack a vector for any active model.
+
+    ``embedding_generated_at`` promises that every active model's vector
+    exists. This read-only audit counts rows whose stamp breaks that promise.
+    A dimension table that was never created means every stamped row lacks
+    that model's vector.
+
+    Args:
+        cursor: Open DBAPI cursor, dict-style or tuple-style.
+        spec: The corpus to audit.
+        model_dimensions: Active model names and dimensions, normally
+            :func:`active_memnon_embedding_model_dimensions`.
+
+    Returns:
+        The number of stamped rows missing at least one active vector.
+    """
+    missing_vector: List[str] = []
+    models: List[str] = []
+    for model, dimensions in model_dimensions.items():
+        table_name = spec.table_name_for_dimensions(dimensions)
+        cursor.execute(
+            "SELECT to_regclass(%s) IS NOT NULL AS present",
+            (f"public.{table_name}",),
+        )
+        if not _first_value(cursor.fetchone(), "present"):
+            missing_vector.append("TRUE")
+            continue
+        missing_vector.append(
+            f"NOT EXISTS (SELECT 1 FROM {table_name} vec"
+            f" WHERE vec.{spec.embedding_fk_column} = src.{spec.id_column}"
+            " AND vec.model = %s)"
+        )
+        models.append(model)
+    cursor.execute(
+        f"""
+        SELECT count(*) AS stamped_without_vectors
+        FROM {spec.table} src
+        WHERE src.embedding_generated_at IS NOT NULL
+          AND ({" OR ".join(missing_vector)})
+        """,
+        tuple(models),
+    )
+    return int(_first_value(cursor.fetchone(), "stamped_without_vectors"))

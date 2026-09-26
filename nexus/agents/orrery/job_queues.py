@@ -8,6 +8,11 @@ from typing import Any
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
+from nexus.agents.memnon.utils.source_embeddings import (
+    AUDITED_SOURCES,
+    active_memnon_embedding_model_dimensions,
+    count_stamped_without_vectors,
+)
 from nexus.agents.orrery.experiences import load_experience_status_sync
 from nexus.agents.orrery.retrograde_maturation import (
     _connect_for_slot,
@@ -44,9 +49,15 @@ def _queue_status(cur: Any, table: str, queue: str) -> dict[str, Any]:
 
 
 def load_job_queues_sync(conn: Any) -> dict[str, Any]:
-    """Read each queue atomically so its counts and job list always agree."""
+    """Read each queue atomically so its counts and job list always agree.
+
+    The same snapshot also audits the Retrograde summary and character
+    experience corpora for rows stamped ``embedding_generated_at`` that lack
+    a vector for an active MEMNON model.
+    """
     from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 
+    model_dimensions = active_memnon_embedding_model_dimensions()
     with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         queues = {
             "narration": _queue_status(cur, "orrery_narration_jobs", "narration"),
@@ -98,6 +109,10 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
             (json.dumps([RETROGRADE_PROLOGUE_MARKER]),),
         )
         unembedded = int(cur.fetchone()["count"])
+        stamped_without_vectors = {
+            spec.table: count_stamped_without_vectors(cur, spec, model_dimensions)
+            for spec in AUDITED_SOURCES
+        }
     counts = {
         state: sum(int(queue["counts"].get(state, 0)) for queue in queues.values())
         for state in (*_SHARED_STATES, "pending")
@@ -112,6 +127,7 @@ def load_job_queues_sync(conn: Any) -> dict[str, Any]:
         "non_terminal_jobs": jobs,
         "scheduler": dict(scheduler) if scheduler else None,
         "unembedded_accepted_chunks": unembedded,
+        "stamped_without_vectors": stamped_without_vectors,
     }
 
 

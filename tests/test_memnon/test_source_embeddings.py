@@ -404,6 +404,7 @@ def test_shared_helpers_serve_a_caller_supplied_embedder() -> None:
         text_column="raw_text",
         embedding_fk_column="chunk_id",
         ensure_table=ensure_chunk_table,
+        table_name_for_dimensions=lambda dimensions: f"chunks_{dimensions}",
     )
 
     def mismatched(_text: str, model: str) -> list[float]:

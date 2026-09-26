@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from nexus.agents.memnon.utils.embedding_tables import ensure_embedding_table
+from nexus.agents.memnon.utils.embedding_tables import (
+    ensure_embedding_table,
+    table_name_for_dimensions,
+)
 from nexus.agents.memnon.utils.source_embeddings import (
     EmbeddingSource,
     ModelVectors,
@@ -29,6 +32,7 @@ _NARRATIVE_CHUNKS = EmbeddingSource(
     text_column="raw_text",
     embedding_fk_column="chunk_id",
     ensure_table=ensure_embedding_table,
+    table_name_for_dimensions=table_name_for_dimensions,
 )
 
 
