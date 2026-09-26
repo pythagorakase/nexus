@@ -1417,6 +1417,39 @@ class LogonUtility:
             ]
         )
 
+    def _build_gaia_place_validator(self, writer: SkaldWriterWire) -> Any:
+        """Check writer references against each Gaia attempt before acceptance."""
+        from nexus.agents.logon.place_reference_validation import (
+            place_reference_sites,
+            validate_place_references,
+        )
+        from nexus.api.db_pool import get_connection
+
+        delegate = getattr(self.provider, "output_validator", None)
+        if self._validation_dbname is None or not any(
+            place_reference_sites(writer.presence)
+        ):
+            return delegate
+        maturation = OrreryRetrogradeMaturationSettings.model_validate(
+            ((self.settings.get("orrery") or {}).get("retrograde") or {}).get(
+                "maturation"
+            )
+            or {}
+        )
+
+        async def validate(ctx: Any, output: Any) -> Any:
+            with get_connection(self._validation_dbname) as conn:
+                with conn.cursor() as cur:
+                    validate_place_references(
+                        writer.presence,
+                        getattr(output, "new_entities", None) or [],
+                        cur,
+                        allow_declarations=maturation.enabled,
+                    )
+            return await delegate(ctx, output) if delegate is not None else output
+
+        return validate
+
     def _generate_narrative_two_pass(
         self,
         turn_prompt: str,
@@ -1473,7 +1506,7 @@ class LogonUtility:
             wire_type=gaia_wire,
             anthropic_transport=anthropic_gaia_transport,
         )
-        gaia_validator = getattr(self.provider, "output_validator", None)
+        gaia_validator = self._build_gaia_place_validator(writer)
         if gaia_route is not None:
             gaia_provider: Any = self._build_gaia_provider(
                 gaia_route,
@@ -1575,7 +1608,7 @@ class LogonUtility:
             wire_type=gaia_wire,
             anthropic_transport=anthropic_gaia_transport,
         )
-        gaia_validator = getattr(self.provider, "output_validator", None)
+        gaia_validator = self._build_gaia_place_validator(writer)
         if gaia_route is not None:
             gaia_provider: Any = self._build_gaia_provider(
                 gaia_route,
