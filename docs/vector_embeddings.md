@@ -7,23 +7,65 @@ verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 
 This document describes the vector embedding strategy used in the NEXUS system for semantic search and similarity matching.
 
-## Embedding Models
+## Production Embedding Artifact Contract
 
-NEXUS uses a multi-model ensemble approach with weighted combinations of different embedding models:
+NEXUS runs exactly one embedding model: the single `[memnon.models]` entry
+with `is_active = true` (Octen-Embedding-4B, 2560 dimensions, the issue #175
+bake-off winner). Loading `nexus.toml` fails when zero or several entries are
+active, and the error names them. Every other registry entry is an offline
+evaluation candidate only: an `ir_eval` run may activate candidates through
+validated MEMNON overrides, and the entries stay registered until the legacy
+vector dimensions they wrote are inventoried.
 
-1. **Extra-Large Model (1536 dimensions)**
-   - **inf-retriever-v1-1.5b** (Infly/inf-retriever-v1-1.5b)
-   - Weight: 0.5
-   - Highest dimensional representation for maximum semantic capture
+### Local-Only Loading
 
-2. **Large Models (1024 dimensions)**
-   - **E5-Large-V2** (intfloat/e5-large-v2) - Weight: 0.3
-   - **BGE-Large-EN** (BAAI/bge-large-en) - Weight: 0.2
+`EmbeddingManager` loads the active model from its `local_path` with
+`local_files_only=True`. There is no Hugging Face download and no hardcoded
+default model. When the directory is missing, is not a directory, or fails to
+load, construction raises a `RuntimeError` naming the model, the path, and the
+corrective command, for example:
 
-3. **Octen Candidate Models (Issue #175 evaluation path)**
-   - **Octen-Embedding-4B** (2560 dimensions)
-   - **Octen-Embedding-8B** (4096 dimensions)
-   - Configured in `nexus.toml` / `settings.json` as inactive-by-default.
+```text
+Embedding model 'Octen-Embedding-4B' is not installed: local_path
+/Users/pythagor/nexus/models/Octen-Embedding-4B does not exist. Restore it with
+`hf download Octen/Octen-Embedding-4B --local-dir /Users/pythagor/nexus/models/Octen-Embedding-4B`,
+then run `nexus models verify`.
+```
+
+The production reranker is `[memnon.retrieval.cross_encoder_reranking]
+model_path`; its repository is the `remote_path` of the reranker candidate
+entry with the same `local_path`.
+
+### Locking and Verifying Artifacts
+
+`[memnon.artifacts] lock_file` (`config/model_artifacts.lock.json`, resolved
+against the repository root) pins the active embedder and, while reranking is
+enabled, the production reranker. For each artifact the lock records:
+
+- the repository (`remote_path`);
+- the revision: the Hub commit, read from a Hub cache snapshot directory
+  (`.../snapshots/<commit>`) or from the `.cache/huggingface/download/*.metadata`
+  files that `hf download --local-dir` writes, and `null` when neither exists;
+- the license from the model card front matter;
+- the dimensions: the embedder's output dimension is read from its
+  sentence-transformers `modules.json` (Pooling and Dense configs) and must
+  equal the configured `dimensions`;
+- every file's path, size, and sha256, plus the total size. `.cache/`,
+  `.git/`, and `.DS_Store` are not part of an artifact.
+
+Run both commands on the host that holds the artifacts:
+
+```bash
+nexus models lock     # hash the local artifacts and write the lock; commit it
+nexus models verify   # read-only; exits 1 listing each problem and its remedy
+```
+
+`verify` fails when a locked file is missing or differs in size or sha256,
+when an unlisted file appears, or when the configured embedder, reranker,
+repository, or dimensions no longer match the lock. Its remediation names
+`hf download <repo> --revision <commit> --local-dir <path>` for a changed
+artifact and re-running `nexus models lock` after an intentional upgrade.
+Neither command downloads anything, and startup does not run `verify`.
 
 ## Database Storage Strategy
 
@@ -133,7 +175,7 @@ python scripts/test_embedding_utils.py
 ## Hybrid Search Capabilities
 
 MEMNON implements sophisticated hybrid search combining:
-- **Multi-model vector similarity**: Weighted ensemble of inf-retriever-v1-1.5b, E5-Large-V2, and BGE-Large-EN
+- **Vector similarity**: The single production embedder (Octen-Embedding-4B)
 - **PostgreSQL full-text search**: For keyword matching
 - **Cross-encoder reranking**: Using Naver TREC-DL22 model for final result refinement
 - **Temporal boosting**: Time-aware search for queries with temporal context
@@ -141,7 +183,7 @@ MEMNON implements sophisticated hybrid search combining:
 
 ## Future Considerations
 
-The current multi-model ensemble approach provides excellent semantic coverage. Potential enhancements include:
+Potential enhancements include:
 
 1. **Dynamic model weighting**: Adjusting weights based on query characteristics
 2. **Additional specialized models**: Task-specific embeddings for different narrative aspects

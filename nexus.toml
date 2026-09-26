@@ -849,7 +849,12 @@ create_tables = true
 drop_existing = true
 
 # Embedding models configuration
-# Multiple models are ensembled for better retrieval quality
+# Exactly one entry is active (validated at load): the production embedder,
+# loaded only from its local_path (no download, no default model; a missing
+# or unloadable artifact raises with the corrective command). Every
+# inactive entry is an offline evaluation candidate only, selectable per
+# ir_eval run; they stay registered until legacy vector dimensions are
+# inventoried (issue #812).
 
 # Active retrieval embedder: Octen-Embedding-4B (issue #175 winner).
 # Beat the prior bge+e5+inf-retriever ensemble on all 5 IR metrics
@@ -921,6 +926,12 @@ local_path = "/Users/pythagor/nexus/models/Octen-Embedding-8B-INT8"
 remote_path = "Octen/Octen-Embedding-8B-INT8"
 dimensions = 4096
 weight = 0.0
+
+[memnon.artifacts]
+# `nexus models lock` records the active embedder and the production reranker
+# (repository, revision, per-file sha256 and size, dimensions) here, on the
+# host that holds the artifacts; `nexus models verify` checks them read-only.
+lock_file = "config/model_artifacts.lock.json"  # relative paths resolve against the repo root
 
 [memnon.import]
 # Settings for importing narrative chunks from markdown files

@@ -115,7 +115,8 @@ def test_model_cache_normalizes_local_path_aliases(
     loads = []
 
     class FakeSentenceTransformer:
-        def __init__(self, path: str):
+        def __init__(self, path: str, *, local_files_only: bool):
+            assert local_files_only, "embedders load only from local artifacts"
             loads.append(path)
 
     monkeypatch.setattr(em, "SentenceTransformer", FakeSentenceTransformer)

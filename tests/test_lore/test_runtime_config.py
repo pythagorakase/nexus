@@ -177,8 +177,8 @@ def test_lore_instances_keep_independent_memnon_configuration(
             memnon = document["memnon"]
             memnon["debug"] = debug
             memnon["query"]["default_limit"] = 11 + index
-            for model in memnon["models"].values():
-                model["is_active"] = False
+            # The production embedder stays the one active model (issue #812);
+            # an inactive candidate's weight still distinguishes the scopes.
             memnon["models"]["bge-large"]["weight"] = 0.25 + index * 0.25
             path = tmp_path / f"scope-{index}.toml"
             path.write_text(tomlkit.dumps(document))

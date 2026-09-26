@@ -2849,6 +2849,22 @@ class EmbeddingModelConfig(BaseModel):
     weight: float = Field(..., ge=0.0, le=1.0, description="Ensemble weight")
 
 
+class ModelArtifactsConfig(BaseModel):
+    """Where ``nexus models lock|verify`` keep the production artifact lock."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lock_file: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "JSON lock recording the active embedder and production reranker "
+            "(repository, revision, per-file sha256 and size, dimensions). "
+            "Relative paths resolve against the repository root."
+        ),
+    )
+
+
 class ImportConfig(BaseModel):
     """Settings for importing narrative chunks."""
 
@@ -3068,6 +3084,7 @@ class MEMNONSettings(BaseModel):
     debug: bool
     database: DatabaseConfig
     models: Dict[str, EmbeddingModelConfig]
+    artifacts: ModelArtifactsConfig
     import_: ImportConfig = Field(..., alias="import")
     query: QueryConfig
     retrieval: RetrievalConfig
@@ -3930,6 +3947,30 @@ class Settings(BaseModel):
                     f"Local serving context_window {window} exceeds model {entry.id!r} architectural window {entry.context_window}"
                 )
 
+        return self
+
+    @model_validator(mode="after")
+    def _validate_single_active_embedder(self) -> "Settings":
+        """Require exactly one production embedder in [memnon.models].
+
+        Inactive entries are offline evaluation candidates; ir_eval may
+        activate several of them per run through validated MEMNON overrides,
+        but the committed runtime configuration names exactly one embedder.
+        """
+
+        active = sorted(
+            name for name, model in self.memnon.models.items() if model.is_active
+        )
+        if len(active) != 1:
+            found = (
+                f"none is active among {sorted(self.memnon.models)}"
+                if not active
+                else f"{len(active)} are active: {active}"
+            )
+            raise ValueError(
+                "[memnon.models] must mark exactly one embedder is_active = true "
+                f"(the production embedder); {found}"
+            )
         return self
 
     @model_validator(mode="after")

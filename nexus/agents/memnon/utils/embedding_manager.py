@@ -1,20 +1,23 @@
 """
 Embedding Manager Utility for MEMNON Agent
 
-Handles initialization and usage of sentence transformer embedding models.
+Loads the configured sentence-transformer embedding models from their local
+artifact directories only. There is no download path and no default model:
+an active model whose ``local_path`` is missing, is not a directory, or fails
+to load raises a RuntimeError naming the model, the path and the corrective
+command (issue #812).
 """
 
 import logging
 import threading
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Mapping, Optional
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger("nexus.memnon.embedding_manager")
 
 # Process-level cache of loaded SentenceTransformer models, keyed by resolved
-# local paths or by remote model identifiers. Mirrors _RERANKER_CACHE in
-# cross_encoder.py.
+# local artifact paths. Mirrors _RERANKER_CACHE in cross_encoder.py.
 #
 # This cache is load-bearing, not an optimization: the production embedder
 # (Octen-Embedding-4B) materializes ~15.5 GB of unified (MPS) memory per
@@ -29,7 +32,7 @@ _MODEL_CACHE_LOCK = threading.Lock()
 
 
 def _cache_key_for_path(path: str) -> str:
-    """Normalize local filesystem paths without rewriting remote model IDs."""
+    """Normalize local filesystem paths so aliases share one cache entry."""
     path_obj = Path(path)
     if path_obj.exists():
         return str(path_obj.resolve())
@@ -37,154 +40,128 @@ def _cache_key_for_path(path: str) -> str:
 
 
 def _get_or_load_sentence_transformer(path: str) -> SentenceTransformer:
-    """Return the process-wide SentenceTransformer for ``path``.
+    """Return the process-wide SentenceTransformer for the local ``path``.
 
     Loads on first request and reuses the same instance for every subsequent
     EmbeddingManager in this process. The lock is held across the load so
     concurrent first requests cannot race two copies of a multi-gigabyte
-    model into memory.
+    model into memory. ``local_files_only`` keeps the load off the network:
+    a local artifact that is incomplete fails here instead of being patched
+    from the Hugging Face Hub.
     """
     cache_key = _cache_key_for_path(path)
     with _MODEL_CACHE_LOCK:
         model = _MODEL_CACHE.get(cache_key)
         if model is None:
-            model = SentenceTransformer(path)
+            model = SentenceTransformer(path, local_files_only=True)
             _MODEL_CACHE[cache_key] = model
         else:
             logger.info(f"Reusing process-cached SentenceTransformer: {cache_key}")
         return model
 
 
+def _artifact_remedy(local_path: str, remote_path: Optional[str]) -> str:
+    """Name the command that restores and checks a missing local artifact."""
+    if remote_path:
+        restore = (
+            f"Restore it with `hf download {remote_path} --local-dir {local_path}`"
+        )
+    else:
+        restore = f"Restore the artifact directory at {local_path}"
+    return f"{restore}, then run `nexus models verify`."
+
+
+def _load_local_model(
+    model_name: str, model_config: Mapping[str, Any]
+) -> SentenceTransformer:
+    """Load one active model from its local artifact directory or raise."""
+    local_path = model_config.get("local_path")
+    remote_path = model_config.get("remote_path") or None
+    if not local_path:
+        raise RuntimeError(
+            f"Embedding model '{model_name}' is active but declares no local_path "
+            "in [memnon.models]; embedders load only from local artifacts."
+        )
+    remedy = _artifact_remedy(str(local_path), remote_path)
+    path = Path(local_path)
+    if not path.exists():
+        raise RuntimeError(
+            f"Embedding model '{model_name}' is not installed: local_path "
+            f"{path} does not exist. {remedy}"
+        )
+    if not path.is_dir():
+        raise RuntimeError(
+            f"Embedding model '{model_name}' local_path {path} is not a "
+            f"directory. {remedy}"
+        )
+    try:
+        model = _get_or_load_sentence_transformer(str(path))
+    except Exception as exc:
+        raise RuntimeError(
+            f"Embedding model '{model_name}' failed to load from local_path "
+            f"{path}: {exc}. {remedy}"
+        ) from exc
+    logger.info(f"Loaded {model_name} from local path: {path}")
+    return model
+
+
 class EmbeddingManager:
     """Manages embedding models for MEMNON."""
 
-    def __init__(self, settings: Dict[str, Any]):  # Changed settings to be non-optional
+    def __init__(self, settings: Dict[str, Any]):
         """
         Initialize the EmbeddingManager.
 
         Args:
             settings: MEMNON agent settings dictionary. Must be provided.
+
+        Raises:
+            RuntimeError: When no model is active or an active model's local
+                artifact is missing or fails to load.
+            ValueError: When a model entry omits ``is_active``.
         """
         if settings is None:
-            # This case should ideally not happen if instantiated correctly from MEMNON
-            logger.error("EmbeddingManager initialized without settings!")
-            self.settings = {}
-        else:
-            self.settings = settings
+            raise ValueError("EmbeddingManager requires the MEMNON settings mapping")
+        self.settings = settings
 
         self.models: Dict[str, SentenceTransformer] = {}
         self.model_active_status: Dict[str, bool] = {}
         self._initialize_models()
 
-    def _initialize_models(self):
-        """Initialize embedding models based on settings."""
-        model_configs = self.settings.get("models", {})
-
+    def _initialize_models(self) -> None:
+        """Load every active model from its local artifact directory."""
+        model_configs = self.settings.get("models") or {}
         if not model_configs:
-            logger.warning(
-                "No embedding models defined in MEMNON settings. Vector search might be unavailable."
+            raise RuntimeError(
+                "No embedding models are configured in [memnon.models]; "
+                "declare the production embedder with is_active = true."
             )
-            # Attempt to load defaults if no config provided
-            self._load_default_models()
-            return
 
-        # Load each model defined in settings
         for model_name, model_config in model_configs.items():
-            # Added: Check if model is explicitly set to active
-            is_active = model_config.get(
-                "is_active", True
-            )  # Default to True if flag is missing
+            if "is_active" not in model_config:
+                raise ValueError(
+                    f"Embedding model '{model_name}' in [memnon.models] must "
+                    "declare is_active"
+                )
+            is_active = bool(model_config["is_active"])
             self.model_active_status[model_name] = is_active
             if not is_active:
                 logger.info(f"Skipping initialization for inactive model: {model_name}")
-                continue  # Skip loading if not active
+                continue
 
             logger.info(f"Initializing active model {model_name}...")
+            self.models[model_name] = _load_local_model(model_name, model_config)
 
-            local_path = model_config.get("local_path")
-            remote_path = model_config.get("remote_path")
-            # dimensions = model_config.get("dimensions") # Dimension info not directly used by ST library here
-
-            loaded = False
-            # Try loading from local path first
-            if local_path:
-                local_path_obj = Path(local_path)
-                if local_path_obj.exists() and local_path_obj.is_dir():
-                    try:
-                        model = _get_or_load_sentence_transformer(str(local_path_obj))
-                        self.models[model_name] = model
-                        logger.info(
-                            f"Loaded {model_name} from local path: {local_path}"
-                        )
-                        loaded = True
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load {model_name} from local path '{local_path}': {e}"
-                        )
-                else:
-                    logger.warning(
-                        f"Local path for {model_name} does not exist or is not a directory: {local_path}"
-                    )
-
-            # Fall back to remote path if local failed or wasn't specified
-            if not loaded and remote_path:
-                try:
-                    logger.info(
-                        f"Attempting to load {model_name} from remote path: {remote_path}"
-                    )
-                    model = _get_or_load_sentence_transformer(remote_path)
-                    self.models[model_name] = model
-                    logger.info(f"Loaded {model_name} from remote path: {remote_path}")
-                    loaded = True
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to load {model_name} from remote path '{remote_path}': {e}"
-                    )
-
-            if not loaded:
-                logger.error(
-                    f"Could not load embedding model '{model_name}' from either local or remote paths."
-                )
-
-        # If absolutely no models were loaded after checking config, try defaults as last resort
         if not self.models:
-            logger.warning(
-                "No active models loaded from settings, attempting to load hardcoded defaults..."
+            raise RuntimeError(
+                "No embedding model in [memnon.models] is marked is_active = "
+                f"true (configured: {sorted(model_configs)}); vector search "
+                "requires the production embedder."
             )
-            # Defaults are assumed active if loaded
-            self._load_default_models()
-            # Update active status for defaults that were loaded
-            for name in self.models:
-                if name not in self.model_active_status:
-                    self.model_active_status[name] = True
-
-        active_models = self.get_available_models()  # Get filtered list
-        if not active_models:
-            logger.error(
-                "CRITICAL: No ACTIVE embedding models could be loaded. Vector search will be unavailable."
-            )
-        else:
-            logger.info(
-                f"EmbeddingManager initialized with {len(active_models)} active models: {', '.join(active_models)}"
-            )
-
-    def _load_default_models(self):
-        """Loads hardcoded default models as a fallback."""
-        defaults = {
-            "bge-large": "BAAI/bge-large-en",
-            "e5-large": "intfloat/e5-large-v2",
-        }
-        for name, path in defaults.items():
-            # Only load if not present AND not explicitly marked inactive in config
-            if name not in self.models and self.model_active_status.get(
-                name, True
-            ):  # Check active status
-                try:
-                    logger.info(f"Loading default model {name} from {path}")
-                    self.models[name] = _get_or_load_sentence_transformer(path)
-                    logger.info(f"Successfully loaded default {name}")
-                except Exception as e:
-                    logger.warning(f"Failed to load default model {name}: {e}")
+        logger.info(
+            f"EmbeddingManager initialized with {len(self.models)} active models: "
+            f"{', '.join(self.models)}"
+        )
 
     def get_model(self, model_key: str) -> Optional[SentenceTransformer]:
         """Get a specific embedding model by key."""
@@ -210,19 +187,20 @@ class EmbeddingManager:
             model_key: Key of the model to use (must be initialized).
 
         Returns:
-            Embedding as a list of floats, or None if the model is not found or embedding fails.
+            Embedding as a list of floats, or None if the model is not found or
+            embedding fails.
         """
         model = self.get_model(model_key)
         if not model:
             # get_model already logged warning if inactive
-            # logger.error(f"Model '{model_key}' not found or not active.") # Simplified log message
             return None
 
         try:
             # Ensure text is not empty
             if not text or not isinstance(text, str) or not text.strip():
                 logger.warning(
-                    f"Attempted to generate embedding for empty or invalid text with model {model_key}. Returning None."
+                    "Attempted to generate embedding for empty or invalid text "
+                    f"with model {model_key}. Returning None."
                 )
                 return None
 
@@ -251,7 +229,6 @@ class EmbeddingManager:
         model = self.get_model(model_key)
         if not model:
             # get_model already logged warning if inactive
-            # logger.error(f"Model '{model_key}' not found or not active for batch generation.")
             return None
 
         # Filter out empty texts before sending to model
@@ -260,12 +237,14 @@ class EmbeddingManager:
         ]
         if not valid_texts:
             logger.warning(
-                f"generate_embeddings_batch called with no valid texts for model {model_key}. Returning empty list."
+                "generate_embeddings_batch called with no valid texts for model "
+                f"{model_key}. Returning empty list."
             )
             return []
         if len(valid_texts) < len(texts):
             logger.warning(
-                f"Filtered out {len(texts) - len(valid_texts)} empty/invalid texts from batch for model {model_key}."
+                f"Filtered out {len(texts) - len(valid_texts)} empty/invalid texts "
+                f"from batch for model {model_key}."
             )
 
         try:
@@ -279,69 +258,3 @@ class EmbeddingManager:
 
             logger.debug(f"Traceback: {traceback.format_exc()}")
             return None
-
-
-# Example usage (for testing purposes)
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    logger.info("Testing EmbeddingManager...")
-
-    # Create dummy settings if needed (since top-level import was removed)
-    # In a real test setup, you might load settings from a file here.
-    test_settings = {
-        "models": {
-            "bge-small-test": {
-                "remote_path": "BAAI/bge-small-en-v1.5",  # Use a real small model for testing
-                "local_path": None,
-                "is_active": True,
-            },
-            "nonexistent-model": {
-                "local_path": "/path/does/not/exist",
-                "remote_path": "fake/model-path",
-                "is_active": False,
-            },
-        }
-    }
-
-    manager = EmbeddingManager(settings=test_settings)
-
-    print(f"Available models: {manager.get_available_models()}")
-
-    test_text = "This is a test sentence."
-    model_to_use = "bge-small-test"
-
-    if model_to_use in manager.get_available_models():
-        embedding = manager.generate_embedding(test_text, model_to_use)
-        if embedding:
-            print(f"Generated embedding for '{test_text}' using {model_to_use}:")
-            print(f"  Dimensions: {len(embedding)}")
-            print(f"  First 5 values: {embedding[:5]}")
-        else:
-            print(f"Failed to generate embedding for {model_to_use}.")
-
-        # Test batch embedding
-        batch_texts = ["First sentence.", "", "Third sentence.", "Another test."]
-        batch_embeddings = manager.generate_embeddings_batch(batch_texts, model_to_use)
-        if batch_embeddings is not None:
-            print(f"\nGenerated batch embeddings using {model_to_use}:")
-            print(
-                f"  Requested: {len(batch_texts)}, Generated: {len(batch_embeddings)}"
-            )
-            if batch_embeddings:
-                print(f"  Dimensions of first embedding: {len(batch_embeddings[0])}")
-        else:
-            print(f"\nFailed to generate batch embeddings for {model_to_use}.")
-
-    else:
-        print(f"Model {model_to_use} not available for testing.")
-
-    # Test getting a non-existent model
-    print(f"\nAttempting to get non-existent model: {manager.get_model('invalid-key')}")
-    print(
-        f"Attempting to generate embedding with non-existent model: {manager.generate_embedding(test_text, 'invalid-key')}"
-    )
-
-    # Test generating embedding for empty text
-    print(
-        f"Attempting to generate embedding for empty text: {manager.generate_embedding('', model_to_use)}"
-    )

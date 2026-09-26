@@ -4116,6 +4116,21 @@ Examples:
         "--list", action="store_true", help="List available models"
     )
 
+    # models command (issue #812): lock or verify the local production
+    # embedder and reranker artifacts; nothing is downloaded.
+    models_parser = subparsers.add_parser(
+        "models", help="Lock or verify the production model artifacts"
+    )
+    models_verbs = models_parser.add_subparsers(dest="models_command", required=True)
+    for verb, verb_help in (
+        ("lock", "Record repositories, revisions, file hashes and dimensions"),
+        ("verify", "Check local artifacts against the lock (read-only)"),
+    ):
+        verb_parser = models_verbs.add_parser(verb, help=verb_help)
+        verb_parser.allow_abbrev = False
+        _add_config_arg(verb_parser)
+        _add_global_output_args(verb_parser)
+
     # clear command
     clear_parser = subparsers.add_parser(
         "clear", help="Clear a slot (reset wizard state)"
@@ -4681,6 +4696,10 @@ def main() -> int:
         result = run_regenerate(args)
     elif args.command == "model":
         result = run_model(args)
+    elif args.command == "models":
+        from nexus.agents.memnon.utils.artifact_manifest import run_models_command
+
+        result = run_models_command(args.models_command, args.config)
     elif args.command == "clear":
         result = run_clear(args)
     elif args.command == "trait-audit":
