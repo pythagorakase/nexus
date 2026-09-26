@@ -152,6 +152,52 @@ describe("durable reader generation recovery", () => {
     expect(engine.isRecoveryLoading).toBe(false);
   });
 
+  it("disables Retry until the first durable read completes", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    vi.mocked(api.getActiveGeneration).mockImplementation(async () => {
+      await gate;
+      return currentSession;
+    });
+    mount();
+    await waitFor(() => expect(screen.getByTestId("button-retry-generation")).toBeInTheDocument());
+    expect(engine.isRecoveryLoading).toBe(true);
+    expect(screen.getByTestId("button-retry-generation")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("button-retry-generation"));
+    expect(api.retryNarrative).not.toHaveBeenCalled();
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getByTestId("button-retry-generation")).toBeEnabled());
+    expect(engine.isRecoveryLoading).toBe(false);
+    vi.mocked(api.retryNarrative).mockResolvedValue({ session_id: "retry-9", status: "processing", message: "started" });
+    fireEvent.click(screen.getByTestId("button-retry-generation"));
+    await waitFor(() => expect(api.retryNarrative).toHaveBeenCalledTimes(1));
+    expect(api.retryNarrative).toHaveBeenCalledWith(4, "failed-8");
+  });
+
+  it("disables Retry while a newer failure's frontier is re-read", async () => {
+    mount();
+    await expectFailure();
+    await waitFor(() => expect(screen.getByTestId("button-retry-generation")).toBeEnabled());
+    const pending: Array<(value: SlotState) => void> = [];
+    vi.mocked(api.getSlotState).mockImplementation(
+      () => new Promise<SlotState>((resolve) => { pending.push(resolve); }),
+    );
+    // A later attempt failed elsewhere; the displayed recovery is now stale.
+    currentSession = { ...failure, session_id: "failed-9" };
+    boundary();
+    await waitFor(() => expect(engine.isRecoveryLoading).toBe(true));
+    expect(screen.getByTestId("button-retry-generation")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("button-retry-generation"));
+    expect(api.retryNarrative).not.toHaveBeenCalled();
+    const newer = { ...state, recovery: { ...recovery, session_id: "failed-9" } };
+    await act(async () => { pending.forEach((resolve) => resolve(newer)); });
+    await waitFor(() => expect(screen.getByTestId("button-retry-generation")).toBeEnabled());
+    vi.mocked(api.retryNarrative).mockResolvedValue({ session_id: "retry-10", status: "processing", message: "started" });
+    fireEvent.click(screen.getByTestId("button-retry-generation"));
+    await waitFor(() => expect(api.retryNarrative).toHaveBeenCalledTimes(1));
+    expect(api.retryNarrative).toHaveBeenCalledWith(4, "failed-9");
+  });
+
   it("retries only the displayed failed session and restores choices after success", async () => {
     vi.mocked(api.retryNarrative).mockImplementation(async () => {
       currentSession = { ...failure, session_id: "retry-9", status: "complete", phase: "complete", terminal_outcome: "accepted", error: null };
