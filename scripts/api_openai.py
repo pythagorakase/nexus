@@ -95,12 +95,8 @@ from nexus.telemetry.usage import (
     record_openai_response,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("metadata_processing.log"), logging.StreamHandler()],
-)
+# Library modules never configure logging: the importing process owns it
+# (the managed gateway through [runtime.logs]; see nexus/runtime/logging_config).
 logger = logging.getLogger("nexus.metadata")
 
 # Default TPM limits if settings file is not available
@@ -1317,5 +1313,9 @@ def reset_abort_flag():
 
 # This file is now meant to be imported as a library, not run directly
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.warning("This file is intended to be used as a library, not run directly.")
     sys.exit(1)

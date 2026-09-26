@@ -40,12 +40,8 @@ except ImportError:
 import sqlalchemy as sa
 from sqlalchemy import create_engine
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("metadata_processing.log"), logging.StreamHandler()],
-)
+# Library modules never configure logging: the importing process owns it
+# (the managed gateway through [runtime.logs]; see nexus/runtime/logging_config).
 logger = logging.getLogger("nexus.openrouter")
 
 # Default TPM limits if settings file is not available
@@ -614,5 +610,9 @@ def validate_llm_requirements(api_key: Optional[str] = None) -> None:
 
 # This file is now meant to be imported as a library, not run directly
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.warning("This file is intended to be used as a library, not run directly.")
     sys.exit(1)

@@ -19,12 +19,13 @@ import json
 import os
 import signal
 import socket
+import string
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Set
 
 import requests
 
@@ -40,7 +41,12 @@ from nexus.runtime.contract import (
     RUNTIME_STATUS_PATH,
     gateway_port_override,
 )
+from nexus.runtime.logging_config import build_logging_config
 from nexus.runtime.remote_auth import build_runtime_request_auth
+
+LOG_CONFIG_PLACEHOLDER = "log_config"
+LOG_CONFIG_FILENAME = "logging.json"
+_TAIL_BLOCK_BYTES = 64 * 1024
 
 
 class RuntimeError_(Exception):
@@ -137,19 +143,142 @@ def _describe_port_occupant(port: int) -> Optional[str]:
         return None
 
 
-def _tail_lines(path: Path, count: int) -> List[str]:
+def _template_fields(command: List[str]) -> Set[str]:
+    """Placeholder names referenced by an argv template."""
+    return {
+        field
+        for part in command
+        for _, field, _, _ in string.Formatter().parse(part)
+        if field
+    }
+
+
+def rotated_segment(path: Path, index: int) -> Path:
+    """The ``index``-th rotated segment of a captured log (``<name>.log.N``)."""
+    if index < 1:
+        raise ValueError(f"Rotated segment index must be >= 1, got {index}")
+    return path.with_name(f"{path.name}.{index}")
+
+
+def _rotate_log(path: Path, max_bytes: int, backup_count: int) -> bool:
+    """Rotate a captured log at spawn once it has reached ``max_bytes``.
+
+    Shifts ``.1 .. .backup_count-1`` up by one (replacing, and so dropping,
+    the oldest ``.backup_count``) and renames the current file to ``.1``; the
+    caller then opens a fresh file. Returns True when a rotation happened.
+    Only the supervisor calls this, and only before spawning the service that
+    owns the file, so no live child is writing to it.
+    """
+    if not path.exists() or path.stat().st_size < max_bytes:
+        return False
+    for index in range(backup_count - 1, 0, -1):
+        source = rotated_segment(path, index)
+        if source.exists():
+            source.replace(rotated_segment(path, index + 1))
+    path.replace(rotated_segment(path, 1))
+    return True
+
+
+def _read_last_lines(path: Path, count: int) -> List[str]:
+    """Return the last ``count`` lines of one file, reading backwards in blocks.
+
+    Returns every line when the file holds fewer than ``count``, so callers
+    can tell the whole file was consumed.
+    """
+    with open(path, "rb") as handle:
+        position = handle.seek(0, os.SEEK_END)
+        data = b""
+        while position > 0 and data.count(b"\n") <= count:
+            step = min(_TAIL_BLOCK_BYTES, position)
+            position -= step
+            handle.seek(position)
+            data = handle.read(step) + data
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if position > 0:
+        # The first line of a mid-file window may be a fragment.
+        lines = lines[1:]
+    return lines[-count:]
+
+
+def _tail_lines(path: Path, count: int, backup_count: int = 0) -> List[str]:
+    """Return the last ``count`` lines of a captured log.
+
+    When the current file holds fewer than ``count`` lines, reading continues
+    backwards through the rotated segments ``.1 .. .backup_count`` (newest
+    first) and stops at the first missing segment. Lines come back in
+    chronological order.
+    """
     if count < 1:
         raise ValueError("Log line count must be a positive integer")
-    if not path.exists():
-        return []
-    with open(path, "rb") as handle:
-        try:
-            handle.seek(-min(path.stat().st_size, 256 * 1024), os.SEEK_END)
-        except OSError:
-            handle.seek(0)
-        text = handle.read().decode("utf-8", errors="replace")
-    lines = text.splitlines()
-    return lines[-count:]
+    segments = [path] + [
+        rotated_segment(path, index) for index in range(1, backup_count + 1)
+    ]
+    collected: List[str] = []
+    for segment in segments:
+        if not segment.exists():
+            break
+        collected = _read_last_lines(segment, count - len(collected)) + collected
+        if len(collected) >= count:
+            break
+    return collected
+
+
+class _LogFollower:
+    """Incrementally read complete lines appended to a captured log.
+
+    Spawn-time rotation renames ``<name>.log`` to ``<name>.log.1`` and opens a
+    fresh file. The follower tracks the file identity it was reading; when the
+    path names a new file it drains the rest of the renamed segment first, so
+    a restart neither strands the reader on the old file nor drops the dead
+    process's last lines.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._inode: Optional[int] = None
+        self._offset = 0
+        self._partial = b""
+        if path.exists():
+            stat = path.stat()
+            self._inode = stat.st_ino
+            self._offset = stat.st_size
+
+    def read_lines(self) -> List[str]:
+        """Return the complete lines appended since the previous call."""
+        if not self.path.exists():
+            return []
+        finished = b""
+        with open(self.path, "rb") as handle:
+            inode = os.fstat(handle.fileno()).st_ino
+            if inode != self._inode:
+                if self._inode is not None:
+                    # The old segment is closed for good: its trailing
+                    # fragment, if any, is a line of its own.
+                    finished = self._partial + self._drain_rotated()
+                    self._partial = b""
+                    if finished and not finished.endswith(b"\n"):
+                        finished += b"\n"
+                self._inode = inode
+                self._offset = 0
+            handle.seek(self._offset)
+            chunk = handle.read()
+            self._offset = handle.tell()
+        buffered = finished + self._partial + chunk
+        complete, newline, self._partial = buffered.rpartition(b"\n")
+        if not newline:
+            return []
+        return complete.decode("utf-8", errors="replace").split("\n")
+
+    def _drain_rotated(self) -> bytes:
+        """Unread bytes of the segment this follower was reading, if rotated."""
+        previous = rotated_segment(self.path, 1)
+        if not previous.exists():
+            return b""
+        with open(previous, "rb") as handle:
+            if os.fstat(handle.fileno()).st_ino != self._inode:
+                return b""
+            handle.seek(self._offset)
+            return handle.read()
 
 
 class Supervisor:
@@ -238,6 +367,18 @@ class Supervisor:
     def log_path(self, name: str) -> Path:
         return self.state_dir / f"{name}.log"
 
+    def log_config_path(self) -> Path:
+        """The dictConfig JSON substituted for the ``{log_config}`` placeholder."""
+        return self.state_dir / LOG_CONFIG_FILENAME
+
+    def _write_log_config(self) -> Path:
+        """Write ``[runtime.logs]`` as a dictConfig JSON file for ``--log-config``."""
+        path = self.log_config_path()
+        path.write_text(
+            json.dumps(build_logging_config(self.runtime.logs), indent=2) + "\n"
+        )
+        return path
+
     def _read_pidfile(self, name: str) -> Optional[Dict[str, Any]]:
         path = self._pidfile(name)
         if not path.exists():
@@ -305,6 +446,7 @@ class Supervisor:
             "python": sys.executable,
             "host": service.host,
             "port": str(service.port),
+            LOG_CONFIG_PLACEHOLDER: str(self.log_config_path()),
         }
         return [part.format(**substitutions) for part in service.command]
 
@@ -330,7 +472,14 @@ class Supervisor:
         detached: bool,
     ) -> int:
         argv = self._service_argv(service)
+        if LOG_CONFIG_PLACEHOLDER in _template_fields(service.command):
+            self._write_log_config()
         log_path = self.log_path(name)
+        # The supervisor is the single rotation owner: the previous process
+        # holding this file is gone, so the rename cannot race a live writer.
+        _rotate_log(
+            log_path, self.runtime.logs.max_bytes, self.runtime.logs.backup_count
+        )
         popen_kwargs: Dict[str, Any] = {}
         if detached:
             if os.name == "posix":
@@ -726,7 +875,12 @@ class Supervisor:
         lines: Optional[int] = None,
         follow: bool = False,
     ) -> Iterator[str]:
-        """Yield captured log lines for a service; generator so -f can stream."""
+        """Yield captured log lines for a service; generator so -f can stream.
+
+        The tail reads back through rotated segments when the current capture
+        is shorter than ``lines``; ``follow`` tails the current capture and
+        crosses the rotation a respawn performs.
+        """
         if self.runtime.profile != "local":
             raise RuntimeError_(
                 f"'nexus logs' reads captured local logs; profile is "
@@ -739,18 +893,19 @@ class Supervisor:
                 f"Known services: {sorted(self.runtime.services)}"
             )
         count = lines if lines is not None else self.runtime.logs.tail_lines
-        for line in _tail_lines(log_path, count):
-            yield line
-        if not follow:
+        tail = _tail_lines(log_path, count, self.runtime.logs.backup_count)
+        # Pin the follow position with the tail read, not after the caller has
+        # consumed the tail, so nothing written meanwhile is skipped.
+        follower = _LogFollower(log_path) if follow else None
+        yield from tail
+        if follower is None:
             return
-        with open(log_path, "rb") as handle:
-            handle.seek(0, os.SEEK_END)
-            while True:
-                chunk = handle.readline()
-                if chunk:
-                    yield chunk.decode("utf-8", errors="replace").rstrip("\n")
-                else:
-                    time.sleep(self.runtime.logs.follow_poll_seconds)
+        while True:
+            appended = follower.read_lines()
+            if appended:
+                yield from appended
+            else:
+                time.sleep(self.runtime.logs.follow_poll_seconds)
 
     # ------------------------------------------------------------------
     # Foreground supervision
@@ -758,12 +913,9 @@ class Supervisor:
 
     def _foreground_loop(self, slot: int, echo: bool = True) -> None:
         """Tail service logs to the console and supervise until interrupted."""
-        offsets: Dict[str, int] = {}
         restarts: Dict[str, int] = {}
         services = self.enabled_services()
-        for name in services:
-            path = self.log_path(name)
-            offsets[name] = path.stat().st_size if path.exists() else 0
+        followers = {name: _LogFollower(self.log_path(name)) for name in services}
 
         interrupted = {"flag": False}
 
@@ -777,19 +929,10 @@ class Supervisor:
         try:
             while not interrupted["flag"]:
                 for name in services:
-                    path = self.log_path(name)
-                    if not path.exists():
-                        continue
-                    size = path.stat().st_size
-                    if size > offsets[name]:
-                        with open(path, "rb") as handle:
-                            handle.seek(offsets[name])
-                            data = handle.read()
-                            offsets[name] = handle.tell()
-                        if echo:
-                            text = data.decode("utf-8", errors="replace")
-                            for line in text.splitlines():
-                                print(f"[{name}] {line}")
+                    appended = followers[name].read_lines()
+                    if echo:
+                        for line in appended:
+                            print(f"[{name}] {line}")
                 self._check_children(services, slot, restarts, echo=echo)
                 time.sleep(self.runtime.logs.follow_poll_seconds)
         finally:

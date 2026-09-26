@@ -8,6 +8,7 @@ All models use `extra='forbid'` to catch typos in configuration keys.
 from copy import deepcopy
 from datetime import timedelta
 from decimal import Decimal
+import logging
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -474,7 +475,9 @@ class RuntimeServiceSettings(BaseModel):
         min_length=1,
         description=(
             "argv template for spawning the service. Placeholders: {python} "
-            "(current interpreter), {host}, {port}. No shell is involved."
+            "(current interpreter), {host}, {port}, {log_config} (the "
+            "dictConfig JSON the supervisor writes from [runtime.logs]). No "
+            "shell is involved."
         ),
     )
     host: str = Field(default="127.0.0.1", description="Bind host (loopback TCP)")
@@ -540,7 +543,13 @@ class RuntimeHealthSettings(BaseModel):
 
 
 class RuntimeLogsSettings(BaseModel):
-    """Captured-log presentation settings for nexus logs."""
+    """Captured service logs: format, rotation, access noise, and nexus logs.
+
+    The supervisor is the single file and rotation owner: it captures each
+    service's stdout+stderr in ``<state_dir>/<service>.log`` and rotates that
+    file at spawn. Services configured with the ``{log_config}`` argv
+    placeholder log to stdout through one formatter (issue #842).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -550,6 +559,75 @@ class RuntimeLogsSettings(BaseModel):
     follow_poll_seconds: float = Field(
         default=0.5, gt=0, description="Poll interval for nexus logs -f"
     )
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO",
+        description=(
+            "Level for the root, uvicorn, uvicorn.error and uvicorn.access "
+            "loggers in services launched with the {log_config} placeholder"
+        ),
+    )
+    format: str = Field(
+        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        min_length=1,
+        description="Percent-style logging format shared by app and uvicorn logs",
+    )
+    max_bytes: int = Field(
+        default=10_485_760,
+        gt=0,
+        description=(
+            "A captured <service>.log at least this large is rotated when the "
+            "supervisor next spawns that service"
+        ),
+    )
+    backup_count: int = Field(
+        default=5,
+        ge=1,
+        description="Rotated segments kept per service (<service>.log.1..N)",
+    )
+    access_success_exclude_paths: List[str] = Field(
+        default_factory=lambda: ["/health", "/runtime/status"],
+        description=(
+            "Request paths (query string ignored) whose successful (<400) "
+            "uvicorn access records are dropped; every 4xx and 5xx is kept"
+        ),
+    )
+
+    @field_validator("format")
+    @classmethod
+    def _validate_format(cls, value: str) -> str:
+        """Reject malformed format strings at config load, not at first log."""
+        try:
+            logging.Formatter(value, style="%", validate=True)
+        except ValueError as exc:
+            raise ValueError(
+                f"[runtime.logs] format is not a valid %-style logging format: "
+                f"{exc}"
+            ) from exc
+        return value
+
+    @field_validator("access_success_exclude_paths")
+    @classmethod
+    def _validate_exclude_paths(cls, value: List[str]) -> List[str]:
+        """Exclusions are exact, absolute request paths without query strings."""
+        for path in value:
+            if not path.startswith("/"):
+                raise ValueError(
+                    f"[runtime.logs] access_success_exclude_paths entry {path!r} "
+                    "must be an absolute request path starting with '/'"
+                )
+            if "?" in path or "#" in path:
+                raise ValueError(
+                    f"[runtime.logs] access_success_exclude_paths entry {path!r} "
+                    "must not carry a query string or fragment; matching "
+                    "ignores the query string"
+                )
+        duplicates = sorted({path for path in value if value.count(path) > 1})
+        if duplicates:
+            raise ValueError(
+                "[runtime.logs] access_success_exclude_paths has duplicate "
+                f"entries: {duplicates}"
+            )
+        return value
 
 
 class RuntimeExternalSettings(BaseModel):

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register nexus/api/route_capabilities.py as production-reachable through the gateway's route-capability registry (#824)",
+  "reason": "Register nexus/runtime/logging_config.py as production-reachable (#842 supervisor-owned logging)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -257,6 +257,7 @@
     "nexus/prompts/registry.py",
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",
+    "nexus/runtime/logging_config.py",
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",

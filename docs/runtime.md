@@ -181,9 +181,9 @@ processes, and they fail loudly in other profiles.
 ### Local profile mechanics
 
 - Services are declared in `[runtime.services.<name>]`: an argv `command`
-  template (`{python}`, `{host}`, `{port}` placeholders — no shell), `port`,
-  `health_path`, extra `env`, an `enabled` mode, and an `autorestart`
-  policy.
+  template (`{python}`, `{host}`, `{port}`, `{log_config}` placeholders — no
+  shell), `port`, `health_path`, extra `env`, an `enabled` mode, and an
+  `autorestart` policy.
 - The supervisor is pure Python and cross-platform by construction: process
   spawning uses `subprocess` with platform-appropriate detach flags,
   liveness checks never signal the process, and all observation is loopback
@@ -192,6 +192,20 @@ processes, and they fail loudly in other profiles.
 - State lives under `[runtime].state_dir` (default `.nexus/runtime`):
   `<service>.pid.json` records pid/port/slot/start time; `<service>.log`
   captures stdout+stderr. Logs survive `nexus down` for postmortems.
+- The supervisor is the single log-file and rotation owner. At spawn, a
+  `<service>.log` of at least `[runtime.logs].max_bytes` becomes
+  `<service>.log.1` (older segments shift up to `backup_count`, the oldest
+  is dropped) and the service starts on a fresh file; a long-running
+  service's capture grows until its next spawn. `nexus logs -n N` continues
+  into the rotated segments when the current file is shorter than `N`, and
+  `-f` follows across a restart's rotation.
+- `{log_config}` expands to `<state_dir>/logging.json`, a
+  `logging.config.dictConfig` document the supervisor writes from
+  `[runtime.logs]` before spawning. The gateway passes it to uvicorn as
+  `--log-config`: application and uvicorn loggers write to stdout (never a
+  file of their own) through one `format` at one `level`, and successful
+  (below 400) access records for `access_success_exclude_paths` are dropped
+  while every 4xx and 5xx is kept.
 - `nexus up --foreground` keeps the supervisor attached: it streams
   prefixed service logs to the console, honors `autorestart = "on-failure"`
   (bounded by `autorestart_max_retries`), and tears everything down on
