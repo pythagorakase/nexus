@@ -276,6 +276,12 @@ def discover_migrations() -> List[Tuple[str, str, Path]]:
                 "files named NNN_name.sql or NNN_name.py (lowercase snake_case)."
             )
         version, name, extension = match.groups()
+        if version == "000":
+            raise RuntimeError(
+                f"Migration {path} uses version 000; versions start at 001, and a "
+                "000 file would sort before every stamped migration and run against "
+                "the current schema"
+            )
         if version in seen:
             raise RuntimeError(
                 f"Migration version {version} is used by both {seen[version]} "

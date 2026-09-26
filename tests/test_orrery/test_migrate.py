@@ -91,6 +91,21 @@ def test_migrate_database_validates_the_tree_before_touching_the_database(
         migrate.migrate_database("save_05")
 
 
+def test_discover_migrations_rejects_version_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 000 file would run against the current schema, so discovery refuses it."""
+
+    (tmp_path / "000_before_everything.sql").write_text("SELECT 0;")
+    (tmp_path / "001_baseline.sql").write_text("SELECT 1;")
+    monkeypatch.setattr(migrate, "MIGRATIONS_DIR", tmp_path)
+
+    with pytest.raises(RuntimeError, match="version 000") as excinfo:
+        migrate.discover_migrations()
+
+    assert str(tmp_path / "000_before_everything.sql") in str(excinfo.value)
+
+
 def test_discover_migrations_rejects_sql_and_python_sharing_a_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -205,6 +220,7 @@ def test_migration_sequence_has_only_known_gaps() -> None:
     head = max(int(version) for version in versions)
     missing = {f"{number:03d}" for number in range(1, head + 1)} - set(versions)
 
+    assert min(versions) == "001"
     assert missing == KNOWN_GAPS
 
 
