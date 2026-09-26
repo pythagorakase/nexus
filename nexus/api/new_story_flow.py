@@ -441,6 +441,7 @@ def perform_transition_with_retrograde(
         "weird": bundle.weird,
         "surface": surface,
         "counters": dict(manifest["counters"]),
+        "entity_stub_budget": dict(manifest["entity_stub_budget"]),
         "embedded_summary_ids": [entry["summary_id"] for entry in embedding_results],
         "timings": [timing.model_dump() for timing in bundle.timings],
     }

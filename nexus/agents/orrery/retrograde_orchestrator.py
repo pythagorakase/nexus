@@ -33,7 +33,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -241,7 +241,13 @@ def persist_retrograde_history(
     Runs a read-only planning pass first; if any execute blocker remains or
     the Decision 8 stub cap is exceeded, raises
     ``RetrogradePersistenceBlockedError`` so the enclosing transaction rolls
-    back. Otherwise executes canonical writes and returns the manifest.
+    back. Otherwise executes canonical writes and returns the manifest, with
+    the stub-budget accounting under ``entity_stub_budget``.
+
+    The stub cap uses the same rule as R6 validation (see
+    ``entity_stub_budget``). Stubs for first-class starting entities, such as
+    trait targets the trait compiler did not create, are inserted but not
+    charged.
     """
 
     from nexus.agents.orrery.retrograde_persistence import (
@@ -280,25 +286,24 @@ def persist_retrograde_history(
             blockers=blockers,
         )
 
-    stub_rows = [
-        row
-        for row in dry_manifest["entity_stub_rows"]
-        if row["status"] == "would_insert"
-    ]
-    if len(stub_rows) > wizard_settings.max_new_entity_stubs:
-        listed = ", ".join(
-            f"{row['entity_kind']}:{row['entity_ref']}" for row in stub_rows
-        )
+    stub_budget = entity_stub_budget(
+        entity_stub_rows=dry_manifest["entity_stub_rows"],
+        packet=bundle.packet,
+        max_new_entity_stubs=wizard_settings.max_new_entity_stubs,
+    )
+    charged_stubs = stub_budget["charged_stubs"]
+    if len(charged_stubs) > wizard_settings.max_new_entity_stubs:
         raise RetrogradePersistenceBlockedError(
-            f"Retrograde expansion would create {len(stub_rows)} new entity "
-            "stubs, exceeding orrery.retrograde.wizard.max_new_entity_stubs="
-            f"{wizard_settings.max_new_entity_stubs}: {listed}",
+            f"Retrograde expansion would create {len(charged_stubs)} new entity "
+            "stubs beyond the first-class starting set, exceeding "
+            "orrery.retrograde.wizard.max_new_entity_stubs="
+            f"{wizard_settings.max_new_entity_stubs}: {', '.join(charged_stubs)}",
             blockers=[
                 {
                     "id": "entity_stub_budget_exceeded",
                     "reason": (
-                        f"{len(stub_rows)} new stubs exceed the configured cap "
-                        f"of {wizard_settings.max_new_entity_stubs}"
+                        f"{len(charged_stubs)} new stubs exceed the configured "
+                        f"cap of {wizard_settings.max_new_entity_stubs}"
                     ),
                 }
             ],
@@ -341,12 +346,53 @@ def persist_retrograde_history(
         "chunk_id": int(prologue_chunk_id),
         "label": "genesis",
     }
+    manifest["entity_stub_budget"] = stub_budget
     logger.info(
         "Retrograde persistence executed for slot %s: %s",
         bundle.slot,
         manifest["counters"],
     )
     return manifest
+
+
+def entity_stub_budget(
+    *,
+    entity_stub_rows: Sequence[Mapping[str, Any]],
+    packet: Mapping[str, Any],
+    max_new_entity_stubs: int,
+) -> dict[str, Any]:
+    """Apply the Decision 8 entity-budget rule to planned stub rows.
+
+    Charges the ``would_insert`` rows of a persistence dry-run manifest with
+    ``charged_new_entity_keys``, the rule R6 response validation applies to
+    the expansion plan. Both sides use the same packet's first-class starting
+    set. Returns ``"kind:ref"`` labels for charged stubs and for uncharged
+    first-class stubs, plus the cap they were measured against. Comparing
+    the charged count with the cap is left to the caller.
+    """
+
+    from nexus.agents.orrery.retrograde_expansion import (
+        charged_new_entity_keys,
+        packet_known_entity_keys,
+    )
+    from nexus.agents.orrery.retrograde_vocabulary import normalize_entity_ref
+
+    labels_by_key: dict[tuple[str, str], str] = {}
+    for row in entity_stub_rows:
+        if row["status"] != "would_insert":
+            continue
+        key = (str(row["entity_kind"]), normalize_entity_ref(str(row["entity_ref"])))
+        labels_by_key.setdefault(key, f"{row['entity_kind']}:{row['entity_ref']}")
+    charged_keys = charged_new_entity_keys(
+        labels_by_key,
+        known_entity_keys=packet_known_entity_keys(packet),
+    )
+    uncharged_keys = sorted(set(labels_by_key) - set(charged_keys))
+    return {
+        "max_new_entity_stubs": max_new_entity_stubs,
+        "charged_stubs": [labels_by_key[key] for key in charged_keys],
+        "first_class_stubs": [labels_by_key[key] for key in uncharged_keys],
+    }
 
 
 def _raise_if_genesis_checkpoint_exists(cur: Any) -> None:
