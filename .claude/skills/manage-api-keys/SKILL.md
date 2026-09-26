@@ -38,6 +38,19 @@ trigger a blocking ACL prompt. Elsewhere it uses `keyring.set_password`.
 `NEXUS_KEYRING_DISABLE=1` is a read-only CI/debug escape hatch. Reads use
 `<ACCOUNT>_API_KEY`; writes must fail loudly until the flag is unset.
 
+## Keep Tests Off the Owner's Store
+
+Every store operation goes through a `SecretBackend` (`read`, `write`,
+`delete`). Tests inject `InMemorySecretBackend` with `use_secret_backend`,
+usually through the `in_memory_secret_store` fixture. The session guard in
+`tests/secret_store_guard.py` fails any test that reaches the real Keychain,
+the `security` CLI, or `keyring`. Do not unset `NEXUS_KEYRING_DISABLE` or
+shell out to `security` to test storage.
+
+`NEXUS_RUN_SECRET_STORE=1` runs the macOS integration test against a
+disposable keychain file and service. Never point a test at service
+`nexus-api` or the login keychain.
+
 ## Preserve Failure Safety
 
 Never render provider exception messages. Verification failures expose only the

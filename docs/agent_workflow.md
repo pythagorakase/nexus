@@ -16,6 +16,11 @@ more specific instructions.
   `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT` and
   `NEXUS_API_URL` unset. The PostgreSQL-gated tests are where fixture debt
   accumulates; a run that skips them is not the gate.
+- The secret-store guard is a mandatory part of the gate. `tests/conftest.py`
+  installs it before collection and stops the session if collection removes
+  it. Before trusting a gate result, confirm the run header reads
+  `secret-store guard: active; nexus-api: denied`, which requires
+  `NEXUS_RUN_LIVE_LLM` to be unset. Never pass `--noconftest`.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 

@@ -150,10 +150,12 @@ assignments automatically. The legacy `settings.json` is retired.
 poetry run pytest                          # offline tier (default)
 NEXUS_RUN_POSTGRES=1 poetry run pytest     # + PostgreSQL integration tests
 NEXUS_RUN_LIVE_LLM=1 poetry run pytest     # + live model endpoints
+NEXUS_RUN_SECRET_STORE=1 poetry run pytest # + disposable macOS keychain test
 ```
 
-Tests marked `requires_postgres`, `live`, and `live_llm` skip unless their
-flag is set, so the default sweep runs fast with no services required.
+Tests marked `requires_postgres`, `live`, `live_llm`, and
+`requires_secret_store` skip unless their flag is set, so the default sweep
+runs fast with no services required.
 Formatting and linting: `poetry run black .`, `poetry run flake8`,
 `poetry run mypy .`.
 
