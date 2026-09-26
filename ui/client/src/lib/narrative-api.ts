@@ -205,6 +205,17 @@ export async function continueNarrative(params: {
   return res.json();
 }
 
+/** Deliberately retry one durable failure; the server fences stale attempts. */
+export async function retryNarrative(slot: number, expectedSessionId: string): Promise<ContinueNarrativeResponse> {
+  const res = await fetch("/api/narrative/retry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slot, expected_session_id: expectedSessionId }),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${(await res.text()) || res.statusText}`);
+  return res.json();
+}
+
 /** Bootstrap timing independently of slot/database reads. */
 export function getRecoveryPreferences(signal: AbortSignal): Promise<{ narrative_generation: GenerationSettings }> {
   return getJson("/api/preferences", signal);

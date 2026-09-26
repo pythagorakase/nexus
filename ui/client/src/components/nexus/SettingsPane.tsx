@@ -88,11 +88,36 @@ function SettingsCard({
 // marquee font, "menu" in its menu font, lorem ipsum in its body font.
 // ──────────────────────────────────────────────────────────────────────────
 
-function ThemeSection({ active, onPick }: { active: ThemeId; onPick: (t: ThemeId) => void }) {
+function SaveRejected({ message, testId }: { message: string; testId: string }) {
+  return (
+    <div className="alert danger" role="alert" data-testid={testId}>
+      <AlertTriangle size={14} />
+      <div>
+        <div className="alert-title">WRITE REJECTED</div>
+        <div className="alert-body">{message}</div>
+      </div>
+    </div>
+  );
+}
+
+function ThemeSection({
+  active,
+  onPick,
+  saveError,
+}: {
+  active: ThemeId;
+  onPick: (t: ThemeId) => void;
+  saveError: string | null;
+}) {
   const { fonts } = useFonts();
+  const { clearSaveError } = useTheme();
+  // The theme mutation is shared with the nav and splash switchers, which
+  // render no error. Only failures caused during this visit belong here.
+  useEffect(() => clearSaveError(), [clearSaveError]);
 
   return (
     <SettingsCard id="theme" label="THEME">
+      {saveError && <SaveRejected message={saveError} testId="theme-save-error" />}
       <div className="theme-grid">
         {THEME_IDS.map((id) => {
           // GET /api/settings serves raw nexus.toml, so a hand-edited
@@ -188,9 +213,11 @@ function FontSlot({
 
 function TypographySection() {
   const { theme } = useTheme();
-  const { fonts, setFont, resetToKeepers } = useFonts();
+  const { fonts, setFont, resetToKeepers, saveError, clearSaveError } = useFonts();
   const themeId = theme as ThemeId;
   const slots = fonts[themeId];
+  // Same rule as THEME: an alert here describes an action from this visit.
+  useEffect(() => clearSaveError(), [clearSaveError]);
 
   return (
     <SettingsCard
@@ -202,6 +229,7 @@ function TypographySection() {
         </button>
       }
     >
+      {saveError && <SaveRejected message={saveError} testId="font-save-error" />}
       <FontSlot
         slotKey="body"
         label="BODY"
@@ -707,7 +735,7 @@ export function SettingsPane({ slot = null }: { slot?: number | null }) {
 }
 
 function SettingsConsole({ settings, slot }: { settings: SettingsPayload; slot: number | null }) {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, saveError: themeSaveError } = useTheme();
   const { gateOpen } = useDeveloperMode();
   const mutation = useStorySettingsMutation(slot);
   const sections = useMemo(
@@ -760,7 +788,11 @@ function SettingsConsole({ settings, slot }: { settings: SettingsPayload; slot: 
           </div>
         )}
 
-        <ThemeSection active={theme as ThemeId} onPick={(t) => setTheme(t)} />
+        <ThemeSection
+          active={theme as ThemeId}
+          onPick={(t) => setTheme(t)}
+          saveError={themeSaveError}
+        />
         <TypographySection />
         {slot !== null && <ModelSection
           settings={settings}

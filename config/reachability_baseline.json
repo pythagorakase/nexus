@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Track the test-session provider guard and remove the now-tested OpenRouter wrapper from orphan exemptions.",
+  "reason": "Preserve wizard confirmation, control transcript and place validation production paths after integrating reviewed QA fixes.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -83,6 +83,7 @@
     "nexus/agents/logon/apex_schema.py",
     "nexus/agents/logon/gaia_registry_schema.py",
     "nexus/agents/logon/orrery_tag_validation.py",
+    "nexus/agents/logon/place_reference_validation.py",
     "nexus/agents/logon/skald_wire.py",
     "nexus/agents/lore/__init__.py",
     "nexus/agents/lore/logon_utility.py",
@@ -222,6 +223,7 @@
     "nexus/api/wizard_agent.py",
     "nexus/api/wizard_chat.py",
     "nexus/api/wizard_confirmation.py",
+    "nexus/api/wizard_transcript.py",
     "nexus/cli.py",
     "nexus/config/__init__.py",
     "nexus/config/loader.py",

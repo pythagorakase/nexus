@@ -322,11 +322,17 @@ def commit_incubator_to_database_sync(
     slot: Optional[int] = None,
     *,
     warning_sink: Optional[List[Dict[str, Any]]] = None,
+    bind_session_id: Optional[str] = None,
 ) -> int:
     """
     Synchronous version of commit flow from incubator to production tables.
 
     Uses psycopg2 connection with transaction management.
+
+    ``bind_session_id`` names the generation session that consumes the newly
+    committed chunk as its parent. The binding is written in this transaction,
+    so a failure after commit, or a cancelled caller, cannot separate the
+    recorded action from the session that must be retried from it.
 
     Returns:
         New chunk ID
@@ -506,6 +512,12 @@ def commit_incubator_to_database_sync(
                     "WHERE session_id = %s",
                     (chunk_id, session_id),
                 )
+                if bind_session_id is not None:
+                    from nexus.api.narrative_lease import associate_accepted_parent
+
+                    associate_accepted_parent(
+                        cur, session_id=bind_session_id, parent_chunk_id=chunk_id
+                    )
                 logger.info("Created narrative chunk %s", chunk_id)
                 bound_baseline = bind_pass2_baseline(
                     incubator["lore_pass_baseline"], chunk_id

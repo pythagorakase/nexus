@@ -3,7 +3,7 @@
  * normalization of backend turn payloads and the click/type/keyboard
  * interaction surface that replaced the wizard command bar.
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { normalizeChoices, WizardChoices } from "./WizardChoices";
 
@@ -36,7 +36,7 @@ describe("WizardChoices", () => {
     const choices = ["Build a floating city", "Start in the underdark"];
 
     it("renders one numbered button per choice", () => {
-        render(<WizardChoices choices={choices} onSubmit={() => {}} />);
+        render(<WizardChoices choices={choices} onSubmit={() => true} />);
         expect(screen.getByTestId("wizard-choice-1")).toHaveTextContent(
             "Build a floating city",
         );
@@ -52,41 +52,41 @@ describe("WizardChoices", () => {
         expect(onSubmit).toHaveBeenCalledWith("Start in the underdark");
     });
 
-    it("clears a freeform draft when a choice is clicked", () => {
-        const onSubmit = vi.fn();
+    it("clears a freeform draft when a choice is clicked", async () => {
+        const onSubmit = vi.fn().mockResolvedValue(true);
         render(<WizardChoices choices={choices} onSubmit={onSubmit} />);
         const freeform = screen.getByTestId("wizard-freeform");
         fireEvent.change(freeform, { target: { value: "abandoned draft" } });
         fireEvent.click(screen.getByTestId("wizard-choice-1"));
         expect(onSubmit).toHaveBeenCalledWith("Build a floating city");
-        expect(freeform).toHaveValue("");
+        await waitFor(() => expect(freeform).toHaveValue(""));
     });
 
-    it("clears a freeform draft when a choice is selected by number key", () => {
-        const onSubmit = vi.fn();
+    it("clears a freeform draft when a choice is selected by number key", async () => {
+        const onSubmit = vi.fn().mockResolvedValue(true);
         render(<WizardChoices choices={choices} onSubmit={onSubmit} />);
         const freeform = screen.getByTestId("wizard-freeform");
         fireEvent.change(freeform, { target: { value: "abandoned draft" } });
         (document.activeElement as HTMLElement | null)?.blur?.();
         fireEvent.keyDown(window, { key: "2" });
         expect(onSubmit).toHaveBeenCalledWith("Start in the underdark");
-        expect(freeform).toHaveValue("");
+        await waitFor(() => expect(freeform).toHaveValue(""));
     });
 
     it("always renders the freeform slot, even with no choices", () => {
-        render(<WizardChoices choices={[]} onSubmit={() => {}} />);
+        render(<WizardChoices choices={[]} onSubmit={() => true} />);
         expect(screen.queryByRole("button")).toBeNull();
         expect(screen.getByTestId("wizard-freeform")).toBeInTheDocument();
     });
 
-    it("submits trimmed freeform text on Enter and clears the field", () => {
-        const onSubmit = vi.fn();
+    it("submits trimmed freeform text on Enter and clears the field", async () => {
+        const onSubmit = vi.fn().mockResolvedValue(true);
         render(<WizardChoices choices={choices} onSubmit={onSubmit} />);
         const freeform = screen.getByTestId("wizard-freeform");
         fireEvent.change(freeform, { target: { value: "  a haunted lighthouse  " } });
         fireEvent.keyDown(freeform, { key: "Enter" });
         expect(onSubmit).toHaveBeenCalledWith("a haunted lighthouse");
-        expect(freeform).toHaveValue("");
+        await waitFor(() => expect(freeform).toHaveValue(""));
     });
 
     it("does not submit empty freeform text", () => {
@@ -136,7 +136,7 @@ describe("WizardChoices", () => {
         render(
             <WizardChoices
                 choices={["A *quiet* start in the **lower stacks**"]}
-                onSubmit={() => {}}
+                onSubmit={() => true}
             />,
         );
         const button = screen.getByTestId("wizard-choice-1");

@@ -1396,6 +1396,7 @@ def _apply_traits_to_wildcard_transition(
             "[SYSTEM] Phase character subphase traits complete. "
             "Proceeding to wildcard. Please introduce the next subphase."
         ),
+        "message_origin": "wizard_control",
         "current_phase": "character",
     }
     if model:

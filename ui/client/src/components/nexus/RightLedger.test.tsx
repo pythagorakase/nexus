@@ -37,8 +37,8 @@ it("renders only durable phases in order with monotonic progress and nothing at 
   client.setQueryData(["/api/narrative/outline", 4], []);
   const engine: NarrativeEngine = {
     slotState: undefined, slotStateError: null, isSlotStateLoading: false,
-    phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null,
-    isGenerating: true, completedGenerations: 0, submitTurn: async () => {},
+    phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: async () => true,
+    isGenerating: true, completedGenerations: 0, submitTurn: async () => true,
   };
   const view = () => <QueryClientProvider client={client}>
     <RightLedger slot={4} engine={engine} readingChunkId={null} onNavigate={() => {}} />

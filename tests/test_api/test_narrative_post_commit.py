@@ -69,10 +69,13 @@ async def test_auto_approval_runs_commit_off_event_loop(
         slot: int | None,
         *,
         warning_sink: list[dict[str, Any]] | None = None,
+        bind_session_id: str | None = None,
     ) -> int:
         assert session_id == "pending-session"
         assert slot == 4
         assert warning_sink is not None
+        # The continue route binds its new session inside this commit.
+        assert bind_session_id == "continuing-session"
         with pytest.raises(RuntimeError):
             asyncio.get_running_loop()
         commit_threads.append(threading.get_ident())
@@ -106,6 +109,7 @@ async def test_auto_approval_runs_commit_off_event_loop(
         choice=1,
         accept_fate=False,
         background_tasks=background_tasks,
+        bind_session_id="continuing-session",
     )
 
     assert result == ("resolved player response", 42, [quarantine_warning])

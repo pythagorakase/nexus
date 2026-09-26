@@ -487,7 +487,12 @@ async def new_story_chat_endpoint(request: ChatRequest):
             history = client.list_messages(request.thread_id, limit=history_limit)
 
         if not request.accept_fate:
-            client.add_message(request.thread_id, "user", request.message)
+            client.add_message(
+                request.thread_id,
+                "user",
+                request.message,
+                origin=request.message_origin,
+            )
 
         history = client.list_messages(request.thread_id, limit=history_limit)
         history.reverse()
@@ -839,7 +844,9 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
         history = client.list_messages(request.thread_id, limit=history_limit)
 
     if not request.accept_fate:
-        client.add_message(request.thread_id, "user", request.message)
+        client.add_message(
+            request.thread_id, "user", request.message, origin=request.message_origin
+        )
 
     history = client.list_messages(request.thread_id, limit=history_limit)
     history.reverse()

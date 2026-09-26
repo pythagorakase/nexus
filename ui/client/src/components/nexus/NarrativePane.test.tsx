@@ -52,10 +52,10 @@ function makeEngine(slotState: SlotState): NarrativeEngine {
     phase: null,
     skaldStatus: "READY",
     elapsedMs: 0,
-    generationError: null,
+    generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
     isGenerating: false,
     completedGenerations: 0,
-    submitTurn: vi.fn(async () => undefined),
+    submitTurn: vi.fn(async () => true),
   };
 }
 
