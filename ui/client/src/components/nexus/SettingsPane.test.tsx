@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FontProvider, KEEPERS } from "@/contexts/FontContext";
-import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import {
   LOCAL_MODELS_DOWNLOAD_KEY,
@@ -330,5 +330,109 @@ describe("SettingsPane model IDs", () => {
     );
     expect(screen.getByTestId("model-openrouter-vendor/model-next"))
       .toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+
+describe("preference save failures (#961)", () => {
+  function preferencesResponse(overrides: Record<string, unknown> = {}) {
+    return new Response(
+      JSON.stringify({ theme: "veil", fonts: KEEPERS, wizard_model: "TEST", ...overrides }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  it("shows the rejection for an online HTTP failure and keeps the saved font", async () => {
+    const calls: string[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return new Response("PermissionError: [Errno 13] Permission denied", { status: 500 });
+    });
+    renderPane();
+    fireEvent.click(screen.getByRole("button", { name: "Cormorant Garamond" }));
+
+    const alert = await screen.findByTestId("font-save-error");
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveTextContent("WRITE REJECTED");
+    expect(alert).toHaveTextContent("500: PermissionError: [Errno 13] Permission denied");
+    expect(screen.getByRole("button", { name: "Spectral" })).toHaveClass("on");
+    expect(screen.getByRole("button", { name: "Cormorant Garamond" })).not.toHaveClass("on");
+    expect(calls).toEqual(["PATCH /api/preferences"]);
+
+    // Storage recovers: the same action succeeds, clears the error, and the
+    // saved matrix now carries the new font.
+    fetchSpy.mockImplementation(async () =>
+      preferencesResponse({ fonts: { ...KEEPERS, veil: { ...KEEPERS.veil, body: "Cormorant Garamond" } } }));
+    fireEvent.click(screen.getByRole("button", { name: "Cormorant Garamond" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Cormorant Garamond" })).toHaveClass("on"));
+    expect(screen.queryByTestId("font-save-error")).not.toBeInTheDocument();
+    expect(calls.filter((c) => !c.startsWith("PATCH /api/preferences"))).toEqual([]);
+  });
+
+  it("shows the rejection for a network failure and keeps the saved theme", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    renderPane();
+    fireEvent.click(screen.getByTestId("theme-gilded"));
+
+    const alert = await screen.findByTestId("theme-save-error");
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveTextContent("Failed to fetch");
+    await waitFor(() => expect(screen.getByTestId("theme-veil")).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.getByTestId("theme-gilded")).toHaveAttribute("aria-pressed", "false");
+    expect(document.documentElement.classList.contains("theme-gilded")).toBe(false);
+
+    fetchSpy.mockResolvedValue(preferencesResponse({ theme: "gilded" }));
+    fireEvent.click(screen.getByTestId("theme-gilded"));
+    await waitFor(() => expect(screen.getByTestId("theme-gilded")).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.queryByTestId("theme-save-error")).not.toBeInTheDocument();
+    expect(document.documentElement.classList.contains("theme-gilded")).toBe(true);
+  });
+});
+
+
+describe("stale theme save errors from other theme switchers (#961 review)", () => {
+  function OutsideSwitcher() {
+    const { setTheme } = useTheme();
+    return <button onClick={() => setTheme("gilded")}>outside-gilded</button>;
+  }
+
+  it("does not attribute an earlier nav/splash failure to the pane's THEME card", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    queryClient.setQueryData([...SETTINGS_QUERY_KEY], SETTINGS);
+    queryClient.setQueryData([...PREFERENCES_QUERY_KEY], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
+    queryClient.setQueryData(["/api/slot/4/settings"], { skald_model: null, gaia_model: null, apex_context_window: null });
+    queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
+    queryClient.setQueryData(["/api/dev/backstage/health"], false);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    const tree = (withPane: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <DeveloperModeProvider>
+            <FontProvider>
+              <OutsideSwitcher />
+              {withPane && <SettingsPane slot={4} />}
+            </FontProvider>
+          </DeveloperModeProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(false));
+    // A theme switch from the nav menu or splash screen fails while the pane is closed.
+    fireEvent.click(screen.getByText("outside-gilded"));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(document.documentElement.classList.contains("theme-gilded")).toBe(false));
+
+    // Opening Settings later must not present that failure as the THEME card's own.
+    view.rerender(tree(true));
+    await screen.findByTestId("theme-veil");
+    expect(screen.queryByTestId("theme-save-error")).not.toBeInTheDocument();
+
+    // A failure caused in the pane still reports there.
+    fireEvent.click(screen.getByTestId("theme-gilded"));
+    await screen.findByTestId("theme-save-error");
+    expect(screen.getByTestId("theme-veil")).toHaveAttribute("aria-pressed", "true");
   });
 });
