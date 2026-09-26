@@ -36,6 +36,7 @@ def failed_row(**overrides):
             replaced_by_session_id=None,
             error="Unresolved place state update",
             error_class="WireContractViolation",
+            owner_expired=False,
         )
         | overrides
     )
@@ -398,10 +399,10 @@ class StartupCursor:
             self.result = None
         elif normalized.startswith("UPDATE narrative_chunks"):
             self.connection.cleared.append(params[-1])
-        elif "FROM narrative_generation_lease" in normalized:
-            self.result = None
         elif "FROM narrative_generation_sessions" in normalized:
             self.result = self.connection.session
+        elif "FROM narrative_generation_lease" in normalized:
+            self.result = None
         elif "FROM incubator" in normalized:
             self.result = None
         elif "embedding_generated_at" in normalized:
@@ -435,11 +436,20 @@ class StartupConnection:
         return StartupCursor(self, dict_rows=cursor_factory is not None)
 
 
-def test_restart_keeps_the_action_a_retryable_failure_resumes():
+@pytest.mark.parametrize(
+    "session",
+    [
+        failed_row(),
+        # A worker died after binding the action; its lease has expired.
+        failed_row(status="initiated", terminal_outcome=None, owner_expired=True),
+    ],
+    ids=["recorded-failure", "expired-owner"],
+)
+def test_restart_keeps_the_action_a_retryable_failure_resumes(session):
     """A gateway restart must not erase the action the displayed Retry needs."""
     from nexus.api.choice_recovery import recover_orphaned_choice
 
-    connection = StartupConnection(failed_row())
+    connection = StartupConnection(session)
     assert recover_orphaned_choice(connection) is None
     assert connection.cleared == []
 
@@ -450,6 +460,13 @@ def test_restart_keeps_the_action_a_retryable_failure_resumes():
         failed_row(parent_chunk_id=None),
         failed_row(replaced_by_session_id="replacement"),
         failed_row(status="complete", terminal_outcome="accepted"),
+        failed_row(status="initiated", terminal_outcome=None),
+        failed_row(
+            status="initiated",
+            terminal_outcome=None,
+            parent_chunk_id=None,
+            owner_expired=True,
+        ),
         None,
     ],
 )
@@ -460,3 +477,140 @@ def test_restart_still_clears_an_action_no_retry_can_resume(session):
     connection = StartupConnection(session)
     assert recover_orphaned_choice(connection) == 9
     assert connection.cleared == [9]
+
+
+class ExpiredOwnerStore:
+    """One slot's lease, latest session and frontier, applying the lease SQL.
+
+    The latest session is a worker that died after its action was bound: it is
+    still ``initiated`` and its lease has expired. Writes are applied in memory
+    so acquisition's reaping is visible to its own retry check.
+    """
+
+    info = SimpleNamespace(dbname="save_04")
+
+    def __init__(self, *, parent_chunk_id):
+        self.session = dict(
+            session_id="dead-worker",
+            status="initiated",
+            terminal_outcome=None,
+            parent_chunk_id=parent_chunk_id,
+            replaced_by_session_id=None,
+            error=None,
+            error_class=None,
+        )
+        self.lease = {"session_id": "dead-worker", "expired": True}
+        self.writes = []
+        self.commits = 0
+        self.rollbacks = 0
+
+    def cursor(self, cursor_factory=None):
+        return ExpiredOwnerCursor(self)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+class ExpiredOwnerCursor:
+    """Answer the lease module's statements against ExpiredOwnerStore."""
+
+    def __init__(self, store):
+        self.store = store
+        self.result = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, query, params=None):
+        store = self.store
+        normalized = " ".join(query.split())
+        self.result = None
+        if normalized.startswith("LOCK TABLE"):
+            return
+        if normalized.startswith("SELECT session_id, expires_at <= NOW() AS is_stale"):
+            if store.lease is not None:
+                self.result = {
+                    "session_id": store.lease["session_id"],
+                    "is_stale": store.lease["expired"],
+                }
+            return
+        if normalized.startswith(
+            "SELECT"
+        ) and "FROM narrative_generation_sessions gs" in (normalized):
+            lease = store.lease
+            expired = (
+                lease is not None
+                and lease["expired"]
+                and lease["session_id"] == store.session["session_id"]
+            )
+            self.result = dict(store.session, owner_expired=expired)
+            return
+        if normalized.startswith("SELECT 1 FROM incubator"):
+            return
+        if normalized.startswith("SELECT nc.id, nc.choice_text FROM narrative_chunks"):
+            self.result = {"id": 9, "choice_text": "Recorded action"}
+            return
+        store.writes.append((normalized, params))
+        if normalized.startswith("DELETE FROM narrative_generation_lease"):
+            store.lease = None
+        elif normalized.startswith("UPDATE narrative_generation_sessions SET status"):
+            assert params["session_id"] == store.session["session_id"]
+            store.session.update(
+                {key: value for key, value in params.items() if key != "session_id"}
+            )
+        elif normalized.startswith(
+            "UPDATE narrative_generation_sessions SET replaced_by_session_id"
+        ):
+            store.session["replaced_by_session_id"] = params[0]
+        elif not normalized.startswith("INSERT INTO narrative_generation_"):
+            raise AssertionError(f"Unexpected lease statement: {normalized}")
+
+    def fetchone(self):
+        return self.result
+
+
+@pytest.mark.parametrize("parent_bound", [True, False], ids=["bound", "unbound"])
+def test_expired_owner_is_judged_alike_by_resume_state_and_retry(parent_bound):
+    """A dead worker's session is advertised exactly when retry accepts it."""
+    store = ExpiredOwnerStore(parent_chunk_id=9 if parent_bound else None)
+    with store.cursor() as cur:
+        advertised = narrative_lease.read_retryable_failure(cur)
+    assert store.writes == []
+    assert store.session["status"] == "initiated"
+
+    try:
+        accepted = narrative_lease.acquire_generation_lease(
+            store,
+            session_id="retry-1",
+            operation="continue",
+            stale_timeout_seconds=60,
+            expected_failed_session_id="dead-worker",
+        )
+    except narrative_lease.GenerationRetryConflict:
+        accepted = None
+
+    if parent_bound:
+        assert advertised == narrative_lease.RetryableFailure(
+            "dead-worker",
+            9,
+            "Generation lease expired before completion.",
+            "GenerationLeaseExpired",
+        )
+        assert accepted == narrative_lease.GenerationRetryContext(9, "Recorded action")
+        # Acquisition recorded the outcome the read projected, then replaced it.
+        assert (store.session["error"], store.session["error_class"]) == (
+            advertised.error,
+            advertised.error_class,
+        )
+        assert store.session["replaced_by_session_id"] == "retry-1"
+        assert (store.commits, store.rollbacks) == (1, 0)
+    else:
+        assert advertised is None
+        assert accepted is None
+        assert (store.commits, store.rollbacks) == (0, 1)

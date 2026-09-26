@@ -277,6 +277,64 @@ def test_staging_failure_resumes_as_recovery_and_retries_once(recovery_db):
     assert snapshot(dbname)[0] == original
 
 
+def test_dead_worker_is_advertised_exactly_as_retry_accepts_it(recovery_db):
+    """A worker died after binding its action and its lease expired.
+
+    Resume state projects the expired owner as the error retry acquisition
+    records for it, without writing, and the retry route accepts that session.
+    """
+    dbname, parent, _ = recovery_db
+    dead = str(uuid.uuid4())
+    with connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM narrative_generation_sessions")
+        conn.commit()
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=dead,
+                operation="continue",
+                stale_timeout_seconds=600,
+            )
+            is None
+        )
+        narrative_lease.bind_generation_parent(
+            conn, session_id=dead, parent_chunk_id=parent
+        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE narrative_generation_lease "
+                "SET expires_at = clock_timestamp() - interval '1 second'"
+            )
+        conn.commit()
+
+    state = resume_state(dbname)
+    assert (state.choices, state.recorded_action) == ([], ACTION)
+    assert state.recovery == narrative_lease.RetryableFailure(
+        dead,
+        parent,
+        "Generation lease expired before completion.",
+        "GenerationLeaseExpired",
+    )
+    _, sessions, leases = snapshot(dbname)
+    assert [(str(row["session_id"]), row["status"]) for row in sessions] == [
+        (dead, "initiated")
+    ]
+    assert [str(row["session_id"]) for row in leases] == [dead]
+    with connect(dbname) as conn:
+        assert recover_orphaned_choice(conn) is None
+
+    response, tasks = retry(state.recovery.session_id)
+    assert tasks.tasks[0].args == (response.session_id, parent, ACTION, 4)
+    _, sessions, _ = snapshot(dbname)
+    reaped = next(row for row in sessions if str(row["session_id"]) == dead)
+    assert reaped["status"] == "error"
+    assert str(reaped["replaced_by_session_id"]) == response.session_id
+    with pytest.raises(HTTPException) as stale:
+        retry(dead)
+    assert stale.value.status_code == 409
+
+
 def test_restart_reopens_the_menu_when_no_retry_can_resume(recovery_db):
     """An unbound failure keeps the original orphan cleanup and live choices."""
     dbname, parent, failed = recovery_db

@@ -125,6 +125,7 @@ def _failed(**overrides: Any) -> Dict[str, Any]:
         "replaced_by_session_id": None,
         "error": STAGING_ERROR,
         "error_class": "WireContractViolation",
+        "owner_expired": False,
     } | overrides
 
 
@@ -204,6 +205,34 @@ def test_stale_or_ineligible_failure_is_not_offered_for_retry(
     assert state.recovery is None
     assert state.choices == []
     assert state.recorded_action == ACTION
+
+
+def test_dead_worker_after_binding_resumes_as_recovery() -> None:
+    """An owner whose lease expired after binding the action is retryable.
+
+    Acquisition would record it as expired before accepting its retry, so the
+    read projects that outcome instead of waiting for the active-status poll.
+    """
+    state = _get_narrative_state(
+        DurableSlotCursor(
+            chunk=_frontier(),
+            session=_failed(
+                status="initiated",
+                terminal_outcome=None,
+                error=None,
+                error_class=None,
+                owner_expired=True,
+            ),
+        )
+    )
+
+    assert state.choices == []
+    assert state.recovery == RetryableFailure(
+        session_id="a3ca073b-c2a0-45d2-b983-43e2c7770fb1",
+        parent_chunk_id=9,
+        error="Generation lease expired before completion.",
+        error_class="GenerationLeaseExpired",
+    )
 
 
 def test_cleared_action_reopens_the_menu_without_recovery() -> None:

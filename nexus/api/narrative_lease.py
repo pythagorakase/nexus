@@ -37,6 +37,19 @@ class GenerationRetryConflict(ValueError):
     """The reviewed failure no longer describes a safe retry frontier."""
 
 
+# An owner whose lease has expired is finished. Acquisition (before it
+# evaluates a retry) and the active-attempt read record it as this terminal
+# error; the unlocked retry read projects the same outcome without writing, so
+# resume state and the retry route judge that session by one rule.
+_OWNER_EXPIRED_SQL = "expires_at <= NOW()"
+_EXPIRED_OWNER_OUTCOME = {
+    "status": "error",
+    "terminal_outcome": "error",
+    "error_class": "GenerationLeaseExpired",
+    "error": "Generation lease expired before completion.",
+}
+
+
 @dataclass(frozen=True)
 class GenerationRetryContext:
     """The unchanged committed action captured while claiming the slot."""
@@ -82,15 +95,25 @@ def read_retryable_failure(cur: Any) -> Optional[RetryableFailure]:
 def _fenced_retry(
     cur: Any, expected_session_id: Optional[str], *, lock: bool
 ) -> tuple[dict[str, Any], GenerationRetryContext]:
-    """Evaluate the retry predicate; ``None`` accepts whichever attempt is latest."""
+    """Evaluate the retry predicate; ``None`` accepts whichever attempt is latest.
+
+    An owner whose lease expired counts as the error acquisition records for
+    it. Under acquisition that lease is already gone; an unlocked read sees
+    the expired lease and projects the same outcome without writing.
+    """
     lock_clause = " FOR UPDATE" if lock else ""
     cur.execute(
         "SELECT session_id, status, terminal_outcome, parent_chunk_id, "
-        "replaced_by_session_id, error, error_class "
-        "FROM narrative_generation_sessions "
+        "replaced_by_session_id, error, error_class, EXISTS ("
+        "SELECT 1 FROM narrative_generation_lease lease "
+        f"WHERE lease.session_id = gs.session_id AND lease.{_OWNER_EXPIRED_SQL}"
+        ") AS owner_expired "
+        "FROM narrative_generation_sessions gs "
         f"ORDER BY created_at DESC LIMIT 1{lock_clause}"
     )
     failed = cur.fetchone()
+    if failed is not None and failed["owner_expired"]:
+        failed = {**failed, **_EXPIRED_OWNER_OUTCOME}
     if (
         failed is None
         or (
@@ -149,8 +172,8 @@ def acquire_generation_lease(
                 """
             )
             cur.execute(
-                """
-                SELECT session_id, expires_at <= NOW() AS is_stale
+                f"""
+                SELECT session_id, {_OWNER_EXPIRED_SQL} AS is_stale
                 FROM narrative_generation_lease
                 WHERE id = TRUE
                 FOR UPDATE
@@ -169,13 +192,14 @@ def acquire_generation_lease(
                 cur.execute(
                     """
                     UPDATE narrative_generation_sessions
-                    SET status = 'error', terminal_outcome = 'error',
-                        error_class = 'GenerationLeaseExpired',
-                        error = 'Generation lease expired before completion.',
+                    SET status = %(status)s,
+                        terminal_outcome = %(terminal_outcome)s,
+                        error_class = %(error_class)s,
+                        error = %(error)s,
                         updated_at = NOW()
-                    WHERE session_id = %s
+                    WHERE session_id = %(session_id)s
                     """,
-                    (stale_session_id,),
+                    {**_EXPIRED_OWNER_OUTCOME, "session_id": stale_session_id},
                 )
 
             retry = (
@@ -576,11 +600,15 @@ def read_generation_session(
                 expired = cur.fetchone()
                 if expired:
                     cur.execute(
-                        "UPDATE narrative_generation_sessions SET status = 'error', "
-                        "terminal_outcome = 'error', error_class = 'GenerationLeaseExpired', "
-                        "error = 'Generation lease expired before completion.', updated_at = NOW() "
-                        "WHERE session_id = %s AND status = 'initiated'",
-                        (expired["session_id"],),
+                        "UPDATE narrative_generation_sessions SET status = %(status)s, "
+                        "terminal_outcome = %(terminal_outcome)s, "
+                        "error_class = %(error_class)s, error = %(error)s, "
+                        "updated_at = NOW() "
+                        "WHERE session_id = %(session_id)s AND status = 'initiated'",
+                        {
+                            **_EXPIRED_OWNER_OUTCOME,
+                            "session_id": expired["session_id"],
+                        },
                     )
             cur.execute(
                 "SELECT gs.*, lease.expires_at FROM narrative_generation_sessions gs "
