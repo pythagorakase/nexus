@@ -25,6 +25,7 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.api.choice_handling import extract_presented_choices
 from nexus.api.db_pool import get_connection
+from nexus.api.narrative_schemas import WeirdLevel
 from nexus.api.trait_compiler_schemas import canonical_trait_name
 from nexus.api.wizard_transcript import introduction_delivered
 
@@ -57,12 +58,17 @@ def _cache_connection(dbname: Optional[str], dict_cursor: bool = False):
 
 
 def _write_snapshot(cache: "WizardCache") -> Dict[str, Any]:
-    """Ignore conversation decoration but bind every persisted setup decision."""
+    """Ignore conversation decoration but bind every setup decision replies build on.
+
+    The strangeness selection is excluded too: no wizard reply reads it, so a
+    player who changes it while a reply is generated must not void that reply.
+    """
     snapshot = asdict(cache)
     snapshot.pop("updated_at")
     snapshot.pop("choices")
     snapshot.pop("choices_recorded")
     snapshot.pop("introduction_claim")
+    snapshot.pop("weird_level")
     return snapshot
 
 
@@ -339,6 +345,9 @@ class WizardCache:
     setting_confirmed: bool = False
     character_confirmed: bool = False
     character_revision_pending: bool = False
+    # Player-selected genesis strangeness (low/medium/high). None until the
+    # player chooses; the transition then uses the configured default level.
+    weird_level: Optional[WeirdLevel] = None
 
     def setting_complete(self) -> bool:
         """Check if setting phase is complete."""
@@ -702,6 +711,7 @@ def _row_to_cache(
         setting_confirmed=bool(row.get("setting_confirmed", False)),
         character_confirmed=bool(row.get("character_confirmed", False)),
         character_revision_pending=bool(row.get("character_revision_pending", False)),
+        weird_level=row.get("weird_level"),
         thread_id=row.get("thread_id"),
         target_slot=row.get("target_slot"),
         choices=extract_presented_choices(row.get("choice_object")),
@@ -858,6 +868,35 @@ def write_character_concept(
     logger.info(
         "Updated character concept in %s", dbname or os.environ.get("PGDATABASE")
     )
+
+
+def write_weird_level(dbname: str, level: WeirdLevel) -> None:
+    """Persist the player's genesis strangeness selection on the wizard cache.
+
+    Call inside ``guarded_wizard_write`` so the selection lands on the wizard
+    the caller read. The column's CHECK constraint rejects any level other
+    than low, medium, or high. Only ``clear_cache`` (a new wizard) clears it;
+    phase clears keep it.
+
+    Raises:
+        RuntimeError: If no wizard cache row was updated.
+    """
+    with _cache_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE assets.new_story_creator
+                SET weird_level = %s, updated_at = NOW()
+                WHERE id = TRUE
+                """,
+                (level,),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(
+                    f"No wizard cache row in {dbname} received the strangeness "
+                    f"selection {level!r}."
+                )
+    logger.info("Recorded genesis strangeness %s in %s", level, dbname)
 
 
 def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:

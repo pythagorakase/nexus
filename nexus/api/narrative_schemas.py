@@ -22,6 +22,10 @@ from nexus.api.choice_handling import ChoiceSelection
 from nexus.config import load_settings
 from nexus.config.settings_models import APINarrativeGenerationSettings
 
+# Player-facing genesis strangeness. Retrograde remaps each level onto the
+# story genre's configured band ([orrery.retrograde.weird.bands_by_genre]).
+WeirdLevel = Literal["low", "medium", "high"]
+
 
 # =============================================================================
 # Core Narrative Schemas
