@@ -504,8 +504,9 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
     except FileNotFoundError as exc:
         return {
             "success": False,
-            "error": f"{exc}. Pass --config with the path to nexus.toml, or set "
-            f"{HOME_ENV} or {RUNTIME_CONFIG_ENV} to an existing configuration.",
+            "error": f"{exc}. Pass --config with the path to nexus.toml, set "
+            f"{HOME_ENV} to a home containing nexus.toml, or set "
+            f"{RUNTIME_CONFIG_ENV} to an existing nexus.toml.",
         }
     except RuntimeHomeError as exc:
         return {"success": False, "error": str(exc)}

@@ -258,6 +258,15 @@ def _model_references(settings: Settings) -> List[Tuple[str, str]]:
     return references
 
 
+def _inside(path: Path, root: Path) -> bool:
+    """Whether ``path`` lies under the resolved ``root``.
+
+    The parent is resolved and the last component is not, so a symlinked
+    model directory counts as where the link lives, not where it points.
+    """
+    return (Path(os.path.realpath(path.parent)) / path.name).is_relative_to(root)
+
+
 def _target_root(target: Union[str, Path, None], active: HomeLocation) -> Path:
     """Resolve the target home: an explicit path, else NEXUS_HOME."""
     if target is not None:
@@ -276,15 +285,16 @@ def plan_home_move(
 
     The source is the checkout laid out with the active configuration; the
     target is the same configuration laid out at ``target`` (default:
-    ``NEXUS_HOME``). Relative configured directories follow the home;
-    absolute ones stay where they are and are reported ``in-place``.
-    ``checkout`` names the checkout to inventory (default: the one this
-    package runs from).
+    ``NEXUS_HOME``). Relative state and usage directories follow the home;
+    absolute ones stay where they are and are reported ``in-place``. A model
+    directory inside the checkout moves to ``<home>/models/<name>``; one
+    configured outside the checkout stays where it is. ``checkout`` names the
+    checkout to inventory (default: the one this package runs from).
 
     Raises:
-        HomePlanError: no target, a target that is or sits inside the
-            checkout, two model directories that would land on one path, or
-            a file that is not regular, a directory or a symlink.
+        HomePlanError: no target, a target that is, sits inside or contains
+            the checkout, two model directories that would land on one path,
+            or a file that is not regular, a directory or a symlink.
         RuntimeHomeError: the locators disagree (see nexus/runtime/home.py).
     """
     active = locate_runtime_home()
@@ -295,6 +305,11 @@ def plan_home_move(
         raise HomePlanError(
             f"Target home {target_root} is the checkout or inside it; a runtime "
             "home must live outside the checkout to separate them."
+        )
+    if checkout.is_relative_to(target_root):
+        raise HomePlanError(
+            f"Target home {target_root} contains the checkout {checkout}; a "
+            "runtime home must live beside the checkout to separate them."
         )
     if target_root.exists() and not target_root.is_dir():
         raise HomePlanError(f"Target home {target_root} exists and is not a directory.")
@@ -341,13 +356,19 @@ def plan_home_move(
         keys_by_path.setdefault(current, []).append((key, configured))
     landing: Dict[Path, Path] = {}
     for current in sorted(keys_by_path):
-        proposed_root = target_home.models_dir / current.name
-        if proposed_root in landing and landing[proposed_root] != current:
-            raise HomePlanError(
-                f"Models {landing[proposed_root]} and {current} would both move "
-                f"to {proposed_root}; give one of them a distinct directory name."
-            )
-        landing[proposed_root] = current
+        # A model outside the checkout (an external drive, a shared cache) is
+        # already separate from it and stays where it is configured.
+        if not _inside(current, checkout):
+            proposed_root = current
+        else:
+            proposed_root = target_home.models_dir / current.name
+            if proposed_root in landing:
+                raise HomePlanError(
+                    f"Models {landing[proposed_root]} and {current} would both "
+                    f"move to {proposed_root}; give one of them a distinct "
+                    "directory name."
+                )
+            landing[proposed_root] = current
         if current.exists() or current.is_symlink():
             for path in _tree(current):
                 if path in claimed:

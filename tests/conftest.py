@@ -17,6 +17,13 @@ if TYPE_CHECKING:
 if os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
     os.environ["NEXUS_TEST_PROVIDER_ONLY"] = "1"
 
+# Tests read the checkout's nexus.toml or a temporary one named by
+# NEXUS_RUNTIME_CONFIG. An owner's exported NEXUS_HOME would make the owner's
+# config active instead and refuse every temporary one as a second active
+# config (#820). Tests that exercise the home set it themselves.
+if "NEXUS_HOME" in os.environ:
+    del os.environ["NEXUS_HOME"]
+
 from nexus.telemetry import usage as usage_telemetry
 from nexus.util.secret_manager import InMemorySecretBackend, use_secret_backend
 from tests import secret_store_guard

@@ -440,9 +440,13 @@ def _point_models(models_source: Path) -> Callable[[Any], None]:
 
 
 def _fake_checkout(tmp_path: Path) -> Tuple[Path, Path, Path]:
-    """Lay out a real checkout-shaped tree with runtime data and models."""
+    """Lay out a real checkout-shaped tree with runtime data and models.
+
+    Model keys hold absolute paths into the checkout's models/ directory, as
+    the shipped nexus.toml does.
+    """
     checkout = tmp_path / "checkout"
-    models_source = tmp_path / "model-store"
+    models_source = checkout / "models"
     config = _write_config(
         checkout / "nexus.toml",
         state_dir=".nexus/runtime",
@@ -666,12 +670,15 @@ def test_home_plan_cli_is_read_only_and_deterministic(
     assert [path.exists() for path in checkout_layout] == layout_before
     plan = cast(Dict[str, Any], json.loads(outputs[0])["home_plan"])
     by_current = {entry["current"]: entry for entry in plan["entries"]}
+    # Absolute configured directories outside the checkout stay put: the
+    # model store as well as the state directory.
     weights = models_source / "bge-large-dir" / "weights.bin"
     assert by_current[str(weights)]["sha256"] == _sha256(weights)
-    assert by_current[str(weights)]["proposed"] == str(
-        target / "models" / "bge-large-dir" / "weights.bin"
-    )
-    # Absolute configured directories are outside any home and stay put.
+    assert (
+        by_current[str(weights)]["status"],
+        by_current[str(weights)]["proposed"],
+    ) == ("in-place", str(weights))
+    assert plan["rewrites"] == []
     captured = by_current[str(state / "gateway.log")]
     assert (captured["status"], captured["proposed"]) == (
         "in-place",
@@ -696,11 +703,11 @@ def test_home_plan_defaults_to_nexus_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """With NEXUS_HOME set the plan targets it; its own config stays in place."""
-    checkout, _, _ = _fake_checkout(tmp_path)
+    checkout, _, models_source = _fake_checkout(tmp_path)
     home_root = tmp_path / "home"
     config = _write_config(
         home_root / "nexus.toml",
-        edit=_point_models(tmp_path / "model-store"),
+        edit=_point_models(models_source),
     )
     monkeypatch.setenv(HOME_ENV, str(home_root))
 
@@ -717,7 +724,7 @@ def test_home_plan_defaults_to_nexus_home(
 def test_home_plan_refuses_ill_posed_targets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No target, the checkout itself, or a home inside it are refused."""
+    """No target, the checkout itself, or a home inside or around it."""
     checkout, config, _ = _fake_checkout(tmp_path)
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
 
@@ -727,6 +734,8 @@ def test_home_plan_refuses_ill_posed_targets(
         plan_home_move(checkout, checkout=checkout)
     with pytest.raises(HomePlanError, match="inside it"):
         plan_home_move(checkout / "home", checkout=checkout)
+    with pytest.raises(HomePlanError, match="contains the checkout"):
+        plan_home_move(tmp_path, checkout=checkout)
     occupied = _write(tmp_path / "a-file", b"not a directory")
     with pytest.raises(HomePlanError, match="not a directory"):
         plan_home_move(occupied, checkout=checkout)
@@ -741,7 +750,7 @@ def test_home_plan_refuses_two_models_landing_on_one_path(
     def edit(document: Any) -> None:
         _point_models(models_source)(document)
         document["memnon"]["models"]["e5-large"]["local_path"] = str(
-            tmp_path / "second-store" / "bge-large-dir"
+            checkout / "second-store" / "bge-large-dir"
         )
 
     config = _write_config(tmp_path / "collide" / "nexus.toml", edit=edit)
@@ -749,3 +758,43 @@ def test_home_plan_refuses_two_models_landing_on_one_path(
 
     with pytest.raises(HomePlanError, match="would both move"):
         plan_home_move(tmp_path / "target", checkout=checkout)
+
+
+def test_home_plan_leaves_models_outside_the_checkout_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A model on an external store is already separate and is not moved.
+
+    It keeps its key, and sharing a directory name with a checkout model that
+    moves is no collision.
+    """
+    checkout, _, models_source = _fake_checkout(tmp_path)
+    external = tmp_path / "external-drive" / "bge-large-dir"
+    weights = _write(external / "weights.bin", b"\x03" * 512)
+
+    def edit(document: Any) -> None:
+        _point_models(models_source)(document)
+        document["memnon"]["models"]["e5-large"]["local_path"] = str(external)
+
+    config = _write_config(tmp_path / "external" / "nexus.toml", edit=edit)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    target = tmp_path / "target"
+
+    plan = plan_home_move(target, checkout=checkout)
+
+    entries = {entry.current: entry for entry in plan.entries}
+    outside = entries[weights]
+    assert (outside.category, outside.status, outside.proposed) == (
+        "models",
+        "in-place",
+        weights,
+    )
+    assert outside.sha256 == _sha256(weights)
+    inside = entries[models_source / "bge-large-dir" / "weights.bin"]
+    assert (inside.status, inside.proposed) == (
+        "move",
+        target / "models" / "bge-large-dir" / "weights.bin",
+    )
+    rewrites = {rewrite.key for rewrite in plan.rewrites}
+    assert "memnon.models.e5-large.local_path" not in rewrites
+    assert "memnon.models.bge-large.local_path" in rewrites
