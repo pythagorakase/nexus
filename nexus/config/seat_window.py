@@ -19,9 +19,12 @@ class SeatWindow(BaseModel):
 
 
 def resolve_seat_window(
-    settings: Mapping[str, Any], model: str, *, seat: str, window: int
+    settings: Mapping[str, Any], model: str, *, seat: str, window: int | None
 ) -> SeatWindow:
-    """Apply a seat policy to an owner's prompt spend without double reserving."""
+    """Apply a seat policy to an owner's prompt spend without double reserving.
+
+    ``window=None`` resolves the model's maximum input for the seat.
+    """
     apex = settings["apex"]
     raw = apex["gaia"] if seat == "gaia" else apex
     policy = SeatWindowPolicy.model_validate(

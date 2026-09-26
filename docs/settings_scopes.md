@@ -71,12 +71,24 @@ configuration. The replay keeps the recorded token counts and recomputes only
 the ceiling through the same seat arithmetic the trimming pass and the final
 guard use; nothing is rendered, counted, priced, or sent to a provider. Each
 attempt holds its recorded prompt spend (ceiling plus policy headroom) unless
-`--window` replaces it, and `--model` replaces every attempt's model, keeping
-the counts measured with the recorded model's tokenizer. Unregistered models
-and allowances above a model's maximum fail exactly as they would at runtime.
+`--window` replaces it. The candidate's window keys
+(`lore.token_budget.apex_context_window` and its `provider_overrides`) are not
+applied: when the candidate's configured window for an attempt's model differs
+from the runtime config's, the replay stops with both values, and `--window`
+is how to replay the new spend. `--model` replaces every attempt's model,
+keeping the counts measured with the recorded model's tokenizer. Unregistered
+models and allowances above a model's maximum fail exactly as they would at
+runtime.
 
-Per attempt, the report gives the ceiling delta, the overflow above the new
-ceiling, the recent-narrative, historical-context, and recalled-scene tokens
-the trimming pass could drop, whether they cover the overflow (an upper
-bound, since the newest scene is never dropped), and the tokens freed below
-the new ceiling.
+Per attempt, the report gives the ceiling delta, whether the recorded spend
+was capped by the model's maximum input (a zero delta on a capped attempt can
+hide capacity the candidate frees; pass `--window` to see it), the overflow
+above the new ceiling, the recent-narrative, historical-context, and
+recalled-scene tokens the trimming pass could drop, whether they cover the
+overflow, and the tokens freed below the new ceiling. Feasibility is an upper
+bound: the trimmable counts include section headings and the newest scene,
+which is never dropped; the trimming pass drops memory from the writer and
+Gaia seats jointly while the replay judges each seat alone; and it ignores the
+registry's tokenizer safety margin (4,096 on the Anthropic, Kimi, and GLM
+entries), which the trimming pass reserves and the final guard also subtracts
+for the locally approximated Kimi and GLM counts.

@@ -40,6 +40,13 @@ _SHARED_START: tuple[BlockId, ...] = (
     "recalled scenes",
     "recent narrative",
 )
+# The memory lanes the trimming pass drops from, in this order of unpacking:
+# warm scenes, retrieved passages, and recalled scenes from either source.
+TRIMMABLE_BLOCKS: tuple[BlockId, BlockId, BlockId] = (
+    "recent narrative",
+    "historical context",
+    "recalled scenes",
+)
 _CARDS: tuple[BlockId, ...] = (
     "recent orrery rulings",
     "orrery imminent activity",

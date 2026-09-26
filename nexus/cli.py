@@ -3410,9 +3410,17 @@ def run_window_replay(args: argparse.Namespace) -> Dict[str, Any]:
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
     # load_settings validates the candidate TOML against the Pydantic models.
-    settings = load_settings(args.config).model_dump()
+    baseline = load_settings().model_dump()
+    settings = load_settings(args.config).model_dump() if args.config else baseline
     try:
-        rows = replay_run(args.run, day, settings, model=args.model, window=args.window)
+        rows = replay_run(
+            args.run,
+            day,
+            settings,
+            baseline=baseline,
+            model=args.model,
+            window=args.window,
+        )
     except NoPromptWindowsError as exc:
         return {"success": False, "error": str(exc)}
     return {
@@ -3435,6 +3443,7 @@ def _print_window_replay(replay: Dict[str, Any]) -> None:
         "INPUT",
         "CEILING",
         "CANDIDATE",
+        "CAPPED",
         "DELTA",
         "OVERFLOW",
         "TRIMMABLE",
@@ -3449,6 +3458,7 @@ def _print_window_replay(replay: Dict[str, Any]) -> None:
             row["recorded_input_tokens"],
             row["recorded_ceiling"],
             row["candidate_ceiling"],
+            "yes" if row["capped"] else "no",
             f"{row['headroom_delta']:+}",
             row["overflow_tokens"],
             row["trimmable_tokens"],
@@ -3743,7 +3753,7 @@ Examples:
   nexus up --foreground         Stay attached; Ctrl+C tears down
   nexus status                  Runtime health, processes, slot, version
   nexus usage --day 2026-07-29 Show exact API-reported UTC-day token usage
-  nexus window-replay --run SESSION --config candidate.toml
+  nexus window-replay --run SESSION --config candidate.toml  Replay prompt windows
   nexus jobs --slot 4           Show durable Retrograde maturation jobs
   nexus logs gateway -f         Follow the gateway log
   nexus down                    Stop the runtime
@@ -3868,8 +3878,8 @@ Examples:
     window_replay_parser.add_argument(
         "--config",
         help=(
-            "Candidate nexus.toml (default: NEXUS_RUNTIME_CONFIG, then the "
-            "repository's nexus.toml)"
+            "Candidate nexus.toml (default: the runtime config); its window "
+            "keys are not applied, so pass --window to replay a different spend"
         ),
     )
     window_replay_parser.add_argument(
@@ -3878,7 +3888,10 @@ Examples:
     window_replay_parser.add_argument(
         "--window",
         type=int,
-        help="Prompt spend replacing each recorded spend",
+        help=(
+            "Prompt spend replacing each recorded spend; candidate window keys "
+            "are not applied, so this is how to replay a different spend"
+        ),
     )
 
     jobs_parser = subparsers.add_parser(
