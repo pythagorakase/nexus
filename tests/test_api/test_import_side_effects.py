@@ -5,7 +5,9 @@ not construct an app, open a Postgres pool, or run schema validation, and
 building the gateway app must not open a pool either. Each test runs in a
 fresh subprocess pointed at an unreachable Postgres port, so any import-time
 connection attempt fails loudly (connection refused) instead of passing
-against a live local server.
+against a live local server. The redirect goes through the connection
+contract's own inputs: ``[api.database]`` in a temporary runtime config names
+the closed port, because a configured server outranks the PG* environment.
 """
 
 from __future__ import annotations
@@ -13,12 +15,17 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+import tomlkit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Point libpq at a port nothing listens on. Any import-time connection
-# attempt raises OperationalError immediately, failing the subprocess.
+# attempt raises OperationalError immediately, failing the subprocess. The
+# contract reads [api.database] first (see _unreachable_runtime_config); PG*
+# also names the port for any libpq use that bypasses the contract.
 _UNREACHABLE_DB_ENV = {
     "PGHOST": "127.0.0.1",
     "PGPORT": "1",
@@ -52,17 +59,30 @@ _FORBIDDEN_MEMNON_IMPORT_MODULES = {
 }
 
 
+def _unreachable_runtime_config(directory: Path) -> Path:
+    """Write a nexus.toml copy whose ``[api.database]`` names the closed port."""
+    document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    database = document["api"]["database"]
+    database["host"] = _UNREACHABLE_DB_ENV["PGHOST"]
+    database["port"] = int(_UNREACHABLE_DB_ENV["PGPORT"])
+    path = directory / "nexus.toml"
+    path.write_text(tomlkit.dumps(document))
+    return path
+
+
 def _run_fresh_import(code: str) -> "subprocess.CompletedProcess[str]":
-    env = {**os.environ, **_UNREACHABLE_DB_ENV}
-    env["PYTHONPATH"] = str(REPO_ROOT)
-    return subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        timeout=120,
-        env=env,
-        cwd=REPO_ROOT,
-    )
+    with tempfile.TemporaryDirectory(prefix="nexus-import-probe-") as directory:
+        env = {**os.environ, **_UNREACHABLE_DB_ENV}
+        env["NEXUS_RUNTIME_CONFIG"] = str(_unreachable_runtime_config(Path(directory)))
+        env["PYTHONPATH"] = str(REPO_ROOT)
+        return subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=env,
+            cwd=REPO_ROOT,
+        )
 
 
 def _assert_clean(result: "subprocess.CompletedProcess[str]") -> None:
@@ -185,7 +205,7 @@ def test_memnon_deferred_import_error_surfaces_at_first_use() -> None:
         "dependency = 'nexus.agents.memnon.utils.embedding_manager'\n"
         "sys.modules[dependency] = None\n"
         "try:\n"
-        "    module.MEMNON(interface=None, db_url='postgresql://unused')\n"
+        "    module.MEMNON(interface=None, db_url='postgresql://unused.invalid')\n"
         "except ModuleNotFoundError as exc:\n"
         "    assert exc.name == dependency, (exc.name, str(exc))\n"
         "else:\n"

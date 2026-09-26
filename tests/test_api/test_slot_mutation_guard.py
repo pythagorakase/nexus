@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import uuid
 from collections.abc import Iterator
@@ -14,6 +13,7 @@ from psycopg2 import sql
 
 from nexus.api import narrative, new_story_flow, slot_mutations, slot_utils
 from nexus.api.save_slots import is_slot_locked, lock_slot, unlock_slot
+from tests.pg_fixtures import connect
 
 
 BODY_MUTATIONS = [
@@ -87,17 +87,12 @@ def test_path_approval_rejects_missing_or_conflicting_slots() -> None:
 def protected_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Create a tiny isolated database; never change an existing save slot."""
     dbname = f"test_slot_guard_{uuid.uuid4().hex}"
-    connection_args = {
-        "user": os.environ.get("PGUSER", "pythagor"),
-        "host": os.environ.get("PGHOST", "localhost"),
-        "port": os.environ.get("PGPORT", "5432"),
-    }
-    admin = psycopg2.connect(dbname="postgres", **connection_args)
+    admin = connect("postgres")
     admin.autocommit = True
     with admin.cursor() as cur:
         cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
     try:
-        with psycopg2.connect(dbname=dbname, **connection_args) as conn:
+        with connect(dbname) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "CREATE TABLE incubator (id boolean PRIMARY KEY, session_id uuid)"
@@ -128,7 +123,7 @@ def protected_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         monkeypatch.setattr(
             narrative,
             "get_db_connection",
-            lambda _slot: psycopg2.connect(dbname=dbname, **connection_args),
+            lambda _slot: connect(dbname),
         )
         yield dbname
     finally:

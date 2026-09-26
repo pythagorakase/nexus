@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 from psycopg2.extras import RealDictCursor
 
@@ -24,7 +22,7 @@ from nexus.memory.correspondence import (
 )
 from nexus.memory.manager import empty_pass2_baseline
 from scripts.replay_state import _verify_correspondence_provenance
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -33,13 +31,7 @@ TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
 
 
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        cursor_factory=RealDictCursor if dict_cursor else None,
-    )
+    return connect(dbname, cursor_factory=RealDictCursor if dict_cursor else None)
 
 
 @pytest.fixture()

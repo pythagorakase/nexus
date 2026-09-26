@@ -5,18 +5,21 @@ from __future__ import annotations
 import asyncio
 from contextlib import closing
 import json
-import os
 from typing import Any, Iterator
 
 import asyncpg  # type: ignore[import-untyped]
-import psycopg2
 import pytest
 
 import nexus.config as config_module
 from nexus.api import commit_handler, commit_handler_sync, narrative_lease
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_protagonist,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -27,12 +30,7 @@ TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
 def _connect(dbname: str) -> Any:
     """Open a direct psycopg2 connection to a disposable database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()
@@ -224,12 +222,7 @@ async def test_async_commit_loads_application_config_once(
         recording_checkpoint,
     )
 
-    conn = await asyncpg.connect(
-        database=qa654_db,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = await asyncpg.connect(**asyncpg_kwargs(qa654_db))
     for type_name in ("json", "jsonb"):
         await conn.set_type_codec(
             type_name,

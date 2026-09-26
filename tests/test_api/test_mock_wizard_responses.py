@@ -1,7 +1,6 @@
 """Schema and routing coverage for TEST-mode Responses API wizard calls."""
 
 import json
-import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +27,7 @@ from nexus.api.new_story_schemas import (
 )
 from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.api.wizard_agent import WizardContext, get_wizard_agent
+from tests.pg_fixtures import connect
 
 FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "test_cache_wizard.json"
 
@@ -113,12 +113,7 @@ def _responses_tool(name: str, schema: type[BaseModel]) -> Dict[str, Any]:
 
 def _connect(dbname: str) -> Any:
     """Open a direct connection for disposable-database administration."""
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()
