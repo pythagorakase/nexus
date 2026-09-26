@@ -8,6 +8,26 @@ references. For each it reports the size, SHA-256, current path and the path
 the file would take in the target home, plus the nexus.toml keys a move would
 have to rewrite. It opens files for reading only and creates nothing; moving
 anything is a later #820 slice.
+
+The plan's contract:
+
+- Symlinks are reported with their target and never followed, in the checkout
+  or in the target. The active configuration is inventoried as the locator
+  rule selected it, so a symlinked ``nexus.toml`` is reported as the link.
+- Every entry is ``move``, ``conflict``, ``in-place`` or ``missing``. A move
+  conflicts when its destination exists, or when a path on the way to it
+  inside the target is a file or a symlink; ``conflict_with`` names the
+  blocking path.
+- Every inventoried path has one owner, so each rewritten key names a
+  directory that receives exactly that model's files. Model directories that
+  nest or name one directory (directly or through symlinks), a model
+  directory that is or contains the checkout or overlaps the active
+  configuration or a runtime directory, and two models that would share a
+  destination are refused before anything is checksummed.
+- A target that is, contains or sits inside the checkout, or that is or sits
+  beneath an existing non-directory, is refused.
+- The order is a pure function of the file tree, so two runs over one tree
+  print identical output.
 """
 
 from __future__ import annotations
@@ -32,6 +52,7 @@ from nexus.runtime.home import (
     build_runtime_home,
     locate_runtime_home,
     repo_root,
+    resolve_parent,
 )
 
 # Report order. Within one file tree the deepest directory claims a file
@@ -62,6 +83,7 @@ class PlanEntry:
     size: Optional[int]
     sha256: Optional[str]
     link_target: Optional[str]
+    conflict_with: Optional[Path]
 
     def as_dict(self) -> Dict[str, Union[str, int, None]]:
         """Return the entry with string paths for JSON output."""
@@ -74,6 +96,9 @@ class PlanEntry:
             "size": self.size,
             "sha256": self.sha256,
             "link_target": self.link_target,
+            "conflict_with": (
+                None if self.conflict_with is None else str(self.conflict_with)
+            ),
         }
 
 
@@ -148,6 +173,8 @@ class HomePlan:
                     else "(configured, not on disk)"
                 )
             )
+            if entry.conflict_with not in (None, entry.proposed):
+                detail += f"  (blocked by {entry.conflict_with})"
             lines.append(
                 f"{entry.status:<9} {entry.category:<{width}}  {entry.current} "
                 f"=> {entry.proposed}  {detail}"
@@ -178,27 +205,54 @@ def _checksum(path: Path) -> Tuple[int, str]:
     return size, digest.hexdigest()
 
 
-def _status(current: Path, proposed: Path) -> Status:
-    """Classify a move of ``current`` to ``proposed``."""
+def _blocker(proposed: Path, target_root: Path) -> Optional[Path]:
+    """Return the existing path that keeps ``proposed`` from being created.
+
+    Walks down from the target home without following links: the first path
+    on the way that exists and is not a directory (a file, or a symlink of
+    any kind) blocks the destination, and so does ``proposed`` itself if it
+    exists. Returns None when the destination is free.
+    """
+    path = target_root
+    for part in proposed.relative_to(target_root).parts[:-1]:
+        path = path / part
+        try:
+            mode = path.lstat().st_mode
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISDIR(mode):
+            return path
+    return proposed if os.path.lexists(proposed) else None
+
+
+def _status(
+    current: Path, proposed: Path, target_root: Path
+) -> Tuple[Status, Optional[Path]]:
+    """Classify a move of ``current`` to ``proposed`` and name any blocker."""
     if current == proposed:
-        return "in-place"
-    if proposed.exists() or proposed.is_symlink():
-        return "conflict"
-    return "move"
+        return "in-place", None
+    blocker = _blocker(proposed, target_root)
+    if blocker is None:
+        return "move", None
+    return "conflict", blocker
 
 
-def _entry(category: str, current: Path, proposed: Path) -> PlanEntry:
+def _entry(
+    category: str, current: Path, proposed: Path, target_root: Path
+) -> PlanEntry:
     """Describe one existing path: its checksum, or its link target."""
+    status, conflict_with = _status(current, proposed, target_root)
     if current.is_symlink():
         return PlanEntry(
             category=category,
-            status=_status(current, proposed),
+            status=status,
             kind="symlink",
             current=current,
             proposed=proposed,
             size=None,
             sha256=None,
             link_target=os.readlink(current),
+            conflict_with=conflict_with,
         )
     mode = current.stat().st_mode
     if not stat.S_ISREG(mode):
@@ -209,13 +263,14 @@ def _entry(category: str, current: Path, proposed: Path) -> PlanEntry:
     size, sha256 = _checksum(current)
     return PlanEntry(
         category=category,
-        status=_status(current, proposed),
+        status=status,
         kind="file",
         current=current,
         proposed=proposed,
         size=size,
         sha256=sha256,
         link_target=None,
+        conflict_with=conflict_with,
     )
 
 
@@ -264,7 +319,114 @@ def _inside(path: Path, root: Path) -> bool:
     The parent is resolved and the last component is not, so a symlinked
     model directory counts as where the link lives, not where it points.
     """
-    return (Path(os.path.realpath(path.parent)) / path.name).is_relative_to(root)
+    return resolve_parent(path).is_relative_to(root)
+
+
+def _aliases(path: Path) -> Tuple[Path, Path]:
+    """Return ``path`` as the inventory walks it and as it fully resolves."""
+    return resolve_parent(path), Path(os.path.realpath(path))
+
+
+def _overlap(first: Path, second: Path) -> bool:
+    """Whether two paths are one path or nest, directly or through symlinks."""
+    return any(
+        one.is_relative_to(other) or other.is_relative_to(one)
+        for one, other in zip(_aliases(first), _aliases(second))
+    )
+
+
+@dataclass(frozen=True)
+class _ModelRoot:
+    """One configured model path, the keys naming it, and its destination."""
+
+    current: Path
+    proposed: Path
+    keys: Tuple[Tuple[str, str], ...]
+
+    @property
+    def moves(self) -> bool:
+        """Whether the plan moves this model (it lies inside the checkout)."""
+        return self.proposed != self.current
+
+    def label(self) -> str:
+        """Name the model by its keys and configured path for errors."""
+        return f"{', '.join(key for key, _ in self.keys)} ({self.current})"
+
+
+def _plan_model_roots(
+    settings: Settings,
+    checkout: Path,
+    models_dir: Path,
+    owners: List[Tuple[str, Path]],
+) -> List[_ModelRoot]:
+    """Map each configured model path to its destination, one owner per path.
+
+    A model inside the checkout moves to ``<models_dir>/<name>``; one outside
+    it (an external drive, a shared cache) is already separate and stays.
+    ``owners`` are the active configuration and the runtime directories the
+    plan inventories under their own layout entries.
+
+    Raises:
+        HomePlanError: two model paths nest or name one directory, a model
+            path is or contains the checkout or overlaps an owner, or two
+            models would share a destination.
+    """
+    keys_by_path: Dict[Path, List[Tuple[str, str]]] = {}
+    for key, configured in _model_references(settings):
+        keys_by_path.setdefault(anchor_path(checkout, configured), []).append(
+            (key, configured)
+        )
+    roots = [
+        _ModelRoot(
+            current=current,
+            proposed=(
+                models_dir / current.name if _inside(current, checkout) else current
+            ),
+            keys=tuple(keys),
+        )
+        for current, keys in sorted(keys_by_path.items())
+    ]
+    for index, root in enumerate(roots):
+        if any(checkout.is_relative_to(alias) for alias in _aliases(root.current)):
+            raise HomePlanError(
+                f"Model path {root.label()} is or contains the checkout "
+                f"{checkout}; point it at a directory of its own."
+            )
+        for owner, path in owners:
+            if _overlap(root.current, path):
+                raise HomePlanError(
+                    f"Model path {root.label()} overlaps {owner} {path}; a "
+                    "path cannot be both a model and runtime data, because "
+                    "each moves under its own layout entry. Point the key at "
+                    "a directory of its own."
+                )
+        for other in roots[index + 1 :]:
+            if _overlap(root.current, other.current):
+                raise HomePlanError(
+                    f"Model paths {root.label()} and {other.label()} overlap: "
+                    "they name one directory or one holds the other, so a "
+                    "move would give their files one destination and their "
+                    "keys two. Point each key at a directory of its own."
+                )
+            if root.moves and other.moves and root.proposed == other.proposed:
+                raise HomePlanError(
+                    f"Models {root.current} and {other.current} would both "
+                    f"move to {root.proposed}; give one of them a distinct "
+                    "directory name."
+                )
+            for moving, staying in ((root, other), (other, root)):
+                if (
+                    moving.moves
+                    and not staying.moves
+                    and _overlap(moving.proposed, staying.current)
+                ):
+                    raise HomePlanError(
+                        f"Model {moving.label()} would move to "
+                        f"{moving.proposed}, which overlaps model "
+                        f"{staying.label()} that stays in place; give each "
+                        "model a directory of its own."
+                    )
+    return roots
 
 
 def _target_root(target: Union[str, Path, None], active: HomeLocation) -> Path:
@@ -276,6 +438,21 @@ def _target_root(target: Union[str, Path, None], active: HomeLocation) -> Path:
     raise HomePlanError(
         f"No target home: pass --to DIR or set {HOME_ENV} to the home to plan."
     )
+
+
+def _require_directory(target_root: Path) -> None:
+    """Refuse a target home that an existing non-directory blocks.
+
+    ``target_root`` is resolved, so its nearest existing path is not a link.
+    """
+    nearest = target_root
+    while not os.path.lexists(nearest):
+        nearest = nearest.parent
+    if not nearest.is_dir():
+        raise HomePlanError(
+            f"Target home {target_root} is blocked: {nearest} exists and is not "
+            "a directory."
+        )
 
 
 def plan_home_move(
@@ -292,9 +469,12 @@ def plan_home_move(
     checkout to inventory (default: the one this package runs from).
 
     Raises:
-        HomePlanError: no target, a target that is, sits inside or contains
-            the checkout, two model directories that would land on one path,
-            or a file that is not regular, a directory or a symlink.
+        HomePlanError: no target; a target that is, sits inside or contains
+            the checkout, or that an existing non-directory blocks; model
+            paths that overlap each other, the checkout, the active
+            configuration or a runtime directory, or that would share a
+            destination; or a file that is not regular, a directory or a
+            symlink.
         RuntimeHomeError: the locators disagree (see nexus/runtime/home.py).
     """
     active = locate_runtime_home()
@@ -311,23 +491,19 @@ def plan_home_move(
             f"Target home {target_root} contains the checkout {checkout}; a "
             "runtime home must live beside the checkout to separate them."
         )
-    if target_root.exists() and not target_root.is_dir():
-        raise HomePlanError(f"Target home {target_root} exists and is not a directory.")
+    _require_directory(target_root)
+    # The config entry is the path the locator selected, not its resolution:
+    # a symlinked nexus.toml is inventoried as the link.
+    source_config = active.selected_config_path
+    target_config = target_root / CONFIG_FILENAME
     source = build_runtime_home(
-        HomeLocation(checkout, active.config_path, "checkout"), settings
-    )
-    target_home = build_runtime_home(
-        HomeLocation(
-            target_root, (target_root / CONFIG_FILENAME).resolve(), "NEXUS_HOME"
-        ),
+        HomeLocation(checkout, active.config_path, "checkout", source_config),
         settings,
     )
-
-    claimed: Set[Path] = set()
-    entries: List[PlanEntry] = []
-
-    claimed.add(source.config_path)
-    entries.append(_entry("config", source.config_path, target_home.config_path))
+    target_home = build_runtime_home(
+        HomeLocation(target_root, target_config.resolve(), "NEXUS_HOME", target_config),
+        settings,
+    )
 
     roots = [
         ("usage", source.usage_dir, target_home.usage_dir),
@@ -341,63 +517,57 @@ def plan_home_move(
         ),
     ]
     roots.sort(key=lambda root: (-len(root[1].parts), CATEGORY_ORDER.index(root[0])))
+    owners = [("the active configuration", source_config)] + [
+        (f"the {category} directory", current_root)
+        for category, current_root, _ in roots
+    ]
+    # Every model path is checked before anything is checksummed.
+    model_roots = _plan_model_roots(settings, checkout, target_home.models_dir, owners)
+
+    claimed: Set[Path] = {source_config}
+    entries = [_entry("config", source_config, target_config, target_root)]
     for category, current_root, proposed_root in roots:
         for path in _tree(current_root):
             if path in claimed:
                 continue
             claimed.add(path)
             proposed = proposed_root / path.relative_to(current_root)
-            entries.append(_entry(category, path, proposed))
+            entries.append(_entry(category, path, proposed, target_root))
 
     rewrites: List[ConfigRewrite] = []
-    keys_by_path: Dict[Path, List[Tuple[str, str]]] = {}
-    for key, configured in _model_references(settings):
-        current = anchor_path(checkout, configured)
-        keys_by_path.setdefault(current, []).append((key, configured))
-    landing: Dict[Path, Path] = {}
-    for current in sorted(keys_by_path):
-        # A model outside the checkout (an external drive, a shared cache) is
-        # already separate from it and stays where it is configured.
-        if not _inside(current, checkout):
-            proposed_root = current
-        else:
-            proposed_root = target_home.models_dir / current.name
-            if proposed_root in landing:
-                raise HomePlanError(
-                    f"Models {landing[proposed_root]} and {current} would both "
-                    f"move to {proposed_root}; give one of them a distinct "
-                    "directory name."
-                )
-            landing[proposed_root] = current
-        if current.exists() or current.is_symlink():
-            for path in _tree(current):
-                if path in claimed:
-                    continue
-                claimed.add(path)
-                proposed = (
-                    proposed_root
-                    if path == current
-                    else proposed_root / path.relative_to(current)
-                )
-                entries.append(_entry(MODELS_CATEGORY, path, proposed))
-        else:
+    for model in model_roots:
+        if not (model.current.exists() or model.current.is_symlink()):
             # Nothing to move, so no key to rewrite; report the gap.
             entries.append(
                 PlanEntry(
                     category=MODELS_CATEGORY,
                     status="missing",
                     kind="missing",
-                    current=current,
-                    proposed=proposed_root,
+                    current=model.current,
+                    proposed=model.proposed,
                     size=None,
                     sha256=None,
                     link_target=None,
+                    conflict_with=None,
                 )
             )
             continue
-        for key, configured in keys_by_path[current]:
-            if anchor_path(target_home.root, configured) != proposed_root:
-                rewrites.append(ConfigRewrite(key, configured, str(proposed_root)))
+        for path in _tree(model.current):
+            if path in claimed:
+                raise HomePlanError(
+                    f"{path} lies under two inventoried paths; the overlap "
+                    "checks should have refused this configuration."
+                )
+            claimed.add(path)
+            proposed = (
+                model.proposed
+                if path == model.current
+                else model.proposed / path.relative_to(model.current)
+            )
+            entries.append(_entry(MODELS_CATEGORY, path, proposed, target_root))
+        for key, configured in model.keys:
+            if anchor_path(target_home.root, configured) != model.proposed:
+                rewrites.append(ConfigRewrite(key, configured, str(model.proposed)))
 
     order = CATEGORY_ORDER + (MODELS_CATEGORY,)
     entries.sort(key=lambda entry: (order.index(entry.category), str(entry.current)))

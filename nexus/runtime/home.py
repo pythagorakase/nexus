@@ -70,13 +70,30 @@ def anchor_path(root: Path, configured: Union[str, PurePath]) -> Path:
     return path if path.is_absolute() else root / path
 
 
+def resolve_parent(path: Path) -> Path:
+    """Return ``path`` made absolute with only its directory resolved.
+
+    Symlinks in the directory are resolved and the last component is kept, so
+    a symlinked file or directory names the link itself, not its target.
+    """
+    return Path(os.path.realpath(path.parent)) / path.name
+
+
 @dataclass(frozen=True)
 class HomeLocation:
-    """The home root and active configuration named by the locators."""
+    """The home root and active configuration named by the locators.
+
+    ``config_path`` is fully resolved: it is the file that is loaded and the
+    path two locators must agree on. ``selected_config_path`` is the same
+    configuration as the locator rule selected it (see :func:`resolve_parent`),
+    so a symlinked ``nexus.toml`` is the link; ``nexus home plan`` inventories
+    that path and never follows the link.
+    """
 
     root: Path
     config_path: Path
     locator: Locator
+    selected_config_path: Path
 
 
 def _environment_path(name: str) -> Optional[Path]:
@@ -85,6 +102,13 @@ def _environment_path(name: str) -> Optional[Path]:
     if raw is None or not raw.strip():
         return None
     return Path(raw).expanduser()
+
+
+def _checkout_location(
+    checkout: Path, selected: Path, locator: Locator
+) -> HomeLocation:
+    """Locate a configuration whose relative directories anchor in the checkout."""
+    return HomeLocation(checkout, selected.resolve(), locator, resolve_parent(selected))
 
 
 def locate_runtime_home(config_path: Union[str, Path, None] = None) -> HomeLocation:
@@ -105,14 +129,10 @@ def locate_runtime_home(config_path: Union[str, Path, None] = None) -> HomeLocat
     if home is None:
         checkout = repo_root()
         if explicit is not None:
-            return HomeLocation(checkout, explicit.resolve(), "explicit")
+            return _checkout_location(checkout, explicit, "explicit")
         if runtime_config is not None:
-            return HomeLocation(
-                checkout, runtime_config.resolve(), "NEXUS_RUNTIME_CONFIG"
-            )
-        return HomeLocation(
-            checkout, (checkout / CONFIG_FILENAME).resolve(), "checkout"
-        )
+            return _checkout_location(checkout, runtime_config, "NEXUS_RUNTIME_CONFIG")
+        return _checkout_location(checkout, checkout / CONFIG_FILENAME, "checkout")
 
     if not home.is_absolute():
         raise RuntimeHomeError(
@@ -132,7 +152,7 @@ def locate_runtime_home(config_path: Union[str, Path, None] = None) -> HomeLocat
                 f"configurations are not allowed: unset one locator or point "
                 f"it at {derived}."
             )
-    return HomeLocation(root, derived, "NEXUS_HOME")
+    return HomeLocation(root, derived, "NEXUS_HOME", root / CONFIG_FILENAME)
 
 
 def resolve_config_path(config_path: Union[str, Path, None] = None) -> Path:

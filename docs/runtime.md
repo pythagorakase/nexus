@@ -314,16 +314,33 @@ fail on the missing config. Once the home holds its config, the target
 defaults to `NEXUS_HOME`. For the active config, every file under the state,
 usage, cache, backup and upload directories, and every configured model
 directory, it prints a status, the current and proposed paths, and the size
-and SHA-256 (a symlink is reported with its target and not followed). `move`
-means the proposed path is free, `conflict` that it exists, `in-place` that
-the file stays where it is, and `missing` that a configured model is not on
-disk. A file is `in-place` when it is already where the target layout puts
-it, when its state or usage directory is configured as an absolute path, or
-when its model directory is outside the checkout (an external drive or a
-shared cache); a model directory inside the checkout moves to
+and SHA-256. A symlink is reported with its target and never followed, in
+the checkout or in the target; that includes a symlinked `nexus.toml`, which
+is reported as the link the locator selected, not as the file it points to.
+`move` means the proposed path is free, `conflict` that it is taken,
+`in-place` that the file stays where it is, and `missing` that a configured
+model is not on disk. A destination is taken when it exists or when a path
+on the way to it inside the target is a file or a symlink; the entry names
+that path (`conflict_with` in `--json`, "blocked by" in text). A file is
+`in-place` when it is already where the target layout puts it, when its
+state or usage directory is configured as an absolute path, or when its
+model directory is outside the checkout (an external drive or a shared
+cache); a model directory inside the checkout moves to
 `<home>/models/<name>`. It also lists the `nexus.toml` keys a move must
-rewrite. It refuses a target that is inside the checkout or contains it, and
-creates nothing. It reads every inventoried file in full to checksum it,
+rewrite, and every path has one owner so each rewritten key names a
+directory that receives exactly that model's files. It refuses, before
+checksumming anything:
+
+- a target that is the checkout, sits inside it, contains it, or is or sits
+  beneath an existing file;
+- two model paths that nest or name one directory, directly or through a
+  symlink;
+- a model path that is or contains the checkout, or that overlaps the active
+  config or a state, usage, cache, backup or upload directory;
+- two models that would land on one destination, including a moving model
+  whose destination overlaps a model that stays in place.
+
+It creates nothing. It reads every inventoried file in full to checksum it,
 model weights included, and prints nothing until it finishes, so on a large
 model store it runs for minutes. Moving files, re-anchoring uploads and
 static mounts, slot-namespacing assets (which rewrites asset path rows and

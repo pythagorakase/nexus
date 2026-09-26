@@ -798,3 +798,259 @@ def test_home_plan_leaves_models_outside_the_checkout_in_place(
     rewrites = {rewrite.key for rewrite in plan.rewrites}
     assert "memnon.models.e5-large.local_path" not in rewrites
     assert "memnon.models.bge-large.local_path" in rewrites
+
+
+@pytest.mark.parametrize(
+    "blocker_kind", ("file", "symlink-to-directory", "symlink-to-file")
+)
+def test_home_plan_reports_a_blocked_destination_ancestor_as_a_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, blocker_kind: str
+) -> None:
+    """A file or symlink on the way to a destination blocks it, unfollowed.
+
+    Every entry beneath the blocker is a conflict naming it, while
+    destinations elsewhere in the target stay free.
+    """
+    checkout, config, _ = _fake_checkout(tmp_path)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    target = tmp_path / "target-home"
+    blocker = target / ".nexus"
+    if blocker_kind == "file":
+        _write(blocker, b"not a directory")
+    else:
+        blocker.parent.mkdir(parents=True)
+        if blocker_kind == "symlink-to-directory":
+            elsewhere = tmp_path / "elsewhere"
+            (elsewhere / "runtime").mkdir(parents=True)
+            blocker.symlink_to(elsewhere, target_is_directory=True)
+        else:
+            blocker.symlink_to(_write(tmp_path / "loose-file", b"a file"))
+    occupied = _write(target / UPLOADS_DIR / "place_images" / "3" / "b.jpg", b"x")
+    before = _tree_snapshot(tmp_path)
+
+    plan = plan_home_move(target, checkout=checkout)
+
+    entries = {entry.current: entry for entry in plan.entries}
+    beneath = [entry for entry in plan.entries if blocker in entry.proposed.parents]
+    assert {entry.category for entry in beneath} == {"usage", "state", "cache"}
+    assert {entry.status for entry in beneath} == {"conflict"}
+    assert {entry.conflict_with for entry in beneath} == {blocker}
+    direct = entries[checkout / UPLOADS_DIR / "place_images" / "3" / "b.jpg"]
+    assert (direct.status, direct.conflict_with) == ("conflict", occupied)
+    free = entries[config]
+    assert (free.status, free.conflict_with) == ("move", None)
+    portrait = entries[checkout / UPLOADS_DIR / "character_portraits" / "7" / "a.png"]
+    assert portrait.status == "move"
+    gateway_log = entries[checkout / ".nexus" / "runtime" / "gateway.log"]
+    assert gateway_log.as_dict()["conflict_with"] == str(blocker)
+    rendered = plan.render()
+    assert any(
+        line.startswith("conflict") and line.endswith(f"(blocked by {blocker})")
+        for line in rendered
+    )
+    assert not any(f"(blocked by {occupied})" in line for line in rendered)
+    assert plan_home_move(target, checkout=checkout).as_dict() == plan.as_dict()
+    assert _tree_snapshot(tmp_path) == before
+
+
+@pytest.mark.parametrize("through", ("file", "symlink-to-file"))
+def test_home_plan_refuses_a_target_under_a_non_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, through: str
+) -> None:
+    """A home beneath a file can never be created, so the plan is refused."""
+    checkout, config, _ = _fake_checkout(tmp_path)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    loose = _write(tmp_path / "loose-file", b"a file")
+    parent = loose
+    if through == "symlink-to-file":
+        parent = tmp_path / "link-to-file"
+        parent.symlink_to(loose)
+
+    with pytest.raises(HomePlanError, match="is blocked") as raised:
+        plan_home_move(parent / "home", checkout=checkout)
+    assert f"{loose} exists and is not a directory" in str(raised.value)
+
+
+def _set_models(models_source: Path, paths: Dict[str, Path]) -> Callable[[Any], None]:
+    """Point the model keys at the fake store, then override named models."""
+
+    def edit(document: Any) -> None:
+        _point_models(models_source)(document)
+        for name, path in paths.items():
+            document["memnon"]["models"][name]["local_path"] = str(path)
+
+    return edit
+
+
+@pytest.mark.parametrize(
+    "layout", ("nested", "symlinked-parent", "symlinked-root", "external-alias")
+)
+def test_home_plan_refuses_overlapping_model_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str
+) -> None:
+    """Nested or aliased model paths would give one set of files two keys.
+
+    Before the refusal the parent claimed the child's files and the child's
+    key was still rewritten to a destination that received nothing.
+    """
+    checkout, _, models_source = _fake_checkout(tmp_path)
+    first = models_source / "parent"
+    _write(first / "sub" / "weights.bin", b"\x04" * 64)
+    _write(first / "config.json", b"{}")
+    if layout == "nested":
+        second = first / "sub"
+    elif layout == "symlinked-parent":
+        (models_source / "alias").symlink_to(first, target_is_directory=True)
+        second = models_source / "alias" / "sub"
+    elif layout == "symlinked-root":
+        second = models_source / "alias"
+        second.symlink_to(first, target_is_directory=True)
+    else:
+        store = tmp_path / "external" / "store"
+        first = store / "shared"
+        _write(first / "weights.bin", b"\x05" * 64)
+        (tmp_path / "external" / "link").symlink_to(store, target_is_directory=True)
+        second = tmp_path / "external" / "link" / "shared"
+    config = _write_config(
+        tmp_path / "overlap" / "nexus.toml",
+        edit=_set_models(models_source, {"bge-large": first, "e5-large": second}),
+    )
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    with pytest.raises(HomePlanError, match="overlap") as raised:
+        plan_home_move(tmp_path / "target", checkout=checkout)
+    message = str(raised.value)
+    for named in (
+        "memnon.models.bge-large.local_path",
+        "memnon.models.e5-large.local_path",
+        str(first),
+        str(second),
+    ):
+        assert named in message
+
+
+@pytest.mark.parametrize("model_path", ("checkout", "ancestor"))
+def test_home_plan_refuses_a_model_path_that_is_or_contains_the_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model_path: str
+) -> None:
+    """The checkout holds code and runtime data; it is never a model."""
+    checkout, _, models_source = _fake_checkout(tmp_path)
+    named = checkout if model_path == "checkout" else tmp_path
+    config = _write_config(
+        tmp_path / "wide" / "nexus.toml",
+        edit=_set_models(models_source, {"e5-large": named}),
+    )
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    with pytest.raises(HomePlanError, match="is or contains the checkout") as raised:
+        plan_home_move(tmp_path / "target", checkout=checkout)
+    assert f"memnon.models.e5-large.local_path ({named})" in str(raised.value)
+
+
+@pytest.mark.parametrize("layout", ("inside-state", "holds-state", "holds-config"))
+def test_home_plan_refuses_a_model_path_overlapping_runtime_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str
+) -> None:
+    """A path is a model or runtime data, never both.
+
+    A model inside the state directory used to have its files claimed (and
+    moved) as state while its key was rewritten to an empty models path.
+    """
+    checkout, _, models_source = _fake_checkout(tmp_path)
+    state = checkout / ".nexus" / "runtime"
+    config_dir = tmp_path / "config-dir"
+    if layout == "inside-state":
+        named = state / "models" / "tiny"
+        _write(named / "weights.bin", b"\x06" * 32)
+        owner = f"the state directory {state}"
+    elif layout == "holds-state":
+        named = checkout / ".nexus"
+        owner = f"the usage directory {state / 'usage'}"
+    else:
+        named = config_dir
+        owner = f"the active configuration {config_dir / 'nexus.toml'}"
+    config = _write_config(
+        config_dir / "nexus.toml",
+        state_dir=".nexus/runtime",
+        usage_dir=".nexus/runtime/usage",
+        edit=_set_models(models_source, {"e5-large": named}),
+    )
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    with pytest.raises(HomePlanError, match="overlaps the") as raised:
+        plan_home_move(tmp_path / "target", checkout=checkout)
+    message = str(raised.value)
+    assert f"memnon.models.e5-large.local_path ({named}) overlaps {owner}" in message
+
+
+def test_home_plan_refuses_a_model_moving_onto_one_that_stays(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A moving model may not land in a model directory that stays in place."""
+    checkout, _, models_source = _fake_checkout(tmp_path)
+    target = tmp_path / "target"
+    staying = target / "models" / "bge-large-dir"
+    _write(staying / "weights.bin", b"\x07" * 16)
+    config = _write_config(
+        tmp_path / "landing" / "nexus.toml",
+        edit=_set_models(models_source, {"e5-large": staying}),
+    )
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    with pytest.raises(HomePlanError, match="stays in place") as raised:
+        plan_home_move(target, checkout=checkout)
+    message = str(raised.value)
+    moving = models_source / "bge-large-dir"
+    assert f"memnon.models.bge-large.local_path ({moving})" in message
+    assert f"would move to {staying}" in message
+    assert f"memnon.models.e5-large.local_path ({staying})" in message
+
+
+@pytest.mark.parametrize("locator", ("NEXUS_RUNTIME_CONFIG", "NEXUS_HOME"))
+def test_home_plan_reports_a_symlinked_active_config_as_the_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, locator: str
+) -> None:
+    """The config entry is the link the locator selected, never its target.
+
+    Locator agreement and loading still use the resolved file.
+    """
+    checkout, checkout_config, models_source = _fake_checkout(tmp_path)
+    real = _write_config(
+        tmp_path / "configs" / "real.toml", edit=_point_models(models_source)
+    )
+    if locator == "NEXUS_RUNTIME_CONFIG":
+        checkout_config.unlink()
+        link = checkout_config
+        link.symlink_to(real)
+        monkeypatch.chdir(checkout)
+        monkeypatch.setenv(RUNTIME_CONFIG_ENV, "nexus.toml")
+        target = tmp_path / "target"
+        expected = ("move", target / "nexus.toml")
+    else:
+        target = tmp_path / "home"
+        target.mkdir()
+        link = target / "nexus.toml"
+        link.symlink_to(real)
+        monkeypatch.setenv(HOME_ENV, str(target))
+        expected = ("in-place", link)
+
+    plan = plan_home_move(target, checkout=checkout)
+
+    config_entry = plan.entries[0]
+    assert config_entry.category == "config"
+    assert config_entry.current == link
+    assert (config_entry.kind, config_entry.link_target) == ("symlink", str(real))
+    assert (config_entry.status, config_entry.proposed) == expected
+    assert (config_entry.size, config_entry.sha256) == (None, None)
+    assert real not in {entry.current for entry in plan.entries}
+    assert plan.source.config_path == real.resolve()
+    location = locate_runtime_home()
+    assert location.config_path == real.resolve()
+    assert location.selected_config_path == link
+
+
+def test_selected_config_path_is_the_config_in_developer_mode() -> None:
+    """Without symlinks the selected path is the resolved checkout config."""
+    location = locate_runtime_home()
+
+    assert location.selected_config_path == location.config_path == REPO_CONFIG
