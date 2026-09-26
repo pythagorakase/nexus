@@ -3771,15 +3771,21 @@ def _print_window_replay(replay: Dict[str, Any]) -> None:
 
 
 def run_inspect_turn(args: argparse.Namespace) -> Dict[str, Any]:
-    """Inspect durable turn references through a read-only connection."""
+    """Inspect durable turn references and derive the turn's joined observation."""
     from contextlib import closing
     from nexus.api.slot_utils import get_slot_db_url
     from nexus.telemetry.attempt_manifest import inspect_turn
+    from nexus.telemetry.turn_observation import observe_turn
     import psycopg2
 
     with closing(psycopg2.connect(get_slot_db_url(slot=args.slot))) as conn:
         result = inspect_turn(conn, session=args.session, chunk=args.chunk)
-    return {"success": True, "slot": args.slot, "turn_inspection": result}
+    return {
+        "success": True,
+        "slot": args.slot,
+        "turn_inspection": result,
+        "observation": observe_turn(result),
+    }
 
 
 def run_prune_manifests(args: argparse.Namespace) -> Dict[str, Any]:
@@ -4227,6 +4233,11 @@ Examples:
     identity = inspect_parser.add_mutually_exclusive_group(required=True)
     identity.add_argument("--session", type=str)
     identity.add_argument("--chunk", type=int)
+    inspect_parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print the concise joined turn observation instead of the tables",
+    )
     prune_parser = subparsers.add_parser(
         "prune-manifests", help="Explicitly prune expired terminal attempt manifests"
     )
@@ -4886,6 +4897,11 @@ def main() -> int:
         except NoGenerationSessionError as exc:
             print(str(exc))
             return 1
+        if args.summary and not args.json:
+            from nexus.telemetry.turn_observation import format_turn_summary
+
+            print(format_turn_summary(result["observation"]))
+            return 0
     elif args.command == "prune-manifests":
         result = run_prune_manifests(args)
     elif args.command == "jobs":

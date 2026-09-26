@@ -302,6 +302,53 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                 monkeypatch, "inspect-turn", "--slot", "4", "--session", session
             )
             assert "[TEST MODE]" not in text
+            # The joined observation reads this turn's real usage ledger (#802).
+            observed = json.loads(
+                run_cli(
+                    monkeypatch,
+                    "inspect-turn",
+                    "--slot",
+                    "4",
+                    "--session",
+                    session,
+                    "--json",
+                )
+            )["observation"]
+            assert observed["schema_version"] == 1
+            assert observed["generation_session"] == session
+            assert observed["ledger_days_read"]
+            joined = {
+                (row["seat"], row["attempt"]): row for row in observed["attempts"]
+            }
+            for seat in ("skald_writer", "gaia"):
+                attempt = joined[(seat, 1)]
+                window, usage = attempt["window"], attempt["usage"]
+                assert attempt["model"] == "TEST"
+                assert attempt["provider_outcome"] == "accepted"
+                assert window["provenance"] == "attempt_manifest"
+                assert window["block_tokens_total"] == window["input_tokens"]
+                assert sum(window["influence_tokens"].values()) == (
+                    window["input_tokens"]
+                )
+                # The TEST Responses mock reports exact counts and no cache details.
+                assert usage["provenance"] == "provider_usage_ledger"
+                assert (usage["input_tokens"], usage["output_tokens"]) == (1000, 800)
+                assert usage["cached_input_tokens"] == "unknown"
+            assert observed["phases"][-1]["phase"] == "complete"
+            assert observed["wall_time"]["seconds"] > 0
+            assert observed["jobs"]["total"] == len(result["jobs"])
+            summary = run_cli(
+                monkeypatch,
+                "inspect-turn",
+                "--slot",
+                "4",
+                "--session",
+                session,
+                "--summary",
+            )
+            assert summary.startswith(f"Turn {session} (")
+            assert "skald_writer #1 TEST" in summary
+            assert "Session\tPhase" not in summary
             if acceptance == "sync":
                 chunk_output = run_cli(
                     monkeypatch,

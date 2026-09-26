@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import pytest
 
+from nexus import cli
 from nexus.agents.lore.seat_blocks import influence_role, influence_token_totals
 from nexus.telemetry.attempt_manifest import identity_hash, validation_metadata
 from nexus.telemetry.prompt_window import PromptWindowRecord
@@ -618,3 +619,12 @@ def test_summary_renders_one_concise_read_of_the_turn() -> None:
         "Jobs 4 · correspondence_compaction queued 1 · "
         "experience_render queued 1, succeeded 2"
     )
+
+
+def test_inspect_turn_accepts_the_summary_flag() -> None:
+    """The concise read is an explicit inspect-turn option, off by default."""
+    parser = cli.build_parser()
+    base = ["inspect-turn", "--slot", "4", "--session", str(uuid4())]
+
+    assert parser.parse_args(base).summary is False
+    assert parser.parse_args([*base, "--summary"]).summary is True
