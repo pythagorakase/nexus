@@ -319,6 +319,30 @@ hosts. Consequences for deployment:
   are `CLOUDFLARE_ACCESS_CLIENT_ID_API_KEY` and
   `CLOUDFLARE_ACCESS_CLIENT_SECRET_API_KEY`.
 
+### Required Keys and Headless Hosts
+
+`GET /api/secrets/status` adds `required` and `required_by` (`seat`, `model`)
+to each masked row. Skald, World State, the wizard, and the experience,
+correspondence, entity-maturation, and summary seats resolve from `nexus.toml`
+and the player's wizard preference, without story pins; a seat that fails to
+resolve fails the request. Offline judgment, the display-only
+`global.model.default_model`, and keyless providers never require a key. The
+API KEYS card lists required keys first, marks a missing one with the warning
+state, and dims the rest. Verification remains an explicit click that is never
+stored and is cleared when the key is replaced.
+
+A host without a browser uses the same card through an SSH tunnel to its
+loopback gateway (port 8002 by default), not another entry path:
+
+```
+ssh -N -L 8002:127.0.0.1:8002 <user>@<host>
+```
+
+Open `http://127.0.0.1:8002` locally and commit each key in Settings → API
+Keys. The gateway keeps its `127.0.0.1` bind, the key crosses only the SSH
+session to `PUT /api/secrets/{provider}`, and it lands in the host's platform
+store, never on a command line or in a file on the host.
+
 ## Development Workflows (unchanged)
 
 - `npm --prefix ui run dev` — Vite dev server with HMR on :5001, proxying
