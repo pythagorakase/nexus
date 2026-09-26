@@ -68,12 +68,8 @@ from scripts.api_openai import (
     setup_abort_handler,
 )
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("summarize_narrative.log"), logging.StreamHandler()],
-)
+# The gateway's summary job imports this module, so logging is configured only
+# by the CLI entry point below (the gateway's comes from [runtime.logs]).
 logger = logging.getLogger("nexus.summarize_narrative")
 
 
@@ -2184,6 +2180,14 @@ class SummaryGenerator:
 
 def main():
     """Main entry point."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler("summarize_narrative.log"),
+            logging.StreamHandler(),
+        ],
+    )
     # Set up command line argument parser
     parser = argparse.ArgumentParser(
         description="Generate comprehensive narrative summaries",

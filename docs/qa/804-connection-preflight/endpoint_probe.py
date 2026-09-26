@@ -54,7 +54,8 @@ def main() -> None:
     mode = sys.argv[1]
     if mode == "prepare":
         source = (ROOT / "nexus.toml").read_text()
-        original = 'command = ["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}"]'
+        original = 'command = ["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}", "--log-config", "{log_config}"]'
+        assert original in source, "nexus.toml gateway command changed"
         source = source.replace(
             original,
             'command = ["{python}", "docs/qa/804-connection-preflight/endpoint_probe.py", "gateway"]',

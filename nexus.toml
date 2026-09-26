@@ -1341,19 +1341,32 @@ stop_grace_seconds = 10.0        # terminate -> kill escalation on nexus down
 port_release_timeout_seconds = 5.0 # swap waits this long for the old llama-server's socket
 
 [runtime.logs]
+# The supervisor is the single log-file and rotation owner: it captures each
+# service's stdout+stderr in <state_dir>/<service>.log and rotates at spawn.
 tail_lines = 100          # default for `nexus logs`
 follow_poll_seconds = 0.5 # poll interval for `nexus logs -f`
+max_tail_bytes = 262144   # most log text one `nexus logs` tail reads, across segments
+# Gates root, uvicorn and uvicorn.error in services whose argv uses {log_config};
+# uvicorn.access stays at INFO, where uvicorn logs every response.
+level = "INFO"            # DEBUG | INFO | WARNING | ERROR | CRITICAL
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+max_bytes = 10485760      # rotate <service>.log at the next spawn once this large
+backup_count = 5          # keep <service>.log.1 .. .5; `nexus logs -n` reads across them
+# Successful (<400) access records for these exact paths are dropped; every
+# 4xx/5xx is kept. Query strings are ignored when matching.
+access_success_exclude_paths = ["/health", "/runtime/status"]
 
 [runtime.services.gateway]
 # argv template — {python} is the current interpreter; no shell in the path
-command = ["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}"]
+# {log_config} is the dictConfig JSON the supervisor writes from [runtime.logs].
+command = ["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}", "--log-config", "{log_config}"]
 host = "127.0.0.1"
 port = 8002 # the desktop shell's runtimeOrigin pins this; agent/test shells export NEXUS_GATEWAY_PORT for an isolated-state instance on another port
 health_path = "/health"
 autorestart = "on-failure"  # honored by the foreground supervisor only
 
 [runtime.services.mock_openai]
-command = ["{python}", "-m", "uvicorn", "nexus.api.mock_openai:app", "--host", "{host}", "--port", "{port}"]
+command = ["{python}", "-m", "uvicorn", "nexus.api.mock_openai:app", "--host", "{host}", "--port", "{port}", "--log-config", "{log_config}"]
 host = "127.0.0.1"
 port = 5102  # must match [global.model.api_models.test] base_url (validated)
 health_path = "/health"

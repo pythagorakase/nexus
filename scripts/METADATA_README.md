@@ -132,7 +132,7 @@ On a typical system:
 ## Troubleshooting
 
 If you encounter issues:
-- Check the `metadata_processing.log` file for detailed error messages
+- Check the console log output for detailed error messages
 - Use `--save-prompt` to inspect the prompt structure
 - Try processing a smaller batch first
 - Ensure your API key has sufficient quota
