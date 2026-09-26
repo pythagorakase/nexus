@@ -158,7 +158,10 @@ Tests marked `requires_postgres`, `requires_corpus`, `live`, `live_llm`, and
 `requires_secret_store` skip unless their flag is set, so the default sweep
 runs fast with no services required. `requires_corpus` probes check the
 owner's golden-master content on disposable data clones of it; they are
-intentional exclusions from the PostgreSQL gate.
+intentional exclusions from the PostgreSQL gate. The shared fixtures in
+`tests/pg_fixtures.py` resolve the server exactly as the runtime does:
+`[api.database]` in `nexus.toml`, then the `PG*` environment, then libpq's
+local socket as the operating-system user.
 Formatting and linting: `poetry run black .`, `poetry run flake8`,
 `poetry run mypy .`.
 

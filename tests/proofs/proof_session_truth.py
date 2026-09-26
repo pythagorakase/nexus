@@ -14,8 +14,9 @@ import tomlkit
 import uvicorn
 
 from nexus.api import narrative, slot_endpoints
+from nexus.database import database_url
 from nexus.telemetry import usage
-from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
+from tests.pg_fixtures import connect, disposable_slot_database
 from tests.scheduler_helpers import (
     route_slot,
     run_cli,
@@ -75,7 +76,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 assert command[index + 1] == dbname
                 command[index : index + 2] = [
                     "--db-url",
-                    sqlalchemy_url(dbname).render_as_string(hide_password=False),
+                    database_url(dbname),
                 ]
             return real_run(command, *args, **kwargs)
 

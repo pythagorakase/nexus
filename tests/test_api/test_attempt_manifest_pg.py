@@ -185,7 +185,7 @@ def test_manifest_real_test_turn_and_child_job_correlation(
     ) as dbname:
         route_slot(monkeypatch, dbname)
         import subprocess
-        from tests.pg_fixtures import sqlalchemy_url
+        from nexus.database import database_url
 
         real_run = subprocess.run
 
@@ -199,7 +199,7 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                 assert command[index + 1] == dbname
                 command[index : index + 2] = [
                     "--db-url",
-                    sqlalchemy_url(dbname).render_as_string(hide_password=False),
+                    database_url(dbname),
                 ]
             return real_run(command, *args, **kwargs)
 
