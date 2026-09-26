@@ -1,11 +1,11 @@
 """Regression tests for side-effect-free API imports (issue #369).
 
 Importing ``nexus.api`` helper/schema modules — or the Orrery worker — must
-not construct an app, instantiate ChunkWorkflow, open a Postgres pool, or run
-schema validation, and building the gateway app must not open a pool either.
-Each test runs in a fresh subprocess pointed at an unreachable Postgres port,
-so any import-time connection attempt fails loudly (connection refused)
-instead of passing against a live local server.
+not construct an app, open a Postgres pool, or run schema validation, and
+building the gateway app must not open a pool either. Each test runs in a
+fresh subprocess pointed at an unreachable Postgres port, so any import-time
+connection attempt fails loudly (connection refused) instead of passing
+against a live local server.
 """
 
 from __future__ import annotations
@@ -79,7 +79,6 @@ def test_api_helper_imports_do_not_touch_postgres() -> None:
         "import nexus.api\n"
         "import nexus.api.choice_handling\n"
         "import nexus.api.new_story_schemas\n"
-        "import nexus.api.chunk_workflow\n"
         "from nexus.api import db_pool\n"
         "assert db_pool._pools == {}, db_pool._pools\n"
         "print('OK')\n"

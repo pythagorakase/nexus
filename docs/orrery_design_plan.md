@@ -616,9 +616,6 @@ Model IDs and their component `uses` live in `[global.model.api_models]`. Runtim
 - `nexus/api/commit_handler_sync.py:354` — where the new chunk id is created
 - `nexus/api/commit_handler.py:320` — async parity (test-only)
 
-**Not on the commit path**
-- `nexus/api/chunk_workflow.py` — narrative-chunk state machine (DRAFT / PENDING_REVIEW / FINALIZED / EMBEDDED); downstream embedding only. Do not hook Orrery here.
-
 **MEMNON**
 - `nexus/agents/memnon/memnon.py:1486` — `get_recent_chunks` (warm slice; `narrative_chunks`-only)
 - `nexus/agents/memnon/memnon.py::query_memory` and `SearchManager` — warm-slice retrieval must remain disjoint from `offscreen_narrations`

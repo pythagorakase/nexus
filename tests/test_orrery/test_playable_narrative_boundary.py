@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from contextlib import closing
+import json
 from typing import Any
+from uuid import uuid4
 
 from tests.pg_fixtures import connect, disposable_slot_database
 
@@ -15,8 +17,11 @@ from nexus.agents.orrery.reconstruction import (
     playable_narrative_predicate,
 )
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
-from nexus.api import chunk_workflow, slot_utils
-from nexus.api.chunk_workflow import ChunkState, ChunkWorkflow
+from nexus.api.narrative_lease import (
+    acquire_generation_lease,
+    bind_generation_parent,
+    claim_parent_embedding,
+)
 from nexus.api.orrery_dev_endpoints import _default_anchor_chunk_id
 
 
@@ -67,39 +72,55 @@ def test_playable_predicate_rejects_an_unsafe_alias() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_legacy_accept_embeds_the_previous_playable_chunk(monkeypatch) -> None:
-    """Real acceptance queues predecessor 7, excluding the synthetic row at 8."""
-    with disposable_slot_database(
-        "qa640_800b_boundary", source_db="save_04", include_data=True
-    ) as dbname:
-        monkeypatch.setattr(chunk_workflow, "VALID_DATABASES", {dbname})
-        monkeypatch.setattr(slot_utils, "VALID_DBNAMES", {dbname})
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute("DELETE FROM narrative_embedding_jobs")
-            cur.execute(
-                "SELECT authorial_directives FROM narrative_chunks "
-                "WHERE authorial_directives @> %s::jsonb LIMIT 1",
-                ('["' + RETROGRADE_PROLOGUE_MARKER + '"]',),
-            )
-            prologue_directives = cur.fetchone()[0]
-            import json
+def test_parent_claim_embeds_only_older_unembedded_playable_chunks() -> None:
+    """The gateway's parent claim skips the prologue and ironman-stamped rows.
 
-            cur.execute(
-                "UPDATE narrative_chunks SET authorial_directives=%s::jsonb WHERE id=8",
-                (json.dumps(prologue_directives),),
+    A continue from ``parent`` claims its embedding trigger through
+    ``claim_parent_embedding``, the call ``narrative._bind_generation_owner``
+    makes. Of the rows older than the parent, only the playable one whose
+    ``embedding_generated_at`` is null is queued: not the embedded row, not
+    Retrograde's synthetic prologue, and not the parent itself.
+    """
+    with disposable_slot_database("qa640_807_boundary") as dbname:
+        with closing(connect(dbname)) as conn:
+            ids: dict[str, int] = {}
+            with conn, conn.cursor() as cur:
+                for name, directives, embedded in (
+                    ("embedded", [], True),
+                    ("playable", [], False),
+                    ("prologue", [RETROGRADE_PROLOGUE_MARKER], False),
+                    ("parent", [], False),
+                ):
+                    cur.execute(
+                        "INSERT INTO narrative_chunks (raw_text, "
+                        "authorial_directives, embedding_generated_at) "
+                        "VALUES (%s, %s::jsonb, "
+                        "CASE WHEN %s THEN now() END) RETURNING id",
+                        (f"Boundary {name} chunk.", json.dumps(directives), embedded),
+                    )
+                    ids[name] = cur.fetchone()[0]
+            session = str(uuid4())
+            assert (
+                acquire_generation_lease(
+                    conn,
+                    session_id=session,
+                    operation="continue",
+                    stale_timeout_seconds=60,
+                )
+                is None
             )
-            cur.execute(
-                "UPDATE narrative_chunks SET authorial_directives='[]', "
-                "embedding_generated_at=NULL, state='finalized' WHERE id=7"
+            bind_generation_parent(
+                conn, session_id=session, parent_chunk_id=ids["parent"]
             )
-            cur.execute("UPDATE narrative_chunks SET state='pending_review' WHERE id=9")
-        response = ChunkWorkflow(dbname).accept_chunk(9, "boundary-test")
-        assert response.state is ChunkState.FINALIZED
-        with closing(connect(dbname)) as conn, conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, chunk_id, state::text FROM narrative_embedding_jobs"
+            assert claim_parent_embedding(
+                conn, session_id=session, parent_chunk_id=ids["parent"]
             )
-            assert cur.fetchall() == [(int(response.embedding_job_id), 7, "queued")]
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT chunk_id, state::text, generation_session_id::text "
+                    "FROM narrative_embedding_jobs ORDER BY chunk_id"
+                )
+                assert cur.fetchall() == [(ids["playable"], "queued", session)]
 
 
 def test_coverage_samples_only_playable_narrative_anchors() -> None:

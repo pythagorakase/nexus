@@ -416,6 +416,19 @@ def test_registry_has_no_stale_entries(
     assert set(ROUTE_CAPABILITIES) - registered == set()
 
 
+def test_retired_chunk_state_route_is_not_served() -> None:
+    """The slot-blind chunk-state route is gone rather than a 500 (#807).
+
+    It called a two-argument method with three arguments and always failed.
+    """
+    response = TestClient(narrative.app).get(
+        "/api/chunks/states", params={"start": 1, "end": 2, "slot": 5}
+    )
+    assert response.status_code == 404, response.text
+    assert ("GET", "/api/chunks/states") not in _keys(narrative.app)
+    assert ("GET", "/api/chunks/states") not in ROUTE_CAPABILITIES
+
+
 @pytest.mark.parametrize(
     "key",
     [

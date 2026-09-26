@@ -13,7 +13,7 @@ import requests
 import tomlkit
 import uvicorn
 
-from nexus.api import narrative, slot_endpoints, chunk_workflow
+from nexus.api import narrative, slot_endpoints
 from nexus.telemetry import usage
 from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
 from tests.scheduler_helpers import (
@@ -60,7 +60,6 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
         "qa640_775_browser", source_db="save_04", include_data=True
     ) as dbname:
         route_slot(monkeypatch, dbname)
-        monkeypatch.setattr(chunk_workflow, "VALID_DATABASES", {dbname})
         real_run = subprocess.run
 
         def run_in_clone(command, *args, **kwargs):

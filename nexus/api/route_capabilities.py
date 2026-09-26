@@ -261,7 +261,6 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("WS", "/ws/narrative"): _player("narrative.progress"),
         ("GET", "/api/narrative/incubator"): _NARRATIVE_READ,
         ("DELETE", "/api/narrative/incubator"): _NARRATIVE_EDIT,
-        ("GET", "/api/chunks/states"): _NARRATIVE_READ,
         ("GET", "/api/user-character"): _NARRATIVE_READ,
         # runtime_status
         ("GET", "/runtime/status"): _operator("diagnostics.runtime", "read"),

@@ -184,11 +184,9 @@ def test_manifest_real_test_turn_and_child_job_correlation(
         "qa640_764_turn", source_db="save_04", include_data=True
     ) as dbname:
         route_slot(monkeypatch, dbname)
-        from nexus.api import chunk_workflow
         import subprocess
         from tests.pg_fixtures import sqlalchemy_url
 
-        monkeypatch.setattr(chunk_workflow, "VALID_DATABASES", {dbname})
         real_run = subprocess.run
 
         def run_in_clone(command, *args, **kwargs):

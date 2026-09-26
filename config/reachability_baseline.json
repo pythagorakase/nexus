@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Retire the orphan Storyteller app and its session layer (#807)",
+  "reason": "Retire the orphan Storyteller app, its session layer, and ChunkWorkflow with the broken chunk-state route (#807)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -170,7 +170,6 @@
     "nexus/api/character_tag_manifest.py",
     "nexus/api/choice_handling.py",
     "nexus/api/choice_recovery.py",
-    "nexus/api/chunk_workflow.py",
     "nexus/api/commit_handler_sync.py",
     "nexus/api/config_utils.py",
     "nexus/api/conversations.py",

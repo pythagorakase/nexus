@@ -85,6 +85,74 @@ GET /api/chunks/states -> 500 {"detail":"ChunkWorkflow.get_chunk_states() takes 
 Without a preinstalled workflow the route fails earlier, on the `save_01`
 connection, and still answers 500.
 
+After the retirement the same script, run with `PGUSER=pythagor PGHOST=localhost`
+from the worktree root, prints:
+
+```text
+nexus.api.chunk_workflow: ImportError cannot import name 'chunk_workflow' from 'nexus.api' (.../nexus/api/__init__.py)
+GET /api/chunks/states -> 404 {"detail":"Not Found"}
+```
+
+<details><summary>Reproduction script</summary>
+
+```python
+"""Reproduce GET /api/chunks/states through the real gateway TestClient (#807).
+
+Creates a throwaway database with a real narrative_chunks table, lets the real
+ChunkWorkflow constructor run its schema check against it, installs it as the
+default workflow, and calls the gateway route. Drops the database afterwards.
+"""
+
+import sys
+import uuid
+from contextlib import closing
+
+import psycopg2
+from fastapi.testclient import TestClient
+
+from nexus.api import db_pool, narrative, slot_utils
+
+dbname = f"qa807_chunkstates_{uuid.uuid4().hex[:10]}"
+admin = psycopg2.connect(host="localhost", user="pythagor", dbname="postgres")
+admin.autocommit = True
+with admin.cursor() as cur:
+    cur.execute(f'CREATE DATABASE "{dbname}"')
+try:
+    with closing(
+        psycopg2.connect(host="localhost", user="pythagor", dbname=dbname)
+    ) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "CREATE TABLE narrative_chunks (id bigint PRIMARY KEY, raw_text text)"
+        )
+        cur.execute("INSERT INTO narrative_chunks VALUES (1, 'a'), (2, 'b')")
+
+    try:
+        from nexus.api import chunk_workflow
+    except ImportError as exc:
+        chunk_workflow = None
+        print("nexus.api.chunk_workflow:", type(exc).__name__, exc)
+
+    if chunk_workflow is not None:
+        chunk_workflow.VALID_DATABASES = {dbname}
+        slot_utils.VALID_DBNAMES.add(dbname)
+        workflow = chunk_workflow.ChunkWorkflow(dbname)  # real constructor + DDL
+        print("direct two-argument call:", workflow.get_chunk_states(1, 2))
+        chunk_workflow._default_workflow = workflow
+
+    response = TestClient(narrative.app).get(
+        "/api/chunks/states", params={"start": 1, "end": 2, "slot": 5}
+    )
+    print("GET /api/chunks/states ->", response.status_code, response.text)
+finally:
+    db_pool.close_all_pools()
+    with admin.cursor() as cur:
+        cur.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
+    admin.close()
+    print("dropped", dbname, file=sys.stderr)
+```
+
+</details>
+
 ## Parent Embedding Semantics
 
 `ChunkWorkflow.accept_chunk` queued an embedding for the previous playable
