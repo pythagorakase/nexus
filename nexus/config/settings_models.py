@@ -542,6 +542,57 @@ class RuntimeHealthSettings(BaseModel):
     )
 
 
+# uvicorn's h11 and httptools protocols log every response on uvicorn.access
+# with this message and (client_addr, method, path, http_version, status) args.
+_UVICORN_ACCESS_MSG = '%s - "%s %s HTTP/%s" %d'
+
+
+def _log_format_probe_records() -> List[logging.LogRecord]:
+    """Records shaped like those the shared ``[runtime.logs]`` formatter renders.
+
+    One application record (message with args) and one uvicorn access record
+    (uvicorn's exact message and argument shape). The formatter is the stdlib
+    ``logging.Formatter``, so both carry only the standard LogRecord fields.
+    """
+    application = logging.LogRecord(
+        name="nexus.runtime",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="format probe %s",
+        args=("record",),
+        exc_info=None,
+        func="_validate_format",
+    )
+    access = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg=_UVICORN_ACCESS_MSG,
+        args=("127.0.0.1:50000", "GET", "/health", "1.1", 200),
+        exc_info=None,
+        func="send",
+    )
+    return [application, access]
+
+
+def _failing_log_placeholders(fmt: str, record: logging.LogRecord) -> List[str]:
+    """Return each ``%(name)`` placeholder in ``fmt`` that cannot render ``record``.
+
+    Call after ``Formatter.format`` failed on ``record``: that call has already
+    set ``record.message`` (and ``record.asctime`` when the format uses it).
+    """
+    failing: List[str] = []
+    for match in logging.PercentStyle.validation_pattern.finditer(fmt):
+        placeholder = match.group(0)
+        try:
+            placeholder % record.__dict__
+        except Exception:
+            failing.append(placeholder)
+    return failing
+
+
 class RuntimeLogsSettings(BaseModel):
     """Captured service logs: format, rotation, access noise, and nexus logs.
 
@@ -571,8 +622,10 @@ class RuntimeLogsSettings(BaseModel):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO",
         description=(
-            "Level for the root, uvicorn, uvicorn.error and uvicorn.access "
-            "loggers in services launched with the {log_config} placeholder"
+            "Level for the root, uvicorn and uvicorn.error loggers in services "
+            "launched with the {log_config} placeholder; uvicorn.access stays "
+            "at INFO, where uvicorn logs every response, so 4xx/5xx records "
+            "survive any level"
         ),
     )
     format: str = Field(
@@ -604,14 +657,38 @@ class RuntimeLogsSettings(BaseModel):
     @field_validator("format")
     @classmethod
     def _validate_format(cls, value: str) -> str:
-        """Reject malformed format strings at config load, not at first log."""
+        """Reject formats that cannot render a record at config load, not at log.
+
+        ``validate=True`` checks only the %-style grammar: ``%(message)d`` or an
+        unknown ``%(field)s`` pass it and then raise inside the handler on every
+        emitted record. So the formatter also renders an application record and
+        a uvicorn access record here, and any failure rejects the format.
+        """
         try:
-            logging.Formatter(value, style="%", validate=True)
+            formatter = logging.Formatter(value, style="%", validate=True)
         except ValueError as exc:
             raise ValueError(
                 f"[runtime.logs] format is not a valid %-style logging format: "
                 f"{exc}"
             ) from exc
+        for record in _log_format_probe_records():
+            try:
+                formatter.format(record)
+            except Exception as exc:
+                failing = _failing_log_placeholders(value, record)
+                culprit = (
+                    "failing placeholder: "
+                    + ", ".join(repr(placeholder) for placeholder in failing)
+                    if failing
+                    else "no %(name) placeholder fails on its own, so a '%' "
+                    "outside them is the culprit (write a literal percent "
+                    "sign as '%%')"
+                )
+                raise ValueError(
+                    f"[runtime.logs] format {value!r} cannot render a "
+                    f"{record.name} log record ({type(exc).__name__}: {exc}); "
+                    f"{culprit}"
+                ) from exc
         return value
 
     @field_validator("access_success_exclude_paths")

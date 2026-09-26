@@ -203,10 +203,14 @@ processes, and they fail loudly in other profiles.
 - `{log_config}` expands to `<state_dir>/logging.json`, a
   `logging.config.dictConfig` document the supervisor writes from
   `[runtime.logs]` before spawning. The gateway and the mock OpenAI server
-  pass it to uvicorn as `--log-config`: application and uvicorn loggers write to stdout (never a
-  file of their own) through one `format` at one `level`, and successful
-  (below 400) access records for `access_success_exclude_paths` are dropped
-  while every 4xx and 5xx is kept.
+  pass it to uvicorn as `--log-config`: application and uvicorn loggers write
+  to stdout (never a file of their own) through one `format`, which must
+  render a log record at config load, not just parse. `level` applies to
+  application loggers, `uvicorn` and `uvicorn.error`; `uvicorn.access` stays
+  at INFO because uvicorn logs every response at INFO, so access records
+  appear at any `level`. Successful (below 400) access records for
+  `access_success_exclude_paths` are dropped while every 4xx and 5xx is
+  kept.
 - `nexus up --foreground` keeps the supervisor attached: it streams
   prefixed service logs to the console, honors `autorestart = "on-failure"`
   (bounded by `autorestart_max_retries`), and tears everything down on

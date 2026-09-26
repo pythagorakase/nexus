@@ -12,6 +12,12 @@ loggers.
 hands the path to uvicorn through the ``{log_config}`` argv placeholder
 (``--log-config``), so uvicorn applies it before importing the app and its
 own default config never replaces it.
+
+``[runtime.logs].level`` gates root, ``uvicorn`` and ``uvicorn.error``. The
+``uvicorn.access`` logger stays at INFO whatever that level is: uvicorn logs
+every response there at INFO, so a higher level would drop 4xx and 5xx
+records before ``SuccessfulAccessFilter`` saw them. The filter alone decides
+which access records are dropped.
 """
 
 from __future__ import annotations
@@ -25,6 +31,11 @@ ACCESS_LOGGER = "uvicorn.access"
 CONSOLE_HANDLER = "console"
 STANDARD_FORMATTER = "standard"
 SUCCESSFUL_ACCESS_FILTER = "successful_access"
+
+# uvicorn logs every access record, success or failure, at INFO. Pinning the
+# access logger there (and leaving the shared handler without a level) means
+# [runtime.logs].level never drops an error response; the filter decides.
+ACCESS_LOGGER_LEVEL = "INFO"
 
 # uvicorn's h11 and httptools protocols log each response on uvicorn.access as
 # '%s - "%s %s HTTP/%s" %d' with args
@@ -74,8 +85,11 @@ def build_logging_config(settings: RuntimeLogsSettings) -> Dict[str, Any]:
 
     One stdout ``StreamHandler`` with one formatter serves root, ``uvicorn``,
     ``uvicorn.error`` (propagating to ``uvicorn``) and ``uvicorn.access``
-    (with the successful-access filter). The mapping is JSON-serializable so
-    the supervisor can write it for ``uvicorn --log-config``.
+    (with the successful-access filter). The configured level applies to all
+    but ``uvicorn.access``, which stays at ``ACCESS_LOGGER_LEVEL``; the handler
+    carries no level, so nothing else gates the access route. The mapping is
+    JSON-serializable so the supervisor can write it for
+    ``uvicorn --log-config``.
     """
     filter_factory = (
         f"{SuccessfulAccessFilter.__module__}.{SuccessfulAccessFilter.__qualname__}"
@@ -90,6 +104,7 @@ def build_logging_config(settings: RuntimeLogsSettings) -> Dict[str, Any]:
                 "exclude_paths": list(settings.access_success_exclude_paths),
             }
         },
+        # No handler level: the loggers' levels are the only gates.
         "handlers": {
             CONSOLE_HANDLER: {
                 "class": "logging.StreamHandler",
@@ -106,7 +121,7 @@ def build_logging_config(settings: RuntimeLogsSettings) -> Dict[str, Any]:
             "uvicorn.error": {"level": settings.level, "propagate": True},
             ACCESS_LOGGER: {
                 "handlers": [CONSOLE_HANDLER],
-                "level": settings.level,
+                "level": ACCESS_LOGGER_LEVEL,
                 "propagate": False,
                 "filters": [SUCCESSFUL_ACCESS_FILTER],
             },

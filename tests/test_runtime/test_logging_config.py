@@ -11,12 +11,13 @@ import http.client
 import json
 import logging
 import os
+import re
 import signal
 import socket
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Tuple, cast
 
 import pytest
 import tomlkit
@@ -26,6 +27,7 @@ from nexus.config import load_settings
 from nexus.config.settings_models import RuntimeLogsSettings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.logging_config import (
+    ACCESS_LOGGER_LEVEL,
     SuccessfulAccessFilter,
     build_logging_config,
 )
@@ -188,13 +190,30 @@ def test_build_logging_config_routes_everything_through_one_stdout_handler() -> 
     assert config["loggers"] == {
         "uvicorn": {"handlers": ["console"], "level": "WARNING", "propagate": False},
         "uvicorn.error": {"level": "WARNING", "propagate": True},
+        # uvicorn logs every response at INFO: the access logger stays there
+        # so the filter, not the level, decides which access records drop.
         "uvicorn.access": {
             "handlers": ["console"],
-            "level": "WARNING",
+            "level": "INFO",
             "propagate": False,
             "filters": ["successful_access"],
         },
     }
+
+
+@pytest.mark.parametrize("level", ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"))
+def test_build_logging_config_pins_only_the_access_logger_at_info(
+    level: str,
+) -> None:
+    """Every level gates root and uvicorn; none gates the access route."""
+    config = build_logging_config(RuntimeLogsSettings.model_validate({"level": level}))
+
+    assert ACCESS_LOGGER_LEVEL == "INFO"
+    assert config["loggers"]["uvicorn.access"]["level"] == "INFO"
+    assert config["root"]["level"] == level
+    assert config["loggers"]["uvicorn"]["level"] == level
+    assert config["loggers"]["uvicorn.error"]["level"] == level
+    assert "level" not in config["handlers"]["console"]
 
 
 def test_repo_config_gateway_uses_the_supervisor_log_config(tmp_path: Path) -> None:
@@ -218,14 +237,14 @@ def test_repo_config_gateway_uses_the_supervisor_log_config(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 
 
-def _probe_supervisor(tmp_path: Path) -> Supervisor:
+def _probe_supervisor(tmp_path: Path, level: str) -> Supervisor:
     """A supervisor whose 'probe' service is uvicorn with {log_config}."""
     (tmp_path / "probe_app.py").write_text(PROBE_APP, encoding="utf-8")
     document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
     runtime = cast(Any, document["runtime"])
     runtime["state_dir"] = str(tmp_path / "state")
     logs = runtime["logs"]
-    logs["level"] = "INFO"
+    logs["level"] = level
     logs["format"] = "%(levelname)s|%(name)s|%(message)s"
     logs["access_success_exclude_paths"] = ["/health", "/runtime/status"]
     probe = tomlkit.table()
@@ -266,24 +285,19 @@ def _get(port: int, target: str) -> int:
         connection.close()
 
 
-def test_supervised_uvicorn_applies_log_config_and_filters_access_noise(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """uvicorn --log-config {log_config}: one format, noise out, failures in."""
-    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
-    supervisor = _probe_supervisor(tmp_path)
+def _serve_probe(
+    tmp_path: Path, level: str, requests_made: Dict[str, int]
+) -> Tuple[Supervisor, Dict[str, Any], List[str]]:
+    """Start the probe under the real supervisor, make requests, return its log.
+
+    Each target in ``requests_made`` must answer with its mapped status. The
+    service is stopped before its captured log is read.
+    """
+    supervisor = _probe_supervisor(tmp_path, level)
     service = supervisor.runtime.services["probe"]
 
     record = supervisor._start_service("probe", service, TEST_SLOT, detached=True)
     try:
-        requests_made = {
-            "/health": 200,
-            "/health?status=503": 503,
-            "/runtime/status": 200,
-            "/runtime/status?status=500": 500,
-            "/api/story": 200,
-            "/api/missing?status=404": 404,
-        }
         for target, expected in requests_made.items():
             assert _get(service.port, target) == expected
     finally:
@@ -295,10 +309,36 @@ def test_supervised_uvicorn_applies_log_config_and_filters_access_noise(
     written = json.loads(supervisor.log_config_path().read_text())
     assert written == build_logging_config(supervisor.runtime.logs)
     assert record["command"][-1] == str(supervisor.log_config_path())
-
     lines = supervisor.log_path("probe").read_text(encoding="utf-8").splitlines()
-    access = [line for line in lines if line.startswith("INFO|uvicorn.access|")]
-    assert [line.split('"')[1] for line in access] == [
+    return supervisor, record, lines
+
+
+def _access_request_lines(lines: List[str]) -> List[str]:
+    """The request line of every uvicorn access record in a captured log."""
+    return [
+        line.split('"')[1] for line in lines if line.startswith("INFO|uvicorn.access|")
+    ]
+
+
+def test_supervised_uvicorn_applies_log_config_and_filters_access_noise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """uvicorn --log-config {log_config}: one format, noise out, failures in."""
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    _, _, lines = _serve_probe(
+        tmp_path,
+        "INFO",
+        {
+            "/health": 200,
+            "/health?status=503": 503,
+            "/runtime/status": 200,
+            "/runtime/status?status=500": 500,
+            "/api/story": 200,
+            "/api/missing?status=404": 404,
+        },
+    )
+
+    assert _access_request_lines(lines) == [
         "GET /health?status=503 HTTP/1.1",
         "GET /runtime/status?status=500 HTTP/1.1",
         "GET /api/story HTTP/1.1",
@@ -313,6 +353,38 @@ def test_supervised_uvicorn_applies_log_config_and_filters_access_noise(
     assert "INFO|nexus.probe|probe handled /api/story" in lines
     # The configured level applies to application loggers through root.
     assert not any("probe debug detail" in line for line in lines)
+
+
+def test_supervised_uvicorn_keeps_access_records_above_info_level(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At WARNING, 4xx/5xx and unexcluded access records still reach the log.
+
+    uvicorn logs every response at INFO. The access logger stays at INFO, so
+    only the filter drops access records: excluded successes vanish, while a
+    404, a 500 and a 200 on an unexcluded path remain. Root and uvicorn.error
+    still honour WARNING, so their INFO records are gone.
+    """
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    _, _, lines = _serve_probe(
+        tmp_path,
+        "WARNING",
+        {
+            "/health": 200,
+            "/api/missing?status=404": 404,
+            "/api/story?status=500": 500,
+            "/api/story": 200,
+        },
+    )
+
+    assert _access_request_lines(lines) == [
+        "GET /api/missing?status=404 HTTP/1.1",
+        "GET /api/story?status=500 HTTP/1.1",
+        "GET /api/story HTTP/1.1",
+    ]
+    assert not any("GET /health HTTP" in line for line in lines)
+    assert not any("uvicorn.error|Uvicorn running on" in line for line in lines)
+    assert not any("probe handled" in line for line in lines)
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +461,17 @@ def test_repo_runtime_logs_settings_load() -> None:
     assert logs.max_bytes > 0
     assert logs.backup_count >= 1
     assert logs.access_success_exclude_paths == ["/health", "/runtime/status"]
-    logging.Formatter(logs.format, validate=True)
+    assert RuntimeLogsSettings(format=logs.format).format == logs.format
+    formatter = logging.Formatter(logs.format)
+    application = logging.LogRecord(
+        "nexus.probe", logging.WARNING, __file__, 1, "saved %s", ("slot",), None
+    )
+    assert formatter.format(application).endswith(
+        " - nexus.probe - WARNING - saved slot"
+    )
+    assert formatter.format(_access_record("/api/story", 500)).endswith(
+        ' - uvicorn.access - INFO - 127.0.0.1:50000 - "GET /api/story HTTP/1.1" 500'
+    )
 
 
 @pytest.mark.parametrize(
@@ -421,12 +503,58 @@ def test_runtime_logs_settings_reject_invalid_values(
         RuntimeLogsSettings(**overrides)
 
 
-def test_invalid_runtime_logs_in_nexus_toml_fails_load(tmp_path: Path) -> None:
+# Formats that parse under Formatter(validate=True) but raise on every record.
+UNRENDERABLE_FORMATS = (
+    ("%(message)d", "TypeError", "'%(message)d'"),
+    ("%(asctime)s %(does_not_exist)s", "ValueError", "'%(does_not_exist)s'"),
+)
+
+
+@pytest.mark.parametrize(
+    "fmt,error,placeholder", UNRENDERABLE_FORMATS, ids=("message-d", "unknown-field")
+)
+def test_runtime_logs_format_must_render_a_record(
+    fmt: str, error: str, placeholder: str
+) -> None:
+    """A format that parses but cannot render a record is rejected by name."""
+    logging.Formatter(fmt, validate=True)
+
+    with pytest.raises(ValidationError) as caught:
+        RuntimeLogsSettings(format=fmt)
+
+    message = str(caught.value)
+    assert "[runtime.logs] format" in message
+    assert f"cannot render a nexus.runtime log record ({error}:" in message
+    assert f"failing placeholder: {placeholder}" in message
+
+
+def test_runtime_logs_format_rejects_a_stray_percent_sign() -> None:
+    """A lone '%' outside the placeholders parses but cannot render."""
+    with pytest.raises(ValidationError, match=re.escape("write a literal percent")):
+        RuntimeLogsSettings(format="%(message)s at 100%")
+
+
+@pytest.mark.parametrize(
+    "key,value,message",
+    (
+        ("backup_count", 0, "backup_count"),
+        ("format", "%(message)d", re.escape("failing placeholder: '%(message)d'")),
+        (
+            "format",
+            "%(does_not_exist)s",
+            re.escape("failing placeholder: '%(does_not_exist)s'"),
+        ),
+    ),
+    ids=("backup-count", "format-message-d", "format-unknown-field"),
+)
+def test_invalid_runtime_logs_in_nexus_toml_fails_load(
+    tmp_path: Path, key: str, value: Any, message: str
+) -> None:
     """A bad [runtime.logs] entry in nexus.toml aborts load_settings."""
     document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
-    cast(Any, document["runtime"])["logs"]["backup_count"] = 0
+    cast(Any, document["runtime"])["logs"][key] = value
     config_path = tmp_path / "nexus.toml"
     config_path.write_text(tomlkit.dumps(document), encoding="utf-8")
 
-    with pytest.raises(ValidationError, match="backup_count"):
+    with pytest.raises(ValidationError, match=message):
         load_settings(config_path)
