@@ -1,3 +1,8 @@
+---
+status: historical
+verified_commit: "aab4b52edba45fb647c2991faf04fb992fbf0dae"
+---
+
 # Vector Embeddings in NEXUS
 
 This document describes the vector embedding strategy used in the NEXUS system for semantic search and similarity matching.

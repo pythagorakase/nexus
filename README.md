@@ -14,8 +14,9 @@ in exchange for richness of plot, depth of character, and high-quality prose.
 
 ## Architecture
 
-Everything below exists and runs today; blueprints for unbuilt modules live
-in `docs/blueprint_*.md`.
+Everything below exists and runs today. `docs/turn_flow_sequence.md` traces
+one turn through the code. The GAIA, PSYCHE, and NEMESIS modules were never
+built; their historical blueprints remain in `docs/blueprint_*.md`.
 
 ### Turn-Cycle Orchestration
 
@@ -38,28 +39,29 @@ text to the IR engine outperforms LLM-rewritten queries.
 narrative corpus. Production embeddings use Octen-Embedding-4B (2560d, the
 issue #175 bake-off winner) stored in pgvector tables, combined with
 IDF-weighted full-text search through configurable hybrid scoring, then
-refined by cross-encoder reranking. See `docs/hybrid_search.md` and
-`docs/vector_embeddings.md`.
+refined by cross-encoder reranking, all configured under `[memnon]` in
+`nexus.toml`.
 
 ### Skald via LOGON
 
 Skald is the frontier storyteller (Claude or GPT family, configured in
-`nexus.toml`). `nexus/agents/logon` owns the API traffic: structured-output
-schemas (`nexus/agents/logon/apex_schema.py`), retry handling, and response
-validation. Skald receives the assembled context payload and returns new
-narrative plus authorial retrieval directives.
+`nexus.toml`). LOGON (`nexus/agents/lore/logon_utility.py`) owns the API
+traffic, with structured-output schemas and validators in
+`nexus/agents/logon/`. By default each turn runs two seats: the writer
+composes prose and choices, then Gaia records state updates, rulings on
+Orrery proposals, and new-entity declarations (`[apex] turn_pipeline`).
 
 ### Orrery World Engine
 
 `nexus/agents/orrery` resolves off-screen behavior and is on by default
 (`[orrery]` in `nexus.toml`). A deterministic package substrate ticks
-characters, factions, and places through condition-gated templates; salient
-resolutions are promoted by a post-commit worker
-(`python -m nexus.agents.orrery.worker`) and narrated asynchronously into
-`offscreen_narrations` — canonical prose the player never sees directly but
-future scenes can draw on. Packages are self-aware in three stages
-(entry-gating, branch-selection, outcome), so what an actor notices and
-pursues depends on its tags and the target's fame. See
+characters, factions, and places through condition-gated templates. After
+each accepted turn, the gateway's deferred-work scheduler promotes salient
+resolutions and records a deterministic perceptual descriptor for each, not
+generated prose (`docs/offscreen_narration_retirement.md`);
+`python -m nexus.agents.orrery.worker` runs one pass by hand. Packages are
+self-aware in three stages (entry-gating, branch-selection, outcome), so what
+an actor notices and pursues depends on its tags and the target's fame. See
 `docs/orrery_design_plan.md` and the generated catalog
 `docs/orrery_packages.md`.
 
@@ -160,7 +162,15 @@ Formatting and linting: `poetry run black .`, `poetry run flake8`,
 - `docs/turn_flow_sequence.md` — the turn cycle end to end
 - `docs/orrery_design_plan.md` — world engine stages, schema, and workers
 - `docs/orrery_retrograde_spec.md` — deep-history generation
-- `docs/hybrid_search.md`, `docs/vector_embeddings.md` — retrieval stack
 - `docs/runtime.md` — the client/runtime contract (profiles, auth header)
 - `docs/agent_workflow.md` — branch, PR, and review workflow for agents
+- `docs/decisions/README.md` — document status front matter and the decision
+  ledger
 - `CLAUDE.md`, `AGENTS.md` — repository conventions for coding agents
+
+Kept for provenance, not as guidance:
+
+- `docs/blueprint_*.md` — historical designs for GAIA, PSYCHE, and NEMESIS
+- `docs/hybrid_search.md` — historical hybrid-search notes (pre-Octen)
+- `docs/vector_embeddings.md` — historical multi-model embedding notes
+- `docs/orrery_slot2_backfill_plan.md` — historical Slot 2 backfill record
