@@ -37,11 +37,15 @@ class GenerationRetryConflict(ValueError):
     """The reviewed failure no longer describes a safe retry frontier."""
 
 
+# The one lease-expiry test. It uses NOW(), the transaction's start, so every
+# judgment inside one transaction (startup recovery's liveness check and its
+# retry read, acquisition and its retry fence) sees the same instant; a lease
+# expiring mid-transaction cannot be dead to one check and live to the next.
+OWNER_EXPIRED_SQL = "expires_at <= NOW()"
 # An owner whose lease has expired is finished. Acquisition (before it
 # evaluates a retry) and the active-attempt read record it as this terminal
 # error; the unlocked retry read projects the same outcome without writing, so
 # resume state and the retry route judge that session by one rule.
-_OWNER_EXPIRED_SQL = "expires_at <= NOW()"
 _EXPIRED_OWNER_OUTCOME = {
     "status": "error",
     "terminal_outcome": "error",
@@ -106,7 +110,7 @@ def _fenced_retry(
         "SELECT session_id, status, terminal_outcome, parent_chunk_id, "
         "replaced_by_session_id, error, error_class, EXISTS ("
         "SELECT 1 FROM narrative_generation_lease lease "
-        f"WHERE lease.session_id = gs.session_id AND lease.{_OWNER_EXPIRED_SQL}"
+        f"WHERE lease.session_id = gs.session_id AND lease.{OWNER_EXPIRED_SQL}"
         ") AS owner_expired "
         "FROM narrative_generation_sessions gs "
         f"ORDER BY created_at DESC LIMIT 1{lock_clause}"
@@ -173,7 +177,7 @@ def acquire_generation_lease(
             )
             cur.execute(
                 f"""
-                SELECT session_id, {_OWNER_EXPIRED_SQL} AS is_stale
+                SELECT session_id, {OWNER_EXPIRED_SQL} AS is_stale
                 FROM narrative_generation_lease
                 WHERE id = TRUE
                 FOR UPDATE
@@ -295,12 +299,12 @@ def bind_generation_parent(conn: Any, *, session_id: str, parent_chunk_id: int) 
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 UPDATE narrative_generation_lease
                 SET parent_chunk_id = %s
                 WHERE id = TRUE
                   AND session_id = %s
-                  AND expires_at > NOW()
+                  AND NOT ({OWNER_EXPIRED_SQL})
                 """,
                 (parent_chunk_id, session_id),
             )
@@ -333,13 +337,13 @@ def claim_parent_embedding(conn: Any, *, session_id: str, parent_chunk_id: int) 
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT session_id
                 FROM narrative_generation_lease
                 WHERE id = TRUE
                   AND session_id = %s
                   AND parent_chunk_id = %s
-                  AND expires_at > NOW()
+                  AND NOT ({OWNER_EXPIRED_SQL})
                 FOR UPDATE
                 """,
                 (session_id, parent_chunk_id),
@@ -560,7 +564,7 @@ def heartbeat_generation(
             cur.execute(
                 "UPDATE narrative_generation_lease "
                 "SET expires_at = clock_timestamp() + make_interval(secs => %s) "
-                "WHERE session_id = %s AND expires_at > clock_timestamp()",
+                f"WHERE session_id = %s AND NOT ({OWNER_EXPIRED_SQL})",
                 (timeout_seconds, session_id),
             )
             if cur.rowcount != 1:
@@ -587,7 +591,7 @@ def read_generation_session(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 "SELECT session_id FROM narrative_generation_lease "
-                "WHERE expires_at <= clock_timestamp()"
+                f"WHERE {OWNER_EXPIRED_SQL}"
             )
             if cur.fetchone() is not None:
                 cur.execute(
@@ -595,7 +599,7 @@ def read_generation_session(
                 )
                 cur.execute(
                     "DELETE FROM narrative_generation_lease "
-                    "WHERE expires_at <= clock_timestamp() RETURNING session_id"
+                    f"WHERE {OWNER_EXPIRED_SQL} RETURNING session_id"
                 )
                 expired = cur.fetchone()
                 if expired:

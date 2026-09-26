@@ -614,3 +614,106 @@ def test_expired_owner_is_judged_alike_by_resume_state_and_retry(parent_bound):
         assert advertised is None
         assert accepted is None
         assert (store.commits, store.rollbacks) == (0, 1)
+
+
+class LeaseClockStore:
+    """A startup-recovery transaction that began at ``now``, read later at ``clock``.
+
+    The latest session is an owner that bound the recorded action on chunk 9.
+    Lease-expiry SQL is evaluated at the instant it names: ``NOW()`` is the
+    transaction start and ``clock_timestamp()`` the later wall clock, so a
+    lease expiring in between is live at one and dead at the other.
+    """
+
+    def __init__(self, *, expires_at, now=100.0, clock=101.0):
+        self.expires_at = expires_at
+        self.now = now
+        self.clock = clock
+        self.session = failed_row(status="initiated", terminal_outcome=None)
+        self.cleared = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def cursor(self, cursor_factory=None):
+        return LeaseClockCursor(self, dict_rows=cursor_factory is not None)
+
+    def expired(self, normalized):
+        instant = self.now if "NOW()" in normalized else self.clock
+        return self.expires_at <= instant
+
+
+class LeaseClockCursor:
+    """Serve recover_orphaned_choice and read_retryable_failure from one store."""
+
+    def __init__(self, store, dict_rows):
+        self.store = store
+        self.dict_rows = dict_rows
+        self.result = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, query, params=None):
+        store = self.store
+        normalized = " ".join(query.split())
+        self.result = None
+        if normalized.startswith("LOCK TABLE"):
+            return
+        if normalized.startswith("UPDATE narrative_chunks"):
+            store.cleared.append(params[-1])
+        elif "FROM narrative_generation_sessions" in normalized:
+            self.result = dict(store.session, owner_expired=store.expired(normalized))
+        elif "FROM narrative_generation_lease WHERE id = TRUE" in normalized:
+            expired = store.expired(normalized)
+            # The pre-fix liveness check selected "expires_at > clock_timestamp()".
+            self.result = (not expired if "expires_at >" in normalized else expired,)
+        elif "FROM incubator" in normalized:
+            return
+        elif "embedding_generated_at" in normalized:
+            menu = {"presented": ["Agree.", "Walk away."], "selected": None}
+            self.result = ("The hearing stalls.", menu, None)
+        elif "FROM narrative_chunks" in normalized:
+            self.result = (
+                {"id": 9, "choice_text": ACTION} if self.dict_rows else (9, ACTION)
+            )
+        else:
+            raise AssertionError(f"Unexpected startup query: {normalized}")
+
+    def fetchone(self):
+        return self.result
+
+
+@pytest.mark.parametrize(
+    "expires_at",
+    [99.0, 100.0, 100.5, 102.0],
+    ids=[
+        "expired-before-start",
+        "expires-at-start",
+        "expires-mid-transaction",
+        "still-owned",
+    ],
+)
+def test_startup_and_retry_read_judge_lease_expiry_at_one_instant(expires_at):
+    """Startup's liveness check and the retry read never split on a boundary.
+
+    A live owner is left alone and an expired one is a retryable failure, so
+    the recorded action is never cleared; recovery is advertised exactly when
+    the lease had expired at the transaction's start.
+    """
+    from psycopg2.extras import RealDictCursor
+
+    from nexus.api.choice_recovery import recover_orphaned_choice
+
+    store = LeaseClockStore(expires_at=expires_at)
+    assert recover_orphaned_choice(store) is None
+    assert store.cleared == []
+    with store.cursor(cursor_factory=RealDictCursor) as cur:
+        advertised = narrative_lease.read_retryable_failure(cur)
+    assert (advertised is not None) == (expires_at <= store.now)
