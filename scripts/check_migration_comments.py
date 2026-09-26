@@ -22,7 +22,10 @@ VIEW for each in the same file. Unqualified names resolve to ``public``, or to
 the schema a CREATE SCHEMA statement creates for its own elements; unquoted
 identifiers fold to lower case, quoted identifiers keep their exact spelling.
 Temporary tables and views are exempt because they end with the migration
-session.
+session. Not seen: SQL a Python migration does not spell as a string literal in
+its own file (an imported constant such as ``from nexus.x import DDL;
+cur.execute(DDL)``, names joined only at run time such as
+``cur.execute(A + B)``, a file it reads, or a bytes literal).
 
 DDL that cannot be verified statically fails rather than passing: verbs,
 object kinds, names, and ALTER TABLE actions built at run time (f-strings,
@@ -67,7 +70,8 @@ _I = re.IGNORECASE
 _IDENTIFIER = r'(?:"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)'
 _DOTTED_NAME = re.compile(rf"{_IDENTIFIER}(?:\s*\.\s*{_IDENTIFIER})*")
 _NAME_PART = re.compile(_IDENTIFIER)
-_RAW_TOKEN = re.compile(r'(?:"(?:[^"]|"")*"|[^\s(),;"])+')
+# A %(name)s placeholder is one token, so a message names it whole.
+_RAW_TOKEN = re.compile(r'(?:"(?:[^"]|"")*"|%\(\w+\)[sIL]|[^\s(),;"])+')
 _NAME_END = frozenset(" \t\r\n\f\v(),;*")
 _PLAIN_NAME = re.compile(r"[a-z_][a-z0-9_$]*")
 _IDENT_CHAR = re.compile(r"[A-Za-z0-9_$]")
@@ -153,12 +157,27 @@ _PY_SQL_HINT = re.compile(
     r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:\w+\s+){0,3}(?:TABLE|TYPE|FUNCTION|VIEW)\b"
     r"|^\s*(?:CREATE|ALTER)\b"
     rf"|\b(?:CREATE|ALTER)\s+(?:\w+\s+){{0,3}}{_PLACEHOLDER_SOURCE}"
-    rf"|{_PLACEHOLDER_SOURCE}\s+(?:\w+\s+){{0,3}}(?:TABLE|TYPE|FUNCTION|VIEW|COLUMN)\b"
     r"|\bALTER\s+TABLE\b|\bADD\s+COLUMN\b|\bCOMMENT\s+ON\b"
     r"|\bDO\s+(?:LANGUAGE\s+\w+\s+)?(?:\$|E?')"
     r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')",
     _I,
 )
+# A placeholder before DDL words ("{} TABLE t") marks SQL only alongside a DDL
+# verb; alone it is ordinary log text such as "{} rows copied into table t".
+_PY_PLACEHOLDER_DDL_HINT = re.compile(
+    rf"{_PLACEHOLDER_SOURCE}\s+(?:\w+\s+){{0,3}}(?:TABLE|TYPE|FUNCTION|VIEW|COLUMN)\b",
+    _I,
+)
+_PY_DDL_VERB = re.compile(r"\b(?:CREATE|ALTER)\b", _I)
+
+
+def _looks_like_sql(rendered: str) -> bool:
+    """Whether a rendered Python string can create or document an object."""
+    return bool(
+        _PY_SQL_HINT.search(rendered)
+        or (_PY_PLACEHOLDER_DDL_HINT.search(rendered) and _PY_DDL_VERB.search(rendered))
+    )
+
 
 # Obligation kind -> the COMMENT ON object type that documents it.
 _COMMENT_KINDS = {
@@ -897,7 +916,7 @@ def python_sql_literals(source: str) -> list[tuple[str, int]]:
         rendered = _render_string(node)
         if rendered is not None:
             if id(node) in executed or (
-                id(node) not in docstrings and _PY_SQL_HINT.search(rendered)
+                id(node) not in docstrings and _looks_like_sql(rendered)
             ):
                 found.append((rendered, getattr(node, "lineno", 1)))
             return

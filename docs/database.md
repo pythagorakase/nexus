@@ -87,7 +87,10 @@ run time (f-strings, `+` or `||` with a non-literal operand, `{}` and `%I`
 placeholders), an `EXECUTE` of a variable or of anything not starting with literal
 text, and columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
-include `COMMENTS`). Not covered: procedures, domains, composite
-types, triggers, indexes, sequences, and DDL inside a function body, even when
-the migration calls that function. For legacy enums, functions, and views, the
+include `COMMENTS`). Not covered: procedures, domains, composite types, triggers,
+indexes, sequences, DDL inside a function body, even when the migration calls
+that function, and SQL a Python migration does not spell as a string literal in
+its own file (an imported constant such as `from nexus.x import DDL;
+cur.execute(DDL)`, names joined only at run time such as `cur.execute(A + B)`, a
+file it reads, or a bytes literal). For legacy enums, functions, and views, the
 inventory remains the only record.

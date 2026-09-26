@@ -367,7 +367,7 @@ python scripts/check_migration_comments.py
 OK: every object created after migration 129 has a comment.
 ```
 
-`tests/test_migration_comment_lint.py` (26 tests, runnable without PostgreSQL)
+`tests/test_migration_comment_lint.py` (27 tests, runnable without PostgreSQL)
 covers each object kind, schema and quoting rules, `CREATE SCHEMA` elements, the
 watermark (pinned at 129), `DO`/`EXECUTE` bodies, `||` and Python `+`/f-string
 concatenation, object kinds filled in at run time, Python migrations, overloads,

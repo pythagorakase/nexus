@@ -394,12 +394,16 @@ $$;
 
 
 def test_python_run_time_object_kind_fails(tmp_path: Path) -> None:
-    """f-strings, split-keyword ``+``, and ``%`` cannot hide the object kind."""
+    """f-strings, split-keyword ``+``, and ``%`` cannot hide the object kind.
+
+    A placeholder before DDL words counts as SQL only beside a DDL verb, so
+    ordinary log text about tables and functions still passes.
+    """
     _migration(
         tmp_path,
         f"{NEXT}_kinds.py",
         """
-def run(cur, kind, verb, statement, value) -> None:
+def run(cur, kind, verb, statement, value, log) -> None:
     cur.execute(f"CREATE {kind} hidden (id int)")
     cur.execute("CREATE " + kind + " hidden_plus (id int)")
     ddl = "ALTER " + kind + " scene ADD COLUMN hidden int"
@@ -412,6 +416,9 @@ def run(cur, kind, verb, statement, value) -> None:
     cur.execute(f"DO $$ BEGIN {verb} TABLE hidden_do (id int); END $$")
     cur.execute(f"SELECT CASE WHEN true THEN {value} ELSE 0 END")
     cur.execute("SELECT 1 FROM pg_type WHERE typname = %s", (kind,))
+    indexed = f"{verb} TABLE two (id int); CREATE INDEX two_idx ON two (id)"
+    print(f"{value} rows copied into table foo")
+    log.info("%s legacy function rows removed", value)
 """,
     )
 
@@ -427,6 +434,25 @@ def run(cur, kind, verb, statement, value) -> None:
         "command assembled at run time; its schema changes cannot be verified",
         f"{NEXT}_kinds.py:10: statement begins with '{{}}', {begins}",
         f"{NEXT}_kinds.py:11: statement begins with '{{}}', {begins}",
+        f"{NEXT}_kinds.py:14: statement begins with '{{}}', {begins}",
+    ]
+
+
+def test_named_placeholder_is_reported_whole(tmp_path: Path) -> None:
+    """A %(name)s column placeholder is named whole in the finding."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_named.py",
+        """
+def run(cur, column) -> None:
+    cur.execute("ALTER TABLE seat_notes ADD COLUMN %(col)s int", {"col": column})
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_named.py:2: ALTER TABLE public.seat_notes ADD COLUMN names "
+        "'%(col)s', which is not a literal identifier; name the object literally "
+        "so its COMMENT can be verified",
     ]
 
 
