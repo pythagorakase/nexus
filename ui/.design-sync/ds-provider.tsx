@@ -37,8 +37,8 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
   // status only — no plaintext. The set covers each KeysSection row state: a
   // seat-required present key (filled dot + ••••last4 placeholder), a
   // seat-required missing key (warning border and dot), and a key no seat needs
-  // (dimmed). Without this the query 404s and KeysSection's
-  // `if (error) throw error` blanks the whole SettingsPane.
+  // (dimmed). Without this the query 404s and KeysSection shows that failure
+  // in place of its rows. The stub matches any `?slot=N` suffix.
   const SECRETS = [
     {
       provider: "anthropic", account: "anthropic", present: true, last4: "8f2a",

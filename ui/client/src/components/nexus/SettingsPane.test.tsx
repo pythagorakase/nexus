@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FontProvider, KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
@@ -8,7 +8,7 @@ import {
   LOCAL_MODELS_DOWNLOAD_KEY,
   LOCAL_MODELS_STATUS_KEY,
 } from "@/hooks/useLocalModels";
-import { SECRETS_QUERY_KEY } from "@/hooks/useSecrets";
+import { secretsQueryKey } from "@/hooks/useSecrets";
 import { applySettingsPatch, SETTINGS_QUERY_KEY, PREFERENCES_QUERY_KEY } from "@/hooks/useSettings";
 import { queryClient as settingsQueryClient } from "@/lib/queryClient";
 import type { LocalModelsStatus } from "@/types/localModels";
@@ -52,7 +52,7 @@ function renderPane(
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   }),
-  statuses: SecretStatus[] = STATUSES,
+  statuses: SecretStatus[] | null = STATUSES,
 ) {
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
@@ -63,7 +63,7 @@ function renderPane(
     skald_model: settings.apex?.model ?? null, gaia_model: settings.apex?.gaia_model ?? null,
     apex_context_window: settings.lore?.token_budget?.apex_context_window ?? null,
   });
-  queryClient.setQueryData([...SECRETS_QUERY_KEY], statuses);
+  if (statuses !== null) queryClient.setQueryData(secretsQueryKey(4), statuses);
   queryClient.setQueryData(["/api/dev/backstage/health"], gateOpen);
 
   render(
@@ -224,7 +224,7 @@ describe("SettingsPane API keys", () => {
     expect(screen.getByTestId("key-row-openrouter")).toHaveClass("required");
     expect(calls).toEqual([
       "POST /api/secrets/openrouter/verify",
-      "PUT /api/secrets/openrouter",
+      "PUT /api/secrets/openrouter?slot=4",
     ]);
   });
 });
@@ -278,7 +278,7 @@ describe("SettingsPane model card local provider", () => {
     queryClient.setQueryData(["/api/slot/4/settings"], {
       skald_model: null, gaia_model: null, apex_context_window: null,
     });
-    queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
+    queryClient.setQueryData(secretsQueryKey(4), STATUSES);
     queryClient.setQueryData([...LOCAL_MODELS_STATUS_KEY], LOCAL_STATUS);
     queryClient.setQueryData([...LOCAL_MODELS_DOWNLOAD_KEY], { state: "idle" });
 
@@ -370,11 +370,14 @@ describe("SettingsPane model IDs", () => {
     const gaiaChanged = { skald_model: "frontier-2.1", gaia_model: "frontier-2.1", apex_context_window: null };
     const following = { ...gaiaChanged, gaia_model: null };
     const skaldChanged = { ...following, skald_model: "vendor/model-next" };
-    const request = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify(gaiaChanged)))
-      .mockResolvedValueOnce(new Response(JSON.stringify(following)))
-      .mockResolvedValueOnce(new Response(JSON.stringify(skaldChanged)));
+    const written = [gaiaChanged, following, skaldChanged];
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      new Response(JSON.stringify(
+        String(input).startsWith("/api/secrets/status") ? STATUSES : written.shift(),
+      )),
+    );
+    const patches = () =>
+      request.mock.calls.filter(([url]) => url === "/api/slot/4/settings");
     renderPane(settings, false, settingsQueryClient);
 
     fireEvent.click(screen.getByTestId("model-target-gaia"));
@@ -383,11 +386,11 @@ describe("SettingsPane model IDs", () => {
       expect(screen.getByTestId("model-target-gaia"))
         .toHaveTextContent("Frontier 2.1"),
     );
-    expect(request).toHaveBeenNthCalledWith(
-      1, "/api/slot/4/settings", expect.objectContaining({
+    expect(patches()[0]).toEqual([
+      "/api/slot/4/settings", expect.objectContaining({
         method: "PATCH", body: JSON.stringify({ gaia_model: "frontier-2.1" }),
       }),
-    );
+    ]);
     expect(screen.getByTestId("model-target-skald")).toHaveTextContent(
       "Frontier 2.1",
     );
@@ -397,11 +400,11 @@ describe("SettingsPane model IDs", () => {
       expect(screen.getByTestId("model-target-gaia"))
         .toHaveTextContent("Same as Skald"),
     );
-    expect(request).toHaveBeenNthCalledWith(
-      2, "/api/slot/4/settings", expect.objectContaining({
+    expect(patches()[1]).toEqual([
+      "/api/slot/4/settings", expect.objectContaining({
         body: JSON.stringify({ gaia_model: null }),
       }),
-    );
+    ]);
     expect(screen.getByRole("button", { name: "Frontier 2.1" }))
       .toHaveAttribute("aria-pressed", "false");
 
@@ -411,16 +414,78 @@ describe("SettingsPane model IDs", () => {
       expect(screen.getByTestId("model-target-skald"))
         .toHaveTextContent("Model Next"),
     );
-    expect(request).toHaveBeenNthCalledWith(
-      3, "/api/slot/4/settings", expect.objectContaining({
+    expect(patches()[2]).toEqual([
+      "/api/slot/4/settings", expect.objectContaining({
         body: JSON.stringify({
           skald_model: "vendor/model-next",
         }),
       }),
-    );
+    ]);
     expect(settingsQueryClient.getQueryData(["/api/slot/4/settings"])).toEqual(skaldChanged);
     expect(settingsQueryClient.getQueryData(SETTINGS_QUERY_KEY)).toEqual(settings);
     expect(screen.getByTestId("model-target-gaia")).toHaveTextContent("Same as Skald");
+  });
+
+  it("re-derives the slot's required keys when the Skald pin changes", async () => {
+    const before: SecretStatus[] = [
+      { ...STATUSES[0] },
+      {
+        provider: "openrouter", account: "openrouter", present: false, last4: null,
+        required: false, required_by: [],
+      },
+    ];
+    const after: SecretStatus[] = [
+      { ...before[0], required: false, required_by: [] },
+      {
+        ...before[1],
+        required: true,
+        required_by: [
+          { seat: "skald", model: "vendor/model-next" },
+          { seat: "gaia", model: "vendor/model-next" },
+        ],
+      },
+    ];
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return new Response(JSON.stringify(
+        String(input).startsWith("/api/secrets/status")
+          ? after
+          : { skald_model: "vendor/model-next", gaia_model: null, apex_context_window: null },
+      ));
+    });
+    renderPane(settings, false, undefined, before);
+    expect(screen.getByTestId("key-row-openrouter")).toHaveClass("optional");
+
+    fireEvent.click(screen.getByRole("button", { name: "Model Next" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("key-row-openrouter")).toHaveClass("required", "missing"),
+    );
+    expect(within(screen.getByTestId("key-row-openrouter")).getByText("openrouter"))
+      .toHaveAttribute("title", "Skald · World State");
+    expect(screen.getByTestId("key-row-openai")).toHaveClass("optional");
+    expect(calls).toEqual(["PATCH /api/slot/4/settings", "GET /api/secrets/status?slot=4"]);
+  });
+
+  it("shows a key status failure in its card and keeps the Model card usable", async () => {
+    const detail =
+      "Cannot derive required API keys from the skald seat: Cannot resolve skald " +
+      "model 'retired-821' (story_pin): absent from the registry.";
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return new Response(JSON.stringify({ detail }), { status: 500 });
+    });
+    renderPane(settings, false, undefined, null);
+
+    const alert = await screen.findByTestId("keys-error");
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveTextContent(detail);
+    expect(document.getElementById("set-keys")).toContainElement(alert);
+    expect(screen.queryByTestId(/^key-row-/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("model-openrouter-vendor/model-next")).toBeEnabled();
+    expect(calls).toEqual(["GET /api/secrets/status?slot=4"]);
   });
 
   it("restores the confirmed Gaia selection when the server rejects a write", async () => {
@@ -512,7 +577,7 @@ describe("stale theme save errors from other theme switchers (#961 review)", () 
     queryClient.setQueryData([...SETTINGS_QUERY_KEY], SETTINGS);
     queryClient.setQueryData([...PREFERENCES_QUERY_KEY], { theme: "veil", fonts: KEEPERS, wizard_model: "TEST" });
     queryClient.setQueryData(["/api/slot/4/settings"], { skald_model: null, gaia_model: null, apex_context_window: null });
-    queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
+    queryClient.setQueryData(secretsQueryKey(4), STATUSES);
     queryClient.setQueryData(["/api/dev/backstage/health"], false);
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
     const tree = (withPane: boolean) => (

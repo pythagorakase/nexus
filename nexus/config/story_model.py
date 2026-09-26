@@ -95,6 +95,19 @@ AUXILIARY_SEATS = (
 )
 
 
+# Where to repair a seat whose model is missing, by where the model came from.
+_CLEAR_PIN = "Clear or replace the story pin with nexus model --slot N --clear."
+_ASSIGN_SEAT = "Assign the seat a registered model in nexus.toml."
+_UNRESOLVED_REMEDY: dict[SeatSource, str] = {
+    "request": "Request a model registered in nexus.toml.",
+    "story_pin": _CLEAR_PIN,
+    "story_follow": _CLEAR_PIN,
+    "player_preference": "Replace or remove wizard_model in preferences.toml.",
+    "seat_default": _ASSIGN_SEAT,
+    "repository_default": _ASSIGN_SEAT,
+}
+
+
 @dataclass(frozen=True)
 class SeatResolution:
     """Literal dispatch identity captured before a turn or job can be repinned."""
@@ -165,8 +178,8 @@ def resolve_seat(
         selected = settings.resolve_model_ref(model)
     except ValueError as exc:
         raise ValueError(
-            f"Cannot resolve {seat} model {model!r}: absent from the registry. "
-            "Clear or replace the story pin with nexus model --slot N --clear."
+            f"Cannot resolve {seat} model {model!r} ({source}): absent from the "
+            f"registry. {_UNRESOLVED_REMEDY[source]}"
         ) from exc
     provider = settings.provider_for_model(selected)
     # JudgmentEngine uses the native OpenAI Responses parser directly.

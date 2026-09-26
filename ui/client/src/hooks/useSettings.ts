@@ -1,6 +1,7 @@
 /** Repository defaults plus separately persisted player preferences. */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { SECRETS_QUERY_KEY } from "@/hooks/useSecrets";
 import type { Preferences, SettingsPatch, SettingsPayload, StorySettings } from "@/types/settings";
 
 export const SETTINGS_QUERY_KEY = ["/api/settings"] as const;
@@ -58,7 +59,13 @@ export function useSettingsMutation() {
     onError: (_error, _patch, context) => {
       if (context?.previous) client.setQueryData(PREFERENCES_QUERY_KEY, context.previous);
     },
-    onSuccess: (preferences) => client.setQueryData(PREFERENCES_QUERY_KEY, preferences),
+    onSuccess: (preferences, patch) => {
+      client.setQueryData(PREFERENCES_QUERY_KEY, preferences);
+      // The wizard seat can move which keys are required.
+      if (patch.wizard_model !== undefined) {
+        void client.invalidateQueries({ queryKey: [...SECRETS_QUERY_KEY] });
+      }
+    },
   });
 }
 
@@ -79,6 +86,8 @@ export function useStorySettingsMutation(slot: number | null) {
     onSuccess: (settings) => {
       client.setQueryData([`/api/slot/${slot}/settings`], settings);
       void client.invalidateQueries({ queryKey: [`/api/slot/${slot}/state`] });
+      // Story pins move which keys the slot's seats require.
+      void client.invalidateQueries({ queryKey: [...SECRETS_QUERY_KEY] });
     },
   });
 }

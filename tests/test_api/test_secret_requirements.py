@@ -5,11 +5,13 @@ assignments and a private ``[runtime].state_dir``, points
 ``NEXUS_RUNTIME_CONFIG`` at it, and drives the real router. Model IDs are read
 from the copied roster, never written here, so roster upgrades do not touch
 these tests. Keys come from environment variables under
-``NEXUS_KEYRING_DISABLE=1`` or from the private in-memory store.
+``NEXUS_KEYRING_DISABLE=1`` or from the private in-memory store. Slot-aware
+tests pin a disposable template clone through the real slot settings route.
 """
 
 from __future__ import annotations
 
+import re
 import secrets
 import tomllib
 from collections.abc import Iterator
@@ -21,6 +23,7 @@ import tomlkit
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from nexus.api import secrets_endpoints, slot_endpoints
 from nexus.api.secrets_endpoints import REQUIRED_SECRET_SEATS, router
 from nexus.config.loader import RUNTIME_CONFIG_ENV, load_settings
 from nexus.config.preferences import (
@@ -29,8 +32,11 @@ from nexus.config.preferences import (
     save_preferences,
 )
 from nexus.util.secret_manager import InMemorySecretBackend, get_secret
+from tests.pg_fixtures import connect
 
-REPOSITORY_CONFIG = Path(__file__).resolve().parents[2] / "nexus.toml"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_CONFIG = REPOSITORY_ROOT / "nexus.toml"
+SECRET_TYPES = REPOSITORY_ROOT / "ui" / "client" / "src" / "types" / "secrets.ts"
 KEYED_PROVIDERS = ("openai", "anthropic", "openrouter")
 
 
@@ -81,11 +87,24 @@ def _write_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     assignments: dict[str, str | None],
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Write the repository config with ``assignments`` and make it active."""
+    """Write the repository config with ``assignments`` and make it active.
+
+    ``overrides`` sets dotted TOML keys, and a ``None`` value removes the key.
+    """
     data = tomllib.loads(REPOSITORY_CONFIG.read_text())
     for use, model_id in assignments.items():
         _assign(data, use, model_id)
+    for dotted, value in (overrides or {}).items():
+        *parents, key = dotted.split(".")
+        table = data
+        for part in parents:
+            table = table[part]
+        if value is None:
+            del table[key]
+        else:
+            table[key] = value
     data["ir_eval"]["judgment"]["model_policy"] = "fixed"
     data["runtime"]["state_dir"] = str(tmp_path / "state")
     path = tmp_path / "nexus.toml"
@@ -95,7 +114,9 @@ def _write_config(
 
 
 def _split_config(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    overrides: dict[str, Any] | None = None,
 ) -> tuple[str, str, str]:
     """Put each keyed provider behind different seats; the wizard runs keyless.
 
@@ -122,14 +143,19 @@ def _split_config(
             "ir_eval.judgment.model": openai,
             "global.model.default_model": openai,
         },
+        overrides,
     )
     return anthropic, openrouter, openai
 
 
-def _rows(client: TestClient) -> dict[str, dict[str, Any]]:
-    response = client.get("/api/secrets/status")
-    assert response.status_code == 200
+def _rows(client: TestClient, query: str = "") -> dict[str, dict[str, Any]]:
+    response = client.get(f"/api/secrets/status{query}")
+    assert response.status_code == 200, response.text
     return {row["provider"]: row for row in response.json()}
+
+
+def _seats(row: dict[str, Any]) -> list[str]:
+    return [item["seat"] for item in row["required_by"]]
 
 
 def test_requiredness_counts_only_generation_seats() -> None:
@@ -146,6 +172,15 @@ def test_requiredness_counts_only_generation_seats() -> None:
         "orrery.retrograde.maturation.model_ref",
         "summaries.model",
     )
+
+
+def test_ui_seat_union_matches_the_required_seats() -> None:
+    """The UI throws on a seat it cannot label; keep its union in lockstep."""
+    union = re.search(
+        r"export type SecretSeat =(?P<body>[^;]+);", SECRET_TYPES.read_text()
+    )
+    assert union is not None
+    assert tuple(re.findall(r'"([^"]+)"', union["body"])) == REQUIRED_SECRET_SEATS
 
 
 def test_status_marks_each_account_the_resolved_seats_need(
@@ -305,13 +340,56 @@ def test_put_returns_requiredness_with_the_stored_key(
     assert written.content.find(key.encode()) == -1
 
 
+def test_switched_off_subsystems_need_no_key(
+    client: TestClient,
+    env_keys: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabled experience and maturation queues never call their seat's model."""
+    _, _, openai = _split_config(
+        tmp_path,
+        monkeypatch,
+        {
+            "orrery.experiences.enabled": False,
+            "orrery.retrograde.maturation.enabled": False,
+        },
+    )
+    assert _rows(client)["openai"]["required_by"] == [
+        {"seat": "storyteller.correspondence.compaction_model", "model": openai}
+    ]
+
+    # Without [orrery] no Orrery seat exists to need a key.
+    _write_config(
+        tmp_path,
+        monkeypatch,
+        {
+            "apex.model": openai,
+            "apex.gaia_model": None,
+            "wizard.default_model": openai,
+            "summaries.model": None,
+            "storyteller.correspondence.compaction_model": openai,
+            "orrery.experiences.model": None,
+            "orrery.retrograde.maturation.model_ref": None,
+        },
+        {"orrery": None},
+    )
+    assert _seats(_rows(client)["openai"]) == [
+        "skald",
+        "gaia",
+        "wizard",
+        "storyteller.correspondence.compaction_model",
+        "summaries.model",
+    ]
+
+
 def test_unresolvable_seat_fails_status_and_blocks_the_write(
     client: TestClient,
     in_memory_secret_store: InMemorySecretBackend,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A stale player preference surfaces as an error, never as optional keys."""
+    """A stale player preference fails loudly, naming its seat and its repair."""
     _split_config(tmp_path, monkeypatch)
     settings = load_settings()
     # A model the player chose, since removed from the roster.
@@ -320,8 +398,124 @@ def test_unresolvable_seat_fails_status_and_blocks_the_write(
     path.parent.mkdir(parents=True)
     path.write_text(tomlkit.dumps(stale))
 
-    with pytest.raises(ValueError, match="Cannot resolve wizard model"):
-        client.get("/api/secrets/status")
-    with pytest.raises(ValueError, match="Cannot resolve wizard model"):
-        client.put("/api/secrets/openrouter", json={"key": secrets.token_urlsafe(24)})
+    status = client.get("/api/secrets/status")
+    written = client.put(
+        "/api/secrets/openrouter", json={"key": secrets.token_urlsafe(24)}
+    )
+
+    for response in (status, written):
+        assert response.status_code == 500
+        assert response.json() == {
+            "detail": (
+                "Cannot derive required API keys from the wizard seat: Cannot "
+                "resolve wizard model 'retired-821' (player_preference): absent "
+                "from the registry. Replace or remove wizard_model in "
+                "preferences.toml."
+            )
+        }
     assert in_memory_secret_store.accounts() == frozenset()
+
+
+@pytest.fixture
+def slot_client(offline_gate_db: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """Serve the secrets and slot settings routes against the slot 4 clone."""
+    for module in (secrets_endpoints, slot_endpoints):
+        monkeypatch.setattr(module, "slot_dbname", lambda slot: offline_gate_db)
+    app = FastAPI()
+    app.include_router(router)
+    app.include_router(slot_endpoints.router)
+    return TestClient(app)
+
+
+@pytest.mark.requires_postgres
+def test_slot_skald_pin_moves_the_requirement(
+    slot_client: TestClient,
+    in_memory_secret_store: InMemorySecretBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Skald picked in the Model card moves the keys that slot's turns read."""
+    data = tomllib.loads(REPOSITORY_CONFIG.read_text())
+    openai = _reasoning_model(data, "openai")
+    anthropic = _reasoning_model(data, "anthropic")
+    _write_config(
+        tmp_path,
+        monkeypatch,
+        {
+            "apex.model": openai,
+            "apex.gaia_model": None,
+            "wizard.default_model": openai,
+            "summaries.model": None,
+            "orrery.experiences.model": openai,
+            "storyteller.correspondence.compaction_model": openai,
+            "orrery.retrograde.maturation.model_ref": openai,
+        },
+        {
+            "orrery.experiences.model_policy": "follow_story",
+            "storyteller.correspondence.compaction_model_policy": "follow_story",
+            "orrery.retrograde.maturation.model_ref_policy": "fixed",
+            "summaries.model_policy": "follow_story",
+        },
+    )
+    for account in KEYED_PROVIDERS:
+        monkeypatch.delenv(f"{account.upper()}_API_KEY", raising=False)
+    cleared = {"skald_model": None, "gaia_model": None, "apex_context_window": None}
+    assert slot_client.patch("/api/slot/4/settings", json=cleared).status_code == 200
+    assert _rows(slot_client, "?slot=4")["anthropic"]["required"] is False
+
+    pinned = slot_client.patch("/api/slot/4/settings", json={"skald_model": anthropic})
+    assert pinned.status_code == 200, pinned.text
+
+    rows = _rows(slot_client, "?slot=4")
+    needed = [
+        {"seat": seat, "model": anthropic}
+        for seat in (
+            "skald",
+            "gaia",
+            "wizard",
+            "orrery.experiences.model",
+            "storyteller.correspondence.compaction_model",
+            "summaries.model",
+        )
+    ]
+    assert rows["anthropic"] == {
+        "provider": "anthropic",
+        "account": "anthropic",
+        "present": False,
+        "last4": None,
+        "required": True,
+        "required_by": needed,
+    }
+    assert rows["openai"]["required_by"] == [
+        {"seat": "orrery.retrograde.maturation.model_ref", "model": openai}
+    ]
+    # Without a slot the repository defaults still put every seat on OpenAI.
+    assert _rows(slot_client)["anthropic"]["required"] is False
+
+    key = secrets.token_urlsafe(24)
+    written = slot_client.put("/api/secrets/anthropic?slot=4", json={"key": key})
+    assert written.status_code == 200, written.text
+    assert written.json() == {**rows["anthropic"], "present": True, "last4": key[-4:]}
+    assert in_memory_secret_store.read("anthropic") == key
+
+
+@pytest.mark.requires_postgres
+def test_retired_slot_pin_names_the_story_pin_repair(
+    slot_client: TestClient,
+    env_keys: None,
+    offline_gate_db: str,
+) -> None:
+    """A pin the roster no longer has fails loudly with the pin's own repair."""
+    with connect(offline_gate_db) as conn, conn.cursor() as cur:
+        cur.execute("UPDATE global_variables SET model = 'retired-821' WHERE id")
+
+    response = slot_client.get("/api/secrets/status?slot=4")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "detail": (
+            "Cannot derive required API keys from the skald seat: Cannot resolve "
+            "skald model 'retired-821' (story_pin): absent from the registry. "
+            "Clear or replace the story pin with nexus model --slot N --clear."
+        )
+    }

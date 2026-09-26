@@ -423,9 +423,11 @@ function ModelSection({
 // ──────────────────────────────────────────────────────────────────────────
 // 5. API keys - masked status only; plaintext lives in local draft state and
 // goes directly to the writer, never through React Query state. Keys the
-// configured model seats need sort first and warn while missing; keys no seat
-// needs are dimmed. The provider name's hover title lists the needing seats
-// (Skald and World State as the Model card names them).
+// model seats need (resolved against the active slot's story pins) sort first
+// and warn while missing; keys no seat needs are dimmed. The provider name's
+// hover title lists the needing seats (Skald and World State as the Model
+// card names them). A status failure, such as a seat whose model left the
+// roster, shows in this card so the Model card above stays usable to repair it.
 // ──────────────────────────────────────────────────────────────────────────
 
 const SEAT_LABELS: Record<SecretSeat, string> = {
@@ -449,17 +451,27 @@ function requiredByTitle(row: SecretStatus): string | undefined {
     .join(" · ");
 }
 
-function KeysSection() {
-  const { data: providers, error } = useSecretsQuery();
-  const setSecret = useSetSecret();
+function KeysSection({ slot }: { slot: number | null }) {
+  const { data: providers, error } = useSecretsQuery(slot);
+  const setSecret = useSetSecret(slot);
   const verifySecret = useVerifySecret();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [verified, setVerified] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
 
-  if (error) throw error;
   if (actionError) throw actionError;
+
+  if (error) {
+    return (
+      <SettingsCard id="keys" label="API KEYS">
+        <div className="alert danger" role="alert" data-testid="keys-error">
+          <AlertTriangle size={14} />
+          <div className="alert-body">{error.message}</div>
+        </div>
+      </SettingsCard>
+    );
+  }
 
   const markBusy = (provider: string, value: boolean) => {
     setBusy((current) => {
@@ -836,7 +848,7 @@ function SettingsConsole({ settings, slot }: { settings: SettingsPayload; slot: 
           onPickSkald={(id) => mutation.mutate({ skald_model: id })}
           onPickGaia={(id) => mutation.mutate({ gaia_model: id })}
         />}
-        <KeysSection />
+        <KeysSection slot={slot} />
         {slot !== null && <ContextLengthSection
           settings={settings}
           onCommit={(value) => mutation.mutate({ apex_context_window: value })}

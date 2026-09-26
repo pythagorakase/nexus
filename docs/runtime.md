@@ -324,12 +324,20 @@ hosts. Consequences for deployment:
 `GET /api/secrets/status` adds `required` and `required_by` (`seat`, `model`)
 to each masked row. Skald, World State, the wizard, and the experience,
 correspondence, entity-maturation, and summary seats resolve from `nexus.toml`
-and the player's wizard preference, without story pins; a seat that fails to
-resolve fails the request. Offline judgment, the display-only
-`global.model.default_model`, and keyless providers never require a key. The
-API KEYS card lists required keys first, marks a missing one with the warning
-state, and dims the rest. Verification remains an explicit click that is never
-stored and is cleared when the key is replaced.
+and the player's wizard preference. With `?slot=N` (the card passes the active
+slot, and `PUT /api/secrets/{provider}` accepts the same parameter) they
+resolve as that slot's turns do: its Skald and World State pins apply, and
+seats that follow the story use its Skald. A seat that fails to resolve fails
+the request with a detail naming the seat, where its model came from, and the
+repair. Offline judgment, the display-only `global.model.default_model`, the
+experience seat while `[orrery.experiences] enabled = false`, the maturation
+seat while `[orrery.retrograde.maturation] enabled = false`, and keyless
+providers never require a key. The API KEYS card lists required keys first,
+marks a missing one with the warning state, dims the rest, shows a status
+failure inside the card (so the Model card stays usable to repair a retired
+pin), and re-reads the rows after the Model card changes a story pin.
+Verification remains an explicit click that is never stored and is cleared
+when the key is replaced.
 
 A host without a browser uses the same card through an SSH tunnel to its
 loopback gateway (port 8002 by default), not another entry path:
@@ -339,9 +347,12 @@ ssh -N -L 8002:127.0.0.1:8002 <user>@<host>
 ```
 
 Open `http://127.0.0.1:8002` locally and commit each key in Settings → API
-Keys. The gateway keeps its `127.0.0.1` bind, the key crosses only the SSH
-session to `PUT /api/secrets/{provider}`, and it lands in the host's platform
-store, never on a command line or in a file on the host.
+Keys. If your own machine already serves a gateway on 8002, forward any free
+local port instead (`-L 8012:127.0.0.1:8002`, then open
+`http://127.0.0.1:8012`); the page and its API calls share that origin. The
+gateway keeps its `127.0.0.1` bind, the key crosses only the SSH session to
+`PUT /api/secrets/{provider}`, and it lands in the host's platform store, never
+on a command line or in a file on the host.
 
 ## Development Workflows (unchanged)
 

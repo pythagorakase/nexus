@@ -5,24 +5,32 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 
+from nexus.api.slot_utils import slot_dbname
 from nexus.config.loader import load_settings
 from nexus.config.settings_models import (
     NATIVE_API_PROVIDERS,
     ProviderModels,
     Settings,
 )
-from nexus.config.story_model import AUXILIARY_SEATS, SeatResolution, resolve_seat
+from nexus.config.story_model import (
+    AUXILIARY_SEATS,
+    SeatResolution,
+    StorySettings,
+    read_story_settings,
+    resolve_seat,
+)
 from nexus.util.secret_manager import MissingSecretError, get_secret, set_secret
 
 router = APIRouter(prefix="/api/secrets", tags=["secrets"])
 
 # Seats that make a provider key required. ir_eval judgment is offline
 # evaluation tooling, and global.model.default_model is display-only with no
-# generation consumer, so neither marks a key required. The UI labels exactly
-# these seats (SEAT_LABELS in ui/client/src/components/nexus/SettingsPane.tsx).
+# generation consumer, so neither marks a key required. The UI types and labels
+# exactly these seats (SecretSeat in ui/client/src/types/secrets.ts, SEAT_LABELS
+# in ui/client/src/components/nexus/SettingsPane.tsx); a test pins the union.
 _NON_GENERATION_SEATS = frozenset(
     {"ir_eval.judgment.model", "global.model.default_model"}
 )
@@ -32,6 +40,10 @@ REQUIRED_SECRET_SEATS: tuple[str, ...] = (
     "wizard",
     *(seat for seat in AUXILIARY_SEATS if seat not in _NON_GENERATION_SEATS),
 )
+
+
+class SeatRequirementError(ValueError):
+    """A seat in use could not be resolved to the account its key lives under."""
 
 
 @dataclass(frozen=True)
@@ -115,18 +127,46 @@ def get_secret_providers() -> list[SecretProvider]:
     return providers
 
 
-def required_secret_accounts(settings: Settings) -> dict[str, list[SeatResolution]]:
-    """Map each secret account the configured model seats read to those seats.
+def _seat_in_use(seat: str, settings: Settings) -> bool:
+    """Return False for a seat whose subsystem is absent or switched off.
 
-    Every seat in ``REQUIRED_SECRET_SEATS`` resolves through ``resolve_seat``
-    without a story, so the answer reflects the repository defaults and the
-    player's wizard preference rather than any one slot's pins. Seats on
-    keyless providers need no account. Resolution errors propagate.
+    The experience and maturation queues gate only on their own ``enabled``
+    flags (``orrery.enabled`` does not stop them), so those flags alone retire
+    their seats.
+    """
+    if seat == "orrery.experiences.model":
+        return settings.orrery is not None and settings.orrery.experiences.enabled
+    if seat == "orrery.retrograde.maturation.model_ref":
+        return (
+            settings.orrery is not None
+            and settings.orrery.retrograde.maturation.enabled
+        )
+    return True
+
+
+def required_secret_accounts(
+    settings: Settings, story: StorySettings | None = None
+) -> dict[str, list[SeatResolution]]:
+    """Map each secret account the model seats in use read to those seats.
+
+    Every seat in ``REQUIRED_SECRET_SEATS`` whose subsystem is on resolves
+    through ``resolve_seat``. With ``story``, Skald and World State pins and
+    the seats that follow the story's Skald resolve as that slot's turns do;
+    without one, the answer reflects the repository defaults and the player's
+    wizard preference. Seats on keyless providers need no account. A seat that
+    fails to resolve raises ``SeatRequirementError`` naming the seat.
     """
     registry = settings.global_.model.api_models
     required: dict[str, list[SeatResolution]] = {}
     for seat in REQUIRED_SECRET_SEATS:
-        resolution = resolve_seat(seat, settings=settings)
+        if not _seat_in_use(seat, settings):
+            continue
+        try:
+            resolution = resolve_seat(seat, settings=settings, story=story)
+        except ValueError as exc:
+            raise SeatRequirementError(
+                f"Cannot derive required API keys from the {seat} seat: {exc}"
+            ) from exc
         account = _secret_account(resolution.provider, registry[resolution.provider])
         if account is not None:
             required.setdefault(account, []).append(resolution)
@@ -139,6 +179,22 @@ def _provider_or_404(provider: str) -> SecretProvider:
         if candidate.provider == provider:
             return candidate
     raise HTTPException(status_code=404, detail="Unknown secret provider.")
+
+
+def _requirements_for(slot: int | None) -> dict[str, list[SeatResolution]]:
+    """Resolve seat requiredness, against ``slot``'s story pins when given.
+
+    A seat that cannot resolve is a configuration error; it fails the request
+    with a detail naming the seat, its model, and where that model came from.
+    """
+    story = None
+    if slot is not None:
+        story = read_story_settings(slot_dbname(slot))
+        story.slot = slot
+    try:
+        return required_secret_accounts(load_settings(), story)
+    except SeatRequirementError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 def _status_for(
@@ -206,11 +262,19 @@ def _verify_provider(provider: SecretProvider, key: str) -> None:
     raise RuntimeError("No verification path exists for this native provider.")
 
 
+_SLOT_QUERY = Query(
+    None,
+    ge=1,
+    le=5,
+    description="Resolve requiredness against this save slot's story pins.",
+)
+
+
 @router.get("/status", response_model=list[SecretStatus])
-def get_secrets_status() -> list[SecretStatus]:
+def get_secrets_status(slot: int | None = _SLOT_QUERY) -> list[SecretStatus]:
     """Return masked status and seat requiredness for UI-visible keyed providers."""
     providers = get_secret_providers()
-    required = required_secret_accounts(load_settings())
+    required = _requirements_for(slot)
     return [
         _status_for(provider, required.get(provider.account, []))
         for provider in providers
@@ -218,11 +282,13 @@ def get_secrets_status() -> list[SecretStatus]:
 
 
 @router.put("/{provider}", response_model=SecretStatus)
-def put_secret(provider: str, body: SecretWriteRequest) -> SecretStatus:
+def put_secret(
+    provider: str, body: SecretWriteRequest, slot: int | None = _SLOT_QUERY
+) -> SecretStatus:
     """Store or replace one registry-approved provider key."""
     selected = _provider_or_404(provider)
     # Resolve seats before writing so a seat error never follows a stored key.
-    requirements = required_secret_accounts(load_settings()).get(selected.account, [])
+    requirements = _requirements_for(slot).get(selected.account, [])
     try:
         set_secret(selected.account, body.key)
     except ValueError:
