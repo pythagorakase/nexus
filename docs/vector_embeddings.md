@@ -65,6 +65,9 @@ when an unlisted file appears, or when the configured embedder, reranker,
 repository, or dimensions no longer match the lock. Its remediation names
 `hf download <repo> --revision <commit> --local-dir <path>` for a changed
 artifact and re-running `nexus models lock` after an intentional upgrade.
+Only `.DS_Store` is ignored: the `._*` AppleDouble files that copying an
+artifact to an exFAT or network volume creates are unexpected files, so remove
+them first (on macOS, `dot_clean -m <path>`).
 Neither command downloads anything, and startup does not run `verify`.
 
 ## Database Storage Strategy

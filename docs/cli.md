@@ -173,6 +173,21 @@ Available models:
 - `TEST` — Mock responses for development
 - `claude` — Anthropic Claude
 
+### `models` — Lock or Verify Model Artifacts
+
+Pins the local production embedder and reranker files (not the LLM that
+`model` selects). Neither verb downloads anything.
+
+```bash
+# Hash the local artifacts and write [memnon.artifacts].lock_file
+poetry run nexus models lock
+
+# Read-only check; exits 1 naming each problem and its restore command
+poetry run nexus models verify
+```
+
+See `docs/vector_embeddings.md` for what the lock records.
+
 ### `lock` / `unlock` — Protect Slots
 
 Lock a slot to prevent accidental modifications.

@@ -253,15 +253,11 @@ class MEMNON:
         result = self.idf_dictionary.build_dictionary()
         logger.info(f"IDF dictionary initialized with {len(result)} terms")
 
-        # Get model weights from settings
-        model_weights = {}
-        for model_name, model_config in self.settings.get("models", {}).items():
-            weight = model_config.get("weight", 0.33)  # Default equal weight
-            model_weights[model_name] = weight
-
-        # Use default weights if none defined in settings
-        if not model_weights:
-            model_weights = {"bge-large": 0.4, "e5-large": 0.4, "bge-small-custom": 0.2}
+        # Model weights come from [memnon.models]; every entry declares one.
+        model_weights = {
+            model_name: model_config["weight"]
+            for model_name, model_config in self.settings["models"].items()
+        }
 
         # Flag to prioritize text search for testing
         self.force_text_first = False

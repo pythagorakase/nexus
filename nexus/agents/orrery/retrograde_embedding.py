@@ -39,7 +39,7 @@ def active_memnon_embedding_model_dimensions() -> dict[str, int]:
     active_models = {
         str(name): int(config["dimensions"])
         for name, config in configured_models.items()
-        if config.get("is_active", True)
+        if config["is_active"]
     }
     if not active_models:
         raise RuntimeError("No active MEMNON embedding models are configured")

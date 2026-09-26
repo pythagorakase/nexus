@@ -328,7 +328,27 @@ def read_manifest(path: Path) -> Dict[str, Any]:
             f"{path} has schema_version {version!r}; expected "
             f"{MANIFEST_SCHEMA_VERSION}. Re-run `nexus models lock`."
         )
+    if not _well_formed_artifacts(manifest.get("artifacts")):
+        raise ArtifactLockError(
+            f"{path} is malformed: every entry in `artifacts` needs a role and a "
+            "`files` list of path, size and sha256. Re-run `nexus models lock`."
+        )
     return manifest
+
+
+def _well_formed_artifacts(artifacts: Any) -> bool:
+    """True when the lock's artifact entries have the fields verify reads."""
+
+    return isinstance(artifacts, list) and all(
+        isinstance(entry, dict)
+        and isinstance(entry.get("role"), str)
+        and isinstance(entry.get("files"), list)
+        and all(
+            isinstance(file, dict) and {"path", "size", "sha256"} <= file.keys()
+            for file in entry["files"]
+        )
+        for entry in artifacts
+    )
 
 
 def _verify_files(spec: ArtifactSpec, entry: Dict[str, Any]) -> List[str]:

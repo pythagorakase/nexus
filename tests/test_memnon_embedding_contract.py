@@ -199,3 +199,46 @@ def test_settings_reject_two_active_embedders_and_name_them(tmp_path: Path) -> N
     assert "exactly one embedder" in message
     assert "2 are active" in message
     assert first in message and second in message
+
+
+def test_lore_startup_surfaces_the_embedder_remedy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LORE fails startup with the embedder's `hf download` remedy, not a guess.
+
+    MEMNON connects to PostgreSQL before it builds its EmbeddingManager, so
+    this stand-in keeps only that step: the real EmbeddingManager raises for
+    the repository's active embedder pointed at a missing directory. The same
+    construction against a real database is in
+    tests/test_lore/test_runtime_config.py.
+    """
+
+    from nexus.agents.lore.lore import LORE
+    from nexus.agents.memnon import memnon as memnon_module
+    from nexus.agents.memnon.utils.embedding_manager import EmbeddingManager
+
+    config = REPO_ROOT / "nexus.toml"
+    settings = load_settings(config).memnon.model_dump(by_alias=True)
+    (active,) = [
+        name for name, model in settings["models"].items() if model["is_active"]
+    ]
+    missing = tmp_path / "not-installed"
+    settings["models"][active]["local_path"] = str(missing)
+    remedy = (
+        f"hf download {settings['models'][active]['remote_path']} --local-dir {missing}"
+    )
+
+    def memnon_without_database(**_kwargs: Any) -> EmbeddingManager:
+        return EmbeddingManager(settings=settings)
+
+    monkeypatch.setattr(memnon_module, "MEMNON", memnon_without_database)
+
+    with pytest.raises(RuntimeError) as raised:
+        LORE(settings_path=str(config), enable_logon=False, dbname="save_05")
+
+    message = str(raised.value)
+    assert message.startswith("FATAL: MEMNON initialization failed:")
+    assert remedy in message
+    assert "Check database connection" not in message
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    assert remedy in str(raised.value.__cause__)

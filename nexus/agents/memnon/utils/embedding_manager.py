@@ -11,7 +11,8 @@ command (issue #812).
 import logging
 import threading
 from pathlib import Path
-from typing import Dict, List, Any, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
+
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger("nexus.memnon.embedding_manager")

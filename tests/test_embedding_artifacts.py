@@ -325,6 +325,23 @@ def test_verify_without_a_lock_names_the_lock_command(tmp_path: Path) -> None:
     assert "nexus models lock" in result["error"]
 
 
+def test_verify_rejects_a_malformed_lock_with_the_relock_command(
+    tmp_path: Path,
+) -> None:
+    """A current-schema lock missing its file lists fails with the remedy."""
+
+    workspace = _workspace(tmp_path)
+    manifest = _lock(workspace)
+    for entry in manifest["artifacts"]:
+        del entry["files"]
+    workspace.lock.write_text(json.dumps(manifest))
+
+    result = run_models_command("verify", str(workspace.config))
+    assert result["success"] is False
+    assert f"{workspace.lock} is malformed" in result["error"]
+    assert "Re-run `nexus models lock`" in result["error"]
+
+
 def test_lock_refuses_artifact_whose_dimension_disagrees(tmp_path: Path) -> None:
     """The artifact's declared output dimension must match nexus.toml."""
 
