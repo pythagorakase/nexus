@@ -105,6 +105,8 @@ def test_status_put_status_and_unknown_provider_flow(
             "account": TEST_ACCOUNT,
             "present": False,
             "last4": None,
+            "required": False,
+            "required_by": [],
         }
     ]
 
@@ -116,6 +118,8 @@ def test_status_put_status_and_unknown_provider_flow(
         "account": TEST_ACCOUNT,
         "present": True,
         "last4": key[-4:],
+        "required": False,
+        "required_by": [],
     }
     assert in_memory_secret_store.read(TEST_ACCOUNT) == key
 
@@ -173,7 +177,8 @@ def test_registry_put_writes_only_its_account(
     written = client.put("/api/secrets/openai", json={"key": key})
 
     assert written.status_code == 200
-    assert written.json() == {
+    masked = ("provider", "account", "present", "last4")
+    assert {field: written.json()[field] for field in masked} == {
         "provider": "openai",
         "account": "openai",
         "present": True,

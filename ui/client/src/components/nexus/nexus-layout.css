@@ -2039,6 +2039,12 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
+/* Seat requiredness: dim keys no seat needs; a needed, missing key warns. */
+.key-row.optional { opacity: .5; transition: opacity .15s linear; }
+.key-row.optional:hover,
+.key-row.optional:focus-within { opacity: 1; }
+.key-row.missing { border-color: var(--warning); }
+.key-row.missing .key-status { color: var(--warning); }
 .key-provider-name {
   font-family: var(--font-body);
   font-size: 15px;

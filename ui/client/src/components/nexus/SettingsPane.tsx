@@ -20,6 +20,7 @@ import {
 import { themeIconPath } from "@/lib/themeIcons";
 import { FONT_CATALOG } from "./fontCatalog";
 import { LOCAL_PROVIDER, LocalModelRows } from "./LocalModelRows";
+import type { SecretSeat, SecretStatus } from "@/types/secrets";
 import type {
   FontSlotId,
   FontSlots,
@@ -421,20 +422,56 @@ function ModelSection({
 
 // ──────────────────────────────────────────────────────────────────────────
 // 5. API keys - masked status only; plaintext lives in local draft state and
-// goes directly to the writer, never through React Query state.
+// goes directly to the writer, never through React Query state. Keys the
+// model seats need (resolved against the active slot's story pins) sort first
+// and warn while missing; keys no seat needs are dimmed. The provider name's
+// hover title lists the needing seats (Skald and World State as the Model
+// card names them). A status failure, such as a seat whose model left the
+// roster, shows in this card so the Model card above stays usable to repair it.
 // ──────────────────────────────────────────────────────────────────────────
 
-function KeysSection() {
-  const { data: providers, error } = useSecretsQuery();
-  const setSecret = useSetSecret();
+const SEAT_LABELS: Record<SecretSeat, string> = {
+  skald: "Skald",
+  gaia: "World State",
+  wizard: "Wizard",
+  "orrery.experiences.model": "Experiences",
+  "storyteller.correspondence.compaction_model": "Correspondence",
+  "orrery.retrograde.maturation.model_ref": "Entity Maturation",
+  "summaries.model": "Summaries",
+};
+
+function requiredByTitle(row: SecretStatus): string | undefined {
+  if (!row.required) return undefined;
+  return row.required_by
+    .map(({ seat }) => {
+      const label = SEAT_LABELS[seat];
+      if (label === undefined) throw new Error(`Unlabeled model seat: ${seat}`);
+      return label;
+    })
+    .join(" · ");
+}
+
+function KeysSection({ slot }: { slot: number | null }) {
+  const { data: providers, error } = useSecretsQuery(slot);
+  const setSecret = useSetSecret(slot);
   const verifySecret = useVerifySecret();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [verified, setVerified] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
 
-  if (error) throw error;
   if (actionError) throw actionError;
+
+  if (error) {
+    return (
+      <SettingsCard id="keys" label="API KEYS">
+        <div className="alert danger" role="alert" data-testid="keys-error">
+          <AlertTriangle size={14} />
+          <div className="alert-body">{error.message}</div>
+        </div>
+      </SettingsCard>
+    );
+  }
 
   const markBusy = (provider: string, value: boolean) => {
     setBusy((current) => {
@@ -481,18 +518,30 @@ function KeysSection() {
     }
   };
 
+  // Stable sort: required rows first, registry order within each group.
+  const rows = [...(providers ?? [])].sort(
+    (a, b) => Number(b.required) - Number(a.required),
+  );
+
   return (
     <SettingsCard id="keys" label="API KEYS">
       <ul className="key-list">
-        {(providers ?? []).map((row) => {
+        {rows.map((row) => {
           const draft = drafts[row.provider] ?? "";
           const isBusy = busy.has(row.provider);
           const isVerified = verified.has(row.provider);
           const status = isVerified ? "verified" : row.present ? "present" : "absent";
+          const need = !row.required ? "optional" : row.present ? "required" : "required missing";
 
           return (
-            <li className="key-row" key={row.provider}>
-              <span className="key-provider-name">{row.provider}</span>
+            <li
+              className={`key-row ${need}`}
+              key={row.provider}
+              data-testid={`key-row-${row.provider}`}
+            >
+              <span className="key-provider-name" title={requiredByTitle(row)}>
+                {row.provider}
+              </span>
               <span className={`key-status ${status}`} data-testid={`key-status-${row.provider}`}>
                 {row.present || isVerified ? (
                   <CircleDot size={12} />
@@ -799,7 +848,7 @@ function SettingsConsole({ settings, slot }: { settings: SettingsPayload; slot: 
           onPickSkald={(id) => mutation.mutate({ skald_model: id })}
           onPickGaia={(id) => mutation.mutate({ gaia_model: id })}
         />}
-        <KeysSection />
+        <KeysSection slot={slot} />
         {slot !== null && <ContextLengthSection
           settings={settings}
           onCommit={(value) => mutation.mutate({ apex_context_window: value })}

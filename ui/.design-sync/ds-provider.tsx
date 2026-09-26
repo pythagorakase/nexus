@@ -34,14 +34,23 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
     { id: 3, name: "The Archivist", summary: "Keeper of the Spire's flooded records; speaks in retrieved fragments.", appearance: "Robed, ageless, eyes like wet glass.", personality: "Patient, oblique, unnervingly precise.", emotionalState: "Serene.", currentActivity: "Cataloguing what the water took.", currentLocationName: "The Spire Vaults", portraitPath: null },
   ];
   // API-key status rows (GET /api/secrets/status → SecretStatus[]). Masked
-  // status only — no plaintext. A mixed present/absent set renders the KeysSection
-  // card populated (present rows show a filled dot + ••••last4 placeholder); an
-  // absent row shows the empty dot. Without this the query 404s and KeysSection's
-  // `if (error) throw error` blanks the whole SettingsPane.
+  // status only — no plaintext. The set covers each KeysSection row state: a
+  // seat-required present key (filled dot + ••••last4 placeholder), a
+  // seat-required missing key (warning border and dot), and a key no seat needs
+  // (dimmed). Without this the query 404s and KeysSection shows that failure
+  // in place of its rows. The stub matches any `?slot=N` suffix.
   const SECRETS = [
-    { provider: "anthropic", account: "nexus-api", present: true, last4: "8f2a" },
-    { provider: "openai", account: "nexus-api", present: true, last4: "b41c" },
-    { provider: "openrouter", account: "nexus-api", present: false, last4: null },
+    {
+      provider: "anthropic", account: "anthropic", present: true, last4: "8f2a",
+      required: true,
+      required_by: [{ seat: "skald", model: "writer-model" }, { seat: "summaries.model", model: "writer-model" }],
+    },
+    {
+      provider: "openai", account: "openai", present: false, last4: null,
+      required: true,
+      required_by: [{ seat: "gaia", model: "world-model" }],
+    },
+    { provider: "openrouter", account: "openrouter", present: false, last4: null, required: false, required_by: [] },
   ];
   // Full settings payload; theme echoes the preview's own localStorage so the
   // Theme/Font providers don't override a deco/splash card's intended theme.
