@@ -51,7 +51,12 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     skald_writer_lenient_schema,
     skald_writer_strict_text_format,
 )
-from nexus.agents.lore.seat_blocks import SEAT_BLOCKS, ContextSeat, order_seat_blocks
+from nexus.agents.lore.seat_blocks import (
+    SEAT_BLOCKS,
+    ContextSeat,
+    influence_token_totals,
+    order_seat_blocks,
+)
 from nexus.agents.lore.utils.scene_order import (  # noqa: E402
     is_recalled,
     recalled_clock_label,
@@ -2035,14 +2040,20 @@ class LogonUtility:
                 attempt=manifest_ordinal,
                 model=provider.model,
                 block_tokens=counts,
+                influence_tokens=influence_token_totals(counts),
                 input_tokens=tokens,
                 effective_ceiling=budget.input_ceiling,
                 policy_headroom=budget.policy_headroom,
                 headroom=budget.input_ceiling - tokens,
                 trimming=payload.get("window_trimming", {}),
             )
-            from nexus.telemetry.attempt_manifest import start_attempt, identity_hash
+            from nexus.telemetry.attempt_manifest import attempt_blocks, start_attempt
 
+            wire_schema = text_format or {
+                key: value
+                for key, value in (anthropic_request or {}).items()
+                if key in {"tools", "tool_choice", "output_config"}
+            }
             start_attempt(
                 attempt_record,
                 resolved_source=getattr(
@@ -2054,44 +2065,18 @@ class LogonUtility:
                     "source",
                     None,
                 ),
-                blocks=[
-                    {
-                        "kind": "system",
-                        "tokens": counts["system"],
-                        "sha256": identity_hash(provider.system_prompt or ""),
-                    }
-                ]
-                + [
-                    {
-                        "kind": kind,
-                        "tokens": local_count.text_count(text),
-                        "sha256": identity_hash(text),
-                    }
-                    for kind, text in active_blocks
-                ]
-                + [
-                    {
-                        "kind": "request framing",
-                        "tokens": counts.get("request framing", 0),
-                        "sha256": identity_hash(
-                            text_format
-                            or {
-                                key: value
-                                for key, value in (anthropic_request or {}).items()
-                                if key in {"tools", "tool_choice", "output_config"}
-                            }
-                        ),
-                    }
-                ],
+                blocks=attempt_blocks(
+                    active_blocks,
+                    local_count.text_count,
+                    system_prompt=provider.system_prompt or "",
+                    system_tokens=counts["system"],
+                    wire_schema=wire_schema,
+                    framing_tokens=counts.get("request framing", 0),
+                ),
                 system_prompt=provider.system_prompt or "",
                 prompt=active_prompt,
                 settings=self.settings,
-                wire_schema=text_format
-                or {
-                    key: value
-                    for key, value in (anthropic_request or {}).items()
-                    if key in {"tools", "tool_choice", "output_config"}
-                },
+                wire_schema=wire_schema,
             )
             record_prompt_window(attempt_record)
             # Native providers count remotely. A declared compatible-provider
