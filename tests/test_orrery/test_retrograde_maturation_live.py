@@ -19,15 +19,14 @@ from nexus.agents.orrery.retrograde_maturation import (
     drain_maturation_jobs_sync,
     enqueue_declared_entity_maturations,
 )
-
-SAVE_02_DSN = "postgresql://pythagor@localhost:5432/save_02"
+from nexus.database import database_url
 
 pytestmark = [pytest.mark.live, pytest.mark.live_llm, pytest.mark.requires_postgres]
 
 
 @pytest.fixture()
 def save_02_conn() -> Iterator[Any]:
-    conn = psycopg2.connect(SAVE_02_DSN)
+    conn = psycopg2.connect(database_url("save_02"))
     try:
         yield conn
     finally:
@@ -114,7 +113,7 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
     if pending:
         from nexus.agents.memnon.memnon import MEMNON
 
-        memnon = MEMNON(interface=None, db_url=SAVE_02_DSN)
+        memnon = MEMNON(interface=None, db_url=database_url("save_02"))
         search = memnon.query_memory(query=name, k=15, use_hybrid=True)
         returned_ids = {
             int(item["summary_id"])

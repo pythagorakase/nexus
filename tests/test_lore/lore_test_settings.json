@@ -1,10 +1,4 @@
 {
-    "Database": {
-        "name": "save_01",
-        "user": "pythagor",
-        "host": "localhost",
-        "port": 5432
-    },
     "Agent Settings": {
         "LORE": {
             "debug": true,

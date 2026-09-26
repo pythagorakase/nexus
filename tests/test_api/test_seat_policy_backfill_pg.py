@@ -6,13 +6,13 @@ import subprocess
 from uuid import uuid4
 
 from psycopg2 import sql
-from psycopg2.extensions import make_dsn
 import pytest
 
 from nexus.config import load_settings
 from nexus.config.story_model import StorySettings, resolve_seat
+from nexus.database import subprocess_env
 from scripts import migrate
-from tests.pg_fixtures import connect, connection_parameters
+from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -28,11 +28,12 @@ def test_seat_policy_migration_backfills_save04_active_jobs(tmp_path):
             "--file",
             str(archive),
             "--dbname",
-            make_dsn(dbname="save_04", **connection_parameters()),
+            "save_04",
         ],
         check=True,
         capture_output=True,
         text=True,
+        env=subprocess_env(),
     )
     with closing(connect("postgres")) as admin:
         admin.autocommit = True
@@ -50,12 +51,13 @@ def test_seat_policy_migration_backfills_save04_active_jobs(tmp_path):
                     "--no-owner",
                     "--no-acl",
                     "--dbname",
-                    make_dsn(dbname=dbname, **connection_parameters()),
+                    dbname,
                     str(archive),
                 ],
                 check=True,
                 capture_output=True,
                 text=True,
+                env=subprocess_env(),
             )
             migration = next(
                 row for row in migrate.discover_migrations() if row[0] == "126"

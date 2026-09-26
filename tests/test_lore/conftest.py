@@ -7,12 +7,13 @@ import logging
 import json
 import os
 import psycopg2
+from contextlib import closing
 from pathlib import Path
-from typing import Dict, Any, Generator
+from typing import Dict, Any, Generator, Iterator
 from unittest.mock import MagicMock
 import sys
 
-TEST_DB_CONNECT_TIMEOUT_SECONDS = 2
+from tests.pg_fixtures import connect, disposable_slot_database, seed_committed_chunk
 
 # Configure logging for tests
 logging.basicConfig(
@@ -48,7 +49,7 @@ def ensure_nexus_slot_env() -> None:
 
 @pytest.fixture(scope="session")
 def test_scenes() -> Dict[str, int]:
-    """Map test scene IDs from lore_test_scenes.md."""
+    """Map the curated golden-master scene IDs from lore_test_scenes.md."""
     return {
         # Dialogue-Heavy Scenes
         "dialogue_offer": 2,  # S01E01_002 - Interrogation/Offer
@@ -77,19 +78,20 @@ def test_scenes() -> Dict[str, int]:
     }
 
 
-@pytest.fixture
-def db_connection(settings) -> Generator[psycopg2.extensions.connection, None, None]:
-    """Provide database connection for tests."""
-    # Get database config from settings
-    db_config = settings.get("Database", {})
+@pytest.fixture(scope="module")
+def lore_infra_database() -> Iterator[str]:
+    """Yield a template clone holding one committed chunk, never an owner slot."""
+    with disposable_slot_database("qa_lore_infra") as dbname:
+        seed_committed_chunk(dbname, raw_text="Fixture narrative for LORE checks.")
+        yield dbname
 
-    conn = psycopg2.connect(
-        dbname=db_config.get("name", "NEXUS"),
-        user=db_config.get("user", "pythagor"),
-        host=db_config.get("host", "localhost"),
-        port=db_config.get("port", 5432),
-        connect_timeout=TEST_DB_CONNECT_TIMEOUT_SECONDS,
-    )
+
+@pytest.fixture
+def db_connection(
+    lore_infra_database: str,
+) -> Generator[psycopg2.extensions.connection, None, None]:
+    """Connect to the disposable LORE clone through the test connection contract."""
+    conn = connect(lore_infra_database)
 
     try:
         yield conn
@@ -98,42 +100,52 @@ def db_connection(settings) -> Generator[psycopg2.extensions.connection, None, N
         conn.close()
 
 
-@pytest.fixture
-def sample_chunks(db_connection, test_scenes) -> Dict[str, Dict]:
-    """Load sample chunks from database for testing."""
-    chunks = {}
-    cursor = db_connection.cursor()
+@pytest.fixture(scope="module")
+def lore_corpus_database() -> Iterator[str]:
+    """Yield a disposable data clone of the save_01 golden master.
 
-    for scene_name, chunk_id in test_scenes.items():
-        cursor.execute(
-            """
-            SELECT 
-                id,
-                raw_text,
-                season,
-                episode,
-                scene,
-                world_layer,
-                world_time
-            FROM narrative_view
-            WHERE id = %s
-        """,
-            (chunk_id,),
+    Only ``requires_corpus`` tests may use it; the flag check stops an
+    unmarked test from cloning the owner's corpus under the plain gate.
+    """
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        pytest.fail(
+            "lore_corpus_database needs the requires_corpus marker and "
+            "NEXUS_RUN_CORPUS=1",
+            pytrace=False,
         )
+    with disposable_slot_database(
+        "qa_lore_corpus", source_db="save_01", include_data=True
+    ) as dbname:
+        yield dbname
 
-        row = cursor.fetchone()
-        if row:
-            chunks[scene_name] = {
-                "id": row[0],
-                "raw_text": row[1],
-                "season": row[2],
-                "episode": row[3],
-                "scene": row[4],
-                "world_layer": row[5],
-                "world_time": row[6],
-            }
 
-    cursor.close()
+@pytest.fixture
+def sample_chunks(lore_corpus_database: str, test_scenes) -> Dict[str, Dict]:
+    """Load the curated scenes from a disposable clone of the golden master."""
+    chunks = {}
+    with closing(connect(lore_corpus_database)) as conn, conn.cursor() as cursor:
+        for scene_name, chunk_id in test_scenes.items():
+            cursor.execute(
+                """
+                SELECT id, raw_text, season, episode, scene, world_layer, world_time
+                FROM narrative_view
+                WHERE id = %s
+                """,
+                (chunk_id,),
+            )
+
+            row = cursor.fetchone()
+            if row:
+                chunks[scene_name] = {
+                    "id": row[0],
+                    "raw_text": row[1],
+                    "season": row[2],
+                    "episode": row[3],
+                    "scene": row[4],
+                    "world_layer": row[5],
+                    "world_time": row[6],
+                }
+
     return chunks
 
 

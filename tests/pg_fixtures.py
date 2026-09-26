@@ -1,4 +1,10 @@
-"""Shared PostgreSQL helpers for disposable integration-test databases."""
+"""Shared PostgreSQL helpers for disposable integration-test databases.
+
+Every helper resolves its server through ``nexus.database``, the same contract
+the runtime uses: explicit ``[api.database]`` values, then the PG* environment,
+then libpq's Unix socket and the operating-system user. Fixtures that seed a
+database therefore reach the server that the code under test reads.
+"""
 
 from __future__ import annotations
 
@@ -12,63 +18,104 @@ from typing import Any
 
 import psycopg2
 from psycopg2 import sql
-from psycopg2.extensions import make_dsn
-from sqlalchemy.engine import URL
+from sqlalchemy import text
+from sqlalchemy.engine import URL, make_url
 
 from nexus.api import db_pool
 from nexus.config.story_model import StorySettings, write_story_settings
+from nexus.database import (
+    asyncpg_kwargs as contract_asyncpg_kwargs,
+    connection_kwargs,
+    create_slot_engine,
+    database_url,
+    subprocess_env,
+)
 from scripts import migrate, new_story_setup
 
 
-def connection_parameters() -> dict[str, str]:
-    """Return the PG* environment as keyword parameters, never a hand-built URI.
+def connection_parameters(dbname: str) -> dict[str, Any]:
+    """Return the runtime contract's psycopg2 keyword parameters for ``dbname``.
 
-    Keyword parameters survive Unix-socket directories (`PGHOST=/var/run/...`)
-    and IPv6 hosts (`::1`) that break naive URI interpolation.
+    Host, port, user, password, connect timeout, and session options all come
+    from ``nexus.database.connection_kwargs``; only the database name is the
+    caller's. Keyword parameters survive Unix-socket directories and IPv6
+    hosts that break naive URI interpolation.
     """
 
-    return {
-        "user": os.environ.get("PGUSER", "pythagor"),
-        "host": os.environ.get("PGHOST", "localhost"),
-        "port": os.environ.get("PGPORT", "5432"),
-    }
+    return connection_kwargs(dbname)
 
 
 def connect(dbname: str, *, cursor_factory: Any = None) -> Any:
-    """Open a direct psycopg2 connection to ``dbname``."""
+    """Open a direct psycopg2 connection to ``dbname`` on the contract's server."""
 
-    kwargs: dict[str, Any] = {"dbname": dbname, **connection_parameters()}
+    kwargs = connection_parameters(dbname)
     if cursor_factory is not None:
         kwargs["cursor_factory"] = cursor_factory
     return psycopg2.connect(**kwargs)
 
 
 def asyncpg_kwargs(dbname: str) -> dict[str, Any]:
-    """Return keyword arguments for ``asyncpg.connect`` targeting ``dbname``."""
+    """Return the contract's ``asyncpg.connect`` keyword arguments for ``dbname``."""
 
-    params = connection_parameters()
-    return {
-        "database": dbname,
-        "user": params["user"],
-        "host": params["host"],
-        "port": int(params["port"]),
-    }
+    return contract_asyncpg_kwargs(dbname)
 
 
 def sqlalchemy_url(dbname: str) -> URL:
-    """Return a SQLAlchemy URL for ``dbname`` built through ``URL.create``."""
+    """Return the contract's URL for ``dbname`` as a SQLAlchemy ``URL``.
 
-    params = connection_parameters()
-    return URL.create(
-        "postgresql",
-        username=params["user"],
-        host=params["host"],
-        port=int(params["port"]),
-        database=dbname,
-    )
+    Pass the object to SQLAlchemy directly. A string for libpq or a command
+    line comes from ``nexus.database.database_url``: SQLAlchemy renders spaces
+    in query values as ``+``, which libpq does not decode.
+    """
+
+    return make_url(database_url(dbname))
 
 
 _connect = connect
+
+_TARGET_IDENTITY_SQL = (
+    "SELECT current_database(), current_setting('port'), "
+    "(pg_postmaster_start_time() AT TIME ZONE 'UTC')::text"
+)
+
+
+def assert_one_target(dbname: str) -> None:
+    """Fail unless fixture, runtime, and URL clients reach one database.
+
+    Fixtures seed through ``connect``, while production code resolves
+    ``nexus.database`` directly or through ``database_url``. Both derive from
+    ``connection_kwargs``, so this guards against drift: a fixture that grows
+    its own resolver would seed one server while the code under test queries
+    another (issue #804). The server's listening port and postmaster start time
+    identify the instance whether a client arrives over TCP or a Unix socket.
+
+    The pooled client checked here is the ``create_slot_engine`` SQLAlchemy
+    engine built from ``database_url``. ``db_pool`` accepts only ``save_0N``
+    names, so it is not checked out; its parameters come from the same
+    ``connection_kwargs`` call that is checked.
+    """
+
+    identities: dict[str, tuple[Any, ...]] = {}
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(_TARGET_IDENTITY_SQL)
+        identities["tests.pg_fixtures.connect"] = tuple(cur.fetchone())
+    with closing(psycopg2.connect(**connection_kwargs(dbname))) as conn:
+        with conn.cursor() as cur:
+            cur.execute(_TARGET_IDENTITY_SQL)
+            identities["nexus.database.connection_kwargs"] = tuple(cur.fetchone())
+    engine = create_slot_engine(database_url(dbname))
+    try:
+        with engine.connect() as sa_conn:
+            row = sa_conn.execute(text(_TARGET_IDENTITY_SQL)).one()
+            identities["nexus.database.database_url"] = tuple(row)
+    finally:
+        engine.dispose()
+    if len(set(identities.values())) != 1 or any(
+        identity[0] != dbname for identity in identities.values()
+    ):
+        raise AssertionError(
+            f"PostgreSQL clients disagree on the {dbname!r} target: {identities!r}"
+        )
 
 
 @contextmanager
@@ -94,6 +141,11 @@ def disposable_slot_database(
 
     if story_pin is None and os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
         raise ValueError("story_pin=None requires NEXUS_RUN_LIVE_LLM=1")
+    # The clone is created and migrated by scripts that resolve nexus.database
+    # themselves, and dropped through the admin connection below. Prove both
+    # still reach one server before creating anything, so a clone cannot
+    # outlive its fixture.
+    assert_one_target("postgres")
 
     def pin_clone() -> None:
         if story_pin is not None:
@@ -123,6 +175,8 @@ def disposable_slot_database(
                 )
             with tempfile.TemporaryDirectory(prefix="nexus-pg-corpus-") as archive_dir:
                 archive_path = os.path.join(archive_dir, "corpus.dump")
+                # subprocess_env() carries the contract's target, password, and
+                # session options, keeping the password off the command line.
                 subprocess.run(
                     [
                         "pg_dump",
@@ -130,11 +184,12 @@ def disposable_slot_database(
                         "--file",
                         archive_path,
                         "--dbname",
-                        make_dsn(dbname=source_db, **connection_parameters()),
+                        source_db,
                     ],
                     check=True,
                     capture_output=True,
                     text=True,
+                    env=subprocess_env(),
                 )
                 subprocess.run(
                     [
@@ -143,12 +198,13 @@ def disposable_slot_database(
                         "--no-owner",
                         "--no-acl",
                         "--dbname",
-                        make_dsn(dbname=dbname, **connection_parameters()),
+                        dbname,
                         archive_path,
                     ],
                     check=True,
                     capture_output=True,
                     text=True,
+                    env=subprocess_env(),
                 )
             pin_clone()
             _, failed = migrate.migrate_database(dbname, skip_locked=False)
@@ -222,3 +278,40 @@ def seed_protagonist(
             )
             assert cur.rowcount == 1
     return character_id, entity_id
+
+
+def seed_committed_chunk(
+    dbname: str,
+    *,
+    raw_text: str,
+    season: int = 1,
+    episode: int = 1,
+    scene: int = 1,
+) -> int:
+    """Insert one committed chunk with its primary-layer metadata; return its ID."""
+
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+            "VALUES (%s, %s) RETURNING id",
+            (raw_text, raw_text),
+        )
+        chunk_id = int(cur.fetchone()[0])
+        cur.execute(
+            """
+            INSERT INTO chunk_metadata (
+                chunk_id, season, episode, scene, world_layer,
+                time_delta, generation_date, slug
+            ) VALUES (
+                %s, %s, %s, %s, 'primary', interval '1 minute', now(), %s
+            )
+            """,
+            (
+                chunk_id,
+                season,
+                episode,
+                scene,
+                f"S{season:02d}E{episode:02d}_{scene:03d}",
+            ),
+        )
+    return chunk_id

@@ -18,7 +18,8 @@ from psycopg2.extensions import cursor as PostgreSQLCursor
 from nexus.agents.memnon.utils.db_access import execute_multi_model_hybrid_search
 from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary, IDFStateError
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
-from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
+from nexus.database import database_url
+from tests.pg_fixtures import connect, disposable_slot_database
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -26,7 +27,7 @@ migration = import_module("migrations.114_slot_scoped_idf")
 
 
 def _url(dbname: str) -> str:
-    return sqlalchemy_url(dbname).render_as_string(hide_password=False)
+    return database_url(dbname)
 
 
 def _insert(cursor: Any, text: str, *, metadata: bool = True) -> int:

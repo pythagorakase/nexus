@@ -25,7 +25,6 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 SLOT = int(os.environ.get("NEXUS_DISPOSABLE_TEST_SLOT", "0"))
 DISPOSABLE_DBNAME = f"save_{SLOT:02d}"
-DISPOSABLE_DSN = f"postgresql://pythagor@localhost:5432/{DISPOSABLE_DBNAME}"
 MODEL_OVERRIDE_ENV = "NEXUS_RETROGRADE_WIZARD_MODEL"
 
 
@@ -150,7 +149,7 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
         assert event["summary"] not in repr(surface["visible"])
 
     # MEMNON retrieves the generated history through the production path.
-    memnon = MEMNON(interface=None, db_url=DISPOSABLE_DSN)
+    memnon = MEMNON(interface=None, db_url=_disposable_dsn())
     target = max(rows, key=lambda row: len(row["summary"]))
     search = memnon.query_memory(query=target["summary"], k=10, use_hybrid=True)
     returned_ids = {
@@ -222,8 +221,15 @@ def _install_fixture_world() -> Any:
     )
 
 
+def _disposable_dsn() -> str:
+    """Resolve the disposable slot through the shared connection contract."""
+    from nexus.database import database_url
+
+    return database_url(DISPOSABLE_DBNAME)
+
+
 def _query(sql: str, params: Any = None) -> list[dict[str, Any]]:
-    conn = psycopg2.connect(DISPOSABLE_DSN)
+    conn = psycopg2.connect(_disposable_dsn())
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params)

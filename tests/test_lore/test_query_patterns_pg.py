@@ -19,7 +19,7 @@ from tests.pg_fixtures import (
 )
 
 
-@pytest.mark.parametrize("db_url", [None, "", "postgresql://localhost/"])
+@pytest.mark.parametrize("db_url", [None, "", "postgresql://fixture.invalid/"])
 def test_query_patterns_require_explicit_database(db_url: str | None) -> None:
     """An absent database never selects a default slot or cast."""
     with pytest.raises(ValueError, match="explicit database"):

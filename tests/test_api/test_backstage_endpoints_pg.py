@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
-import psycopg2  # type: ignore[import-untyped]
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from psycopg2 import sql
 import pytest
 
 from nexus.agents.orrery.relationship_provenance import relationship_producer
@@ -20,27 +17,29 @@ from nexus.agents.orrery.retrograde_persistence import (
     _insert_prologue_chunk,
 )
 from nexus.agents.orrery.tag_writer import apply_pair_tag_bestowal
-from nexus.api import backstage_endpoints, commit_handler_sync, db_pool
+from nexus.api import backstage_endpoints, commit_handler_sync
 from nexus.memory.correspondence import (
     CorrespondenceCompactionPlan,
     insert_digest_version,
 )
 from nexus.config import load_settings
+from nexus.database import database_url
 from nexus.memory.manager import empty_pass2_baseline
-from scripts import new_story_setup
+from tests.pg_fixtures import assert_one_target, connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
-def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+def _route_backstage_to(monkeypatch: pytest.MonkeyPatch, dbname: str) -> None:
+    """Resolve the endpoint's slot-4 URL to ``dbname`` through the contract."""
+
+    def fixture_slot_url(*, slot: int) -> str:
+        if slot != 4:
+            raise ValueError("slot_number must be between 1 and 5")
+        return database_url(dbname)
+
+    monkeypatch.setattr(backstage_endpoints, "get_slot_db_url", fixture_slot_url)
 
 
 def _stage_incubator(
@@ -97,83 +96,27 @@ def _stage_incubator(
 
 @pytest.fixture(scope="module")
 def disposable_db() -> Iterator[str]:
-    """Yield a dump-initialized disposable slot and drop it afterward."""
+    """Yield a template clone that seeding and the endpoint both resolve."""
 
-    dbname = f"qa_wt625_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        try:
-            admin = _connect("postgres")
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
-        admin.autocommit = True
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
-            dbname,
-            source_db="NEXUS_template",
-        )
+    with disposable_slot_database("qa_wt625") as dbname:
+        assert_one_target(dbname)
         yield dbname
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
 
 
 @pytest.fixture(scope="module")
 def empty_disposable_db() -> Iterator[str]:
-    """Yield a second dump-initialized slot with no committed chunks."""
+    """Yield a second template clone with no committed chunks."""
 
-    dbname = f"qa_wt625_empty_{uuid.uuid4().hex[:8]}"
-    admin: Any = None
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        try:
-            admin = _connect("postgres")
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
-        admin.autocommit = True
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
-            dbname,
-            source_db="NEXUS_template",
-        )
+    with disposable_slot_database("qa_wt625_empty") as dbname:
+        assert_one_target(dbname)
         yield dbname
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
 
 
 @pytest.fixture(scope="module")
 def backstage_case(disposable_db: str) -> dict[str, Any]:
     """Persist every Backstage stream through real writer/query paths."""
 
-    conn = _connect(disposable_db)
+    conn = connect(disposable_db)
     try:
         with conn:
             with conn.cursor() as cur:
@@ -464,12 +407,7 @@ def client(
 ) -> TestClient:
     """Route the genuine Backstage endpoint to the disposable slot."""
 
-    def disposable_url(*, slot: int) -> str:
-        if slot != 4:
-            raise ValueError("slot_number must be between 1 and 5")
-        return f"postgresql://pythagor@localhost:5432/{disposable_db}"
-
-    monkeypatch.setattr(backstage_endpoints, "get_slot_db_url", disposable_url)
+    _route_backstage_to(monkeypatch, disposable_db)
     app = FastAPI()
     app.include_router(backstage_endpoints.router)
     return TestClient(app)
@@ -663,11 +601,7 @@ def test_empty_slot_is_404(
     empty_disposable_db: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        backstage_endpoints,
-        "get_slot_db_url",
-        lambda *, slot: (f"postgresql://pythagor@localhost:5432/{empty_disposable_db}"),
-    )
+    _route_backstage_to(monkeypatch, empty_disposable_db)
     app = FastAPI()
     app.include_router(backstage_endpoints.router)
     response = TestClient(app).get("/api/dev/backstage/4/turn")
@@ -740,11 +674,7 @@ def test_backstage_gate_both_arms(
         document["orrery"]["dashboard"]["enabled"] = True  # type: ignore[index]
         on_path = tmp_path / "backstage_on.toml"
         on_path.write_text(tomlkit.dumps(document))
-        monkeypatch.setattr(
-            backstage_endpoints,
-            "get_slot_db_url",
-            lambda *, slot: f"postgresql://pythagor@localhost:5432/{disposable_db}",
-        )
+        _route_backstage_to(monkeypatch, disposable_db)
         enabled_settings = load_settings(str(on_path))
         narrative._include_backstage_router(narrative.app, enabled_settings)
         narrative.app.router.routes.extend(catch_all)
@@ -790,7 +720,7 @@ def test_incubator_view_never_exposes_staged_correspondence(
     monkeypatch.setattr(
         narrative,
         "get_db_connection",
-        lambda slot=None: _connect(disposable_db),
+        lambda slot=None: connect(disposable_db),
     )
     response = TestClient(narrative.app).get(
         "/api/narrative/incubator", params={"slot": 4}

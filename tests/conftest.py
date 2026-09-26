@@ -168,6 +168,13 @@ def pytest_collection_modifyitems(
             "Set NEXUS_RUN_POSTGRES=1 to run PostgreSQL integration tests.",
         )
 
+    if not _flag_enabled("NEXUS_RUN_CORPUS"):
+        _apply_marker_skip(
+            items,
+            "requires_corpus",
+            "Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.",
+        )
+
     if not _flag_enabled("NEXUS_RUN_LIVE_LLM"):
         _apply_marker_skip(
             items,

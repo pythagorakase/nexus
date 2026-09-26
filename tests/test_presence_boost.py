@@ -87,7 +87,7 @@ def test_measurement_idf_does_not_create_home_cache(
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(psycopg2, "connect", lambda *_args, **_kwargs: _IDFConnection())
 
-    dictionary = ReadOnlyIDFDictionary("postgresql://test@localhost/disposable")
+    dictionary = ReadOnlyIDFDictionary("postgresql://test@fixture.invalid/disposable")
     assert dictionary.build_dictionary(force_rebuild=True) == {"fixture": 0.0}
     assert list(tmp_path.iterdir()) == []
 
@@ -123,7 +123,7 @@ def test_time_aware_search_forwards_presence_boost(
     )
 
     results = continuous_temporal_search.execute_multi_model_time_aware_search(
-        db_url="postgresql://test@localhost/disposable",
+        db_url="postgresql://test@fixture.invalid/disposable",
         query_text="What happened recently?",
         query_embeddings={"fixture": [1.0, 0.0, 0.0]},
         model_weights={"fixture": 1.0},
