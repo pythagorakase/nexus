@@ -33,6 +33,7 @@ from nexus.api.new_story_flow import (
 from nexus.api.save_slots import get_slot_model
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.wizard_transcript import visible_wizard_messages
 from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
@@ -84,7 +85,7 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
 
 @router.get("/setup/resume", response_model=ResumeSetupResponse)
 def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResponse:
-    """Restore saved drafts, all conversation messages, and current choices."""
+    """Restore saved drafts, the player transcript, and current choices."""
     try:
         data = resume_setup(slot)
         if not data:
@@ -107,11 +108,7 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
             thread_id=data.thread_id,
             target_slot=slot,
             current_phase=data.current_phase(),
-            messages=[
-                message
-                for message in reversed(messages)
-                if message["role"] in {"user", "assistant"}
-            ],
+            messages=visible_wizard_messages(list(reversed(messages))),
             choices=data.choices,
             setting_draft=data.get_setting_dict(),
             character_draft=data.get_character_dict(),

@@ -12,10 +12,15 @@ import logging
 import threading
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, NotRequired, Optional, TypedDict
 
 
 from scripts.api_openai import OpenAIProvider
+from nexus.api.wizard_transcript import (
+    MessageOrigin,
+    decode_wizard_message,
+    encode_wizard_message,
+)
 from nexus.config.loader import get_provider_for_model
 
 logger = logging.getLogger("nexus.api.conversations")
@@ -26,6 +31,18 @@ class Message(TypedDict):
 
     role: str
     content: str
+    origin: NotRequired[MessageOrigin]
+
+
+def _normalized_message(role: str, content: str) -> Message:
+    """Return model-facing text and retain optional wizard provenance."""
+    message: Message = {"role": role, "content": content}
+    if role == "user":
+        text, origin = decode_wizard_message(content)
+        message["content"] = text
+        if origin is not None:
+            message["origin"] = origin
+    return message
 
 
 class ConversationsClient:
@@ -97,7 +114,14 @@ class ConversationsClient:
         logger.info("Created conversations thread %s", thread_id)
         return thread_id
 
-    def add_message(self, thread_id: str, role: str, content: str) -> str:
+    def add_message(
+        self,
+        thread_id: str,
+        role: str,
+        content: str,
+        *,
+        origin: MessageOrigin | None = None,
+    ) -> str:
         """
         Add a message to an existing thread.
 
@@ -105,10 +129,16 @@ class ConversationsClient:
             thread_id: The ID of the thread to add the message to
             role: The role of the message sender (user/assistant)
             content: The message content
+            origin: Explicit provenance for a wizard input. Its envelope is
+                storage-only; list_messages returns the original content.
 
         Returns:
             The ID of the created message
         """
+        if origin is not None:
+            if role != "user":
+                raise ValueError("Wizard input provenance requires role=user")
+            content = encode_wizard_message(content, origin)
         if self._store_mode == "memory":
             msg_id = f"test_msg_{uuid.uuid4().hex[:16]}"
             # Initialize thread if it doesn't exist (handle edge cases)
@@ -147,7 +177,7 @@ class ConversationsClient:
             # Return most recent messages, limited (newest first)
             limited = messages[-limit:] if limit else messages
             limited = list(reversed(limited))
-            return [{"role": m["role"], "content": m["content"]} for m in limited]
+            return [_normalized_message(m["role"], m["content"]) for m in limited]
         if self._store_mode == "file" and self._file_store:
             return self._file_store.list_messages(thread_id, limit=limit)
 
@@ -168,7 +198,7 @@ class ConversationsClient:
                 for part in item.content
                 if part.type in {"input_text", "output_text"}
             )
-            history.append({"role": item.role, "content": content})
+            history.append(_normalized_message(item.role, content))
             if limit and len(history) >= limit:
                 break
 
@@ -254,7 +284,7 @@ class _FileConversationStore:
             messages = self._load(thread_id)
         limited = messages[-limit:] if limit else messages
         limited = list(reversed(limited))
-        return [{"role": m["role"], "content": m["content"]} for m in limited]
+        return [_normalized_message(m["role"], m["content"]) for m in limited]
 
     def delete_thread(self, thread_id: str) -> bool:
         path = self._thread_path(thread_id)
