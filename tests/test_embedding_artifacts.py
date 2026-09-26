@@ -26,6 +26,7 @@ from nexus.agents.memnon.utils.artifact_manifest import (
     lock_artifact,
     run_models_command,
 )
+from nexus.config.loader import RUNTIME_CONFIG_ENV, settings_path_scope
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
@@ -409,6 +410,59 @@ def test_verify_rejects_a_lock_that_is_not_an_object(tmp_path: Path) -> None:
         f"{workspace.lock} does not hold a JSON object at its top level. "
         "Re-run `nexus models lock`."
     )
+
+
+def test_default_config_follows_the_load_settings_chain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without --config, a settings scope and then NEXUS_RUNTIME_CONFIG apply."""
+
+    workspace = _workspace(tmp_path)
+    _lock(workspace)
+    elsewhere = tmp_path / "elsewhere" / "model_artifacts.lock.json"
+    other = _write_config(
+        tmp_path,
+        workspace.embedder_dir,
+        workspace.reranker_dir,
+        elsewhere,
+        name="other",
+    )
+
+    with settings_path_scope(workspace.config):
+        scoped = run_models_command("verify", None)
+        explicit = run_models_command("verify", str(other))
+    assert scoped["success"] is True, scoped
+    assert scoped["lock_file"] == str(workspace.lock)
+    # --config still wins over an active scope.
+    assert explicit["success"] is False
+    assert f"No model artifact lock at {elsewhere}" in explicit["error"]
+
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(workspace.config))
+    from_env = run_models_command("verify", None)
+    assert from_env["success"] is True, from_env
+    assert from_env["lock_file"] == str(workspace.lock)
+
+
+def test_verify_outside_the_repository_without_config_names_the_fix(
+    tmp_path: Path,
+) -> None:
+    """No nexus.toml to find is a clean CLI error, still JSON under --json."""
+
+    env = {key: value for key, value in os.environ.items() if key != RUNTIME_CONFIG_ENV}
+    cli = subprocess.run(
+        [sys.executable, "-m", "nexus.cli", "models", "verify", "--json"],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env={**env, "PYTHONPATH": str(REPO_ROOT)},
+        cwd=tmp_path,
+    )
+    assert cli.returncode == 1, cli.stdout + cli.stderr
+    assert json.loads(cli.stderr) == {
+        "error": "Configuration file not found: nexus.toml. Pass --config with "
+        f"the path to nexus.toml, set {RUNTIME_CONFIG_ENV}, or run from the "
+        "repository root."
+    }
 
 
 def test_lock_refuses_artifact_whose_dimension_disagrees(tmp_path: Path) -> None:

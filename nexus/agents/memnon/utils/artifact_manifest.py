@@ -485,25 +485,26 @@ def _lock_summary(manifest: Dict[str, Any], path: Path) -> str:
     return "\n".join(lines)
 
 
-def _settings_path(config_path: Optional[str]) -> Path:
-    """Explicit --config, then NEXUS_RUNTIME_CONFIG, then the repo nexus.toml."""
-
-    if config_path:
-        return Path(config_path)
-    runtime_config = os.environ.get(RUNTIME_CONFIG_ENV)
-    return Path(runtime_config) if runtime_config else _REPO_ROOT / "nexus.toml"
-
-
 def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, Any]:
     """Run ``nexus models lock`` or ``nexus models verify`` for the CLI.
 
-    Returns the CLI result mapping: ``success`` plus a ``message`` on success,
-    or an ``error`` naming every problem and its remediation on failure.
+    ``config_path`` is ``--config``; without it, :func:`load_settings` owns the
+    fallback chain (an active settings scope, then NEXUS_RUNTIME_CONFIG, then
+    nexus.toml). Returns the CLI result mapping: ``success`` plus a ``message``
+    on success, or an ``error`` naming every problem and its remediation on
+    failure.
     """
 
     if command not in ("lock", "verify"):
         raise ValueError(f"Unknown models command: {command!r}")
-    settings = load_settings(_settings_path(config_path))
+    try:
+        settings = load_settings(config_path or None)
+    except FileNotFoundError as exc:
+        return {
+            "success": False,
+            "error": f"{exc}. Pass --config with the path to nexus.toml, set "
+            f"{RUNTIME_CONFIG_ENV}, or run from the repository root.",
+        }
     lock_path = lock_file_path(settings)
     try:
         specs = production_artifact_specs(settings)
