@@ -33,9 +33,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 UI_PUBLIC_DIR = REPO_ROOT / "ui" / "client" / "public"
 UI_DIST_DIR = REPO_ROOT / "ui" / "dist" / "public"
 
-# Paths that must never fall back to index.html: a 404 on these is a real
-# 404 (a missing API route masquerading as the app shell is a debugging trap).
-NO_SPA_FALLBACK_PREFIXES = ("api/", "ws/")
+# Paths that must never fall back to the app shell: a 404 on these is a real
+# 404 (a missing API route masquerading as the app shell is a debugging trap,
+# and a plane projection that omits a route must answer 404, issue #824).
+NO_SPA_FALLBACK_PREFIXES = ("api/", "ws/", "runtime/")
 
 # App-shell files that must always be revalidated (service worker update
 # flow depends on sw.js never being served stale).
@@ -105,6 +106,8 @@ def mount_ui(app: FastAPI) -> None:
         # mount occupies when the build exists.
         @app.get("/{full_path:path}", include_in_schema=False)
         async def ui_build_missing(full_path: str) -> PlainTextResponse:
+            if full_path.startswith(NO_SPA_FALLBACK_PREFIXES):
+                raise StarletteHTTPException(status_code=404)
             return PlainTextResponse(
                 "NEXUS UI build not found. Run `npm --prefix ui run build`, "
                 "or use the Vite dev server (`npm --prefix ui run dev`).",
