@@ -173,8 +173,14 @@ one. `offsetCoincidentPins` (in `lib/map-geometry.ts`) fans them out:
   color, no text). Centering and the place dialog keep the true
   coordinates.
 
-Because epsilon divides by zoom, zooming in far enough returns
-near-but-distinct places to their true positions.
+Grouping is single-linkage: a chain of pins, each within epsilon of the
+next, fans onto one ring around the chain's centroid even when its end
+pins are far apart, so those end pins can sit farther than the ring
+radius from their true points (the leaders show where). Only grouped
+pins move, so a fanned pin can land near an ungrouped single. And
+because epsilon divides by zoom, which pins fan depends on the zoom:
+zooming in far enough returns near-but-distinct places to their true
+positions.
 
 ---
 

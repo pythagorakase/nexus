@@ -74,7 +74,6 @@ import {
   zoomViewBoxAtCursor,
   type DragSession,
   type LabelCandidate,
-  type MapBounds,
   type PanBounds,
   type ViewBox,
 } from "@/lib/map-geometry";
@@ -249,13 +248,23 @@ export function MapPane({ slot }: MapPaneProps) {
 
   // Center on the narrative's current place when the slot, the current
   // place, or the charted extent changes — not on a bare resize, which
-  // the refit above already carried across (re-centering there would
-  // throw away the reader's pan).
+  // the refit above already carried across, nor on a places refetch that
+  // leaves the extent as it was (re-centering there would throw away the
+  // reader's pan). The extent is compared by value: every refetch that
+  // changes any place rebuilds the mapBounds object.
   const firstCurrentPlaceId = currentPlaces[0]?.placeId;
+  const boundsKey = mapBounds
+    ? [
+        mapBounds.minLng,
+        mapBounds.maxLng,
+        mapBounds.minLat,
+        mapBounds.maxLat,
+      ].join(",")
+    : null;
   const centeredOnRef = useRef<{
     slot: number | null;
     placeId: number;
-    bounds: MapBounds | null;
+    boundsKey: string | null;
   } | null>(null);
   useEffect(() => {
     if (firstCurrentPlaceId === undefined) return;
@@ -264,7 +273,7 @@ export function MapPane({ slot }: MapPaneProps) {
       last &&
       last.slot === slot &&
       last.placeId === firstCurrentPlaceId &&
-      last.bounds === mapBounds
+      last.boundsKey === boundsKey
     ) {
       return;
     }
@@ -273,10 +282,10 @@ export function MapPane({ slot }: MapPaneProps) {
     centeredOnRef.current = {
       slot,
       placeId: firstCurrentPlaceId,
-      bounds: mapBounds,
+      boundsKey,
     };
     setViewBox((previous) => centerViewBoxOn(coordinates, previous, panBounds));
-  }, [slot, firstCurrentPlaceId, mapBounds, placeCoordinates, panBounds]);
+  }, [slot, firstCurrentPlaceId, boundsKey, placeCoordinates, panBounds]);
 
   // Where each pin is DRAWN: coincident pins fan out onto a small ring
   // (screen-constant, hence / zoom). Pins, labels and hit targets use

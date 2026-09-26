@@ -105,13 +105,14 @@ function renderPane() {
   for (const place of PLACES) {
     client.setQueryData(["/api/places", place.id, "images", SLOT], []);
   }
-  return render(
+  render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
         <MapPane slot={SLOT} />
       </ThemeProvider>
     </QueryClientProvider>,
   );
+  return client;
 }
 
 function readViewBox() {
@@ -187,6 +188,36 @@ describe("MapPane", () => {
     expect(after.latitude).toBeCloseTo(before.latitude, 9);
     const box = readViewBox();
     expect(box.width / box.height).toBeCloseTo(700 / 800, 9);
+  });
+
+  it("keeps the pan when a places refetch keeps the extent", async () => {
+    const client = renderPane();
+    resizeCanvas(1000, 600);
+    const svg = screen.getByTestId("map-svg");
+    for (let tick = 0; tick < 3; tick++) {
+      fireEvent.wheel(svg, { deltaY: -100, clientX: 850, clientY: 120 });
+    }
+    const panned = screen.getByTestId("map-svg").getAttribute("viewBox");
+
+    // A turn charts a new place inside the existing extent and revises
+    // another: the places data changes, the charted extent does not.
+    // REGRESSION: the centering guard compared the rebuilt mapBounds
+    // object by reference and snapped back to the current place.
+    const refetched: Place[] = [
+      ...PLACES.map((place) =>
+        place.id === 102 ? { ...place, summary: "Stockfish stores" } : place,
+      ),
+      makePlace(105, "Tyskebryggen Quay", [5.334, 60.396]),
+    ];
+    expect(computeMapBounds(refetched)).toEqual(computeMapBounds(PLACES));
+    act(() => {
+      client.setQueryData(["/api/places", SLOT], refetched);
+    });
+
+    // react-query notifies observers on a timer, not synchronously.
+    expect(await screen.findByTestId("map-pin-105")).toBeInTheDocument();
+    expect(screen.getByTestId("map-svg").getAttribute("viewBox")).toBe(panned);
+    expect(screen.getByText("1.33×")).toBeInTheDocument();
   });
 
   it("fans coincident places out, with leaders back to the true point", () => {
