@@ -5,6 +5,7 @@ sources:
   - ui/client/src/lib/narrative-api.ts
   - nexus/api/slot_state.py
   - nexus/api/narrative.py
+  - nexus/api/choice_handling.py
   - nexus/api/narrative_lease.py
   - nexus/api/narrative_generation.py
   - nexus/agents/lore/lore.py
@@ -24,7 +25,7 @@ sources:
   - nexus/jobs/
   - nexus/agents/orrery/worker.py
   - nexus.toml
-verified_commit: "aab4b52edba45fb647c2991faf04fb992fbf0dae"
+verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 ---
 
 # The Turn Cycle
@@ -55,24 +56,30 @@ reflects gateway reachability alone.
 
 `continue_narrative` in `nexus/api/narrative.py`:
 
-1. Rejects locked slots and slots still in the new-story wizard, and validates
-   any model override against the registry.
-2. Mints a session UUID and acquires the slot's durable generation lease
+1. Rejects locked slots, a request carrying both `choice` and `accept_fate`,
+   a model override missing from the registry, and slots still in the
+   new-story wizard.
+2. Returns 409 when a supplied `session_id` no longer matches the pending
+   draft, before any session or lease exists.
+3. Mints a session UUID and acquires the slot's durable generation lease
    (`nexus/api/narrative_lease.py`): the singleton `narrative_generation_lease`
    row plus a `narrative_generation_sessions` record. A live owner returns 409
    with its session id; an owner past `[api.narrative_generation]
    stale_lease_timeout_seconds` is recorded as `GenerationLeaseExpired` and
    replaced.
-3. With a draft pending, records the player's response on it and accepts it
+4. With a draft pending, records the player's response on it and accepts it
    through `commit_incubator_to_database_sync` (step 7), binding the new
-   session to the accepted chunk in the same transaction. A `session_id` that
-   no longer matches the pending draft returns 409. Without a pending draft,
-   the response is recorded on the committed frontier chunk.
-4. Binds the session to its parent chunk and claims the parent's embedding
+   session to the accepted chunk in the same transaction. Without a pending
+   draft, the response is recorded on the committed frontier chunk. A
+   numbered `choice`, or `accept_fate` (which takes the first presented
+   choice), resolves to that choice's full text, which the chunk records and
+   generation receives as the player's input; freeform `user_text` is recorded
+   as written.
+5. Binds the session to its parent chunk and claims the parent's embedding
    trigger, which enqueues every playable chunk older than the parent that
    lacks embeddings (`nexus/jobs/embeddings.py`). Embedding therefore trails
    acceptance by one turn.
-5. Schedules `generate_narrative_async` (`nexus/api/narrative_generation.py`)
+6. Schedules `generate_narrative_async` (`nexus/api/narrative_generation.py`)
    as a background task and returns the session id. A failure before
    scheduling releases the lease and records the error on the session.
 
@@ -94,7 +101,7 @@ LOGON resolves the storyteller route (model, wire class, provider), which fixes
 the effective context window and the token budget. `handle_user_input` in
 `nexus/memory/manager.py` then runs Pass 2: deterministic entity detection
 reports every known character, place, and faction named in the input as a
-divergence gap. Unless the input is a simple choice
+divergence gap. Unless the input is a bare choice number or letter
 (`[memory] skip_simple_choices`) or no budget remains, a raw vector search over
 the input keeps the results that fit the Pass-2 budget (`[memory]
 phase2_fraction` of the context window).

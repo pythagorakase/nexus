@@ -3,7 +3,7 @@ status: canonical
 sources:
   - tests/test_doc_front_matter.py
   - README.md
-verified_commit: "aab4b52edba45fb647c2991faf04fb992fbf0dae"
+verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 ---
 
 # Document Status and the Decision Ledger
@@ -24,7 +24,7 @@ status: canonical
 sources:
   - nexus/api/narrative.py
   - nexus/jobs/
-verified_commit: "aab4b52edba45fb647c2991faf04fb992fbf0dae"
+verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 ---
 ```
 

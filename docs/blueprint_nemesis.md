@@ -1,6 +1,6 @@
 ---
 status: historical
-verified_commit: "aab4b52edba45fb647c2991faf04fb992fbf0dae"
+verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
 ---
 
 # NEMESIS Utility Module Blueprint (Threat Director)
