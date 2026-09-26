@@ -223,74 +223,94 @@ class CrossEncoderReranker:
             Maximum relevance score across windows
         """
         # If passage is not too long, score directly
-        if len(passage) < self.max_length * 4:  # Rough character estimate
+        if not self._needs_sliding_window(passage):
             return self.score_pair(query, passage)
 
         # For long passages, use sliding window approach
         try:
-            # Split the passage into sentences to create more meaningful chunks
-            sentences = self._split_into_sentences(passage)
-
-            # If we couldn't split into sentences, fall back to character-based chunking
-            if len(sentences) <= 1:
-                # Split by character chunks
-                chunks = textwrap.wrap(
-                    passage, width=self.max_length * 2
-                )  # Rough character approximation
-            else:
-                chunks = []
-                current_chunk = []
-                current_text = ""
-
-                for sentence in sentences:
-                    # If adding this sentence would exceed max length, start a new chunk
-                    if (
-                        len(current_text + sentence) > self.max_length * 4
-                    ):  # Rough character estimate
-                        if current_chunk:  # Don't add empty chunks
-                            chunks.append(" ".join(current_chunk))
-                        current_chunk = [sentence]
-                        current_text = sentence
-                    else:
-                        current_chunk.append(sentence)
-                        current_text += sentence
-
-                # Add the last chunk
-                if current_chunk:
-                    chunks.append(" ".join(current_chunk))
-
-            # Create overlapping windows if needed
-            if len(chunks) > 1:
-                windows = []
-
-                for i in range(len(chunks)):
-                    windows.append(chunks[i])
-
-                    # Add overlapping windows
-                    if i < len(chunks) - 1:
-                        # Create an overlapping window with the end of current chunk and start of next chunk
-                        overlap = (
-                            chunks[i].split(" ")[-self.sliding_window_overlap // 10 :]
-                            + chunks[i + 1].split(" ")[
-                                : self.sliding_window_overlap // 10
-                            ]
-                        )
-                        windows.append(" ".join(overlap))
-
-                chunks = windows
-
-            # Score each window
-            scores = []
-            for chunk in chunks:
-                scores.append(self.score_pair(query, chunk))
-
-            # Return the maximum score
-            return max(scores) if scores else 0.0
+            windows = self._build_sliding_windows(passage)
+            scores = [self.score_pair(query, window) for window in windows]
+            return self._max_window_score(scores)
 
         except Exception as e:
             logger.error(f"Error scoring with sliding window: {e}")
             # Fall back to direct scoring with truncation
             return self.score_pair(query, passage)
+
+    def _needs_sliding_window(self, passage: str) -> bool:
+        """Return whether a passage is long enough to be scored in windows."""
+        return len(passage) >= self.max_length * 4  # Rough character estimate
+
+    def _build_sliding_windows(self, passage: str) -> List[str]:
+        """
+        Split a long passage into the windows scored by sliding-window reranking.
+
+        The passage is grouped into sentence chunks of roughly ``max_length``
+        tokens (character-wrapped when it has no sentence boundaries), and an
+        overlap window spanning each adjacent chunk pair is interleaved between
+        them.
+
+        Args:
+            passage: The long passage to split
+
+        Returns:
+            Windows in passage order; empty when the passage has no text
+        """
+        # Split the passage into sentences to create more meaningful chunks
+        sentences = self._split_into_sentences(passage)
+
+        # If we couldn't split into sentences, fall back to character-based chunking
+        if len(sentences) <= 1:
+            # Split by character chunks
+            chunks = textwrap.wrap(
+                passage, width=self.max_length * 2
+            )  # Rough character approximation
+        else:
+            chunks = []
+            current_chunk: List[str] = []
+            current_text = ""
+
+            for sentence in sentences:
+                # If adding this sentence would exceed max length, start a new chunk
+                if (
+                    len(current_text + sentence) > self.max_length * 4
+                ):  # Rough character estimate
+                    if current_chunk:  # Don't add empty chunks
+                        chunks.append(" ".join(current_chunk))
+                    current_chunk = [sentence]
+                    current_text = sentence
+                else:
+                    current_chunk.append(sentence)
+                    current_text += sentence
+
+            # Add the last chunk
+            if current_chunk:
+                chunks.append(" ".join(current_chunk))
+
+        # Create overlapping windows if needed
+        if len(chunks) <= 1:
+            return chunks
+
+        windows = []
+        for i in range(len(chunks)):
+            windows.append(chunks[i])
+
+            # Add overlapping windows
+            if i < len(chunks) - 1:
+                # Create an overlapping window with the end of current chunk and
+                # start of next chunk
+                overlap = (
+                    chunks[i].split(" ")[-self.sliding_window_overlap // 10 :]
+                    + chunks[i + 1].split(" ")[: self.sliding_window_overlap // 10]
+                )
+                windows.append(" ".join(overlap))
+
+        return windows
+
+    @staticmethod
+    def _max_window_score(window_scores: List[float]) -> float:
+        """Reduce one passage's window scores to its maximum (0.0 if none)."""
+        return max(window_scores) if window_scores else 0.0
 
     def _split_into_sentences(self, text: str) -> List[str]:
         """Split text into sentences using simple heuristics."""
@@ -310,6 +330,11 @@ class CrossEncoderReranker:
         """
         Rerank a batch of passages against a query.
 
+        With ``use_sliding_window``, short passages in each rerank batch are
+        scored together, and the windows of every long passage in the batch are
+        flattened and scored through batched inference in slices of
+        ``batch_size``. Each long passage takes the maximum of its window scores.
+
         Args:
             query: The search query
             passages: List of passages to score
@@ -317,7 +342,7 @@ class CrossEncoderReranker:
             use_sliding_window: Whether to use sliding window for long texts
 
         Returns:
-            List of relevance scores for each passage
+            List of relevance scores for each passage, in input order
         """
         if not passages:
             return []
@@ -337,15 +362,19 @@ class CrossEncoderReranker:
             batch_scores = [0.0 for _ in batch_passages]
             short_passage_indexes = []
             short_passages = []
+            window_scores_by_passage: Dict[int, List[float]] = {}
+            window_owners: List[int] = []
+            windows: List[str] = []
 
             for batch_index, passage in enumerate(batch_passages):
-                if len(passage) < self.max_length * 4:
+                if not self._needs_sliding_window(passage):
                     short_passage_indexes.append(batch_index)
                     short_passages.append(passage)
                 else:
-                    batch_scores[batch_index] = self.score_pair_with_sliding_window(
-                        query, passage
-                    )
+                    window_scores_by_passage[batch_index] = []
+                    for window in self._build_sliding_windows(passage):
+                        window_owners.append(batch_index)
+                        windows.append(window)
 
             short_scores = self.score_batch(
                 query,
@@ -355,9 +384,49 @@ class CrossEncoderReranker:
             for batch_index, score in zip(short_passage_indexes, short_scores):
                 batch_scores[batch_index] = score
 
+            window_scores = self._score_windows(query, windows, batch_size=batch_size)
+            for batch_index, score in zip(window_owners, window_scores):
+                window_scores_by_passage[batch_index].append(score)
+            for batch_index, passage_window_scores in window_scores_by_passage.items():
+                batch_scores[batch_index] = self._max_window_score(
+                    passage_window_scores
+                )
+
             scores.extend(batch_scores)
 
         return scores
+
+    def _score_windows(
+        self,
+        query: str,
+        windows: List[str],
+        batch_size: int,
+    ) -> List[float]:
+        """
+        Score flattened sliding windows with batched inference.
+
+        Windows are sent to the model in slices of at most ``batch_size`` pairs,
+        each through :meth:`score_batch`, so window scores are normalized exactly
+        like single-pair scores.
+
+        Args:
+            query: The search query
+            windows: Windows from one or more long passages, in any order
+            batch_size: Maximum pairs per model call
+
+        Returns:
+            One relevance score per window, in input order
+        """
+        window_scores: List[float] = []
+        for start in range(0, len(windows), batch_size):
+            window_scores.extend(
+                self.score_batch(
+                    query,
+                    windows[start : start + batch_size],
+                    batch_size=batch_size,
+                )
+            )
+        return window_scores
 
 
 class Qwen3LMReranker:
