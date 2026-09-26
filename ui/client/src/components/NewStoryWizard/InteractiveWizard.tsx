@@ -76,7 +76,7 @@ export const ACCEPTED_BEFORE_INTRODUCTION: Record<"character" | "seed", Phase> =
 };
 
 // The server holds newer wizard state than the screen (409), such as an
-// introduction whose reply arrived although its response was lost.
+// acceptance or introduction whose response was lost after it was saved.
 class StaleWizardState extends Error {}
 
 // User-facing phase titles; the seed phase is presented as "Introduction"
@@ -898,9 +898,16 @@ export function InteractiveWizard({
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ slot, thread_id: threadId, phase: currentPhase, artifact_token: artifactToken }),
                     });
-                    const accepted = await confirmation.json();
-                    if (!confirmation.ok || accepted.status !== "confirmed" || accepted.next_phase !== nextPhase || accepted.thread_id !== threadId) {
-                        throw new Error(accepted.detail || "Could not confirm the saved artifact.");
+                    if (confirmation.status === 409) {
+                        // The acceptance may have been saved although its
+                        // response was lost; continue only if the saved wizard
+                        // now awaits exactly this transition's introduction.
+                        await requireSavedAcceptance(nextPhase);
+                    } else {
+                        const accepted = await confirmation.json().catch(() => null);
+                        if (!confirmation.ok || accepted?.status !== "confirmed" || accepted.next_phase !== nextPhase || accepted.thread_id !== threadId) {
+                            throw new Error(accepted?.detail || "Could not confirm the saved artifact.");
+                        }
                     }
                     setAcceptedPhase(currentPhase);
                 }
@@ -946,6 +953,14 @@ export function InteractiveWizard({
             // Show wait screen and start transition
             // This can take up to 10 minutes with reasoning models
             performTransition();
+        }
+    };
+
+    const requireSavedAcceptance = async (nextPhase: Phase) => {
+        const res = await fetch(`/api/story/new/setup/resume?slot=${slot}`);
+        const saved: WizardResumeData | null = res.ok ? await res.json().catch(() => null) : null;
+        if (!saved || saved.thread_id !== threadId || saved.awaiting_introduction !== nextPhase) {
+            throw new StaleWizardState();
         }
     };
 

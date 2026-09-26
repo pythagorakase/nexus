@@ -41,10 +41,7 @@ from nexus.api.new_story_flow import (
 from nexus.api.save_slots import get_slot_model
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
-from nexus.api.wizard_transcript import (
-    introduction_delivered,
-    visible_wizard_messages,
-)
+from nexus.api.wizard_transcript import visible_wizard_messages
 from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
@@ -116,12 +113,7 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
         finally:
             if client.client is not None:
                 client.client.close()
-        # An unfinished introduction claim is delivered once its reply follows
-        # the control message; otherwise the phase still awaits it.
-        if data.introduction_claim is not None and introduction_delivered(
-            list(reversed(messages))
-        ):
-            data = data.with_delivered_claim()
+        data = data.settle_introduction_claim(list(reversed(messages)))
         awaiting_introduction = data.awaiting_introduction()
         # The character card is restored while it awaits acceptance and while
         # its accepted transition still lacks the introduction it requested.

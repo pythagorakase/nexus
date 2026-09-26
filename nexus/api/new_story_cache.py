@@ -19,13 +19,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Mapping, Optional
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence
 
 from psycopg2.extras import RealDictCursor
 
 from nexus.api.choice_handling import extract_presented_choices
 from nexus.api.db_pool import get_connection
 from nexus.api.trait_compiler_schemas import canonical_trait_name
+from nexus.api.wizard_transcript import introduction_delivered
 
 logger = logging.getLogger("nexus.api.new_story_cache")
 
@@ -399,10 +400,16 @@ class WizardCache:
         # Only the character and seed phases can be untouched.
         return "character" if self.current_phase() == "character" else "seed"
 
-    def with_delivered_claim(self) -> "WizardCache":
-        """View an unfinished claim whose reply reached the transcript as done."""
-        if self.introduction_claim is None:
-            raise ValueError("No introduction claim to settle")
+    def settle_introduction_claim(
+        self, transcript: Sequence[Mapping[str, object]]
+    ) -> "WizardCache":
+        """View an unfinished claim as the chronological transcript proves it.
+
+        The claimed reply was delivered once it follows the latest control
+        message; until then the phase still awaits its introduction.
+        """
+        if self.introduction_claim is None or not introduction_delivered(transcript):
+            return self
         return replace(
             self,
             choices=list(self.introduction_claim.choices),

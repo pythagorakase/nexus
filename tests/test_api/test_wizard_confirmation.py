@@ -10,7 +10,15 @@ from fastapi.testclient import TestClient
 from pydantic_ai import CallDeferred, ModelRetry
 import pytest
 
-from nexus.api import setup_endpoints, wizard_agent, wizard_chat, slot_state
+from nexus import cli
+from nexus.api import (
+    new_story_cache,
+    setup_endpoints,
+    slot_endpoints,
+    slot_state,
+    wizard_agent,
+    wizard_chat,
+)
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import (
     WizardCache,
@@ -22,6 +30,7 @@ from nexus.api.new_story_cache import (
 )
 from nexus.api.new_story_schemas import WizardResponse, CharacterCreationState
 from nexus.api.slot_state import SlotState, WizardState, _get_wizard_state_from_row
+from tests.test_cli_wizard_confirmation import Response, arguments
 from tests.test_wizard_agent import sample_concept_submission, DummyRunContext
 
 
@@ -433,7 +442,11 @@ def test_acceptance_awaits_the_next_introduction_until_a_reply_is_recorded(
     assert claimed.awaiting_introduction() == introduced
     assert claimed.choices == []
     assert claimed.introduction_claim == IntroductionClaim("c1", ["A", "B"])
-    settled = claimed.with_delivered_claim()
+    control = {"role": "user", "content": "[SYSTEM]", "origin": "wizard_control"}
+    assert claimed.settle_introduction_claim([control]) is claimed
+    settled = claimed.settle_introduction_claim(
+        [control, {"role": "assistant", "content": "Where does it begin?"}]
+    )
     assert settled.awaiting_introduction() is None
     assert settled.choices == ["A", "B"]
     assert settled.introduction_claim is None
@@ -586,9 +599,13 @@ def introduction_routes(
     monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
     monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
     monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
+    # Slot state reads the cache through a call-time import.
+    monkeypatch.setattr(new_story_cache, "read_cache", lambda dbname: cache)
+    monkeypatch.setattr(slot_endpoints, "ConversationsClient", lambda model: storage)
     app = FastAPI()
     app.include_router(wizard_chat.router)
     app.include_router(setup_endpoints.router)
+    app.include_router(slot_endpoints.router)
     return SimpleNamespace(
         client=TestClient(app, raise_server_exceptions=False),
         cache=cache,
@@ -621,6 +638,13 @@ def assistant_messages(routes: SimpleNamespace) -> list[str]:
 def resume(routes: SimpleNamespace) -> dict:
     """Read the wizard exactly as a reload does."""
     response = routes.client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def slot_state_of(routes: SimpleNamespace) -> dict:
+    """Read the slot state the CLI and Continue use."""
+    response = routes.client.get("/api/slot/4/state")
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -708,6 +732,8 @@ def test_crash_between_claim_and_transcript_write_is_recoverable(
     assert interrupted["awaiting_introduction"] == introduced
     assert interrupted["choices"] == []
     assert assistant_messages(routes) == []
+    state = slot_state_of(routes)
+    assert (state["awaiting_introduction"], state["choices"]) == (introduced, [])
 
     retried = routes.client.post("/api/story/new/chat", json=routes.introduction)
     assert retried.status_code == 200, retried.text
@@ -741,6 +767,9 @@ def test_crash_after_transcript_write_settles_the_delivered_claim(
     assert delivered["awaiting_introduction"] is None
     assert delivered["choices"] == ["Here", "There"]
     assert delivered["messages"][-1]["content"] == "Where does it begin?"
+    state = slot_state_of(routes)
+    assert state["awaiting_introduction"] is None
+    assert state["choices"] == ["Here", "There"]
 
     # A retry settles the claim from the transcript instead of introducing again.
     routes.faults["complete"] = None
@@ -816,3 +845,47 @@ def test_introduction_delivery_is_read_after_the_latest_control() -> None:
     assert introduction_delivered([before, control, control]) is False
     with pytest.raises(ValueError, match="no control message"):
         introduction_delivered([before, player])
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_cli_uses_the_delivered_introduction_after_a_crash(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+) -> None:
+    """Slot state settles the claim, so the CLI never asks for it again."""
+    routes = introduction_routes(
+        monkeypatch,
+        accepted,
+        introduced,
+        [WizardResponse(message="Where does it begin?", choices=["Here", "There"])],
+    )
+    routes.faults["complete"] = RuntimeError("Process terminated")
+    crashed = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert crashed.status_code == 500
+    assert routes.cache.introduction_claim is not None
+
+    posts: list[tuple[str, dict]] = []
+
+    def gateway_get(url: str, **kwargs):
+        assert url.endswith("/api/slot/4/state")
+        return Response(slot_state_of(routes))
+
+    def gateway_post(url: str, *, json: dict, **kwargs):
+        posts.append((url.split("/api/")[-1], json))
+        return Response({"message": "The harbor waits.", "choices": []})
+
+    monkeypatch.setattr(cli, "_api_get", gateway_get)
+    monkeypatch.setattr(cli, "_api_post", gateway_post)
+
+    loaded = cli.run_load(arguments())
+    assert "awaiting_introduction" not in loaded
+    # Without input there is no introduction left to request.
+    idle = cli.run_continue(arguments())
+    assert idle["success"] is False
+    assert posts == []
+    # The delivered choices answer the introduction.
+    answered = cli.run_continue(arguments(choice=1))
+    assert answered["success"] is True
+    assert [(path, body["message"]) for path, body in posts] == [
+        ("story/new/chat", "Here")
+    ]
+    assert "message_origin" not in posts[0][1]

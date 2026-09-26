@@ -19,6 +19,7 @@ from nexus.config.story_model import (
     write_story_settings,
 )
 
+from nexus.api.conversations import ConversationsClient
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_schemas import (
     SlotStateResponse,
@@ -28,11 +29,25 @@ from nexus.api.narrative_schemas import (
 )
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.narrative_lease import discard_generation
+from nexus.api.new_story_cache import WizardCache
 from nexus.api.slot_utils import slot_dbname
 
 logger = logging.getLogger("nexus.api.slot_endpoints")
 
 router = APIRouter(prefix="/api/slot", tags=["slot"])
+
+
+def _settle_introduction_claim(cache: WizardCache, model: Optional[str]) -> WizardCache:
+    """Read the transcript an unfinished introduction claim is settled against."""
+    if not cache.thread_id or not model:
+        raise RuntimeError("The saved wizard is missing its conversation or model")
+    client = ConversationsClient(model=model)
+    try:
+        messages = client.list_messages(cache.thread_id, limit=0)
+    finally:
+        if client.client is not None:
+            client.client.close()
+    return cache.settle_introduction_claim(list(reversed(messages)))
 
 
 @router.get("/{slot}/state", response_model=SlotStateResponse)
@@ -76,6 +91,11 @@ async def get_slot_state_endpoint(slot: int):
             from nexus.api.new_story_cache import read_cache
 
             cache = read_cache(slot_dbname(slot))
+            if cache is not None and cache.introduction_claim is not None:
+                # Only an unfinished introduction claim needs the transcript;
+                # settle it exactly as resume does.
+                cache = _settle_introduction_claim(cache, state.model)
+                response.choices = cache.choices
             if cache is not None:
                 response.pending_confirmation = cache.pending_confirmation()
                 response.awaiting_introduction = cache.awaiting_introduction()
