@@ -9,7 +9,13 @@ type Stage = (typeof STAGES)[number];
 
 function renderWaitScreen(
     currentStage: Stage | null,
-    options: { hasError?: boolean; errorMessage?: string; onRetry?: () => void; onCancel?: () => void } = {},
+    options: {
+        skippedStages?: readonly Stage[];
+        hasError?: boolean;
+        errorMessage?: string;
+        onRetry?: () => void;
+        onCancel?: () => void;
+    } = {},
 ) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     queryClient.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
@@ -22,6 +28,7 @@ function renderWaitScreen(
                     elapsedSeconds={125}
                     stages={STAGES}
                     currentStage={currentStage}
+                    skippedStages={options.skippedStages}
                     onRetry={options.onRetry ?? (() => {})}
                     onCancel={options.onCancel ?? (() => {})}
                     hasError={options.hasError}
@@ -83,6 +90,17 @@ describe("WaitScreen stage track", () => {
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         expect(onRetry).toHaveBeenCalledTimes(1);
         expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps skipped stages dim once the operation passes them", () => {
+        renderWaitScreen("bootstrap", { skippedStages: STAGES.slice(0, 5) });
+        expect(pipStates()).toEqual([...Array(5).fill("skipped"), "active"]);
+        for (const pip of screen.getAllByTestId("wait-stage").slice(0, 5)) {
+            expect(pip).toHaveClass("bg-muted");
+        }
+        const progress = screen.getByRole("progressbar");
+        expect(progress).toHaveAttribute("aria-valuenow", "0");
+        expect(progress).toHaveAttribute("aria-valuemax", "1");
     });
 
     it("keeps every pip dim when a failure precedes the first stage", () => {

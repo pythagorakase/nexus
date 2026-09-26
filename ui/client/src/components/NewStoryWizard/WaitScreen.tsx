@@ -2,9 +2,9 @@
  * WaitScreen - Full-screen loading state for long-running API operations.
  *
  * Displays a timer counting up, a segmented stage track (one pip per stage:
- * done lit, active glowing, pending dim, failed in the danger colour), and
- * retry/cancel buttons. Used while the story's world is generated, which can
- * take many minutes.
+ * done lit, active glowing, pending or skipped dim, failed in the danger
+ * colour), and retry/cancel buttons. Used while the story's world is
+ * generated, which can take many minutes.
  */
 import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,8 @@ interface WaitScreenProps<S extends string> {
    * Null before the first stage reports.
    */
   currentStage: S | null;
+  /** Stages the operation skipped; they stay dim once passed */
+  skippedStages?: readonly S[];
   /** Called when user clicks Retry button */
   onRetry: () => void;
   /** Called when user clicks Cancel button */
@@ -33,7 +35,7 @@ interface WaitScreenProps<S extends string> {
   errorMessage?: string;
 }
 
-type StageState = 'done' | 'active' | 'pending' | 'failed';
+type StageState = 'done' | 'active' | 'pending' | 'skipped' | 'failed';
 
 /**
  * Format seconds as MM:SS
@@ -44,18 +46,21 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-/** Each stage's state: every stage before the current one is done. */
+/** Each stage's state: every unskipped stage before the current one is done. */
 function stageStates<S extends string>(
   stages: readonly S[],
   currentStage: S | null,
+  skippedStages: readonly S[],
   hasError: boolean,
 ): StageState[] {
   const current = currentStage === null ? -1 : stages.indexOf(currentStage);
   if (currentStage !== null && current < 0) {
     throw new Error(`Wait stage ${currentStage} is not one of ${stages.join(', ')}`);
   }
-  return stages.map((_, index) =>
-    index < current
+  return stages.map((stage, index) =>
+    skippedStages.includes(stage)
+      ? 'skipped'
+      : index < current
       ? 'done'
       : index > current
       ? 'pending'
@@ -70,13 +75,14 @@ export function WaitScreen<S extends string>({
   elapsedSeconds,
   stages,
   currentStage,
+  skippedStages = [],
   onRetry,
   onCancel,
   hasError = false,
   errorMessage,
 }: WaitScreenProps<S>) {
   const { glowClass, generatingClass, isGilded, isVeil } = useTheme();
-  const states = stageStates(stages, currentStage, hasError);
+  const states = stageStates(stages, currentStage, skippedStages, hasError);
 
   // Theme-specific accent shared by the timer and the lit pips
   const timerColor = isGilded
@@ -98,6 +104,7 @@ export function WaitScreen<S extends string>({
     done: pipLit,
     active: cn(pipLit, pipGlow, 'animate-pulse motion-reduce:animate-none'),
     pending: 'bg-muted',
+    skipped: 'bg-muted',
     failed: 'bg-destructive shadow-[0_0_6px_1px_hsl(var(--destructive)/0.8)]',
   };
 
@@ -127,7 +134,7 @@ export function WaitScreen<S extends string>({
         <div
           role="progressbar"
           aria-valuemin={0}
-          aria-valuemax={stages.length}
+          aria-valuemax={states.filter((state) => state !== 'skipped').length}
           aria-valuenow={states.filter((state) => state === 'done').length}
           className="flex w-full max-w-xs gap-1.5"
         >

@@ -1241,38 +1241,60 @@ def _retrograde_status_stage(status: Any) -> Optional[str]:
     return str(stage)
 
 
-def _print_retrograde_stages(
-    slot: int,
-    interval_seconds: float,
-    read_timeout_seconds: float,
-    stopped: threading.Event,
-) -> None:
-    """Print each Retrograde stage change once until stopped or terminal."""
+class _RetrogradeStageEcho:
+    """Print each Retrograde stage change of one transition wait once."""
 
-    url = f"{get_api_url()}/api/story/new/retrograde/status"
-    printed: Optional[str] = None
-    while not stopped.wait(interval_seconds):
+    def __init__(self, slot: int, read_timeout_seconds: float) -> None:
+        self._url = f"{get_api_url()}/api/story/new/retrograde/status"
+        self._slot = slot
+        self._read_timeout_seconds = read_timeout_seconds
+        self._printed: Optional[str] = None
+        # The gateway keeps the previous run's record until this run's flow
+        # resets it, so a finished record counts only once this wait has
+        # seen the run idle or in progress.
+        self._run_seen = False
+        # Set by a terminal stage or a failed read; no further reads follow.
+        self.settled = False
+
+    def read(self) -> None:
+        """Read the slot's status once and print the stage if it changed."""
+
         try:
             response = _api_get(
-                url, params={"slot": slot}, timeout=read_timeout_seconds
+                self._url,
+                params={"slot": self._slot},
+                timeout=self._read_timeout_seconds,
             )
             response.raise_for_status()
             status = response.json()
             stage = _retrograde_status_stage(status)
         except (requests.RequestException, ValueError) as exc:
             print(f"Genesis stage unavailable: {exc}", file=sys.stderr, flush=True)
+            self.settled = True
             return
-        if stage is not None and stage != printed:
+        finished = status["stage"] in {"done", "failed"}
+        if not finished:
+            self._run_seen = True
+        elif not self._run_seen:
+            return
+        if stage is not None and stage != self._printed:
             print(f"Genesis stage: {stage}", flush=True)
-            printed = stage
-        if status["stage"] in {"done", "failed"}:
-            return
+            self._printed = stage
+        self.settled = finished
+
+    def poll(self, interval_seconds: float, stopped: threading.Event) -> None:
+        """Read every interval until stopped or settled."""
+
+        while not self.settled and not stopped.wait(interval_seconds):
+            self.read()
 
 
 @contextmanager
 def _echo_retrograde_stages(slot: int, *, enabled: bool) -> Iterator[None]:
     """Print Retrograde stage changes while the wizard transition is in flight.
 
+    Once the transition answers, one more read reports the stage it finished
+    or failed at; an interrupted or unanswered transition skips that read.
     Human output only: JSON callers receive the transition outcome alone.
     """
 
@@ -1289,11 +1311,13 @@ def _echo_retrograde_stages(slot: int, *, enabled: bool) -> Iterator[None]:
         settings, "wizard stage poll"
     ).status_poll_interval_seconds
     # Each stage read gets the configured per-request budget of a status read.
-    read_timeout = settings.api.narrative_generation.request_timeout_seconds
+    echo = _RetrogradeStageEcho(
+        slot, settings.api.narrative_generation.request_timeout_seconds
+    )
     stopped = threading.Event()
     reader = threading.Thread(
-        target=_print_retrograde_stages,
-        args=(slot, interval, read_timeout, stopped),
+        target=echo.poll,
+        args=(interval, stopped),
         name="retrograde-stage-echo",
         daemon=True,
     )
@@ -1303,6 +1327,10 @@ def _echo_retrograde_stages(slot: int, *, enabled: bool) -> Iterator[None]:
     finally:
         stopped.set()
         reader.join()
+    # The gateway records "done" or "failed" just before it answers, so the
+    # interval-paced reader rarely sees it: read the outcome once more.
+    if not echo.settled:
+        echo.read()
 
 
 def _generation_timeout_seconds() -> int:

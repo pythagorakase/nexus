@@ -1,4 +1,4 @@
-import { WaitScreen } from "nexus-ui";
+import { GENESIS_STAGES, WaitScreen } from "nexus-ui";
 
 // WaitScreen is a fixed full-screen overlay (fixed inset-0). It resolves its
 // vh/vw against the viewport, so a sized relative wrapper frames it for capture.
@@ -8,16 +8,6 @@ const Frame = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-// The genesis stages the new-story wizard waits on, in pipeline order.
-const STAGES = [
-  "packet",
-  "seed_candidates",
-  "expansion",
-  "persistence",
-  "embedding",
-  "bootstrap",
-] as const;
-
 // The generating state shown while the story is being built: status line, a
 // large MM:SS timer counting up, the stage track (two stages done, the third
 // glowing), and Cancel / Retry.
@@ -26,7 +16,7 @@ export const Generating = () => (
     <WaitScreen
       statusText="Initializing Your World"
       elapsedSeconds={87}
-      stages={STAGES}
+      stages={GENESIS_STAGES}
       currentStage="expansion"
       onRetry={() => {}}
       onCancel={() => {}}
@@ -42,7 +32,7 @@ export const Failed = () => (
     <WaitScreen
       statusText="Initializing Your World"
       elapsedSeconds={142}
-      stages={STAGES}
+      stages={GENESIS_STAGES}
       currentStage="persistence"
       hasError
       errorMessage="Retrograde persistence is blocked by 2 unresolved references."

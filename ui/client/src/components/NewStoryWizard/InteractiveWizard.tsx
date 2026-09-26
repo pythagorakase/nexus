@@ -89,12 +89,23 @@ class StaleWizardState extends Error {}
 
 // Genesis waits on the transition's Retrograde stages, then on scheduling
 // the opening narrative ("bootstrap"); one wait-screen pip per stage.
-const GENESIS_STAGES = [...RETROGRADE_STAGES, "bootstrap"] as const;
+export const GENESIS_STAGES = [...RETROGRADE_STAGES, "bootstrap"] as const;
 type GenesisStage = (typeof GENESIS_STAGES)[number];
+
+const isFinished = (status: RetrogradeStatus) => status.stage === "done" || status.stage === "failed";
+
+/** What one transition's stage reads have seen of the gateway's run. */
+interface StageReads {
+    /**
+     * A read found the run idle or in progress. Until then a finished record
+     * is the previous run's: the gateway keeps it until this run resets it.
+     */
+    runSeen: boolean;
+}
 
 /**
  * Read the gateway's Retrograde stage every `intervalMs` until `signal`
- * aborts or the run reports done or failed. Reads never overlap.
+ * aborts or this run reports done or failed. Reads never overlap.
  */
 function pollRetrogradeStages(
     slot: number,
@@ -102,7 +113,8 @@ function pollRetrogradeStages(
     signal: AbortSignal,
     onStage: (stage: RetrogradeStage) => void,
     onError: (error: Error) => void,
-): void {
+): StageReads {
+    const reads: StageReads = { runSeen: false };
     let timer: ReturnType<typeof setTimeout> | undefined;
     const read = async () => {
         let status: RetrogradeStatus;
@@ -113,14 +125,19 @@ function pollRetrogradeStages(
             return;
         }
         if (signal.aborted) return;
+        const finished = isFinished(status);
+        reads.runSeen ||= !finished;
+        if (!reads.runSeen) {
+            timer = setTimeout(read, intervalMs);
+            return;
+        }
         const stage = retrogradeStageOf(status);
         if (stage !== null) onStage(stage);
-        if (status.stage !== "done" && status.stage !== "failed") {
-            timer = setTimeout(read, intervalMs);
-        }
+        if (!finished) timer = setTimeout(read, intervalMs);
     };
     timer = setTimeout(read, intervalMs);
     signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+    return reads;
 }
 
 // User-facing phase titles; the seed phase is presented as "Introduction"
@@ -229,6 +246,7 @@ export function InteractiveWizard({
     const [waitScreenError, setWaitScreenError] = useState<string | null>(null);
     const [waitScreenStatusText, setWaitScreenStatusText] = useState("Initializing your world...");
     const [waitScreenStage, setWaitScreenStage] = useState<GenesisStage | null>(null);
+    const [waitScreenSkipped, setWaitScreenSkipped] = useState<readonly GenesisStage[]>([]);
     const transitionAbortRef = useRef<AbortController | null>(null);
     // Stage reads end when the transition settles, on cancel, or on unmount.
     const stagePollRef = useRef<AbortController | null>(null);
@@ -457,6 +475,7 @@ export function InteractiveWizard({
         setWaitScreenError(null);
         setWaitScreenElapsed(0);
         setWaitScreenStage(null);
+        setWaitScreenSkipped([]);
         setWaitScreenStatusText("Initializing your world...");
         setWaitScreenActive(true);
 
@@ -470,7 +489,7 @@ export function InteractiveWizard({
 
         try {
             const pollSeconds = await getRetrogradeStatusPollSeconds(abortController.signal);
-            pollRetrogradeStages(slot, pollSeconds * 1000, stagePoll.signal, setWaitScreenStage, (error) => {
+            const stageReads = pollRetrogradeStages(slot, pollSeconds * 1000, stagePoll.signal, setWaitScreenStage, (error) => {
                 console.error("Genesis stage read error:", error);
                 toast({ title: "Transmission Error", description: error.message, variant: "destructive" });
             });
@@ -488,18 +507,27 @@ export function InteractiveWizard({
                 const error = await transitionRes.json();
                 const detail = error.detail || "Transition failed";
                 // The gateway still holds the stage that was running when the
-                // transition failed ("failed" names it in detail.stage).
+                // transition failed ("failed" names it in detail.stage), unless
+                // the transition was refused before its run reset the record.
                 const status = await getRetrogradeStatus(slot, abortController.signal).catch(
                     (statusError: Error) => {
                         if (statusError.name === "AbortError") throw statusError;
                         throw new Error(`${detail}\n${statusError.message}`);
                     },
                 );
-                setWaitScreenStage(retrogradeStageOf(status));
+                if (stageReads.runSeen || !isFinished(status)) {
+                    setWaitScreenStage(retrogradeStageOf(status));
+                }
                 throw new Error(detail);
             }
 
-            await transitionRes.json(); // consume response
+            const transition = await transitionRes.json();
+            const retrogradeRan = transition.retrograde?.enabled;
+            if (typeof retrogradeRan !== "boolean") {
+                throw new Error(`Transition response names no Retrograde outcome: ${JSON.stringify(transition)}`);
+            }
+            // A skipped Retrograde run leaves its stages dim, not done.
+            if (!retrogradeRan) setWaitScreenSkipped(RETROGRADE_STAGES);
 
             // Step 2: Trigger bootstrap (generate first narrative chunk)
             setWaitScreenStage("bootstrap");
@@ -574,6 +602,7 @@ export function InteractiveWizard({
         setWaitScreenError(null);
         setWaitScreenElapsed(0);
         setWaitScreenStage(null);
+        setWaitScreenSkipped([]);
         setWaitScreenStatusText("Initializing your world...");
         setIsLoading(false);
         // Re-show the pending artifact for editing
@@ -1111,6 +1140,7 @@ export function InteractiveWizard({
                     elapsedSeconds={waitScreenElapsed}
                     stages={GENESIS_STAGES}
                     currentStage={waitScreenStage}
+                    skippedStages={waitScreenSkipped}
                     onRetry={handleWaitScreenRetry}
                     onCancel={handleWaitScreenCancel}
                     hasError={!!waitScreenError}

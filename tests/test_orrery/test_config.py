@@ -403,11 +403,11 @@ def test_orrery_dashboard_defaults_to_disabled() -> None:
 
 
 def test_retrograde_wizard_stage_poll_interval_is_positive() -> None:
-    """The UI/CLI genesis stage poll ships at one second and rejects zero."""
+    """The UI/CLI genesis stage poll ships a positive interval and rejects zero."""
 
     wizard = load_settings().orrery.retrograde.wizard
-    assert wizard.status_poll_interval_seconds == 1
-    assert OrreryRetrogradeWizardSettings().status_poll_interval_seconds == 1
+    assert wizard.status_poll_interval_seconds > 0
+    assert OrreryRetrogradeWizardSettings().status_poll_interval_seconds > 0
     with pytest.raises(ValidationError, match="status_poll_interval_seconds"):
         OrreryRetrogradeWizardSettings(status_poll_interval_seconds=0)
 

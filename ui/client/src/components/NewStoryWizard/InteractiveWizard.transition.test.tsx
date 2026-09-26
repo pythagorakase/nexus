@@ -70,6 +70,9 @@ function stage(name: string, detail: Record<string, unknown> = {}) {
     return { slot: 5, stage: name, detail, updated_at: "2026-09-26T12:00:00+00:00", stages: [] };
 }
 
+const IDLE = { slot: 5, stage: "idle", stages: [] };
+const TRANSITIONED = { status: "transitioned", retrograde: { enabled: true } };
+
 function renderReadyWizard(onComplete = vi.fn()) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     queryClient.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
@@ -141,7 +144,7 @@ describe("genesis stage waiter", () => {
         await expectNoFurtherStatusReads(gateway);
         expect(pipStates()).toEqual(track(4));
 
-        await act(async () => gateway.transition!.resolve(Response.json({ status: "transitioned" })));
+        await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
         await waitFor(() => expect(pipStates()).toEqual(track(5)));
         expect(screen.getByText("Starting narrative generation...")).toBeInTheDocument();
         expect(gateway.requests.at(-1)).toBe("POST /api/narrative/continue");
@@ -164,7 +167,7 @@ describe("genesis stage waiter", () => {
         gateway.status = stage("seed_candidates", { weird: "medium" });
         await waitFor(() => expect(pipStates()).toEqual(track(1)));
 
-        await act(async () => gateway.transition!.resolve(Response.json({ status: "transitioned" })));
+        await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
         await waitFor(() => expect(pipStates()).toEqual(track(5)));
         await expectNoFurtherStatusReads(gateway);
     });
@@ -194,7 +197,7 @@ describe("genesis stage waiter", () => {
         await expectNoFurtherStatusReads(gateway);
 
         // Retry starts a fresh run from an empty track.
-        gateway.status = { slot: 5, stage: "idle", stages: [] };
+        gateway.status = IDLE;
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         await waitFor(() => expect(pipStates()).toEqual(Array(6).fill("pending")));
         expect(screen.queryByText("Generation Failed")).toBeNull();
@@ -206,9 +209,70 @@ describe("genesis stage waiter", () => {
         const gateway = stubGateway();
         renderReadyWizard();
         await confirmIntroduction();
+        // The run reports idle from its reset before it can fail.
+        await waitFor(() => expect(gateway.served).toContain("idle"));
         gateway.status = stage("failed", { stage: "embedding" });
         await waitFor(() => expect(pipStates()).toEqual(track(4)));
         await expectNoFurtherStatusReads(gateway);
+    });
+
+    it("reads past the previous run's failure record until this run reports", async () => {
+        const gateway = stubGateway();
+        // Retry's first reads can precede the new run's reset of the record.
+        gateway.status = stage("failed", { stage: "persistence" });
+        renderReadyWizard();
+        await confirmIntroduction();
+        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(2));
+        expect(pipStates()).toEqual(Array(6).fill("pending"));
+
+        gateway.status = IDLE;
+        await waitFor(() => expect(gateway.served.at(-1)).toBe("idle"));
+        gateway.status = stage("packet");
+        await waitFor(() => expect(pipStates()).toEqual(track(0)));
+    });
+
+    it("marks no stage failed when the transition is refused before its run starts", async () => {
+        const gateway = stubGateway();
+        gateway.status = stage("failed", { stage: "persistence" });
+        renderReadyWizard();
+        await confirmIntroduction();
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const readsBeforeRefusal = gateway.statusReads;
+        await act(async () =>
+            gateway.transition!.resolve(
+                Response.json({ detail: "Confirm the setting and character before starting the story." }, { status: 409 }),
+            ),
+        );
+        expect(await screen.findByText("Confirm the setting and character before starting the story.")).toBeInTheDocument();
+        expect(gateway.statusReads).toBeGreaterThan(readsBeforeRefusal);
+        expect(pipStates()).toEqual(Array(6).fill("pending"));
+    });
+
+    it("leaves a skipped Retrograde run's pips dim while bootstrap glows", async () => {
+        const gateway = stubGateway();
+        renderReadyWizard();
+        await confirmIntroduction();
+        await waitFor(() => expect(gateway.served).toContain("idle"));
+        await act(async () =>
+            gateway.transition!.resolve(
+                Response.json({ status: "transitioned", retrograde: { enabled: false, skip_reason: "mock_wizard_model" } }),
+            ),
+        );
+        await waitFor(() => expect(pipStates()).toEqual([...Array(5).fill("skipped"), "active"]));
+    });
+
+    it("reports a transition response that names no Retrograde outcome", async () => {
+        const gateway = stubGateway();
+        renderReadyWizard();
+        await confirmIntroduction();
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        await act(async () => gateway.transition!.resolve(Response.json({ status: "transitioned" })));
+        expect(
+            await screen.findByText('Transition response names no Retrograde outcome: {"status":"transitioned"}'),
+        ).toBeInTheDocument();
+        expect(gateway.bootstrap).toBeNull();
     });
 
     it("leaves every pip dim when the transition fails before the first stage", async () => {
@@ -246,7 +310,7 @@ describe("genesis stage waiter", () => {
         renderReadyWizard();
         await confirmIntroduction();
         await waitFor(() => expect(gateway.transition).not.toBeNull());
-        await act(async () => gateway.transition!.resolve(Response.json({ status: "transitioned" })));
+        await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
         vi.spyOn(console, "error").mockImplementation(() => {});
         await act(async () =>
@@ -290,7 +354,7 @@ describe("genesis stage waiter", () => {
         expect(screen.getByText("Transmission Error")).toBeInTheDocument();
         await expectNoFurtherStatusReads(gateway);
 
-        await act(async () => gateway.transition!.resolve(Response.json({ status: "transitioned" })));
+        await act(async () => gateway.transition!.resolve(Response.json(TRANSITIONED)));
         await waitFor(() => expect(gateway.bootstrap).not.toBeNull());
         await act(async () => gateway.bootstrap!.resolve(Response.json({ session_id: "opening-session" })));
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
