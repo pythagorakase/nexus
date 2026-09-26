@@ -67,6 +67,8 @@ import requests
 import tomlkit
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
+from tests import secret_store_guard
+
 SLOT = int(os.environ.get("NEXUS_DISPOSABLE_TEST_SLOT", "0"))
 DBNAME = f"save_{SLOT:02d}"
 DSN = f"postgresql://pythagor@localhost:5432/{DBNAME}"
@@ -471,7 +473,11 @@ def golden_path(tmp_path_factory: pytest.TempPathFactory) -> Any:
             [sys.executable, "-m", "nexus.api.narrative"],
             stdout=log_handle,
             stderr=subprocess.STDOUT,
-            env=os.environ.copy(),
+            # The live gate's server reads provider keys from the owner's
+            # Keychain. Without this opt-out the secret-store guard (#963)
+            # starts it in env-only mode and its first model call fails with
+            # MissingSecretError.
+            env=secret_store_guard.store_access_env(os.environ),
         )
         try:
             _wait_health()

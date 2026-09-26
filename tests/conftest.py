@@ -3,17 +3,35 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 import psycopg2
 import pytest
+
+if TYPE_CHECKING:
+    from _pytest.terminal import TerminalReporter
 
 # Apply before collection and propagate to test subprocesses.
 if os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
     os.environ["NEXUS_TEST_PROVIDER_ONLY"] = "1"
 
 from nexus.telemetry import usage as usage_telemetry
+from nexus.util.secret_manager import InMemorySecretBackend, use_secret_backend
+from tests import secret_store_guard
+
+# Guard the real secret-store backends before collection, so test-module
+# imports and session- or module-scoped fixtures are covered as well as test
+# bodies. A conftest that cannot install the guard fails to load, and pytest
+# stops before collecting anything.
+secret_store_guard.install(setattr)
+
+# Env-only credential mode for this process too, except in live sessions,
+# whose guarded reads of nexus-api need the store path. Child processes get
+# NEXUS_KEYRING_DISABLE=1 from the guard's spawn tripwires in every session.
+if not secret_store_guard.LIVE_LLM_OPT_IN:
+    os.environ["NEXUS_KEYRING_DISABLE"] = "1"
 
 
 def _flag_enabled(name: str) -> bool:
@@ -47,6 +65,46 @@ def _forbid_unopted_postgres_connections(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.fixture(autouse=True)
+def _forbid_unopted_secret_store_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail immediately if a test reaches a real platform secret store.
+
+    Every Keychain and keyring operation is wrapped by
+    ``tests/secret_store_guard.py``; a denied call fails through ``pytest.fail``
+    before any ``security`` subprocess or ``keyring`` call runs. The guard is
+    re-applied per test so a test that replaced a backend method still runs
+    guarded. Only ``NEXUS_RUN_SECRET_STORE=1`` (disposable keychain files) and
+    ``NEXUS_RUN_LIVE_LLM=1`` (reads of ``nexus-api``) widen it, and only when
+    set before the session starts.
+    """
+    secret_store_guard.install(monkeypatch.setattr)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _register_disposable_keychain_root(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Make pytest's base temp dir the only home of disposable keychains."""
+    secret_store_guard.set_disposable_root(tmp_path_factory.getbasetemp())
+
+
+@pytest.fixture
+def in_memory_secret_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[InMemorySecretBackend]:
+    """Route ``get_secret``/``set_secret`` to a private in-memory store.
+
+    ``NEXUS_KEYRING_DISABLE`` is removed so the store path, not the env-only
+    path, is exercised. With this backend injected and the session guard in
+    place, removing it cannot reach the owner's store. Leaving the block
+    restores the previous backend and clears the read cache.
+    """
+    monkeypatch.delenv("NEXUS_KEYRING_DISABLE", raising=False)
+    backend = InMemorySecretBackend()
+    with use_secret_backend(backend):
+        yield backend
+
+
+@pytest.fixture(autouse=True)
 def _isolate_provider_usage(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -61,9 +119,41 @@ def _isolate_provider_usage(
     monkeypatch.setattr(usage_telemetry, "_config", config)
 
 
+def pytest_report_header(config: pytest.Config) -> str:
+    """Show the secret-store guard state at the top of every run."""
+    return secret_store_guard.describe()
+
+
+def pytest_terminal_summary(
+    terminalreporter: TerminalReporter,
+    exitstatus: int,
+    config: pytest.Config,
+) -> None:
+    """Repeat the guard state after the run; ``-q`` hides the report header."""
+    terminalreporter.write_line(secret_store_guard.describe())
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Refuse to run any test if collection removed the secret-store guard."""
+    if not secret_store_guard.installed():
+        pytest.exit(
+            "Secret-store guard is missing after collection; refusing to run "
+            "tests that could reach the owner's credential store.",
+            returncode=pytest.ExitCode.USAGE_ERROR,
+        )
+
+
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
+    if not secret_store_guard.SECRET_STORE_OPT_IN:
+        _apply_marker_skip(
+            items,
+            "requires_secret_store",
+            "Set NEXUS_RUN_SECRET_STORE=1 to run disposable platform "
+            "secret-store integration tests.",
+        )
+
     if not _flag_enabled("NEXUS_RUN_POSTGRES"):
         _apply_marker_skip(
             items,

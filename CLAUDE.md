@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Register pre-commit hooks (once per checkout): `poetry run pre-commit install`
 - Run tests: `poetry run pytest`
 - Run the full gate (PostgreSQL-backed tests included): `NEXUS_RUN_POSTGRES=1 poetry run pytest`, with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset. A summary with hundreds of skips is not a passing gate.
+- Secret-store guard (mandatory, fail-closed, inside pytest): a gate run whose final terminal summary lacks `secret-store guard: active; nexus-api: denied` is not a gate; `docs/agent_workflow.md` lists what the guard covers, its flags and child-process opt-out, and its gaps.
 - Run specific test: `poetry run pytest tests/path/to/test.py::test_name`
 - Format code: `poetry run black .`
 - Typecheck: `poetry run mypy .`
@@ -158,6 +159,7 @@ All runtime reads go through `nexus.util.secret_manager.get_secret(<account>)`, 
 - Never export keys in long-lived shell rc files.
 - `NEXUS_KEYRING_DISABLE=1` is the supported CI/debug escape hatch — when set, `get_secret` reads from `<ACCOUNT>_API_KEY` env vars instead of the platform store.
 - Stored keys use service `nexus-api`; inspect status through the API KEYS card rather than printing credential values.
+- Tests never use the owner's store: inject `InMemorySecretBackend` with `use_secret_backend` (the `in_memory_secret_store` fixture). Unsetting `NEXUS_KEYRING_DISABLE` in a test does not reach the platform store; the session guard fails it.
 - 1Password is not a NEXUS dependency or source of truth. `scripts/sync_secrets.py` is a deprecated personal migration shim for legacy entries only.
 
 For detailed set, rotation, verification, and migration workflows, see the `manage-api-keys` skill in `.claude/skills/`.

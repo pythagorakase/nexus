@@ -38,6 +38,29 @@ trigger a blocking ACL prompt. Elsewhere it uses `keyring.set_password`.
 `NEXUS_KEYRING_DISABLE=1` is a read-only CI/debug escape hatch. Reads use
 `<ACCOUNT>_API_KEY`; writes must fail loudly until the flag is unset.
 
+## Keep Tests Off the Owner's Store
+
+Every store operation goes through a `SecretBackend` (`read`, `write`,
+`delete`). Tests inject `InMemorySecretBackend` with `use_secret_backend`,
+usually through the `in_memory_secret_store` fixture. The session guard in
+`tests/secret_store_guard.py` fails any test that reaches the real backends,
+a `keyring` backend, or the `security` CLI. Do not unset
+`NEXUS_KEYRING_DISABLE` or shell out to `security` to test storage.
+
+`NEXUS_RUN_SECRET_STORE=1` runs the macOS integration test against a
+disposable keychain file under pytest's base temp directory and a throwaway
+service. Never point a test at service `nexus-api` or the login keychain.
+
+The guard covers credential-store access in the pytest process. A `security`
+spawn runs only as an argv list that exactly matches an open backend or
+disposable-keychain scope. Every child process gets `NEXUS_KEYRING_DISABLE=1`
+whatever the opt-in flags and whatever its `env` says; a child that genuinely
+needs store access gets `env=secret_store_guard.store_access_env(...)`, with
+the reason beside the call. `os.exec*`, fork-then-exec, a renamed copy of
+`security`, a child that runs `security` itself, and `ctypes` calls into the
+Security framework are not covered. It does not guard protected paths, and
+there is no launcher preflight outside pytest.
+
 ## Preserve Failure Safety
 
 Never render provider exception messages. Verification failures expose only the
