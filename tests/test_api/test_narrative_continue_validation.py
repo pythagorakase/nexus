@@ -19,7 +19,6 @@ from psycopg2.extras import Json, RealDictCursor
 
 from nexus.agents.logon.apex_schema import StorytellerResponseMinimal
 from nexus.api import (
-    chunk_workflow,
     commit_handler_sync,
     narrative,
     narrative_generation,
@@ -1161,14 +1160,6 @@ def test_undo_restores_unresolved_parent_and_plain_continue_rejects(
     monkeypatch.setattr(slot_endpoints, "slot_dbname", lambda _slot: dbname)
     monkeypatch.setattr(
         slot_endpoints,
-        "get_connection",
-        lambda _dbname, dict_cursor=False: _clone_connection(
-            dbname, dict_cursor=dict_cursor
-        ),
-    )
-    monkeypatch.setattr(chunk_workflow, "VALID_DATABASES", {dbname})
-    monkeypatch.setattr(
-        chunk_workflow,
         "get_connection",
         lambda _dbname, dict_cursor=False: _clone_connection(
             dbname, dict_cursor=dict_cursor

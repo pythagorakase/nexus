@@ -47,10 +47,6 @@ from nexus.api.choice_handling import (
     resolve_choice_response,
     validate_choice_index,
 )
-from nexus.api.chunk_workflow import (
-    ChunkWorkflow,
-    get_default_workflow,
-)
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_flow import (
     start_setup,
@@ -1635,16 +1631,6 @@ async def clear_incubator(
         return {"message": "Incubator cleared"}
     finally:
         conn.close()
-
-
-@app.get("/api/chunks/states")
-async def get_chunk_states_endpoint(start: int, end: int, slot: Optional[int] = None):
-    """Get states for a range of chunks"""
-    try:
-        return get_default_workflow().get_chunk_states(start, end, slot)
-    except Exception as e:
-        logger.error(f"Error fetching chunk states: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/user-character")

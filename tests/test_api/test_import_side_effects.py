@@ -1,10 +1,11 @@
 """Regression tests for side-effect-free API imports (issue #369).
 
 Importing ``nexus.api`` helper/schema modules — or the Orrery worker — must
-not construct the Storyteller app, instantiate ChunkWorkflow, open a Postgres
-pool, or run schema validation. Each test runs in a fresh subprocess pointed
-at an unreachable Postgres port, so any import-time connection attempt fails
-loudly (connection refused) instead of passing against a live local server.
+not construct an app, open a Postgres pool, or run schema validation, and
+building the gateway app must not open a pool either. Each test runs in a
+fresh subprocess pointed at an unreachable Postgres port, so any import-time
+connection attempt fails loudly (connection refused) instead of passing
+against a live local server.
 """
 
 from __future__ import annotations
@@ -78,7 +79,6 @@ def test_api_helper_imports_do_not_touch_postgres() -> None:
         "import nexus.api\n"
         "import nexus.api.choice_handling\n"
         "import nexus.api.new_story_schemas\n"
-        "import nexus.api.chunk_workflow\n"
         "from nexus.api import db_pool\n"
         "assert db_pool._pools == {}, db_pool._pools\n"
         "print('OK')\n"
@@ -86,10 +86,20 @@ def test_api_helper_imports_do_not_touch_postgres() -> None:
     _assert_clean(_run_fresh_import(code))
 
 
-def test_storyteller_app_export_does_not_touch_postgres() -> None:
-    """Resolving nexus.api.app builds the FastAPI app without a database."""
+def test_api_package_exports_no_application() -> None:
+    """The package has no app export; the gateway is the one app (#807)."""
     code = (
-        "from nexus.api import app\n"
+        "import nexus.api\n"
+        "assert not hasattr(nexus.api, 'app'), nexus.api.app\n"
+        "print('OK')\n"
+    )
+    _assert_clean(_run_fresh_import(code))
+
+
+def test_gateway_app_import_does_not_touch_postgres() -> None:
+    """Importing the gateway builds its FastAPI app without a database."""
+    code = (
+        "from nexus.api.narrative import app\n"
         "from nexus.api import db_pool\n"
         "assert app.title is not None\n"
         "assert db_pool._pools == {}, db_pool._pools\n"
@@ -98,12 +108,12 @@ def test_storyteller_app_export_does_not_touch_postgres() -> None:
     _assert_clean(_run_fresh_import(code))
 
 
-def test_storyteller_app_export_does_not_import_ml_stack() -> None:
-    """Resolving nexus.api.app must not import LORE's MEMNON/ML dependencies."""
+def test_gateway_app_import_does_not_import_ml_stack() -> None:
+    """Importing the gateway must not import MEMNON or its ML dependencies."""
     module_list = repr(sorted(_FORBIDDEN_APP_IMPORT_MODULES))
     code = (
         "import sys\n"
-        "from nexus.api import app\n"
+        "from nexus.api.narrative import app\n"
         f"forbidden = {module_list}\n"
         "loaded = [module for module in forbidden if module in sys.modules]\n"
         "assert app.title is not None\n"

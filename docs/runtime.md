@@ -24,6 +24,13 @@ A client that works against `http://127.0.0.1:8002` works against
 `https://nexus.example.com` by changing its base URL and, when the remote
 origin is Access-protected, configuring its edge-auth secret references.
 
+The gateway is also the only application: the `nexus.api` package exports
+none. #807 retired the pre-gateway Storyteller app (`nexus/api/storyteller.py`),
+its file-backed session store, and `GET /api/chunks/states`, which always
+answered 500, after a caller inventory found no client
+(`docs/qa/807-one-gateway/inventory.md`). The Storyteller app's setup routes
+were already served by the gateway.
+
 ## The Runtime Endpoint
 
 `GET /runtime/status` is the runtime's self-description. Clients use it for
