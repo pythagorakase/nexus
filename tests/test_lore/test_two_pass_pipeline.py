@@ -1159,9 +1159,13 @@ def _install_gaia_capture(
     windows: list[Any] = []
     real_attach = utility._attach_prompt_window_guard
 
-    def spy_attach(provider, prompt, *, seat, window):
+    def spy_attach(provider, prompt, *, seat, window, narrative=None):
         windows.append(window)
-        return real_attach(provider, prompt, seat=seat, window=window)
+        if seat == "gaia":
+            captured["identity_narrative"] = narrative
+        return real_attach(
+            provider, prompt, seat=seat, window=window, narrative=narrative
+        )
 
     monkeypatch.setattr(utility, "_attach_prompt_window_guard", spy_attach)
     return captured, windows
@@ -1222,6 +1226,7 @@ def test_sync_pinned_gaia_runs_fresh_openai_seat(
     assert skald_gaia_prompt_guide() not in captured["system_prompt"]
     # Gaia enforcement used the GAIA provider's window, not the writer's 32K.
     assert windows[-1] == 75_000
+    assert captured["identity_narrative"] == WRITER_PAYLOAD["narrative"]
     assert response.narrative == WRITER_PAYLOAD["narrative"]
 
 
@@ -1259,6 +1264,7 @@ async def test_async_pinned_gaia_runs_fresh_openai_seat(
     }
     assert captured["route"][3] == "openai"
     assert windows[-1] == 75_000
+    assert captured["identity_narrative"] == WRITER_PAYLOAD["narrative"]
     assert response.narrative == WRITER_PAYLOAD["narrative"]
 
 

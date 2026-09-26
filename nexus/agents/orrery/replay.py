@@ -180,6 +180,7 @@ NEED_CLOCK_RECONCILIATION_COLUMNS = (
 
 SKALD_SCALAR_FIELDS = frozenset(
     {
+        "characters.name",
         "characters.emotional_state",
         "characters.current_activity",
         "characters.current_location",
@@ -270,6 +271,27 @@ class Drift:
     kind: str  # 'missing_row' | 'extra_row' | 'value'
     expected: Any
     actual: Any
+
+
+def _seed_checkpoint_character_names(
+    characters: dict[int, dict[str, Any]], result: ReplayResult
+) -> None:
+    """Keep names omitted by old checkpoints unknown until a ledger writes them.
+
+    Canonical names are scalar state; alias membership is not part of this
+    replay surface. Never fill historical names from the present-day catalog.
+    """
+    missing = [row for row in characters.values() if "name" not in row]
+    for row in missing:
+        row["name"] = None
+        result.unreproducible.add(("characters", str(row["id"]), "name"))
+    if missing:
+        result.add_note(
+            "characters",
+            f"{len(missing)} canonical name(s) absent from the base checkpoint; "
+            "unknown until a ledgered name write",
+            approximate=True,
+        )
 
 
 @dataclass
@@ -957,6 +979,7 @@ class _Replayer:
 
         entities = {row["id"]: dict(row) for row in base_state["entities"]}
         characters = {row["id"]: dict(row) for row in base_state["characters"]}
+        _seed_checkpoint_character_names(characters, result)
         places = {row["id"]: dict(row) for row in base_state["places"]}
         needs = {
             (row["character_entity_id"], row["need_type"]): dict(row)
@@ -1662,7 +1685,7 @@ class _Replayer:
                 "characters",
                 "SELECT id, entity_id, created_at FROM characters "
                 "WHERE created_at <= %s",
-                ("current_location", "current_activity", "emotional_state"),
+                ("name", "current_location", "current_activity", "emotional_state"),
             ),
             (
                 "places",
@@ -3245,6 +3268,15 @@ def _diff_section(
         for column in sorted(set(exp_row) | set(act_row)):
             if column in volatile:
                 continue
+            if (
+                section == "characters"
+                and column == "name"
+                and ("name" not in exp_row or "name" not in act_row)
+            ):
+                # Old checkpoint documents never recorded canonical names.
+                # Missing is unknown, not a historical NULL or current name.
+                skipped += 1
+                continue
             if (section, str(key), column) in unreproducible:
                 skipped += 1
                 continue
@@ -3329,6 +3361,14 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
             base_stored = _load_checkpoint_state(cur, base_id)
             target_stored = _load_checkpoint_state(cur, target_id)
             boundary_notes: dict[str, list[str]] = {}
+            if any(
+                "name" not in row
+                for state in (base_stored, target_stored)
+                for row in state["characters"]
+            ):
+                boundary_notes["characters"] = [
+                    "canonical names absent from a checkpoint; comparison skipped"
+                ]
             rebase = _rebase_reconciled_need_clock_baseline(
                 cur,
                 base_stored["character_need_states"],
@@ -3421,6 +3461,13 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
             target_checkpoint_id=target_id,
         )
         stored = _load_checkpoint_state(cur, target_id)
+        if any("name" not in row for row in stored["characters"]):
+            result.add_note(
+                "characters",
+                "target checkpoint did not record canonical names; "
+                "name comparison skipped",
+                approximate=True,
+            )
         missing_sections = _missing_checkpoint_sections(
             cur, base_id
         ) | _missing_checkpoint_sections(cur, target_id)

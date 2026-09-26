@@ -105,7 +105,7 @@ CHECKPOINT_SECTIONS: dict[str, str] = {
     ),
     "characters": (
         "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
-        "FROM (SELECT id, entity_id, current_location, current_activity, "
+        "FROM (SELECT id, entity_id, name, current_location, current_activity, "
         "emotional_state FROM characters) t"
     ),
     "places": (
@@ -325,11 +325,12 @@ async def log_state_delta_async(
     new_value: Any,
     old_value: Any = None,
 ) -> None:
+    """Persist encoded JSON through text so asyncpg codecs cannot encode it twice."""
     await conn.execute(
         """
         INSERT INTO state_delta_log (
             source_chunk_id, writer, entity_id, field, old_value, new_value
-        ) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+        ) VALUES ($1, $2, $3, $4, $5::text::jsonb, $6::text::jsonb)
         """,
         source_chunk_id,
         writer,
