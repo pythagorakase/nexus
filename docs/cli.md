@@ -125,6 +125,18 @@ poetry run nexus continue --slot 5 --accept-fate
 poetry run nexus continue --slot 5 --model TEST
 ```
 
+### `retry` — Retry a Failed Continuation
+
+When a continuation fails after your action was recorded, `load` shows the
+failure and this command. `retry` resumes that recorded action without choosing
+or recording it again, then prints the new turn the way `continue` does. It
+exits with an error when the slot reports no failed continuation, and the
+server rejects it if a newer attempt has replaced that failure.
+
+```bash
+poetry run nexus retry --slot 5
+```
+
 ### `clear` — Reset a Slot
 
 Clears wizard state and returns the slot to empty.
