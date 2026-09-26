@@ -36,7 +36,7 @@ Issue #964 records the isolated full gate on `b0645dafb646bf849a084d6a0eda77c076
 | none | 2 |
 | new-issue | 1 |
 
-Product defects suspected even with a valid fixture: 2 (both low severity; see the rows below). Nodes whose repair needs a runtime confirmation before it can be declared complete: 127.
+Product defects suspected even with a valid fixture: 2 (both low severity; see the rows below). Nodes whose repair needs a runtime confirmation before it can be declared complete: 128.
 
 ## Reading the Groups
 
@@ -522,7 +522,7 @@ Then replace _connect() with tests.pg_fixtures.connect(dbname) and get_slot_db_u
 #### `tests/test_orrery/test_claim_accounts_live.py::test_sibling_accounts_hydrate_predicates_and_propagate_independently`
 
 - Baseline outcome: failure; signature: `psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp`
-- Route: `seed_disposable_clone` to #885; confidence 0.9
+- Route: `seed_disposable_clone` to #885; confidence 0.9; runtime confirmation needed
 - Cause: The fixture uses hardwired slot 5. The first write is _insert_character('account-canonical-knower'), before _insert_chunk, so the characters need-state trigger raises on the empty clone. The body later needs six self-created characters, two manual-producer relationships (_insert_relationship already wraps relationship_producer('manual')), a birth chunk, a threat_issued event, canonical and variant claims with a told awareness row, and a drain chunk 4h later for drain_claim_propagation_sync. It has no corpus dependency.
 - Prerequisite: Story clock (base_timestamp) before the characters INSERT, the template pair_tags/event_types seed, and the pg_temp valence shadow installed by the fixture.
 - Repair steps:

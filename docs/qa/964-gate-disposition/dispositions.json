@@ -636,7 +636,7 @@
    "routed_issue": "#885",
    "product_defect_suspected": false,
    "product_defect_detail": "Nothing past the fixture prerequisite executed. The same helpers and propagation drain pass on a seeded clone in tests/test_orrery/test_distortion_live.py, which was green in the baseline.",
-   "needs_runtime_confirmation": false,
+   "needs_runtime_confirmation": true,
    "confidence": 0.9,
    "outcome": "failure",
    "signature": "psycopg2.errors.RaiseException: need-clock anchor unavailable: no canonical world time or base_timestamp",
