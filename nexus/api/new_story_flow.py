@@ -172,6 +172,47 @@ class WizardConversationMoveError(RuntimeError):
     """A wizard thread could not be moved into the requested model's store."""
 
 
+def _remove_partial_copy(
+    target: ConversationsClient, thread_id: str, message_ids: list[str]
+) -> None:
+    """Delete a failed move's copied messages, then its thread.
+
+    Hosted conversations retain their items after the conversation is deleted,
+    so each copied item goes first. A thread whose items could not all be
+    deleted is kept, and logged, so its remaining items stay reachable.
+    """
+    remaining: list[str] = []
+    for message_id in reversed(message_ids):
+        try:
+            target.delete_message(thread_id, message_id)
+        except Exception:
+            remaining.append(message_id)
+            logger.exception(
+                "Removing copied message %s from partial wizard thread %s failed",
+                message_id,
+                thread_id,
+            )
+    if remaining:
+        logger.error(
+            "Partial wizard thread %s remains in %s storage with messages %s",
+            thread_id,
+            target.store_mode,
+            remaining,
+        )
+        return
+    try:
+        removed = target.delete_thread(thread_id)
+    except Exception:
+        removed = False
+        logger.exception("Removing partial wizard thread %s failed", thread_id)
+    if not removed:
+        logger.error(
+            "Partial wizard thread %s remains in %s storage",
+            thread_id,
+            target.store_mode,
+        )
+
+
 def switch_wizard_model(
     slot_number: int,
     *,
@@ -247,14 +288,17 @@ def switch_wizard_model(
         ) from exc
 
     new_thread_id = target.create_thread()
+    copied: list[str] = []
     try:
         # list_messages is newest first; replay oldest first with provenance.
         for message in reversed(messages):
-            target.add_message(
-                new_thread_id,
-                message["role"],
-                message["content"],
-                origin=message.get("origin"),
+            copied.append(
+                target.add_message(
+                    new_thread_id,
+                    message["role"],
+                    message["content"],
+                    origin=message.get("origin"),
+                )
             )
         repoint_wizard_conversation(
             dbname,
@@ -276,17 +320,7 @@ def switch_wizard_model(
         raise
     except BaseException:
         # The original failure propagates; only the partial copy is removed.
-        try:
-            removed = target.delete_thread(new_thread_id)
-        except Exception:
-            removed = False
-            logger.exception("Removing partial wizard thread %s failed", new_thread_id)
-        if not removed:
-            logger.error(
-                "Partial wizard thread %s remains in %s storage",
-                new_thread_id,
-                target.store_mode,
-            )
+        _remove_partial_copy(target, new_thread_id, copied)
         raise
     logger.info(
         "Moved wizard thread %s (%s storage) to %s (%s storage) for slot %s",

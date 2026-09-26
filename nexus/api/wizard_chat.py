@@ -907,7 +907,13 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             write_wizard_choices(
                 [], slot_dbname(request.slot), expected_thread_id=request.thread_id
             )
-            payload = {"type": "message", "message": result.output, "choices": []}
+            # A model switch may have moved the thread; clients adopt this ID.
+            payload = {
+                "type": "message",
+                "message": result.output,
+                "choices": [],
+                "thread_id": request.thread_id,
+            }
             yield json.dumps(payload) + "\n"
             return
 
@@ -1098,6 +1104,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                     "type": "final",
                     "message": final_output.message,
                     "choices": ui_choices,
+                    "thread_id": request.thread_id,
                 }
             ) + "\n"
 

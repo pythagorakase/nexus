@@ -340,6 +340,28 @@ def test_local_conversations_reject_unknown_threads(
         client.list_messages(thread_id)
 
 
+@pytest.mark.parametrize("provider", LOCAL_STORE_PROVIDERS)
+def test_local_conversations_delete_single_messages(
+    provider: str, offline_registry: Path
+) -> None:
+    """One message leaves its thread; an absent one fails instead of passing."""
+    client = ConversationsClient(registry_model(provider))
+    thread_id = client.create_thread()
+    welcome = client.add_message(thread_id, "assistant", "Welcome")
+    client.add_message(thread_id, "user", "A harbor")
+
+    client.delete_message(thread_id, welcome)
+
+    assert client.list_messages(thread_id, limit=0) == [
+        {"role": "user", "content": "A harbor"}
+    ]
+    with pytest.raises(LookupError, match=re.escape(repr(welcome))):
+        client.delete_message(thread_id, welcome)
+    with pytest.raises(ConversationThreadNotFoundError):
+        client.delete_message("conv_created_by_hosted_store", welcome)
+    assert client.delete_thread(thread_id)
+
+
 @pytest.mark.parametrize(
     "provider", [provider for provider in REGISTRY_PROVIDERS if provider != "openai"]
 )

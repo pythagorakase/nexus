@@ -43,16 +43,23 @@ from tests.model_registry_helpers import registry_model
 OPENING = [("assistant", "Welcome"), ("assistant", "Pick a genre")]
 PLAYER = "A harbor city"
 REPLY = "The harbor wakes."
+DEBUG_REPLY = "Debug: the harbor is set."
 
 
 class HostedConversations:
-    """The hosted Conversations HTTP API, answered in process for the real SDK."""
+    """The hosted Conversations HTTP API, answered in process for the real SDK.
+
+    As on the real service, deleting a conversation leaves its items stored;
+    only an item deletion removes an item.
+    """
 
     def __init__(self) -> None:
-        self.threads: dict[str, list[dict[str, Any]]] = {}
+        self.threads: dict[str, list[str]] = {}
+        self.items: dict[str, dict[str, Any]] = {}
         self.reads = 0
+        self.writes = 0
         self.fail_reads_after: Optional[int] = None
-        self.fail_item_writes = False
+        self.fail_writes_after: Optional[int] = None
 
     def _error(self, status: int, message: str) -> httpx.Response:
         return httpx.Response(
@@ -77,8 +84,8 @@ class HostedConversations:
                 json={"id": conversation_id, "object": "conversation", "created_at": 1},
             )
         conversation_id, _, rest = path.strip("/").partition("/")
-        items = self.threads.get(conversation_id)
-        if items is None:
+        item_ids = self.threads.get(conversation_id)
+        if item_ids is None:
             return self._error(404, f"Conversation {conversation_id} not found")
         if rest == "" and request.method == "DELETE":
             del self.threads[conversation_id]
@@ -90,27 +97,40 @@ class HostedConversations:
                     "deleted": True,
                 },
             )
+        if rest.startswith("items/") and request.method == "DELETE":
+            item_id = rest.removeprefix("items/")
+            if item_id not in item_ids:
+                return self._error(404, f"Item {item_id} not found")
+            item_ids.remove(item_id)
+            del self.items[item_id]
+            return httpx.Response(
+                200,
+                json={"id": conversation_id, "object": "conversation", "created_at": 1},
+            )
         if rest == "items" and request.method == "POST":
-            if self.fail_item_writes:
+            self.writes += 1
+            if (
+                self.fail_writes_after is not None
+                and self.writes > self.fail_writes_after
+            ):
                 return self._error(400, "Item rejected")
             (item,) = json.loads(request.content)["items"]
             item_id = f"msg_{uuid.uuid4().hex[:12]}"
             kind = "output_text" if item["role"] == "assistant" else "input_text"
-            items.append(
-                {
-                    "id": item_id,
-                    "type": "message",
-                    "role": item["role"],
-                    "content": [{"type": kind, "text": item["content"]}],
-                }
-            )
+            self.items[item_id] = {
+                "id": item_id,
+                "type": "message",
+                "role": item["role"],
+                "content": [{"type": kind, "text": item["content"]}],
+            }
+            item_ids.append(item_id)
             return httpx.Response(200, json={"data": [{"id": item_id}]})
         if rest == "items" and request.method == "GET":
             self.reads += 1
             if self.fail_reads_after is not None and self.reads > self.fail_reads_after:
                 return self._error(401, "Incorrect API key provided")
             assert request.url.params["order"] == "desc"
-            newest = list(reversed(items))
+            newest = [self.items[item_id] for item_id in reversed(item_ids)]
             after = request.url.params.get("after")
             if after:
                 newest = newest[[item["id"] for item in newest].index(after) + 1 :]
@@ -226,6 +246,11 @@ def mount_wizard(
             history_text(kwargs)
             yield Turn()
 
+    class DebugAgent:
+        async def run(self, *args: Any, **kwargs: Any) -> Any:
+            history_text(kwargs)
+            return SimpleNamespace(output=DEBUG_REPLY)
+
     monkeypatch.setattr(slot_state, "get_slot_state", get_slot_state)
     monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda slot: None)
     for module in (wizard_chat, wizard_agent):
@@ -235,6 +260,7 @@ def mount_wizard(
     monkeypatch.setattr(new_story_flow, "repoint_wizard_conversation", repoint)
     monkeypatch.setattr(wizard_chat, "write_wizard_choices", write_choices)
     monkeypatch.setattr(wizard_chat, "get_wizard_agent", lambda context: Agent())
+    monkeypatch.setattr(wizard_chat, "wizard_debug_agent", DebugAgent())
     monkeypatch.setattr(wizard_chat, "get_wizard_streaming_enabled", lambda: True)
     monkeypatch.setattr(
         wizard_chat,
@@ -271,10 +297,23 @@ def thread_files(thread_dir: Path) -> list[str]:
     )
 
 
-def chat(client: TestClient, streaming: bool, model: str) -> httpx.Response:
+def chat(
+    client: TestClient, streaming: bool, model: str, *, dev: bool = False
+) -> httpx.Response:
     """Send the first player message with an explicit model override."""
     endpoint = "/api/story/new/chat/stream" if streaming else "/api/story/new/chat"
-    return client.post(endpoint, json={"slot": 4, "message": PLAYER, "model": model})
+    return client.post(
+        endpoint, json={"slot": 4, "message": PLAYER, "model": model, "dev": dev}
+    )
+
+
+def returned_thread_id(response: httpx.Response, streaming: bool) -> Any:
+    """Read the thread ID a successful turn tells the client to continue in."""
+    if not streaming:
+        return response.json()["thread_id"]
+    records = [json.loads(line) for line in response.text.splitlines()]
+    assert records[-1]["type"] in {"final", "message"}, records
+    return records[-1]["thread_id"]
 
 
 @pytest.mark.parametrize("streaming", [False, True])
@@ -305,8 +344,7 @@ def test_cross_store_switch_moves_the_opening_to_the_new_store(
     assert response.status_code == 200, response.text
     assert record.model == target_model
     assert record.thread_id != old_thread
-    if not streaming:
-        assert response.json()["thread_id"] == record.thread_id
+    assert returned_thread_id(response, streaming) == record.thread_id
     assert record.choice_threads == [record.thread_id]
     assert transcript(target_model, record.thread_id) == [
         *OPENING,
@@ -316,6 +354,29 @@ def test_cross_store_switch_moves_the_opening_to_the_new_store(
     assert seen[: len(OPENING)] == [content for _, content in OPENING]
     # The source copy is left intact; only the slot's pointer moved.
     assert transcript(source_model, old_thread) == OPENING
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_dev_turn_returns_the_moved_thread(
+    monkeypatch: pytest.MonkeyPatch, hosted: HostedConversations, streaming: bool
+) -> None:
+    """A debug turn after a cross-store switch also names the new thread."""
+    source_model, target_model = registry_model("local"), registry_model("openai")
+    old_thread = opened_thread(source_model)
+    record = SlotRecord(model=source_model, thread_id=old_thread)
+
+    response = chat(
+        mount_wizard(monkeypatch, record, []), streaming, target_model, dev=True
+    )
+
+    assert response.status_code == 200, response.text
+    assert record.thread_id != old_thread
+    assert returned_thread_id(response, streaming) == record.thread_id
+    assert transcript(target_model, record.thread_id) == [
+        *OPENING,
+        ("user", PLAYER),
+        ("assistant", DEBUG_REPLY),
+    ]
 
 
 @pytest.mark.parametrize("streaming", [False, True])
@@ -334,6 +395,7 @@ def test_same_store_switch_keeps_the_thread(
 
     assert response.status_code == 200, response.text
     assert (record.model, record.thread_id) == (target_model, thread_id)
+    assert returned_thread_id(response, streaming) == thread_id
     assert transcript(target_model, thread_id) == [
         *OPENING,
         ("user", PLAYER),
@@ -364,11 +426,13 @@ def test_failed_cross_store_switch_changes_nothing(
     record = SlotRecord(model=source_model, thread_id=old_thread)
     files_before = thread_files(offline_registry)
     hosted_before = set(hosted.threads)
+    items_before = set(hosted.items)
     if failure == "source_unreadable":
         # The lock check reads first; the credential fails on the move's read.
         hosted.fail_reads_after = hosted.reads + 1
     elif failure == "target_write_rejected":
-        hosted.fail_item_writes = True
+        # One message is copied before the second is rejected.
+        hosted.fail_writes_after = hosted.writes + 1
     else:
 
         def concurrent_setup() -> None:
@@ -390,6 +454,8 @@ def test_failed_cross_store_switch_changes_nothing(
     assert record.choice_threads == []
     assert thread_files(offline_registry) == files_before
     assert set(hosted.threads) == hosted_before
+    # Deleting a hosted conversation keeps its items; each copy is deleted too.
+    assert set(hosted.items) == items_before
     hosted.fail_reads_after = None
     assert transcript(source_model, old_thread) == OPENING
 

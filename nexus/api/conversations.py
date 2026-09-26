@@ -302,6 +302,31 @@ class ConversationsClient:
 
         return history
 
+    def delete_message(self, thread_id: str, message_id: str) -> None:
+        """
+        Delete one message from a thread.
+
+        Hosted conversations keep their items after the conversation itself is
+        deleted, so a copied transcript must be removed item by item.
+
+        Args:
+            thread_id: The ID of the thread holding the message
+            message_id: The ID returned by add_message
+
+        Raises:
+            ConversationThreadNotFoundError: If a file or memory thread is absent.
+            LookupError: If a file or memory thread has no such message.
+        """
+        if self._store_mode == "memory":
+            self._require_memory_store().delete_message(thread_id, message_id)
+        elif self._store_mode == "file":
+            self._require_file_store().delete_message(thread_id, message_id)
+        else:
+            self._require_hosted_client().conversations.items.delete(
+                message_id, conversation_id=thread_id
+            )
+        logger.debug("Deleted message %s from thread %s", message_id, thread_id)
+
     def delete_thread(self, thread_id: str) -> bool:
         """
         Delete a conversation thread.
@@ -332,6 +357,18 @@ class ConversationsClient:
         except openai.OpenAIError as exc:
             logger.warning("Failed to delete thread %s: %s", thread_id, exc)
             return False
+
+
+def _without_message(
+    messages: List[Dict[str, str]], thread_id: str, message_id: str
+) -> List[Dict[str, str]]:
+    """Return a local thread's messages minus one, raising if it is absent."""
+    kept = [message for message in messages if message["id"] != message_id]
+    if len(kept) == len(messages):
+        raise LookupError(
+            f"Wizard conversation thread {thread_id!r} has no message {message_id!r}"
+        )
+    return kept
 
 
 class _MemoryConversationStore:
@@ -377,6 +414,11 @@ class _MemoryConversationStore:
         limited = messages[-limit:] if limit else messages
         limited = list(reversed(limited))
         return [_normalized_message(m["role"], m["content"]) for m in limited]
+
+    def delete_message(self, thread_id: str, message_id: str) -> None:
+        with self._lock:
+            messages = self._existing(thread_id)
+            messages[:] = _without_message(messages, thread_id, message_id)
 
     def delete_thread(self, thread_id: str) -> bool:
         with self._lock:
@@ -442,6 +484,11 @@ class _FileConversationStore:
         limited = messages[-limit:] if limit else messages
         limited = list(reversed(limited))
         return [_normalized_message(m["role"], m["content"]) for m in limited]
+
+    def delete_message(self, thread_id: str, message_id: str) -> None:
+        with self._lock:
+            messages = self._load(thread_id)
+            self._save(thread_id, _without_message(messages, thread_id, message_id))
 
     def delete_thread(self, thread_id: str) -> bool:
         with self._lock:
