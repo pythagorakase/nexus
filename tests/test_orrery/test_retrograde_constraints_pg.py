@@ -152,6 +152,16 @@ def _hydrate_fixture(
         target_slot=3,
         dbname=dbname,
     )
+    from nexus.api.wizard_confirmation import confirm_artifact
+
+    for phase in ("setting", "character"):
+        draft = read_cache(dbname)
+        confirm_artifact(
+            dbname,
+            thread_id=draft.thread_id,
+            phase=phase,
+            artifact_token=draft.artifact_token(phase),
+        )
     cache = read_cache(dbname)
     assert cache is not None
     assert cache.current_phase() == "ready"

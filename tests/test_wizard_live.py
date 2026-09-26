@@ -12,6 +12,7 @@ Or quick validation:
 """
 
 import asyncio
+from contextlib import nullcontext
 import logging
 import os
 from datetime import timezone
@@ -188,6 +189,10 @@ def mock_db_functions(monkeypatch):
     """Mock all database functions so tests can run without PostgreSQL."""
     import nexus.api.wizard_agent as wizard_module
 
+    from nexus.api.new_story_cache import WizardCache
+
+    monkeypatch.setattr(wizard_module, "guarded_wizard_write", lambda *a: nullcontext())
+    monkeypatch.setattr(wizard_module, "read_cache", lambda *a: WizardCache())
     # Mock record_drafts (called by all tools)
     monkeypatch.setattr(wizard_module, "record_drafts", lambda *args, **kwargs: None)
 
@@ -361,12 +366,41 @@ async def test_seed_date_conflict_uses_bounded_live_repair(
         force=True,
     )
     try:
+        from nexus.api.wizard_confirmation import confirm_artifact
+        from tests.test_wizard_agent import (
+            sample_concept_submission,
+            sample_trait_selection,
+            sample_wildcard,
+        )
+
+        character_draft = {
+            "concept": sample_concept_submission()
+            .to_character_concept()
+            .model_copy(
+                update={
+                    "name": "Morgan Hale",
+                    "archetype": "Civil litigant preparing for a hearing",
+                }
+            )
+            .model_dump(),
+            "trait_selection": sample_trait_selection().model_dump(),
+            "wildcard": sample_wildcard().model_dump(),
+        }
         write_cache(
             thread_id="issue_600_live_seed_repair",
             setting_draft=setting,
+            character_draft=character_draft,
             target_slot=ISSUE_600_SLOT,
             dbname=ISSUE_600_DBNAME,
         )
+        for phase in ("setting", "character"):
+            draft = read_cache(ISSUE_600_DBNAME)
+            confirm_artifact(
+                ISSUE_600_DBNAME,
+                thread_id=draft.thread_id,
+                phase=phase,
+                artifact_token=draft.artifact_token(phase),
+            )
         context = WizardContext.from_request(
             slot=ISSUE_600_SLOT,
             phase="seed",
@@ -434,6 +468,10 @@ def setup_db_mocks():
     """Apply DB mocks for quick_test (non-pytest context)."""
     import nexus.api.wizard_agent as wizard_module
 
+    from nexus.api.new_story_cache import WizardCache
+
+    wizard_module.guarded_wizard_write = lambda *a: nullcontext()
+    wizard_module.read_cache = lambda *a: WizardCache()
     # Mock record_drafts (called by all tools)
     wizard_module.record_drafts = lambda *args, **kwargs: None
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Preserve production paths for character name reveals, wizard transcripts and place validation after integrating the reviewed QA fixes.",
+  "reason": "Integrate all seven adversarial QA fixes while preserving wizard confirmation, transcript filtering and character identity",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -222,6 +222,7 @@
     "nexus/api/trait_input_derivation.py",
     "nexus/api/wizard_agent.py",
     "nexus/api/wizard_chat.py",
+    "nexus/api/wizard_confirmation.py",
     "nexus/api/wizard_transcript.py",
     "nexus/cli.py",
     "nexus/config/__init__.py",

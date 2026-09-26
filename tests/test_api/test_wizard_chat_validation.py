@@ -24,10 +24,16 @@ def _client_with_wizard_state(
         cur.execute(
             """
             UPDATE assets.new_story_creator
-            SET setting_genre = %s, character_name = %s, traits_confirmed = %s
+            SET setting_genre = %s, character_name = %s, traits_confirmed = %s,
+                setting_confirmed = %s
             WHERE id = TRUE
             """,
-            (setting_genre, character_name, traits_confirmed),
+            (
+                setting_genre,
+                character_name,
+                traits_confirmed,
+                character_name is not None,
+            ),
         )
         cur.execute("UPDATE assets.traits SET rationale = NULL WHERE id = 11")
     app = FastAPI()

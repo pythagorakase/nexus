@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -46,6 +47,15 @@ from nexus.api.wizard_agent import (
     submit_wildcard_trait,
     submit_world_document,
 )
+
+
+@pytest.fixture(autouse=True)
+def mocked_tool_transaction(monkeypatch):
+    """Mock persistence here; the PG confirmation suite exercises real transactions."""
+    monkeypatch.setattr(
+        wizard_module, "guarded_wizard_write", lambda *args: nullcontext()
+    )
+    monkeypatch.setattr(wizard_module, "read_cache", lambda *args: WizardCache())
 
 
 @dataclass
@@ -506,6 +516,9 @@ async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> Non
 
     class CompleteCacheWithoutTimestamp:
         base_timestamp = None
+        character_revision_pending = False
+        setting_confirmed = True
+        character_confirmed = True
 
         def setting_complete(self) -> bool:
             return True
