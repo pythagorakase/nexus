@@ -16,7 +16,8 @@ from nexus.config.story_model import (
     resolve_story_model,
     story_context_settings,
 )
-from nexus.memory.manager import pass2_baseline_config_fingerprint
+from nexus.memory.context_state import Pass2BaselineV1, Pass2BaselineV2
+from nexus.memory.manager import ContextMemoryManager, pass2_baseline_config_fingerprint
 from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
@@ -93,6 +94,96 @@ def test_context_fingerprint_is_scoped_to_story(
     assert pass2_baseline_config_fingerprint(changed) != before
     assert pass2_baseline_config_fingerprint(other) == other_fingerprint
     assert pass2_baseline_config_fingerprint(defaults) == before
+
+
+def test_window_patch_rebases_matching_tail_in_same_transaction(
+    client: TestClient, offline_gate_db: str
+) -> None:
+    """A player window change unbricks a schema-1 tail it can vouch for (#805)."""
+    defaults = load_settings_as_dict()
+    before = story_context_settings(defaults, read_story_settings(offline_gate_db))
+    with connect(offline_gate_db) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+            "VALUES ('Window tail.', 'Window tail.') RETURNING id"
+        )
+        tail_id = cur.fetchone()[0]
+        legacy = Pass2BaselineV1(
+            config_fingerprint=pass2_baseline_config_fingerprint(before),
+            parent_chunk_id=tail_id,
+            memory_identities=[tail_id, "retrograde_summary:3"],
+            prior_token_accounting={"total_available": 900, "warm_slice": 100},
+            remaining_budget=800,
+        )
+        cur.execute(
+            "INSERT INTO lore_pass_baselines (chunk_id, schema_version, payload) "
+            "VALUES (%s, 1, %s::jsonb)",
+            (tail_id, legacy.model_dump_json()),
+        )
+    assert (
+        client.patch(
+            "/api/slot/4/settings", json={"apex_context_window": 100_000}
+        ).status_code
+        == 200
+    )
+    after = story_context_settings(defaults, read_story_settings(offline_gate_db))
+    with connect(offline_gate_db) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT schema_version, payload FROM lore_pass_baselines "
+            "WHERE chunk_id = %s",
+            (tail_id,),
+        )
+        version, payload = cur.fetchone()
+    assert version == 2
+    rebased = Pass2BaselineV2.model_validate(payload)
+    assert rebased.config_fingerprint == pass2_baseline_config_fingerprint(after)
+    assert (
+        rebased.config_snapshot.budget["lore.token_budget.apex_context_window"]
+        == 100_000
+    )
+    assert (
+        rebased.parent_chunk_id,
+        rebased.memory_identities,
+        rebased.prior_token_accounting,
+        rebased.remaining_budget,
+    ) == (
+        tail_id,
+        legacy.memory_identities,
+        legacy.prior_token_accounting,
+        legacy.remaining_budget,
+    )
+    # The next continuation's restore check now matches exactly.
+    assert (
+        ContextMemoryManager(after).hydrate_pass2_baseline(
+            tail_id,
+            schema_version=version,
+            payload=payload,
+            storyteller_text="Window tail.",
+        )
+        == rebased
+    )
+
+    # A tail stamped under other settings stays for restoration to refuse.
+    foreign = legacy.model_copy(update={"config_fingerprint": "0" * 64})
+    with connect(offline_gate_db) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE lore_pass_baselines SET schema_version = 1, payload = %s::jsonb "
+            "WHERE chunk_id = %s",
+            (foreign.model_dump_json(), tail_id),
+        )
+    assert (
+        client.patch(
+            "/api/slot/4/settings", json={"apex_context_window": 90_000}
+        ).status_code
+        == 200
+    )
+    with connect(offline_gate_db) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT schema_version, payload FROM lore_pass_baselines "
+            "WHERE chunk_id = %s",
+            (tail_id,),
+        )
+        assert cur.fetchone() == (1, foreign.model_dump(mode="json"))
 
 
 def test_wizard_records_player_model_in_slot(

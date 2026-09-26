@@ -51,6 +51,24 @@ def read_story_settings(dbname: str) -> StorySettings:
     )
 
 
+def lock_story_settings(cur: Any, *, dbname: str | None = None) -> StorySettings:
+    """Read and row-lock the story pins on the caller's transaction."""
+    cur.execute(
+        "SELECT model, gaia_model, apex_context_window "
+        "FROM global_variables WHERE id = TRUE FOR UPDATE"
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("Story settings row is missing")
+    values = list(row.values()) if isinstance(row, Mapping) else row
+    return StorySettings(
+        skald_model=values[0],
+        gaia_model=values[1],
+        apex_context_window=values[2],
+        dbname=dbname,
+    )
+
+
 def write_story_settings(cur: Any, patch: StorySettings) -> None:
     """Validate and persist explicit pins on the caller's transaction."""
     updates = patch.model_dump(exclude_unset=True)

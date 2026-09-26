@@ -13,9 +13,12 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 
+from nexus.config import load_settings_as_dict
 from nexus.config.story_model import (
     StorySettings,
+    lock_story_settings,
     read_story_settings,
+    story_context_settings,
     write_story_settings,
 )
 
@@ -331,7 +334,12 @@ def get_slot_settings_endpoint(slot: int) -> StorySettings:
 
 @router.patch("/{slot}/settings", response_model=StorySettings)
 def patch_slot_settings_endpoint(slot: int, patch: StorySettings) -> StorySettings:
-    """Validate registry selections and persist only explicitly supplied pins."""
+    """Validate registry selections and persist only explicitly supplied pins.
+
+    A context-window change is an explicit player intervention: in the same
+    transaction, the accepted tail's Pass-2 baseline is rewritten under the
+    new window when it was fingerprinted under the pre-change settings.
+    """
     if slot < 1 or slot > 5:
         raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
     require_writable_slot(slot)
@@ -341,11 +349,31 @@ def patch_slot_settings_endpoint(slot: int, patch: StorySettings) -> StorySettin
     dbname = slot_dbname(slot)
     with get_connection(dbname) as conn, conn.cursor() as cur:
         try:
+            previous = (
+                lock_story_settings(cur, dbname=dbname)
+                if "apex_context_window" in updates
+                else None
+            )
             write_story_settings(cur, patch)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if previous is not None:
+            from nexus.memory.manager import rebase_tail_pass2_baseline
+
+            base = load_settings_as_dict()
+            try:
+                rebase_tail_pass2_baseline(
+                    cur,
+                    previous_settings=story_context_settings(base, previous),
+                    current_settings=story_context_settings(
+                        base, lock_story_settings(cur, dbname=dbname)
+                    ),
+                    target=f"slot {slot} ({dbname})",
+                )
+            except RuntimeError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
     return read_story_settings(dbname)
 
 
