@@ -19,6 +19,7 @@ import tomlkit
 
 from nexus import cli
 from nexus.agents.lore.lore import LORE
+from nexus.agents.memnon.utils.artifact_manifest import run_models_command
 from nexus.api import asset_endpoints, local_inference, static_ui
 from nexus.api.route_capabilities import ROUTE_CAPABILITIES
 from nexus.api.settings_endpoints import _read_raw_settings
@@ -237,6 +238,8 @@ def test_disagreeing_locators_are_refused_by_every_reader(
             reader()
     with pytest.raises(RuntimeError_, match=DISAGREEMENT):
         Supervisor.from_config()
+    models = run_models_command("verify", None)
+    assert models["success"] is False and DISAGREEMENT in models["error"]
 
     monkeypatch.setattr(
         sys, "argv", ["nexus", "--json", "home", "plan", "--to", str(tmp_path / "t")]
