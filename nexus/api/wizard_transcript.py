@@ -65,3 +65,20 @@ def visible_wizard_messages(
                 continue
         visible.append({"role": role, "content": message["content"]})
     return visible
+
+
+def introduction_delivered(messages: Sequence[Mapping[str, object]]) -> bool:
+    """Whether an assistant reply follows the latest wizard control message.
+
+    An introduction claim is written only after its control message, so a
+    claimed introduction was delivered exactly when a reply follows that
+    control in the chronological transcript.
+    """
+    controls = [
+        index
+        for index, message in enumerate(messages)
+        if message["role"] == "user" and message.get("origin") == "wizard_control"
+    ]
+    if not controls:
+        raise ValueError("An introduction claim has no control message to follow")
+    return any(message["role"] == "assistant" for message in messages[controls[-1] :])

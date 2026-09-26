@@ -41,7 +41,10 @@ from nexus.api.new_story_flow import (
 from nexus.api.save_slots import get_slot_model
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
-from nexus.api.wizard_transcript import visible_wizard_messages
+from nexus.api.wizard_transcript import (
+    introduction_delivered,
+    visible_wizard_messages,
+)
 from nexus.prompts.registry import PromptId, load
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
@@ -100,7 +103,8 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
             raise HTTPException(
                 status_code=404, detail=f"No active setup found for slot {slot}"
             )
-        if not data.thread_id:
+        thread_id = data.thread_id
+        if not thread_id:
             raise RuntimeError("The saved wizard is missing its conversation ID")
         model = get_slot_model(slot, dbname=slot_dbname(slot))
         if not model:
@@ -108,10 +112,16 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
         client = ConversationsClient(model=model)
         try:
             # The model's context window limit must not truncate the UI transcript.
-            messages = client.list_messages(data.thread_id, limit=0)
+            messages = client.list_messages(thread_id, limit=0)
         finally:
             if client.client is not None:
                 client.client.close()
+        # An unfinished introduction claim is delivered once its reply follows
+        # the control message; otherwise the phase still awaits it.
+        if data.introduction_claim is not None and introduction_delivered(
+            list(reversed(messages))
+        ):
+            data = data.with_delivered_claim()
         awaiting_introduction = data.awaiting_introduction()
         # The character card is restored while it awaits acceptance and while
         # its accepted transition still lacks the introduction it requested.
@@ -120,7 +130,7 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
             or awaiting_introduction == "seed"
         )
         return ResumeSetupResponse(
-            thread_id=data.thread_id,
+            thread_id=thread_id,
             target_slot=slot,
             current_phase=data.current_phase(),
             pending_confirmation=data.pending_confirmation(),

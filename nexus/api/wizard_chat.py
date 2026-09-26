@@ -34,10 +34,11 @@ from nexus.api.narrative_schemas import (
 )
 from nexus.api.new_story_cache import (
     WizardCache,
+    claim_wizard_introduction,
     clear_suggested_traits,
+    complete_wizard_introduction,
     guarded_wizard_write,
     read_cache,
-    release_wizard_introduction,
     write_wizard_choices,
 )
 from nexus.api.new_story_flow import (
@@ -61,6 +62,7 @@ from nexus.api.pydantic_ai_utils import (
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_confirmation import WizardStateConflict
+from nexus.api.wizard_transcript import introduction_delivered
 from nexus.api.wizard_agent import (
     WizardContext,
     wizard_debug_agent,
@@ -136,26 +138,50 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
     return {**(context or {}), "character_state": char_state}
 
 
-def _reject_repeated_introduction(
-    cache: Optional[WizardCache], message_origin: str
-) -> None:
-    """Introduce an accepted phase once, before its application control repeats.
+_ALREADY_INTRODUCED = "This phase was already introduced. Resume before continuing."
+
+
+def _reconcile_introduction(
+    cache: Optional[WizardCache],
+    message_origin: str,
+    *,
+    slot: int,
+    request_model: Optional[str],
+    slot_model: Optional[str],
+) -> Optional[str]:
+    """Refuse a delivered introduction; return an undelivered claim to replace.
 
     Until a character concept or seed draft exists, the only wizard control
-    message is the introduction that artifact acceptance requests. Acceptance
-    clears the recorded choices and every reply records them again, so recorded
-    choices mean the introduction already arrived, even if its response was lost.
+    message is the introduction that artifact acceptance requests. A completed
+    reply records its choices, so that introduction already arrived. An
+    unfinished claim is settled against the transcript: a reply after its
+    control message was delivered, so the claim is completed and this request
+    refused; otherwise its writer failed or is still running, and this request
+    may replace exactly that claim.
     """
     if (
-        cache is not None
-        and message_origin == "wizard_control"
-        and cache.phase_untouched()
-        and cache.choices_recorded
+        cache is None
+        or message_origin != "wizard_control"
+        or not cache.phase_untouched()
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="This phase was already introduced. Resume before continuing.",
+        return None
+    if cache.choices_recorded:
+        raise HTTPException(status_code=409, detail=_ALREADY_INTRODUCED)
+    claim = cache.introduction_claim
+    if claim is None:
+        return None
+    thread_id = cache.thread_id
+    if thread_id is None:
+        raise WizardStateConflict("The saved wizard is missing its conversation.")
+    # The same store the introduction's control and reply were written to.
+    client = ConversationsClient(model=resolve_wizard_model(request_model, slot_model))
+    transcript = client.list_messages(thread_id, limit=0)
+    if introduction_delivered(list(reversed(transcript))):
+        complete_wizard_introduction(
+            claim.id, claim.choices, slot_dbname(slot), expected_thread_id=thread_id
         )
+        raise HTTPException(status_code=409, detail=_ALREADY_INTRODUCED)
+    return claim.id
 
 
 def _is_introduction(cache: Optional[WizardCache], message_origin: str) -> bool:
@@ -175,27 +201,28 @@ def _record_text_reply(
     message: str,
     choices: List[str],
     introduction: bool,
+    replaces_claim: Optional[str],
 ) -> None:
     """Persist a text reply's transcript message and presented choices.
 
-    Recorded choices are the durable proof that an introduction arrived, and the
-    conversation store cannot share their transaction. An introduction therefore
-    claims them first, only while none are recorded, so one reply wins; the
-    claim is withdrawn if the transcript write then fails.
+    The conversation store cannot share a transaction with the recorded choices
+    that prove an introduction arrived. An introduction therefore claims its
+    reply first, so concurrent introductions keep one reply, then writes the
+    transcript and completes the claim. A failure or crash between those steps
+    leaves an unfinished claim that the next request reconciles.
     """
     dbname = slot_dbname(slot)
     if not introduction:
         client.add_message(thread_id, "assistant", message)
         write_wizard_choices(choices, dbname, expected_thread_id=thread_id)
         return
-    write_wizard_choices(
-        choices, dbname, expected_thread_id=thread_id, claim_introduction=True
+    claim_id = claim_wizard_introduction(
+        choices, dbname, expected_thread_id=thread_id, replaces_claim=replaces_claim
     )
-    try:
-        client.add_message(thread_id, "assistant", message)
-    except Exception:
-        release_wizard_introduction(choices, dbname, expected_thread_id=thread_id)
-        raise
+    client.add_message(thread_id, "assistant", message)
+    complete_wizard_introduction(
+        claim_id, choices, dbname, expected_thread_id=thread_id
+    )
 
 
 def _accept_fate_prompt(message: Optional[str]) -> str:
@@ -389,7 +416,13 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 status_code=409,
                 detail="Confirm or revise the completed character before continuing.",
             )
-        _reject_repeated_introduction(persisted_cache, request.message_origin)
+        replaces_claim = _reconcile_introduction(
+            persisted_cache,
+            request.message_origin,
+            slot=request.slot,
+            request_model=request.model,
+            slot_model=state.model,
+        )
         introduction = _is_introduction(persisted_cache, request.message_origin)
         state_subphase = _wizard_subphase_for_state(
             state_phase,
@@ -792,6 +825,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             message=wizard_response.message,
             choices=ui_choices,
             introduction=introduction,
+            replaces_claim=replaces_claim,
         )
 
         return {
@@ -859,7 +893,13 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             status_code=409,
             detail="Use the non-streaming wizard route to confirm or revise this artifact.",
         )
-    _reject_repeated_introduction(persisted_cache, request.message_origin)
+    replaces_claim = _reconcile_introduction(
+        persisted_cache,
+        request.message_origin,
+        slot=request.slot,
+        request_model=request.model,
+        slot_model=state.model,
+    )
     introduction = _is_introduction(persisted_cache, request.message_origin)
 
     request.context_data = _hydrate_character_context(request)
@@ -1150,6 +1190,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 message=final_output.message,
                 choices=ui_choices,
                 introduction=introduction,
+                replaces_claim=replaces_claim,
             )
             yield json.dumps(
                 {

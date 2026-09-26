@@ -13,9 +13,11 @@ import pytest
 
 from nexus.api import setup_endpoints
 from nexus.api.new_story_cache import (
+    IntroductionClaim,
+    claim_wizard_introduction,
+    complete_wizard_introduction,
     init_cache,
     read_cache,
-    release_wizard_introduction,
     write_cache,
     write_wizard_choices,
 )
@@ -435,11 +437,19 @@ def test_accepted_transition_awaits_introduction_until_its_reply_persists(
         phase=accepted,
         artifact_token=pending.artifact_token(),
     )
+    # The introduction's control was written; its reply has not arrived.
+    control = {
+        "role": "user",
+        "content": f"[SYSTEM] Phase {accepted} complete. Proceeding to {introduced}.",
+        "origin": "wizard_control",
+    }
     monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
     monkeypatch.setattr(
         setup_endpoints,
         "ConversationsClient",
-        lambda model: SimpleNamespace(list_messages=lambda *a, **k: [], client=None),
+        lambda model: SimpleNamespace(
+            list_messages=lambda *a, **k: [control], client=None
+        ),
     )
     app = FastAPI()
     app.include_router(setup_endpoints.router)
@@ -451,27 +461,56 @@ def test_accepted_transition_awaits_introduction_until_its_reply_persists(
     assert interrupted["choices"] == []
     assert (interrupted["character_sheet"] is not None) is (accepted == "character")
 
-    # The introduction claims its choice set, even an empty one, exactly once.
-    write_wizard_choices(
-        [], offline_gate_db, expected_thread_id="saved-thread", claim_introduction=True
+    # A claimed reply is not yet an introduction; only one claim can be taken.
+    claim_id = claim_wizard_introduction(
+        ["Here", "There"],
+        offline_gate_db,
+        expected_thread_id="saved-thread",
+        replaces_claim=None,
+    )
+    claimed = read_cache(offline_gate_db)
+    assert claimed.awaiting_introduction() == introduced
+    assert claimed.introduction_claim == IntroductionClaim(claim_id, ["Here", "There"])
+    assert claimed.choices == []
+    with pytest.raises(WizardStateConflict, match="already introduced"):
+        claim_wizard_introduction(
+            ["Late"],
+            offline_gate_db,
+            expected_thread_id="saved-thread",
+            replaces_claim=None,
+        )
+    assert (
+        client.get("/api/story/new/setup/resume?slot=4").json()["awaiting_introduction"]
+        == introduced
+    )
+
+    # A request that found the claim undelivered replaces exactly that claim.
+    replacement = claim_wizard_introduction(
+        [],
+        offline_gate_db,
+        expected_thread_id="saved-thread",
+        replaces_claim=claim_id,
+    )
+    with pytest.raises(WizardStateConflict):
+        complete_wizard_introduction(
+            claim_id,
+            ["Here", "There"],
+            offline_gate_db,
+            expected_thread_id="saved-thread",
+        )
+
+    # Completion records the reply's choice set, even an empty one.
+    complete_wizard_introduction(
+        replacement, [], offline_gate_db, expected_thread_id="saved-thread"
     )
     introduced_state = client.get("/api/story/new/setup/resume?slot=4").json()
     assert introduced_state["current_phase"] == introduced
     assert introduced_state["awaiting_introduction"] is None
     with pytest.raises(WizardStateConflict, match="already introduced"):
-        write_wizard_choices(
+        claim_wizard_introduction(
             ["A second introduction", "Its twin"],
             offline_gate_db,
             expected_thread_id="saved-thread",
-            claim_introduction=True,
+            replaces_claim=replacement,
         )
     assert read_cache(offline_gate_db).choices == []
-
-    # Withdrawing another reply's choices is a no-op; withdrawing its own
-    # claim makes the introduction requestable again.
-    release_wizard_introduction(
-        ["Not this reply"], offline_gate_db, expected_thread_id="saved-thread"
-    )
-    assert read_cache(offline_gate_db).awaiting_introduction() is None
-    release_wizard_introduction([], offline_gate_db, expected_thread_id="saved-thread")
-    assert read_cache(offline_gate_db).awaiting_introduction() == introduced

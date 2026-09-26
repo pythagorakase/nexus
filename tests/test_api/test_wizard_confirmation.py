@@ -15,6 +15,7 @@ from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import (
     WizardCache,
     CharacterData,
+    IntroductionClaim,
     SettingData,
     SuggestedTrait,
     _row_to_cache,
@@ -425,6 +426,18 @@ def test_acceptance_awaits_the_next_introduction_until_a_reply_is_recorded(
     assert replied.current_phase() == introduced
     assert replied.awaiting_introduction() is None
 
+    # A claimed reply is not an introduction until its transcript proves it.
+    claimed = accepted_row(
+        accepted, {"introduction_claim": {"id": "c1", "presented": ["A", "B"]}}
+    )
+    assert claimed.awaiting_introduction() == introduced
+    assert claimed.choices == []
+    assert claimed.introduction_claim == IntroductionClaim("c1", ["A", "B"])
+    settled = claimed.with_delivered_claim()
+    assert settled.awaiting_introduction() is None
+    assert settled.choices == ["A", "B"]
+    assert settled.introduction_claim is None
+
     # Completion without acceptance is a pending confirmation, never a transition.
     unaccepted = accepted_row(accepted, None)
     setattr(unaccepted, f"{accepted}_confirmed", False)
@@ -481,8 +494,8 @@ def introduction_routes(
 ) -> SimpleNamespace:
     """Mount the chat and resume routes on an accepted, unintroduced wizard.
 
-    Choice writes follow the database contract: an introduction claim succeeds
-    only while no reply has recorded choices, and a release withdraws it.
+    The choice-store fakes follow the database contract: a claim replaces only
+    no reply or the named unfinished claim, and completion needs its own claim.
     """
     from nexus.api.wizard_confirmation import WizardStateConflict
 
@@ -492,7 +505,8 @@ def introduction_routes(
     cache.thread_id = thread_id
     storage.add_message(thread_id, "assistant", "Anything else before we finish?")
     storage.add_message(thread_id, "user", "That is everything.")
-    released: list[list[str]] = []
+    claims: list[str | None] = []
+    faults: dict[str, Exception | None] = {"complete": None}
 
     class Agent:
         async def run(self, *args, **kwargs):
@@ -513,20 +527,32 @@ def introduction_routes(
 
             yield Turn()
 
-    def record_choices(choices, dbname, *, expected_thread_id, **kwargs):
+    def record_choices(choices, dbname, *, expected_thread_id):
         assert expected_thread_id == thread_id
-        if kwargs.get("claim_introduction") and cache.choices_recorded:
+        cache.choices = choices
+        cache.choices_recorded = True
+        cache.introduction_claim = None
+
+    def claim(choices, dbname, *, expected_thread_id, replaces_claim):
+        assert expected_thread_id == thread_id
+        claims.append(replaces_claim)
+        current = cache.introduction_claim.id if cache.introduction_claim else None
+        if cache.choices_recorded or current != replaces_claim:
             raise WizardStateConflict(
                 "This phase was already introduced. Resume before continuing."
             )
+        cache.introduction_claim = IntroductionClaim(f"claim-{len(claims)}", choices)
+        return cache.introduction_claim.id
+
+    def complete(claim_id, choices, dbname, *, expected_thread_id):
+        assert expected_thread_id == thread_id
+        if faults["complete"] is not None:
+            raise faults["complete"]
+        if cache.introduction_claim is None or cache.introduction_claim.id != claim_id:
+            raise WizardStateConflict("The introduction changed while it was saved.")
+        cache.introduction_claim = None
         cache.choices = choices
         cache.choices_recorded = True
-
-    def release(choices, dbname, *, expected_thread_id):
-        assert expected_thread_id == thread_id
-        released.append(choices)
-        cache.choices = []
-        cache.choices_recorded = False
 
     state = SlotState(
         slot=4,
@@ -555,7 +581,8 @@ def introduction_routes(
     )
     monkeypatch.setattr(wizard_chat, "record_pydantic_ai_result", lambda *a, **k: None)
     monkeypatch.setattr(wizard_chat, "write_wizard_choices", record_choices)
-    monkeypatch.setattr(wizard_chat, "release_wizard_introduction", release)
+    monkeypatch.setattr(wizard_chat, "claim_wizard_introduction", claim)
+    monkeypatch.setattr(wizard_chat, "complete_wizard_introduction", complete)
     monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
     monkeypatch.setattr(setup_endpoints, "get_slot_model", lambda *a, **k: "TEST")
     monkeypatch.setattr(setup_endpoints, "ConversationsClient", lambda model: storage)
@@ -567,7 +594,8 @@ def introduction_routes(
         cache=cache,
         storage=storage,
         thread_id=thread_id,
-        released=released,
+        claims=claims,
+        faults=faults,
         introduction={
             "slot": 4,
             "thread_id": thread_id,
@@ -582,19 +610,26 @@ def introduction_routes(
 
 
 def assistant_messages(routes: SimpleNamespace) -> list[str]:
-    """Transcript replies, excluding the two seeded before acceptance."""
+    """Chronological replies after the one seeded before acceptance."""
     return [
         message["content"]
-        for message in routes.storage.list_messages(routes.thread_id, limit=0)
+        for message in reversed(routes.storage.list_messages(routes.thread_id, limit=0))
         if message["role"] == "assistant"
     ][1:]
+
+
+def resume(routes: SimpleNamespace) -> dict:
+    """Read the wizard exactly as a reload does."""
+    response = routes.client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
 @pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
 def test_interrupted_introduction_is_retried_once_then_refused(
     monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
 ) -> None:
-    """A failed introduction stays requestable; a recorded one cannot repeat."""
+    """A failed introduction stays requestable; a completed one cannot repeat."""
     replies: list = [
         RuntimeError("Provider unavailable"),
         WizardResponse(
@@ -608,14 +643,14 @@ def test_interrupted_introduction_is_retried_once_then_refused(
     client, introduction = routes.client, routes.introduction
 
     assert client.post("/api/story/new/chat", json=introduction).status_code == 500
-    interrupted = client.get("/api/story/new/setup/resume?slot=4").json()
+    interrupted = resume(routes)
     assert interrupted["awaiting_introduction"] == introduced
     assert interrupted["messages"][-1]["content"] == "That is everything."
 
     retried = client.post("/api/story/new/chat", json=introduction)
     assert retried.status_code == 200, retried.text
     assert retried.json()["choices"] == ["The harbor", "The lighthouse"]
-    resumed = client.get("/api/story/new/setup/resume?slot=4").json()
+    resumed = resume(routes)
     assert resumed["current_phase"] == introduced
     assert resumed["awaiting_introduction"] is None
     assert resumed["choices"] == ["The harbor", "The lighthouse"]
@@ -640,27 +675,113 @@ def test_interrupted_introduction_is_retried_once_then_refused(
     )
     assert player.status_code == 200, player.text
     assert replies == []
-    assert routes.released == []
+    assert routes.claims == [None]
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_crash_between_claim_and_transcript_write_is_recoverable(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+) -> None:
+    """A claim whose reply never reached the transcript is not an introduction."""
+    routes = introduction_routes(
+        monkeypatch,
+        accepted,
+        introduced,
+        [
+            WizardResponse(message="Lost on the way.", choices=["One", "Two"]),
+            WizardResponse(message="Where does it begin?", choices=["Here", "There"]),
+        ],
+    )
+    add_message = routes.storage.add_message
+
+    def crash_on_first_reply(thread_id, role, content, **kwargs):
+        if role == "assistant" and content == "Lost on the way.":
+            raise RuntimeError("Process terminated")
+        return add_message(thread_id, role, content, **kwargs)
+
+    routes.storage.add_message = crash_on_first_reply
+    crashed = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert crashed.status_code == 500
+    # The claim committed, but only as a claim.
+    assert routes.cache.introduction_claim is not None
+    interrupted = resume(routes)
+    assert interrupted["awaiting_introduction"] == introduced
+    assert interrupted["choices"] == []
+    assert assistant_messages(routes) == []
+
+    retried = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert retried.status_code == 200, retried.text
+    # The retry replaced exactly the undelivered claim.
+    assert routes.claims == [None, "claim-1"]
+    resumed = resume(routes)
+    assert resumed["awaiting_introduction"] is None
+    assert resumed["choices"] == ["Here", "There"]
+    assert assistant_messages(routes) == ["Where does it begin?"]
+
+
+@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
+def test_crash_after_transcript_write_settles_the_delivered_claim(
+    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
+) -> None:
+    """A delivered reply whose claim never completed is refused, not repeated."""
+    routes = introduction_routes(
+        monkeypatch,
+        accepted,
+        introduced,
+        [WizardResponse(message="Where does it begin?", choices=["Here", "There"])],
+    )
+    routes.faults["complete"] = RuntimeError("Process terminated")
+    crashed = routes.client.post("/api/story/new/chat", json=routes.introduction)
+    assert crashed.status_code == 500
+    assert routes.cache.introduction_claim is not None
+    assert assistant_messages(routes) == ["Where does it begin?"]
+
+    # Reload shows the delivered introduction with its claimed choices.
+    delivered = resume(routes)
+    assert delivered["awaiting_introduction"] is None
+    assert delivered["choices"] == ["Here", "There"]
+    assert delivered["messages"][-1]["content"] == "Where does it begin?"
+
+    # A retry settles the claim from the transcript instead of introducing again.
+    routes.faults["complete"] = None
+    for endpoint in ("/api/story/new/chat", "/api/story/new/chat/stream"):
+        retried = routes.client.post(endpoint, json=routes.introduction)
+        assert retried.status_code == 409
+        assert "already introduced" in retried.json()["detail"]
+    assert routes.cache.introduction_claim is None
+    assert routes.cache.choices == ["Here", "There"]
+    assert routes.claims == [None]
+    assert assistant_messages(routes) == ["Where does it begin?"]
 
 
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("winner", ["completed", "claimed"])
 @pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
 def test_introduction_that_loses_the_claim_never_reaches_the_transcript(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str, stream: bool
+    monkeypatch: pytest.MonkeyPatch,
+    accepted: str,
+    introduced: str,
+    winner: str,
+    stream: bool,
 ) -> None:
-    """Concurrent introductions: only the reply that records choices is kept."""
+    """Concurrent introductions: only the reply holding the claim is kept."""
     routes: SimpleNamespace
 
-    def concurrent_winner_lands_first() -> WizardResponse:
-        # Another request introduced the phase while this model call ran.
-        routes.cache.choices = ["The winner's option", "Another"]
-        routes.cache.choices_recorded = True
+    def concurrent_winner_goes_first() -> WizardResponse:
+        # Another request claimed or completed the introduction meanwhile.
+        if winner == "completed":
+            routes.cache.choices = ["The winner's option", "Another"]
+            routes.cache.choices_recorded = True
+        else:
+            routes.cache.introduction_claim = IntroductionClaim(
+                "winner", ["The winner's option", "Another"]
+            )
         return WizardResponse(
             message="A second introduction.", choices=["Late one", "Late two"]
         )
 
     routes = introduction_routes(
-        monkeypatch, accepted, introduced, [concurrent_winner_lands_first]
+        monkeypatch, accepted, introduced, [concurrent_winner_goes_first]
     )
     endpoint = "/api/story/new/chat" + ("/stream" if stream else "")
     response = routes.client.post(endpoint, json=routes.introduction)
@@ -673,33 +794,25 @@ def test_introduction_that_loses_the_claim_never_reaches_the_transcript(
         assert response.status_code == 409
         assert "already introduced" in response.json()["detail"]
     assert assistant_messages(routes) == []
-    assert routes.cache.choices == ["The winner's option", "Another"]
-    assert routes.released == []
+    assert routes.claims == [None]
+    if winner == "completed":
+        assert routes.cache.choices == ["The winner's option", "Another"]
+    else:
+        assert routes.cache.introduction_claim.id == "winner"
 
 
-@pytest.mark.parametrize(("accepted", "introduced"), CHECKPOINTS)
-def test_transcript_failure_withdraws_the_introduction_claim(
-    monkeypatch: pytest.MonkeyPatch, accepted: str, introduced: str
-) -> None:
-    """A claimed introduction that never reached the transcript stays requestable."""
-    routes = introduction_routes(
-        monkeypatch,
-        accepted,
-        introduced,
-        [WizardResponse(message="Lost on the way.", choices=["One", "Two"])],
-    )
-    add_message = routes.storage.add_message
+def test_introduction_delivery_is_read_after_the_latest_control() -> None:
+    """Only a reply after the latest control message delivers the introduction."""
+    from nexus.api.wizard_transcript import introduction_delivered
 
-    def failing_assistant_write(thread_id, role, content, **kwargs):
-        if role == "assistant":
-            raise RuntimeError("Conversation store unavailable")
-        return add_message(thread_id, role, content, **kwargs)
-
-    routes.storage.add_message = failing_assistant_write
-    response = routes.client.post("/api/story/new/chat", json=routes.introduction)
-    assert response.status_code == 500
-    assert "Conversation store unavailable" in response.json()["detail"]
-    assert routes.released == [["One", "Two"]]
-    resumed = routes.client.get("/api/story/new/setup/resume?slot=4").json()
-    assert resumed["awaiting_introduction"] == introduced
-    assert assistant_messages(routes) == []
+    before = {"role": "assistant", "content": "Anything else?"}
+    control = {"role": "user", "content": "[SYSTEM]", "origin": "wizard_control"}
+    reply = {"role": "assistant", "content": "Where does it begin?"}
+    player = {"role": "user", "content": "The harbor.", "origin": "user"}
+    assert introduction_delivered([before, control]) is False
+    assert introduction_delivered([before, control, reply]) is True
+    assert introduction_delivered([before, control, reply, player]) is True
+    # A retry's control after an undelivered claim still awaits its reply.
+    assert introduction_delivered([before, control, control]) is False
+    with pytest.raises(ValueError, match="no control message"):
+        introduction_delivered([before, player])
