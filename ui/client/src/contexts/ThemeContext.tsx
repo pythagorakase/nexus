@@ -9,6 +9,8 @@ const THEMES: Theme[] = ['gilded', 'vector', 'veil'];
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
+  /** Message of the most recent rejected save; null once a save succeeds. */
+  saveError: string | null;
   isGilded: boolean;
   isVector: boolean;
   isVeil: boolean;
@@ -85,6 +87,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     <ThemeContext.Provider value={{
       theme,
       setTheme,
+      // The cache rollback above already restores the saved theme; the pane
+      // needs the reason as well.
+      saveError: mutation.error?.message ?? null,
       isGilded,
       isVector,
       isVeil,

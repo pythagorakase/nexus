@@ -332,3 +332,60 @@ describe("SettingsPane model IDs", () => {
       .toHaveAttribute("aria-pressed", "true");
   });
 });
+
+
+describe("preference save failures (#961)", () => {
+  function preferencesResponse(overrides: Record<string, unknown> = {}) {
+    return new Response(
+      JSON.stringify({ theme: "veil", fonts: KEEPERS, wizard_model: "TEST", ...overrides }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  it("shows the rejection for an online HTTP failure and keeps the saved font", async () => {
+    const calls: string[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return new Response("PermissionError: [Errno 13] Permission denied", { status: 500 });
+    });
+    renderPane();
+    fireEvent.click(screen.getByRole("button", { name: "Cormorant Garamond" }));
+
+    const alert = await screen.findByTestId("font-save-error");
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveTextContent("WRITE REJECTED");
+    expect(alert).toHaveTextContent("500: PermissionError: [Errno 13] Permission denied");
+    expect(screen.getByRole("button", { name: "Spectral" })).toHaveClass("on");
+    expect(screen.getByRole("button", { name: "Cormorant Garamond" })).not.toHaveClass("on");
+    expect(calls).toEqual(["PATCH /api/preferences"]);
+
+    // Storage recovers: the same action succeeds, clears the error, and the
+    // saved matrix now carries the new font.
+    fetchSpy.mockImplementation(async () =>
+      preferencesResponse({ fonts: { ...KEEPERS, veil: { ...KEEPERS.veil, body: "Cormorant Garamond" } } }));
+    fireEvent.click(screen.getByRole("button", { name: "Cormorant Garamond" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Cormorant Garamond" })).toHaveClass("on"));
+    expect(screen.queryByTestId("font-save-error")).not.toBeInTheDocument();
+    expect(calls.filter((c) => !c.startsWith("PATCH /api/preferences"))).toEqual([]);
+  });
+
+  it("shows the rejection for a network failure and keeps the saved theme", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    renderPane();
+    fireEvent.click(screen.getByTestId("theme-gilded"));
+
+    const alert = await screen.findByTestId("theme-save-error");
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(alert).toHaveTextContent("Failed to fetch");
+    await waitFor(() => expect(screen.getByTestId("theme-veil")).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.getByTestId("theme-gilded")).toHaveAttribute("aria-pressed", "false");
+    expect(document.documentElement.classList.contains("theme-gilded")).toBe(false);
+
+    fetchSpy.mockResolvedValue(preferencesResponse({ theme: "gilded" }));
+    fireEvent.click(screen.getByTestId("theme-gilded"));
+    await waitFor(() => expect(screen.getByTestId("theme-gilded")).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.queryByTestId("theme-save-error")).not.toBeInTheDocument();
+    expect(document.documentElement.classList.contains("theme-gilded")).toBe(true);
+  });
+});
