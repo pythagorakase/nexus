@@ -10,6 +10,8 @@ Wire-format contract: the JSON shapes match what the Express/Drizzle layer
 served (camelCase keys, ``currentLocation`` coerced to a string, ``metadata``
 omitted when a chunk has none). The client code under ``ui/client/src`` is
 the consumer contract — do not change shapes here without updating it.
+The one deliberate break is player safety (issue #769): authored place
+``secrets`` and the hidden character psychology profile are not served.
 
 Queries are written against the LIVE database schema (``psql -d save_NN -c
 '\\d+ <table>'``), not the retired Drizzle typings, which had drifted
@@ -515,51 +517,18 @@ async def get_character_relationships(
     ]
 
 
-@router.get("/api/characters/{character_id}/psychology")
-async def get_character_psychology(
-    character_id: int, slot: Optional[int] = None
-) -> Dict[str, Any]:
-    """Character psychology profile. 404 when absent."""
-    dbname = resolve_dbname(slot)
-    rows = _fetch_all(
-        dbname,
-        """
-        SELECT character_id, self_concept, behavior, cognitive_framework,
-               temperament, relational_style, defense_mechanisms,
-               character_arc, secrets, validation_evidence,
-               created_at, updated_at
-        FROM character_psychology
-        WHERE character_id = %s
-        LIMIT 1
-        """,
-        (character_id,),
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Character psychology not found")
-    row = rows[0]
-    return {
-        "characterId": row["character_id"],
-        "selfConcept": row["self_concept"],
-        "behavior": row["behavior"],
-        "cognitiveFramework": row["cognitive_framework"],
-        "temperament": row["temperament"],
-        "relationalStyle": row["relational_style"],
-        "defenseMechanisms": row["defense_mechanisms"],
-        "characterArc": row["character_arc"],
-        "secrets": row["secrets"],
-        "validationEvidence": row["validation_evidence"],
-        "createdAt": row["created_at"],
-        "updatedAt": row["updated_at"],
-    }
-
-
 # ---------------------------------------------------------------------------
 # Places, zones, factions
 # ---------------------------------------------------------------------------
 
 
 def _place_payload(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Project place facts without rewriting legacy diagnostic-only stubs."""
+    """Project player-safe place facts without rewriting legacy diagnostic stubs.
+
+    Authored place ``secrets`` are hidden canonical truth, so this ordinary
+    reader projection never carries them (issue #769); the column stays in
+    the database for server-side narrative generation.
+    """
     summary = row["summary"]
     current_status = row["current_status"]
     provenance = row["extra_data"] or {}
@@ -587,7 +556,6 @@ def _place_payload(row: Dict[str, Any]) -> Dict[str, Any]:
         "inhabitants": row["inhabitants"],
         "history": row["history"],
         "currentStatus": current_status,
-        "secrets": row["secrets"],
         "extraData": row["extra_data"],
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
@@ -611,7 +579,6 @@ async def get_places(slot: Optional[int] = None) -> List[Dict[str, Any]]:
             inhabitants,
             history,
             current_status,
-            secrets,
             extra_data,
             created_at,
             updated_at,

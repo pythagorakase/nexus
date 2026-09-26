@@ -1,11 +1,28 @@
 """Place projection distinguishes setup provenance from genuine story prose."""
 
+import json
 from copy import deepcopy
 from typing import Any
 
 import pytest
 
 from nexus.api.reader_endpoints import _place_payload
+
+# The ordinary reader's allow-list; authored secrets never reach the client (#769).
+PLAYER_PLACE_KEYS = {
+    "id",
+    "name",
+    "type",
+    "zone",
+    "summary",
+    "inhabitants",
+    "history",
+    "currentStatus",
+    "extraData",
+    "createdAt",
+    "updatedAt",
+    "geometry",
+}
 
 
 def _row(**overrides: Any) -> dict[str, Any]:
@@ -21,7 +38,6 @@ def _row(**overrides: Any) -> dict[str, Any]:
         "current_status": "latent in generated backstory",
         "history": None,
         "inhabitants": None,
-        "secrets": None,
         "geometry": None,
         "extra_data": {
             "source": "retrograde",
@@ -94,12 +110,11 @@ def test_place_genuine_and_near_matching_prose_stays_visible() -> None:
         current_status="Previously latent in generated backstory; now occupied.",
         history="The Retrograde survey named the annex in 2180.",
         inhabitants=["Sana Pell"],
-        secrets="A spare valve is hidden behind the north panel.",
         geometry={"type": "Point", "coordinates": [12.5, 42.0]},
     )
     payload = _place_payload(row)
 
-    for field in ("summary", "history", "inhabitants", "secrets", "geometry"):
+    for field in ("summary", "history", "inhabitants", "geometry"):
         assert payload[field] == row[field]
     assert payload["currentStatus"] == row["current_status"]
 
@@ -108,3 +123,20 @@ def test_place_signature_for_another_name_is_not_suppressed() -> None:
     """A quoted marker about another place is not this row's legacy signature."""
     row = _row(name="Council Office")
     assert _place_payload(row)["summary"] == row["summary"]
+
+
+def test_place_payload_never_carries_hidden_canonical_truth() -> None:
+    """A secret-bearing row still projects only the player-safe allow-list."""
+    secret = "A spare valve is hidden behind the north panel."
+    row = _row(
+        summary="The annex houses the station's reserve pumps.",
+        secrets=secret,
+        canonical_truth={"latent_secrets": [secret]},
+    )
+    payload = _place_payload(row)
+
+    assert "secrets" not in payload
+    assert "canonical_truth" not in payload
+    assert set(payload) == PLAYER_PLACE_KEYS
+    assert secret not in json.dumps(payload, default=str)
+    assert payload["summary"] == row["summary"]

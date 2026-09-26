@@ -259,7 +259,8 @@ When `selectedLocation !== null && detailsDialogOpen`, render a Radix
 - Thumbnail (first / main image from `placeImagesQuery`).
 - Metadata: name, ID, type, zone, coordinates (lat/lng to 6 decimals).
 - Long-form text sections: summary, history, current status, inhabitants
-  (parsed from either array or PG-quoted-string format), secrets.
+  (parsed from either array or PG-quoted-string format). Authored place
+  secrets are never served to or shown by the player client (issue #769).
 - Upload button (hidden `<input type="file">` triggered programmatically).
 - "View Gallery" button → opens `<ImageGalleryModal>`.
 

@@ -82,8 +82,8 @@ export function MapPlaceDialog({
     images?.find((img) => img.isMain === 1) ?? images?.[0] ?? null;
   const inhabitants = parseInhabitants(place.inhabitants);
   const hasDetails =
-    [place.summary, place.history, place.currentStatus, place.secrets].some(
-      (body) => Boolean(body?.trim()),
+    [place.summary, place.history, place.currentStatus].some((body) =>
+      Boolean(body?.trim()),
     ) || inhabitants.length > 0;
 
   return (
@@ -128,7 +128,6 @@ export function MapPlaceDialog({
           {inhabitants.length > 0 && (
             <DialogSection title="Inhabitants" body={inhabitants.join(", ")} />
           )}
-          <DialogSection title="Secrets" body={place.secrets} />
         </div>
       </DialogContent>
     </Dialog>
