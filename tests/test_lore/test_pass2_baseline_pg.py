@@ -14,7 +14,6 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 import asyncpg  # type: ignore[import-untyped]
-import psycopg2
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -27,6 +26,7 @@ from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
 from nexus.config import load_settings_as_dict
+from nexus.database import database_url
 from nexus.memory.context_state import bind_pass2_baseline
 from nexus.memory.manager import (
     ContextMemoryManager,
@@ -35,7 +35,12 @@ from nexus.memory.manager import (
 )
 from nexus.telemetry.usage import current_usage_context
 from scripts import stamp_lore_pass_baseline
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_protagonist,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -44,12 +49,7 @@ MIGRATION = Path("migrations/107_lore_pass_baselines.sql")
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()
@@ -232,12 +232,7 @@ def _wire_payload(narrative: str) -> dict[str, Any]:
 
 
 async def _connect_async(dbname: str) -> asyncpg.Connection:
-    conn = await asyncpg.connect(
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
     for type_name in ("json", "jsonb"):
         await conn.set_type_codec(
             type_name,
@@ -373,12 +368,7 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
     route_settings["API Settings"]["apex"]["turn_pipeline"] = "single_pass"
     route_settings["apex"]["turn_pipeline"] = "single_pass"
 
-    database_url = f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
-    database_url += (
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{pass2_database}"
-    )
-    engine = create_engine(database_url, future=True)
+    engine = create_engine(database_url(pass2_database), future=True)
     conn = _connect(pass2_database)
     lore_instances: list[LORE] = []
     provider_outputs = [
@@ -572,12 +562,7 @@ def test_component_regeneration_sparse_promotion_restore_and_cascade(
     """Accepted turn N restores exact exclusions in a fresh manager for N+1."""
 
     _patch_unrelated_commit_work(monkeypatch)
-    database_url = f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
-    database_url += (
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{pass2_database}"
-    )
-    engine = create_engine(database_url, future=True)
+    engine = create_engine(database_url(pass2_database), future=True)
     conn = _connect(pass2_database)
     try:
         parent_chunk_id = _seed_parent(conn, "accepted parent")
@@ -1002,12 +987,8 @@ def test_missing_tail_error_and_admin_stamp_boundary(
 ) -> None:
     """Historical tails fail loudly until the explicit empty boundary is stamped."""
 
-    database_url = f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
-    database_url += (
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{pass2_database}"
-    )
-    engine = create_engine(database_url, future=True)
+    db_url = database_url(pass2_database)
+    engine = create_engine(db_url, future=True)
     conn = _connect(pass2_database)
     try:
         tail_chunk_id = _seed_parent(conn, "historical tail")
@@ -1022,7 +1003,7 @@ def test_missing_tail_error_and_admin_stamp_boundary(
         monkeypatch.setattr(
             stamp_lore_pass_baseline,
             "get_slot_db_url",
-            lambda slot: database_url,
+            lambda slot: db_url,
         )
         monkeypatch.setattr(
             stamp_lore_pass_baseline,
