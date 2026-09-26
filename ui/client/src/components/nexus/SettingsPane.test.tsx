@@ -28,12 +28,21 @@ const SETTINGS: SettingsPayload = {
 };
 
 const STATUSES: SecretStatus[] = [
-  { provider: "openai", account: "openai", present: true, last4: "wxyz" },
+  {
+    provider: "openai",
+    account: "openai",
+    present: true,
+    last4: "wxyz",
+    required: true,
+    required_by: [{ seat: "skald", model: "frontier-2.1" }],
+  },
   {
     provider: "anthropic",
     account: "anthropic",
     present: false,
     last4: null,
+    required: false,
+    required_by: [],
   },
 ];
 
@@ -43,6 +52,7 @@ function renderPane(
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   }),
+  statuses: SecretStatus[] = STATUSES,
 ) {
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
@@ -53,7 +63,7 @@ function renderPane(
     skald_model: settings.apex?.model ?? null, gaia_model: settings.apex?.gaia_model ?? null,
     apex_context_window: settings.lore?.token_budget?.apex_context_window ?? null,
   });
-  queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
+  queryClient.setQueryData([...SECRETS_QUERY_KEY], statuses);
   queryClient.setQueryData(["/api/dev/backstage/health"], gateOpen);
 
   render(
@@ -118,6 +128,105 @@ describe("SettingsPane API keys", () => {
     expect(screen.queryByText("absent", { exact: false })).not.toBeInTheDocument();
   });
 
+  const SEAT_STATUSES: SecretStatus[] = [
+    {
+      provider: "openai",
+      account: "openai",
+      present: true,
+      last4: "wxyz",
+      required: false,
+      required_by: [],
+    },
+    {
+      provider: "anthropic",
+      account: "anthropic",
+      present: false,
+      last4: null,
+      required: true,
+      required_by: [
+        { seat: "skald", model: "frontier-2.1" },
+        { seat: "summaries.model", model: "frontier-2.1" },
+      ],
+    },
+    {
+      provider: "openrouter",
+      account: "openrouter",
+      present: true,
+      last4: "abcd",
+      required: true,
+      required_by: [{ seat: "gaia", model: "vendor/model-next" }],
+    },
+  ];
+
+  it("sorts needed keys first, warns while one is missing, and dims the rest", () => {
+    renderPane(SETTINGS, false, undefined, SEAT_STATUSES);
+
+    const rows = screen.getAllByTestId(/^key-row-/);
+    expect(rows.map((row) => row.dataset.testid)).toEqual([
+      "key-row-anthropic",
+      "key-row-openrouter",
+      "key-row-openai",
+    ]);
+
+    // Required and missing: the warning state, named seats on hover.
+    expect(screen.getByTestId("key-row-anthropic")).toHaveClass("required", "missing");
+    expect(screen.getByTestId("key-row-anthropic")).not.toHaveClass("optional");
+    expect(screen.getByText("anthropic")).toHaveAttribute("title", "Skald · Summaries");
+    expect(screen.getByTestId("key-status-anthropic")).toHaveClass("absent");
+
+    // Required and present: full weight, no warning.
+    expect(screen.getByTestId("key-row-openrouter")).toHaveClass("required");
+    expect(screen.getByTestId("key-row-openrouter")).not.toHaveClass("missing");
+    expect(screen.getByTestId("key-row-openrouter")).not.toHaveClass("optional");
+    expect(screen.getByText("openrouter")).toHaveAttribute("title", "World State");
+
+    // Needed by no seat: dimmed, with no hover title.
+    expect(screen.getByTestId("key-row-openai")).toHaveClass("optional");
+    expect(screen.getByTestId("key-row-openai")).not.toHaveClass("required");
+    expect(screen.getByText("openai")).not.toHaveAttribute("title");
+
+    // The state is visual only: no status words and no internal seat names.
+    const card = document.getElementById("set-keys")!;
+    expect(card.textContent).not.toMatch(/required|missing|optional|needed/i);
+    expect(card.innerHTML).not.toMatch(/gaia|summaries\.model|orrery/i);
+  });
+
+  it("clears a verified mark when the key is replaced", async () => {
+    const replaced: SecretStatus = { ...SEAT_STATUSES[2], last4: "wxyz" };
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(input)}`);
+      const body =
+        init?.method === "POST"
+          ? { provider: "openrouter", verified: true, detail: "Models endpoint reachable." }
+          : replaced;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    renderPane(SETTINGS, false, undefined, SEAT_STATUSES);
+
+    fireEvent.click(screen.getByTestId("key-verify-openrouter"));
+    await waitFor(() =>
+      expect(screen.getByTestId("key-status-openrouter")).toHaveClass("verified"),
+    );
+
+    fireEvent.change(screen.getByTestId("key-input-openrouter"), {
+      target: { value: "sk-replacement-wxyz" },
+    });
+    fireEvent.click(screen.getByTestId("key-commit-openrouter"));
+    await waitFor(() =>
+      expect(screen.getByTestId("key-input-openrouter")).toHaveAttribute(
+        "placeholder",
+        "••••••••wxyz",
+      ),
+    );
+    expect(screen.getByTestId("key-status-openrouter")).toHaveClass("present");
+    expect(screen.getByTestId("key-status-openrouter")).not.toHaveClass("verified");
+    expect(screen.getByTestId("key-row-openrouter")).toHaveClass("required");
+    expect(calls).toEqual([
+      "POST /api/secrets/openrouter/verify",
+      "PUT /api/secrets/openrouter",
+    ]);
+  });
 });
 
 describe("SettingsPane model card local provider", () => {

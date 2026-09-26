@@ -20,6 +20,7 @@ import {
 import { themeIconPath } from "@/lib/themeIcons";
 import { FONT_CATALOG } from "./fontCatalog";
 import { LOCAL_PROVIDER, LocalModelRows } from "./LocalModelRows";
+import type { SecretSeat, SecretStatus } from "@/types/secrets";
 import type {
   FontSlotId,
   FontSlots,
@@ -421,8 +422,32 @@ function ModelSection({
 
 // ──────────────────────────────────────────────────────────────────────────
 // 5. API keys - masked status only; plaintext lives in local draft state and
-// goes directly to the writer, never through React Query state.
+// goes directly to the writer, never through React Query state. Keys the
+// configured model seats need sort first and warn while missing; keys no seat
+// needs are dimmed. The provider name's hover title lists the needing seats
+// (Skald and World State as the Model card names them).
 // ──────────────────────────────────────────────────────────────────────────
+
+const SEAT_LABELS: Record<SecretSeat, string> = {
+  skald: "Skald",
+  gaia: "World State",
+  wizard: "Wizard",
+  "orrery.experiences.model": "Experiences",
+  "storyteller.correspondence.compaction_model": "Correspondence",
+  "orrery.retrograde.maturation.model_ref": "Entity Maturation",
+  "summaries.model": "Summaries",
+};
+
+function requiredByTitle(row: SecretStatus): string | undefined {
+  if (!row.required) return undefined;
+  return row.required_by
+    .map(({ seat }) => {
+      const label = SEAT_LABELS[seat];
+      if (label === undefined) throw new Error(`Unlabeled model seat: ${seat}`);
+      return label;
+    })
+    .join(" · ");
+}
 
 function KeysSection() {
   const { data: providers, error } = useSecretsQuery();
@@ -481,18 +506,30 @@ function KeysSection() {
     }
   };
 
+  // Stable sort: required rows first, registry order within each group.
+  const rows = [...(providers ?? [])].sort(
+    (a, b) => Number(b.required) - Number(a.required),
+  );
+
   return (
     <SettingsCard id="keys" label="API KEYS">
       <ul className="key-list">
-        {(providers ?? []).map((row) => {
+        {rows.map((row) => {
           const draft = drafts[row.provider] ?? "";
           const isBusy = busy.has(row.provider);
           const isVerified = verified.has(row.provider);
           const status = isVerified ? "verified" : row.present ? "present" : "absent";
+          const need = !row.required ? "optional" : row.present ? "required" : "required missing";
 
           return (
-            <li className="key-row" key={row.provider}>
-              <span className="key-provider-name">{row.provider}</span>
+            <li
+              className={`key-row ${need}`}
+              key={row.provider}
+              data-testid={`key-row-${row.provider}`}
+            >
+              <span className="key-provider-name" title={requiredByTitle(row)}>
+                {row.provider}
+              </span>
               <span className={`key-status ${status}`} data-testid={`key-status-${row.provider}`}>
                 {row.present || isVerified ? (
                   <CircleDot size={12} />
