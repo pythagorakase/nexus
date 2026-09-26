@@ -126,6 +126,11 @@ def test_every_subcommand_registers_post_command_output_flags() -> None:
             "Slot must be between 1 and 5",
             id="clear-mutation",
         ),
+        pytest.param(
+            ("retry", "--slot", "0"),
+            "Slot must be between 1 and 5",
+            id="retry",
+        ),
     ),
 )
 def test_global_output_flags_are_order_independent(
@@ -1749,3 +1754,169 @@ def test_retrograde_history_formatter_uses_summary_rows(capsys) -> None:
     assert "no summary" in output
     assert "embedding_pending_summary_ids: []" in output
     assert "summary_chunk" not in output
+
+
+def test_load_reports_a_failed_continuation_instead_of_consumed_choices(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """#952: the CLI resume view carries the durable failure, not a stale menu."""
+
+    error = "Unresolved place state update name 'Machine-Shop'."
+    state = {
+        "slot": 4,
+        "is_empty": False,
+        "is_wizard_mode": False,
+        "current_chunk_id": 9,
+        "has_pending": False,
+        "storyteller_text": "The hearing stalls.",
+        "choices": [],
+        "session_id": None,
+        "recovery": {
+            "session_id": "failed-8",
+            "parent_chunk_id": 9,
+            "error": error,
+            "error_class": "WireContractViolation",
+        },
+    }
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, Any]:
+            return state
+
+    monkeypatch.setattr(cli, "_api_get", lambda url, timeout: Response())
+    result = cli.run_load(Namespace(slot=4))
+    assert result["choices"] == []
+    assert result["recovery"] == state["recovery"]
+    assert result["retry_command"] == "nexus retry --slot 4"
+
+    cli.emit_output(result, as_json=False)
+    printed = capsys.readouterr().out
+    assert f"[Failed continuation: {error}]" in printed
+    assert "Retry with: nexus retry --slot 4" in printed
+    assert "Choices:" not in printed
+
+
+def test_load_names_the_session_when_a_failure_recorded_no_detail(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A failure with neither error nor class never prints a bare None."""
+
+    recovery = {
+        "session_id": "failed-8",
+        "parent_chunk_id": 9,
+        "error": None,
+        "error_class": None,
+    }
+    cli.emit_output(
+        {
+            "success": True,
+            "message": "The hearing stalls.",
+            "recovery": recovery,
+            "retry_command": "nexus retry --slot 4",
+        },
+        as_json=False,
+    )
+    printed = capsys.readouterr().out
+    assert (
+        "[Failed continuation: Narrative generation failed (session failed-8)]"
+        in printed
+    )
+    assert "None" not in printed
+
+
+def _retry_gateway(
+    monkeypatch: pytest.MonkeyPatch, *, recovery: dict[str, Any] | None
+) -> list[tuple[str, dict[str, Any]]]:
+    """Serve slot state, the retry route and the finished turn over HTTP doubles."""
+    posts: list[tuple[str, dict[str, Any]]] = []
+    retried = {"done": False}
+
+    def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        if url.endswith("/api/slot/5/state"):
+            if not retried["done"]:
+                return DummyResponse(
+                    {
+                        "slot": 5,
+                        "is_empty": False,
+                        "is_wizard_mode": False,
+                        "has_pending": False,
+                        "current_chunk_id": 9,
+                        "storyteller_text": "The hearing stalls.",
+                        "choices": [],
+                        "session_id": None,
+                        "recovery": recovery,
+                    }
+                )
+            return DummyResponse(
+                {
+                    "slot": 5,
+                    "is_empty": False,
+                    "is_wizard_mode": False,
+                    "has_pending": True,
+                    "current_chunk_id": 10,
+                    "storyteller_text": "The inspection begins at dawn.",
+                    "choices": ["Follow the engineers.", "Stay behind."],
+                    "session_id": "retry-9",
+                    "recovery": None,
+                }
+            )
+        if url.endswith("/api/narrative/status/retry-9"):
+            return DummyResponse({"status": "complete", "chunk_id": None})
+        raise AssertionError(f"Unexpected GET {url}")
+
+    def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:
+        posts.append((url, json))
+        if url.endswith("/api/narrative/retry"):
+            retried["done"] = True
+            return DummyResponse({"session_id": "retry-9", "status": "processing"})
+        raise AssertionError(f"Unexpected POST {url}")
+
+    monkeypatch.setattr(cli.requests, "get", fake_get)
+    monkeypatch.setattr(cli.requests, "post", fake_post)
+    return posts
+
+
+def test_retry_resumes_the_advertised_failure_and_prints_the_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`nexus retry` sends only the advertised session and prints like continue."""
+    posts = _retry_gateway(
+        monkeypatch,
+        recovery={
+            "session_id": "failed-8",
+            "parent_chunk_id": 9,
+            "error": "Unresolved place state update",
+            "error_class": "WireContractViolation",
+        },
+    )
+    monkeypatch.setattr(sys, "argv", ["nexus", "retry", "--slot", "5"])
+
+    assert cli.main() == 0
+    assert len(posts) == 1
+    url, payload = posts[0]
+    assert url.endswith("/api/narrative/retry")
+    assert payload == {"slot": 5, "expected_session_id": "failed-8"}
+    printed = capsys.readouterr().out
+    assert "The inspection begins at dawn." in printed
+    assert "Choices:\n  1. Follow the engineers.\n  2. Stay behind." in printed
+
+
+def test_retry_fails_loudly_when_no_failure_is_advertised(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Without advertised recovery the CLI refuses and schedules nothing."""
+    posts = _retry_gateway(monkeypatch, recovery=None)
+    monkeypatch.setattr(sys, "argv", ["nexus", "retry", "--slot", "5"])
+
+    assert cli.main() == 1
+    assert posts == []
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Slot 5 has no failed continuation to retry." in captured.err

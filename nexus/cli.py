@@ -953,6 +953,18 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         print(message)
         print()
 
+    recovery = payload.get("recovery")
+    if recovery:
+        # The recorded action above consumed the menu; its continuation failed.
+        detail = (
+            recovery["error"]
+            or recovery["error_class"]
+            or f"Narrative generation failed (session {recovery['session_id']})"
+        )
+        print(f"[Failed continuation: {detail}]")
+        print(f"Retry with: {payload['retry_command']}")
+        print()
+
     if payload.get("trait_audit"):
         _print_trait_audit(payload)
         print()
@@ -1161,6 +1173,10 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
             "choices": data.get("choices", []),
             "chunk_id": data.get("current_chunk_id"),
             "has_pending": data.get("has_pending"),
+            "recovery": data.get("recovery"),
+            "retry_command": (
+                f"nexus retry --slot {args.slot}" if data.get("recovery") else None
+            ),
         }
 
     except requests.exceptions.ConnectionError:
@@ -1991,6 +2007,44 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Explicitly retry the failed continuation that slot state advertises.
+
+    Reads GET /api/slot/{slot}/state, sends its ``recovery.session_id`` as
+    ``expected_session_id`` to POST /api/narrative/retry (which resumes the
+    recorded action without recording it again and fences a stale session),
+    then waits for and loads the new turn exactly as ``nexus continue`` does.
+    """
+    try:
+        state_response = _api_get(
+            f"{get_api_url()}/api/slot/{args.slot}/state", timeout=30
+        )
+        state_response.raise_for_status()
+        recovery = state_response.json().get("recovery")
+        if not recovery:
+            return {
+                "success": False,
+                "error": f"Slot {args.slot} has no failed continuation to retry.",
+            }
+
+        response = _api_post(
+            f"{get_api_url()}/api/narrative/retry",
+            json={"slot": args.slot, "expected_session_id": recovery["session_id"]},
+            timeout=120,
+        )
+        response.raise_for_status()
+        return _wait_for_narrative_result(args.slot, response.json()["session_id"])
+
+    except requests.exceptions.ConnectionError:
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
+    except requests.exceptions.HTTPError as e:
+        return {"success": False, "error": f"API error: {e.response.text}"}
 
 
 def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
@@ -4017,6 +4071,14 @@ Examples:
         ),
     )
 
+    # retry command
+    retry_parser = subparsers.add_parser(
+        "retry", help="Retry the failed continuation of the recorded action"
+    )
+    retry_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+
     # undo command
     undo_parser = subparsers.add_parser("undo", help="Revert last action")
     undo_parser.add_argument(
@@ -4517,6 +4579,7 @@ def main() -> int:
     if args.command in (
         "load",
         "continue",
+        "retry",
         "undo",
         "regenerate",
         "clear",
@@ -4610,6 +4673,8 @@ def main() -> int:
         result = run_load(args)
     elif args.command == "continue":
         result = run_continue(args)
+    elif args.command == "retry":
+        result = run_retry(args)
     elif args.command == "undo":
         result = run_undo(args)
     elif args.command == "regenerate":

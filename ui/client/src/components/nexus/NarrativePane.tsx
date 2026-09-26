@@ -208,8 +208,14 @@ export function NarrativePane({
   const chunks = episodeChunks?.chunks ?? [];
   const hasPending = slotState?.has_pending ?? false;
   const pendingText = hasPending ? slotState?.storyteller_text ?? null : null;
-  const choices = hasPending ? slotState?.choices ?? [] : [];
-  const needsRecovery = !!engine.failedGeneration && !hasPending;
+  // Slot state lists only live choices: an action already recorded on the
+  // committed frontier consumed its menu.
+  const choices = slotState?.choices ?? [];
+  // Retryable exactly when the retry route would accept it; the failure line
+  // also covers a failed attempt that recorded no action (input stays open).
+  const recovery = hasPending ? null : slotState?.recovery ?? null;
+  const needsRecovery = recovery !== null;
+  const failure = hasPending ? null : recovery ?? engine.failedGeneration;
   const isBootstrapNeeded =
     !!slotState &&
     !slotState.is_empty &&
@@ -572,19 +578,20 @@ export function NarrativePane({
               )}
           </div>
 
+          {failure && !isGenerating && (
+            <div
+              className="reader-status failed"
+              role="alert"
+              title={failure.error ?? failure.error_class ?? undefined}
+              data-testid="generation-failure"
+            >
+              <span className="glyph">✕</span>
+              <span>The next scene failed.</span>
+            </div>
+          )}
+
           {needsRecovery && !isGenerating && (
-            <section className="choices" data-testid="generation-recovery" role="alert">
-              <h3>The next scene could not be completed.</h3>
-              <p>
-                {isBootstrapNeeded
-                  ? "Your story setup is saved. You can try beginning the story again."
-                  : "Your last accepted action is saved. Retry continues from that action without choosing or saving it again."}
-              </p>
-              <p>Nothing will be retried until you choose to continue.</p>
-              <details>
-                <summary>Failure details</summary>
-                <p>{engine.generationError || engine.failedGeneration?.error}</p>
-              </details>
+            <section className="choices" data-testid="generation-recovery">
               <button
                 className="choice"
                 onClick={() => void engine.retryGeneration()}
@@ -592,13 +599,9 @@ export function NarrativePane({
                 data-testid="button-retry-generation"
               >
                 <span className="choice-glyph">◆</span>
-                <span className="choice-text">Retry continuation</span>
+                <span className="choice-text">Retry</span>
               </button>
             </section>
-          )}
-
-          {engine.isRecoveryLoading && !isGenerating && !needsRecovery && (
-            <p role="status">Checking the latest continuation…</p>
           )}
 
           {isBootstrapNeeded && canSubmit && (

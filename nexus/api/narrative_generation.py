@@ -26,7 +26,11 @@ from nexus.api.lore_adapter import (
     response_to_incubator,
     validate_incubator_data,
 )
-from nexus.api.narrative_lease import finish_generation, heartbeat_generation
+from nexus.api.narrative_lease import (
+    OWNER_EXPIRED_SQL,
+    finish_generation,
+    heartbeat_generation,
+)
 from nexus.api.config_utils import get_generation_lease_timeout_seconds
 from nexus.telemetry.generation import generation_progress, report_generation_phase
 from nexus.api.presence_reconciliation import (
@@ -519,13 +523,13 @@ async def write_to_incubator(
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT session_id, parent_chunk_id
                 FROM narrative_generation_lease
                 WHERE id = TRUE
                   AND session_id = %s
                   AND parent_chunk_id = %s
-                  AND expires_at > NOW()
+                  AND NOT ({OWNER_EXPIRED_SQL})
                 FOR UPDATE
                 """,
                 (data["session_id"], data["parent_chunk_id"]),

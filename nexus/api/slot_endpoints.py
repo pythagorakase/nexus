@@ -22,11 +22,13 @@ from nexus.config.story_model import (
 from nexus.api.conversations import ConversationsClient
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_schemas import (
+    NarrativeRecovery,
     SlotStateResponse,
     SlotUndoResponse,
     SlotLockResponse,
     TraitMenuItemResponse,
 )
+from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.narrative_lease import discard_generation
 from nexus.api.new_story_cache import WizardCache
@@ -138,6 +140,11 @@ async def get_slot_state_endpoint(slot: int):
             return response
 
         if state.narrative_state:
+            recovery = state.narrative_state.recovery
+            # The retry route refuses locked slots before its predicate, so a
+            # locked slot never advertises a retry.
+            if recovery is not None and is_slot_locked(slot, dbname=slot_dbname(slot)):
+                recovery = None
             return SlotStateResponse(
                 slot=slot,
                 is_empty=False,
@@ -149,6 +156,16 @@ async def get_slot_state_endpoint(slot: int):
                 storyteller_text=state.narrative_state.storyteller_text,
                 choices=state.narrative_state.choices,
                 session_id=state.narrative_state.session_id,
+                recovery=(
+                    NarrativeRecovery(
+                        session_id=recovery.session_id,
+                        parent_chunk_id=recovery.parent_chunk_id,
+                        error=recovery.error,
+                        error_class=recovery.error_class,
+                    )
+                    if recovery is not None
+                    else None
+                ),
                 model=state.model,
             )
 

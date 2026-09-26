@@ -282,6 +282,20 @@ class FrontierClock(BaseModel):
     face: str
 
 
+class NarrativeRecovery(BaseModel):
+    """A failed continuation of the frontier's recorded action.
+
+    Present exactly when ``POST /api/narrative/retry`` would accept
+    ``session_id`` as ``expected_session_id``; the route re-checks under the
+    generation lease.
+    """
+
+    session_id: str
+    parent_chunk_id: int
+    error: Optional[str] = None
+    error_class: Optional[str] = None
+
+
 class SlotStateResponse(BaseModel):
     """Response model for slot state endpoint."""
 
@@ -303,10 +317,11 @@ class SlotStateResponse(BaseModel):
     has_pending: bool = False  # True if incubator has pending content
     frontier_clock: Optional[FrontierClock] = None
     storyteller_text: Optional[str] = None
-    choices: List[str] = []
+    choices: List[str] = []  # Live choices; a recorded action consumes the menu
     session_id: Optional[str] = (
         None  # Live session ID while incubator pending; basis for regenerate
     )
+    recovery: Optional[NarrativeRecovery] = None
     model: Optional[str] = None
     # Trait selection menu (character phase, traits subphase)
     trait_menu: Optional[List[TraitMenuItemResponse]] = None

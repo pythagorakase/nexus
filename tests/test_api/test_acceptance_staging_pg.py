@@ -502,7 +502,12 @@ async def test_staging_resolves_same_turn_declarations_only_on_acceptance(
 
 
 def test_recovery_respects_live_lease_without_incubator(acceptance_slot) -> None:
-    """A generating owner preserves its input until the lease actually expires."""
+    """A generating owner preserves its input until the lease actually expires.
+
+    An expired owner bound to the input is then retryable (acquisition would
+    record it as expired and accept its retry), so the input is still kept;
+    only input no retry can resume is cleared.
+    """
     dbname, parent, _ = acceptance_slot
     with closing(connect(dbname)) as conn:
         own_draft(conn, parent)
@@ -516,6 +521,13 @@ def test_recovery_respects_live_lease_without_incubator(acceptance_slot) -> None
             cur.execute(
                 "UPDATE narrative_generation_lease "
                 "SET expires_at = clock_timestamp() - interval '1 second'"
+            )
+        conn.commit()
+        assert recover_orphaned_choice(conn) is None
+        assert parent_choice(conn, parent) == before
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE narrative_generation_sessions SET parent_chunk_id = NULL"
             )
         conn.commit()
         assert recover_orphaned_choice(conn) == parent

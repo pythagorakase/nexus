@@ -37,6 +37,23 @@ class GenerationRetryConflict(ValueError):
     """The reviewed failure no longer describes a safe retry frontier."""
 
 
+# The one lease-expiry test. It uses NOW(), the transaction's start, so every
+# judgment inside one transaction (startup recovery's liveness check and its
+# retry read, acquisition and its retry fence) sees the same instant; a lease
+# expiring mid-transaction cannot be dead to one check and live to the next.
+OWNER_EXPIRED_SQL = "expires_at <= NOW()"
+# An owner whose lease has expired is finished. Acquisition (before it
+# evaluates a retry) and the active-attempt read record it as this terminal
+# error; the unlocked retry read projects the same outcome without writing, so
+# resume state and the retry route judge that session by one rule.
+_EXPIRED_OWNER_OUTCOME = {
+    "status": "error",
+    "terminal_outcome": "error",
+    "error_class": "GenerationLeaseExpired",
+    "error": "Generation lease expired before completion.",
+}
+
+
 @dataclass(frozen=True)
 class GenerationRetryContext:
     """The unchanged committed action captured while claiming the slot."""
@@ -45,17 +62,68 @@ class GenerationRetryContext:
     user_text: str
 
 
+@dataclass(frozen=True)
+class RetryableFailure:
+    """The latest terminal failure that an explicit retry would resume as-is."""
+
+    session_id: str
+    parent_chunk_id: int
+    error: Optional[str]
+    error_class: Optional[str]
+
+
 def _retry_context(cur: Any, expected_session_id: str) -> GenerationRetryContext:
     """Fence retry against durable state under the generation lease lock."""
+    return _fenced_retry(cur, expected_session_id, lock=True)[1]
+
+
+def read_retryable_failure(cur: Any) -> Optional[RetryableFailure]:
+    """Return the failure ``POST /api/narrative/retry`` would accept right now.
+
+    This is the unlocked twin of the retry fence, so resume state offers a
+    recovery control exactly when the retry route would honour it. The route
+    still re-evaluates the same predicate under the lease before scheduling.
+    """
+    try:
+        failed, context = _fenced_retry(cur, None, lock=False)
+    except GenerationRetryConflict:
+        return None
+    return RetryableFailure(
+        session_id=str(failed["session_id"]),
+        parent_chunk_id=context.parent_chunk_id,
+        error=failed["error"],
+        error_class=failed["error_class"],
+    )
+
+
+def _fenced_retry(
+    cur: Any, expected_session_id: Optional[str], *, lock: bool
+) -> tuple[dict[str, Any], GenerationRetryContext]:
+    """Evaluate the retry predicate; ``None`` accepts whichever attempt is latest.
+
+    An owner whose lease expired counts as the error acquisition records for
+    it. Under acquisition that lease is already gone; an unlocked read sees
+    the expired lease and projects the same outcome without writing.
+    """
+    lock_clause = " FOR UPDATE" if lock else ""
     cur.execute(
         "SELECT session_id, status, terminal_outcome, parent_chunk_id, "
-        "replaced_by_session_id FROM narrative_generation_sessions "
-        "ORDER BY created_at DESC LIMIT 1 FOR UPDATE"
+        "replaced_by_session_id, error, error_class, EXISTS ("
+        "SELECT 1 FROM narrative_generation_lease lease "
+        f"WHERE lease.session_id = gs.session_id AND lease.{OWNER_EXPIRED_SQL}"
+        ") AS owner_expired "
+        "FROM narrative_generation_sessions gs "
+        f"ORDER BY created_at DESC LIMIT 1{lock_clause}"
     )
     failed = cur.fetchone()
+    if failed is not None and failed["owner_expired"]:
+        failed = {**failed, **_EXPIRED_OWNER_OUTCOME}
     if (
         failed is None
-        or str(failed["session_id"]) != expected_session_id
+        or (
+            expected_session_id is not None
+            and str(failed["session_id"]) != expected_session_id
+        )
         or failed["status"] != "error"
         or failed["terminal_outcome"] != "error"
         or failed["replaced_by_session_id"] is not None
@@ -69,20 +137,20 @@ def _retry_context(cur: Any, expected_session_id: str) -> GenerationRetryContext
         raise GenerationRetryConflict("A pending narrative already exists.")
     cur.execute(
         "SELECT nc.id, nc.choice_text FROM narrative_chunks nc "
-        f"WHERE {playable_narrative_predicate()} ORDER BY nc.id DESC LIMIT 1 "
-        "FOR UPDATE"
+        f"WHERE {playable_narrative_predicate()} ORDER BY nc.id DESC LIMIT 1"
+        f"{lock_clause}"
     )
     parent = cur.fetchone()
     parent_id = int(failed["parent_chunk_id"])
     if parent_id == 0 and parent is None:
-        return GenerationRetryContext(parent_chunk_id=0, user_text="")
+        return failed, GenerationRetryContext(parent_chunk_id=0, user_text="")
     if (
         parent is None
         or int(parent["id"]) != parent_id
         or not (parent["choice_text"] or "").strip()
     ):
         raise GenerationRetryConflict("The committed action changed. Reload the story.")
-    return GenerationRetryContext(
+    return failed, GenerationRetryContext(
         parent_chunk_id=parent_id, user_text=parent["choice_text"]
     )
 
@@ -108,8 +176,8 @@ def acquire_generation_lease(
                 """
             )
             cur.execute(
-                """
-                SELECT session_id, expires_at <= NOW() AS is_stale
+                f"""
+                SELECT session_id, {OWNER_EXPIRED_SQL} AS is_stale
                 FROM narrative_generation_lease
                 WHERE id = TRUE
                 FOR UPDATE
@@ -128,13 +196,14 @@ def acquire_generation_lease(
                 cur.execute(
                     """
                     UPDATE narrative_generation_sessions
-                    SET status = 'error', terminal_outcome = 'error',
-                        error_class = 'GenerationLeaseExpired',
-                        error = 'Generation lease expired before completion.',
+                    SET status = %(status)s,
+                        terminal_outcome = %(terminal_outcome)s,
+                        error_class = %(error_class)s,
+                        error = %(error)s,
                         updated_at = NOW()
-                    WHERE session_id = %s
+                    WHERE session_id = %(session_id)s
                     """,
-                    (stale_session_id,),
+                    {**_EXPIRED_OWNER_OUTCOME, "session_id": stale_session_id},
                 )
 
             retry = (
@@ -230,12 +299,12 @@ def bind_generation_parent(conn: Any, *, session_id: str, parent_chunk_id: int) 
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 UPDATE narrative_generation_lease
                 SET parent_chunk_id = %s
                 WHERE id = TRUE
                   AND session_id = %s
-                  AND expires_at > NOW()
+                  AND NOT ({OWNER_EXPIRED_SQL})
                 """,
                 (parent_chunk_id, session_id),
             )
@@ -268,13 +337,13 @@ def claim_parent_embedding(conn: Any, *, session_id: str, parent_chunk_id: int) 
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT session_id
                 FROM narrative_generation_lease
                 WHERE id = TRUE
                   AND session_id = %s
                   AND parent_chunk_id = %s
-                  AND expires_at > NOW()
+                  AND NOT ({OWNER_EXPIRED_SQL})
                 FOR UPDATE
                 """,
                 (session_id, parent_chunk_id),
@@ -495,7 +564,7 @@ def heartbeat_generation(
             cur.execute(
                 "UPDATE narrative_generation_lease "
                 "SET expires_at = clock_timestamp() + make_interval(secs => %s) "
-                "WHERE session_id = %s AND expires_at > clock_timestamp()",
+                f"WHERE session_id = %s AND NOT ({OWNER_EXPIRED_SQL})",
                 (timeout_seconds, session_id),
             )
             if cur.rowcount != 1:
@@ -522,7 +591,7 @@ def read_generation_session(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 "SELECT session_id FROM narrative_generation_lease "
-                "WHERE expires_at <= clock_timestamp()"
+                f"WHERE {OWNER_EXPIRED_SQL}"
             )
             if cur.fetchone() is not None:
                 cur.execute(
@@ -530,16 +599,20 @@ def read_generation_session(
                 )
                 cur.execute(
                     "DELETE FROM narrative_generation_lease "
-                    "WHERE expires_at <= clock_timestamp() RETURNING session_id"
+                    f"WHERE {OWNER_EXPIRED_SQL} RETURNING session_id"
                 )
                 expired = cur.fetchone()
                 if expired:
                     cur.execute(
-                        "UPDATE narrative_generation_sessions SET status = 'error', "
-                        "terminal_outcome = 'error', error_class = 'GenerationLeaseExpired', "
-                        "error = 'Generation lease expired before completion.', updated_at = NOW() "
-                        "WHERE session_id = %s AND status = 'initiated'",
-                        (expired["session_id"],),
+                        "UPDATE narrative_generation_sessions SET status = %(status)s, "
+                        "terminal_outcome = %(terminal_outcome)s, "
+                        "error_class = %(error_class)s, error = %(error)s, "
+                        "updated_at = NOW() "
+                        "WHERE session_id = %(session_id)s AND status = 'initiated'",
+                        {
+                            **_EXPIRED_OWNER_OUTCOME,
+                            "session_id": expired["session_id"],
+                        },
                     )
             cur.execute(
                 "SELECT gs.*, lease.expires_at FROM narrative_generation_sessions gs "

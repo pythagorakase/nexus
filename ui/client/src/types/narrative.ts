@@ -61,6 +61,17 @@ export interface GenerationSession {
   error_class: string | null;
 }
 
+/**
+ * A failed continuation of the frontier's recorded action (NarrativeRecovery).
+ * Present exactly when POST /api/narrative/retry would accept `session_id`.
+ */
+export interface NarrativeRecovery {
+  session_id: string;
+  parent_chunk_id: number;
+  error: string | null;
+  error_class: string | null;
+}
+
 export interface SlotState {
   narrative_generation: GenerationSettings;
   slot: number;
@@ -74,8 +85,10 @@ export interface SlotState {
   has_pending: boolean;
   frontier_clock: FrontierClock | null;
   storyteller_text: string | null;
+  /** Live choices only; a recorded action consumes the committed menu. */
   choices: string[];
   session_id: string | null;
+  recovery?: NarrativeRecovery | null;
   model: string | null;
 }
 
