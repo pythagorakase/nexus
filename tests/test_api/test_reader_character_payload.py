@@ -93,3 +93,56 @@ def test_each_legacy_placeholder_is_suppressed_independently() -> None:
     assert payload["summary"] == row["summary"]
     assert payload["background"] is None
     assert payload["currentActivity"] is None
+
+
+def test_renamed_legacy_character_uses_only_recorded_prior_names() -> None:
+    """A durable name reveal must not expose an older diagnostic summary."""
+    row = _row(
+        name="Anika Sayegh",
+        identity_previous_names=["Nell Rourke", "The unnamed witness"],
+    )
+    original = deepcopy(row)
+
+    payload = _character_payload(row)
+
+    assert payload["name"] == "Anika Sayegh"
+    assert payload["summary"] is None
+    assert row == original
+    assert "identity_previous_names" not in payload
+
+
+@pytest.mark.parametrize("prior_names", [None, [], ["Another person"]])
+def test_rename_does_not_guess_missing_placeholder_provenance(prior_names) -> None:
+    """Only exact names from this character's rulings extend the legacy marker."""
+    row = _row(name="Anika Sayegh", identity_previous_names=prior_names)
+
+    assert _character_payload(row)["summary"] == row["summary"]
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "Nell Rourke was the name Anika used while working at the quay.",
+        "Retrograde-generated character stub for Nell Rourke. "
+        "Created so Skald-selected setup history can resolve to canonical rows. "
+        "Anika now keeps the rescue ledger.",
+    ],
+)
+def test_recorded_prior_name_does_not_hide_real_character_facts(summary: str) -> None:
+    row = _row(
+        name="Anika Sayegh",
+        summary=summary,
+        identity_previous_names=["Nell Rourke"],
+    )
+
+    assert _character_payload(row)["summary"] == summary
+
+
+def test_recorded_prior_name_still_requires_retrograde_provenance() -> None:
+    row = _row(
+        name="Anika Sayegh",
+        identity_previous_names=["Nell Rourke"],
+        extra_data={"source": "authored"},
+    )
+
+    assert _character_payload(row)["summary"] == row["summary"]

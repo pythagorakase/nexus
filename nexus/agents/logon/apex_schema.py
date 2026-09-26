@@ -113,6 +113,22 @@ class NewEntityPairTagHint(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class CharacterNameReveal(BaseModel):
+    """An explicit same-person ruling grounded in the finished narrative."""
+
+    character_id: int = Field(gt=0, strict=True, description="Existing character ID.")
+    previous_name: str = Field(
+        min_length=1, max_length=200, description="Exact current canonical name."
+    )
+    evidence: str = Field(
+        min_length=1,
+        max_length=1000,
+        description="Literal narrative quotation establishing this person's name.",
+    )
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class NewEntityDeclaration(BaseModel):
     """
     Skald's declaration that this chunk introduces a new persistent entity.
@@ -147,6 +163,10 @@ class NewEntityDeclaration(BaseModel):
         default=None,
         description="Character place name; identity review evidence only.",
     )
+    same_as: Optional[CharacterNameReveal] = Field(
+        default=None,
+        description="Explicit name reveal; keeps existing character ID and history.",
+    )
     coordinates: Optional[Coordinates] = Field(
         default=None,
         description="Optional real-Earth coordinates for a declared place.",
@@ -166,6 +186,12 @@ class NewEntityDeclaration(BaseModel):
 
         if self.coordinates is not None and self.kind != "place":
             raise ValueError("coordinates are only valid for place declarations")
+        if self.same_as is not None and self.kind != "character":
+            raise ValueError("same_as is only valid for character declarations")
+        if self.same_as is not None and (self.tag_hints or self.pair_tag_hints):
+            raise ValueError(
+                "same_as records identity only; use updates for tag changes"
+            )
         return self
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")

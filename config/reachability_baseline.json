@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Preserve wizard confirmation, control transcript and place validation production paths after integrating reviewed QA fixes.",
+  "reason": "Integrate all seven adversarial QA fixes while preserving wizard confirmation, transcript filtering and character identity",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -253,6 +253,7 @@
     "nexus/presence/__init__.py",
     "nexus/presence/cues.py",
     "nexus/presence/identity.py",
+    "nexus/presence/name_reveals.py",
     "nexus/presence/normalization.py",
     "nexus/presence/roster.py",
     "nexus/prompts/__init__.py",

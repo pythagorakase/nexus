@@ -155,8 +155,13 @@ def validate_character_batch(
     index: IdentityIndex,
     *,
     scene_location: str | None = None,
+    narrative: str | None = None,
 ) -> None:
     """Validate against catalog plus earlier novel declarations before any writes."""
+    from nexus.presence.name_reveals import project_name_reveals
+
+    index, reveals = project_name_reveals(declarations, index, narrative=narrative)
+    revealed_ids = {reveal.target.id for reveal in reveals}
     # Copy mutable index containers; database row records are read-only evidence.
     index = copy(index)
     index.by_id = dict(index.by_id)
@@ -167,6 +172,8 @@ def validate_character_batch(
     for declaration in declarations:
         if declaration.get("kind", "character") != "character":
             continue
+        if declaration.get("same_as"):
+            continue
         result = resolve_character_declaration(
             declaration,
             index,
@@ -175,6 +182,12 @@ def validate_character_batch(
         )
         if result.status == "ambiguous":
             raise CharacterIdentityAmbiguity(str(declaration["name"]), result)
+        if result.existing_id in revealed_ids:
+            from nexus.presence.name_reveals import CharacterNameRevealConflict
+
+            raise CharacterNameRevealConflict(
+                "A name reveal cannot also declare the same person for maturation"
+            )
         if result.status == "novel":
             entry = RosterEntry(
                 kind="character", id=provisional_id, name=str(declaration["name"])

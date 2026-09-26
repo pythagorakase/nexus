@@ -154,6 +154,12 @@ def enqueue_declared_entity_maturations(
     parsed = [
         NewEntityDeclaration.model_validate(declaration) for declaration in declarations
     ]
+    if any(declaration.same_as is not None for declaration in parsed):
+        from nexus.presence.name_reveals import CharacterNameRevealConflict
+
+        raise CharacterNameRevealConflict(
+            "Name reveals require accepted ruling persistence, not maturation"
+        )
     result.declared = len(parsed)
 
     settings_dict = dict(settings or load_settings_as_dict())
@@ -270,6 +276,10 @@ def _resolve_or_create_stub(
     kind-incompatible names raise ``ValueError``).
     """
 
+    if declaration.same_as is not None:
+        from nexus.presence.name_reveals import CharacterNameRevealConflict
+
+        raise CharacterNameRevealConflict("Name reveals cannot create a stub")
     if declaration.kind == "character":
         existing = require_character_identity(
             cur,
@@ -1040,10 +1050,11 @@ def build_runtime_maturation_packet(
     )
 
     declaration = dict(row.get("declaration") or {})
+    target_name = context["canonical_name"]
     target_card = {
         "kind": row["entity_kind"],
         "role": "maturation_target",
-        "name": row["entity_name"],
+        "name": target_name,
         "summary": declaration.get("summary") or context.get("entity_summary"),
         "details": {
             "declared_tag_hints": declaration.get("tag_hints") or [],
@@ -1113,8 +1124,7 @@ def build_runtime_maturation_packet(
         "optional": True,
         "rarity": "The maturation target may propose at most one project.",
         "actor_rule": (
-            f"actor_ref must name the maturation target exactly: "
-            f"{row['entity_name']}"
+            f"actor_ref must name the maturation target exactly: {target_name}"
         ),
         "target_rule": (load(PromptId.RETROGRADE_MATURATION_TARGET)),
     }
@@ -1125,7 +1135,7 @@ def build_runtime_maturation_packet(
                 (
                     load(
                         PromptId.RETROGRADE_MATURATION_DIRECTIVE,
-                        ROW_ENTITY_NAME=f"{row['entity_name']}",
+                        ROW_ENTITY_NAME=target_name,
                         ROW_ENTITY_KIND=f"{row['entity_kind']}",
                     )
                 ),
@@ -1361,7 +1371,7 @@ def _load_job_context(
     row: Mapping[str, Any],
     cfg: OrreryRetrogradeMaturationSettings,
 ) -> dict[str, Any]:
-    """Load scoped prompt material: entity summary, chunk excerpt, anchors."""
+    """Load the current target by stable ID and its enqueue-time source excerpt."""
 
     table = _SUBTYPE_TABLES[str(row["entity_kind"])]
     if row["entity_kind"] == "place":
@@ -1384,7 +1394,8 @@ def _load_job_context(
         )
     else:
         cur.execute(
-            f"SELECT summary AS entity_summary FROM {table} WHERE id = %s",
+            f"SELECT summary AS entity_summary, name AS canonical_name "
+            f"FROM {table} WHERE id = %s",
             (row["entity_subtype_id"],),
         )
     entity_row = cur.fetchone()
@@ -1394,6 +1405,13 @@ def _load_job_context(
             f"{row['entity_kind']} id {row['entity_subtype_id']}"
         )
     entity_summary = _row_value(entity_row, "entity_summary", 0)
+    canonical_name = _row_value(
+        entity_row,
+        "place_name" if row["entity_kind"] == "place" else "canonical_name",
+        1,
+    )
+    if not isinstance(canonical_name, str) or not canonical_name.strip():
+        raise ValueError(f"Maturation job {row['job_id']} target has no canonical name")
     geo_authoring = None
     if row["entity_kind"] == "place":
         geo_authoring = {
@@ -1415,6 +1433,8 @@ def _load_job_context(
             f"{row['requesting_chunk_id']}"
         )
     raw_text = str(_row_value(chunk_row, "raw_text", 0) or "")
+    # The original chunk may predate a name reveal. Keep its enqueue-time
+    # label solely as the excerpt anchor, never as the generation target.
     excerpt = _excerpt_around_name(
         raw_text,
         name=str(row["entity_name"]),
@@ -1428,7 +1448,10 @@ def _load_job_context(
             entry for entry in roster.all_references.values() if entry.kind == kind
         ]
         for entry in sorted(entries, key=lambda entry: entry.id)[:6]:
-            if entry.name == row["entity_name"]:
+            if (entry.kind, entry.id) == (
+                row["entity_kind"],
+                row["entity_subtype_id"],
+            ):
                 continue
             scene_entities.append(
                 {
@@ -1441,6 +1464,7 @@ def _load_job_context(
             )
 
     return {
+        "canonical_name": canonical_name,
         "entity_summary": entity_summary,
         "chunk_excerpt": excerpt,
         "scene_entities": scene_entities,

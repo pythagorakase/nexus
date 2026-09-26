@@ -381,18 +381,20 @@ def _character_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     ):
         # Frozen signatures from legacy saved rows. New character stubs store
         # NULL prose; do not couple these values to mutable producer wording.
+        recorded_names = [row["name"], *(row.get("identity_previous_names") or [])]
         placeholders = {
-            "summary": (
-                f"Retrograde-generated character stub for {row['name']}. "
+            "summary": {
+                f"Retrograde-generated character stub for {name}. "
                 "Created so Skald-selected setup history can resolve to canonical rows."
-            ),
-            "background": (
+                for name in recorded_names
+            },
+            "background": {
                 "Retrograde-generated stub; details intentionally sparse until play."
-            ),
-            "currentActivity": "latent in generated backstory",
+            },
+            "currentActivity": {"latent in generated backstory"},
         }
         prose = {
-            field: None if value == placeholders[field] else value
+            field: None if value in placeholders[field] else value
             for field, value in prose.items()
         }
 
@@ -455,6 +457,12 @@ async def get_characters(
             c.extra_data,
             c.created_at,
             c.updated_at,
+            ARRAY(
+                SELECT ruling.previous_name
+                FROM character_identity_rulings ruling
+                WHERE ruling.character_id = c.id
+                ORDER BY ruling.source_chunk_id, ruling.id
+            ) AS identity_previous_names,
             p.name AS current_location_name,
             (
                 SELECT ci.file_path
