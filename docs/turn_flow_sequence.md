@@ -25,7 +25,7 @@ sources:
   - nexus/jobs/
   - nexus/agents/orrery/worker.py
   - nexus.toml
-verified_commit: "ed9531e3418f695b9e47b5c9e7fdc897ac4ecdcd"
+verified_commit: "be1c299cb70b3e3a75b514ad7ad34ca45031b8a8"
 ---
 
 # The Turn Cycle
@@ -40,11 +40,15 @@ authoritative; this document is their map.
 
 The IRIS Narrative pane (`ui/client/src/hooks/useNarrativeEngine.ts`) polls
 `GET /api/slot/{slot}/state` for the newest passage, which is the pending draft
-when one exists, and its choices. The player picks a choice or writes freeform
-text, and `continueNarrative` (`ui/client/src/lib/narrative-api.ts`) posts
-`slot`, `choice` or `user_text`, and any pending draft's `session_id` to
-`POST /api/narrative/continue`. The `nexus continue` CLI command uses the same
-endpoint.
+when one exists, and its choices. Selecting a choice, by click or number key,
+only loads its text into the reader's draft, which remembers the choice while
+the player edits the text and forgets it once the text is cleared. Enter or the
+send glyph commits: `continueNarrative` (`ui/client/src/lib/narrative-api.ts`)
+posts `slot`, the draft as `choice` plus `user_text` (one edited-choice
+payload) or as freeform `user_text` alone, and any pending draft's `session_id`
+to `POST /api/narrative/continue`. The `nexus continue` CLI command uses the
+same endpoint; `--choice K --text "..."` sends an edited choice (the wizard
+refuses that combination).
 
 While a generation runs, the pane follows phase events on
 `/ws/narrative?slot=N` and reconciles with the durable session through
@@ -73,8 +77,11 @@ reflects gateway reachability alone.
    draft, the response is recorded on the committed frontier chunk. A
    numbered `choice`, or `accept_fate` (which takes the first presented
    choice), resolves to that choice's full text, which the chunk records and
-   generation receives as the player's input; freeform `user_text` is recorded
-   as written.
+   generation receives as the player's input. A `choice` sent with different
+   `user_text` (`nexus/api/choice_handling.py`) records and generates from that
+   edited text instead, and its `choice_object` keeps the number with
+   `"edited": true`; unchanged text resolves as the bare choice. Freeform
+   `user_text` is recorded as written.
 5. Binds the session to its parent chunk and claims the parent's embedding
    trigger, which enqueues every playable chunk older than the parent that
    lacks embeddings (`nexus/jobs/embeddings.py`). Embedding therefore trails
@@ -202,7 +209,12 @@ The pending draft appears in the Narrative pane. From there:
   continuing.
 - **Regenerate.** `POST /api/narrative/regenerate` reruns generation from the
   same parent and player text, with an optional author's note, under a new
-  session. The current draft stays until its replacement is staged.
+  session, which records the draft it set out to replace in
+  `supersedes_session_id` when it acquires the slot. The pane offers it as a
+  glyph on the pending block while nothing generates. The current draft stays
+  until its replacement is staged; when the re-roll fails the draft remains,
+  and the failed session's `supersedes_session_id` naming that draft lets the
+  pane report the failure.
 - **Discard.** `DELETE /api/narrative/incubator` removes the draft and marks
   its session discarded.
 - **Retry.** After a failed generation, `POST /api/narrative/retry` with the

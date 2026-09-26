@@ -65,10 +65,12 @@ const frontier: SlotState = {
 const running: GenerationSession = {
   slot: 4,
   session_id: "next-10",
+  operation: "continue",
   status: "initiated",
   phase: "writer",
   terminal_outcome: null,
   replaced_by_session_id: null,
+  supersedes_session_id: null,
   chunk_id: null,
   parent_chunk_id: null,
   created_at: "2026-09-26T08:00:00Z",

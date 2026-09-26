@@ -8,6 +8,7 @@ import * as api from "@/lib/narrative-api";
 import { useNarrativeEngine } from "./useNarrativeEngine";
 
 vi.mock("@/lib/narrative-api", () => ({
+  REGENERATE_NOTE_MAX_CHARS: 500, regenerateNarrative: vi.fn(),
   continueNarrative: vi.fn(), retryNarrative: vi.fn(), getSlotState: vi.fn(),
   getActiveGeneration: vi.fn(), getGenerationStatus: vi.fn(), getRecoveryPreferences: vi.fn(),
   getLatestChunk: vi.fn(async () => null), getOutline: vi.fn(async () => []),
@@ -19,8 +20,9 @@ const settings = {
   wake_gap_threshold_seconds: 15, stale_lease_timeout_seconds: 3600,
 };
 const failure: GenerationSession = {
-  slot: 4, session_id: "failed-8", status: "error", phase: "staging",
-  terminal_outcome: "error", replaced_by_session_id: null, chunk_id: null, parent_chunk_id: 9,
+  slot: 4, session_id: "failed-8", operation: "continue", status: "error", phase: "staging",
+  terminal_outcome: "error", replaced_by_session_id: null, supersedes_session_id: null,
+  chunk_id: null, parent_chunk_id: 9,
   created_at: "2026-09-25T08:00:00Z", heartbeat_at: "2026-09-25T08:01:00Z",
   expires_at: null, error: "Unresolved place state update", error_class: "WireContractViolation",
 };
@@ -112,8 +114,12 @@ describe("durable reader generation recovery", () => {
     expect(screen.getByTestId("choice-1")).toHaveTextContent("Live choice");
     expect(screen.queryByTestId("generation-failure")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("choice-1"));
+    expect(api.continueNarrative).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByTestId("input-freeform"), { key: "Enter" });
     await waitFor(() => expect(api.continueNarrative).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.continueNarrative).mock.calls[0][0]).toMatchObject({ slot: 4, choice: 1 });
+    expect(vi.mocked(api.continueNarrative).mock.calls[0][0]).toMatchObject({
+      slot: 4, choice: 1, userText: "Live choice",
+    });
   });
 
   it("never offers a Retry the server would reject once the recorded action is gone", async () => {

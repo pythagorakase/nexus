@@ -4,7 +4,8 @@
  * Owns:
  * - the /ws/narrative WebSocket (phase telemetry, auto-reconnect)
  * - slot state polling via react-query (pending chunk + choices)
- * - turn submission through POST /api/narrative/continue
+ * - turn submission through POST /api/narrative/continue, explicit retry,
+ *   and pending-turn regeneration, all followed by the same durable polling
  * - the elapsed-time clock while a generation is in flight
  * - SKALD operator status derivation (READY / TRANSMITTING / GENERATING /
  *   RECEIVING / OFFLINE)
@@ -14,6 +15,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import {
   continueNarrative,
+  regenerateNarrative,
   retryNarrative,
   getSlotState,
   getActiveGeneration,
@@ -22,6 +24,7 @@ import {
 } from "@/lib/narrative-api";
 import {
   ACTIVE_GENERATION_PHASES,
+  type ContinueNarrativeResponse,
   type NarrativePhase,
   type GenerationSettings,
   type GenerationSession,
@@ -57,6 +60,8 @@ export interface NarrativeEngine {
   completedGenerations: number;
   /** True only after the server acknowledged this submission. */
   submitTurn: (params: { choice?: number; userText?: string }) => Promise<boolean>;
+  /** Re-roll the pending turn; its prose stays until the replacement lands. */
+  regenerateTurn: (note?: string) => Promise<boolean>;
 }
 
 export function useNarrativeEngine(slot: number | null): NarrativeEngine {
@@ -403,8 +408,11 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     };
   }, []);
 
-  const submitRequest = useCallback(
-    async (params: { choice?: number; userText?: string }, retrySession?: string) => {
+  // Every generation request - continue, retry, regenerate - shares one
+  // in-flight guard, the optimistic phase and clock, and the durable
+  // active/status recovery loop above.
+  const launch = useCallback(
+    async (start: (slot: number) => Promise<ContinueNarrativeResponse>) => {
       if (slot === null) throw new Error("No active slot");
       if (submittingRef.current || isActivePhase(phaseRef.current)) {
         toast({
@@ -423,16 +431,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
       startClock();
 
       try {
-        if (!retrySession && slotState?.has_pending && !slotState.session_id) {
-          throw new Error("Pending turn is missing its session ID");
-        }
-        const result = retrySession ? await retryNarrative(slot, retrySession) : await continueNarrative({
-          slot,
-          ...params,
-          sessionId: slotState?.has_pending
-            ? slotState.session_id ?? undefined
-            : undefined,
-        });
+        const result = await start(slot);
         if (activeSlotRef.current !== slot) return true;
         setFailedGeneration(null);
         sessionRef.current = result.session_id;
@@ -463,7 +462,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         return false;
       }
     },
-    [slot, slotState, startClock, stopClock, invalidateNarrativeQueries],
+    [slot, startClock, stopClock, invalidateNarrativeQueries],
   );
 
   // A recorded action awaiting its retry consumed the frontier's menu: only
@@ -472,13 +471,33 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
   const submitTurn = useCallback(
     (params: { choice?: number; userText?: string }) => {
       if (recovery) return Promise.resolve(false);
-      return submitRequest(params);
-    }, [recovery, submitRequest],
+      return launch((active) => {
+        if (slotState?.has_pending && !slotState.session_id) {
+          throw new Error("Pending turn is missing its session ID");
+        }
+        return continueNarrative({
+          slot: active,
+          ...params,
+          sessionId: slotState?.has_pending
+            ? slotState.session_id ?? undefined
+            : undefined,
+        });
+      });
+    }, [recovery, launch, slotState],
   );
   const retryGeneration = useCallback(() => {
     if (!recovery) return Promise.resolve(false);
-    return submitRequest({}, recovery.session_id);
-  }, [recovery, submitRequest]);
+    return launch((active) => retryNarrative(active, recovery.session_id));
+  }, [recovery, launch]);
+  const regenerateTurn = useCallback(
+    (note?: string) => launch((active) => {
+      if (!slotState?.has_pending || !slotState.session_id) {
+        throw new Error("No pending turn to regenerate");
+      }
+      return regenerateNarrative({ slot: active, sessionId: slotState.session_id, note });
+    }),
+    [launch, slotState],
+  );
 
   let skaldStatus: SkaldStatus = "READY";
   if (!backendReachable) {
@@ -508,5 +527,6 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     isGenerating: isActivePhase(phase),
     completedGenerations,
     submitTurn,
+    regenerateTurn,
   };
 }

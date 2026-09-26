@@ -1908,6 +1908,17 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
 
                 # Continue to narrative mode handling below (don't return here)
             else:
+                # A wizard choice is sent as its presented text; only narrative
+                # mode records an edited choice. Refuse the mix rather than
+                # silently dropping the typed text.
+                if args.choice is not None and (args.user_text or "").strip():
+                    return {
+                        "success": False,
+                        "error": (
+                            "Wizard mode takes --choice or --text, not both. "
+                            "Send your own wording with --text alone."
+                        ),
+                    }
                 # Call wizard chat directly
                 url = f"{get_api_url()}/api/story/new/chat"
                 # Omission is meaningful: the backend resolves the slot's
@@ -2108,6 +2119,8 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             # Narrative mode - call continue directly
             # The API already resolves the persisted slot model. Sending a
             # model is an explicit override and must remain opt-in.
+            # --choice with --text is one edited-choice payload: the server
+            # keeps the number and records the text when it differs.
             model_to_use = getattr(args, "model", None)
             user_text = args.user_text or ""
 
@@ -4197,11 +4210,16 @@ Examples:
     continue_parser.add_argument(
         "--choice",
         type=int,
-        help="Select structured choice by number (1-indexed)",
+        help=(
+            "Select structured choice by number (1-indexed); in narrative mode, "
+            "with --text, send your edited version of that choice"
+        ),
     )
     continue_parser.add_argument(
         "--user-text",
-        help="Freeform user input",
+        "--text",
+        dest="user_text",
+        help="Freeform user input, or with --choice the edited text of that choice",
     )
     continue_parser.add_argument(
         "--accept-fate",

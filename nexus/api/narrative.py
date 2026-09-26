@@ -45,7 +45,6 @@ from nexus.api.lore_adapter import (
 from nexus.api.choice_handling import (
     normalize_choice_object,
     resolve_choice_response,
-    validate_choice_index,
 )
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_flow import (
@@ -588,9 +587,17 @@ def _record_player_response_for_chunk(
 
 
 def _acquire_generation_owner(
-    *, slot: Optional[int], session_id: str, operation: str
+    *,
+    slot: Optional[int],
+    session_id: str,
+    operation: str,
+    supersedes_session_id: Optional[str] = None,
 ) -> None:
-    """Acquire the durable slot lease or raise the documented 409."""
+    """Acquire the durable slot lease or raise the documented 409.
+
+    A regenerate owner passes the pending draft it would replace as
+    ``supersedes_session_id``; the lease records it on the new session row.
+    """
     conn = get_db_connection(slot)
     try:
         conflict = acquire_generation_lease(
@@ -598,6 +605,7 @@ def _acquire_generation_owner(
             session_id=session_id,
             operation=operation,
             stale_timeout_seconds=get_generation_lease_timeout_seconds(),
+            supersedes_session_id=supersedes_session_id,
         )
     finally:
         conn.close()
@@ -1215,6 +1223,7 @@ async def regenerate_narrative(
         slot=request.slot,
         session_id=session_id,
         operation="regenerate",
+        supersedes_session_id=incumbent_session_id,
     )
     scheduled = False
     failure_class = "GenerationError"
@@ -1500,24 +1509,27 @@ async def select_choice(request: SelectChoiceRequest):
                 )
 
             # P0: Validate selection label is valid
-            presented = choice_object.get("presented", [])
             if request.selection.label != "freeform":
                 if not isinstance(request.selection.label, int):
                     raise HTTPException(status_code=400, detail="Invalid label type")
+                # The continue route's rule: text that differs from the
+                # presented choice is recorded with its number and edited: true.
                 try:
-                    selected_choice_text = validate_choice_index(
-                        request.selection.label, presented
+                    resolved = resolve_choice_response(
+                        choice_object,
+                        choice=request.selection.label,
+                        user_text=(
+                            request.selection.text if request.selection.edited else None
+                        ),
                     )
                 except ValueError as exc:
                     raise HTTPException(
                         status_code=400,
                         detail=str(exc),
                     ) from exc
-                choice_text = (
-                    request.selection.text
-                    if request.selection.edited
-                    else selected_choice_text
-                )
+                choice_text = resolved.choice_text
+                if resolved.choice_object and resolved.choice_object.get("edited"):
+                    choice_object["edited"] = True
                 selected_index: Optional[int] = request.selection.label
             else:
                 choice_text = request.selection.text

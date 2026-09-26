@@ -451,6 +451,10 @@ async def test_regenerate_route_threads_incubator_parent_into_generation_task(
         "get_db_connection",
         lambda _slot: RegenerateConnection(),
     )
+    owners: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        narrative, "_acquire_generation_owner", lambda **kwargs: owners.append(kwargs)
+    )
 
     background_tasks = BackgroundTasks()
     await narrative.regenerate_narrative(
@@ -464,6 +468,15 @@ async def test_regenerate_route_threads_incubator_parent_into_generation_task(
     assert task.args[0] != "pending-session"
     assert task.args[1] == 17
     assert task.kwargs["expected_incubator_session"] == "pending-session"
+    # The new session names the draft it targets before any generation runs.
+    assert owners == [
+        {
+            "slot": 5,
+            "session_id": task.args[0],
+            "operation": "regenerate",
+            "supersedes_session_id": "pending-session",
+        }
+    ]
 
 
 def test_session_error_class_unwraps_nested_validation_failure() -> None:

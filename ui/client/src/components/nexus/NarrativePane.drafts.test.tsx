@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
+import { readerDraftScope } from "@/lib/reader-draft";
 import type { SlotState } from "@/types/narrative";
 import { NarrativePane } from "./NarrativePane";
 
@@ -26,6 +27,7 @@ beforeAll(() => {
 });
 beforeEach(() => localStorage.clear());
 
+/** Render the pane; `show` re-renders it with a later slot state. */
 function mount(
   state: SlotState = base,
   send: NarrativeEngine["submitTurn"] = vi.fn(async () => true),
@@ -36,18 +38,23 @@ function mount(
   client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
   client.setQueryData(["/api/narrative/latest-chunk", state.slot], null);
   client.setQueryData(["/api/narrative/outline", state.slot], []);
-  const engine: NarrativeEngine = {
-    slotState: state, slotStateError: null, isSlotStateLoading: false,
-    phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
-    isGenerating: false, completedGenerations: 0, submitTurn: send,
+  const tree = (current: SlotState) => {
+    const engine: NarrativeEngine = {
+      slotState: current, slotStateError: null, isSlotStateLoading: false,
+      phase: null, skaldStatus: "READY", elapsedMs: 0, generationError: null, failedGeneration: null, isRecoveryLoading: false, retryGeneration: vi.fn(async () => true),
+      isGenerating: false, completedGenerations: 0, submitTurn: send,
+      regenerateTurn: vi.fn(async () => true),
+    };
+    return (
+      <QueryClientProvider client={client}>
+        <ThemeProvider>
+          <NarrativePane slot={current.slot} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
   };
-  return render(
-    <QueryClientProvider client={client}>
-      <ThemeProvider>
-        <NarrativePane slot={state.slot} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />
-      </ThemeProvider>
-    </QueryClientProvider>,
-  );
+  const view = render(tree(state));
+  return Object.assign(view, { show: (next: SlotState) => view.rerender(tree(next)) });
 }
 
 const input = () => screen.getByTestId("input-freeform");
@@ -193,12 +200,17 @@ describe("reader draft recovery", () => {
     expect(screen.queryByTestId("unconfirmed-action")).not.toBeInTheDocument();
   });
 
-  it("does not clear a typed draft when a structured choice fails", async () => {
-    mount(base, vi.fn(async () => false));
-    type(TEXT);
+  it("keeps a selected choice's draft and identity when its send fails", async () => {
+    const failed = vi.fn(async () => false);
+    mount(base, failed);
     fireEvent.click(screen.getByTestId("choice-1"));
-    await act(async () => {});
-    expect(input()).toHaveValue(TEXT);
+    submit();
+    await waitFor(() => expect(failed).toHaveBeenCalledTimes(1));
+    expect(input()).toHaveValue("Read the ledger");
+    expect(screen.getByTestId("choice-1")).toHaveAttribute("aria-pressed", "true");
+    submit();
+    await waitFor(() => expect(failed).toHaveBeenCalledTimes(2));
+    expect(failed).toHaveBeenLastCalledWith({ choice: 1, userText: "Read the ledger" });
   });
 
   it("reports unavailable browser persistence while retaining editable text", () => {
@@ -210,5 +222,260 @@ describe("reader draft recovery", () => {
     expect(input()).toHaveValue(TEXT);
     expect(screen.getByRole("alert")).toHaveTextContent("could not be saved");
     storage.mockRestore();
+  });
+});
+
+describe("number-key choice shortcuts", () => {
+  const press = (init: KeyboardEventInit) =>
+    fireEvent.keyDown(document.body, { key: "1", code: "Digit1", ...init });
+
+  it.each([
+    ["Cmd", { metaKey: true }],
+    ["Ctrl", { ctrlKey: true }],
+    ["Alt", { altKey: true }],
+    ["held-key repeat", { repeat: true }],
+    ["IME composition", { isComposing: true }],
+  ])("never acts on a %s digit", async (_name, init) => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    press(init);
+    await act(async () => {});
+    expect(send).not.toHaveBeenCalled();
+    expect(input()).toHaveValue("");
+  });
+
+  it.each(["select", "contenteditable"])("leaves a digit typed into a %s to it", async (kind) => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    const control = document.createElement(kind === "select" ? "select" : "div");
+    if (kind === "contenteditable") {
+      control.setAttribute("contenteditable", "true");
+      // jsdom does not derive isContentEditable from the attribute.
+      Object.defineProperty(control, "isContentEditable", { value: true });
+    }
+    document.body.appendChild(control);
+    try {
+      expect(fireEvent.keyDown(control, { key: "1", code: "Digit1" })).toBe(true);
+      await act(async () => {});
+      expect(input()).toHaveValue("");
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      control.remove();
+    }
+  });
+
+  it("loads a plain digit's choice into the draft without sending", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    press({});
+    await waitFor(() => expect(input()).toHaveValue("Read the ledger"));
+    await act(async () => {});
+    expect(send).not.toHaveBeenCalled();
+    expect(input()).toHaveFocus();
+  });
+});
+
+describe("deliberate choice drafts", () => {
+  const choice = (n: number) => screen.getByTestId(`choice-${n}`);
+  const sendGlyph = () => screen.getByRole("button", { name: "Send" });
+
+  it("loads a clicked choice into the draft and sends only on Enter", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    fireEvent.click(choice(2));
+    await act(async () => {});
+    expect(send).not.toHaveBeenCalled();
+    expect(input()).toHaveValue("Ask Sana");
+    expect(input()).toHaveFocus();
+    expect(choice(2)).toHaveAttribute("aria-pressed", "true");
+    expect(choice(1)).toHaveAttribute("aria-pressed", "false");
+    submit();
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledWith({ choice: 2, userText: "Ask Sana" });
+    await waitFor(() => expect(input()).toHaveValue(""));
+    expect(choice(2)).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("keeps the selected identity while the text is edited", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    fireEvent.click(choice(1));
+    type("Read the ledger, then burn it");
+    expect(choice(1)).toHaveAttribute("aria-pressed", "true");
+    expect(choice(1)).toHaveClass("selected", "edited");
+    submit();
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledWith({
+      choice: 1, userText: "Read the ledger, then burn it",
+    });
+  });
+
+  it("drops the selected identity when the text is cleared", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    fireEvent.click(choice(1));
+    type("");
+    expect(choice(1)).toHaveAttribute("aria-pressed", "false");
+    type("Walk out");
+    submit();
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledWith({ userText: "Walk out" });
+  });
+
+  it("restores the selected identity with the draft after remount", async () => {
+    const view = mount();
+    fireEvent.click(choice(2));
+    type("Ask Sana about the ledger");
+    view.unmount();
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    expect(input()).toHaveValue("Ask Sana about the ledger");
+    expect(choice(2)).toHaveAttribute("aria-pressed", "true");
+    expect(send).not.toHaveBeenCalled();
+    submit();
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledWith({ choice: 2, userText: "Ask Sana about the ledger" });
+  });
+
+  it("sends through the icon-only send glyph, dimmed while empty", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    expect(sendGlyph()).toBeDisabled();
+    expect(sendGlyph()).toHaveTextContent("↵");
+    fireEvent.click(choice(1));
+    expect(sendGlyph()).toBeEnabled();
+    fireEvent.click(sendGlyph());
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send).toHaveBeenCalledWith({ choice: 1, userText: "Read the ledger" });
+  });
+
+  it("never sends on Shift+Enter or an Enter that ends IME composition", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    fireEvent.click(choice(1));
+    fireEvent.keyDown(input(), { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(input(), { key: "Enter", isComposing: true });
+    await act(async () => {});
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("turns a double Enter or a double click into one request", async () => {
+    let accept!: (accepted: boolean) => void;
+    const send = vi.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+    mount(base, send);
+    fireEvent.click(choice(1));
+    submit();
+    submit();
+    fireEvent.click(sendGlyph());
+    fireEvent.click(sendGlyph());
+    expect(send).toHaveBeenCalledTimes(1);
+    await act(async () => { accept(true); });
+    expect(input()).toHaveValue("");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([0, 1.5, "2", null])(
+    "keeps the text but drops a stored choice identity of %j",
+    (stored) => {
+      const key = readerDraftScope(base)!.draftKey;
+      localStorage.setItem(key, JSON.stringify({ revision: "r1", text: "Ask Sana", choice: stored }));
+      mount();
+      expect(input()).toHaveValue("Ask Sana");
+      expect(choice(2)).toHaveAttribute("aria-pressed", "false");
+    },
+  );
+
+  describe("a choice identity outside the presented menu", () => {
+    const key = readerDraftScope(base)!.draftKey;
+    const store = (draft: object) => localStorage.setItem(key, JSON.stringify(draft));
+    const stored = () => JSON.parse(localStorage.getItem(key) ?? "null");
+    const pressed = () => screen.queryAllByRole("button", { pressed: true });
+    const three: SlotState = {
+      ...base, choices: ["Read the ledger", "Ask Sana", "Leave the crew"],
+    };
+
+    it("restores as freeform text and sends only the text", async () => {
+      store({ revision: "r1", text: "Ask Sana twice", choice: 999 });
+      const send = vi.fn(async () => true);
+      mount(base, send);
+      expect(input()).toHaveValue("Ask Sana twice");
+      expect(pressed()).toHaveLength(0);
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ userText: "Ask Sana twice" });
+    });
+
+    it("keeps a stored choice the menu still presents", async () => {
+      store({ revision: "r1", text: "Ask Sana twice", choice: 2 });
+      const send = vi.fn(async () => true);
+      mount(base, send);
+      expect(input()).toHaveValue("Ask Sana twice");
+      expect(pressed()).toEqual([choice(2)]);
+      expect(choice(2)).toHaveClass("selected", "edited");
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ choice: 2, userText: "Ask Sana twice" });
+    });
+
+    it("drops a stored choice the shorter menu no longer has", async () => {
+      store({ revision: "r1", text: "Ask Sana twice", choice: 2 });
+      const send = vi.fn(async () => true);
+      const view = mount({ ...base, choices: ["Read the ledger"] }, send);
+      expect(input()).toHaveValue("Ask Sana twice");
+      expect(pressed()).toHaveLength(0);
+      await waitFor(() => expect(stored()).toEqual({ revision: "r1", text: "Ask Sana twice" }));
+      view.show(base);
+      expect(choice(2)).toHaveAttribute("aria-pressed", "false");
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ userText: "Ask Sana twice" });
+    });
+
+    it("drops a live selection when the menu shrinks below it", async () => {
+      const send = vi.fn(async () => true);
+      const view = mount(three, send);
+      fireEvent.click(choice(3));
+      type("Leave the crew at dawn");
+      expect(choice(3)).toHaveAttribute("aria-pressed", "true");
+      view.show(base);
+      expect(input()).toHaveValue("Leave the crew at dawn");
+      expect(pressed()).toHaveLength(0);
+      await waitFor(() => expect(stored()).not.toHaveProperty("choice"));
+      view.show(three);
+      expect(choice(3)).toHaveAttribute("aria-pressed", "false");
+      type("Leave the crew at dusk");
+      submit();
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      expect(send).toHaveBeenCalledWith({ userText: "Leave the crew at dusk" });
+    });
+
+    it("still clears a sent choice when its menu is consumed before the acknowledgement", async () => {
+      const committed: SlotState = { ...base, has_pending: false, session_id: null };
+      const committedKey = readerDraftScope(committed)!.draftKey;
+      let accept!: (accepted: boolean) => void;
+      const send = vi.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+      const view = mount(committed, send);
+      fireEvent.click(choice(1));
+      submit();
+      expect(send).toHaveBeenCalledWith({ choice: 1, userText: "Read the ledger" });
+      view.show({ ...committed, choices: [] });
+      await act(async () => {});
+      await act(async () => { accept(true); });
+      expect(input()).toHaveValue("");
+      expect(localStorage.getItem(committedKey)).toBeNull();
+    });
+  });
+
+  it("replaces the draft when another choice is selected", async () => {
+    const send = vi.fn(async () => true);
+    mount(base, send);
+    fireEvent.click(choice(1));
+    type("Read the ledger aloud");
+    fireEvent.click(choice(2));
+    expect(input()).toHaveValue("Ask Sana");
+    expect(choice(2)).toHaveClass("selected");
+    expect(choice(2)).not.toHaveClass("edited");
+    expect(choice(1)).not.toHaveClass("selected");
+    expect(send).not.toHaveBeenCalled();
   });
 });

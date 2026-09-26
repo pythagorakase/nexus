@@ -38,7 +38,13 @@ class ContinueNarrativeRequest(BaseModel):
     session_id: Optional[str] = Field(
         default=None, description="Pending draft to accept"
     )
-    user_text: str = Field(default="", description="User's completion text")
+    user_text: str = Field(
+        default="",
+        description=(
+            "Freeform response; with choice, the player's edited text of that "
+            "choice (persisted with the choice number and edited: true)"
+        ),
+    )
     choice: Optional[int] = Field(
         default=None, description="Structured choice number (1-indexed)"
     )
@@ -144,11 +150,17 @@ class NarrativeStatus(BaseModel):
     """Status of a narrative generation session"""
 
     session_id: str
+    operation: Literal["continue", "regenerate"] = Field(
+        description="Whether the attempt continues the story or re-rolls a draft"
+    )
     status: str
     slot: int
     phase: str
     terminal_outcome: Optional[str]
     replaced_by_session_id: Optional[str]
+    supersedes_session_id: Optional[str] = Field(
+        description="Pending draft session a regenerate attempt set out to replace"
+    )
     error_class: Optional[str]
     heartbeat_at: datetime
     expires_at: Optional[datetime] = None

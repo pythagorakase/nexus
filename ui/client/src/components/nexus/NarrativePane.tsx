@@ -20,6 +20,17 @@
  * choice-text line. When a chunk presents no structured choices the freeform
  * input has no placeholder and takes focus, so the blinking caret is the
  * invitation to type.
+ *
+ * Selecting a choice (click or its number key) never sends a turn: it loads
+ * the choice into slot 0 as an editable draft that remembers which choice it
+ * came from. Only Enter or the send glyph commits the draft - as the choice
+ * number plus its (possibly edited) text, or as freeform text once the draft
+ * is cleared and retyped.
+ *
+ * The pending block carries a quiet regenerate glyph while nothing is
+ * generating. It opens one optional note; Enter or its send glyph re-rolls
+ * the draft. The pending prose stays on screen until the replacement lands,
+ * and a failed re-roll leaves it there beneath a failure line.
  */
 import {
   Fragment,
@@ -27,6 +38,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type KeyboardEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -35,6 +47,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
 import {
+  REGENERATE_NOTE_MAX_CHARS,
   getChunk,
   getChunkContext,
   getEpisodeChunks,
@@ -215,7 +228,17 @@ export function NarrativePane({
   // also covers a failed attempt that recorded no action (input stays open).
   const recovery = hasPending ? null : slotState?.recovery ?? null;
   const needsRecovery = recovery !== null;
-  const failure = hasPending ? null : recovery ?? engine.failedGeneration;
+  // A failed attempt that set out to supersede the draft still pending is a
+  // re-roll which failed and left that draft in place.
+  const pendingSessionId = hasPending ? slotState?.session_id ?? null : null;
+  const regenerationFailure =
+    pendingSessionId !== null &&
+    engine.failedGeneration?.supersedes_session_id === pendingSessionId
+      ? engine.failedGeneration
+      : null;
+  const failure = hasPending
+    ? regenerationFailure
+    : recovery ?? engine.failedGeneration;
   const isBootstrapNeeded =
     !!slotState &&
     !slotState.is_empty &&
@@ -317,46 +340,118 @@ export function NarrativePane({
   const canSubmit = !isGenerating && !engine.isRecoveryLoading && !needsRecovery
     && !!slotState && !slotState.is_wizard_mode;
 
-  const handleChoice = useCallback(
-    (index: number) => {
-      if (!canSubmit) return;
-      void draft.submit(() => submitTurn({ choice: index }), false);
+  // Regenerate: pending-only, idle-only, one optional note. The note survives
+  // a failed re-roll and is dropped once a different draft is pending.
+  const canRegenerate = canSubmit && pendingSessionId !== null;
+  const [regenerateOpen, setRegenerateOpen] = useState(false);
+  const [regenerateNote, setRegenerateNote] = useState("");
+  const regenerating = useRef(false);
+  useEffect(() => {
+    setRegenerateOpen(false);
+    setRegenerateNote("");
+  }, [pendingSessionId]);
+  const handleRegenerate = useCallback(async () => {
+    if (!canRegenerate || regenerating.current) return;
+    regenerating.current = true;
+    try {
+      const note = regenerateNote.trim();
+      if (await engine.regenerateTurn(note || undefined)) setRegenerateOpen(false);
+    } finally {
+      regenerating.current = false;
+    }
+  }, [canRegenerate, regenerateNote, engine.regenerateTurn]);
+  const handleRegenerateKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Escape") {
+        setRegenerateOpen(false);
+      } else if (
+        event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing
+      ) {
+        event.preventDefault();
+        void handleRegenerate();
+      }
     },
-    [canSubmit, submitTurn, draft.submit],
+    [handleRegenerate],
   );
 
-  const handleFreeformSubmit = useCallback(() => {
+  // Selecting loads the choice into the draft, caret at its end, and never
+  // submits. The epoch re-focuses even when the same choice is reselected.
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
+  const handleSelect = useCallback(
+    (index: number) => {
+      if (!canSubmit) return;
+      draft.select(index, choices[index - 1]);
+      setSelectionEpoch((epoch) => epoch + 1);
+    },
+    [canSubmit, choices, draft.select],
+  );
+  useEffect(() => {
+    if (selectionEpoch === 0) return;
+    const field = freeformRef.current;
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  }, [selectionEpoch]);
+
+  // The one commit path. A draft that came from a choice sends its number and
+  // text together; the server records an edit only when the text differs.
+  const selectedChoice = draft.choice;
+  const handleSend = useCallback(() => {
     const text = freeform.trim();
     if (!text || !canSubmit) return;
-    void draft.submit(() => submitTurn({ userText: text }), true);
-  }, [freeform, canSubmit, submitTurn, draft.submit]);
+    void draft.submit(
+      () => submitTurn(
+        selectedChoice === null
+          ? { userText: text }
+          : { choice: selectedChoice, userText: text },
+      ),
+      true,
+    );
+  }, [freeform, selectedChoice, canSubmit, submitTurn, draft.submit]);
 
   const handleFreeformKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.key === "Enter" && !event.shiftKey) {
+      if (
+        event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing
+      ) {
         event.preventDefault();
-        handleFreeformSubmit();
+        handleSend();
       }
     },
-    [handleFreeformSubmit],
+    [handleSend],
   );
+  // The draft names only a choice on this menu (useReaderDraft validates it).
+  const selectedEdited =
+    selectedChoice !== null
+    && freeform.trim() !== choices[selectedChoice - 1].trim();
 
   // Number keys 1-N select choices when focus is outside the freeform field.
   // Inert while reading history - no submission affordances exist there.
+  // Browser chords (Cmd/Ctrl/Alt+digit switch tabs), held-key repeats and IME
+  // composition are never a choice.
   useEffect(() => {
     if (isHistorical) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.metaKey || event.ctrlKey || event.altKey || event.repeat
+        || event.isComposing
+      ) return;
       if (document.activeElement === freeformRef.current) return;
+      // A digit typed into any editable control belongs to that control.
       const target = event.target as HTMLElement | null;
-      if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
+      if (
+        target
+        && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)
+      ) return;
       const n = parseInt(event.key, 10);
       if (!isNaN(n) && n >= 1 && n <= choices.length) {
-        handleChoice(n);
+        event.preventDefault();
+        handleSelect(n);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [choices.length, handleChoice, isHistorical]);
+  }, [choices.length, handleSelect, isHistorical]);
 
   // Keep the frontier in view when new content lands or generation starts.
   useEffect(() => {
@@ -533,6 +628,43 @@ export function NarrativePane({
                     <ProseMarkdown text={pendingText} />
                   </div>
                 </div>
+                {canRegenerate && (
+                  <div className="regenerate-row">
+                    {regenerateOpen && (
+                      <>
+                        <input
+                          className="choice-input regenerate-note"
+                          value={regenerateNote}
+                          maxLength={REGENERATE_NOTE_MAX_CHARS}
+                          onChange={(e) => setRegenerateNote(e.target.value)}
+                          onKeyDown={handleRegenerateKeyDown}
+                          autoFocus
+                          aria-label="Note for the regenerated scene"
+                          data-testid="input-regenerate-note"
+                        />
+                        <button
+                          type="button"
+                          className="reader-nav-btn"
+                          onClick={() => void handleRegenerate()}
+                          aria-label="Regenerate now"
+                          data-testid="button-confirm-regenerate"
+                        >
+                          ↵
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className="reader-nav-btn regenerate-toggle"
+                      onClick={() => setRegenerateOpen((open) => !open)}
+                      aria-label="Regenerate"
+                      aria-expanded={regenerateOpen}
+                      data-testid="button-regenerate"
+                    >
+                      ↻
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -586,7 +718,11 @@ export function NarrativePane({
               data-testid="generation-failure"
             >
               <span className="glyph">✕</span>
-              <span>The next scene failed.</span>
+              <span>
+                {regenerationFailure
+                  ? "The regeneration failed."
+                  : "The next scene failed."}
+              </span>
             </div>
           )}
 
@@ -621,36 +757,55 @@ export function NarrativePane({
               presented no numbered choices (matches the CLI continue flow). */}
           {!isGenerating && !isBootstrapNeeded && !needsRecovery && (
             <section className="choices" data-testid="story-choices">
-              {choices.map((text, i) => (
+              {choices.map((text, i) => {
+                const isSelected = selectedChoice === i + 1;
+                const state = isSelected
+                  ? selectedEdited ? " selected edited" : " selected"
+                  : "";
+                return (
+                  <button
+                    key={`${i}-${text}`}
+                    className={`choice${state}`}
+                    onClick={() => handleSelect(i + 1)}
+                    disabled={!canSubmit}
+                    aria-pressed={isSelected}
+                    data-testid={`choice-${i + 1}`}
+                  >
+                    <span className="choice-key">{i + 1}</span>
+                    <span className="choice-glyph">◆</span>
+                    <span className="choice-text">
+                      <InlineMarkdown text={text} />
+                    </span>
+                  </button>
+                );
+              })}
+              <div className="freeform-row">
+                <label className="choice freeform">
+                  <Textarea
+                    ref={freeformRef}
+                    autoSize
+                    className="choice-input"
+                    rows={1}
+                    value={freeform}
+                    placeholder={freeformPresent.placeholder}
+                    autoFocus={freeformPresent.autoFocus}
+                    onChange={(e) => draft.update(e.target.value)}
+                    onKeyDown={handleFreeformKeyDown}
+                    disabled={!canSubmit}
+                    data-testid="input-freeform"
+                  />
+                </label>
                 <button
-                  key={`${i}-${text}`}
-                  className="choice"
-                  onClick={() => handleChoice(i + 1)}
-                  disabled={!canSubmit}
-                  data-testid={`choice-${i + 1}`}
+                  type="button"
+                  className="reader-nav-btn freeform-send"
+                  onClick={handleSend}
+                  disabled={!canSubmit || !freeform.trim()}
+                  aria-label="Send"
+                  data-testid="button-send-turn"
                 >
-                  <span className="choice-key">{i + 1}</span>
-                  <span className="choice-glyph">◆</span>
-                  <span className="choice-text">
-                    <InlineMarkdown text={text} />
-                  </span>
+                  ↵
                 </button>
-              ))}
-              <label className="choice freeform">
-                <Textarea
-                  ref={freeformRef}
-                  autoSize
-                  className="choice-input"
-                  rows={1}
-                  value={freeform}
-                  placeholder={freeformPresent.placeholder}
-                  autoFocus={freeformPresent.autoFocus}
-                  onChange={(e) => draft.update(e.target.value)}
-                  onKeyDown={handleFreeformKeyDown}
-                  disabled={!canSubmit}
-                  data-testid="input-freeform"
-                />
-              </label>
+              </div>
             </section>
           )}
 

@@ -513,6 +513,18 @@
   box-shadow: 0 0 14px hsl(320 55% 50% / .2);
 }
 .choice:disabled { opacity: .5; cursor: not-allowed; }
+/* The choice loaded into the draft holds its hover glow; the border breaks
+   to dashes once the draft's text departs from it. */
+.choice.selected {
+  border-color: var(--brass);
+  color: var(--brass-bright);
+  background: hsl(320 55% 50% / .05);
+  box-shadow: 0 0 14px hsl(320 55% 50% / .2);
+}
+.choice.selected.edited {
+  border-style: dashed;
+  box-shadow: none;
+}
 .choice-key {
   flex-shrink: 0;
   width: 30px;
@@ -586,6 +598,41 @@
   border-color: var(--brass);
   box-shadow: 0 0 18px hsl(320 55% 50% / .25);
 }
+/* Slot 0's send glyph rides the pill's right edge on its last line; dimmed
+   while there is nothing to send. */
+.freeform-row { position: relative; }
+.freeform-row .choice.freeform { padding-right: 52px; }
+.freeform-send {
+  position: absolute;
+  right: 4px;
+  bottom: 10px;
+  height: 56px;
+}
+
+/* Pending-only regenerate: a quiet glyph under the draft's prose. Its one
+   optional note and send glyph open beside it. */
+.regenerate-row {
+  max-width: 65ch;
+  margin: 2px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.regenerate-row .reader-nav-btn {
+  font-size: 18px;
+  padding: 2px 8px;
+}
+.regenerate-toggle { opacity: .45; }
+.regenerate-toggle:hover,
+.regenerate-toggle:focus-visible,
+.regenerate-toggle[aria-expanded="true"] { opacity: 1; }
+.regenerate-note {
+  flex: 1;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.regenerate-note:focus { border-bottom-color: var(--brass); }
 
 /* Pending-generation note inside the reader. */
 .reader-status {

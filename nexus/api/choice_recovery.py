@@ -38,7 +38,9 @@ def clear_parent_choice(cur: Any, parent_chunk_id: int) -> None:
             f"a parent that produced a pending child should always have "
             f"presented choices recorded (lifecycle violation)."
         )
+    # An edited-choice flag belongs to the selection being cleared.
     choice_object = dict(choice_object, selected=None)
+    choice_object.pop("edited", None)
     cur.execute(
         """
         UPDATE narrative_chunks

@@ -15,6 +15,10 @@ Both wizard and narrative modes read identical choice_object structures:
 Narrative mode writes the canonical integer/null shape:
     {"presented": ["Option 1", ...], "selected": 1 | null}
 
+A presented choice the player edited before sending keeps its integer and adds
+``"edited": true``; the edited response itself lives in ``choice_text``:
+    {"presented": ["Option 1", ...], "selected": 1, "edited": true}
+
 This module eliminates the divergent implementations that led to:
 - Wizard mode ignoring --choice validation
 - Different accept-fate behavior (hardcoded string vs first choice)
@@ -129,7 +133,8 @@ def normalize_choice_object(raw: Any) -> Optional[Dict[str, Any]]:
     Normalize a stored choice_object into the canonical narrative write shape.
 
     Readers accept the older selected-object shape for compatibility, but new
-    writes store only the 1-indexed selected choice number or null.
+    writes store only the 1-indexed selected choice number or null, plus
+    ``"edited": true`` when the player sent an edited version of that choice.
     """
     if raw is None:
         return None
@@ -150,6 +155,9 @@ def normalize_choice_object(raw: Any) -> Optional[Dict[str, Any]]:
     presented = [str(choice) for choice in presented_raw]
     selected_raw = raw.get("selected")
     selected: Optional[int] = None
+    edited = raw.get("edited", False)
+    if not isinstance(edited, bool):
+        raise ValueError("choice_object.edited must be a boolean")
 
     if isinstance(selected_raw, int):
         selected = selected_raw
@@ -157,6 +165,7 @@ def normalize_choice_object(raw: Any) -> Optional[Dict[str, Any]]:
         label = selected_raw.get("label")
         if isinstance(label, int):
             selected = label
+            edited = edited or selected_raw.get("edited") is True
         elif label == "freeform":
             selected = None
         elif label is not None:
@@ -168,12 +177,22 @@ def normalize_choice_object(raw: Any) -> Optional[Dict[str, Any]]:
         raise ValueError(
             f"choice_object.selected {selected} out of range (1-{len(presented)})"
         )
+    if edited and selected is None:
+        raise ValueError("choice_object.edited requires a selected choice")
 
-    return {"presented": presented, "selected": selected}
+    normalized: Dict[str, Any] = {"presented": presented, "selected": selected}
+    if edited:
+        normalized["edited"] = True
+    return normalized
 
 
 def selected_text_from_choice_object(raw: Any) -> Optional[str]:
-    """Return selected choice text from a choice_object, if it has one."""
+    """Return selected choice text from a choice_object, if it has one.
+
+    Raises:
+        ValueError: If the object marks its selection as edited in the
+            canonical shape, whose edited text lives only in ``choice_text``.
+    """
     decoded = raw
     if isinstance(decoded, str):
         try:
@@ -196,6 +215,11 @@ def selected_text_from_choice_object(raw: Any) -> Optional[str]:
         return None
 
     selected = choice_object["selected"]
+    if choice_object.get("edited"):
+        raise ValueError(
+            f"choice_object.selected {selected} was edited; its text lives in "
+            "choice_text, not in the presented menu"
+        )
     presented = choice_object["presented"]
     return presented[selected - 1]
 
@@ -210,10 +234,16 @@ def resolve_choice_response(
     """
     Resolve user input into canonical persisted narrative choice fields.
 
+    ``choice`` and ``user_text`` together are one atomic edited-choice payload:
+    the player selected presented choice ``choice`` and sent ``user_text`` as
+    their version of it. Text that differs from the presented choice persists
+    as ``choice_text`` with ``{"selected": choice, "edited": true}``; empty or
+    unchanged text resolves exactly as ``choice`` alone.
+
     Args:
         raw_choice_object: Stored choice_object from incubator or narrative_chunks
         choice: Optional 1-indexed structured choice number
-        user_text: Optional freeform/edited user response text
+        user_text: Optional freeform response, or the edited text of ``choice``
         accept_fate: Whether to mechanically select the first presented choice
 
     Returns:
@@ -231,6 +261,16 @@ def resolve_choice_response(
 
     if choice is not None:
         resolved_text = validate_choice_index(choice, presented)
+        if text and text != resolved_text.strip():
+            return ResolvedChoiceResponse(
+                choice_text=text,
+                choice_object={
+                    "presented": presented,
+                    "selected": choice,
+                    "edited": True,
+                },
+                selected=choice,
+            )
         return ResolvedChoiceResponse(
             choice_text=resolved_text,
             choice_object={"presented": presented, "selected": choice},

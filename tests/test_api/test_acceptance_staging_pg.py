@@ -181,7 +181,11 @@ async def test_staging_bleed_regenerate_and_acceptance(acceptance_slot) -> None:
         status = await narrative.get_narrative_status(regenerated.session_id, slot=5)
         assert status.status == "complete" and status.chunk_id is None
         assert status.phase == "complete" and status.terminal_outcome is None
+        assert status.operation == "regenerate"
+        assert status.supersedes_session_id == session
         replaced = await narrative.get_narrative_status(session, slot=5)
+        assert replaced.operation == "continue"
+        assert replaced.supersedes_session_id is None
         assert replaced.terminal_outcome == "superseded"
         assert replaced.replaced_by_session_id == regenerated.session_id
         selected = narrative._record_player_response_for_chunk(
@@ -221,6 +225,53 @@ async def test_staging_bleed_regenerate_and_acceptance(acceptance_slot) -> None:
                 (resolution,),
             )
             assert cur.fetchone() == (1,)
+
+
+@pytest.mark.asyncio
+async def test_failed_regenerate_keeps_its_link_to_the_surviving_draft(
+    acceptance_slot,
+) -> None:
+    """A re-roll names its target draft from acquisition, and keeps it on failure."""
+    dbname, parent, resolution = acceptance_slot
+    with closing(connect(dbname)) as conn:
+        session = own_draft(conn, parent)
+        await write_to_incubator(conn, draft(parent, resolution, session))
+        finish_generation(conn, session_id=session, status="complete")
+        conn.commit()
+        regenerated = await narrative.regenerate_narrative(
+            RegenerateNarrativeRequest(slot=5, session_id=session), BackgroundTasks()
+        )
+        in_flight = await narrative.get_narrative_status(regenerated.session_id, slot=5)
+        assert in_flight.status == "initiated"
+        assert in_flight.supersedes_session_id == session
+
+        finish_generation(
+            conn,
+            session_id=regenerated.session_id,
+            status="error",
+            error="Writer refused the draft",
+            error_class="WireContractViolation",
+        )
+
+        failed = await narrative.get_active_narrative(slot=5)
+        assert failed is not None
+        assert failed.session_id == regenerated.session_id
+        assert failed.operation == "regenerate"
+        assert failed.terminal_outcome == "error"
+        assert failed.supersedes_session_id == session
+        incumbent = await narrative.get_narrative_status(session, slot=5)
+        assert incumbent.supersedes_session_id is None
+        assert incumbent.terminal_outcome is None
+        assert incumbent.replaced_by_session_id is None
+        with conn.cursor() as cur:
+            cur.execute("SELECT session_id::text FROM incubator")
+            assert cur.fetchone() == (session,)
+            cur.execute(
+                "SELECT supersedes_session_id::text FROM narrative_generation_sessions "
+                "WHERE session_id = %s",
+                (regenerated.session_id,),
+            )
+            assert cur.fetchone() == (session,)
 
 
 @pytest.mark.parametrize(

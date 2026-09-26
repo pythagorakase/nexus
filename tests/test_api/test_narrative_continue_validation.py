@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import threading
 import uuid
@@ -27,6 +28,7 @@ from nexus.api import (
     slot_endpoints,
     slot_state,
 )
+from nexus.api.config_utils import get_max_choice_text_length
 from nexus.api.slot_state import NarrativeState, SlotState, WizardState
 from nexus.config import get_available_api_models
 from nexus.memory.manager import empty_pass2_baseline
@@ -373,6 +375,195 @@ def test_explicit_choice_free_chunk_keeps_empty_continue(
     assert len(generation_calls) == 1
     generation_args, _generation_kwargs = generation_calls[0]
     assert generation_args[1:3] == (17, "")
+
+
+DOOR_CHOICES = ["Open the door.", "Wait in silence."]
+EDITED_DOOR = "Open the door slowly, listening first."
+
+
+def _post_door_choice(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, Any],
+    *,
+    recorded: dict[str, Any] | None = None,
+) -> tuple[Any, ChoiceConnection, list[tuple[Any, ...]]]:
+    """Continue from committed chunk 17 through the production resolver."""
+    choice_object = {"presented": DOOR_CHOICES, "selected": None}
+    choice_text = None
+    if recorded is not None:
+        choice_object = recorded["choice_object"]
+        choice_text = recorded["choice_text"]
+    connection = ChoiceConnection(
+        {
+            "id": 17,
+            "storyteller_text": "The door waits.",
+            "choice_object": choice_object,
+            "choice_text": choice_text,
+        }
+    )
+    state = _committed_state(choices=[] if recorded else DOOR_CHOICES)
+    assert state.narrative_state is not None
+    state.narrative_state.recorded_action = choice_text
+    monkeypatch.setattr(slot_state, "get_slot_state", lambda _slot: state)
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+    generation_calls: list[tuple[Any, ...]] = []
+
+    async def capture_generation(*args: Any, **_kwargs: Any) -> None:
+        generation_calls.append(args)
+
+    monkeypatch.setattr(narrative, "generate_narrative_async", capture_generation)
+    response = TestClient(narrative.app).post(
+        "/api/narrative/continue", json={"slot": 3, **payload}
+    )
+    return response, connection, generation_calls
+
+
+def _chunk_response_writes(connection: ChoiceConnection) -> list[tuple[Any, ...]]:
+    """Return the persisted (choice_object, choice_text, raw_text, id) writes."""
+    return [
+        (json.loads(params[0]), *params[1:])
+        for query, params in connection.updates
+        if query.startswith("UPDATE narrative_chunks SET choice_object")
+    ]
+
+
+def test_edited_choice_persists_number_and_edited_text_atomically(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The selected number and the player's edited text land in one write."""
+    response, connection, generation_calls = _post_door_choice(
+        monkeypatch, {"choice": 1, "user_text": EDITED_DOOR}
+    )
+
+    assert response.status_code == 200
+    assert _chunk_response_writes(connection) == [
+        (
+            {"presented": DOOR_CHOICES, "selected": 1, "edited": True},
+            EDITED_DOOR,
+            f"The door waits.\n\n{EDITED_DOOR}",
+            17,
+        )
+    ]
+    assert connection.commits == 1
+    assert [call[1:3] for call in generation_calls] == [(17, EDITED_DOOR)]
+
+
+def test_unchanged_choice_text_persists_exactly_as_choice_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sending the presented text back writes what a bare choice writes."""
+    bare, bare_connection, bare_calls = _post_door_choice(monkeypatch, {"choice": 1})
+    echoed, echoed_connection, echoed_calls = _post_door_choice(
+        monkeypatch, {"choice": 1, "user_text": "Open the door."}
+    )
+
+    assert bare.status_code == echoed.status_code == 200
+    assert _chunk_response_writes(echoed_connection) == _chunk_response_writes(
+        bare_connection
+    )
+    assert _chunk_response_writes(bare_connection) == [
+        (
+            {"presented": DOOR_CHOICES, "selected": 1},
+            "Open the door.",
+            "The door waits.\n\nOpen the door.",
+            17,
+        )
+    ]
+    assert [call[1:3] for call in echoed_calls] == [call[1:3] for call in bare_calls]
+
+
+def test_recorded_edited_choice_is_idempotent_only_for_the_same_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A resend compares resolved text, so the bare choice now conflicts."""
+    recorded = {
+        "choice_object": {"presented": DOOR_CHOICES, "selected": 1, "edited": True},
+        "choice_text": EDITED_DOOR,
+    }
+    resent, resent_connection, resent_calls = _post_door_choice(
+        monkeypatch, {"choice": 1, "user_text": EDITED_DOOR}, recorded=recorded
+    )
+    bare, bare_connection, bare_calls = _post_door_choice(
+        monkeypatch, {"choice": 1}, recorded=recorded
+    )
+
+    assert resent.status_code == 200
+    assert _chunk_response_writes(resent_connection) == []
+    assert [call[1:3] for call in resent_calls] == [(17, EDITED_DOOR)]
+    assert bare.status_code == 409
+    assert bare.json()["detail"] == "Choice already selected for chunk 17."
+    assert bare_connection.updates == []
+    assert bare_calls == []
+
+
+def test_edited_choice_text_obeys_the_choice_text_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The configured length limit applies to the edited text actually sent."""
+    limit = get_max_choice_text_length()
+    response, connection, generation_calls = _post_door_choice(
+        monkeypatch, {"choice": 1, "user_text": "o" * (limit + 1)}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        f"Selection text too long ({limit + 1} chars). Max: {limit}"
+    )
+    assert connection.updates == []
+    assert generation_calls == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_object", "expected_text"),
+    [
+        (
+            EDITED_DOOR,
+            {"presented": DOOR_CHOICES, "selected": 1, "edited": True},
+            EDITED_DOOR,
+        ),
+        (
+            "  Open the door. ",
+            {"presented": DOOR_CHOICES, "selected": 1},
+            "Open the door.",
+        ),
+    ],
+    ids=["edited", "unchanged"],
+)
+def test_select_choice_records_an_edit_like_continue(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    expected_object: dict[str, Any],
+    expected_text: str,
+) -> None:
+    """The older select route writes the same canonical edited-choice shape."""
+    connection = ChoiceConnection(
+        {
+            "id": 17,
+            "storyteller_text": "The door waits.",
+            "choice_object": {"presented": DOOR_CHOICES, "selected": None},
+            "choice_text": None,
+        }
+    )
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+
+    response = TestClient(narrative.app).post(
+        "/api/narrative/select-choice",
+        json={
+            "slot": 3,
+            "chunk_id": 17,
+            "selection": {"label": 1, "text": text, "edited": True},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert _chunk_response_writes(connection) == [
+        (
+            expected_object,
+            expected_text,
+            f"The door waits.\n\n{expected_text}",
+            17,
+        )
+    ]
 
 
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
@@ -1086,15 +1277,123 @@ def test_pending_choice_rolls_back_when_auto_approval_validation_fails(
 
 
 @pytest.mark.requires_postgres
+def test_pending_edited_choice_commits_number_and_edited_text(
+    monkeypatch: pytest.MonkeyPatch,
+    disposable_narrative_db: str,
+) -> None:
+    """Accepting a draft with an edited choice keeps both through the commit."""
+    dbname = disposable_narrative_db
+    parent_chunk_id = _reset_to_committed_parent(dbname)
+    pending_session_id = str(uuid.uuid4())
+    with _clone_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO incubator (
+                    id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+                    generation_model, choice_object, choice_text,
+                    metadata_updates, entity_updates, reference_updates,
+                    orrery_proposal, orrery_adjudications, new_entities,
+                    lore_pass_baseline, session_id, llm_response_id, status
+                ) VALUES (
+                    TRUE, %s, %s, %s, %s, %s, %s, NULL,
+                    %s, %s, %s, NULL, %s, %s, %s, %s, %s, 'provisional'
+                )
+                """,
+                (
+                    parent_chunk_id + 1,
+                    parent_chunk_id,
+                    "Approach the door.",
+                    "The door waits.",
+                    _valid_override(),
+                    Json({"presented": DOOR_CHOICES, "selected": None}),
+                    Json(
+                        {
+                            "chronology": {
+                                "episode_transition": "continue",
+                                "time_delta_minutes": 1,
+                            },
+                            "world_layer": "primary",
+                        }
+                    ),
+                    Json({}),
+                    Json({"characters": [], "places": [], "factions": []}),
+                    Json([]),
+                    Json([]),
+                    Json(TEST_BASELINE_PAYLOAD),
+                    pending_session_id,
+                    "edited-choice-fixture",
+                ),
+            )
+
+    _route_clone_to_slot(monkeypatch, dbname)
+    generated_from: list[str] = []
+
+    async def stop_after_approval(
+        session_id: str,
+        _parent_chunk_id: int,
+        user_text: str,
+        slot: int,
+        **_kwargs: Any,
+    ) -> None:
+        generated_from.append(user_text)
+        narrative._abandon_generation_owner(
+            slot=slot,
+            session_id=session_id,
+            error="Fixture stops after proving edited-choice acceptance.",
+        )
+
+    monkeypatch.setattr(narrative, "generate_narrative_async", stop_after_approval)
+    monkeypatch.setattr(narrative, "wake_scheduler", lambda _slot: None)
+    with TestClient(narrative.app) as client:
+        response = client.post(
+            "/api/narrative/continue",
+            json={
+                "slot": 3,
+                "session_id": pending_session_id,
+                "choice": 1,
+                "user_text": EDITED_DOOR,
+            },
+        )
+
+    assert response.status_code == 200
+    assert generated_from == [EDITED_DOOR]
+    with _clone_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT choice_text, choice_object, raw_text
+                FROM narrative_chunks
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+            assert cur.fetchone() == {
+                "choice_text": EDITED_DOOR,
+                "choice_object": {
+                    "presented": DOOR_CHOICES,
+                    "selected": 1,
+                    "edited": True,
+                },
+                "raw_text": f"The door waits.\n\n{EDITED_DOOR}",
+            }
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("edited", [False, True], ids=["choice", "edited-choice"])
 def test_undo_restores_unresolved_parent_and_plain_continue_rejects(
     monkeypatch: pytest.MonkeyPatch,
     disposable_narrative_db: str,
+    edited: bool,
 ) -> None:
     """The real undo→continue path cannot advance without a player decision."""
     dbname = disposable_narrative_db
     choices = ["Open the door.", "Wait in silence."]
     storyteller_text = "The door waits."
-    selected_text = choices[0]
+    selected_text = EDITED_DOOR if edited else choices[0]
+    selected_object: dict[str, Any] = {"presented": choices, "selected": 1}
+    if edited:
+        selected_object["edited"] = True
     session_id = str(uuid.uuid4())
 
     with _clone_connection(dbname) as conn:
@@ -1111,7 +1410,7 @@ def test_undo_restores_unresolved_parent_and_plain_continue_rejects(
                 (
                     f"{storyteller_text}\n\n{selected_text}",
                     storyteller_text,
-                    Json({"presented": choices, "selected": 1}),
+                    Json(selected_object),
                     selected_text,
                 ),
             )

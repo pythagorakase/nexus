@@ -14,6 +14,8 @@ export interface DraftScope {
 export interface InputDraft {
   revision: string;
   text: string;
+  /** The presented choice (1-indexed) this text started from, if any. */
+  choice?: number;
 }
 
 export interface UnconfirmedAction extends InputDraft {
@@ -54,9 +56,16 @@ export function createDraftStore(name: string): DraftStore {
 
   const readDraft = (key: string): InputDraft | null => {
     const record = readRecord(key);
-    return record && typeof record.revision === "string" && typeof record.text === "string"
-      ? { revision: record.revision, text: record.text }
-      : null;
+    if (!record || typeof record.revision !== "string" || typeof record.text !== "string") {
+      return null;
+    }
+    // Only a menu position is a choice identity. Any other stored value is
+    // dropped, and the player's text survives as freeform. useInputDraft
+    // drops, in turn, a position beyond the menu presented now.
+    const { choice } = record;
+    return typeof choice === "number" && Number.isInteger(choice) && choice >= 1
+      ? { revision: record.revision, text: record.text, choice }
+      : { revision: record.revision, text: record.text };
   };
 
   const readUnconfirmedActions = (key: string): UnconfirmedAction[] => {
