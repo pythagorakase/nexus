@@ -54,7 +54,7 @@ export const Expanded = () => (
       mode="view"
       wizardData={{ setting, character, seed }}
       currentPhase="seed"
-      completedPhases={new Set(["setting", "character", "seed"])}
+      completedPhases={new Set(["setting", "character", "seed"] as const)}
       pendingArtifact={null}
       onPhaseClick={() => {}}
       onConfirm={() => {}}
@@ -74,7 +74,7 @@ export const Collapsed = () => (
       mode="view"
       wizardData={{ setting, character, seed }}
       currentPhase="seed"
-      completedPhases={new Set(["setting", "character"])}
+      completedPhases={new Set(["setting", "character"] as const)}
       pendingArtifact={null}
       onPhaseClick={() => {}}
       onConfirm={() => {}}

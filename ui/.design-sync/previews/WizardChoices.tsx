@@ -2,7 +2,8 @@ import { WizardChoices } from "nexus-ui";
 
 // The wizard's turn-input surface: numbered structured choices plus an
 // always-present freeform "…or something else" slot. Mirrors the narrative
-// reader's interaction pattern. onSubmit is inert in preview.
+// reader's interaction pattern. onSubmit is inert in preview: it never
+// acknowledges a turn, so typed input is retained.
 export const Choices = () => (
   <div style={{ width: 620 }}>
     <WizardChoices
@@ -11,7 +12,7 @@ export const Choices = () => (
         "A frontier mining colony clinging to a fractured asteroid.",
         "A walled archive-city where memory itself is currency.",
       ]}
-      onSubmit={() => {}}
+      onSubmit={() => false}
     />
   </div>
 );
@@ -26,7 +27,7 @@ export const Disabled = () => (
         "Slip into the customs house alone and search for the vault ledger.",
       ]}
       disabled
-      onSubmit={() => {}}
+      onSubmit={() => false}
     />
   </div>
 );

@@ -5,15 +5,16 @@ import { Intertitle } from "nexus-ui";
 // Pure props, no data binding, so every cell is the real component at a real
 // boundary.
 //
-// Two fields carry the variation: `worldTime` is the calculated in-world
-// timestamp (nullable — chunks before the first base_timestamp have none), and
-// the layer suffix appears only for a non-"primary" world_layer. The schema
-// admits exactly two layers, 'primary' and 'retrograde'.
+// Two fields carry the variation: the world clock (nullable — chunks before the
+// first base_timestamp have none) and the layer suffix, which appears only for
+// a non-"primary" world_layer. The schema admits exactly two layers, 'primary'
+// and 'retrograde'. The reader payload carries the clock twice: `worldTime` is
+// the UTC instant (the <time> datetime) and `worldTimeFace` the server's
+// clock_face() rendering, displayed verbatim.
 
 const READER = { maxWidth: 560 };
 
-// Canonical boundary: primary layer, world clock resolved. The timestamp
-// formats as "14 Mar 2073 · 21:40".
+// Canonical boundary: primary layer, world clock resolved.
 export const SceneBoundary = () => (
   <div style={READER}>
     <Intertitle
@@ -21,7 +22,8 @@ export const SceneBoundary = () => (
       episode={2}
       scene={3}
       worldLayer="primary"
-      worldTime="2073-03-14T21:40"
+      worldTime="2073-03-14T21:40:00+00:00"
+      worldTimeFace="14 Mar 2073 · 21:40"
     />
   </div>
 );
@@ -36,6 +38,7 @@ export const WithoutWorldTime = () => (
       scene={1}
       worldLayer="primary"
       worldTime={null}
+      worldTimeFace={null}
     />
   </div>
 );
@@ -50,7 +53,8 @@ export const RetrogradeLayer = () => (
       episode={7}
       scene={12}
       worldLayer="retrograde"
-      worldTime="2071-11-02T04:15"
+      worldTime="2071-11-02T04:15:00+00:00"
+      worldTimeFace="2 Nov 2071 · 04:15"
     />
   </div>
 );
