@@ -7,7 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { FontProvider } from "@/contexts/FontContext";
-import { ModelProvider } from "@/contexts/ModelContext";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
@@ -61,14 +60,12 @@ function App() {
       <ThemeProvider>
         <DeveloperModeProvider>
           <FontProvider>
-            <ModelProvider>
-              <TooltipProvider>
-                <ErrorBoundary>
-                  <Toaster />
-                  <Router />
-                </ErrorBoundary>
-              </TooltipProvider>
-            </ModelProvider>
+            <TooltipProvider>
+              <ErrorBoundary>
+                <Toaster />
+                <Router />
+              </ErrorBoundary>
+            </TooltipProvider>
           </FontProvider>
         </DeveloperModeProvider>
       </ThemeProvider>

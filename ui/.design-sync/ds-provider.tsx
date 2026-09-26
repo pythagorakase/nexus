@@ -57,7 +57,6 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
     },
     apex: { model: "@anthropic.apex", provider: "anthropic" },
     lore: { token_budget: { apex_context_window: 128000 } },
-    global: { narrative: { test_mode: false } },
     settings_meta: {
       model_roles: [
         { provider: "anthropic", role: "apex", ref: "@anthropic.apex", label: "Claude Opus 4.8" },

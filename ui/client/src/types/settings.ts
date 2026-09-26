@@ -55,11 +55,7 @@ export interface SettingsPayload {
   ["Agent Settings"]?: {
     global?: {
       model?: { default_model?: string };
-      narrative?: { test_mode?: boolean; test_database_suffix?: string };
     };
-  };
-  global?: {
-    narrative?: { test_mode?: boolean; test_database_suffix?: string };
   };
   /** Concrete model ID supplied by the roster. */
   apex?: { provider?: string; model?: string; gaia_model?: string | null };

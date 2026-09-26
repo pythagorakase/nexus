@@ -17,7 +17,6 @@ import type { SettingsPayload } from "@/types/settings";
 import { SettingsPane } from "./SettingsPane";
 
 const SETTINGS: SettingsPayload = {
-  global: { narrative: { test_mode: false } },
   ui: {
     theme: "veil",
     fonts: KEEPERS,

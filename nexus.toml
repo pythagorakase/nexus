@@ -117,11 +117,6 @@ openai = "op-item:tyrupcepa4wluec7sou4e7mkza:api key"
 anthropic = "op-read:op://API/Anthropic/api key"
 openrouter = "op-read:op://API/OpenRouter/api key"
 
-[global.narrative]
-# Test mode settings for development (legacy - prefer model picker with TEST model)
-test_mode = false
-test_database_suffix = "_test"
-
 # =============================================================================
 # UI Settings (read by the React client via GET /api/settings)
 # =============================================================================

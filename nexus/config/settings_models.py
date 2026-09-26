@@ -389,22 +389,12 @@ class ModelConfig(BaseModel):
         return self
 
 
-class NarrativeConfig(BaseModel):
-    """Narrative test mode settings."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    test_mode: bool = Field(..., description="Enable test mode")
-    test_database_suffix: str = Field(..., description="Database suffix for testing")
-
-
 class GlobalSettings(BaseModel):
     """Global configuration settings."""
 
     model_config = ConfigDict(extra="forbid")
 
     model: ModelConfig
-    narrative: NarrativeConfig
 
 
 class LocalModelCatalogEntry(BaseModel):

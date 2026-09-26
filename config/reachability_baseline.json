@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Retire scripts/propagate_schema.py so scripts/migrate.py is the sole migration runner (#810)",
+  "reason": "Delete the unread narrative test-mode scripts with the [global.narrative] table (#809)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -62,8 +62,6 @@
     "scripts/simple_update.py",
     "scripts/sync_secrets.py",
     "scripts/test_narrative_api.py",
-    "scripts/test_narrative_simple.py",
-    "scripts/test_narrative_turn.py",
     "scripts/test_setup_flow.py",
     "scripts/token_counter.py",
     "scripts/trim_oversized_contexts.py",
