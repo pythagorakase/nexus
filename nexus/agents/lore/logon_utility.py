@@ -2773,6 +2773,18 @@ class LogonUtility:
                     sections.append(
                         f"- {char1} → {char2}: {rel_type} (valence {valence:+.2f})"
                     )
+                    # Stored prose renders verbatim; NULL or blank columns add
+                    # no line, so a bare relationship keeps its one-line form.
+                    for label, column in (
+                        ("Dynamic", "dynamic"),
+                        ("Recent Events", "recent_events"),
+                    ):
+                        value = rel[column]
+                        if value is not None and value.strip():
+                            # An embedded newline continues the sub-line, so
+                            # the continuation keeps the dossier indent.
+                            text = value.strip().replace("\n", "\n    ")
+                            sections.append(f"  {label}: {text}")
 
             events = entity_data.get("events", [])
             if events:

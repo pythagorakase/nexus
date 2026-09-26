@@ -138,6 +138,8 @@ def test_dossier_omits_unknown_location_and_formats_decimal_valence(seat: str) -
                         "character2_name": "Iona",
                         "relationship_type": "complex",
                         "valence_current": Decimal(value),
+                        "dynamic": None,
+                        "recent_events": None,
                     }
                     for value in ("0E-20", "-0.18181818181818181818", "0.125")
                 ],

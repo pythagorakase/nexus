@@ -1,6 +1,7 @@
 """Tests for LOGON prompt formatting."""
 
 from contextlib import closing
+from decimal import Decimal
 from pathlib import Path
 import re
 from typing import Any, Literal, cast
@@ -9,6 +10,7 @@ import pytest
 
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.lore.seat_blocks import ContextSeat
 from nexus.agents.logon.skald_wire import CharacterRef, PlaceRef, PresenceBaseline
 from nexus.config.loader import load_settings_as_dict
 from nexus.memory.correspondence import correspondence_settings
@@ -830,6 +832,8 @@ def test_render_limits_and_signed_relationship_valence(
                     "character2_name": "Mira",
                     "relationship_type": "ally",
                     "valence_current": (-2, 0, 3)[i % 3],
+                    "dynamic": f"Ledger{i} stays open.",
+                    "recent_events": None,
                 }
                 for i in range(10)
             ],
@@ -842,10 +846,123 @@ def test_render_limits_and_signed_relationship_valence(
     for label, limit in zip(("Person", "Event", "Threat", "Peripheral"), limits):
         for i in range(10):
             assert (f"{label}{i}" in rendered) is (i < limit)
+    for i in range(10):
+        assert (f"Ledger{i}" in rendered) is (i < limits[0])
     assert "ally (valence -2.00)" in rendered
+    assert (
+        "- Person0 → Mira: ally (valence -2.00)\n  Dynamic: Ledger0 stays open.\n"
+        in rendered
+    )
     if limits[0] >= 3:
         assert "ally (valence +0.00)" in rendered
         assert "ally (valence +3.00)" in rendered
+
+
+_BARE_RELATIONSHIP_LINE = "- Mara Vey → Ivo Senn: obligation (valence +0.37)"
+
+
+def _fetched_relationship(
+    dynamic: str | None, recent_events: str | None
+) -> dict[str, Any]:
+    """Mirror a fetch_character_relationships row: r.* plus endpoint names."""
+    return {
+        "character1_id": 1,
+        "character2_id": 4,
+        "character1_name": "Mara Vey",
+        "character2_name": "Ivo Senn",
+        "relationship_type": "obligation",
+        "valence_current": Decimal("0.365711857825"),
+        "dynamic": dynamic,
+        "recent_events": recent_events,
+        "history": "Mara owes Ivo a life-debt.",
+    }
+
+
+def _relationships_block(relationship: dict[str, Any], seat: str) -> str:
+    """Render one relationship and return its block through the last line break."""
+    rendered = LogonUtility({})._format_context_prompt(
+        {"user_input": "Continue.", "entity_data": {"relationships": [relationship]}},
+        seat=cast(ContextSeat, seat),
+    )
+    start = rendered.index("\nRelationships:\n") + 1
+    return rendered[start : rendered.index("\n\n", start) + 1]
+
+
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+def test_relationship_dynamic_and_recent_events_render_verbatim(seat: str) -> None:
+    """Both stored prose columns follow the head line, stripped but untruncated."""
+    dynamic = ("Guarded trust; the debt stays unspoken. " * 13)[:500]
+    recent_events = (
+        "Ivo returned the ledger at dawn; Mara kept it shut. " * 12
+    ).strip()
+    assert len(dynamic) == 500 and len(recent_events) > 500
+
+    block = _relationships_block(
+        _fetched_relationship(f"  {dynamic}\n", f"\t{recent_events}  "), seat
+    )
+
+    assert block == (
+        "Relationships:\n"
+        f"{_BARE_RELATIONSHIP_LINE}\n"
+        f"  Dynamic: {dynamic}\n"
+        f"  Recent Events: {recent_events}\n"
+    )
+
+
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+@pytest.mark.parametrize(
+    ("dynamic", "recent_events"),
+    [(None, None), ("", ""), ("   ", "\n\t "), (None, " \n")],
+)
+def test_relationship_without_prose_keeps_the_bare_line(
+    seat: str, dynamic: str | None, recent_events: str | None
+) -> None:
+    """NULL, empty, and whitespace-only columns add no line and no placeholder."""
+    block = _relationships_block(_fetched_relationship(dynamic, recent_events), seat)
+
+    assert block == f"Relationships:\n{_BARE_RELATIONSHIP_LINE}\n"
+
+
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+@pytest.mark.parametrize(
+    ("dynamic", "recent_events", "detail"),
+    [
+        (" Wary. ", "  ", "  Dynamic: Wary.\n"),
+        (None, " Ivo paid in full. ", "  Recent Events: Ivo paid in full.\n"),
+    ],
+)
+def test_relationship_renders_only_the_populated_column(
+    seat: str, dynamic: str | None, recent_events: str | None, detail: str
+) -> None:
+    """One populated column renders alone beneath the unchanged head line."""
+    block = _relationships_block(_fetched_relationship(dynamic, recent_events), seat)
+
+    assert block == f"Relationships:\n{_BARE_RELATIONSHIP_LINE}\n{detail}"
+
+
+@pytest.mark.parametrize("seat", ["writer", "gaia"])
+def test_relationship_prose_continuation_lines_keep_the_indent(seat: str) -> None:
+    """An embedded newline continues the sub-line under the dossier indent."""
+    block = _relationships_block(
+        _fetched_relationship("Wary.\nStill owes Ivo.", " Paid.\nLeft town. "), seat
+    )
+
+    assert block == (
+        "Relationships:\n"
+        f"{_BARE_RELATIONSHIP_LINE}\n"
+        "  Dynamic: Wary.\n    Still owes Ivo.\n"
+        "  Recent Events: Paid.\n    Left town.\n"
+    )
+
+
+@pytest.mark.parametrize("column", ["dynamic", "recent_events"])
+def test_relationship_missing_prose_column_fails_loudly(column: str) -> None:
+    """A row without the fetched column shape raises instead of rendering."""
+    relationship = _fetched_relationship("Wary.", "Ivo paid in full.")
+    del relationship[column]
+
+    with pytest.raises(KeyError, match=column):
+        _relationships_block(relationship, "writer")
 
 
 @pytest.mark.parametrize("key", ["relationships", "events", "threats", "bleed_menu"])
