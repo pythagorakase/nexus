@@ -99,7 +99,9 @@ Inside the `<svg>`, in order back-to-front:
    `world-outline.ts` (Natural Earth 110m, FeatureCollection of
    MultiPolygons) rendered as a `<path d={pathGenerator(geom)}>`. Fill +
    stroke are theme-aware; opacity ~0.45.
-4. **Place pins**: per-place `<g>` containing circle, optional pulse
+4. **Leaders**: hairlines from each fanned-out coincident pin back to its
+   true point (§3.5), `pointer-events: none`.
+5. **Place pins**: per-place `<g>` containing circle, optional pulse
    ring, and optional label box.
 
 ---
@@ -153,6 +155,26 @@ When the places query returns an empty array, render
 `<text x="50%" y="50%">[NO LOCATION DATA AVAILABLE]</text>`. Don't gate
 the entire SVG behind a loading skeleton — keep the grid + world outline
 visible.
+
+### 3.5 Coincident Pins
+
+Places charted at the same point would stack on one pin, hiding all but
+one. `offsetCoincidentPins` (in `lib/map-geometry.ts`) fans them out:
+
+- Pins within `COINCIDENT_PIN_EPSILON_PX / zoom` of each other form a
+  group (connected components, so visiting order cannot split a chain).
+- Members sort by place id and sit on a ring around the group centroid:
+  angle `-π/2 + 2πi/n` (lowest id on top, then clockwise), radius
+  `COINCIDENT_PIN_RING_PX / zoom`, grown for groups above six so ring
+  neighbors stay at least that far apart. Singles keep their exact point.
+- The result depends only on the id → point pairs, never on input order.
+- Pins, labels, label culling and hit targets use the fanned positions;
+  each displaced pin gets a hairline leader to its true point (state
+  color, no text). Centering and the place dialog keep the true
+  coordinates.
+
+Because epsilon divides by zoom, zooming in far enough returns
+near-but-distinct places to their true positions.
 
 ---
 
@@ -262,6 +284,21 @@ When `selectedLocation !== null && detailsDialogOpen`, render a Radix
   (parsed from either array or PG-quoted-string format), secrets.
 - Upload button (hidden `<input type="file">` triggered programmatically).
 - "View Gallery" button → opens `<ImageGalleryModal>`.
+
+### 4.7 Canvas Resize
+
+The projection refits to every canvas size, so after a resize the same
+viewBox numbers name a different place on Earth. **Do not reset the
+viewBox on resize** (the U4 rebuild did, discarding every pan and zoom).
+Capture the window as its geographic center plus zoom against the old
+fit, then rebuild it against the new fit before paint
+(`preserveViewAcrossRefit`, run from a layout effect keyed on the canvas
+size). The inverse is the linear equirectangular one read off the
+projected world box (`invertEquirectangular`), which, unlike d3's
+`projection.invert`, does not wrap a view panned past the antimeridian
+to the far side of the world. Re-centering on the current place fires
+on a slot, current-place or charted-extent change, never on a bare
+resize.
 
 ---
 
