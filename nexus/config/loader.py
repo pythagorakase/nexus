@@ -323,10 +323,7 @@ def _load_from_json(path: Path) -> Settings:
     legacy_new_story = data.get("API Settings", {}).get("new_story", {})
 
     transformed_data = {
-        "global": {
-            "model": legacy_model,
-            "narrative": legacy_global.get("narrative", {}),
-        },
+        "global": {"model": legacy_model},
         "lore": legacy_agent_settings.get("LORE", {}),
         "memnon": legacy_agent_settings.get("MEMNON", {}),
         "memory": data.get("memory", {}),

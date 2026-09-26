@@ -52,6 +52,31 @@ def test_removed_typewriter_setting_is_rejected(tmp_path: Path) -> None:
     )
 
 
+def test_retired_narrative_test_mode_table_is_rejected(tmp_path: Path) -> None:
+    """The retired [global.narrative] TEST toggles cannot return to nexus.toml.
+
+    TEST is selected through the registered TEST model; a product-config
+    switch that no runtime code reads must fail validation, not linger.
+    """
+    source = Path("nexus.toml").read_text()
+    assert "[global.narrative]" not in source
+    config = tmp_path / "nexus.toml"
+    config.write_text(
+        source
+        + "\n[global.narrative]\n"
+        + "test_mode = false\n"
+        + 'test_database_suffix = "_test"\n'
+    )
+
+    with pytest.raises(ValidationError) as exc:
+        load_settings(config)
+
+    assert any(
+        error["loc"] == ("global", "narrative") and error["type"] == "extra_forbidden"
+        for error in exc.value.errors()
+    )
+
+
 @pytest.mark.parametrize(
     "field",
     [
