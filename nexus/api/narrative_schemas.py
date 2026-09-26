@@ -38,7 +38,13 @@ class ContinueNarrativeRequest(BaseModel):
     session_id: Optional[str] = Field(
         default=None, description="Pending draft to accept"
     )
-    user_text: str = Field(default="", description="User's completion text")
+    user_text: str = Field(
+        default="",
+        description=(
+            "Freeform response; with choice, the player's edited text of that "
+            "choice (persisted with the choice number and edited: true)"
+        ),
+    )
     choice: Optional[int] = Field(
         default=None, description="Structured choice number (1-indexed)"
     )
