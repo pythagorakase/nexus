@@ -42,6 +42,14 @@ def offline_gate_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         yield dbname
 
 
+@pytest.fixture(autouse=True)
+def empty_memory_conversation_store() -> Iterator[None]:
+    """Start and leave every test with no threads in the in-memory TEST store."""
+    conversations._MEMORY_STORE.threads.clear()
+    yield
+    conversations._MEMORY_STORE.threads.clear()
+
+
 @pytest.fixture
 def offline_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
     """Remove every registry credential, refuse sockets, and isolate thread files.

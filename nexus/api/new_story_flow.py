@@ -4,7 +4,7 @@ Headless helpers to manage new-story setup per slot.
 
 from __future__ import annotations
 
-from nexus.database import connection_kwargs
+from nexus.database import AmbiguousCommit, connection_kwargs
 
 import logging
 from datetime import datetime, timezone
@@ -184,8 +184,10 @@ def switch_wizard_model(
     A model whose provider uses another conversation store (hosted OpenAI,
     local files, or TEST memory) cannot read the current thread. Its messages
     are copied, in order, into a new thread of the requested store, and the
-    new thread ID and model are saved in one transaction. Any failure leaves
-    the slot model and cached thread ID unchanged and removes the partial copy.
+    new thread ID and model are saved in one transaction. Any failure before
+    that save leaves the slot model and cached thread ID unchanged and removes
+    the partial copy. An ambiguous commit keeps the copy, because the save may
+    have landed and the slot may already name the new thread.
 
     Args:
         slot_number: Target save slot (1-5).
@@ -201,6 +203,7 @@ def switch_wizard_model(
             locate it.
         WizardConversationMoveError: If the current store cannot be read.
         WizardStateConflict: If the thread or slot model changed meanwhile.
+        AmbiguousCommit: If the save's outcome is unknown; the copy is kept.
     """
     if thread_id is None:
         raise RuntimeError(
@@ -260,6 +263,17 @@ def switch_wizard_model(
             expected_model=slot_model,
             model=model,
         )
+    except AmbiguousCommit:
+        # The save may have committed, so deleting the copy could leave the slot
+        # pointing at a missing thread. Keep it; the next read settles the state.
+        logger.error(
+            "Wizard thread move for slot %s ended in an ambiguous commit; "
+            "keeping %s in %s storage until the slot's thread ID is read back",
+            slot_number,
+            new_thread_id,
+            target.store_mode,
+        )
+        raise
     except BaseException:
         # The original failure propagates; only the partial copy is removed.
         try:

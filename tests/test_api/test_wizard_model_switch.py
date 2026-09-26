@@ -37,6 +37,7 @@ from nexus.api.new_story_schemas import WizardResponse
 from nexus.api.save_slots import get_slot_model, set_slot_model
 from nexus.api.slot_state import SlotState, WizardState
 from nexus.api.wizard_confirmation import WizardStateConflict
+from nexus.database import AmbiguousCommit
 from tests.model_registry_helpers import registry_model
 
 OPENING = [("assistant", "Welcome"), ("assistant", "Pick a genre")]
@@ -390,6 +391,35 @@ def test_failed_cross_store_switch_changes_nothing(
     assert thread_files(offline_registry) == files_before
     assert set(hosted.threads) == hosted_before
     hosted.fail_reads_after = None
+    assert transcript(source_model, old_thread) == OPENING
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_ambiguous_save_keeps_the_copied_thread(
+    monkeypatch: pytest.MonkeyPatch,
+    hosted: HostedConversations,
+    offline_registry: Path,
+    streaming: bool,
+) -> None:
+    """A save with an unknown outcome fails the request but keeps the new thread."""
+    source_model, target_model = registry_model("local"), registry_model("openai")
+    old_thread = opened_thread(source_model)
+    record = SlotRecord(model=source_model, thread_id=old_thread)
+    hosted_before = set(hosted.threads)
+
+    def connection_lost() -> None:
+        raise AmbiguousCommit("connection lost while committing the model switch")
+
+    record.before_repoint = connection_lost
+
+    response = chat(mount_wizard(monkeypatch, record, []), streaming, target_model)
+
+    assert response.status_code == 500, response.text
+    assert (record.model, record.thread_id) == (source_model, old_thread)
+    assert record.choice_threads == []
+    new_threads = set(hosted.threads) - hosted_before
+    assert len(new_threads) == 1
+    assert transcript(target_model, new_threads.pop()) == OPENING
     assert transcript(source_model, old_thread) == OPENING
 
 
