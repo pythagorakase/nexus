@@ -166,6 +166,28 @@ def test_lore_without_runtime_environment_falls_back_to_repo_root(
         lore.close()
 
 
+def test_lore_startup_names_the_missing_embedder_remedy(
+    tmp_path: Path, runtime_database: str
+) -> None:
+    """A missing production embedder fails LORE startup with its restore command."""
+    document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
+    models = cast(Any, document["memnon"])["models"]
+    (active,) = [name for name, model in models.items() if model["is_active"]]
+    missing = tmp_path / "not-installed"
+    models[active]["local_path"] = str(missing)
+    path = tmp_path / "missing-embedder.toml"
+    path.write_text(tomlkit.dumps(document), encoding="utf-8")
+    remedy = f"hf download {models[active]['remote_path']} --local-dir {missing}"
+
+    with pytest.raises(RuntimeError) as raised:
+        LORE(settings_path=str(path), enable_logon=False, dbname=runtime_database)
+
+    assert str(raised.value).startswith("FATAL: MEMNON initialization failed:")
+    assert remedy in str(raised.value)
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    assert remedy in str(raised.value.__cause__)
+
+
 def test_lore_instances_keep_independent_memnon_configuration(
     tmp_path: Path, runtime_database: str
 ) -> None:
@@ -177,8 +199,8 @@ def test_lore_instances_keep_independent_memnon_configuration(
             memnon = document["memnon"]
             memnon["debug"] = debug
             memnon["query"]["default_limit"] = 11 + index
-            for model in memnon["models"].values():
-                model["is_active"] = False
+            # The production embedder stays the one active model (issue #812);
+            # an inactive candidate's weight still distinguishes the scopes.
             memnon["models"]["bge-large"]["weight"] = 0.25 + index * 0.25
             path = tmp_path / f"scope-{index}.toml"
             path.write_text(tomlkit.dumps(document))

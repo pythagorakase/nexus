@@ -4,19 +4,63 @@ Cross-Encoder Reranking Module for MEMNON
 This module implements a sliding window approach for cross-encoder reranking
 of search results, handling long text chunks effectively by splitting them
 into overlapping windows when they exceed the model's context length.
+
+The cross-encoder loads only from the local folder it is given (the production
+``[memnon.retrieval.cross_encoder_reranking].model_path``); a missing or broken
+folder raises a RuntimeError naming the folder and the install command.
 """
 
-import os
 import logging
-import torch
-import numpy as np
-from typing import List, Dict, Any, Optional, Tuple, Union
-from sentence_transformers import CrossEncoder
-from tqdm import tqdm
 import textwrap
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+
+import numpy as np
+import torch
+from sentence_transformers import CrossEncoder
 
 # Set up logging
 logger = logging.getLogger("nexus.memnon.cross_encoder")
+
+# The nexus.toml key that names the production reranker folder.
+MODEL_PATH_SETTING = "[memnon.retrieval.cross_encoder_reranking].model_path"
+
+
+def reranker_repo_id(
+    model_path: str, candidates: Mapping[str, Mapping[str, Any]]
+) -> Optional[str]:
+    """Return the Hugging Face repository of the reranker folder ``model_path``.
+
+    The repository is the ``remote_path`` of the one
+    ``[memnon.retrieval.cross_encoder_reranking.candidates]`` entry whose
+    ``local_path`` is ``model_path``: the match ``nexus models lock`` uses to
+    name the production reranker. None when no single entry matches or the
+    entry names no repository.
+
+    Args:
+        model_path: The reranker folder that will be loaded
+        candidates: The candidate registry, keyed by candidate name
+
+    Returns:
+        The repository id, or None when it cannot be derived
+    """
+    matches = [
+        candidate
+        for candidate in candidates.values()
+        if Path(str(candidate["local_path"])) == Path(model_path)
+    ]
+    if len(matches) != 1:
+        return None
+    return str(matches[0].get("remote_path") or "") or None
+
+
+def _reranker_remedy(path: Path, repo_id: Optional[str]) -> str:
+    """Name the command that installs a missing reranker, then the check."""
+    if repo_id:
+        install = f"Download it with `hf download {repo_id} --local-dir {path}`"
+    else:
+        install = f"Point {MODEL_PATH_SETTING} at the downloaded reranker folder"
+    return f"{install}, then run `nexus models verify`."
 
 
 class CrossEncoderReranker:
@@ -26,24 +70,49 @@ class CrossEncoderReranker:
 
     def __init__(
         self,
-        model_name_or_path: str = "naver/trecdl22-crossencoder-debertav3",
+        model_path: str,
         device: Optional[str] = None,
         max_length: int = 512,
         sliding_window_overlap: int = 128,
         cache_dir: Optional[str] = None,
         use_8bit: bool = False,
+        repo_id: Optional[str] = None,
     ):
         """
-        Initialize the cross-encoder reranker.
+        Load the cross-encoder from exactly ``model_path``, a local folder.
+
+        Nothing is downloaded and no other folder is substituted:
+        ``nexus models verify`` checks the folder named by
+        ``[memnon.retrieval.cross_encoder_reranking].model_path``, so that
+        folder is the one that loads (issue #812).
 
         Args:
-            model_name_or_path: Path to the cross-encoder model
+            model_path: Local directory holding the cross-encoder artifact
             device: Device to use for inference ('cuda', 'mps', or 'cpu')
             max_length: Maximum sequence length for the model
             sliding_window_overlap: Overlap size for sliding windows
-            cache_dir: Directory to cache the model
+            cache_dir: Unused; the artifact is read from ``model_path``
             use_8bit: Whether to use 8-bit quantization for model loading
+            repo_id: Hugging Face repository of the artifact, named in the
+                install command when the folder is missing or fails to load
+
+        Raises:
+            RuntimeError: When ``model_path`` does not exist, is not a
+                directory, or fails to load.
         """
+        path = Path(model_path)
+        remedy = _reranker_remedy(path, repo_id)
+        if not path.exists():
+            raise RuntimeError(
+                f"Cross-encoder reranker is not installed: {MODEL_PATH_SETTING} "
+                f"{path} does not exist. {remedy}"
+            )
+        if not path.is_dir():
+            raise RuntimeError(
+                f"Cross-encoder reranker {MODEL_PATH_SETTING} {path} is not a "
+                f"directory. {remedy}"
+            )
+
         self.max_length = max_length
         self.sliding_window_overlap = sliding_window_overlap
 
@@ -59,75 +128,58 @@ class CrossEncoderReranker:
         self.device = device
         logger.info(f"Using device: {self.device}")
 
-        # Check for local model path first
-        model_exists_locally = False
-        local_model_path = os.path.join(
-            os.path.abspath(
-                os.path.dirname(
-                    os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-                )
-            ),
-            "models",
-            model_name_or_path.split("/")[-1],
-        )
-
-        if os.path.exists(local_model_path):
-            logger.info(f"Using local model at: {local_model_path}")
-            model_name_or_path = local_model_path
-            model_exists_locally = True
-
         try:
-            if use_8bit and device == "cuda" and torch.cuda.is_available():
-                # Use 8-bit quantization when loading the model
-                from transformers import (
-                    AutoModelForSequenceClassification,
-                    AutoTokenizer,
-                    BitsAndBytesConfig,
-                )
+            self.model = self._load_local(str(path), device, max_length, use_8bit)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Cross-encoder reranker failed to load from {MODEL_PATH_SETTING} "
+                f"{path}: {str(exc).rstrip('.')}. {remedy}"
+            ) from exc
+        logger.info(f"Cross-encoder model loaded from {path}")
 
-                logger.info(
-                    f"Loading cross-encoder model with 8-bit quantization: {model_name_or_path}"
-                )
-                quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+    @staticmethod
+    def _load_local(
+        path: str, device: str, max_length: int, use_8bit: bool
+    ) -> CrossEncoder:
+        """Load the CrossEncoder from a local folder, never from the Hub."""
+        if use_8bit and device == "cuda" and torch.cuda.is_available():
+            # Use 8-bit quantization when loading the model
+            from transformers import (
+                AutoModelForSequenceClassification,
+                AutoTokenizer,
+                BitsAndBytesConfig,
+            )
 
-                model = AutoModelForSequenceClassification.from_pretrained(
-                    model_name_or_path,
-                    quantization_config=quantization_config,
-                    device_map="auto",
-                )
-                tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+            logger.info(f"Loading cross-encoder with 8-bit quantization: {path}")
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
-                # Create a custom CrossEncoder with the 8-bit model
-                self.model = CrossEncoder(
-                    model_name_or_path,
-                    tokenizer=tokenizer,
-                    model=model,
-                    max_length=max_length,
-                    device=None,  # device is handled by device_map in 8-bit mode
-                )
-                logger.info(
-                    f"Cross-encoder model loaded successfully with 8-bit quantization"
-                )
-            else:
-                # Use sentence-transformers CrossEncoder without quantization
-                if use_8bit and device != "cuda":
-                    logger.warning(
-                        "8-bit quantization requested but requires CUDA. Using full precision model."
-                    )
-                elif use_8bit and not torch.cuda.is_available():
-                    logger.warning(
-                        "8-bit quantization requested but CUDA is not available. Using full precision model."
-                    )
+            model = AutoModelForSequenceClassification.from_pretrained(
+                path,
+                quantization_config=quantization_config,
+                device_map="auto",
+                local_files_only=True,
+            )
+            tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
 
-                self.model = CrossEncoder(
-                    model_name_or_path, device=device, max_length=max_length
-                )
-                logger.info(
-                    f"Cross-encoder model loaded successfully: {model_name_or_path}"
-                )
-        except Exception as e:
-            logger.error(f"Error loading cross-encoder model: {e}")
-            raise
+            # Create a custom CrossEncoder with the 8-bit model
+            return CrossEncoder(
+                path,
+                tokenizer=tokenizer,
+                model=model,
+                max_length=max_length,
+                device=None,  # device is handled by device_map in 8-bit mode
+                local_files_only=True,
+            )
+
+        # Use sentence-transformers CrossEncoder without quantization
+        if use_8bit:
+            logger.warning(
+                "8-bit quantization requested but requires CUDA. "
+                "Using full precision model."
+            )
+        return CrossEncoder(
+            path, device=device, max_length=max_length, local_files_only=True
+        )
 
     def score_pair(self, query: str, passage: str) -> float:
         """
@@ -581,18 +633,25 @@ def _get_or_create_reranker(
     api_type: str,
     device: Optional[str],
     use_8bit: bool,
+    repo_id: Optional[str] = None,
 ):
-    """Return a cached reranker, constructing it on first request."""
+    """Return a cached reranker, constructing it on first request.
+
+    ``repo_id`` only names the install command when a cross-encoder folder is
+    missing; it is not part of the cache key.
+    """
     key = (model_path, api_type, device, use_8bit)
     cached = _RERANKER_CACHE.get(key)
     if cached is not None:
         return cached
 
+    instance: Union[CrossEncoderReranker, Qwen3LMReranker]
     if api_type == "cross_encoder":
         instance = CrossEncoderReranker(
-            model_name_or_path=model_path,
+            model_path=model_path,
             device=device,
             use_8bit=use_8bit,
+            repo_id=repo_id,
         )
     elif api_type == "qwen3_lm":
         instance = Qwen3LMReranker(
@@ -612,14 +671,15 @@ def _get_or_create_reranker(
 def rerank_results(
     query: str,
     results: List[Dict[str, Any]],
+    model_path: str,
     top_k: int = 10,
     alpha: float = 0.3,  # Blend weight for original scores
     batch_size: int = 8,
     use_sliding_window: bool = True,
-    model_path: str = "naver/trecdl22-crossencoder-debertav3",
     api_type: str = "cross_encoder",
     device: Optional[str] = None,
     use_8bit: bool = False,
+    repo_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Rerank results using a reranker model.
@@ -628,16 +688,18 @@ def rerank_results(
         query: The search query
         results: List of result dicts from initial retrieval
                 (must contain 'text' and 'score' fields)
+        model_path: Local folder holding the reranker model
         top_k: Number of results to return after reranking
         alpha: Weight for original score blending
               final_score = alpha * original_score + (1 - alpha) * reranker_score
         batch_size: Batch size for model inference
         use_sliding_window: Whether to use sliding window for long texts
-        model_path: Path to the reranker model
         api_type: "cross_encoder" (SequenceClassification: DeBERTa-v3, mxbai)
                   or "qwen3_lm" (Qwen3-Reranker yes/no causal-LM)
         device: Device to use for inference
         use_8bit: Whether to use 8-bit quantization (cross_encoder only)
+        repo_id: Hugging Face repository of the cross-encoder, named in the
+                install command when its folder is missing
 
     Returns:
         Reranked list of result dicts with updated scores
@@ -654,6 +716,7 @@ def rerank_results(
             api_type=api_type,
             device=device,
             use_8bit=use_8bit,
+            repo_id=repo_id,
         )
 
         # Extract passages from results

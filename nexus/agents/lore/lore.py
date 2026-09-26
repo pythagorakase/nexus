@@ -206,10 +206,6 @@ class LORE:
         )
 
         self._initialize_memnon()
-        if not self.memnon:
-            raise RuntimeError(
-                "FATAL: MEMNON initialization failed! Check database connection."
-            )
 
         # LOGON is initialized lazily on first use when enabled
         if self.enable_logon and not self._logon_initialized:
@@ -275,8 +271,10 @@ class LORE:
             )
             logger.info("MEMNON utility initialized with the configured database")
         except Exception as e:
-            logger.error(f"Failed to initialize MEMNON: {e}")
-            self.memnon = None
+            # Chain the cause: MEMNON's own message names the failing component
+            # and its remedy (for example the `hf download` command that
+            # restores a missing embedder artifact).
+            raise RuntimeError(f"FATAL: MEMNON initialization failed: {e}") from e
 
     def _initialize_logon(self):
         """Initialize LOGON utility for API communication"""

@@ -95,6 +95,7 @@
     "nexus/agents/memnon/__init__.py",
     "nexus/agents/memnon/memnon.py",
     "nexus/agents/memnon/utils/alias_search.py",
+    "nexus/agents/memnon/utils/artifact_manifest.py",
     "nexus/agents/memnon/utils/content_processor.py",
     "nexus/agents/memnon/utils/continuous_temporal_search.py",
     "nexus/agents/memnon/utils/cross_encoder.py",

@@ -253,15 +253,11 @@ class MEMNON:
         result = self.idf_dictionary.build_dictionary()
         logger.info(f"IDF dictionary initialized with {len(result)} terms")
 
-        # Get model weights from settings
-        model_weights = {}
-        for model_name, model_config in self.settings.get("models", {}).items():
-            weight = model_config.get("weight", 0.33)  # Default equal weight
-            model_weights[model_name] = weight
-
-        # Use default weights if none defined in settings
-        if not model_weights:
-            model_weights = {"bge-large": 0.4, "e5-large": 0.4, "bge-small-custom": 0.2}
+        # Model weights come from [memnon.models]; every entry declares one.
+        model_weights = {
+            model_name: model_config["weight"]
+            for model_name, model_config in self.settings["models"].items()
+        }
 
         # Flag to prioritize text search for testing
         self.force_text_first = False
@@ -1834,7 +1830,7 @@ class MEMNON:
             cross_encoder_config.get("enabled", False)
             and len(search_results_initial) > 0
         ):
-            from .utils.cross_encoder import rerank_results
+            from .utils.cross_encoder import rerank_results, reranker_repo_id
 
             try:
                 logger.info("Applying cross-encoder reranking")
@@ -1861,9 +1857,7 @@ class MEMNON:
                 use_sliding_window = cross_encoder_config.get(
                     "use_sliding_window", True
                 )
-                model_path = cross_encoder_config.get(
-                    "model_path", "naver-trecdl22-crossencoder-debertav3"
-                )
+                model_path = cross_encoder_config["model_path"]
                 # api_type must accompany model_path so that swapping production
                 # to a Qwen3-Reranker checkpoint doesn't silently load it as a
                 # SequenceClassification CrossEncoder.
@@ -1885,6 +1879,9 @@ class MEMNON:
                     model_path=model_path,
                     api_type=api_type,
                     use_8bit=use_8bit,
+                    repo_id=reranker_repo_id(
+                        model_path, cross_encoder_config["candidates"]
+                    ),
                 )
 
                 rerank_time = time.time() - rerank_start_time
