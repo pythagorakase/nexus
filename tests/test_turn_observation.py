@@ -7,7 +7,7 @@ the exact shape ``inspect_turn`` returns from PostgreSQL.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 import json
 from typing import Any, Optional
 from uuid import uuid4
@@ -29,7 +29,10 @@ from nexus.telemetry.turn_observation import (
 )
 from nexus.telemetry.usage import UsageEvent, record_prompt_window, record_usage_event
 
-READ_AT = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+# Read once, so a run that straddles UTC midnight keeps one pair of days.
+TODAY = datetime.now(timezone.utc).date()
+YESTERDAY = TODAY - timedelta(days=1)
+READ_AT = datetime.combine(TODAY, time(12), tzinfo=timezone.utc)
 WRITER_BLOCKS = {
     "system": 4580,
     "recent narrative": 14031,
@@ -57,11 +60,6 @@ REPAIR_NOTES: list[dict[str, Any]] = [
 REJECTION_NOTES: list[dict[str, Any]] = [
     {"rejection": "wire-contract-violation", "error": "private generated prose"}
 ]
-
-
-def _days() -> tuple[date, date]:
-    today = datetime.now(timezone.utc).date()
-    return today - timedelta(days=1), today
 
 
 def _window(
@@ -163,7 +161,6 @@ def _event(
 def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     """Record a writer pass before UTC midnight and three Gaia attempts after it."""
     session = str(uuid4())
-    yesterday, today = _days()
     writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
     # Gaia 1 is a manifest written before influence roles were declared.
     gaia = [
@@ -181,7 +178,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{yesterday}T23:59:59.500000Z",
+            f"{YESTERDAY}T23:59:59.500000Z",
             "skald_writer",
             1,
             "writer-model",
@@ -199,7 +196,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{today}T00:00:05Z",
+            f"{TODAY}T00:00:05Z",
             "gaia",
             2,
             "gaia-model",
@@ -216,7 +213,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{today}T00:00:10Z",
+            f"{TODAY}T00:00:10Z",
             "gaia",
             3,
             "gaia-model",
@@ -233,7 +230,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{today}T00:00:20.200000Z",
+            f"{TODAY}T00:00:20.200000Z",
             "correspondence_compaction",
             1,
             "compaction-model",
@@ -251,7 +248,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             other,
-            f"{today}T00:00:06Z",
+            f"{TODAY}T00:00:06Z",
             "gaia",
             1,
             "gaia-model",
@@ -264,7 +261,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{yesterday - timedelta(days=1)}T12:00:00Z",
+            f"{YESTERDAY - timedelta(days=1)}T12:00:00Z",
             "skald_writer",
             9,
             "writer-model",
@@ -288,12 +285,12 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
         # recorded_at::text as PostgreSQL renders it, including a session in
         # another time zone for the Gaia transition.
         "phases": [
-            {"phase": "retrieval", "recorded_at": f"{yesterday} 23:59:30.25+00"},
-            {"phase": "assembly", "recorded_at": f"{yesterday} 23:59:38.5+00"},
-            {"phase": "writer", "recorded_at": f"{yesterday} 23:59:41+00"},
-            {"phase": "gaia", "recorded_at": f"{yesterday} 19:00:11.125-05"},
-            {"phase": "staging", "recorded_at": f"{today} 00:00:20+00"},
-            {"phase": "complete", "recorded_at": f"{today} 00:00:20.5+00"},
+            {"phase": "retrieval", "recorded_at": f"{YESTERDAY} 23:59:30.25+00"},
+            {"phase": "assembly", "recorded_at": f"{YESTERDAY} 23:59:38.5+00"},
+            {"phase": "writer", "recorded_at": f"{YESTERDAY} 23:59:41+00"},
+            {"phase": "gaia", "recorded_at": f"{YESTERDAY} 19:00:11.125-05"},
+            {"phase": "staging", "recorded_at": f"{TODAY} 00:00:20+00"},
+            {"phase": "complete", "recorded_at": f"{TODAY} 00:00:20.5+00"},
         ],
         "manifests": [
             _manifest(gaia[0], provider_outcome="error"),
@@ -342,12 +339,11 @@ def test_observation_joins_each_attempt_with_its_provider_usage() -> None:
     """Manifest windows, validation codes and ledger tokens join per attempt."""
     inspection, session, _ = _two_pass_turn()
     observation = observe_turn(inspection, read_at=READ_AT)
-    yesterday, today = _days()
 
     assert observation["schema_version"] == SCHEMA_VERSION == 1
     assert observation["generation_session"] == session
-    assert observation["read_at"] == "2026-09-26T12:00:00Z"
-    assert observation["ledger_days_read"] == [str(yesterday), str(today)]
+    assert observation["read_at"] == f"{TODAY}T12:00:00Z"
+    assert observation["ledger_days_read"] == [str(YESTERDAY), str(TODAY)]
     assert observation["terminal_outcome"] == "accepted"
     attempts = _by_key(observation)
     # Sorted, stable keys; the run on an unspanned day never joins.
@@ -465,7 +461,6 @@ def test_phase_spans_cross_utc_midnight_and_offsets() -> None:
     """Consecutive transitions become spans; the last one stays open."""
     inspection, _, _ = _two_pass_turn()
     observation = observe_turn(inspection, read_at=READ_AT)
-    yesterday, today = _days()
 
     assert [(span["phase"], span["seconds"]) for span in observation["phases"]] == [
         ("retrieval", 8.25),
@@ -475,11 +470,11 @@ def test_phase_spans_cross_utc_midnight_and_offsets() -> None:
         ("staging", 0.5),
         ("complete", UNKNOWN),
     ]
-    assert observation["phases"][3]["started_at"] == f"{today}T00:00:11.125000Z"
+    assert observation["phases"][3]["started_at"] == f"{TODAY}T00:00:11.125000Z"
     assert observation["phases"][-1]["ended_at"] is None
     assert observation["wall_time"] == {
-        "started_at": f"{yesterday}T23:59:30.250000Z",
-        "ended_at": f"{today}T00:00:20.500000Z",
+        "started_at": f"{YESTERDAY}T23:59:30.250000Z",
+        "ended_at": f"{TODAY}T00:00:20.500000Z",
         "seconds": 50.25,
     }
 
@@ -487,14 +482,13 @@ def test_phase_spans_cross_utc_midnight_and_offsets() -> None:
 def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
     """A manifest-less run keeps its latest window snapshot and only safe codes."""
     session = str(uuid4())
-    _, today = _days()
     record = _window(session, "gaia", 1, "gaia-model", GAIA_BLOCKS)
     record_prompt_window(record)
     record.validation_notes.extend(REPAIR_NOTES + REJECTION_NOTES)
     record_prompt_window(record)
     inspection = {
         "session": {"session_id": session, "terminal_outcome": None},
-        "phases": [{"phase": "retrieval", "recorded_at": f"{today} 00:00:01+00"}],
+        "phases": [{"phase": "retrieval", "recorded_at": f"{TODAY} 00:00:01+00"}],
         "manifests": [],
         "jobs": [],
     }
@@ -502,7 +496,7 @@ def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
     observation = observe_turn(inspection, read_at=READ_AT)
 
     assert observation["terminal_outcome"] is None
-    assert observation["ledger_days_read"] == [str(today)]
+    assert observation["ledger_days_read"] == [str(TODAY)]
     assert observation["wall_time"]["seconds"] == UNKNOWN
     (attempt,) = observation["attempts"]
     assert attempt["outcome"] == attempt["provider_outcome"] == UNKNOWN
@@ -545,8 +539,79 @@ def test_session_without_phases_reads_no_ledger_day() -> None:
     assert observation["attempts"][0]["usage"]["provenance"] == UNKNOWN
 
 
+def test_summary_jobs_sharing_an_attempt_number_join_after_midnight() -> None:
+    """Episode and season summaries share attempt 1 but not their output cap."""
+    session = str(uuid4())
+    # The turn completes before UTC midnight; a new_season transition queues an
+    # episode and a season summary that the worker runs after it.
+    for ts, input_tokens, cap in (
+        (f"{TODAY}T00:00:31Z", 41000, 8000),
+        (f"{TODAY}T00:00:47Z", 9000, 12000),
+    ):
+        record_usage_event(
+            _event(
+                session,
+                ts,
+                "summaries",
+                1,
+                "summary-model",
+                anthropic=True,
+                outcome="accepted",
+                input_tokens=input_tokens,
+                output_tokens=1500,
+                total_tokens=input_tokens + 1500,
+                max_output_tokens=cap,
+            )
+        )
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [
+            {"phase": "retrieval", "recorded_at": f"{YESTERDAY} 23:59:40+00"},
+            {"phase": "complete", "recorded_at": f"{YESTERDAY} 23:59:58+00"},
+        ],
+        "manifests": [],
+        "jobs": [
+            {
+                "id": job_id,
+                "state": "succeeded",
+                "generation_session_id": session,
+                "queue": "narrative_summary",
+            }
+            for job_id in (1, 2)
+        ],
+    }
+
+    # A read before midnight names only the phases' day; nothing ran yet.
+    before = datetime.combine(YESTERDAY, time(23, 59, 59), tzinfo=timezone.utc)
+    early = observe_turn(inspection, read_at=before)
+    assert early["ledger_days_read"] == [str(YESTERDAY)]
+    assert early["attempts"] == []
+
+    observation = observe_turn(inspection, read_at=READ_AT)
+    assert observation["ledger_days_read"] == [str(YESTERDAY), str(TODAY)]
+    (summaries,) = observation["attempts"]
+    assert (summaries["seat"], summaries["attempt"]) == ("summaries", 1)
+    assert summaries["model"] == "summary-model"
+    usage = summaries["usage"]
+    assert usage["events"] == 2
+    assert usage["provider"] == "anthropic"
+    assert usage["transport"] == "anthropic_messages"
+    assert usage["reasoning_effort"] is None
+    assert usage["max_output_tokens"] == [8000, 12000]
+    assert (usage["input_tokens"], usage["output_tokens"]) == (50000, 3000)
+    assert observation["usage_totals"]["input_tokens"] == 50000
+    assert json.loads(json.dumps(observation)) == observation
+    summary = format_turn_summary(observation)
+    assert f"ledger {YESTERDAY} to {TODAY}" in summary.splitlines()[0]
+    assert (
+        "  usage in 50,000 · cached unknown · cache write unknown · out 3,000 · "
+        "reasoning unknown · effort - · max out 8,000/12,000 "
+        "[provider_usage_ledger ×2]"
+    ) in summary.splitlines()
+
+
 def test_join_refuses_rows_it_cannot_attribute() -> None:
-    """Foreign sessions, unread days, naive clocks and model drift raise."""
+    """Foreign sessions, unread days, naive clocks, model or provider drift raise."""
     inspection, session, other = _two_pass_turn()
     days = ledger_days(inspection)
     events, windows = read_turn_ledgers(session, days)
@@ -566,6 +631,12 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
     ]
     with pytest.raises(ValueError, match="conflicting models"):
         derive_turn_observation(inspection, drifted, windows, ledger_days=days)
+    accepted = next(
+        event for event in events if (event.seat, event.attempt) == ("gaia", 3)
+    )
+    rerouted = [*events, accepted.model_copy(update={"provider": "other-provider"})]
+    with pytest.raises(ValueError, match="conflicting provider values"):
+        derive_turn_observation(inspection, rerouted, windows, ledger_days=days)
     naive = {
         **inspection,
         "phases": [{"phase": "retrieval", "recorded_at": "2026-09-24 21:24:10"}],
@@ -577,13 +648,12 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
 def test_summary_renders_one_concise_read_of_the_turn() -> None:
     """The --summary text states freshness, spans, each attempt and totals."""
     inspection, session, _ = _two_pass_turn()
-    yesterday, today = _days()
     summary = format_turn_summary(observe_turn(inspection, read_at=READ_AT))
     lines = summary.splitlines()
 
     assert lines[0] == (
-        f"Turn {session} (accepted) · read 2026-09-26T12:00:00Z · ledger "
-        f"{yesterday}, {today} · schema v1"
+        f"Turn {session} (accepted) · read {TODAY}T12:00:00Z · ledger "
+        f"{YESTERDAY} to {TODAY} · schema v1"
     )
     assert lines[1] == (
         "Wall 50.250s: retrieval 8.250s → assembly 2.500s → writer 30.125s → "

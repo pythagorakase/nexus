@@ -1,11 +1,19 @@
 """One derived, versioned observation of a generation turn.
 
-The observation joins a turn's durable records on read and is never stored.
-Every attempt is keyed by ``(generation_session, seat, attempt)`` and carries
-its rendered window from the attempt manifest (or, for an attempt without a
-manifest, the prompt-window ledger), its validation codes, and the tokens the
-provider reported in the usage ledger. Observed phase transitions become spans,
-and correlated job work is counted by queue and state.
+The observation serves decisions about a turn's token economics: which seat and
+attempt spend the prompt window and the provider's tokens, what retries and
+repairs cost, and where the wall time goes (a seat's budget, retry policy or
+model choice). It is read through ``nexus inspect-turn --json`` or
+``--summary``, states its freshness in ``read_at`` and ``ledger_days_read``,
+and is proven by ``tests/test_turn_observation.py``.
+
+The observation joins one generation session's durable records on read and is
+never stored; a replacement session (``replaced_by_session_id``) is observed on
+its own. Every attempt is keyed by ``(generation_session, seat, attempt)`` and
+carries its rendered window from the attempt manifest (or, for an attempt
+without a manifest, the prompt-window ledger), its validation codes, and the
+tokens the provider reported in the usage ledger. Observed phase transitions
+become spans, and correlated job work is counted by queue and state.
 
 Token counts are renderer or provider truth only: nothing is estimated and
 nothing is priced (Decision 9, #858). Each section names its ``provenance``.
@@ -13,10 +21,24 @@ A value no source recorded reads ``"unknown"``; ``null`` means the source
 records that the thing has not happened (no terminal outcome yet, no later
 phase) or was not sent (no reasoning effort on the request).
 
+Seats without a manifest or window record (summaries, compaction) restart
+attempt numbers at 1 for each request, so such a row can sum several provider
+calls that share one attempt number; ``events`` counts them. An attempt's
+``transport``, ``reasoning_effort`` and ``max_output_tokens`` are the value
+every event recorded, or the sorted distinct values when events differ. Only a
+conflicting model or provider refuses the join.
+
+``usage_totals`` adds each field as the providers reported it. Providers count
+differently (OpenAI's ``input_tokens`` includes cached input; Anthropic's
+excludes cache reads and writes), so a total across providers is not one
+comparable quantity; every attempt names its provider and transport.
+
 Schema version 1 has these top-level keys: ``schema_version``,
 ``generation_session``, ``read_at`` (UTC), ``ledger_days_read`` (every UTC day
-spanned by the observed phases), ``terminal_outcome``, ``wall_time``,
-``phases``, ``attempts``, ``usage_totals`` and ``jobs``.
+from the first observed phase through the later of the last phase and
+``read_at``, so correlated work that finishes after the turn is read),
+``terminal_outcome``, ``wall_time``, ``phases``, ``attempts``,
+``usage_totals`` and ``jobs``.
 """
 
 from __future__ import annotations
@@ -67,12 +89,21 @@ def _observed_phases(inspection: Mapping[str, Any]) -> list[tuple[str, datetime]
     return [(row["phase"], _utc(row["recorded_at"])) for row in inspection["phases"]]
 
 
-def ledger_days(inspection: Mapping[str, Any]) -> list[str]:
-    """Return every UTC day spanned by the turn's observed phase transitions."""
+def ledger_days(
+    inspection: Mapping[str, Any], *, through: Optional[datetime] = None
+) -> list[str]:
+    """Return every UTC day from the turn's first observed phase onward.
+
+    The days run through the last phase, or through ``through`` (the read time)
+    when that is later, so background work that finishes on a later UTC day
+    is read. A turn without observed phases names no day.
+    """
     moments = [moment for _, moment in _observed_phases(inspection)]
     if not moments:
         return []
     first, last = min(moments).date(), max(moments).date()
+    if through is not None:
+        last = max(last, through.astimezone(timezone.utc).date())
     return [
         (first + timedelta(days=offset)).isoformat()
         for offset in range((last - first).days + 1)
@@ -97,9 +128,9 @@ def read_turn_ledgers(
 def observe_turn(
     inspection: Mapping[str, Any], *, read_at: Optional[datetime] = None
 ) -> dict[str, Any]:
-    """Read the ledgers for every day the turn spans and derive its observation."""
+    """Read the ledgers from the turn's first phase through the read and join them."""
     read_at = read_at or datetime.now(timezone.utc)
-    days = ledger_days(inspection)
+    days = ledger_days(inspection, through=read_at)
     events, windows = read_turn_ledgers(str(inspection["session"]["session_id"]), days)
     return derive_turn_observation(
         inspection, events, windows, ledger_days=days, read_at=read_at
@@ -118,7 +149,7 @@ def derive_turn_observation(
 
     ``ledger_days`` names the UTC days whose ledgers supplied ``usage_events``
     and ``windows``. Rows from another session or another day, or sources that
-    disagree on an attempt's model or request, raise instead of joining.
+    disagree on an attempt's model or provider, raise instead of joining.
     """
     read_at = read_at or datetime.now(timezone.utc)
     session_id = str(inspection["session"]["session_id"])
@@ -297,6 +328,17 @@ def _agreed(session_id: str, key: AttemptKey, field: str, values: set[Any]) -> A
     return next(iter(values))
 
 
+def _profile(values: set[Any]) -> Any:
+    """Return the value every event recorded, or the sorted distinct values.
+
+    Request settings are not identity: calls that share an attempt number on a
+    seat without a manifest (an episode and a season summary) may differ.
+    """
+    if len(values) == 1:
+        return next(iter(values))
+    return sorted(values, key=lambda value: (value is None, value))
+
+
 def _usage(
     session_id: str, key: AttemptKey, events: list[UsageEvent]
 ) -> dict[str, Any]:
@@ -316,19 +358,20 @@ def _usage(
                 UNKNOWN,
             ),
         }
-    result: dict[str, Any] = {"provenance": USAGE_LEDGER, "events": len(events)}
-    for field in ("provider", "transport"):
-        result[field] = _agreed(
-            session_id, key, field, {getattr(event, field) for event in events}
-        )
-    result["outcomes"] = [event.outcome for event in events]
+    result: dict[str, Any] = {
+        "provenance": USAGE_LEDGER,
+        "events": len(events),
+        "provider": _agreed(
+            session_id, key, "provider", {event.provider for event in events}
+        ),
+        "transport": _profile({event.transport for event in events}),
+        "outcomes": [event.outcome for event in events],
+    }
     for field in USAGE_TOKEN_FIELDS:
         result[field] = _sum_reported(getattr(event, field) for event in events)
     # The generation profile the request sent; null means none was sent.
     for field in ("reasoning_effort", "max_output_tokens"):
-        result[field] = _agreed(
-            session_id, key, field, {getattr(event, field) for event in events}
-        )
+        result[field] = _profile({getattr(event, field) for event in events})
     return result
 
 
@@ -400,6 +443,13 @@ def _duration(value: Any) -> str:
     return f"{value:.3f}s" if isinstance(value, float) else str(value)
 
 
+def _setting(value: Any) -> str:
+    """Render a request setting; distinct values join and unsent reads ``-``."""
+    if isinstance(value, list):
+        return "/".join(_setting(item) for item in value)
+    return "-" if value is None else _tokens(value)
+
+
 def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
     """Render one attempt; a section no source recorded collapses to unknown."""
     window, usage = attempt["window"], attempt["usage"]
@@ -434,8 +484,8 @@ def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
             f"{_tokens(usage['cache_creation_tokens'])} · out "
             f"{_tokens(usage['output_tokens'])} · reasoning "
             f"{_tokens(usage['reasoning_tokens'])} · effort "
-            f"{usage['reasoning_effort'] or '-'} · max out "
-            f"{_tokens(usage['max_output_tokens'] or '-')} "
+            f"{_setting(usage['reasoning_effort'])} · max out "
+            f"{_setting(usage['max_output_tokens'])} "
             f"[{usage['provenance']} ×{usage['events']}]"
         )
     if validation["provenance"] == UNKNOWN:
@@ -453,7 +503,11 @@ def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
 
 def format_turn_summary(observation: Mapping[str, Any]) -> str:
     """Render the observation as a few concise lines of text, in tokens."""
-    days = ", ".join(observation["ledger_days_read"]) or "none"
+    # The days read are contiguous, so the first and last name them all.
+    read_days = observation["ledger_days_read"]
+    days = read_days[0] if read_days else "none"
+    if len(read_days) > 1:
+        days = f"{read_days[0]} to {read_days[-1]}"
     lines = [
         f"Turn {observation['generation_session']} "
         f"({observation['terminal_outcome'] or 'open'}) · read "

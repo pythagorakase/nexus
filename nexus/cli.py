@@ -3771,21 +3771,25 @@ def _print_window_replay(replay: Dict[str, Any]) -> None:
 
 
 def run_inspect_turn(args: argparse.Namespace) -> Dict[str, Any]:
-    """Inspect durable turn references and derive the turn's joined observation."""
+    """Inspect durable turn references; JSON and summary reads join the ledgers."""
     from contextlib import closing
     from nexus.api.slot_utils import get_slot_db_url
     from nexus.telemetry.attempt_manifest import inspect_turn
-    from nexus.telemetry.turn_observation import observe_turn
     import psycopg2
 
     with closing(psycopg2.connect(get_slot_db_url(slot=args.slot))) as conn:
         result = inspect_turn(conn, session=args.session, chunk=args.chunk)
-    return {
+    payload: Dict[str, Any] = {
         "success": True,
         "slot": args.slot,
         "turn_inspection": result,
-        "observation": observe_turn(result),
     }
+    # The table read never depends on the usage and prompt-window ledgers.
+    if args.json or args.summary:
+        from nexus.telemetry.turn_observation import observe_turn
+
+        payload["observation"] = observe_turn(result)
+    return payload
 
 
 def run_prune_manifests(args: argparse.Namespace) -> Dict[str, Any]:
