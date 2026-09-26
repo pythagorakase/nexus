@@ -2,8 +2,10 @@
 """
 Database migration runner for NEXUS.
 
-Applies SQL migrations to all slot databases and the template database.
-Tracks applied migrations in a per-database `schema_migrations` table.
+The sole migration runner: applies migrations to all slot databases and the
+template database, and tracks applied migrations in a per-database
+`schema_migrations` table. New migrations are SQL; Python migrations run only
+when their version is in PYTHON_MIGRATION_ALLOWLIST.
 
 Usage:
     python scripts/migrate.py --status          # Show pending migrations
@@ -41,9 +43,60 @@ logging.basicConfig(
 
 # Migration directory relative to this script
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
+# Every migration is a file named NNN_name.sql or NNN_name.py.
+MIGRATION_FILENAME = re.compile(r"^([0-9]{3})_([a-z0-9_]+)\.(sql|py)$")
+# Interpreter and operating-system artifacts tolerated beside the migrations.
+IGNORED_MIGRATION_ENTRIES = frozenset({"__pycache__", ".DS_Store"})
 SCRIPT_ONLY_MIGRATIONS = {
     "008",  # migrations/008_populate_mock_database.py is a manual seed script.
 }
+# New migrations are SQL. Python is reserved for mechanics one SQL transaction
+# cannot express (for example CREATE INDEX CONCURRENTLY); a new entry needs a
+# comment giving its reason. Unlisted Python migrations abort discovery.
+PYTHON_MIGRATION_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # Historical Python migrations, preserved as written (#810).
+        "008",
+        "023",
+        "025",
+        "027",
+        "028",
+        "029",
+        "030",
+        "031",
+        "032",
+        "033",
+        "034",
+        "035",
+        "036",
+        "037",
+        "038",
+        "039",
+        "042",
+        "043",
+        "045",
+        "046",
+        "047",
+        "048",
+        "049",
+        "050",
+        "051",
+        "052",
+        "053",
+        "054",
+        "055",
+        "056",
+        "057",
+        "058",
+        "059",
+        "060",
+        "061",
+        "062",
+        "078",
+        "114",
+        "126",
+    }
+)
 
 # All target databases
 TEMPLATE_DB = "NEXUS_template"
@@ -119,12 +172,10 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
     """
     with conn.cursor() as cur:
         # Check if table exists with correct schema
-        cur.execute(
-            """
+        cur.execute("""
             SELECT column_name FROM information_schema.columns
             WHERE table_name = 'schema_migrations' AND table_schema = 'public'
-            """
-        )
+            """)
         columns = {row[0] for row in cur.fetchall()}
 
         if columns and "version" not in columns:
@@ -142,8 +193,7 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
             if dry_run:
                 LOG.info("  [DRY-RUN] Would create schema_migrations table")
                 return False
-            cur.execute(
-                """
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -157,8 +207,7 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
                     'Migration name from the migration filename or bootstrap list.';
                 COMMENT ON COLUMN schema_migrations.applied_at IS
                     'Database transaction timestamp when the migration stamp was inserted.';
-                """
-            )
+                """)
     conn.commit()
     return True
 
@@ -204,18 +253,50 @@ def discover_migrations() -> List[Tuple[str, str, Path]]:
     """
     Discover SQL and managed Python migration files.
 
+    Every entry in MIGRATIONS_DIR other than IGNORED_MIGRATION_ENTRIES must be a
+    file matching MIGRATION_FILENAME whose version no other file uses, and every
+    Python migration's version must be in PYTHON_MIGRATION_ALLOWLIST.
+
     Returns list of (version, name, path) tuples sorted by version.
+
+    Raises:
+        RuntimeError: If an entry is not a migration file, two files share a
+            version, or a Python migration is not allowlisted.
     """
     migrations = []
-    pattern = re.compile(r"^(\d{3})_(.+)\.(sql|py)$")
+    seen: dict[str, Path] = {}
 
-    for path in MIGRATIONS_DIR.iterdir():
-        match = pattern.match(path.name)
-        if match:
-            version, name, _extension = match.groups()
-            if version in SCRIPT_ONLY_MIGRATIONS:
-                continue
-            migrations.append((version, name, path))
+    for path in sorted(MIGRATIONS_DIR.iterdir()):
+        if path.name in IGNORED_MIGRATION_ENTRIES:
+            continue
+        match = MIGRATION_FILENAME.match(path.name)
+        if match is None or not path.is_file():
+            raise RuntimeError(
+                f"Unrecognized entry in {MIGRATIONS_DIR}: {path}. Migrations are "
+                "files named NNN_name.sql or NNN_name.py (lowercase snake_case)."
+            )
+        version, name, extension = match.groups()
+        if version == "000":
+            raise RuntimeError(
+                f"Migration {path} uses version 000; versions start at 001, and a "
+                "000 file would sort before every stamped migration and run against "
+                "the current schema"
+            )
+        if version in seen:
+            raise RuntimeError(
+                f"Migration version {version} is used by both {seen[version]} "
+                f"and {path}"
+            )
+        seen[version] = path
+        if extension == "py" and version not in PYTHON_MIGRATION_ALLOWLIST:
+            raise RuntimeError(
+                f"Python migration {path} is not in PYTHON_MIGRATION_ALLOWLIST. "
+                "New migrations are SQL; allowlist Python in scripts/migrate.py "
+                "only with a reason comment."
+            )
+        if version in SCRIPT_ONLY_MIGRATIONS:
+            continue
+        migrations.append((version, name, path))
 
     return sorted(migrations, key=lambda x: x[0])
 
@@ -292,7 +373,13 @@ def migrate_database(
     Apply pending migrations to a single database.
 
     Returns (applied_count, skipped_count).
+
+    The migration tree is validated before the database is touched, so a
+    duplicate, misnamed, or unallowlisted migration fails without leaving a
+    tracking table or bootstrap stamps behind.
     """
+    all_migrations = discover_migrations()
+
     if not db_exists(dbname):
         LOG.warning("Database %s does not exist, skipping", dbname)
         return (0, 0)
@@ -316,7 +403,6 @@ def migrate_database(
 
         if not table_ready:
             # In dry-run mode and table doesn't exist - show all migrations as pending
-            all_migrations = discover_migrations()
             LOG.info(
                 "  [DRY-RUN] Would bootstrap %d existing migrations",
                 len(BOOTSTRAP_MIGRATIONS),
@@ -341,8 +427,6 @@ def migrate_database(
         # treat bootstrapped migrations as applied
         if dry_run and bootstrap_needed:
             applied = {v for v, _ in BOOTSTRAP_MIGRATIONS}
-
-        all_migrations = discover_migrations()
 
         pending = [(v, n, p) for v, n, p in all_migrations if v not in applied]
 
@@ -388,12 +472,10 @@ def show_status() -> None:
             conn = get_connection(dbname)
             # Don't modify in status mode - just check if table exists with right schema
             with conn.cursor() as cur:
-                cur.execute(
-                    """
+                cur.execute("""
                     SELECT column_name FROM information_schema.columns
                     WHERE table_name = 'schema_migrations' AND table_schema = 'public'
-                    """
-                )
+                    """)
                 columns = {row[0] for row in cur.fetchall()}
 
             if not columns or "version" not in columns:

@@ -78,6 +78,8 @@ python scripts/migrate.py --template
 
 Migration files live in `migrations/` (e.g., `009_remove_assets_save_slots.sql`). The runner tracks applied migrations in a per-database `schema_migrations` table.
 
+`scripts/migrate.py` is the sole migration runner; never apply migration SQL by hand. New migrations are SQL (`NNN_name.sql`, next free number). A Python migration runs only if its version is in `PYTHON_MIGRATION_ALLOWLIST` in `scripts/migrate.py`, with a comment giving the reason (for example, `CREATE INDEX CONCURRENTLY`). Discovery aborts on duplicate versions and on any unrecognized file in `migrations/`; see `docs/database.md`.
+
 **Locked slots are skipped** unless `--write-locked-slot` is supplied (for example,
 `python scripts/migrate.py --slot 1 --write-locked-slot`). The override applies only
 to the maintenance session; the database stays locked and other backends stay connected.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Delete the unreachable retry and resilient OpenAI facades (#813)",
+  "reason": "Retire scripts/propagate_schema.py so scripts/migrate.py is the sole migration runner (#810)",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -52,7 +52,6 @@
     "scripts/pr_review.py",
     "scripts/process_characters.py",
     "scripts/process_factions.py",
-    "scripts/propagate_schema.py",
     "scripts/query_narratives.py",
     "scripts/query_narratives_simple.py",
     "scripts/query_narratives_vector.py",
