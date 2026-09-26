@@ -15,7 +15,6 @@ function makePlace(overrides: Partial<Place> = {}): Place {
     history: null,
     currentStatus: null,
     inhabitants: null,
-    secrets: null,
     coordinates: null,
     geom: null,
     extraData: {
@@ -89,7 +88,6 @@ describe("MapPlaceDialog", () => {
         summary: " \n ",
         history: "\t",
         currentStatus: " ",
-        secrets: "\n",
         inhabitants: [" "],
       }),
     );
@@ -98,7 +96,6 @@ describe("MapPlaceDialog", () => {
       "Summary",
       "History",
       "Current Status",
-      "Secrets",
       "Inhabitants",
     ]) {
       expect(screen.queryByText(section)).not.toBeInTheDocument();
@@ -107,11 +104,18 @@ describe("MapPlaceDialog", () => {
 
   it.each([
     { history: "The Retrograde survey named the annex in 2180." },
-    { secrets: "A spare valve is hidden behind the north panel." },
     { inhabitants: ["Sana Pell"] },
   ])("keeps sparse but genuine details visible: %j", (details) => {
     renderDialog(makePlace(details));
     expect(screen.queryByText("No details recorded yet.")).not.toBeInTheDocument();
     expect(screen.getByText(Object.values(details).flat()[0])).toBeInTheDocument();
+  });
+
+  it("never renders authored secrets, even from a stale secret-bearing payload", () => {
+    const secret = "A spare valve is hidden behind the north panel.";
+    renderDialog({ ...makePlace(), secrets: secret } as Place);
+    expect(screen.queryByText(secret)).not.toBeInTheDocument();
+    expect(screen.queryByText("Secrets")).not.toBeInTheDocument();
+    expect(screen.getByText("No details recorded yet.")).toBeInTheDocument();
   });
 });

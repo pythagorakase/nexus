@@ -66,7 +66,7 @@ export const places = pgTable("places", {
   inhabitants: text("inhabitants").array(),
   history: text("history"),
   currentStatus: text("current_status"),
-  secrets: text("secrets"),
+  // No `secrets`: authored place secrets never reach the player (issue #769).
   extraData: jsonb("extra_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
@@ -102,22 +102,6 @@ export const characterRelationships = pgTable("character_relationships", {
   extraData: jsonb("extra_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`CURRENT_TIMESTAMP`),
-});
-
-// Character psychology table
-export const characterPsychology = pgTable("character_psychology", {
-  characterId: bigint("character_id", { mode: "number" }).primaryKey().references(() => characters.id),
-  selfConcept: jsonb("self_concept"),
-  behavior: jsonb("behavior"),
-  cognitiveFramework: jsonb("cognitive_framework"),
-  temperament: jsonb("temperament"),
-  relationalStyle: jsonb("relational_style"),
-  defenseMechanisms: jsonb("defense_mechanisms"),
-  characterArc: jsonb("character_arc"),
-  secrets: jsonb("secrets"),
-  validationEvidence: jsonb("validation_evidence"),
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
 });
 
 // Character images table (in assets schema)
@@ -209,7 +193,6 @@ export type CharacterListEntry = Character & {
   portraitPath: string | null;
 };
 export type CharacterRelationship = typeof characterRelationships.$inferSelect;
-export type CharacterPsychology = typeof characterPsychology.$inferSelect;
 export type CharacterImage = typeof characterImages.$inferSelect;
 export type PlaceImage = typeof placeImages.$inferSelect;
 export type Season = typeof seasons.$inferSelect;

@@ -18,8 +18,6 @@ const PLACE = {
     "Built over the ashes of the third Conflagration, the Concourse was meant as a memorial and became a market instead — grief and commerce sharing the same cold marble.",
   currentStatus:
     "Quiet at this hour. A single gear turns in the orrery; the Archivist keeps his post by the brass armature.",
-  secrets:
-    "The sealed envelope in the Archivist's drawer carries a name the Veil was paid to erase.",
   extraData: null,
   createdAt: "2026-06-01T00:00:00Z",
   updatedAt: "2026-06-01T00:00:00Z",
@@ -40,7 +38,7 @@ const noop = () => {};
 
 // Full dossier: type eyebrow, title, zone + coordinates meta, the glyph
 // divider, and every prose section (summary / history / current status /
-// inhabitants / secrets).
+// inhabitants).
 export const Open = () => (
   <div style={{ position: "relative", minHeight: 620 }}>
     <MapPlaceDialog

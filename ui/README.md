@@ -87,7 +87,6 @@ peers); the built PWA is served from `dist/public` by
 - `GET /api/narrative/chunks/:episodeId` - Paginated chunks
 - `GET /api/characters` - Character listings
 - `GET /api/characters/:id/relationships` - Relationship network
-- `GET /api/characters/:id/psychology` - Psychology profile
 - `GET /api/places` - Geographic locations
 - `GET /api/zones` - Zone boundaries
 - `GET /api/factions` - Faction information

@@ -42,7 +42,6 @@ Preferred communication style: Simple, everyday language.
 - `/api/narrative/chunks/:episodeId` - Paginated chunks for an episode
 - `/api/characters` - Character listings with ID range filtering
 - `/api/characters/:id/relationships` - Character relationship network
-- `/api/characters/:id/psychology` - Detailed psychological profile
 - `/api/places` - Geographic locations with coordinates
 - `/api/zones` - Zone boundaries (GeoJSON polygons)
 - `/api/factions` - Faction information

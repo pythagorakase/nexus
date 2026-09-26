@@ -19,6 +19,8 @@ from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonis
 
 pytestmark = pytest.mark.requires_postgres
 
+SECRET = "A spare valve is hidden behind the north panel."
+
 
 @pytest.fixture
 def place_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
@@ -104,13 +106,15 @@ def test_place_stub_reads_preserve_provenance_and_later_facts(
             assert dict(cur.fetchone()) == stored
             cur.execute(
                 """
-                UPDATE places SET summary = %s, history = %s, current_status = %s
+                UPDATE places
+                SET summary = %s, history = %s, current_status = %s, secrets = %s
                 WHERE id = %s
                 """,
                 (
                     "The annex houses the station's reserve pumps.",
                     "Built after the south-ring freeze.",
                     "Workers are repairing the intake.",
+                    SECRET,
                     inserted["id"],
                 ),
             )
@@ -123,3 +127,6 @@ def test_place_stub_reads_preserve_provenance_and_later_facts(
             assert annex["history"] == "Built after the south-ring freeze."
             assert annex["currentStatus"] == "Workers are repairing the intake."
             assert annex["extraData"] == stored["extra_data"]
+            # Authored secrets stay in the row but never reach the player.
+            assert "secrets" not in annex
+            assert SECRET not in response.text

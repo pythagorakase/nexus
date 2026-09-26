@@ -188,7 +188,6 @@ class TestWorldReads:
             "inhabitants",
             "history",
             "currentStatus",
-            "secrets",
             "extraData",
             "createdAt",
             "updatedAt",
@@ -238,10 +237,13 @@ class TestWorldReads:
             assert {"character1Id", "character2Id", "relationshipType"} <= set(
                 relationships[0].keys()
             )
+        # Hidden psychology is retired from the ordinary reader (issue #769):
+        # the path is unrouted, not a lookup that found no row.
         psychology = client.get(
             f"/api/characters/{character_id}/psychology?slot={READ_SLOT}"
         )
-        assert psychology.status_code in (200, 404)
+        assert psychology.status_code == 404
+        assert psychology.json() == {"detail": "Not Found"}
 
     def test_invalid_slot_is_400(self, client: TestClient) -> None:
         assert client.get("/api/places?slot=9").status_code == 400
