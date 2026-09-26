@@ -26,7 +26,6 @@ import type {
   SlotState,
 } from "@/types/narrative";
 import { parseNarrativePhase } from "@/types/narrative";
-import type { SettingsPayload } from "@/types/settings";
 import type { OutlineRow } from "@/lib/narrative-nav";
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -253,23 +252,31 @@ export interface RetrogradeStageRecord {
   detail: Record<string, unknown>;
 }
 
+interface RetrogradeStatusRecord {
+  /**
+   * The transition run that owns this record; null before any run in this
+   * gateway process. Each run starts a record under a new identity.
+   */
+  run: string | null;
+  stages: RetrogradeStageRecord[];
+  /** nexus.toml [orrery.retrograde.wizard] status_poll_interval_seconds. */
+  status_poll_interval_seconds: number;
+}
+
 /**
- * GET /api/story/new/retrograde/status. "idle" means this gateway process has
- * recorded no stage for the slot's current run; "failed" names the stage
- * that failed in detail.stage.
+ * GET /api/story/new/retrograde/status. "idle" means the run has recorded no
+ * stage yet (or no run has started); "failed" names the stage that failed
+ * in detail.stage.
  */
-export type RetrogradeStatus =
-  | { stage: "idle"; stages: RetrogradeStageRecord[] }
-  | {
-      stage: RetrogradeStage | "done";
-      stages: RetrogradeStageRecord[];
-      detail: Record<string, unknown>;
-    }
-  | {
-      stage: "failed";
-      stages: RetrogradeStageRecord[];
-      detail: Record<string, unknown> & { stage: RetrogradeStage };
-    };
+export type RetrogradeStatus = RetrogradeStatusRecord &
+  (
+    | { stage: "idle" }
+    | { stage: RetrogradeStage | "done"; detail: Record<string, unknown> }
+    | {
+        stage: "failed";
+        detail: Record<string, unknown> & { stage: RetrogradeStage };
+      }
+  );
 
 const RETROGRADE_STATUS_STAGES: readonly string[] = [
   ...RETROGRADE_STAGES,
@@ -278,7 +285,10 @@ const RETROGRADE_STATUS_STAGES: readonly string[] = [
   "idle",
 ];
 
-/** Read the in-flight transition's Retrograde stage for a slot. */
+/**
+ * Read a slot's Retrograde record: the run that owns it, its stage, and the
+ * interval to read it at (a player route, unlike GET /api/settings).
+ */
 export async function getRetrogradeStatus(
   slot: number,
   signal?: AbortSignal,
@@ -287,7 +297,11 @@ export async function getRetrogradeStatus(
     `/api/story/new/retrograde/status?slot=${slot}`,
     signal,
   );
-  if (!RETROGRADE_STATUS_STAGES.includes(status?.stage) || !Array.isArray(status.stages)) {
+  if (
+    !RETROGRADE_STATUS_STAGES.includes(status?.stage) ||
+    !Array.isArray(status.stages) ||
+    !(typeof status.run === "string" || status.run === null)
+  ) {
     throw new Error(`Unrecognized Retrograde status: ${JSON.stringify(status)}`);
   }
   if (
@@ -295,6 +309,12 @@ export async function getRetrogradeStatus(
     !(RETROGRADE_STAGES as readonly unknown[]).includes(status.detail?.stage)
   ) {
     throw new Error(`Retrograde failure names no known stage: ${JSON.stringify(status.detail)}`);
+  }
+  const seconds: unknown = status.status_poll_interval_seconds;
+  if (typeof seconds !== "number" || !(seconds > 0)) {
+    throw new Error(
+      "nexus.toml [orrery.retrograde.wizard] status_poll_interval_seconds must be a positive number",
+    );
   }
   return status;
 }
@@ -306,19 +326,4 @@ export async function getRetrogradeStatus(
 export function retrogradeStageOf(status: RetrogradeStatus): RetrogradeStage | null {
   if (status.stage === "idle" || status.stage === "done") return null;
   return status.stage === "failed" ? status.detail.stage : status.stage;
-}
-
-/**
- * Seconds between Retrograde status reads while a transition is in flight:
- * nexus.toml [orrery.retrograde.wizard] status_poll_interval_seconds.
- */
-export async function getRetrogradeStatusPollSeconds(signal?: AbortSignal): Promise<number> {
-  const settings = await getJson<SettingsPayload>("/api/settings", signal);
-  const seconds = settings.orrery?.retrograde?.wizard?.status_poll_interval_seconds;
-  if (typeof seconds !== "number" || !(seconds > 0)) {
-    throw new Error(
-      "nexus.toml [orrery.retrograde.wizard] status_poll_interval_seconds must be a positive number",
-    );
-  }
-  return seconds;
 }

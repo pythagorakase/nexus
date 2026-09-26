@@ -6,7 +6,6 @@ import { rememberActiveSlot } from "@/lib/active-slot";
 import {
     RETROGRADE_STAGES,
     getRetrogradeStatus,
-    getRetrogradeStatusPollSeconds,
     retrogradeStageOf,
     type RetrogradeStage,
     type RetrogradeStatus,
@@ -92,29 +91,22 @@ class StaleWizardState extends Error {}
 export const GENESIS_STAGES = [...RETROGRADE_STAGES, "bootstrap"] as const;
 type GenesisStage = (typeof GENESIS_STAGES)[number];
 
-const isFinished = (status: RetrogradeStatus) => status.stage === "done" || status.stage === "failed";
-
-/** What one transition's stage reads have seen of the gateway's run. */
-interface StageReads {
-    /**
-     * A read found the run idle or in progress. Until then a finished record
-     * is the previous run's: the gateway keeps it until this run resets it.
-     */
-    runSeen: boolean;
-}
-
 /**
  * Read the gateway's Retrograde stage every `intervalMs` until `signal`
- * aborts or this run reports done or failed. Reads never overlap.
+ * aborts or this run reports done or failed. `previousRun` is the run that
+ * owned the record before the transition was posted: the gateway keeps that
+ * record until this run replaces it under a new identity, so records still
+ * carrying it are skipped and any other record is this run's, terminal or
+ * not. Reads never overlap.
  */
 function pollRetrogradeStages(
     slot: number,
+    previousRun: string | null,
     intervalMs: number,
     signal: AbortSignal,
     onStage: (stage: RetrogradeStage) => void,
     onError: (error: Error) => void,
-): StageReads {
-    const reads: StageReads = { runSeen: false };
+): void {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const read = async () => {
         let status: RetrogradeStatus;
@@ -125,19 +117,15 @@ function pollRetrogradeStages(
             return;
         }
         if (signal.aborted) return;
-        const finished = isFinished(status);
-        reads.runSeen ||= !finished;
-        if (!reads.runSeen) {
-            timer = setTimeout(read, intervalMs);
-            return;
+        if (status.run !== previousRun) {
+            const stage = retrogradeStageOf(status);
+            if (stage !== null) onStage(stage);
+            if (status.stage === "done" || status.stage === "failed") return;
         }
-        const stage = retrogradeStageOf(status);
-        if (stage !== null) onStage(stage);
-        if (!finished) timer = setTimeout(read, intervalMs);
+        timer = setTimeout(read, intervalMs);
     };
     timer = setTimeout(read, intervalMs);
     signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
-    return reads;
 }
 
 // User-facing phase titles; the seed phase is presented as "Introduction"
@@ -488,11 +476,20 @@ export function InteractiveWizard({
         abortController.signal.addEventListener("abort", () => stagePoll.abort(), { once: true });
 
         try {
-            const pollSeconds = await getRetrogradeStatusPollSeconds(abortController.signal);
-            const stageReads = pollRetrogradeStages(slot, pollSeconds * 1000, stagePoll.signal, setWaitScreenStage, (error) => {
-                console.error("Genesis stage read error:", error);
-                toast({ title: "Transmission Error", description: error.message, variant: "destructive" });
-            });
+            // Read before the post: the record belongs to the previous run (or
+            // none), and the answer carries the configured poll interval.
+            const before = await getRetrogradeStatus(slot, abortController.signal);
+            pollRetrogradeStages(
+                slot,
+                before.run,
+                before.status_poll_interval_seconds * 1000,
+                stagePoll.signal,
+                setWaitScreenStage,
+                (error) => {
+                    console.error("Genesis stage read error:", error);
+                    toast({ title: "Transmission Error", description: error.message, variant: "destructive" });
+                },
+            );
 
             // Step 1: Transition (Retrograde history, then world writes)
             const transitionRes = await fetch("/api/story/new/transition", {
@@ -508,16 +505,15 @@ export function InteractiveWizard({
                 const detail = error.detail || "Transition failed";
                 // The gateway still holds the stage that was running when the
                 // transition failed ("failed" names it in detail.stage), unless
-                // the transition was refused before its run reset the record.
+                // the transition was refused before its run replaced the
+                // previous run's record.
                 const status = await getRetrogradeStatus(slot, abortController.signal).catch(
                     (statusError: Error) => {
                         if (statusError.name === "AbortError") throw statusError;
                         throw new Error(`${detail}\n${statusError.message}`);
                     },
                 );
-                if (stageReads.runSeen || !isFinished(status)) {
-                    setWaitScreenStage(retrogradeStageOf(status));
-                }
+                if (status.run !== before.run) setWaitScreenStage(retrogradeStageOf(status));
                 throw new Error(detail);
             }
 

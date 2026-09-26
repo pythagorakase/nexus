@@ -1222,12 +1222,17 @@ def _retrograde_status_stage(status: Any) -> Optional[str]:
     """Validate a Retrograde status payload and name the stage it reports.
 
     Returns None while idle, the stage in progress, ``done``, or
-    ``failed (<stage>)`` naming the stage that failed.
+    ``failed (<stage>)`` naming the stage that failed. The payload must name
+    the run that owns it (``run``: an identity, or null before any run).
     """
 
     from nexus.agents.orrery.retrograde_orchestrator import RETROGRADE_WIZARD_STAGES
 
-    stage = status.get("stage") if isinstance(status, dict) else None
+    if not isinstance(status, dict) or not (
+        "run" in status and (status["run"] is None or isinstance(status["run"], str))
+    ):
+        raise ValueError(f"Unrecognized Retrograde status: {status!r}")
+    stage = status.get("stage")
     if stage == "idle":
         return None
     if stage == "failed":
@@ -1249,15 +1254,16 @@ class _RetrogradeStageEcho:
         self._slot = slot
         self._read_timeout_seconds = read_timeout_seconds
         self._printed: Optional[str] = None
-        # The gateway keeps the previous run's record until this run's flow
-        # resets it, so a finished record counts only once this wait has
-        # seen the run idle or in progress.
-        self._run_seen = False
+        # The run owning the gateway's record before the transition was
+        # posted (None: no run yet). The gateway keeps that record until this
+        # run's flow replaces it under a new identity, so any record with
+        # another identity is this run's, terminal or not.
+        self._previous_run: Optional[str] = None
         # Set by a terminal stage or a failed read; no further reads follow.
         self.settled = False
 
-    def read(self) -> None:
-        """Read the slot's status once and print the stage if it changed."""
+    def _fetch(self) -> Optional[tuple[dict[str, Any], Optional[str]]]:
+        """Read and validate the slot's status; a failed read settles the echo."""
 
         try:
             response = _api_get(
@@ -1271,16 +1277,29 @@ class _RetrogradeStageEcho:
         except (requests.RequestException, ValueError) as exc:
             print(f"Genesis stage unavailable: {exc}", file=sys.stderr, flush=True)
             self.settled = True
+            return None
+        return status, stage
+
+    def snapshot(self) -> None:
+        """Note which run owns the record; call before posting the transition."""
+
+        read = self._fetch()
+        if read is not None:
+            self._previous_run = read[0]["run"]
+
+    def read(self) -> None:
+        """Read the slot's status once and print this run's stage if it changed."""
+
+        read = self._fetch()
+        if read is None:
             return
-        finished = status["stage"] in {"done", "failed"}
-        if not finished:
-            self._run_seen = True
-        elif not self._run_seen:
+        status, stage = read
+        if status["run"] == self._previous_run:
             return
         if stage is not None and stage != self._printed:
             print(f"Genesis stage: {stage}", flush=True)
             self._printed = stage
-        self.settled = finished
+        self.settled = status["stage"] in {"done", "failed"}
 
     def poll(self, interval_seconds: float, stopped: threading.Event) -> None:
         """Read every interval until stopped or settled."""
@@ -1293,9 +1312,11 @@ class _RetrogradeStageEcho:
 def _echo_retrograde_stages(slot: int, *, enabled: bool) -> Iterator[None]:
     """Print Retrograde stage changes while the wizard transition is in flight.
 
-    Once the transition answers, one more read reports the stage it finished
-    or failed at; an interrupted or unanswered transition skips that read.
-    Human output only: JSON callers receive the transition outcome alone.
+    A read before the transition is posted notes which run owns the gateway's
+    record; only records of another run are printed. Once the transition
+    answers, one more read reports the stage it finished or failed at; an
+    interrupted or unanswered transition skips that read. Human output only:
+    JSON callers receive the transition outcome alone.
     """
 
     if not enabled:
@@ -1314,6 +1335,7 @@ def _echo_retrograde_stages(slot: int, *, enabled: bool) -> Iterator[None]:
     echo = _RetrogradeStageEcho(
         slot, settings.api.narrative_generation.request_timeout_seconds
     )
+    echo.snapshot()
     stopped = threading.Event()
     reader = threading.Thread(
         target=echo.poll,

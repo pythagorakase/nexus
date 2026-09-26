@@ -695,7 +695,7 @@ max_tokens = 16000
 # CLI/UI HTTP timeout for the transition request; frontier calls run inside it.
 transition_timeout_seconds = 900
 # CLI/UI stage poll of GET /api/story/new/retrograde/status while the
-# transition request is in flight (the UI reads it via GET /api/settings).
+# transition request is in flight (the UI reads it from that route's answer).
 status_poll_interval_seconds = 1
 # NOTE: transition progress (GET /api/story/new/retrograde/status) lives in a
 # process-local registry. Run the API single-worker, or accept that status

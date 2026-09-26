@@ -51,12 +51,6 @@ export interface OrreryDashboardKnobs {
   backstage_poll_idle_ms?: number;
 }
 
-/** Mirrors `[orrery.retrograde.wizard]` (OrreryRetrogradeWizardSettings). */
-export interface OrreryRetrogradeWizardKnobs {
-  transition_timeout_seconds?: number;
-  status_poll_interval_seconds?: number;
-}
-
 export interface SettingsPayload {
   ["Agent Settings"]?: {
     global?: {
@@ -81,7 +75,6 @@ export interface SettingsPayload {
   };
   orrery?: {
     dashboard?: OrreryDashboardKnobs;
-    retrograde?: { wizard?: OrreryRetrogradeWizardKnobs };
   };
   /** Mirrors `[ui]` in nexus.toml (UISettings in settings_models.py). */
   ui?: {

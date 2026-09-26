@@ -212,6 +212,32 @@ def test_player_projection_keeps_reading_and_play_routes(
         assert "UI build not found" in shell.text
 
 
+def test_player_projection_paces_the_genesis_stage_waiter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The new-story wait screen needs nothing from the operator plane.
+
+    ``GET /api/settings`` is operator-only, so the player-plane Retrograde
+    status route the waiter reads before posting the transition carries the
+    configured poll interval and the identity of the run owning its record.
+    """
+    document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    document["orrery"]["retrograde"]["wizard"][  # type: ignore[index]
+        "status_poll_interval_seconds"
+    ] = 2.5
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document))
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+    player = TestClient(build_player_app(_gateway(tmp_path, monkeypatch, built=False)))
+
+    assert player.get("/api/settings").status_code in (404, 405)
+    status = player.get("/api/story/new/retrograde/status", params={"slot": 5})
+    assert status.status_code == 200, status.text
+    body = status.json()
+    assert body["status_poll_interval_seconds"] == 2.5
+    assert body["run"] is None or isinstance(body["run"], str)
+
+
 @pytest.mark.parametrize("built", [False, True], ids=["dist-missing", "dist-built"])
 def test_projections_preserve_registration_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, built: bool

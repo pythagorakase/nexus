@@ -470,9 +470,10 @@ def perform_transition_with_retrograde(
     from nexus.api.save_slots import get_slot_model
     from nexus.config import load_settings
 
-    # A run reports "idle" from its first step, so stage pollers never read the
-    # previous attempt's terminal stage while this one derives trait inputs,
-    # skips Retrograde, or fails before its first stage.
+    # A run reports "idle" under a fresh run identity from its first step, so
+    # stage pollers never read the previous attempt's terminal stage as this
+    # run's, whether this run derives trait inputs, skips Retrograde, fails
+    # before its first stage, or finishes before a poller's first read.
     reset_retrograde_progress(slot_number)
 
     dbname = slot_dbname(slot_number)

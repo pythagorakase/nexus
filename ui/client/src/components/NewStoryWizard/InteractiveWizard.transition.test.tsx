@@ -6,6 +6,11 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
 
 const STATUS_URL = "/api/story/new/retrograde/status?slot=5";
+// Run identities: the gateway starts each transition run's record under a
+// new one, replacing the previous run's record.
+const PREVIOUS_RUN = "run-before-this-transition";
+const THIS_RUN = "run-of-this-transition";
+const RETRY_RUN = "run-of-the-retry";
 
 // The saved wizard is ready: the introduction artifact awaits confirmation,
 // and confirming it starts the transition the wait screen tracks.
@@ -28,14 +33,21 @@ interface Deferred {
 }
 
 /**
- * A stand-in gateway at the fetch boundary. Status reads answer with the
- * current `status`; the transition and bootstrap requests stay in flight until
- * the test settles them, and reject like fetch when their signal aborts.
+ * A stand-in player-plane gateway at the fetch boundary. Status reads answer
+ * with the current `status` record plus the configured poll interval, as the
+ * gateway does; the operator-only settings route is not served. The
+ * transition and bootstrap requests stay in flight until the test settles
+ * them, and reject like fetch when their signal aborts.
  */
 function stubGateway() {
     const gateway = {
-        status: { slot: 5, stage: "idle", stages: [] } as Record<string, unknown>,
-        statusFailure: null as Response | null,
+        status: NO_RUN as Record<string, unknown>,
+        // nexus.toml's status_poll_interval_seconds as each status reports it.
+        pollSeconds: 0.01 as number | undefined,
+        // Every status read fails while set; failedReads names single reads
+        // (counted from 1) that fail.
+        statusFailing: false,
+        failedReads: new Set<number>(),
         statusReads: 0,
         served: [] as unknown[],
         requests: [] as string[],
@@ -50,13 +62,14 @@ function stubGateway() {
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         gateway.requests.push(`${init?.method ?? "GET"} ${url}`);
-        if (url === "/api/settings") {
-            return Response.json({ orrery: { retrograde: { wizard: { status_poll_interval_seconds: 0.01 } } } });
-        }
         if (url === STATUS_URL) {
             gateway.statusReads += 1;
+            if (gateway.statusFailing || gateway.failedReads.has(gateway.statusReads)) {
+                gateway.served.push("502");
+                return new Response("Gateway worker restarted", { status: 502 });
+            }
             gateway.served.push(gateway.status.stage);
-            return gateway.statusFailure ?? Response.json(gateway.status);
+            return Response.json({ ...gateway.status, status_poll_interval_seconds: gateway.pollSeconds });
         }
         if (url === "/api/story/new/transition") return pending("transition", init?.signal);
         if (url === "/api/narrative/continue") return pending("bootstrap", init?.signal);
@@ -66,11 +79,12 @@ function stubGateway() {
     return gateway;
 }
 
-function stage(name: string, detail: Record<string, unknown> = {}) {
-    return { slot: 5, stage: name, detail, updated_at: "2026-09-26T12:00:00+00:00", stages: [] };
+function stage(name: string, detail: Record<string, unknown> = {}, run: string = THIS_RUN) {
+    return { slot: 5, run, stage: name, detail, updated_at: "2026-09-26T12:00:00+00:00", stages: [] };
 }
 
-const IDLE = { slot: 5, stage: "idle", stages: [] };
+// No run has started for the slot in this gateway process.
+const NO_RUN = { slot: 5, run: null, stage: "idle", stages: [] };
 const TRANSITIONED = { status: "transitioned", retrograde: { enabled: true } };
 
 function renderReadyWizard(onComplete = vi.fn()) {
@@ -126,8 +140,10 @@ describe("genesis stage waiter", () => {
         await confirmIntroduction();
 
         await waitFor(() => expect(gateway.transition).not.toBeNull());
-        expect(gateway.requests.slice(0, 2)).toEqual(["GET /api/settings", "POST /api/story/new/transition"]);
-        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(0));
+        // The read before the post names the run owning the record and the
+        // poll interval; nothing is read from the operator plane.
+        expect(gateway.requests.slice(0, 2)).toEqual([`GET ${STATUS_URL}`, "POST /api/story/new/transition"]);
+        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(1));
         expect(pipStates()).toEqual(Array(6).fill("pending"));
 
         gateway.status = stage("packet");
@@ -158,6 +174,7 @@ describe("genesis stage waiter", () => {
         });
         expect(screen.queryAllByTestId("wait-stage")).toHaveLength(0);
         await expectNoFurtherStatusReads(gateway);
+        expect(gateway.requests.filter((request) => request.includes("/api/settings"))).toEqual([]);
     });
 
     it("stops reading once the transition settles", async () => {
@@ -196,12 +213,19 @@ describe("genesis stage waiter", () => {
         expect(gateway.statusReads).toBeGreaterThan(readsBeforeFailure);
         await expectNoFurtherStatusReads(gateway);
 
-        // Retry starts a fresh run from an empty track.
-        gateway.status = IDLE;
+        // Retry starts a fresh run from an empty track. Its read before the
+        // post finds the failure, now the previous run's record, and its
+        // reads skip that record until the retry's run replaces it.
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         await waitFor(() => expect(pipStates()).toEqual(Array(6).fill("pending")));
         expect(screen.queryByText("Generation Failed")).toBeNull();
-        gateway.status = stage("packet");
+        await waitFor(() =>
+            expect(gateway.requests.filter((request) => request === "POST /api/story/new/transition")).toHaveLength(2),
+        );
+        const readsBeforeRetryRun = gateway.statusReads;
+        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(readsBeforeRetryRun + 2));
+        expect(pipStates()).toEqual(Array(6).fill("pending"));
+        gateway.status = stage("packet", {}, RETRY_RUN);
         await waitFor(() => expect(pipStates()).toEqual(track(0)));
     });
 
@@ -209,31 +233,83 @@ describe("genesis stage waiter", () => {
         const gateway = stubGateway();
         renderReadyWizard();
         await confirmIntroduction();
-        // The run reports idle from its reset before it can fail.
-        await waitFor(() => expect(gateway.served).toContain("idle"));
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        // This run's first record the reads see is already terminal.
         gateway.status = stage("failed", { stage: "embedding" });
         await waitFor(() => expect(pipStates()).toEqual(track(4)));
         await expectNoFurtherStatusReads(gateway);
     });
 
-    it("reads past the previous run's failure record until this run reports", async () => {
+    it.each([
+        ["failed", { stage: "persistence" }],
+        ["done", { embedded_summaries: 4 }],
+    ])("reads past the previous run's %s record until this run reports", async (name, detail) => {
         const gateway = stubGateway();
-        // Retry's first reads can precede the new run's reset of the record.
-        gateway.status = stage("failed", { stage: "persistence" });
+        // The post's first reads can precede its run's replacement of the record.
+        gateway.status = stage(name, detail, PREVIOUS_RUN);
         renderReadyWizard();
         await confirmIntroduction();
-        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(2));
+        await waitFor(() => expect(gateway.statusReads).toBeGreaterThan(3));
         expect(pipStates()).toEqual(Array(6).fill("pending"));
 
-        gateway.status = IDLE;
+        gateway.status = stage("idle");
         await waitFor(() => expect(gateway.served.at(-1)).toBe("idle"));
         gateway.status = stage("packet");
         await waitFor(() => expect(pipStates()).toEqual(track(0)));
     });
 
+    it.each([
+        ["no run", NO_RUN],
+        ["the previous run's failure", stage("failed", { stage: "embedding" }, PREVIOUS_RUN)],
+    ])(
+        "marks the failed stage when this run's failure is the first record read after the post (before it: %s)",
+        async (_before, before) => {
+            const gateway = stubGateway();
+            // No interval read comes before the transition answers.
+            gateway.pollSeconds = 60;
+            gateway.status = before;
+            renderReadyWizard();
+            await confirmIntroduction();
+            await waitFor(() => expect(gateway.transition).not.toBeNull());
+            expect(gateway.statusReads).toBe(1);
+
+            gateway.status = stage("failed", { stage: "persistence" });
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            await act(async () =>
+                gateway.transition!.resolve(
+                    Response.json({ detail: "Retrograde persistence blocked: 2 unresolved refs" }, { status: 400 }),
+                ),
+            );
+            expect(await screen.findByText("Retrograde persistence blocked: 2 unresolved refs")).toBeInTheDocument();
+            expect(pipStates()).toEqual(track(3, "failed"));
+            expect(gateway.served).toEqual([before.stage, "failed"]);
+        },
+    );
+
+    it("marks the failed stage from the final read after the first stage read failed", async () => {
+        const gateway = stubGateway();
+        // The read before the post succeeds; the first interval read fails.
+        gateway.failedReads.add(2);
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        renderReadyWizard();
+        await confirmIntroduction();
+        expect(await screen.findByText("502: Gateway worker restarted")).toBeInTheDocument();
+        await expectNoFurtherStatusReads(gateway);
+
+        gateway.status = stage("failed", { stage: "embedding" });
+        await act(async () =>
+            gateway.transition!.resolve(
+                Response.json({ detail: "Transition failed: embedding provider timeout" }, { status: 500 }),
+            ),
+        );
+        expect(await screen.findByText("Transition failed: embedding provider timeout")).toBeInTheDocument();
+        expect(pipStates()).toEqual(track(4, "failed"));
+        expect(gateway.served).toEqual(["idle", "502", "failed"]);
+    });
+
     it("marks no stage failed when the transition is refused before its run starts", async () => {
         const gateway = stubGateway();
-        gateway.status = stage("failed", { stage: "persistence" });
+        gateway.status = stage("failed", { stage: "persistence" }, PREVIOUS_RUN);
         renderReadyWizard();
         await confirmIntroduction();
         await waitFor(() => expect(gateway.transition).not.toBeNull());
@@ -295,7 +371,7 @@ describe("genesis stage waiter", () => {
         gateway.status = stage("seed_candidates", { weird: "medium" });
         await waitFor(() => expect(pipStates()).toEqual(track(1)));
         vi.spyOn(console, "error").mockImplementation(() => {});
-        gateway.statusFailure = new Response("Gateway worker restarted", { status: 502 });
+        gateway.statusFailing = true;
         await act(async () =>
             gateway.transition!.resolve(Response.json({ detail: "Transition failed: provider timeout" }, { status: 500 })),
         );
@@ -347,7 +423,8 @@ describe("genesis stage waiter", () => {
         const gateway = stubGateway();
         const { onComplete } = renderReadyWizard();
         vi.spyOn(console, "error").mockImplementation(() => {});
-        gateway.statusFailure = new Response("Gateway worker restarted", { status: 502 });
+        // The first interval read, after the post, fails.
+        gateway.failedReads.add(2);
         await confirmIntroduction();
 
         expect(await screen.findByText("502: Gateway worker restarted")).toBeInTheDocument();
@@ -360,9 +437,22 @@ describe("genesis stage waiter", () => {
         await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
     });
 
+    it("posts no transition when the read before it fails", async () => {
+        const gateway = stubGateway();
+        gateway.statusFailing = true;
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        renderReadyWizard();
+        await confirmIntroduction();
+        expect(await screen.findByText("502: Gateway worker restarted")).toBeInTheDocument();
+        expect(screen.getByText("Generation Failed")).toBeInTheDocument();
+        await expectNoFurtherStatusReads(gateway);
+        expect(gateway.statusReads).toBe(1);
+        expect(gateway.transition).toBeNull();
+    });
+
     it("reports a missing poll interval instead of guessing one", async () => {
         const gateway = stubGateway();
-        vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ orrery: {} }));
+        gateway.pollSeconds = undefined;
         vi.spyOn(console, "error").mockImplementation(() => {});
         renderReadyWizard();
         await confirmIntroduction();
@@ -372,6 +462,6 @@ describe("genesis stage waiter", () => {
             ),
         ).toBeInTheDocument();
         expect(gateway.transition).toBeNull();
-        expect(gateway.statusReads).toBe(0);
+        expect(gateway.statusReads).toBe(1);
     });
 });

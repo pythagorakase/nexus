@@ -58,3 +58,18 @@ def get_generation_lease_timeout_seconds() -> int:
     if settings.api is None:
         raise RuntimeError("nexus.toml is missing the required [api] section")
     return settings.api.narrative_generation.stale_lease_timeout_seconds
+
+
+def get_retrograde_status_poll_interval_seconds() -> float:
+    """Return the wizard stage poll interval from nexus.toml.
+
+    The Retrograde status route reports this value to the new-story wait
+    screen, which paces its reads of that route by it.
+    """
+    settings = load_settings()
+    if settings.orrery is None:
+        raise RuntimeError(
+            "nexus.toml is missing the [orrery] section required for the wizard "
+            "stage poll"
+        )
+    return settings.orrery.retrograde.wizard.status_poll_interval_seconds
