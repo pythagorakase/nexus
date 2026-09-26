@@ -31,9 +31,12 @@ Background usage never joins ``attempts``.
 
 Token counts are renderer or provider truth only: nothing is estimated and
 nothing is priced (Decision 9, #858). Each section names its ``provenance``.
-A value no source recorded reads ``"unknown"``; ``null`` means the source
-records that the thing has not happened (no terminal outcome yet, no later
-phase) or was not sent (no reasoning effort on the request).
+A value no source recorded reads ``"unknown"``; this includes list-typed fields
+(``repair_codes``, ``rejection_codes``, ``outcomes``, ``seats``, and a
+``block_tokens`` or ``influence_tokens`` mapping), so a JSON consumer must not
+assume they are always arrays or objects. ``null`` means the source records
+that the thing has not happened (no terminal outcome yet, no later phase) or
+was not sent (no reasoning effort on the request).
 
 Seats without a manifest or window record restart attempt numbers at 1 for each
 request, so such a row can sum several provider calls that share one attempt
@@ -56,9 +59,9 @@ attempt and job names its provider and transport.
 
 The join refuses, instead of guessing, rows from another session or an unread
 day, conflicting models or providers on one attempt, a timestamp without a UTC
-offset, a background seat under the session's run id (background workers
-record under their job id), and an event under a listed job's id and slot whose
-seat no provider-backed queue records.
+offset, phases recorded out of order, a background seat under the session's run
+id (background workers record under their job id), and an event under a listed
+job's id and slot whose seat no provider-backed queue records.
 
 Schema version 1 has these top-level keys: ``schema_version``,
 ``generation_session``, ``read_at`` (UTC), ``ledger_days_read`` (every UTC day
@@ -298,7 +301,7 @@ def derive_turn_observation(
     ]
     job_days = job_ledger_days(inspection, read_at=read_at)
     entries = _job_entries(inspection["jobs"], job_events, job_days, slot=slot)
-    phases, wall_time = _phase_spans(_observed_phases(inspection))
+    phases, wall_time = _phase_spans(session_id, _observed_phases(inspection))
     critical_path = _critical_path_totals(attempts)
     background = _background_totals(entries)
     return {
@@ -662,11 +665,17 @@ def _overall_totals(
 
 
 def _phase_spans(
-    observed: list[tuple[str, datetime]],
+    session_id: str, observed: list[tuple[str, datetime]]
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     spans = []
     for index, (phase, started) in enumerate(observed):
         ended = observed[index + 1][1] if index + 1 < len(observed) else None
+        if ended is not None and ended < started:
+            raise ValueError(
+                f"Phase {observed[index + 1][0]} of {session_id} was recorded at "
+                f"{_iso(ended)}, before the preceding phase {phase} at "
+                f"{_iso(started)}"
+            )
         spans.append(
             {
                 "phase": phase,

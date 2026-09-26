@@ -776,6 +776,31 @@ def test_phase_spans_cross_utc_midnight_and_offsets() -> None:
     }
 
 
+def test_phases_recorded_out_of_order_refuse_the_join() -> None:
+    """A later phase recorded before its predecessor never yields negative time."""
+    inspection, session, _ = _two_pass_turn()
+    phases = [dict(row) for row in inspection["phases"]]
+    # Staging stamped a second before the Gaia transition it follows.
+    phases[4]["recorded_at"] = f"{TODAY} 00:00:10.125+00"
+    reordered = {**inspection, "phases": phases}
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"Phase staging of {session} was recorded at "
+            f"{TODAY}T00:00:10.125000Z, before the preceding phase gaia at "
+            f"{TODAY}T00:00:11.125000Z"
+        ),
+    ):
+        observe_turn(reordered, slot=4, read_at=READ_AT)
+    # Equal stamps are a zero-length span, not a disorder.
+    phases[4]["recorded_at"] = f"{YESTERDAY} 19:00:11.125-05"
+    spans = observe_turn({**inspection, "phases": phases}, slot=4, read_at=READ_AT)[
+        "phases"
+    ]
+    assert spans[3]["seconds"] == 0.0
+
+
 def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
     """A manifest-less run keeps its latest window snapshot and only safe codes."""
     session = str(uuid4())
