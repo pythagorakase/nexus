@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "check": "tsc",
+    "check": "tsc && npm run check:design-sync",
+    "check:design-sync": "tsc -p .design-sync/tsconfig.previews.json",
     "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "desktop:dev": "npm run build && tauri dev",
     "desktop:build": "npm run build && tauri build",

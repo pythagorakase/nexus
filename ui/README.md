@@ -107,6 +107,11 @@ The project uses Vite for fast development with HMR:
 - Frontend: React + TypeScript (Vite dev server on port 5001)
 - Backend: NEXUS FastAPI gateway (port 8002)
 
+`npm run check` type-checks the app (`tsc`), then runs `npm run check:design-sync`,
+which type-checks the design-sync previews (`.design-sync/previews/`) against the
+live component sources, so a prop change cannot strand a preview. See
+`.design-sync/NOTES.md`.
+
 Database schema changes go through the repo-root migration workflow
 (`scripts/migrate.py`); see the root `CLAUDE.md`.
 

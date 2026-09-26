@@ -52,6 +52,8 @@ around it:
   = one graded cell, 2-5 cells. Never wrap in a provider (cfg.provider does it).
   Inline styles for layout glue only; component keeps its own classes. Realistic
   NEXUS story-engine content; Chicago Title Case labels.
+- `npm run check` type-checks every preview against the live component props
+  (see "Preview Type-Check" below); a preview that no longer compiles fails it.
 - **Overlays** (Dialog/Popover/DropdownMenu/Tooltip/Sheet/Drawer/HoverCard/
   ContextMenu/Select/Command/Menubar/NavigationMenu/AlertDialog): render OPEN.
   - **Dialog**: `open modal={false}` — otherwise the `bg-black/80` overlay blacks
@@ -64,6 +66,27 @@ around it:
   (e.g. 560×360) to frame.
 - Review sheet renders each cell as a populated top band + an empty band below —
   the empty band is sheet layout, NOT a missing render.
+
+## Preview Type-Check
+
+`npm run check` runs `tsc` over the app, then `npm run check:design-sync`
+(`tsc -p .design-sync/tsconfig.previews.json`): a no-emit type-check of every
+`previews/*.tsx`. That tsconfig extends the app's and maps `nexus-ui` to the
+committed source barrel `nexus-ui.ts` — `export *` from each `componentSrcMap`
+source, as `gen-entry.mjs` writes them, plus `DesignThemeRoot` — so it needs no
+`build.mjs` run, no `.cache/lib-dist`, and no `.ds-sync/`. Incremental state lives
+in the gitignored `.cache/tsbuildinfo.previews`.
+
+Nothing checked previews before (#884): the app's `tsc` never includes
+`.design-sync/`, and the only declared types for `nexus-ui` are the generated
+root-only barrel (`package.json#types`), which exists only after a `build.mjs` run.
+Five previews had drifted from their components' props unnoticed (LeftRail,
+ArtifactSidePanel, Intertitle, TopBar, WizardChoices).
+
+- Carding a component means adding its source to `nexus-ui.ts` as well as to
+  `componentSrcMap`; until then its preview fails the check with a missing export.
+- `nexus-ui.ts` is type-check only. Never import it from build code: the synced
+  bundle is still built from the generated `.cache/lib-entry.tsx`.
 
 ## FIXED (#657): real `.d.ts` prop contracts
 
@@ -102,7 +125,8 @@ look at it, then fix it or record it here.
 ## Re-sync risks (watch-list)
 
 - `componentSrcMap` in `config.json` is static; a component add/remove requires
-  re-merging `.cache/componentSrcMap.json` (run `build.mjs` then re-merge).
+  re-merging `.cache/componentSrcMap.json` (run `build.mjs` then re-merge) and the
+  matching line in `nexus-ui.ts`.
 - The phantom-`--entry` technique depends on `resolveDistEntry(soft)` returning
   null for a nonexistent path — verify if the converter is upgraded.
 - `build.mjs`'s font-url rewrite (`/fonts/` → `../../../client/public/fonts/`) is

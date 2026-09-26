@@ -1,0 +1,111 @@
+// Source-backed stand-in for the `nexus-ui` package that every preview imports.
+// Type-check only: tsconfig.previews.json maps `nexus-ui` here so the previews
+// compile against the live component sources, with no generated bundle or
+// declaration tree. The synced bundle itself is still built from the generated
+// .cache/lib-entry.tsx (gen-entry.mjs); never import this file from build code.
+//
+// One line per config.json componentSrcMap source, in that order, mirroring
+// gen-entry.mjs: `export *` plus a named re-export for a default-only root.
+// Carding a new component means adding its source here too; until then its
+// preview fails `npm run check:design-sync` with a missing-export error.
+export * from "@/components/ErrorBoundary";
+export * from "@/components/NewStoryWizard/ArtifactSidePanel";
+export * from "@/components/NewStoryWizard/CharacterPhase";
+export * from "@/components/NewStoryWizard/InteractiveWizard";
+export * from "@/components/NewStoryWizard/LocationPhase";
+export * from "@/components/NewStoryWizard/ModeSelector";
+export * from "@/components/NewStoryWizard/SeedPhase";
+export * from "@/components/NewStoryWizard/SettingPhase";
+export * from "@/components/NewStoryWizard/SlotSelector";
+export * from "@/components/NewStoryWizard/TraitSelector";
+export * from "@/components/NewStoryWizard/TraitSelectorGrid";
+export * from "@/components/NewStoryWizard/WaitScreen";
+export * from "@/components/NewStoryWizard/WizardChoices";
+export * from "@/components/NewStoryWizard/WizardShell";
+export * from "@/components/StoryChoices";
+export * from "@/components/ThemeMenu";
+export * from "@/components/ai/conversation";
+export * from "@/components/ai/loader";
+export * from "@/components/ai/message";
+export * from "@/components/ai/prompt-input";
+export * from "@/components/ai/response";
+export * from "@/components/deco/DecoCorner";
+export * from "@/components/deco/DecoDivider";
+export * from "@/components/deco/DecoFrame";
+export * from "@/components/deco/DecoSunburst";
+export * from "@/components/nexus/CharactersPane";
+export * from "@/components/nexus/Intertitle";
+export * from "@/components/nexus/LeftRail";
+export * from "@/components/nexus/LocalModelRows";
+export * from "@/components/nexus/MapPane";
+export * from "@/components/nexus/MapPlaceDialog";
+export * from "@/components/nexus/NarrativePane";
+export * from "@/components/nexus/NexusLayout";
+export * from "@/components/nexus/ProseMarkdown";
+export * from "@/components/nexus/RightLedger";
+export * from "@/components/nexus/SettingsPane";
+export * from "@/components/nexus/TopBar";
+export * from "@/components/ui/accordion";
+export * from "@/components/ui/alert-dialog";
+export * from "@/components/ui/alert";
+export * from "@/components/ui/animated-beam";
+export * from "@/components/ui/aspect-ratio";
+export * from "@/components/ui/avatar";
+export * from "@/components/ui/badge";
+export * from "@/components/ui/breadcrumb";
+export * from "@/components/ui/button";
+export * from "@/components/ui/calendar";
+export * from "@/components/ui/card";
+export * from "@/components/ui/carousel";
+export * from "@/components/ui/chart";
+export * from "@/components/ui/checkbox";
+export * from "@/components/ui/collapsible";
+export * from "@/components/ui/command";
+export * from "@/components/ui/context-menu";
+export * from "@/components/ui/dialog";
+export * from "@/components/ui/drawer";
+export * from "@/components/ui/dropdown-menu";
+export * from "@/components/ui/form";
+export * from "@/components/ui/hover-card";
+export * from "@/components/ui/input";
+export * from "@/components/ui/label";
+export * from "@/components/ui/menubar";
+export * from "@/components/ui/navigation-menu";
+export * from "@/components/ui/pagination";
+export * from "@/components/ui/popover";
+export * from "@/components/ui/progress";
+export * from "@/components/ui/radio-group";
+export * from "@/components/ui/resizable";
+export * from "@/components/ui/scroll-area";
+export * from "@/components/ui/select";
+export * from "@/components/ui/separator";
+export * from "@/components/ui/sheet";
+export * from "@/components/ui/sidebar";
+export * from "@/components/ui/skeleton";
+export * from "@/components/ui/slider";
+export * from "@/components/ui/switch";
+export * from "@/components/ui/table";
+export * from "@/components/ui/tabs";
+export * from "@/components/ui/textarea";
+export * from "@/components/ui/toast";
+export * from "@/components/ui/toaster";
+export * from "@/components/ui/toggle-group";
+export * from "@/components/ui/toggle";
+export * from "@/components/ui/tooltip";
+export * from "@/components/veil/CrescentFrame";
+export * from "@/components/veil/NouveauFrame";
+export * from "@/components/veil/VeilSpiral";
+export * from "@/pages/DevMarkdownPreview";
+export { default as DevMarkdownPreview } from "@/pages/DevMarkdownPreview";
+export * from "@/pages/NewStoryPage";
+export { default as NewStoryPage } from "@/pages/NewStoryPage";
+export * from "@/pages/SplashPage";
+export { default as SplashPage } from "@/pages/SplashPage";
+export * from "@/pages/not-found";
+export { default as NotFound } from "@/pages/not-found";
+export * from "@/pages/splash/GildedDeco";
+export * from "@/pages/splash/GildedSplash";
+export * from "@/pages/splash/VectorSplash";
+export * from "@/pages/splash/VeilSplash";
+export * from "@/pages/splash/shared";
+export { DesignThemeRoot } from "./ds-provider";
