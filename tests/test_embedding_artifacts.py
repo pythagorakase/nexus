@@ -15,8 +15,9 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
+import pytest
 import tomlkit
 
 from nexus.agents.memnon.utils.artifact_manifest import (
@@ -170,6 +171,28 @@ def _lock(workspace: Workspace) -> Dict[str, Any]:
     return json.loads(workspace.lock.read_text())
 
 
+def _cli_verify(config: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+    """Run ``nexus models verify`` in a subprocess, as a user would."""
+
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nexus.cli",
+            "models",
+            "verify",
+            "--config",
+            str(config),
+            *flags,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        cwd=REPO_ROOT,
+    )
+
+
 def test_lock_records_artifacts_and_verify_passes(tmp_path: Path) -> None:
     """lock pins repository, revision, license, dimensions and every file."""
 
@@ -235,22 +258,7 @@ def test_verify_fails_after_one_byte_changes(tmp_path: Path) -> None:
         f"--local-dir {workspace.embedder_dir}"
     ) in result["error"]
 
-    cli = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "nexus.cli",
-            "models",
-            "verify",
-            "--config",
-            str(workspace.config),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
-        cwd=REPO_ROOT,
-    )
+    cli = _cli_verify(workspace.config)
     assert cli.returncode == 1, cli.stdout + cli.stderr
     assert "model.safetensors sha256 differs from the lock" in cli.stderr
 
@@ -340,6 +348,67 @@ def test_verify_rejects_a_malformed_lock_with_the_relock_command(
     assert result["success"] is False
     assert f"{workspace.lock} is malformed" in result["error"]
     assert "Re-run `nexus models lock`" in result["error"]
+
+
+def _truncate(text: str) -> str:
+    """Cut a lock off mid-file, as an interrupted write or copy leaves it."""
+
+    return text[: len(text) // 2]
+
+
+def _conflict(text: str) -> str:
+    """Wrap a lock in the markers an unresolved git merge leaves behind."""
+
+    theirs = text.replace('"schema_version": 1', '"schema_version": 1 ')
+    return f"<<<<<<< HEAD\n{text}=======\n{theirs}>>>>>>> main\n"
+
+
+@pytest.mark.parametrize(
+    ("damage", "position"),
+    [(_truncate, "line "), (_conflict, ": line 1 column 1 (char 0). ")],
+    ids=["truncated", "merge-conflict"],
+)
+def test_verify_reports_an_unparseable_lock_with_the_relock_command(
+    tmp_path: Path, damage: Callable[[str], str], position: str
+) -> None:
+    """A lock that is not JSON fails verify cleanly, in text and --json output."""
+
+    workspace = _workspace(tmp_path)
+    _lock(workspace)
+    workspace.lock.write_text(damage(workspace.lock.read_text()))
+
+    result = run_models_command("verify", str(workspace.config))
+    assert result["success"] is False
+    message = result["error"]
+    assert message.startswith(f"{workspace.lock} is not valid JSON: ")
+    assert position in message
+    assert message.endswith(
+        "It may be truncated or hold merge-conflict markers. "
+        "Re-run `nexus models lock`."
+    )
+
+    cli = _cli_verify(workspace.config)
+    assert cli.returncode == 1, cli.stdout + cli.stderr
+    assert cli.stderr.strip() == f"Error: {message}"
+
+    as_json = _cli_verify(workspace.config, "--json")
+    assert as_json.returncode == 1, as_json.stdout + as_json.stderr
+    assert json.loads(as_json.stderr) == {"error": message}
+
+
+def test_verify_rejects_a_lock_that_is_not_an_object(tmp_path: Path) -> None:
+    """Valid JSON with a non-object top level is a malformed lock, not a crash."""
+
+    workspace = _workspace(tmp_path)
+    workspace.lock.parent.mkdir(parents=True)
+    workspace.lock.write_text("[]\n")
+
+    result = run_models_command("verify", str(workspace.config))
+    assert result["success"] is False
+    assert result["error"] == (
+        f"{workspace.lock} does not hold a JSON object at its top level. "
+        "Re-run `nexus models lock`."
+    )
 
 
 def test_lock_refuses_artifact_whose_dimension_disagrees(tmp_path: Path) -> None:

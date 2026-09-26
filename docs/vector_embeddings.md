@@ -73,7 +73,10 @@ nexus models verify   # read-only; exits 1 listing each problem and its remedy
 when an unlisted file appears, or when the configured embedder, reranker,
 repository, or dimensions no longer match the lock. Its remediation names
 `hf download <repo> --revision <commit> --local-dir <path>` for a changed
-artifact and re-running `nexus models lock` after an intentional upgrade.
+artifact and re-running `nexus models lock` after an intentional upgrade. A
+lock that is absent, truncated, holds merge-conflict markers, or lacks the
+expected fields fails the same way (exit 1, and valid JSON under `--json`)
+with `nexus models lock` as the remedy.
 Only `.DS_Store` is ignored: the `._*` AppleDouble files that copying an
 artifact to an exFAT or network volume creates are unexpected files, so remove
 them first (on macOS, `dot_clean -m <path>`).

@@ -314,15 +314,37 @@ def write_manifest(manifest: Dict[str, Any], path: Path) -> None:
 
 
 def read_manifest(path: Path) -> Dict[str, Any]:
-    """Read a lock written by :func:`write_manifest`."""
+    """Read a lock written by :func:`write_manifest`.
+
+    Raises:
+        ArtifactLockError: When the lock is absent, is not a JSON object (for
+            example truncated, or holding merge-conflict markers), or does not
+            have the current schema.
+    """
 
     if not path.is_file():
         raise ArtifactLockError(
             f"No model artifact lock at {path}. Run `nexus models lock` on the "
             "host that holds the production artifacts, then commit the lock."
         )
-    manifest = json.loads(path.read_text(encoding="utf-8"))
-    version = manifest.get("schema_version") if isinstance(manifest, dict) else None
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise ArtifactLockError(
+            f"{path} is not UTF-8 text ({exc.reason} at byte {exc.start}). "
+            "Re-run `nexus models lock`."
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise ArtifactLockError(
+            f"{path} is not valid JSON: {exc}. It may be truncated or hold "
+            "merge-conflict markers. Re-run `nexus models lock`."
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise ArtifactLockError(
+            f"{path} does not hold a JSON object at its top level. "
+            "Re-run `nexus models lock`."
+        )
+    version = manifest.get("schema_version")
     if version != MANIFEST_SCHEMA_VERSION:
         raise ArtifactLockError(
             f"{path} has schema_version {version!r}; expected "
