@@ -27,9 +27,10 @@ from tests import secret_store_guard
 # stops before collecting anything.
 secret_store_guard.install(setattr)
 
-# The guard's patches do not reach subprocesses, so unless the session opted
-# into a real store, children inherit env-only credential mode.
-if not (secret_store_guard.SECRET_STORE_OPT_IN or secret_store_guard.LIVE_LLM_OPT_IN):
+# Env-only credential mode for this process too, except in live sessions,
+# whose guarded reads of nexus-api need the store path. Child processes get
+# NEXUS_KEYRING_DISABLE=1 from the guard's spawn tripwires in every session.
+if not secret_store_guard.LIVE_LLM_OPT_IN:
     os.environ["NEXUS_KEYRING_DISABLE"] = "1"
 
 

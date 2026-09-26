@@ -21,9 +21,11 @@ more specific instructions.
   it. Before trusting a gate result, confirm the final terminal summary (or
   the run header, which `-q` hides) reads `secret-store guard: active;
   nexus-api: denied`, which requires `NEXUS_RUN_LIVE_LLM` to be unset. Never
-  pass `--noconftest`. The guard covers credential-store access only, in the
-  pytest process plus `NEXUS_KEYRING_DISABLE=1` for its children. It is not
-  a protected-path write guard, and no launcher preflight runs outside
+  pass `--noconftest`. The guard covers credential-store access only: backend
+  calls and `security`/`keyring` use in the pytest process, plus
+  `NEXUS_KEYRING_DISABLE=1` in every child process whatever the opt-in
+  flags. `os.exec*` and fork-then-exec are not covered. It is not a
+  protected-path write guard, and no launcher preflight runs outside
   pytest; those parts of #963 are not implemented yet.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.

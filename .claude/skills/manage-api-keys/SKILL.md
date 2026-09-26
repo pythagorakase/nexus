@@ -51,10 +51,13 @@ shell out to `security` to test storage.
 disposable keychain file and service. Never point a test at service
 `nexus-api` or the login keychain.
 
-The guard covers credential-store access in the pytest process, and the
-root conftest exports `NEXUS_KEYRING_DISABLE=1` to child processes unless a
-session opts in. It does not guard protected paths, and there is no launcher
-preflight outside pytest.
+The guard covers credential-store access in the pytest process. A `security`
+spawn runs only as an argv list that exactly matches an open backend or
+disposable-keychain scope. Every child process gets `NEXUS_KEYRING_DISABLE=1`
+whatever the opt-in flags; a child that genuinely needs store access must
+get an explicit `env` that sets the flag, with the reason in the test.
+`os.exec*` and fork-then-exec are not covered. It does not guard protected
+paths, and there is no launcher preflight outside pytest.
 
 ## Preserve Failure Safety
 

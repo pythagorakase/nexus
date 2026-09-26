@@ -7,9 +7,11 @@ fails any test that reaches the real Keychain or keyring store instead.
 
 from __future__ import annotations
 
+import os
 import secrets
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -24,9 +26,9 @@ from nexus.util.secret_manager import (
     set_secret,
     use_secret_backend,
 )
-from tests import secret_store_guard
 
 TEST_ACCOUNT = "test-secret-455"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_ENV_VAR = f"{TEST_ACCOUNT.upper()}_API_KEY"
 
 
@@ -169,25 +171,65 @@ def test_platform_backend_targets_production_service() -> None:
         assert backend.keychain is None
 
 
-@pytest.mark.skipif(
-    secret_store_guard.SECRET_STORE_OPT_IN or secret_store_guard.LIVE_LLM_OPT_IN,
-    reason="Opted-in sessions do not export environment-only mode.",
-)
-def test_child_processes_inherit_environment_only_mode() -> None:
-    """Subprocesses miss the guard's patches, so they get the env-only flag.
+INNER_CHILD_TEST = """
+import subprocess
+import sys
 
-    The child only reports its environment; it never touches a secret store,
-    so this probe stays safe even if the export regresses.
-    """
+
+REPORT = "import os; print(os.environ.get('NEXUS_KEYRING_DISABLE'))"
+
+
+def test_child_reports_environment_only_mode():
     child = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import os; print(os.environ.get('NEXUS_KEYRING_DISABLE'))",
-        ],
+        [sys.executable, "-c", REPORT],
         capture_output=True,
         text=True,
         check=True,
-        timeout=30.0,
+        timeout=30,
     )
     assert child.stdout.strip() == "1"
+"""
+
+
+@pytest.mark.parametrize("flag", [None, "NEXUS_RUN_SECRET_STORE", "NEXUS_RUN_LIVE_LLM"])
+def test_child_processes_inherit_environment_only_mode(
+    flag: str | None,
+    tmp_path: Path,
+) -> None:
+    """Children stay env-only in a fresh session, whatever its opt-in flags.
+
+    The inner session starts with an explicit ``NEXUS_KEYRING_DISABLE=0`` (the
+    documented opt-out), so only its own guard can put the child back into
+    env-only mode. The child only reports its environment; it never touches a
+    secret store, so this probe stays safe even if the rule regresses.
+    """
+    inner = tmp_path / "test_inner_child_env.py"
+    inner.write_text(INNER_CHILD_TEST)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("NEXUS_RUN_SECRET_STORE", "NEXUS_RUN_LIVE_LLM")
+    }
+    env["NEXUS_KEYRING_DISABLE"] = "0"
+    if flag is not None:
+        env[flag] = "1"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "tests.conftest",
+            str(inner),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180.0,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "1 passed" in result.stdout
