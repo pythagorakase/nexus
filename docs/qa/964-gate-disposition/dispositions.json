@@ -1560,10 +1560,10 @@
    "node": "tests/test_api/test_reader_asset_endpoints.py::TestWorldReads::test_relationships_and_psychology",
    "root_cause_category": "owner_slot_content_assumption",
    "cause_explanation": "Hardwired save_02 corpus assumption. /api/characters returns [] on the empty slot, so characters[0] raises IndexError.",
-   "prerequisite": "At least 1 character. Inserting it needs base_timestamp first because of the need-state trigger. To make the shape checks non-vacuous, also 1 character_relationships row and 1 character_psychology row for that character.",
+   "prerequisite": "At least 1 character. Inserting it needs base_timestamp first because of the need-state trigger. To make the relationship shape check non-vacuous, also 1 character_relationships row for that character. No character_psychology row is needed: after #769 the test asserts the psychology route is unrouted (404).",
    "repair_route": "parametrize_slot_or_fixture",
    "repair_steps": [
-    "Use the shared seeded reader slot: seed_protagonist plus a second character, a relationship between them and a psychology row. Relationship writes need SET LOCAL nexus.write_producer (migration 115 trigger)."
+    "Use the shared seeded reader slot: seed_protagonist plus a second character and a relationship between them. Relationship writes need SET LOCAL nexus.write_producer (migration 115 trigger). Do not seed a psychology row: after #769 the test asserts GET /api/characters/{character_id}/psychology is unrouted (404 Not Found)."
    ],
    "routed_issue": "#885",
    "product_defect_suspected": false,
