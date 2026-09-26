@@ -164,7 +164,8 @@ def _refresh_references(cur: Any, record: PromptWindowRecord) -> None:
     )
 
 
-def _validation_metadata(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def validation_metadata(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Reduce validation notes to safe repair codes, counts and a hash of each note."""
     metadata = []
     for note in notes:
         item: dict[str, Any] = {"sha256": identity_hash(note)}
@@ -195,7 +196,7 @@ def update_validation(record: PromptWindowRecord) -> None:
             """UPDATE generation_attempt_manifests SET validation=%s, updated_at=now()
             WHERE generation_session_id=%s AND seat=%s AND attempt=%s""",
             (
-                Json(_validation_metadata(record.validation_notes)),
+                Json(validation_metadata(record.validation_notes)),
                 record.generation_session,
                 record.seat,
                 record.attempt,
