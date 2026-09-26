@@ -8,13 +8,24 @@ CLI, while other platforms use the ``keyring`` library.
 Lookup order in :func:`get_secret`:
 
 1. ``NEXUS_KEYRING_DISABLE=1`` → consult environment variables only.
-2. Platform-native secret store:
+2. The active :class:`SecretBackend` (the platform-native store by default):
 
    * macOS → ``security find-generic-password -s nexus-api -a <provider> -w``
    * Other platforms → ``keyring.get_password("nexus-api", <provider>)``
 
 3. Environment variable ``<PROVIDER>_API_KEY`` (case-insensitive provider).
 4. Raise :class:`MissingSecretError` with actionable remediation.
+
+Backends
+--------
+Every store operation goes through a :class:`SecretBackend` (``read``,
+``write``, ``delete``). :func:`platform_backend` selects the production store
+for this platform: :class:`MacOSKeychainBackend` on Darwin and
+:class:`KeyringLibraryBackend` elsewhere, both on service ``nexus-api``.
+:func:`use_secret_backend` routes :func:`get_secret` and :func:`set_secret`
+through another backend for the duration of a ``with`` block. Tests inject
+:class:`InMemorySecretBackend`; the opt-in platform-store integration test
+injects a Keychain backend bound to a disposable keychain file and service.
 
 Why ``security`` CLI on macOS rather than the ``keyring`` Python library?
 The ``security`` binary is Apple-signed and unconditionally trusted by
@@ -27,16 +38,22 @@ documented workaround.
 
 The result of a successful lookup is cached for the lifetime of the process
 (``functools.lru_cache``). :func:`set_secret` clears that cache after every
-successful write so rotations are visible immediately. Tests that need an
-unconditional fresh read can also call ``get_secret.cache_clear()``.
+successful write so rotations are visible immediately, and entering or
+leaving :func:`use_secret_backend` clears it so no value crosses backends.
+Tests that need an unconditional fresh read can also call
+``get_secret.cache_clear()``.
 """
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import os
 import platform
 import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Protocol
 
 SERVICE_NAME = "nexus-api"
 
@@ -57,148 +74,271 @@ class MissingSecretError(RuntimeError):
     """Raised when no API key can be located for the requested provider."""
 
 
-def _read_macos_keychain(account: str) -> str | None:
-    """Read from the login Keychain via the ``security`` CLI.
+class SecretBackend(Protocol):
+    """One secret-store namespace used by :func:`get_secret`/:func:`set_secret`."""
 
-    Returns the key on success, or ``None`` when the item is genuinely
-    absent (``errSecItemNotFound`` / exit 44) so the caller can try the
-    env-var fallback.
+    def read(self, account: str) -> str | None:
+        """Return the stored key, or ``None`` when ``account`` is absent."""
+        ...
 
-    Raises :class:`MissingSecretError` for any other failure (locked
-    keychain, timeout, corrupted store). Per project policy these surface
-    visibly rather than silently degrading to "no key".
+    def write(self, account: str, key: str) -> None:
+        """Store or replace the key for ``account``."""
+        ...
+
+    def delete(self, account: str) -> None:
+        """Remove ``account``; an already-absent account is not an error."""
+        ...
+
+
+class MacOSKeychainBackend:
+    """Keychain items reached through Apple's signed ``security`` CLI.
+
+    With ``keychain=None`` every command searches the user's keychain list,
+    which is the owner's login Keychain in production. An explicit
+    ``keychain`` path scopes every command to that one keychain file.
     """
-    try:
-        result = subprocess.run(
-            [
-                "security",
-                "find-generic-password",
-                "-s",
-                SERVICE_NAME,
-                "-a",
-                account,
-                "-w",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=_SECURITY_CALL_TIMEOUT_SEC,
-        )
-    except FileNotFoundError:
-        return None
-    except subprocess.CalledProcessError as exc:
-        if exc.returncode == _ERRSEC_ITEM_NOT_FOUND:
+
+    def __init__(
+        self,
+        service: str = SERVICE_NAME,
+        keychain: Path | None = None,
+    ) -> None:
+        self.service = service
+        self.keychain = keychain
+
+    def _argv(self, command: str, account: str, *options: str) -> list[str]:
+        """Build one ``security`` command scoped to this service and keychain."""
+        argv = ["security", command, "-s", self.service, "-a", account, *options]
+        if self.keychain is not None:
+            argv.append(os.fspath(self.keychain))
+        return argv
+
+    def read(self, account: str) -> str | None:
+        """Read from the Keychain via the ``security`` CLI.
+
+        Returns the key on success, or ``None`` when the item is genuinely
+        absent (``errSecItemNotFound`` / exit 44) so the caller can try the
+        env-var fallback.
+
+        Raises :class:`MissingSecretError` for any other failure (locked
+        keychain, timeout, corrupted store). Per project policy these surface
+        visibly rather than silently degrading to "no key".
+        """
+        try:
+            result = subprocess.run(
+                self._argv("find-generic-password", account, "-w"),
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=_SECURITY_CALL_TIMEOUT_SEC,
+            )
+        except FileNotFoundError:
             return None
-        raise MissingSecretError(
-            f"Keychain read failed for provider '{account}' "
-            f"(security exit {exc.returncode}). "
-            f"If your login keychain is locked, unlock it and retry.\n"
-            f"stderr: {(exc.stderr or '').strip()}"
-        ) from exc
-    except subprocess.TimeoutExpired as exc:
-        raise MissingSecretError(
-            f"Keychain read timed out for provider '{account}' after "
-            f"{_SECURITY_CALL_TIMEOUT_SEC}s. The login keychain may be "
-            f"locked or in a degraded state."
-        ) from exc
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode == _ERRSEC_ITEM_NOT_FOUND:
+                return None
+            raise MissingSecretError(
+                f"Keychain read failed for provider '{account}' "
+                f"(security exit {exc.returncode}). "
+                f"If your login keychain is locked, unlock it and retry.\n"
+                f"stderr: {(exc.stderr or '').strip()}"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise MissingSecretError(
+                f"Keychain read timed out for provider '{account}' after "
+                f"{_SECURITY_CALL_TIMEOUT_SEC}s. The login keychain may be "
+                f"locked or in a degraded state."
+            ) from exc
 
-    value = result.stdout.strip()
-    return value or None
+        value = result.stdout.strip()
+        return value or None
+
+    def write(self, account: str, key: str) -> None:
+        """Replace a Keychain item without exposing ``key`` on failure.
+
+        Delete-then-add intentionally avoids ``security ... -U``: updating an
+        existing item can trigger a GUI ACL prompt, while a fresh item created
+        by Apple's signed ``security`` binary completes silently. ``-A``
+        preserves silent reads from unattended NEXUS processes.
+        """
+        try:
+            # A missing item returns non-zero and is expected on the first write.
+            subprocess.run(
+                self._argv("delete-generic-password", account),
+                capture_output=True,
+                timeout=_SECURITY_CALL_TIMEOUT_SEC,
+            )
+            subprocess.run(
+                self._argv("add-generic-password", account, "-A", "-w", key),
+                capture_output=True,
+                check=True,
+                timeout=_SECURITY_CALL_TIMEOUT_SEC,
+            )
+        except subprocess.TimeoutExpired:
+            # TimeoutExpired retains the full argv (including the key), so sever
+            # the exception chain and emit only sanitized context.
+            raise RuntimeError(
+                f"Keychain write timed out for account '{account}' after "
+                f"{_SECURITY_CALL_TIMEOUT_SEC}s."
+            ) from None
+        except subprocess.CalledProcessError as exc:
+            # CalledProcessError also retains argv. Never include stderr: a
+            # secret store's diagnostics are not a safe response or logging
+            # surface.
+            raise RuntimeError(
+                f"Keychain write failed for account '{account}' "
+                f"(security exit {exc.returncode})."
+            ) from None
+        except OSError:
+            raise RuntimeError(
+                f"Keychain write could not start for account '{account}'."
+            ) from None
+
+    def delete(self, account: str) -> None:
+        """Remove a Keychain item; ``errSecItemNotFound`` means already gone."""
+        try:
+            result = subprocess.run(
+                self._argv("delete-generic-password", account),
+                capture_output=True,
+                timeout=_SECURITY_CALL_TIMEOUT_SEC,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"Keychain delete timed out for account '{account}' after "
+                f"{_SECURITY_CALL_TIMEOUT_SEC}s."
+            ) from None
+        except OSError:
+            raise RuntimeError(
+                f"Keychain delete could not start for account '{account}'."
+            ) from None
+        if result.returncode not in (0, _ERRSEC_ITEM_NOT_FOUND):
+            raise RuntimeError(
+                f"Keychain delete failed for account '{account}' "
+                f"(security exit {result.returncode})."
+            )
 
 
-def _read_keyring_library(account: str) -> str | None:
-    """Read via the cross-platform ``keyring`` library (non-Darwin fallback).
+class KeyringLibraryBackend:
+    """Items in the cross-platform ``keyring`` library's default store."""
 
-    Returns ``None`` if the library is missing or its backend raises a
-    ``KeyringError`` (common on headless CI hosts with no secret store).
-    Backend failures are non-fatal here so the caller falls through to the
-    env-var path -- otherwise a stock Linux CI box could not run NEXUS even
-    with ``<PROVIDER>_API_KEY`` correctly exported.
+    def __init__(self, service: str = SERVICE_NAME) -> None:
+        self.service = service
+
+    def read(self, account: str) -> str | None:
+        """Read via the ``keyring`` library.
+
+        Returns ``None`` if the library is missing or its backend raises a
+        ``KeyringError`` (common on headless CI hosts with no secret store).
+        Backend failures are non-fatal here so the caller falls through to the
+        env-var path -- otherwise a stock Linux CI box could not run NEXUS even
+        with ``<PROVIDER>_API_KEY`` correctly exported.
+        """
+        try:
+            import keyring  # type: ignore[import-not-found]
+            import keyring.errors  # type: ignore[import-not-found]
+        except ImportError:
+            return None
+        try:
+            return keyring.get_password(self.service, account)
+        except keyring.errors.KeyringError:
+            return None
+
+    def write(self, account: str, key: str) -> None:
+        """Replace a keyring item, failing loudly and safely."""
+        try:
+            import keyring  # type: ignore[import-not-found]
+        except ImportError:
+            raise RuntimeError(
+                "The keyring package is required to store API keys on this " "platform."
+            ) from None
+
+        try:
+            keyring.set_password(self.service, account, key)
+        except Exception as exc:  # noqa: BLE001 - sanitize backend-specific failures
+            raise RuntimeError(
+                f"Keyring write failed for account '{account}' "
+                f"({type(exc).__name__})."
+            ) from None
+
+    def delete(self, account: str) -> None:
+        """Remove a keyring item; the library's not-found error means gone."""
+        try:
+            import keyring  # type: ignore[import-not-found]
+            import keyring.errors  # type: ignore[import-not-found]
+        except ImportError:
+            raise RuntimeError(
+                "The keyring package is required to delete API keys on this "
+                "platform."
+            ) from None
+
+        try:
+            keyring.delete_password(self.service, account)
+        except keyring.errors.PasswordDeleteError:
+            return
+        except Exception as exc:  # noqa: BLE001 - sanitize backend-specific failures
+            raise RuntimeError(
+                f"Keyring delete failed for account '{account}' "
+                f"({type(exc).__name__})."
+            ) from None
+
+
+class InMemorySecretBackend:
+    """Process-local store for tests; nothing leaves this object."""
+
+    def __init__(self) -> None:
+        self._items: dict[str, str] = {}
+
+    def read(self, account: str) -> str | None:
+        """Return the stored key, or ``None`` when ``account`` is absent."""
+        return self._items.get(account)
+
+    def write(self, account: str, key: str) -> None:
+        """Store or replace the key for ``account``."""
+        self._items[account] = key
+
+    def delete(self, account: str) -> None:
+        """Remove ``account``; an already-absent account is not an error."""
+        self._items.pop(account, None)
+
+    def accounts(self) -> frozenset[str]:
+        """Return the accounts currently stored, for teardown assertions."""
+        return frozenset(self._items)
+
+
+_backend_override: SecretBackend | None = None
+
+
+def platform_backend() -> SecretBackend:
+    """Return this platform's production store on service ``nexus-api``."""
+    if platform.system() == "Darwin":
+        return MacOSKeychainBackend()
+    return KeyringLibraryBackend()
+
+
+def active_backend() -> SecretBackend:
+    """Return the backend :func:`get_secret` and :func:`set_secret` use now."""
+    if _backend_override is not None:
+        return _backend_override
+    return platform_backend()
+
+
+@contextlib.contextmanager
+def use_secret_backend(backend: SecretBackend) -> Iterator[SecretBackend]:
+    """Route :func:`get_secret` and :func:`set_secret` through ``backend``.
+
+    The previous selection is restored on exit, including when the block
+    raises. The read cache is cleared on entry and exit so a value read from
+    one backend is never served while another is active. Overrides nest.
     """
+    global _backend_override
+    previous = _backend_override
+    _backend_override = backend
+    get_secret.cache_clear()
     try:
-        import keyring  # type: ignore[import-not-found]
-        import keyring.errors  # type: ignore[import-not-found]
-    except ImportError:
-        return None
-    try:
-        return keyring.get_password(SERVICE_NAME, account)
-    except keyring.errors.KeyringError:
-        return None
-
-
-def _write_macos_keychain(account: str, key: str) -> None:
-    """Replace a login Keychain item without exposing ``key`` on failure.
-
-    Delete-then-add intentionally avoids ``security ... -U``: updating an
-    existing item can trigger a GUI ACL prompt, while a fresh item created by
-    Apple's signed ``security`` binary completes silently. ``-A`` preserves
-    silent reads from unattended NEXUS processes.
-    """
-    try:
-        # A missing item returns non-zero and is expected on the first write.
-        subprocess.run(
-            [
-                "security",
-                "delete-generic-password",
-                "-s",
-                SERVICE_NAME,
-                "-a",
-                account,
-            ],
-            capture_output=True,
-            timeout=_SECURITY_CALL_TIMEOUT_SEC,
-        )
-        subprocess.run(
-            [
-                "security",
-                "add-generic-password",
-                "-A",
-                "-s",
-                SERVICE_NAME,
-                "-a",
-                account,
-                "-w",
-                key,
-            ],
-            capture_output=True,
-            check=True,
-            timeout=_SECURITY_CALL_TIMEOUT_SEC,
-        )
-    except subprocess.TimeoutExpired:
-        # TimeoutExpired retains the full argv (including the key), so sever
-        # the exception chain and emit only sanitized context.
-        raise RuntimeError(
-            f"Keychain write timed out for account '{account}' after "
-            f"{_SECURITY_CALL_TIMEOUT_SEC}s."
-        ) from None
-    except subprocess.CalledProcessError as exc:
-        # CalledProcessError also retains argv. Never include stderr: a secret
-        # store's diagnostics are not a safe response or logging surface.
-        raise RuntimeError(
-            f"Keychain write failed for account '{account}' "
-            f"(security exit {exc.returncode})."
-        ) from None
-    except OSError:
-        raise RuntimeError(
-            f"Keychain write could not start for account '{account}'."
-        ) from None
-
-
-def _write_keyring_library(account: str, key: str) -> None:
-    """Replace a non-Darwin keyring item, failing loudly and safely."""
-    try:
-        import keyring  # type: ignore[import-not-found]
-    except ImportError:
-        raise RuntimeError(
-            "The keyring package is required to store API keys on this platform."
-        ) from None
-
-    try:
-        keyring.set_password(SERVICE_NAME, account, key)
-    except Exception as exc:  # noqa: BLE001 - sanitize backend-specific failures
-        raise RuntimeError(
-            f"Keyring write failed for account '{account}' " f"({type(exc).__name__})."
-        ) from None
+        yield backend
+    finally:
+        _backend_override = previous
+        get_secret.cache_clear()
 
 
 @functools.lru_cache(maxsize=None)
@@ -222,11 +362,7 @@ def get_secret(provider: str) -> str:
             f"export {env_var} for this run."
         )
 
-    if platform.system() == "Darwin":
-        value = _read_macos_keychain(provider)
-    else:
-        value = _read_keyring_library(provider)
-
+    value = active_backend().read(provider)
     if value:
         return value
 
@@ -242,7 +378,7 @@ def get_secret(provider: str) -> str:
 
 
 def set_secret(provider: str, key: str) -> None:
-    """Store ``key`` for ``provider`` in the platform's canonical secret store.
+    """Store ``key`` for ``provider`` in the active secret store.
 
     Environment-only mode deliberately has no write path. Successful writes
     invalidate all cached reads so the new value is visible in this process.
@@ -261,9 +397,6 @@ def set_secret(provider: str, key: str) -> None:
             "Unset it before storing an API key."
         )
 
-    if platform.system() == "Darwin":
-        _write_macos_keychain(account, key)
-    else:
-        _write_keyring_library(account, key)
+    active_backend().write(account, key)
 
     get_secret.cache_clear()
