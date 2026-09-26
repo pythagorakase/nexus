@@ -41,11 +41,12 @@ _FILE_STORE_DIR = Path(__file__).parent.parent.parent / "temp" / "wizard_threads
 
 
 class ConversationThreadNotFoundError(LookupError):
-    """A wizard thread ID has no record in the local conversation file store.
+    """A wizard thread ID has no record in a local conversation store.
 
-    ``create_thread`` always writes the thread file, so a missing file means
-    the ID belongs to another store (for example, a hosted ``conv_*`` ID after
-    a switch to a file-backed provider) or the thread was deleted.
+    ``create_thread`` always registers the thread in the file or memory store,
+    so a missing record means the ID belongs to another store (for example, a
+    hosted ``conv_*`` ID after a switch to a file-backed provider), the thread
+    was deleted, or an in-memory thread was lost when the process restarted.
     """
 
 
@@ -123,9 +124,9 @@ class ConversationsClient:
     The wizard model's registry provider selects the store (see
     ``conversation_store_mode``). OpenAI models use the hosted Conversations
     API; the application keeps the name ``thread_id`` for its stored
-    conversation ID. The TEST provider stores history in memory, and every
-    other provider stores it in local files without constructing a hosted
-    client.
+    conversation ID. The TEST provider stores history in process memory, and
+    every other provider stores it in local files without constructing a
+    hosted client.
     """
 
     def __init__(self, model: str) -> None:
@@ -148,12 +149,12 @@ class ConversationsClient:
         self._store_mode: ConversationStoreMode = conversation_store_mode(
             seat.provider, settings
         )
-        self._test_mode = self._store_mode == "memory"
-        self._test_threads: Dict[str, List[Dict[str, str]]] = {}
+        self._memory_store: Optional[_MemoryConversationStore] = None
         self._file_store: Optional[_FileConversationStore] = None
         self.client: Any = None
 
         if self._store_mode == "memory":
+            self._memory_store = _MEMORY_STORE
             logger.info("[TEST MODE] ConversationsClient using in-memory storage")
         elif self._store_mode == "file":
             self._file_store = _FileConversationStore()
@@ -166,6 +167,15 @@ class ConversationsClient:
             # Hosted Conversations replaced Assistants Threads (retired on
             # August 26, 2026).
             self.client = _hosted_conversations_client(self.model, settings)
+
+    def _require_memory_store(self) -> _MemoryConversationStore:
+        """Return the shared memory store, failing loudly if it was never set."""
+        if self._memory_store is None:
+            raise RuntimeError(
+                f"ConversationsClient for {self.model!r} is in memory storage mode "
+                "without a memory store"
+            )
+        return self._memory_store
 
     def _require_file_store(self) -> _FileConversationStore:
         """Return the local file store, failing loudly if it was never built."""
@@ -188,8 +198,7 @@ class ConversationsClient:
     def create_thread(self) -> str:
         """Create a new conversation thread and return its ID."""
         if self._store_mode == "memory":
-            thread_id = f"test_thread_{uuid.uuid4().hex[:16]}"
-            self._test_threads[thread_id] = []
+            thread_id = self._require_memory_store().create_thread()
             logger.info("[TEST MODE] Created in-memory thread %s", thread_id)
             return thread_id
         if self._store_mode == "file":
@@ -224,20 +233,14 @@ class ConversationsClient:
             The ID of the created message
 
         Raises:
-            ConversationThreadNotFoundError: If a file-backed thread is absent.
+            ConversationThreadNotFoundError: If a file or memory thread is absent.
         """
         if origin is not None:
             if role != "user":
                 raise ValueError("Wizard input provenance requires role=user")
             content = encode_wizard_message(content, origin)
         if self._store_mode == "memory":
-            msg_id = f"test_msg_{uuid.uuid4().hex[:16]}"
-            # Initialize thread if it doesn't exist (handle edge cases)
-            if thread_id not in self._test_threads:
-                self._test_threads[thread_id] = []
-            self._test_threads[thread_id].append(
-                {"id": msg_id, "role": role, "content": content}
-            )
+            msg_id = self._require_memory_store().add_message(thread_id, role, content)
             logger.debug("[TEST MODE] Added %s message to thread %s", role, thread_id)
             return msg_id
         if self._store_mode == "file":
@@ -264,14 +267,10 @@ class ConversationsClient:
             List of Message TypedDicts with 'role' and 'content' fields
 
         Raises:
-            ConversationThreadNotFoundError: If a file-backed thread is absent.
+            ConversationThreadNotFoundError: If a file or memory thread is absent.
         """
         if self._store_mode == "memory":
-            messages = self._test_threads.get(thread_id, [])
-            # Return most recent messages, limited (newest first)
-            limited = messages[-limit:] if limit else messages
-            limited = list(reversed(limited))
-            return [_normalized_message(m["role"], m["content"]) for m in limited]
+            return self._require_memory_store().list_messages(thread_id, limit=limit)
         if self._store_mode == "file":
             return self._require_file_store().list_messages(thread_id, limit=limit)
 
@@ -309,15 +308,12 @@ class ConversationsClient:
             True if successful, False otherwise
 
         Raises:
-            ConversationThreadNotFoundError: If a file-backed thread is absent.
+            ConversationThreadNotFoundError: If a file or memory thread is absent.
         """
         if self._store_mode == "memory":
-            if thread_id in self._test_threads:
-                del self._test_threads[thread_id]
-                logger.info("[TEST MODE] Deleted in-memory thread %s", thread_id)
-                return True
-            logger.warning("[TEST MODE] Thread %s not found", thread_id)
-            return False
+            self._require_memory_store().delete_thread(thread_id)
+            logger.info("[TEST MODE] Deleted in-memory thread %s", thread_id)
+            return True
         if self._store_mode == "file":
             self._require_file_store().delete_thread(thread_id)
             logger.info("Deleted local thread %s", thread_id)
@@ -331,6 +327,60 @@ class ConversationsClient:
         except openai.OpenAIError as exc:
             logger.warning("Failed to delete thread %s: %s", thread_id, exc)
             return False
+
+
+class _MemoryConversationStore:
+    """Process-wide in-memory conversation store for the TEST provider.
+
+    Every client in the process shares one instance, as file-backed clients
+    share one directory, so a thread created by one request is visible to the
+    next. Threads do not survive a process restart.
+    """
+
+    def __init__(self) -> None:
+        self.threads: Dict[str, List[Dict[str, str]]] = {}
+        self._lock = threading.Lock()
+
+    def _existing(self, thread_id: str) -> List[Dict[str, str]]:
+        """Return a created thread's messages, raising when the store lacks it."""
+        messages = self.threads.get(thread_id)
+        if messages is None:
+            raise ConversationThreadNotFoundError(
+                f"Wizard conversation thread {thread_id!r} does not exist in the "
+                "in-memory TEST store; it was created in another conversation "
+                "store, deleted, or lost when the process restarted"
+            )
+        return messages
+
+    def create_thread(self) -> str:
+        thread_id = f"test_thread_{uuid.uuid4().hex[:16]}"
+        with self._lock:
+            self.threads[thread_id] = []
+        return thread_id
+
+    def add_message(self, thread_id: str, role: str, content: str) -> str:
+        msg_id = f"test_msg_{uuid.uuid4().hex[:16]}"
+        with self._lock:
+            self._existing(thread_id).append(
+                {"id": msg_id, "role": role, "content": content}
+            )
+        return msg_id
+
+    def list_messages(self, thread_id: str, limit: int = 20) -> List[Message]:
+        with self._lock:
+            messages = list(self._existing(thread_id))
+        limited = messages[-limit:] if limit else messages
+        limited = list(reversed(limited))
+        return [_normalized_message(m["role"], m["content"]) for m in limited]
+
+    def delete_thread(self, thread_id: str) -> bool:
+        with self._lock:
+            self._existing(thread_id)
+            del self.threads[thread_id]
+        return True
+
+
+_MEMORY_STORE = _MemoryConversationStore()
 
 
 class _FileConversationStore:

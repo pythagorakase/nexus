@@ -1,11 +1,16 @@
-"""Disposable slot routing for request-boundary PostgreSQL regressions."""
+"""Shared API-test boundaries: disposable slot databases and offline registries."""
 
 from collections.abc import Iterator
+from pathlib import Path
+import socket
 
 import pytest
 
+from nexus.api import conversations
 from nexus.api import new_story_flow, setup_endpoints, slot_mutations, slot_state
 from nexus.api import slot_utils
+from nexus.config import load_settings
+from nexus.util.secret_manager import get_secret
 from tests.pg_fixtures import disposable_slot_database
 
 
@@ -35,3 +40,32 @@ def offline_gate_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         ):
             monkeypatch.setattr(module, "slot_dbname", fixture_slot_dbname)
         yield dbname
+
+
+@pytest.fixture
+def offline_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
+    """Remove every registry credential, refuse sockets, and isolate thread files.
+
+    Yields:
+        The directory that receives file-backed wizard threads.
+    """
+    monkeypatch.setenv("NEXUS_TEST_PROVIDER_ONLY", "1")
+    monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
+    for provider, config in load_settings().global_.model.api_models.items():
+        accounts = {provider}
+        if config.api_key_secret is not None:
+            accounts.add(config.api_key_secret)
+        for account in accounts:
+            monkeypatch.delenv(f"{account.upper()}_API_KEY", raising=False)
+    get_secret.cache_clear()
+
+    def refuse_network(*args: object, **kwargs: object) -> None:
+        pytest.fail("Wizard conversation storage opened a network connection")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", refuse_network)
+    monkeypatch.setattr(socket, "create_connection", refuse_network)
+    thread_dir = tmp_path / "wizard_threads"
+    monkeypatch.setattr(conversations, "_FILE_STORE_DIR", thread_dir)
+    yield thread_dir
+    get_secret.cache_clear()

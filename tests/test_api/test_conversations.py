@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import re
-import socket
-from collections.abc import Iterator
 from pathlib import Path
+import re
 from typing import Any, cast
 
 import httpx
@@ -22,7 +20,6 @@ from nexus.api.conversations import (
 from nexus.api.wizard_transcript import MessageOrigin
 from nexus.config import load_settings
 from nexus.config.provider_guard import ProviderForbiddenInTests
-from nexus.util.secret_manager import get_secret
 from tests.model_registry_helpers import registry_model
 
 # Every provider section in nexus.toml, so a newly registered provider is
@@ -31,10 +28,10 @@ REGISTRY_PROVIDERS = sorted(load_settings().global_.model.api_models)
 # The storage contract: only hosted OpenAI has a Conversations endpoint, and
 # the mock provider keeps history in memory. Every other provider uses files.
 EXPECTED_STORE_MODE = {"openai": "openai", "test": "memory"}
-FILE_STORE_PROVIDERS = [
+LOCAL_STORE_PROVIDERS = [
     provider
     for provider in REGISTRY_PROVIDERS
-    if EXPECTED_STORE_MODE.get(provider, "file") == "file"
+    if EXPECTED_STORE_MODE.get(provider, "file") != "openai"
 ]
 
 
@@ -162,7 +159,7 @@ def test_local_conversation_origins_and_literal_envelope_round_trip(
     stored = (
         json.loads(path.read_text())
         if backend == "file"
-        else client._test_threads[thread_id]
+        else conversations._MEMORY_STORE.threads[thread_id]
     )
     assert stored[1]["content"] == messages[1]["content"]
     literal = stored[2]["content"]
@@ -255,35 +252,6 @@ def test_openai_conversation_origins_survive_storage_and_new_client() -> None:
         assert resumed.list_messages("conv_origins", limit=1) == [messages[-1]]
 
 
-@pytest.fixture
-def offline_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    """Remove every registry credential, refuse sockets, and isolate thread files.
-
-    Yields:
-        The directory that receives file-backed wizard threads.
-    """
-    monkeypatch.setenv("NEXUS_TEST_PROVIDER_ONLY", "1")
-    monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
-    for provider, config in load_settings().global_.model.api_models.items():
-        accounts = {provider}
-        if config.api_key_secret is not None:
-            accounts.add(config.api_key_secret)
-        for account in accounts:
-            monkeypatch.delenv(f"{account.upper()}_API_KEY", raising=False)
-    get_secret.cache_clear()
-
-    def refuse_network(*args: object, **kwargs: object) -> None:
-        pytest.fail("Wizard conversation storage opened a network connection")
-
-    monkeypatch.setattr(socket.socket, "connect", refuse_network)
-    monkeypatch.setattr(socket.socket, "connect_ex", refuse_network)
-    monkeypatch.setattr(socket, "create_connection", refuse_network)
-    thread_dir = tmp_path / "wizard_threads"
-    monkeypatch.setattr(conversations, "_FILE_STORE_DIR", thread_dir)
-    yield thread_dir
-    get_secret.cache_clear()
-
-
 @pytest.mark.parametrize("provider", REGISTRY_PROVIDERS)
 def test_conversation_store_mode_follows_registry_provider(provider: str) -> None:
     """Only hosted OpenAI selects Conversations; TEST is memory; others use files."""
@@ -339,18 +307,20 @@ def test_wizard_conversations_follow_registry_provider(
     assert not thread_file.exists()
 
 
-@pytest.mark.parametrize("provider", FILE_STORE_PROVIDERS)
-def test_file_conversations_reject_unknown_threads(
+@pytest.mark.parametrize("provider", LOCAL_STORE_PROVIDERS)
+def test_local_conversations_reject_unknown_threads(
     provider: str, offline_registry: Path
 ) -> None:
-    """A thread the file store never created, or deleted, fails loudly.
+    """A thread the local store never created, or deleted, fails loudly.
 
-    A hosted ``conv_*`` ID reaching a file-backed provider must not resume as
-    an empty transcript or silently start a new file under that ID.
+    A hosted ``conv_*`` ID reaching a file or memory store must not resume as
+    an empty transcript or silently start a new thread under that ID.
     """
     client = ConversationsClient(registry_model(provider))
+    in_memory = EXPECTED_STORE_MODE.get(provider) == "memory"
+    store = "in-memory TEST store" if in_memory else str(offline_registry)
     hosted_id = "conv_created_by_hosted_store"
-    unknown = re.escape(repr(hosted_id)) + ".*" + re.escape(str(offline_registry))
+    unknown = re.escape(repr(hosted_id)) + ".*" + re.escape(store)
     operations = (
         lambda: client.list_messages(hosted_id, limit=0),
         lambda: client.add_message(hosted_id, "assistant", "Welcome"),
@@ -359,6 +329,7 @@ def test_file_conversations_reject_unknown_threads(
     for operation in operations:
         with pytest.raises(ConversationThreadNotFoundError, match=unknown):
             operation()
+    assert hosted_id not in conversations._MEMORY_STORE.threads
     assert not (offline_registry / f"{hosted_id}.json").exists()
 
     thread_id = client.create_thread()
