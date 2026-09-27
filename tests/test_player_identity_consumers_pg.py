@@ -7,7 +7,6 @@ save-slot or template database is mutated.
 
 from __future__ import annotations
 
-import os
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -19,7 +18,7 @@ import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2 import sql  # type: ignore[import-untyped]
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
-from sqlalchemy import URL, create_engine, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -43,6 +42,7 @@ from nexus.api.narrative_generation import generate_bootstrap_narrative
 from nexus.config.settings_models import OrreryWeatherSettings
 from nexus.memory.manager import ContextMemoryManager
 from scripts import new_story_setup
+from tests.pg_fixtures import asyncpg_kwargs, connect, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -60,31 +60,7 @@ _AMBIENT_SETTINGS = {
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     """Open a direct psycopg connection to the disposable database."""
 
-    kwargs: dict[str, Any] = {
-        "dbname": dbname,
-        "user": os.environ.get("PGUSER", "pythagor"),
-        "host": os.environ.get("PGHOST", "localhost"),
-        "port": os.environ.get("PGPORT", "5432"),
-        "connect_timeout": 2,
-    }
-    if dict_cursor:
-        kwargs["cursor_factory"] = RealDictCursor
-    return psycopg2.connect(
-        **kwargs,
-    )
-
-
-def _database_url(dbname: str) -> URL:
-    """Build the SQLAlchemy URL for a disposable local database."""
-
-    return URL.create(
-        "postgresql+psycopg2",
-        username=os.environ.get("PGUSER", "pythagor"),
-        password=os.environ.get("PGPASSWORD"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=int(os.environ.get("PGPORT", "5432")),
-        database=dbname,
-    )
+    return connect(dbname, cursor_factory=RealDictCursor if dict_cursor else None)
 
 
 @contextmanager
@@ -106,7 +82,7 @@ def _disposable_player_database(prefix: str) -> Iterator[tuple[str, Engine]]:
             dbname,
             source_db="NEXUS_template",
         )
-        engine = create_engine(_database_url(dbname), future=True)
+        engine = create_engine(sqlalchemy_url(dbname), future=True)
         yield dbname, engine
     finally:
         new_story_setup.USE_POOL = original_use_pool
@@ -1000,13 +976,7 @@ async def test_async_gis_consumer_uses_same_identity_contract(
     """The asyncpg place-stub path resolves and rejects the same identity."""
 
     dbname, _engine = disposable_player_db
-    conn = await asyncpg.connect(
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        password=os.environ.get("PGPASSWORD"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=int(os.environ.get("PGPORT", "5432")),
-    )
+    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
     transaction = conn.transaction()
     await transaction.start()
     try:

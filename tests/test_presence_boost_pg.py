@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Iterator
 import uuid
 
@@ -12,10 +11,12 @@ from psycopg2 import sql
 import pytest
 
 from nexus.agents.memnon.utils.search import SearchManager
+from nexus.database import database_url
 from scripts.measure_presence_boost import (
     load_measurement_corpus,
     measure_presence_boost,
 )
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -36,19 +37,7 @@ class FixedEmbeddingManager:
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
-
-
-def _database_url(dbname: str) -> str:
-    user = os.environ.get("PGUSER", "pythagor")
-    host = os.environ.get("PGHOST", "localhost")
-    port = os.environ.get("PGPORT", "5432")
-    return f"postgresql://{user}@{host}:{port}/{dbname}"
+    return connect(dbname)
 
 
 def _insert_chunk(cursor: Any, raw_text: str, scene: int) -> int:
@@ -206,7 +195,7 @@ def presence_database() -> Iterator[dict[str, Any]]:
 
         yield {
             "dbname": dbname,
-            "db_url": _database_url(dbname),
+            "db_url": database_url(dbname),
             "query_text": query_text,
             "character_id": character_id,
             "nonpresent_chunk_id": nonpresent_chunk_id,

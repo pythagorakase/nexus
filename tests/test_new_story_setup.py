@@ -26,6 +26,7 @@ import tomlkit
 
 from scripts import migrate
 from scripts import new_story_setup
+from tests.pg_fixtures import connect, subprocess_env
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -36,12 +37,7 @@ _SEED_ROWS = [("alert", "faction"), ("grieving", "character")]
 
 
 def _connect(dbname: str) -> psycopg2.extensions.connection:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 def _all_known_migrations() -> list[tuple[str, str]]:
@@ -55,7 +51,7 @@ def _all_known_migrations() -> list[tuple[str, str]]:
 @pytest.fixture
 def template_db() -> Generator[str, None, None]:
     """A throwaway template: minimal schema, seed rows, full migration stamps."""
-    subprocess.run(["createdb", _SOURCE_DB], check=True)
+    subprocess.run(["createdb", _SOURCE_DB], check=True, env=subprocess_env())
     try:
         conn = _connect(_SOURCE_DB)
         try:
@@ -118,7 +114,9 @@ def template_db() -> Generator[str, None, None]:
             conn.close()
         yield _SOURCE_DB
     finally:
-        subprocess.run(["dropdb", "--if-exists", _SOURCE_DB], check=False)
+        subprocess.run(
+            ["dropdb", "--if-exists", _SOURCE_DB], check=False, env=subprocess_env()
+        )
 
 
 @pytest.mark.parametrize("desktop_reset", [False, True], ids=["fresh", "desktop-reset"])
@@ -209,4 +207,6 @@ def test_fresh_database_is_baseline_stamped(
         applied, failed = migrate.migrate_database(_TARGET_DB, skip_locked=False)
         assert (applied, failed) == (0, 0)
     finally:
-        subprocess.run(["dropdb", "--if-exists", _TARGET_DB], check=False)
+        subprocess.run(
+            ["dropdb", "--if-exists", _TARGET_DB], check=False, env=subprocess_env()
+        )

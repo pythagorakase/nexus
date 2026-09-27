@@ -12,7 +12,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
@@ -26,6 +25,7 @@ from nexus.memory.correspondence import (
     load_accepted_correspondence,
     persist_staged_correspondence,
 )
+from tests.pg_fixtures import connect
 
 
 pytestmark = [
@@ -40,12 +40,7 @@ pytestmark = [
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()

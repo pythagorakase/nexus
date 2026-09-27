@@ -7,7 +7,6 @@ afterward. No save-slot or template database is mutated.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import uuid
 from typing import Any, Iterator
@@ -19,6 +18,7 @@ import pytest
 from nexus import cli
 from nexus.api import db_pool, slot_utils
 from scripts import new_story_setup
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -27,13 +27,7 @@ pytestmark = pytest.mark.requires_postgres
 def _connect(dbname: str) -> Any:
     """Open a direct PostgreSQL connection to the disposable database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @pytest.fixture(scope="module")

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Iterator
 from uuid import uuid4
 
@@ -31,6 +30,7 @@ from nexus.api.presence_reconciliation import (
 )
 from nexus.memory.manager import empty_pass2_baseline
 from scripts import new_story_setup
+from tests.pg_fixtures import asyncpg_kwargs, connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -45,24 +45,13 @@ TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
 def _connect(dbname: str) -> Any:
     """Open a psycopg2 connection to the disposable database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 async def _connect_async(dbname: str) -> asyncpg.Connection:
     """Open an asyncpg connection with the application's JSON codecs."""
 
-    conn = await asyncpg.connect(
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
     for type_name in ("json", "jsonb"):
         await conn.set_type_codec(
             type_name,
