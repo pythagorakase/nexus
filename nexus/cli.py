@@ -3722,6 +3722,24 @@ def run_home(args: argparse.Namespace) -> Dict[str, Any]:
     return {"success": True, "home_plan": plan.as_dict()}
 
 
+def run_doctor(args: argparse.Namespace) -> int:
+    """Run one role's read-only readiness checks; exit 1 if any check fails."""
+    from nexus.runtime.readiness import (
+        ReadinessContext,
+        render_report,
+        run_readiness,
+    )
+
+    config = Path(args.config) if args.config else None
+    report = run_readiness(args.target, ReadinessContext(config_path=config))
+    if args.json:
+        print(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
+    else:
+        for line in render_report(report):
+            print(line)
+    return 0 if report.ok else 1
+
+
 def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
     """Return provider usage and rendered blocks for one UTC day or run."""
     from nexus.telemetry.usage import read_prompt_windows, summarize_usage
@@ -4233,6 +4251,19 @@ Examples:
         dest="target",
         help="Target runtime home directory (default: NEXUS_HOME)",
     )
+
+    from nexus.runtime.readiness import TARGETS
+
+    doctor_parser = subparsers.add_parser(
+        "doctor", help="Check this machine's readiness for a role (read-only)"
+    )
+    doctor_parser.add_argument(
+        "--target",
+        choices=TARGETS,
+        default="owner-host",
+        help="Machine role whose checks run (default: owner-host)",
+    )
+    _add_config_arg(doctor_parser)
 
     usage_parser = subparsers.add_parser(
         "usage",
@@ -4949,6 +4980,8 @@ def main() -> int:
         result = run_logs(args)
     elif args.command == "home":
         result = run_home(args)
+    elif args.command == "doctor":
+        return run_doctor(args)
     elif args.command == "usage":
         result = run_usage(args)
     elif args.command == "window-replay":

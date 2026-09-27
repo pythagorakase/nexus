@@ -13,7 +13,6 @@ SPA mount registers a catch-all route and must come last.
 from __future__ import annotations
 
 import asyncio
-from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Dict
 
 import requests
@@ -25,6 +24,7 @@ from nexus.runtime.contract import (
     RUNTIME_STATUS_PATH,
     gateway_port_override,
 )
+from nexus.runtime.readiness import gateway_readiness, runtime_version
 
 
 def _database_status() -> Dict[str, Any]:
@@ -71,15 +71,10 @@ def build_runtime_status() -> Dict[str, Any]:
     settings = load_settings()
     runtime = settings.runtime
 
-    try:
-        nexus_version = version("nexus")
-    except PackageNotFoundError:
-        nexus_version = "unknown"
-
     database = _database_status()
     status: Dict[str, Any] = {
         "profile": runtime.profile if runtime else None,
-        "version": nexus_version,
+        "version": runtime_version(),
         "slot": database.get("slot"),
         "database": database,
         # The gateway answered this request, so it is healthy by construction.
@@ -131,6 +126,10 @@ def build_runtime_status() -> Dict[str, Any]:
     status["ok"] = database["ok"] and all(
         service.get("ok", False) for service in status["services"].values()
     )
+    # Readiness is a separate answer from `ok` (liveness plus the active slot's
+    # database): the checks the gateway can evaluate in-process, which never
+    # gate a client's "connected" state. `nexus doctor` runs the full set.
+    status["readiness"] = gateway_readiness().model_dump(mode="json")
     return status
 
 

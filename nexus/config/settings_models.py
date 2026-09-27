@@ -752,6 +752,54 @@ class RuntimeLogsSettings(BaseModel):
         return value
 
 
+class RuntimeReadinessSettings(BaseModel):
+    """Bounds for the read-only readiness checks behind ``nexus doctor`` (#803).
+
+    PostgreSQL checks connect through the ``[api.database]`` contract, so its
+    ``connect_timeout_seconds`` bounds them exactly as it bounds the runtime.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    gateway_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        description="HTTP timeout for the owner-client GET /runtime/status probe",
+    )
+    reachability_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        description=(
+            "Wall-clock limit for the ci-runner reachability gate subprocess "
+            "(python -S scripts/check_reachability.py)"
+        ),
+    )
+    slots: List[int] = Field(
+        default_factory=lambda: [1, 2, 3, 4, 5],
+        min_length=1,
+        description=(
+            "Save slots whose databases slots.migrations_current reads; an "
+            "absent slot database is reported, not failed"
+        ),
+    )
+
+    @field_validator("slots")
+    @classmethod
+    def _validate_slots(cls, value: List[int]) -> List[int]:
+        """Slots are distinct save-slot numbers, 1 through 5."""
+        invalid = sorted({slot for slot in value if not 1 <= slot <= 5})
+        if invalid:
+            raise ValueError(
+                f"[runtime.readiness] slots must be between 1 and 5, got {invalid}"
+            )
+        duplicates = sorted({slot for slot in value if value.count(slot) > 1})
+        if duplicates:
+            raise ValueError(
+                f"[runtime.readiness] slots has duplicate entries: {duplicates}"
+            )
+        return value
+
+
 class RuntimeExternalSettings(BaseModel):
     """Attach targets for the external profile (spawn nothing)."""
 
@@ -1006,6 +1054,9 @@ class RuntimeSettings(BaseModel):
     scheduler: DeferredWorkSettings = Field(default_factory=DeferredWorkSettings)
     health: RuntimeHealthSettings = Field(default_factory=RuntimeHealthSettings)
     logs: RuntimeLogsSettings = Field(default_factory=RuntimeLogsSettings)
+    readiness: RuntimeReadinessSettings = Field(
+        default_factory=RuntimeReadinessSettings
+    )
     external: Optional[RuntimeExternalSettings] = None
     remote: Optional[RuntimeRemoteSettings] = None
 

@@ -48,7 +48,18 @@ were already served by the gateway.
     "mock_openai": {"ok": true, "port": 5102}
   },
   "auth": {"header": "X-Nexus-Auth", "enforced": false},
-  "ok": true
+  "ok": true,
+  "readiness": {
+    "schema_version": 1,
+    "target": "owner-host",
+    "ok": true,
+    "checks": [
+      {"id": "config.valid", "status": "pass", "...": "..."},
+      {"id": "tools.pg_dump", "status": "pass", "...": "..."},
+      {"id": "ui.bundle", "status": "pass", "...": "..."}
+    ],
+    "omitted": ["postgres.reachable", "...", "secrets.seat_providers"]
+  }
 }
 ```
 
@@ -65,6 +76,10 @@ Field semantics:
   it.
 - `ok` — conjunction of everything above; a client can gate its "connected"
   indicator on this single bit.
+- `readiness` — the owner-host readiness checks the gateway evaluates
+  in-process, in the schema `nexus doctor --json` prints (see Readiness
+  Checks). It never feeds `ok`; `omitted` names the checks only
+  `nexus doctor` runs.
 
 The canonical path and header names live in `nexus/runtime/contract.py`.
 
@@ -247,6 +262,7 @@ nexus down [service] [--config PATH]
 nexus restart [service] [--slot N] [--config PATH]
 nexus status [--config PATH]
 nexus logs [service] [-n LINES] [-f] [--config PATH]
+nexus doctor [--target owner-host|owner-client|ci-runner] [--config PATH]
 ```
 
 All verbs honor the global `--json` flag for machine-readable output.
@@ -258,6 +274,53 @@ describes the config that actually launched them. Story commands use
 `profile = "remote"`; an explicit `NEXUS_API_URL` still overrides the base
 URL. Access credentials are attached only when that override has the same
 origin as `remote.base_url`.
+
+## Readiness Checks
+
+`nexus doctor` answers "is this machine ready for its role?" with one
+registry of read-only checks in `nexus/runtime/readiness.py` (issue #803).
+It never creates, migrates, locks, or writes anything: database sessions are
+read-only, and secrets are reported present or missing, never printed. It
+exits 1 when any check fails and 0 otherwise. Text output is one line per
+check; `--json` prints the machine-readable report. Liveness (`/health`),
+readiness, and slot playability are three separate answers; this is the
+second.
+
+| Check | Roles | Depends on | Passes when |
+| --- | --- | --- | --- |
+| `config.valid` | all | — | the active `nexus.toml` (The Runtime Home) resolves and validates |
+| `postgres.reachable` | owner-host | `config.valid` | the `postgres` database accepts the `[api.database]` connection contract |
+| `postgres.extensions` | owner-host | `postgres.reachable` | `vector` and `postgis` are in `pg_available_extensions` |
+| `template.present` | owner-host | `postgres.reachable` | `NEXUS_template` exists |
+| `template.migrations_current` | owner-host | `template.present` | its `schema_migrations` stamps match `migrations/` exactly |
+| `slots.migrations_current` | owner-host | `template.present` | every probed slot that exists matches `migrations/`; an absent slot is reported, not failed |
+| `tools.pg_dump` | owner-host | `config.valid` | `pg_dump` resolves on `PATH` or `[api.database].tool_search_paths` |
+| `ui.bundle` | owner-host | — | `ui/dist/public/index.html` exists |
+| `secrets.seat_providers` | owner-host | `config.valid` | every key the model seats in use read is present (Required Keys and Headless Hosts) |
+| `gateway.reachable` | owner-client | `config.valid` | the profile's gateway answers `/runtime/status` with the runtime's auth headers |
+| `gateway.version` | owner-client | `gateway.reachable` | client and runtime report the same `nexus` version |
+| `reachability.gate` | ci-runner | `config.valid` | `python -S scripts/check_reachability.py` passes |
+
+Each report entry carries `id`, `targets`, `status` (`pass`, `fail`, or
+`skip`), `observed`, `depends_on`, and `remediation`. A check whose
+dependency did not pass is skipped, and its `observed` names the check that
+failed at the root of the chain. The report adds `schema_version`, `target`,
+`ok` (no check failed), and `omitted`. Stamps a database carries that this
+checkout lacks fail the migration checks too: the code is older than the
+schema.
+
+`[runtime.readiness]` in `nexus.toml` bounds the checks:
+`gateway_timeout_seconds` for the owner-client probe,
+`reachability_timeout_seconds` for the gate, and `slots` for the slot
+databases read. PostgreSQL checks connect exactly as the runtime does, so
+`[api.database].connect_timeout_seconds` bounds them. With
+`NEXUS_KEYRING_DISABLE=1`, `secrets.seat_providers` reads environment
+variables only and says so.
+
+`/runtime/status` carries the checks the gateway evaluates in-process
+(`config.valid`, `tools.pg_dump`, `ui.bundle`): the gateway's own `PATH` and
+build directory are the ones that matter to it. Guest-host checks, slot
+playability, and `nexus init` are later slices of #803.
 
 ## The Runtime Home
 
