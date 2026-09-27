@@ -12,6 +12,8 @@ omitted when a chunk has none). The client code under ``ui/client/src`` is
 the consumer contract — do not change shapes here without updating it.
 The one deliberate break is player safety (issue #769): authored place
 ``secrets`` and the hidden character psychology profile are not served.
+``GET /api/narrative/recap`` (issue #832) is new rather than ported; it
+serves its typed ``ReturnRecap`` model's snake_case field names.
 
 Queries are written against the LIVE database schema (``psql -d save_NN -c
 '\\d+ <table>'``), not the retired Drizzle typings, which had drifted
@@ -229,8 +231,9 @@ async def get_return_recap(slot: Optional[int] = None) -> ReturnRecap:
 
     ``due`` turns true once ``[ui.recap].hiatus_hours`` have passed since the
     last accepted player action. Items cite only committed, playable rows the
-    reader already serves, each verified server-side before it is returned;
-    an item without a source is omitted. Nothing is written.
+    reader already serves, or the pending draft whose menu slot state serves,
+    each verified server-side in the same snapshot before it is returned; an
+    item without a source is omitted. Nothing is written.
     """
     dbname = resolve_dbname(slot)
     policy = load_settings().ui.recap

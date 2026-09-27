@@ -32,9 +32,10 @@
  * the draft. The pending prose stays on screen until the replacement lands,
  * and a failed re-roll leaves it there beneath a failure line.
  *
- * Just above the frontier chunk, a history glyph opens the return recap
- * (ReturnRecapCard). It opens on its own after a real-world hiatus, and the
- * next accepted action closes it.
+ * Just above the latest committed chunk, a history glyph opens the return
+ * recap (ReturnRecapCard), whether or not a draft is pending below. It opens
+ * on its own after a real-world hiatus, and the next accepted action closes
+ * it.
  */
 import {
   Fragment,
@@ -50,7 +51,11 @@ import { DecoDivider } from "@/components/deco";
 import { Textarea } from "@/components/ui/textarea";
 import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
-import { ReturnRecapCard, useReturnRecapVisibility } from "./ReturnRecapCard";
+import {
+  ReturnRecapCard,
+  recapBeneath,
+  useReturnRecapVisibility,
+} from "./ReturnRecapCard";
 import {
   REGENERATE_NOTE_MAX_CHARS,
   getChunk,
@@ -225,15 +230,17 @@ export function NarrativePane({
     enabled: headChunkId !== null,
   });
 
-  // Where the story stands, for a returning player. Committed canon only, so
-  // it waits for a committed frontier; the reader's "/api/narrative"
-  // invalidation after an accepted action refreshes it.
+  // Where the story stands, for a returning player. It sits above the latest
+  // committed chunk, so it waits for one; the reader's "/api/narrative"
+  // invalidation after an accepted action refreshes it. The gateway decides
+  // `due` against the hiatus clock, so a reader left open across the hiatus
+  // asks again when the player returns to the tab.
   const { data: recap } = useQuery<ReturnRecap>({
     queryKey: ["/api/narrative/recap", slot],
     queryFn: () => getReturnRecap(slot),
     enabled: !isHistorical && !!latestChunk,
+    refetchOnWindowFocus: "always",
   });
-  const recapView = useReturnRecapVisibility(recap);
 
   const chunks = episodeChunks?.chunks ?? [];
   const hasPending = slotState?.has_pending ?? false;
@@ -324,6 +331,17 @@ export function NarrativePane({
       pendingDivider: previousVoice !== null && previousVoice !== "st",
     };
   }, [chunks, currentChunkId]);
+
+  // The recap sits just above the latest committed chunk, whose setting and
+  // cast it reports, even while a draft is pending below that chunk.
+  const recapChunkId = latestChunk?.id ?? null;
+  const recapIndex = chunkRenders.findIndex((chunk) => chunk.id === recapChunkId);
+  const chunkAboveRecap = recapIndex > 0 ? chunkRenders[recapIndex - 1].id : null;
+  const shownRecap = useMemo(
+    () => recapBeneath(recap, chunkAboveRecap),
+    [recap, chunkAboveRecap],
+  );
+  const recapView = useReturnRecapVisibility(shownRecap);
 
   // The historical chunk's prose segments (storyteller + the player's
   // recorded response).
@@ -606,7 +624,7 @@ export function NarrativePane({
 
   const recapCard = (
     <ReturnRecapCard
-      recap={recap}
+      recap={shownRecap}
       open={recapView.open}
       onToggle={recapView.toggle}
     />
@@ -632,7 +650,7 @@ export function NarrativePane({
           <section className="chunk-stream">
             {chunkRenders.map((chunk) => (
               <Fragment key={chunk.id}>
-                {chunk.isCurrent && recapCard}
+                {chunk.id === recapChunkId && recapCard}
                 {chunk.intertitle && <Intertitle {...chunk.intertitle} />}
                 <div
                   className={`chunk-block ${chunk.isCurrent ? "current" : ""}`}
@@ -652,7 +670,6 @@ export function NarrativePane({
               </Fragment>
             ))}
 
-            {pendingText && recapCard}
             {pendingText && (
               <div className="chunk-block current" data-testid="chunk-pending">
                 <div className="prose-block">

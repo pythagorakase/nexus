@@ -12,6 +12,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,6 +21,8 @@ from pydantic import ValidationError
 from nexus.api import narrative
 from nexus.api.return_recap import (
     ActionRow,
+    DraftHandle,
+    DraftRow,
     FrontierRow,
     NamedRow,
     RecapEvidenceError,
@@ -67,6 +70,23 @@ OPEN_FRONTIER = FrontierRow(
     # The stored jsonb shape: the menu with no selection yet.
     choice_object={"presented": MEMORIAL_CHOICES, "selected": None},
 )
+DRAFT_SESSION = "5f0c2a4e-8d6b-4f3e-9a51-2c7d1e0b8a93"
+DRAFT_CHOICES = [
+    "Hand Ren the warrant and walk out into the rain.",
+    "Ask Sister Calyx who signed it.",
+]
+# The live reading loop at rest: the answered frontier was committed with
+# the player's action, and the next draft waits with its own menu.
+ANSWERED_FRONTIER = FrontierRow(
+    chunk_id=42,
+    choice_text=MEMORIAL_CHOICES[1],
+    choice_object={"presented": MEMORIAL_CHOICES, "selected": 2},
+)
+PENDING_DRAFT = DraftRow(
+    session_id=DRAFT_SESSION,
+    choice_text=None,
+    choice_object={"presented": DRAFT_CHOICES, "selected": None},
+)
 
 
 def _compose(**overrides: Any) -> ReturnRecap:
@@ -80,13 +100,17 @@ def _compose(**overrides: Any) -> ReturnRecap:
         "roster": ROSTER,
         "last_action": LAST_ACTION,
         "frontier": OPEN_FRONTIER,
+        "draft": None,
     }
     rows.update(overrides)
     return compose_recap(**rows)
 
 
-def _handles(item: RecapItem) -> list[tuple[str, int]]:
-    return [(source.kind, source.id) for source in item.sources]
+def _handles(item: RecapItem) -> list[tuple[str, int | str]]:
+    return [
+        (source.kind, str(source.id) if source.kind == "draft" else source.id)
+        for source in item.sources
+    ]
 
 
 def test_full_return_cites_each_fact_to_its_committed_rows() -> None:
@@ -139,6 +163,55 @@ def test_answered_frontier_is_the_last_action_and_leaves_no_open_decision() -> N
     ]
     assert recap.items[-1].text == edited
     assert _handles(recap.items[-1]) == [("chunk", 42)]
+
+
+def test_pending_draft_is_the_open_decision_over_an_answered_frontier() -> None:
+    """At rest in the live loop, the waiting draft's menu is what stays open."""
+    recap = _compose(
+        frontier=ANSWERED_FRONTIER,
+        last_action=ActionRow(chunk_id=42, choice_text=MEMORIAL_CHOICES[1]),
+        draft=PENDING_DRAFT,
+    )
+
+    assert [item.kind for item in recap.items] == [
+        "location",
+        "roster",
+        "last_action",
+        "open_decision",
+    ]
+    _, roster, action, decision = recap.items
+    assert _handles(roster)[0] == ("chunk", 42)
+    assert action.text == MEMORIAL_CHOICES[1]
+    assert _handles(action) == [("chunk", 42)]
+    assert decision.text.split("\n") == DRAFT_CHOICES
+    assert _handles(decision) == [("draft", DRAFT_SESSION)]
+    # On the wire the draft is its session ID, as /api/slot/state serves it.
+    assert decision.model_dump(mode="json")["sources"] == [
+        {"kind": "draft", "id": DRAFT_SESSION}
+    ]
+
+
+@pytest.mark.parametrize(
+    "draft",
+    [
+        DraftRow(
+            session_id=DRAFT_SESSION,
+            choice_text=DRAFT_CHOICES[0],
+            choice_object={"presented": DRAFT_CHOICES, "selected": 1},
+        ),
+        DraftRow(session_id=DRAFT_SESSION, choice_text=None, choice_object=None),
+    ],
+    ids=["answered-draft", "freeform-draft"],
+)
+def test_a_pending_draft_supersedes_the_frontier_menu(draft: DraftRow) -> None:
+    """With a draft waiting, the committed frontier's menu is never offered."""
+    recap = _compose(frontier=OPEN_FRONTIER, draft=draft)
+
+    assert [item.kind for item in recap.items] == [
+        "location",
+        "roster",
+        "last_action",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -197,7 +270,12 @@ def test_facts_without_a_source_are_omitted_not_invented(
 def test_empty_story_has_no_items_and_is_never_due() -> None:
     """A slot with no committed chunks or recorded action has nothing to recap."""
     recap = _compose(
-        last_played=None, setting=None, roster=None, last_action=None, frontier=None
+        last_played=None,
+        setting=None,
+        roster=None,
+        last_action=None,
+        frontier=None,
+        draft=None,
     )
 
     assert recap == ReturnRecap(due=False, last_played=None, items=[])
@@ -261,22 +339,35 @@ def test_fractional_hiatus_and_unplayed_story() -> None:
     assert is_recap_due(None, RETURN, 1.5) is False
 
 
-def test_an_item_citing_other_than_one_chunk_is_refused_before_any_read() -> None:
-    """Every item names the one chunk its evidence came from."""
+@pytest.mark.parametrize(
+    ("sources", "cited"),
+    [
+        ([SourceHandle(kind="place", id=7)], "[]"),
+        (
+            [
+                SourceHandle(kind="chunk", id=42),
+                DraftHandle(kind="draft", id=UUID(DRAFT_SESSION)),
+            ],
+            f"['chunk 42', 'draft {DRAFT_SESSION}']",
+        ),
+    ],
+    ids=["no-anchor", "two-anchors"],
+)
+def test_an_item_citing_other_than_one_anchor_is_refused_before_any_read(
+    sources: list[Any], cited: str
+) -> None:
+    """Every item names the one chunk or draft its evidence came from."""
     recap = ReturnRecap(
         due=False,
         last_played=None,
-        items=[
-            RecapItem(
-                kind="location",
-                text="Lantern Quay Memorial Hall",
-                sources=[SourceHandle(kind="place", id=7)],
-            )
-        ],
+        items=[RecapItem(kind="open_decision", text="Wait.", sources=sources)],
     )
 
-    with pytest.raises(RecapEvidenceError, match="exactly one chunk, got \\[\\]"):
+    with pytest.raises(RecapEvidenceError) as exc:
         verify_recap_sources(None, recap)
+    assert str(exc.value) == (
+        f"Recap open_decision item must cite exactly one chunk or draft, got {cited}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -401,3 +492,6 @@ def test_recap_wire_contract_is_the_typed_model() -> None:
         "place",
         "character",
     ]
+    draft = components["DraftHandle"]["properties"]
+    assert draft["kind"]["const"] == "draft"
+    assert draft["id"] == {"format": "uuid", "title": "Id", "type": "string"}

@@ -1,5 +1,6 @@
 /**
- * ReturnRecapCard - where the story stands, just above the frontier.
+ * ReturnRecapCard - where the story stands, just above the latest committed
+ * chunk (the one whose setting and cast it reports).
  *
  * A quiet history glyph toggles the card. The card opens on its own when the
  * gateway reports a recap due (a real-world hiatus since the last accepted
@@ -10,8 +11,9 @@
  * Each line leads with an icon, never a label: the setting (pin), who is
  * present (people), the last accepted action (footsteps, in the player's
  * voice), and the options still open (fork), one per line. The gateway has
- * already verified every line against committed canon and omits any fact it
- * cannot source, so the card renders exactly what it receives.
+ * already verified every line against its source and omits any fact it
+ * cannot source; the pane leaves out only a last action whose player line is
+ * printed directly above the card (recapBeneath).
  */
 import { useCallback, useId, useState } from "react";
 import {
@@ -37,6 +39,26 @@ const MARKDOWN_KINDS: ReadonlySet<RecapItem["kind"]> = new Set<RecapItem["kind"]
   "last_action",
   "open_decision",
 ]);
+
+/**
+ * The recap as shown just below the chunk `chunkAboveId`. A last action cited
+ * to that chunk is its player line, already printed directly above the card,
+ * so the card does not repeat it.
+ */
+export function recapBeneath(
+  recap: ReturnRecap | undefined,
+  chunkAboveId: number | null,
+): ReturnRecap | undefined {
+  if (!recap || chunkAboveId === null) return recap;
+  const items = recap.items.filter(
+    (item) =>
+      item.kind !== "last_action"
+      || !item.sources.some(
+        (source) => source.kind === "chunk" && source.id === chunkAboveId,
+      ),
+  );
+  return items.length === recap.items.length ? recap : { ...recap, items };
+}
 
 export interface ReturnRecapVisibility {
   open: boolean;

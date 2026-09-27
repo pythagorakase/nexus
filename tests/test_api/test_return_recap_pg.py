@@ -22,12 +22,14 @@ from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.api import narrative, reader_endpoints, slot_utils
 from nexus.api.config_utils import get_max_choice_text_length
 from nexus.api.return_recap import (
+    DraftHandle,
     RecapEvidenceError,
     RecapItem,
     ReturnRecap,
     SourceHandle,
     verify_recap_sources,
 )
+from nexus.api.slot_state import get_slot_state
 from nexus.config import load_settings
 from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import (
@@ -48,6 +50,10 @@ MEMORIAL_CHOICES = [
     "Take Ivo's call on the viaduct stairs.",
 ]
 LAST_ACTION = "Offer Rook the thumb-to-temple greeting."
+DRAFT_CHOICES = [
+    "Hand Ren the warrant and walk out into the rain.",
+    "Ask Sister Calyx who signed it.",
+]
 EARLIER = "2026-01-01T00:00:00+00:00"
 
 
@@ -457,6 +463,71 @@ def test_accepting_the_open_decision_closes_it_and_resets_the_clock(
     }
 
 
+def _seed_draft(dbname: str, parent: int, choices: list[str]) -> str:
+    """Leave a pending draft continuing ``parent``; return its session ID."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO incubator (parent_chunk_id, storyteller_text, choice_object) "
+            "VALUES (%s, 'Ren unfolds the warrant.', %s) RETURNING session_id::text",
+            (parent, Json({"presented": choices, "selected": None})),
+        )
+        return str(cur.fetchone()[0])
+
+
+def test_live_loop_at_rest_offers_the_pending_drafts_decision(
+    recap_slot: tuple[str, int],
+) -> None:
+    """An answered frontier plus a waiting draft: the draft's menu stays open.
+
+    Accepting a pending draft commits it with the player's action, and the
+    next generation leaves a new draft, so this is the ordinary return state.
+    """
+    dbname, player_id = recap_slot
+    ids = _seed_memorial(dbname, player_id)
+    assert _record(ids["frontier"], choice=2) == MEMORIAL_CHOICES[1]
+    session_id = _seed_draft(dbname, ids["frontier"], DRAFT_CHOICES)
+    _set_last_played(dbname, EARLIER)
+
+    recap = _reader().get(f"/api/narrative/recap?slot={SLOT}").json()
+
+    assert recap["due"] is True
+    assert recap["items"] == [
+        {
+            "kind": "location",
+            "text": "Lantern Quay Memorial Hall, Transit Viaduct",
+            "sources": [
+                {"kind": "chunk", "id": ids["frontier"]},
+                {"kind": "place", "id": ids["hall"]},
+                {"kind": "place", "id": ids["viaduct"]},
+            ],
+        },
+        {
+            "kind": "roster",
+            "text": "Mara Vey, Elian Rook, Ren Vale",
+            "sources": [
+                {"kind": "chunk", "id": ids["frontier"]},
+                {"kind": "character", "id": player_id},
+                {"kind": "character", "id": ids["rook"]},
+                {"kind": "character", "id": ids["ren"]},
+            ],
+        },
+        {
+            "kind": "last_action",
+            "text": MEMORIAL_CHOICES[1],
+            "sources": [{"kind": "chunk", "id": ids["frontier"]}],
+        },
+        {
+            "kind": "open_decision",
+            "text": "\n".join(DRAFT_CHOICES),
+            "sources": [{"kind": "draft", "id": session_id}],
+        },
+    ]
+    # The draft handle and its menu are exactly what slot state already serves.
+    pending = get_slot_state(SLOT).narrative_state
+    assert pending is not None and pending.has_pending
+    assert (str(pending.session_id), pending.choices) == (session_id, DRAFT_CHOICES)
+
+
 def test_new_story_recap_is_empty_and_not_due(recap_slot: tuple[str, int]) -> None:
     response = _reader().get(f"/api/narrative/recap?slot={SLOT}")
 
@@ -467,9 +538,11 @@ def test_new_story_recap_is_empty_and_not_due(recap_slot: tuple[str, int]) -> No
 def test_forged_handles_fail_server_side_verification(
     recap_slot: tuple[str, int],
 ) -> None:
-    """Handles outside committed canon, or unrelated to their chunk, are refused."""
+    """Handles outside canon or the draft, or unrelated to their anchor, fail."""
     dbname, player_id = recap_slot
     ids = _seed_memorial(dbname, player_id)
+    pending = _seed_draft(dbname, ids["frontier"], DRAFT_CHOICES)
+    absent = str(uuid.uuid4())
     forged = ReturnRecap(
         due=False,
         last_played=None,
@@ -495,6 +568,19 @@ def test_forged_handles_fail_server_side_verification(
                 text="Draft action.",
                 sources=[SourceHandle(kind="chunk", id=ids["draft"])],
             ),
+            RecapItem(
+                kind="open_decision",
+                text="Wait.",
+                sources=[DraftHandle(kind="draft", id=uuid.UUID(absent))],
+            ),
+            RecapItem(
+                kind="roster",
+                text="Ren Vale",
+                sources=[
+                    DraftHandle(kind="draft", id=uuid.UUID(pending)),
+                    SourceHandle(kind="character", id=ids["ren"]),
+                ],
+            ),
         ],
     )
 
@@ -506,3 +592,7 @@ def test_forged_handles_fail_server_side_verification(
     assert f"location: chunk {ids['prologue']}" in message
     assert f"roster: character {ids['ivo']} on chunk {ids['frontier']}" in message
     assert f"last_action: chunk {ids['draft']}" in message
+    # A session that is not the pending draft, and a draft citing a character.
+    assert f"open_decision: draft {absent}" in message
+    assert f"roster: character {ids['ren']} on draft {pending}" in message
+    assert f"roster: draft {pending}" not in message

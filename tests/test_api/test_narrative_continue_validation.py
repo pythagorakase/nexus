@@ -585,8 +585,10 @@ def _write_order(connection: ChoiceConnection) -> list[str]:
         {"choice": 2},
         {"choice": 1, "user_text": EDITED_DOOR},
         {"user_text": "Knock twice, then wait."},
+        # Accepting fate records the first presented choice as the action.
+        {"accept_fate": True},
     ],
-    ids=["choice", "edited-choice", "freeform"],
+    ids=["choice", "edited-choice", "freeform", "accept-fate"],
 )
 def test_accepted_action_stamps_last_played_in_its_transaction(
     monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]

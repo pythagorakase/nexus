@@ -356,7 +356,8 @@ def _persist_chunk_response(
 ) -> str:
     """Persist resolved player response fields for a chunk.
 
-    Every accepted player action (a choice, an edited choice, or free text)
+    Every accepted player action (a choice, an edited choice, free text, or
+    accepting fate, which records the first presented choice as the action)
     reaches the save through here, so the same cursor also stamps
     ``global_variables.last_played``: the return recap's hiatus clock moves
     only when the chunk write commits with it.
