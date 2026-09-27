@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import type { ChunkWithMetadata, SlotState } from "@/types/narrative";
 import { NarrativePane } from "./NarrativePane";
+import type { RecapSlotStates } from "./ReturnRecapCard";
 
 const SLOT = 2;
 
@@ -117,15 +119,24 @@ function renderPane(
     model: null,
   };
 
+  // The reader shell holds the recap state above the pane.
+  function Reader() {
+    const recapState = useState<RecapSlotStates>({});
+    return (
+      <NarrativePane
+        slot={SLOT}
+        engine={makeEngine(slotState)}
+        readingChunkId={readingChunkId}
+        onNavigate={vi.fn()}
+        recapState={recapState}
+      />
+    );
+  }
+
   return render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <NarrativePane
-          slot={SLOT}
-          engine={makeEngine(slotState)}
-          readingChunkId={readingChunkId}
-          onNavigate={vi.fn()}
-        />
+        <Reader />
       </ThemeProvider>
     </QueryClientProvider>,
   );

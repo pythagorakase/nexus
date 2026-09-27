@@ -5,17 +5,24 @@
  * A quiet history glyph toggles the card. The card opens on its own when the
  * gateway reports a recap due (a real-world hiatus since the last accepted
  * action), and it closes on the glyph or once the next action is accepted.
- * Closing is this reader's own state: nothing is written to the story, and a
- * closed due recap stays closed until a new action moves last_played.
+ * Closing is this reader's own state, held per slot above the panes the
+ * reader swaps (ReaderRecapState): nothing is written to the story or the
+ * browser, and a closed due recap stays closed, through history and pane
+ * switches alike, until a new action moves last_played.
  *
  * Each line leads with an icon, never a label: the setting (pin), who is
  * present (people), the last accepted action (footsteps, in the player's
  * voice), and the options still open (fork), one per line. The gateway has
  * already verified every line against its source and omits any fact it
  * cannot source; the pane leaves out only a last action whose player line is
- * printed directly above the card (recapBeneath).
+ * printed right beside the card (recapBeside).
  */
-import { useCallback, useId, useState } from "react";
+import {
+  useCallback,
+  useId,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   Footprints,
   History,
@@ -41,20 +48,23 @@ const MARKDOWN_KINDS: ReadonlySet<RecapItem["kind"]> = new Set<RecapItem["kind"]
 ]);
 
 /**
- * The recap as shown just below the chunk `chunkAboveId`. A last action cited
- * to that chunk is its player line, already printed directly above the card,
- * so the card does not repeat it.
+ * The recap as shown beside the chunks `printedChunkIds`, the committed chunks
+ * bordering the card that print a player line: the one above ends with it,
+ * the one below closes with it after its prose. A last action cited to one of
+ * them is that line, already on screen next to the card, so the card does not
+ * repeat it.
  */
-export function recapBeneath(
+export function recapBeside(
   recap: ReturnRecap | undefined,
-  chunkAboveId: number | null,
+  printedChunkIds: readonly number[],
 ): ReturnRecap | undefined {
-  if (!recap || chunkAboveId === null) return recap;
+  if (!recap || printedChunkIds.length === 0) return recap;
   const items = recap.items.filter(
     (item) =>
       item.kind !== "last_action"
       || !item.sources.some(
-        (source) => source.kind === "chunk" && source.id === chunkAboveId,
+        (source) =>
+          source.kind === "chunk" && printedChunkIds.includes(source.id),
       ),
   );
   return items.length === recap.items.length ? recap : { ...recap, items };
@@ -68,28 +78,62 @@ export interface ReturnRecapVisibility {
   close: () => void;
 }
 
+/** One slot's recap as the player left it in this reader. */
+export interface RecapSlotState {
+  /** Opened on demand. */
+  requested: boolean;
+  /** The last_played whose due recap the player closed. */
+  closedFor: string | null;
+}
+
+/** Recap state by slot number; a slot absent here is untouched. */
+export type RecapSlotStates = Readonly<Partial<Record<number, RecapSlotState>>>;
+
 /**
- * Card visibility for one reader. Held by the pane, not the card, so moving
- * the frontier or reading history does not reopen a recap the player closed.
+ * The reader's recap state and its setter, a useState pair held by the reader
+ * shell (NexusLayout) above the panes it swaps. Leaving the narrative pane
+ * unmounts it; the state outlives that, so coming back neither reopens a
+ * recap the player closed nor closes one they opened. Keyed by slot, so what
+ * the player did with one slot's recap never carries to another's, even a
+ * clone's that shares its last_played.
+ */
+export type ReaderRecapState = readonly [
+  RecapSlotStates,
+  Dispatch<SetStateAction<RecapSlotStates>>,
+];
+
+const UNTOUCHED: RecapSlotState = { requested: false, closedFor: null };
+
+/**
+ * Card visibility for `slot` in this reader. The state lives above the pane
+ * and the card, so moving the frontier, reading history or switching panes
+ * does not reopen a recap the player closed.
  */
 export function useReturnRecapVisibility(
   recap: ReturnRecap | undefined,
+  slot: number,
+  [states, setStates]: ReaderRecapState,
 ): ReturnRecapVisibility {
-  const [requested, setRequested] = useState(false);
-  // The last_played whose due recap this reader closed.
-  const [closedFor, setClosedFor] = useState<string | null>(null);
+  const { requested, closedFor } = states[slot] ?? UNTOUCHED;
   const lastPlayed = recap?.last_played ?? null;
   const open =
     (recap?.items.length ?? 0) > 0
     && (requested || (!!recap?.due && closedFor !== lastPlayed));
   const close = useCallback(() => {
-    setRequested(false);
-    setClosedFor(lastPlayed);
-  }, [lastPlayed]);
+    setStates((prev) => ({
+      ...prev,
+      [slot]: { requested: false, closedFor: lastPlayed },
+    }));
+  }, [slot, lastPlayed, setStates]);
   const toggle = useCallback(() => {
     if (open) close();
-    else setRequested(true);
-  }, [open, close]);
+    else {
+      setStates((prev) => ({
+        ...prev,
+        [slot]: { ...(prev[slot] ?? UNTOUCHED), requested: true },
+      }));
+    }
+  }, [open, close, slot, setStates]);
   return { open, toggle, close };
 }
 

@@ -4,17 +4,20 @@ import {
   focusManager,
 } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReturnRecap } from "@shared/schema";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import type { ChunkWithMetadata, SlotState } from "@/types/narrative";
 import { NarrativePane } from "./NarrativePane";
+import type { RecapSlotStates } from "./ReturnRecapCard";
 
 // The pane and card run for real on seeded reader queries; the engine's turn
 // submission is the gateway boundary. Each fixture is a response the gateway
 // can produce for the slot state beside it.
 const SLOT = 4;
+const OTHER_SLOT = 3;
 const MEMORIAL_CHOICES = [
   "Close your hand around the brass key and follow Rook into the rain.",
   "Show Ren the warrant is premature and ask for an hour.",
@@ -91,6 +94,20 @@ function openFrontierRecap(): ReturnRecap {
   });
 }
 
+// The same recap told `by` chunks further into the episode: every chunk it
+// cites moves on with the frontier.
+function shifted(recap: ReturnRecap, by: number): ReturnRecap {
+  return {
+    ...recap,
+    items: recap.items.map((item) => ({
+      ...item,
+      sources: item.sources.map((source) =>
+        source.kind === "chunk" ? { ...source, id: source.id + by } : source,
+      ),
+    })),
+  };
+}
+
 function chunk(
   id: number,
   scene: number,
@@ -126,7 +143,7 @@ const PENDING_CHUNKS = [
 ];
 const OPEN_FRONTIER_CHUNKS = [chunk(101, 1, LAST_ACTION), chunk(102, 2, null)];
 
-function slotStateOf(pending: boolean): SlotState {
+function slotStateOf(slot: number, pending: boolean, frontier: number): SlotState {
   return {
     narrative_generation: {
       request_timeout_seconds: 10,
@@ -134,7 +151,7 @@ function slotStateOf(pending: boolean): SlotState {
       wake_gap_threshold_seconds: 15,
       stale_lease_timeout_seconds: 3600,
     },
-    slot: SLOT,
+    slot,
     story_id: "story-832",
     is_empty: false,
     is_wizard_mode: false,
@@ -142,7 +159,7 @@ function slotStateOf(pending: boolean): SlotState {
     subphase: null,
     thread_id: null,
     // A provisional draft has no chunk id until acceptance.
-    current_chunk_id: pending ? null : 102,
+    current_chunk_id: pending ? null : frontier,
     has_pending: pending,
     frontier_clock: null,
     storyteller_text: pending ? "Ren's warrant is courteous and exact." : null,
@@ -173,16 +190,24 @@ function engineOf(slotState: SlotState): NarrativeEngine {
   };
 }
 
-function renderPane(recap: ReturnRecap, { pending = true } = {}) {
-  const CHUNKS = pending ? PENDING_CHUNKS : OPEN_FRONTIER_CHUNKS;
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-  });
-  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
-  client.setQueryData(["/api/narrative/latest-chunk", SLOT], CHUNKS[1]);
+interface Story {
+  recap: ReturnRecap;
+  pending?: boolean;
+  /** The page of the episode the reader fetched, in story order. */
+  page?: ChunkWithMetadata[];
+  /** The latest committed chunk, when it is not the last one on the page. */
+  latest?: ChunkWithMetadata;
+}
+
+function seed(client: QueryClient, slot: number, story: Story) {
+  const pending = story.pending ?? true;
+  const page = story.page ?? (pending ? PENDING_CHUNKS : OPEN_FRONTIER_CHUNKS);
+  const committed = story.latest ? [...page, story.latest] : page;
+  const latest = committed[committed.length - 1];
+  client.setQueryData(["/api/narrative/latest-chunk", slot], latest);
   client.setQueryData(
-    ["/api/narrative/outline", SLOT],
-    CHUNKS.map((c) => ({
+    ["/api/narrative/outline", slot],
+    committed.map((c) => ({
       id: c.id,
       season: 1,
       episode: 1,
@@ -190,40 +215,104 @@ function renderPane(recap: ReturnRecap, { pending = true } = {}) {
       slug: c.metadata!.slug,
     })),
   );
-  client.setQueryData(["/api/narrative/chunks", 1, 1, SLOT], {
-    chunks: CHUNKS,
-    total: CHUNKS.length,
+  client.setQueryData(["/api/narrative/chunks", 1, 1, slot], {
+    chunks: page,
+    total: committed.length,
   });
-  for (const id of [101, 102]) {
-    client.setQueryData(["/api/narrative/chunks/context", id, SLOT], {
+  for (const c of committed) {
+    client.setQueryData(["/api/narrative/chunks/context", c.id, slot], {
       characters: [],
       places: [],
     });
-    client.setQueryData(
-      ["/api/narrative/chunk", id, SLOT],
-      CHUNKS.find((c) => c.id === id),
-    );
+    client.setQueryData(["/api/narrative/chunk", c.id, slot], c);
   }
-  client.setQueryData(["/api/narrative/recap", SLOT], recap);
-  const engine = engineOf(slotStateOf(pending));
-  const pane = (readingChunkId: number | null) => (
+  client.setQueryData(["/api/narrative/recap", slot], story.recap);
+  return engineOf(slotStateOf(slot, pending, latest.id));
+}
+
+interface ReaderView {
+  slot: number;
+  tab: "narrative" | "map";
+  readingChunkId: number | null;
+}
+
+// The reader shell's part, played as NexusLayout plays it: it holds the recap
+// state and mounts the narrative pane only while that tab is shown.
+function Reader({
+  view,
+  engines,
+}: {
+  view: ReaderView;
+  engines: ReadonlyMap<number, NarrativeEngine>;
+}) {
+  const recapState = useState<RecapSlotStates>({});
+  if (view.tab !== "narrative") return <div data-testid="map-pane" />;
+  return (
+    <NarrativePane
+      slot={view.slot}
+      engine={engines.get(view.slot)!}
+      readingChunkId={view.readingChunkId}
+      onNavigate={vi.fn()}
+      recapState={recapState}
+    />
+  );
+}
+
+function renderReader(story: Story) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
+  const engines = new Map([[SLOT, seed(client, SLOT, story)]]);
+  let view: ReaderView = { slot: SLOT, tab: "narrative", readingChunkId: null };
+  const tree = () => (
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <NarrativePane
-          slot={SLOT}
-          engine={engine}
-          readingChunkId={readingChunkId}
-          onNavigate={vi.fn()}
-        />
+        <Reader view={view} engines={engines} />
       </ThemeProvider>
     </QueryClientProvider>
   );
-  const view = render(pane(null));
-  return { ...view, readAt: (id: number | null) => view.rerender(pane(id)) };
+  const rendered = render(tree());
+  const show = (next: Partial<ReaderView>) => {
+    view = { ...view, ...next };
+    rendered.rerender(tree());
+  };
+  return {
+    ...rendered,
+    client,
+    show,
+    readAt: (readingChunkId: number | null) => show({ readingChunkId }),
+    seedSlot: (slot: number, other: Story) => {
+      engines.set(slot, seed(client, slot, other));
+    },
+  };
+}
+
+function renderPane(recap: ReturnRecap, { pending = true } = {}) {
+  return renderReader({ recap, pending });
+}
+
+// A long episode: the reader's page ends at chunk 102, before chunk 103, the
+// latest committed chunk, which the recap describes and whose action it
+// reports. None of the recap's lines is on screen already.
+function pastThePage(): Story {
+  return {
+    recap: shifted(recapOf(), 1),
+    page: [chunk(101, 1, EARLIER_ACTION), chunk(102, 2, "Knock twice, then wait.")],
+    latest: chunk(103, 3, LAST_ACTION),
+  };
 }
 
 const card = () => screen.queryByTestId("recap-card");
 const trigger = () => screen.getByRole("button", { name: "Recap" });
+
+function expectInOrder(elements: HTMLElement[]) {
+  for (const [earlier, later] of elements.slice(1).map((el, i) => [elements[i], el])) {
+    expect(earlier.compareDocumentPosition(later)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  }
+}
 
 async function send(text: string) {
   const field = screen.getByTestId("input-freeform");
@@ -278,7 +367,7 @@ describe("return recap card", () => {
   });
 
   it("renders each sourced fact as served, names in natural case", () => {
-    renderPane(recapOf());
+    renderReader(pastThePage());
 
     expect(screen.getByTestId("recap-location")).toHaveTextContent(
       /^Lantern Quay Memorial Hall, Transit Viaduct$/,
@@ -296,7 +385,7 @@ describe("return recap card", () => {
   });
 
   it("leads lines with icons: no heading, label or prose", () => {
-    renderPane(recapOf());
+    renderReader(pastThePage());
 
     const recap = card()!;
     expect(recap.querySelectorAll("h1, h2, h3, h4, h5, h6, p, label")).toHaveLength(0);
@@ -351,6 +440,94 @@ describe("return recap card", () => {
     expect(Object.keys(localStorage).filter((key) => /recap/i.test(key))).toEqual([]);
   });
 
+  it("stays closed across pane switches until a new action moves last_played", async () => {
+    const { client, show } = renderPane(recapOf());
+    fireEvent.click(trigger());
+    expect(card()).not.toBeInTheDocument();
+
+    // To the map and back: the narrative pane unmounts in between.
+    show({ tab: "map" });
+    expect(screen.queryByTestId("narrative-reader")).not.toBeInTheDocument();
+    show({ tab: "narrative" });
+    expect(trigger()).toHaveAttribute("aria-expanded", "false");
+    expect(card()).not.toBeInTheDocument();
+
+    // An action accepted elsewhere, then another hiatus: a new recap is due.
+    act(() => {
+      client.setQueryData(
+        ["/api/narrative/recap", SLOT],
+        recapOf({ last_played: "2026-09-27T21:00:00+00:00" }),
+      );
+    });
+    await waitFor(() => expect(card()).toBeInTheDocument());
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps an on-demand recap open across pane switches", () => {
+    const { show } = renderPane(recapOf({ due: false }));
+    fireEvent.click(trigger());
+    expect(card()).toBeInTheDocument();
+
+    show({ tab: "map" });
+    show({ tab: "narrative" });
+
+    expect(card()).toBeInTheDocument();
+    expect(trigger()).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("never lets one slot's closed recap close another's", () => {
+    const { show, seedSlot } = renderPane(recapOf());
+    // A clone of the same story, down to its last_played.
+    seedSlot(OTHER_SLOT, { recap: recapOf() });
+    fireEvent.click(trigger());
+    expect(card()).not.toBeInTheDocument();
+
+    show({ slot: OTHER_SLOT });
+    expect(card()).toBeInTheDocument();
+
+    show({ slot: SLOT });
+    expect(card()).not.toBeInTheDocument();
+  });
+
+  it("falls in above the draft when its chunk lies past the fetched page", () => {
+    renderReader(pastThePage());
+
+    expect(screen.queryByTestId("chunk-103")).not.toBeInTheDocument();
+    const recap = screen.getByTestId("return-recap");
+    expect(card()).toBeInTheDocument();
+    expect(trigger()).toHaveAttribute("aria-expanded", "true");
+    expectInOrder([
+      screen.getByTestId("chunk-101"),
+      screen.getByTestId("chunk-102"),
+      recap,
+      screen.getByTestId("chunk-pending"),
+    ]);
+    // Chunk 103's action is not on screen, so the card carries it.
+    expect(screen.getByTestId("recap-last_action")).toHaveTextContent(
+      /^Offer Rook the thumb-to-temple greeting\.$/,
+    );
+  });
+
+  it("falls in after the last fetched chunk, not repeating its action", () => {
+    renderReader({
+      recap: shifted(openFrontierRecap(), 1),
+      pending: false,
+      page: [chunk(101, 1, EARLIER_ACTION), chunk(102, 2, LAST_ACTION)],
+      latest: chunk(103, 3, null),
+    });
+
+    const recap = screen.getByTestId("return-recap");
+    expectInOrder([
+      screen.getByTestId("chunk-102"),
+      recap,
+      screen.getByTestId("reader-nav-bottom"),
+    ]);
+    // Chunk 102 ends with the last action, just above the card.
+    expect(
+      Array.from(card()!.querySelectorAll("li"), (item) => item.dataset.testid),
+    ).toEqual(["recap-location", "recap-roster", "recap-open_decision"]);
+  });
+
   it("closes on the next accepted action, but not on a refused one", async () => {
     renderPane(recapOf());
 
@@ -373,6 +550,23 @@ describe("return recap card", () => {
     await send("Take Ivo's call on the viaduct stairs.");
 
     await waitFor(() => expect(card()).not.toBeInTheDocument());
+  });
+
+  it("does not repeat the action the chunk below it closes with", () => {
+    renderPane(recapOf());
+
+    // Chunk 102 was committed with the player's action when it was accepted
+    // as a draft, and prints that action after its prose, below the card.
+    const recap = screen.getByTestId("return-recap");
+    const frontier = screen.getByTestId("chunk-102");
+    expectInOrder([recap, frontier, screen.getByTestId("chunk-pending")]);
+    expect(frontier.querySelector(".md-part.you")).toHaveTextContent(
+      "Offer Rook the thumb-to-temple greeting.",
+    );
+    expect(screen.queryByTestId("recap-last_action")).not.toBeInTheDocument();
+    expect(
+      Array.from(card()!.querySelectorAll("li"), (item) => item.dataset.testid),
+    ).toEqual(["recap-location", "recap-roster", "recap-open_decision"]);
   });
 
   it("does not repeat the action printed directly above it", () => {

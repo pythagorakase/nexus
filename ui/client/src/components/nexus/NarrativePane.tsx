@@ -33,9 +33,11 @@
  * and a failed re-roll leaves it there beneath a failure line.
  *
  * Just above the latest committed chunk, a history glyph opens the return
- * recap (ReturnRecapCard), whether or not a draft is pending below. It opens
- * on its own after a real-world hiatus, and the next accepted action closes
- * it.
+ * recap (ReturnRecapCard), whether or not a draft is pending below. When that
+ * chunk lies past the fetched page of a long episode, the glyph follows the
+ * last chunk shown instead, still above any pending draft. It opens on its
+ * own after a real-world hiatus, and the next accepted action closes it; the
+ * reader shell holds that state (recapState) so it outlives this pane.
  */
 import {
   Fragment,
@@ -53,8 +55,9 @@ import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
 import {
   ReturnRecapCard,
-  recapBeneath,
+  recapBeside,
   useReturnRecapVisibility,
+  type ReaderRecapState,
 } from "./ReturnRecapCard";
 import {
   REGENERATE_NOTE_MAX_CHARS,
@@ -88,6 +91,8 @@ interface NarrativePaneProps {
   readingChunkId: number | null;
   /** Navigate the reading position (null returns to the live frontier). */
   onNavigate: (chunkId: number | null) => void;
+  /** Recap visibility, held by the reader shell so it outlives this pane. */
+  recapState: ReaderRecapState;
 }
 
 interface SceneGrounding {
@@ -175,6 +180,7 @@ export function NarrativePane({
   engine,
   readingChunkId,
   onNavigate,
+  recapState,
 }: NarrativePaneProps) {
   const { slotState, isGenerating, completedGenerations, submitTurn, phase } =
     engine;
@@ -333,15 +339,29 @@ export function NarrativePane({
   }, [chunks, currentChunkId]);
 
   // The recap sits just above the latest committed chunk, whose setting and
-  // cast it reports, even while a draft is pending below that chunk.
+  // cast it reports, even while a draft is pending below that chunk. The
+  // episode page is fetched from its start, so in a long episode that chunk
+  // may not be on it: once the page has loaded, the recap then follows the
+  // last chunk shown, above any pending draft.
   const recapChunkId = latestChunk?.id ?? null;
   const recapIndex = chunkRenders.findIndex((chunk) => chunk.id === recapChunkId);
-  const chunkAboveRecap = recapIndex > 0 ? chunkRenders[recapIndex - 1].id : null;
-  const shownRecap = useMemo(
-    () => recapBeneath(recap, chunkAboveRecap),
-    [recap, chunkAboveRecap],
-  );
-  const recapView = useReturnRecapVisibility(shownRecap);
+  const recapAfterChunks = recapIndex === -1 && episodeChunks !== undefined;
+  const shownRecap = useMemo(() => {
+    // The committed chunks bordering the card. After the page, only the
+    // pending draft, which records no player line, can follow it.
+    const beside = recapAfterChunks
+      ? chunkRenders.slice(-1)
+      : recapIndex === -1
+        ? []
+        : chunkRenders.slice(Math.max(recapIndex - 1, 0), recapIndex + 1);
+    return recapBeside(
+      recap,
+      beside
+        .filter((chunk) => chunk.parts.some((part) => part.voice === "you"))
+        .map((chunk) => chunk.id),
+    );
+  }, [recap, chunkRenders, recapIndex, recapAfterChunks]);
+  const recapView = useReturnRecapVisibility(shownRecap, slot, recapState);
 
   // The historical chunk's prose segments (storyteller + the player's
   // recorded response).
@@ -669,6 +689,7 @@ export function NarrativePane({
                 </div>
               </Fragment>
             ))}
+            {recapAfterChunks && recapCard}
 
             {pendingText && (
               <div className="chunk-block current" data-testid="chunk-pending">

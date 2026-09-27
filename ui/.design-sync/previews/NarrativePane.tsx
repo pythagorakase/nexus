@@ -49,6 +49,10 @@ function makeEngine(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
+// Return recap visibility belongs to the reader shell (NexusLayout); a static
+// cell has no recap to show or hide.
+const recapState = [{}, noop] as const;
+
 // Frontier with three structured choices plus the freeform slot-0 input.
 export const Frontier = () => (
   <div
@@ -60,6 +64,7 @@ export const Frontier = () => (
       engine={makeEngine()}
       readingChunkId={null}
       onNavigate={noop}
+      recapState={recapState}
     />
   </div>
 );
@@ -81,6 +86,7 @@ export const Generating = () => (
       })}
       readingChunkId={null}
       onNavigate={noop}
+      recapState={recapState}
     />
   </div>
 );
