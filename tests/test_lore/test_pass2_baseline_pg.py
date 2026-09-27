@@ -698,12 +698,7 @@ def test_window_change_rebases_accepted_baseline_and_semantic_change_refuses(
     """A budget-only change keeps accepted memory; semantics and V1 stop (#805)."""
 
     _patch_unrelated_commit_work(monkeypatch)
-    database_url = f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
-    database_url += (
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{pass2_database}"
-    )
-    engine = create_engine(database_url, future=True)
+    engine = create_engine(database_url(pass2_database), future=True)
     conn = _connect(pass2_database)
     try:
         parent_chunk_id = _seed_parent(conn, "window parent")
