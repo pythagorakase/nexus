@@ -1382,6 +1382,14 @@ poll_interval_seconds = 0.25
 stop_grace_seconds = 10.0        # terminate -> kill escalation on nexus down
 port_release_timeout_seconds = 5.0 # swap waits this long for the old llama-server's socket
 
+[runtime.cli]
+inspect_timeout_seconds = 30.0  # per request of `nexus inspect`; no answer in time exits 4
+# Per short request of load, continue, retry, undo, regenerate, clear, lock,
+# unlock and model --set/--clear (state reads, wizard setup and confirmation,
+# slot administration). Generation, wizard chat and transition requests keep
+# their own budgets.
+request_timeout_seconds = 30.0
+
 [runtime.logs]
 # The supervisor is the single log-file and rotation owner: it captures each
 # service's stdout+stderr in <state_dir>/<service>.log and rotates at spawn.

@@ -23,6 +23,10 @@ from nexus.runtime.contract import (
 from nexus.util.secret_manager import get_secret
 
 
+class InsecureRuntimeTransportError(ValueError):
+    """A runtime credential would cross plaintext HTTP to a non-loopback host."""
+
+
 @dataclass(frozen=True)
 class RuntimeRequestAuth:
     """Headers and redirect policy for one outbound runtime request."""
@@ -83,7 +87,7 @@ def build_runtime_request_auth(
     """
     nexus_auth = os.environ.get("NEXUS_AUTH", "")
     if nexus_auth and not _credential_transport_is_safe(target_url):
-        raise ValueError(
+        raise InsecureRuntimeTransportError(
             "Refusing to send NEXUS_AUTH over plaintext to a non-loopback target"
         )
     headers = {NEXUS_AUTH_HEADER: nexus_auth}

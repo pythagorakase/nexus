@@ -246,13 +246,25 @@ def test_pending_character_text_enters_revision_before_chat(monkeypatch):
         Response(
             {"status": "revision_started", "phase": "character", "thread_id": "wrong"}
         ),
-        requests.Timeout("Unknown revision"),
     ],
 )
 def test_revision_start_failure_never_sends_player_text(monkeypatch, failure):
     calls = gateway(monkeypatch, artifact("character"), [failure])
     result = cli.run_continue(arguments(user_text="Revise the character."))
     assert result["success"] is False
+    assert len(calls) == 1
+    assert calls[0][0] == "story/new/setup/character/revise"
+
+
+def test_revision_start_timeout_reaches_main_without_sending_player_text(
+    monkeypatch,
+):
+    """An unanswered revision start propagates; main() reports api_unreachable."""
+    calls = gateway(
+        monkeypatch, artifact("character"), [requests.Timeout("Unknown revision")]
+    )
+    with pytest.raises(requests.Timeout, match="Unknown revision"):
+        cli.run_continue(arguments(user_text="Revise the character."))
     assert len(calls) == 1
     assert calls[0][0] == "story/new/setup/character/revise"
 

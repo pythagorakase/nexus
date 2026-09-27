@@ -878,6 +878,31 @@ class RuntimeRemoteSettings(BaseModel):
         return self
 
 
+class RuntimeCliSettings(BaseModel):
+    """Request budgets of the CLI's HTTP commands."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    inspect_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "Per-request HTTP timeout of `nexus inspect` reads; a request that "
+            "cannot connect or answer within it exits 4 (API unreachable)"
+        ),
+    )
+    request_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "Per-request HTTP timeout of the play and slot commands' short API "
+            "requests (slot state reads, wizard setup and confirmation, undo, "
+            "clear, lock, unlock, model changes); generation, wizard chat, and "
+            "transition requests keep their own budgets"
+        ),
+    )
+
+
 class RuntimeGatewaySettings(BaseModel):
     """Gateway-wide network policy settings."""
 
@@ -1053,6 +1078,7 @@ class RuntimeSettings(BaseModel):
     gateway: RuntimeGatewaySettings
     scheduler: DeferredWorkSettings = Field(default_factory=DeferredWorkSettings)
     health: RuntimeHealthSettings = Field(default_factory=RuntimeHealthSettings)
+    cli: RuntimeCliSettings = Field(default_factory=RuntimeCliSettings)
     logs: RuntimeLogsSettings = Field(default_factory=RuntimeLogsSettings)
     readiness: RuntimeReadinessSettings = Field(
         default_factory=RuntimeReadinessSettings

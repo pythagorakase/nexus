@@ -410,15 +410,17 @@ def test_seed_bootstrap_failure_preserves_partial_work(
     assert code == 1, (stdout, stderr)
     assert stdout == ""
     assert "Traceback" not in stderr
-    payload = json.loads(stderr)
-    assert payload["success"] is False
+    envelope = json.loads(stderr)
+    assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
+    payload = envelope["partial"]
     assert payload["narrative_bootstrap"] is False
     assert payload["artifact_data"] == {"title": "The Glass Orchard"}
     assert payload["retrograde"] == {"status": "complete"}
-    assert payload["phase"] is None
+    # The transition left wizard mode: the seed phase is not preserved.
+    assert "phase" not in payload
     assert payload["bootstrap_error"]["detail"]
     assert payload["recovery_command"] == "nexus load --slot 5"
-    assert payload["recovery_command"] in payload["error"]
+    assert payload["recovery_command"] in envelope["error"]
     assert "next_phase_intro" not in payload
     if outcome not in {"schedule_error", "missing_session"}:
         assert payload["session_id"] == SESSION_ID
@@ -475,8 +477,9 @@ def test_generation_response_failures_keep_session_recovery(
     assert code == 1, (stdout, stderr)
     assert stdout == ""
     assert "Traceback" not in stderr
-    payload = json.loads(stderr)
-    assert payload["success"] is False
+    envelope = json.loads(stderr)
+    assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
+    payload = envelope["partial"]
     assert payload["session_id"] == SESSION_ID
     assert payload["generation_error"]["status"] == expected_status
     assert payload["generation_error"]["detail"]
@@ -746,10 +749,13 @@ def test_cli_rejects_weird_for_a_story_in_narrative_mode(tmp_path: Path) -> None
     assert code == 1, (stdout, stderr)
     assert stdout == ""
     assert json.loads(stderr) == {
+        "ok": False,
+        "code": "domain_failure",
         "error": (
             "--weird applies only to a new story; slot 5 already holds a story "
             "in narrative mode."
-        )
+        ),
+        "partial": {},
     }
     assert _writes(scenario) == []
 

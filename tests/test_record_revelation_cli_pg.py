@@ -215,11 +215,12 @@ def _run_record_revelation_cli(
 
 
 def _assert_json_error(output: str, error: str, message: str) -> None:
-    """Require one structured error object and no traceback on either stream."""
+    """Require one JSON failure envelope and no traceback on either stream."""
 
+    envelope = {"ok": False, "code": "domain_failure", "error": message, "partial": {}}
     assert output == ""
-    assert error == json.dumps({"error": message}) + "\n"
-    assert json.loads(error) == {"error": message}
+    assert error == json.dumps(envelope, indent=2, sort_keys=True) + "\n"
+    assert json.loads(error) == envelope
     assert "Traceback" not in output + error
 
 
