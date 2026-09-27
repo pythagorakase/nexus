@@ -354,7 +354,13 @@ def _persist_chunk_response(
     choice_text: str,
     incubator_session_id: Optional[str] = None,
 ) -> str:
-    """Persist resolved player response fields for a chunk."""
+    """Persist resolved player response fields for a chunk.
+
+    Every accepted player action (a choice, an edited choice, or free text)
+    reaches the save through here, so the same cursor also stamps
+    ``global_variables.last_played``: the return recap's hiatus clock moves
+    only when the chunk write commits with it.
+    """
     raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
 
     if is_incubator:
@@ -398,7 +404,17 @@ def _persist_chunk_response(
                 detail=f"Chunk {chunk_id} not found",
             )
 
+    _stamp_last_played(cur)
     return raw_text
+
+
+def _stamp_last_played(cur: Any) -> None:
+    """Record the accepted player action's time on the slot's global row."""
+    cur.execute("UPDATE global_variables SET last_played = now() WHERE id = true")
+    if cur.rowcount != 1:
+        raise RuntimeError(
+            "global_variables row id=true is missing; cannot record last_played"
+        )
 
 
 def _record_player_response_for_chunk(

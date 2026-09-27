@@ -4035,6 +4035,33 @@ class UILocalModelsSettings(BaseModel):
     )
 
 
+class UIRecapSettings(BaseModel):
+    """Return-recap policy for the reader (issue #832).
+
+    Read by the gateway's ``GET /api/narrative/recap`` route, which decides
+    server-side whether a returning player is due a recap and how many
+    present characters it names. No code default stands in for an absent
+    ``[ui.recap]`` table.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    hiatus_hours: float = Field(
+        ...,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "Real-world hours since the last accepted player action after which "
+            "the reader opens the recap on its own"
+        ),
+    )
+    roster_limit: int = Field(
+        ...,
+        ge=1,
+        description="Most present characters the recap names, in character-ID order",
+    )
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
@@ -4059,6 +4086,10 @@ class UISettings(BaseModel):
     local_models: UILocalModelsSettings = Field(
         default_factory=UILocalModelsSettings,
         description="Cadence/interaction knobs for the local-model manager UI",
+    )
+    recap: UIRecapSettings = Field(
+        ...,
+        description="Hiatus and roster bounds for the reader's return recap",
     )
 
 
@@ -4140,7 +4171,7 @@ class Settings(BaseModel):
         default_factory=CharacterIdentitySettings
     )
     ui: UISettings = Field(
-        default_factory=UISettings,
+        ...,
         description="React client settings (served via GET /api/settings)",
     )
     ir_eval: Optional[IREvalSettings] = Field(

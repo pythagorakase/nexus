@@ -30,7 +30,9 @@ from fastapi import APIRouter, HTTPException
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.db_pool import get_connection
+from nexus.api.return_recap import ReturnRecap, load_return_recap
 from nexus.api.slot_utils import require_slot_dbname
+from nexus.config import load_settings
 from nexus.presence.roster import read_roster
 from nexus.util.clock_face import clock_face
 
@@ -219,6 +221,25 @@ async def get_outline(slot: Optional[int] = None) -> List[Dict[str, Any]]:
         }
         for row in rows
     ]
+
+
+@router.get("/api/narrative/recap", response_model=ReturnRecap)
+async def get_return_recap(slot: Optional[int] = None) -> ReturnRecap:
+    """The return recap: setting, present cast, last action, open decision.
+
+    ``due`` turns true once ``[ui.recap].hiatus_hours`` have passed since the
+    last accepted player action. Items cite only committed, playable rows the
+    reader already serves, each verified server-side before it is returned;
+    an item without a source is omitted. Nothing is written.
+    """
+    dbname = resolve_dbname(slot)
+    policy = load_settings().ui.recap
+    with get_connection(dbname) as conn:
+        return load_return_recap(
+            conn,
+            hiatus_hours=policy.hiatus_hours,
+            roster_limit=policy.roster_limit,
+        )
 
 
 @router.get("/api/narrative/chunks/{chunk_id}/adjacent")

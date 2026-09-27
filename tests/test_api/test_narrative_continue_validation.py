@@ -564,6 +564,111 @@ def test_select_choice_records_an_edit_like_continue(
     ]
 
 
+LAST_PLAYED_STAMP = "UPDATE global_variables SET last_played = now() WHERE id = true"
+
+
+def _write_order(connection: ChoiceConnection) -> list[str]:
+    """Name the response and recap-clock writes the route made, in order.
+
+    Generation-lease binding shares the transaction but is not under test.
+    """
+    names = [
+        "stamp" if query == LAST_PLAYED_STAMP else query.split(" SET ")[0]
+        for query, _params in connection.updates
+    ]
+    return [name for name in names if "narrative_generation" not in name]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"choice": 2},
+        {"choice": 1, "user_text": EDITED_DOOR},
+        {"user_text": "Knock twice, then wait."},
+    ],
+    ids=["choice", "edited-choice", "freeform"],
+)
+def test_accepted_action_stamps_last_played_in_its_transaction(
+    monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]
+) -> None:
+    """Every accepted action moves the recap clock with its chunk write."""
+    response, connection, _calls = _post_door_choice(monkeypatch, payload)
+
+    assert response.status_code == 200, response.text
+    assert _write_order(connection) == ["UPDATE narrative_chunks", "stamp"]
+    assert connection.commits == 1
+    assert connection.rollbacks == 0
+
+
+@pytest.mark.parametrize(
+    ("payload", "status"),
+    [
+        ({"choice": 1, "user_text": EDITED_DOOR}, 200),
+        ({"choice": 1}, 409),
+    ],
+    ids=["same-edit-resent", "conflicting-resend"],
+)
+def test_resubmission_leaves_last_played_alone(
+    monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any], status: int
+) -> None:
+    """An idempotent or conflicting resend is not a new accepted action."""
+    recorded = {
+        "choice_object": {"presented": DOOR_CHOICES, "selected": 1, "edited": True},
+        "choice_text": EDITED_DOOR,
+    }
+
+    response, connection, _calls = _post_door_choice(
+        monkeypatch, payload, recorded=recorded
+    )
+
+    assert response.status_code == status
+    assert _write_order(connection) == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"choice": 3},
+        {"user_text": "o" * (get_max_choice_text_length() + 1)},
+    ],
+    ids=["unknown-choice", "overlong-text"],
+)
+def test_rejected_input_leaves_last_played_alone(
+    monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]
+) -> None:
+    response, connection, generation_calls = _post_door_choice(monkeypatch, payload)
+
+    assert response.status_code == 400
+    assert connection.updates == []
+    assert generation_calls == []
+
+
+def test_select_choice_route_stamps_last_played() -> None:
+    """The older select route records an accepted action the same way."""
+    connection = ChoiceConnection(
+        {
+            "id": 17,
+            "storyteller_text": "The door waits.",
+            "choice_object": {"presented": DOOR_CHOICES, "selected": None},
+            "choice_text": None,
+        }
+    )
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+        response = TestClient(narrative.app).post(
+            "/api/narrative/select-choice",
+            json={
+                "slot": 3,
+                "chunk_id": 17,
+                "selection": {"label": 2, "text": DOOR_CHOICES[1], "edited": False},
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert _write_order(connection) == ["UPDATE narrative_chunks", "stamp"]
+    assert connection.commits == 1
+
+
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     """Open a direct PostgreSQL connection for a disposable clone."""
     return connect(dbname, cursor_factory=RealDictCursor if dict_cursor else None)

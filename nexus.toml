@@ -142,6 +142,17 @@ poll_idle_ms = 15_000   # status poll at rest (catches external server changes)
 download_poll_ms = 1000 # download progress poll
 delete_arm_ms = 2800    # armed-delete window before disarming
 
+[ui.recap]
+# Return recap above the reader's frontier (UIRecapSettings in
+# settings_models.py). Read by the gateway's GET /api/narrative/recap, which
+# decides server-side; the client only renders what that route returns.
+# hiatus_hours: real-world hours since the last accepted player action (choice,
+#   edited choice, or free text) after which the recap opens on its own. The
+#   history glyph above the frontier opens it on demand at any time.
+# roster_limit: most present characters the recap names, in character-ID order.
+hiatus_hours = 12.0
+roster_limit = 6
+
 # Per-theme font slot choices (NEXUS IRIS keeper matrix). The display slot is
 # the marquee font — reserved for the NEXUS wordmark and locked in the UI.
 [ui.fonts.veil]

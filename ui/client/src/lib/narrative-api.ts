@@ -14,6 +14,7 @@ import type {
   CurrentPlace,
   Place,
   PlaceImage,
+  ReturnRecap,
   Zone,
 } from "@shared/schema";
 import type {
@@ -73,6 +74,11 @@ export function getEpisodeChunks(
 
 export function getChunkContext(chunkId: number, slot: number): Promise<ChunkContext> {
   return getJson(`/api/narrative/chunks/${chunkId}/context?slot=${slot}`);
+}
+
+/** Where the story stands, each fact citing its committed rows. */
+export function getReturnRecap(slot: number): Promise<ReturnRecap> {
+  return getJson(`/api/narrative/recap?slot=${slot}`);
 }
 
 /** Story outline: one row per committed chunk, story order. */

@@ -31,6 +31,10 @@
  * generating. It opens one optional note; Enter or its send glyph re-rolls
  * the draft. The pending prose stays on screen until the replacement lands,
  * and a failed re-roll leaves it there beneath a failure line.
+ *
+ * Just above the frontier chunk, a history glyph opens the return recap
+ * (ReturnRecapCard). It opens on its own after a real-world hiatus, and the
+ * next accepted action closes it.
  */
 import {
   Fragment,
@@ -46,6 +50,7 @@ import { DecoDivider } from "@/components/deco";
 import { Textarea } from "@/components/ui/textarea";
 import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
+import { ReturnRecapCard, useReturnRecapVisibility } from "./ReturnRecapCard";
 import {
   REGENERATE_NOTE_MAX_CHARS,
   getChunk,
@@ -53,6 +58,7 @@ import {
   getEpisodeChunks,
   getLatestChunk,
   getOutline,
+  getReturnRecap,
 } from "@/lib/narrative-api";
 import {
   freeformPresentation,
@@ -68,6 +74,7 @@ import {
   type ChunkContext,
   type ChunkWithMetadata,
 } from "@/types/narrative";
+import type { ReturnRecap } from "@shared/schema";
 
 interface NarrativePaneProps {
   slot: number;
@@ -217,6 +224,16 @@ export function NarrativePane({
     queryFn: () => getChunkContext(headChunkId as number, slot),
     enabled: headChunkId !== null,
   });
+
+  // Where the story stands, for a returning player. Committed canon only, so
+  // it waits for a committed frontier; the reader's "/api/narrative"
+  // invalidation after an accepted action refreshes it.
+  const { data: recap } = useQuery<ReturnRecap>({
+    queryKey: ["/api/narrative/recap", slot],
+    queryFn: () => getReturnRecap(slot),
+    enabled: !isHistorical && !!latestChunk,
+  });
+  const recapView = useReturnRecapVisibility(recap);
 
   const chunks = episodeChunks?.chunks ?? [];
   const hasPending = slotState?.has_pending ?? false;
@@ -395,19 +412,25 @@ export function NarrativePane({
 
   // The one commit path. A draft that came from a choice sends its number and
   // text together; the server records an edit only when the text differs.
+  // An accepted action closes the recap.
   const selectedChoice = draft.choice;
+  const closeRecap = recapView.close;
   const handleSend = useCallback(() => {
     const text = freeform.trim();
     if (!text || !canSubmit) return;
     void draft.submit(
-      () => submitTurn(
-        selectedChoice === null
-          ? { userText: text }
-          : { choice: selectedChoice, userText: text },
-      ),
+      async () => {
+        const accepted = await submitTurn(
+          selectedChoice === null
+            ? { userText: text }
+            : { choice: selectedChoice, userText: text },
+        );
+        if (accepted) closeRecap();
+        return accepted;
+      },
       true,
     );
-  }, [freeform, selectedChoice, canSubmit, submitTurn, draft.submit]);
+  }, [freeform, selectedChoice, canSubmit, submitTurn, draft.submit, closeRecap]);
 
   const handleFreeformKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -581,6 +604,14 @@ export function NarrativePane({
     );
   }
 
+  const recapCard = (
+    <ReturnRecapCard
+      recap={recap}
+      open={recapView.open}
+      onToggle={recapView.toggle}
+    />
+  );
+
   return (
     <article className="reader" data-testid="narrative-reader" ref={headRef}>
       <div className="reader-frame">
@@ -601,6 +632,7 @@ export function NarrativePane({
           <section className="chunk-stream">
             {chunkRenders.map((chunk) => (
               <Fragment key={chunk.id}>
+                {chunk.isCurrent && recapCard}
                 {chunk.intertitle && <Intertitle {...chunk.intertitle} />}
                 <div
                   className={`chunk-block ${chunk.isCurrent ? "current" : ""}`}
@@ -620,6 +652,7 @@ export function NarrativePane({
               </Fragment>
             ))}
 
+            {pendingText && recapCard}
             {pendingText && (
               <div className="chunk-block current" data-testid="chunk-pending">
                 <div className="prose-block">

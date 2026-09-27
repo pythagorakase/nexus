@@ -634,6 +634,65 @@
 }
 .regenerate-note:focus { border-bottom-color: var(--brass); }
 
+/* Return recap: a quiet history glyph just above the frontier chunk, and a
+   card whose lines lead with icons instead of labels. Bronze marks it as
+   looking back, like historical reading. */
+.recap {
+  width: 100%;
+  max-width: 65ch;
+  margin: 0 auto;
+}
+.recap-row {
+  display: flex;
+  justify-content: flex-end;
+}
+.recap-row .reader-nav-btn {
+  padding: 2px 8px;
+  line-height: 0;
+}
+.recap-toggle svg { width: 16px; height: 16px; }
+.recap-toggle { opacity: .45; }
+.recap-toggle:hover,
+.recap-toggle:focus-visible,
+.recap-toggle[aria-expanded="true"] { opacity: 1; }
+.recap-card {
+  margin: 4px 0 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--bronze);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-1);
+}
+.recap-card ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.recap-item {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  column-gap: 12px;
+  align-items: start;
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--fg);
+}
+.recap-icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 4px;
+  color: var(--bronze);
+}
+.recap-item.last_action .recap-text,
+.recap-item.open_decision .recap-text { color: var(--fg-muted); }
+.recap-item.open_decision .recap-text {
+  display: grid;
+  gap: 4px;
+}
+
 /* Pending-generation note inside the reader. */
 .reader-status {
   margin: 28px auto 0;
