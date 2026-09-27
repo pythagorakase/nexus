@@ -49,7 +49,86 @@ An explicit `NEXUS_API_URL` can select the same configured origin directly;
 the Access headers are omitted if its origin differs from
 `[runtime.remote].base_url`.
 
+Under a remote runtime, only HTTP commands run. Commands that would open a
+slot database or act on this machine's runtime files are refused before they
+connect to anything; see Transports below.
+
+## Command Contract
+
+`nexus/cli_contract.py` declares every command's transport, the exit codes,
+and the JSON envelopes. A test walks the parser and fails when a command is
+added without a declared transport, or when the registry names a command that
+no longer exists.
+
+### Exit Codes
+
+| Code | Meaning | JSON `code` values |
+| --- | --- | --- |
+| 0 | Success | — |
+| 1 | Domain failure: the command ran and failed | `domain_failure`, `not_found`, `api_error`, `invalid_response`, `config_error` |
+| 2 | Usage: unusable arguments (argparse errors also exit 2) | `usage_error` |
+| 3 | Transport refused under a remote runtime | `transport_refused` |
+| 4 | The NEXUS API could not be reached or did not answer in time | `api_unreachable` |
+
+Expected failures are reported through these codes. A traceback means a
+programming fault.
+
+### Transports
+
+Each command declares the most privileged resource its handler opens:
+
+| Transport | Opens | Commands |
+| --- | --- | --- |
+| `http` | The NEXUS API only | `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `inspect slot`, `model --set`, `model --clear` |
+| `database` | A slot database directly | `model` (reading seat identities), `jobs`, `inspect-turn`, `prune-manifests`, `trait-audit`, `retrograde-packet`, `retrograde-seed-candidates --slot`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, and the faction, character, and place manifest and apply commands |
+| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `usage`, `window-replay`, `models lock`, `models verify`, `model --list`, `retrograde-seed-candidates --packet`, `retrograde-expand-seeds`, `backfill-review-packet` |
+
+The runtime is remote when the active `nexus.toml` sets `[runtime] profile =
+"remote"`, or when `NEXUS_API_URL` names a host other than `localhost` or a
+loopback address. A remote runtime refuses `database` and `local_operator`
+commands with exit 3 before any connection is opened. Two exceptions follow
+the remote profile itself: `up` and `status` probe the hosted runtime's
+`/runtime/status` over HTTP. The runtime commands that accept `--config`
+(`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`)
+check the profile of that file.
+
+### JSON Failure Envelope
+
+With `--json`, every failure prints one object on stderr:
+
+```json
+{
+  "ok": false,
+  "code": "api_unreachable",
+  "error": "Cannot connect to API server at http://localhost:8002",
+  "partial": {}
+}
+```
+
+`error` is the same message string earlier releases printed as
+`{"error": ...}`. `partial` holds every non-empty field of the failed result
+(a saved seed, a session ID, a recovery command); `false` and `0` are kept,
+`null` and empty values are not. Without `--json`, a failure prints one
+`Error: <message>` line on stderr.
+
+Success output is unchanged for existing commands. JSON-first commands
+(`inspect slot`) print `{"ok": true, "data": ...}` on stdout.
+
 ## Commands
+
+### `inspect slot` — Read a Slot's State as JSON
+
+Reads `GET /api/slot/{slot}/state`, the player-plane `slot.read` route, and
+returns its body unchanged under `data`. Nothing is written. The request
+timeout is `[runtime.cli].inspect_timeout_seconds`.
+
+```bash
+poetry run nexus inspect slot --slot 5 --json
+```
+
+Exits 1 with `not_found` when the gateway answers 404, and 4 with
+`api_unreachable` when nothing answers. Without `--json`, the state prints as
+one field per line.
 
 ### `usage` — View Exact API Token Usage
 
@@ -235,6 +314,8 @@ Add `--json` for machine-readable output:
 ```bash
 poetry run nexus load --slot 5 --json
 ```
+
+Failures use the envelope described in JSON Failure Envelope above.
 
 ## Artifact Display
 

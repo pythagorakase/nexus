@@ -23,9 +23,12 @@ Commands:
     nexus place-manifest --slot N  Build reviewed place tag manifest
     nexus place-apply --slot N  Dry-run ready place manifest operations
     nexus backfill-review-packet --slot N  Summarize manifest review queues
+    nexus inspect slot --slot N  Read one slot's state as a JSON envelope
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
+Each command's transport, exit codes and JSON envelopes are declared in
+nexus/cli_contract.py.
 """
 
 from __future__ import annotations
@@ -46,9 +49,28 @@ import uuid
 
 import requests  # type: ignore[import-untyped]
 
+from nexus.cli_contract import (
+    API_URL_ENV,
+    ENVELOPE_COMMANDS,
+    RUNTIME_CONFIG_COMMANDS,
+    ExitCode,
+    command_path,
+    detect_remote_runtime,
+    error_envelope,
+    exit_code_for,
+    partial_fields,
+    resolve_transport,
+    success_envelope,
+    transport_refusal,
+)
 from nexus.config import load_settings
-from nexus.config.settings_models import OrreryRetrogradeWizardSettings, Settings
-from nexus.runtime.home import locate_runtime_home
+from nexus.config.settings_models import (
+    OrreryRetrogradeWizardSettings,
+    RuntimeCliSettings,
+    Settings,
+)
+from nexus.runtime.contract import HOME_ENV, RUNTIME_CONFIG_ENV
+from nexus.runtime.home import RuntimeHomeError, locate_runtime_home
 from nexus.runtime.remote_auth import build_runtime_request_auth
 from nexus.util.secret_manager import MissingSecretError
 
@@ -72,15 +94,18 @@ FACTION_APPLY_SOURCE_KIND_CHOICES = (
 )
 
 
-def _load_cli_settings() -> Optional[Settings]:
+def _load_cli_settings(config_path: Optional[str] = None) -> Optional[Settings]:
     """Load the runtime home's active config, or None for a bare install.
 
-    A config named by NEXUS_HOME or NEXUS_RUNTIME_CONFIG must exist; only the
-    checkout default may be absent (an installed CLI outside any checkout).
+    ``config_path`` is a runtime verb's explicit ``--config``. A config named
+    by it, NEXUS_HOME or NEXUS_RUNTIME_CONFIG must exist; only the checkout
+    default may be absent (an installed CLI outside any checkout).
     """
-    location = locate_runtime_home()
-    if location.locator == "checkout" and not location.config_path.exists():
-        return None
+    location = locate_runtime_home(config_path)
+    if not location.config_path.exists():
+        if location.locator == "checkout":
+            return None
+        raise FileNotFoundError(f"Configuration file not found: {location.config_path}")
     return _load_cli_settings_file(location.config_path)
 
 
@@ -101,7 +126,7 @@ def _load_cli_settings_version(path: str, modified_ns: int, size: int) -> Settin
 def get_api_url() -> str:
     """Get the API URL from an override, remote profile, or local default."""
 
-    override = os.environ.get("NEXUS_API_URL")
+    override = os.environ.get(API_URL_ENV)
     if override:
         return override.rstrip("/")
 
@@ -1088,12 +1113,39 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         print(f"[Chunk: {chunk_id}]")
 
 
-def emit_error(message: str, as_json: bool) -> None:
-    """Emit error output to stderr."""
+def emit_error(
+    message: str,
+    as_json: bool,
+    *,
+    code: str = "domain_failure",
+    partial: Optional[Mapping[str, Any]] = None,
+) -> None:
+    """Emit error output to stderr: the JSON envelope, or one ``Error:`` line."""
     if as_json:
-        print(json.dumps({"error": message}), file=sys.stderr)
+        envelope = error_envelope(code, message, partial or {})
+        print(json.dumps(envelope, indent=2, sort_keys=True), file=sys.stderr)
     else:
         print(f"Error: {message}", file=sys.stderr)
+
+
+def _fail(
+    args: argparse.Namespace,
+    code: str,
+    message: str,
+    partial: Optional[Mapping[str, Any]] = None,
+) -> int:
+    """Report one failure and return its stable exit code."""
+    emit_error(message, args.json, code=code, partial=partial)
+    return int(exit_code_for(code))
+
+
+def _api_unreachable() -> Dict[str, Any]:
+    """The failed result of a request that could not reach the NEXUS API."""
+    return {
+        "success": False,
+        "code": "api_unreachable",
+        "error": f"Cannot connect to API server at {get_api_url()}",
+    }
 
 
 def run_load(args: argparse.Namespace) -> Dict[str, Any]:
@@ -1179,14 +1231,75 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def _inspect_timeout_seconds() -> float:
+    """Read the per-request budget of ``nexus inspect`` from [runtime.cli]."""
+    settings = _load_cli_settings()
+    if settings is None or settings.runtime is None:
+        return RuntimeCliSettings().inspect_timeout_seconds
+    return settings.runtime.cli.inspect_timeout_seconds
+
+
+def run_inspect_slot(args: argparse.Namespace) -> Dict[str, Any]:
+    """Read one slot's state through GET /api/slot/{slot}/state, unchanged.
+
+    The route is the player-plane ``slot.read`` capability in
+    nexus/api/route_capabilities.py; nothing is written. A request that cannot
+    connect or times out propagates to main(), which reports it as
+    ``api_unreachable`` (exit 4).
+    """
+    url = f"{get_api_url()}/api/slot/{args.slot}/state"
+    response = _api_get(url, timeout=_inspect_timeout_seconds())
+    status = response.status_code
+    failure: Dict[str, Any] = {"success": False, "slot": args.slot}
+    if status == 404:
+        return {
+            **failure,
+            "code": "not_found",
+            "status_code": status,
+            "error": f"{url} returned 404: {response.text}",
+        }
+    if not 200 <= status < 300:
+        return {
+            **failure,
+            "code": "api_error",
+            "status_code": status,
+            "error": f"{url} returned HTTP {status}: {response.text}",
+        }
+    try:
+        data = response.json()
+    except ValueError as exc:
+        return {
+            **failure,
+            "code": "invalid_response",
+            "error": f"{url} returned a body that is not JSON: {exc}",
+        }
+    if not isinstance(data, dict):
+        return {
+            **failure,
+            "code": "invalid_response",
+            "error": f"{url} returned JSON that is not an object: {data!r}",
+        }
+    return {"success": True, "data": data}
+
+
+def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
+    """Run one read-only ``nexus inspect`` command."""
+    if args.inspect_command == "slot":
+        return run_inspect_slot(args)
+    raise ValueError(f"Unknown inspect command: {args.inspect_command!r}")
+
+
+def _print_inspection(data: Mapping[str, Any], truncate: bool) -> None:
+    """Print an inspected record's fields, omitting empty ones."""
+    for key, value in data.items():
+        _print_value(key, value, indent=0, truncate=truncate)
 
 
 def _retrograde_wizard_settings(
@@ -2206,10 +2319,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2246,10 +2356,7 @@ def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
         return _wait_for_narrative_result(args.slot, response.json()["session_id"])
 
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
 
@@ -2276,10 +2383,7 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": True, "message": message}
 
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2340,10 +2444,7 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": "Regeneration timed out"}
 
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2413,10 +2514,7 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2438,10 +2536,7 @@ def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
             "message": f"Slot {args.slot} cleared",
         }
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -3488,10 +3583,7 @@ def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
             "message": f"Slot {args.slot} locked",
         }
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -3513,10 +3605,7 @@ def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
             "message": f"Slot {args.slot} unlocked",
         }
     except requests.exceptions.ConnectionError:
-        return {
-            "success": False,
-            "error": f"Cannot connect to API server at {get_api_url()}",
-        }
+        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -4142,6 +4231,7 @@ Examples:
   nexus logs gateway -f         Follow the gateway log
   nexus down                    Stop the runtime
   nexus load --slot 5           Show current state of slot 5
+  nexus inspect slot --slot 5 --json   Slot state as a JSON envelope
   nexus continue --slot 5       Advance the story
   nexus continue --slot 5 --choice 1   Select choice #1
   nexus continue --slot 5 --user-text "I approach carefully"
@@ -4329,6 +4419,20 @@ Examples:
         "prune-manifests", help="Explicitly prune expired terminal attempt manifests"
     )
     prune_parser.add_argument("--slot", type=int, required=True, choices=range(1, 6))
+
+    # inspect family (issue #815): read-only, JSON-first reads over the API.
+    inspect_family = subparsers.add_parser(
+        "inspect", help="Read-only JSON-first inspection over the NEXUS API"
+    )
+    inspect_verbs = inspect_family.add_subparsers(dest="inspect_command", required=True)
+    inspect_slot_parser = inspect_verbs.add_parser(
+        "slot", help="Read one slot's state through GET /api/slot/{slot}/state"
+    )
+    inspect_slot_parser.allow_abbrev = False
+    inspect_slot_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    _add_global_output_args(inspect_slot_parser)
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
@@ -4895,13 +4999,10 @@ Examples:
     return parser
 
 
-def main() -> int:
-    """Entry point for the NEXUS CLI."""
-    parser = build_parser()
-    args = parser.parse_args()
-
-    # Validate slot for commands that require it
-    if args.command in (
+# Commands whose --slot, when given, must name slot 1-5 (argparse decides
+# whether it is required).
+_SLOT_COMMANDS = frozenset(
+    {
         "load",
         "continue",
         "retry",
@@ -4924,50 +5025,73 @@ def main() -> int:
         "jobs",
         "lock",
         "unlock",
-    ):
-        if args.slot < 1 or args.slot > 5:
-            emit_error("Slot must be between 1 and 5", args.json)
-            return 1
+        "inspect slot",
+        "model",
+        "retrograde-seed-candidates",
+        "up",
+        "restart",
+    }
+)
 
-    if args.command == "model":
-        if args.slot is not None and (args.slot < 1 or args.slot > 5):
-            emit_error("Slot must be between 1 and 5", args.json)
-            return 1
-        if not args.list and args.slot is None:
-            emit_error("--slot is required unless using --list", args.json)
-            return 1
 
-    if args.command == "retrograde-seed-candidates" and args.slot is not None:
-        if args.slot < 1 or args.slot > 5:
-            emit_error("Slot must be between 1 and 5", args.json)
-            return 1
-
-    if args.command in ("up", "restart") and args.slot is not None:
-        if args.slot < 1 or args.slot > 5:
-            emit_error("Slot must be between 1 and 5", args.json)
-            return 1
-
-    if args.command == "usage" and args.day is not None:
+def _usage_error(args: argparse.Namespace, command: str) -> Optional[str]:
+    """Return why the parsed arguments are unusable, or None when they are."""
+    slot: Optional[int] = getattr(args, "slot", None)
+    if command in _SLOT_COMMANDS and slot is not None and not 1 <= slot <= 5:
+        return "Slot must be between 1 and 5"
+    if command == "model" and not args.list and slot is None:
+        return "--slot is required unless using --list"
+    if command == "usage" and args.day is not None:
         from nexus.telemetry.usage import validate_usage_day
 
         try:
             validate_usage_day(args.day)
         except ValueError as exc:
-            emit_error(str(exc), args.json)
-            return 1
-
-    if args.command == "logs" and args.lines is not None and args.lines < 1:
-        emit_error("Log line count must be a positive integer", args.json)
-        return 1
-
-    if args.command == "record-revelation" and args.world_time is not None:
+            return str(exc)
+    if command == "logs" and args.lines is not None and args.lines < 1:
+        return "Log line count must be a positive integer"
+    if command == "record-revelation" and args.world_time is not None:
         try:
             parse_record_revelation_world_time(args.world_time)
         except ValueError as exc:
-            emit_error(str(exc), args.json)
-            return 1
+            return str(exc)
+    return None
 
-    # Execute command
+
+def _config_remedy(command: str) -> str:
+    """Name the locators that select an active nexus.toml for ``command``."""
+    config_flag = (
+        "Pass --config with the path to nexus.toml, set "
+        if command in RUNTIME_CONFIG_COMMANDS
+        else "Set "
+    )
+    return (
+        f"{config_flag}{HOME_ENV} to a home containing nexus.toml, or set "
+        f"{RUNTIME_CONFIG_ENV} to an existing nexus.toml."
+    )
+
+
+def _transport_refusal(args: argparse.Namespace, command: str) -> Optional[str]:
+    """Refuse a database or local-operator command under a remote runtime.
+
+    Only the active nexus.toml and NEXUS_API_URL are read; no database or
+    network connection is opened. HTTP commands are never refused.
+    """
+    if resolve_transport(command, args, None) == "http":
+        return None
+    explicit = (
+        getattr(args, "config", None) if command in RUNTIME_CONFIG_COMMANDS else None
+    )
+    settings = _load_cli_settings(explicit)
+    remote = detect_remote_runtime(
+        settings.runtime if settings is not None else None,
+        os.environ.get(API_URL_ENV),
+    )
+    return transport_refusal(command, args, remote)
+
+
+def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
+    """Run the selected command; an int is an exit code already reported."""
     if args.command == "up":
         result = run_up(args)
     elif args.command == "down":
@@ -4992,6 +5116,8 @@ def main() -> int:
         try:
             result = run_inspect_turn(args)
         except NoGenerationSessionError as exc:
+            if args.json:
+                return _fail(args, "domain_failure", str(exc))
             print(str(exc))
             return 1
         if args.summary and not args.json:
@@ -4999,6 +5125,8 @@ def main() -> int:
 
             print(format_turn_summary(result["observation"]))
             return 0
+    elif args.command == "inspect":
+        result = run_inspect(args)
     elif args.command == "prune-manifests":
         result = run_prune_manifests(args)
     elif args.command == "jobs":
@@ -5056,24 +5184,67 @@ def main() -> int:
     elif args.command == "unlock":
         result = run_unlock(args)
     else:
-        emit_error(f"Unknown command: {args.command}", args.json)
-        return 2
+        return _fail(args, "usage_error", f"Unknown command: {args.command}")
+    return result
 
-    # Check for errors (consistent format: success=False with error message)
+
+def main() -> int:
+    """Entry point for the NEXUS CLI; exit codes follow nexus.cli_contract."""
+    parser = build_parser()
+    args = parser.parse_args()
+    command = command_path(parser, args)
+
+    usage_error = _usage_error(args, command)
+    if usage_error is not None:
+        return _fail(args, "usage_error", usage_error)
+
+    # Refuse before dispatch, so a refused command opens no connection.
+    try:
+        refusal = _transport_refusal(args, command)
+    except FileNotFoundError as exc:
+        return _fail(args, "config_error", f"{exc}. {_config_remedy(command)}")
+    except (RuntimeHomeError, ValueError) as exc:
+        return _fail(args, "config_error", str(exc))
+    if refusal is not None:
+        return _fail(args, "transport_refused", refusal)
+
+    try:
+        outcome = _dispatch(args)
+    except requests.exceptions.ConnectionError as exc:
+        outcome = {
+            **_api_unreachable(),
+            "error": f"Cannot connect to API server at {get_api_url()}: {exc}",
+        }
+    except requests.exceptions.Timeout as exc:
+        outcome = {
+            **_api_unreachable(),
+            "error": f"Timed out waiting for API server at {get_api_url()}: {exc}",
+        }
+    if isinstance(outcome, int):
+        return outcome
+    result = outcome
+
+    # Failure: one envelope, preserving every non-empty field of the result.
     if not result.get("success", True) or result.get("error"):
-        if args.json and any(
-            result.get(key)
-            for key in ("transition_error", "bootstrap_error", "generation_error")
-        ):
-            print(json.dumps(result, indent=2, sort_keys=True), file=sys.stderr)
+        return _fail(
+            args,
+            result.get("code", "domain_failure"),
+            result.get("error") or "Unknown error",
+            partial_fields(result),
+        )
+
+    if command in ENVELOPE_COMMANDS:
+        if args.json:
+            envelope = success_envelope(result["data"])
+            print(json.dumps(envelope, indent=2, sort_keys=True))
         else:
-            emit_error(result.get("error", "Unknown error"), args.json)
-        return 1
+            _print_inspection(result["data"], truncate=args.truncate)
+        return int(ExitCode.OK)
 
     emit_output(result, args.json, truncate=args.truncate)
     if result.get("failed_policy"):
-        return 1
-    return 0
+        return int(ExitCode.DOMAIN_FAILURE)
+    return int(ExitCode.OK)
 
 
 if __name__ == "__main__":

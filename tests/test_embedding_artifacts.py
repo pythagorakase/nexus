@@ -395,7 +395,12 @@ def test_verify_reports_an_unparseable_lock_with_the_relock_command(
 
     as_json = _cli_verify(workspace.config, "--json")
     assert as_json.returncode == 1, as_json.stdout + as_json.stderr
-    assert json.loads(as_json.stderr) == {"error": message}
+    assert json.loads(as_json.stderr) == {
+        "ok": False,
+        "code": "domain_failure",
+        "error": message,
+        "partial": {},
+    }
 
 
 def test_verify_rejects_a_lock_that_is_not_an_object(tmp_path: Path) -> None:
@@ -464,10 +469,13 @@ def test_verify_without_a_config_to_find_names_the_fix(tmp_path: Path) -> None:
     )
     assert cli.returncode == 1, cli.stdout + cli.stderr
     assert json.loads(cli.stderr) == {
+        "ok": False,
+        "code": "config_error",
         "error": "Configuration file not found: "
         f"{empty_home.resolve() / 'nexus.toml'}. Pass --config with the path to "
         f"nexus.toml, set {HOME_ENV} to a home containing nexus.toml, or set "
-        f"{RUNTIME_CONFIG_ENV} to an existing nexus.toml."
+        f"{RUNTIME_CONFIG_ENV} to an existing nexus.toml.",
+        "partial": {},
     }
 
 

@@ -198,7 +198,10 @@ The runtime is operated in one of three profiles, configured in
 
 `nexus down`, `restart`, and `logs` are local-profile verbs: they manage or
 read state that only exists when this machine's supervisor owns the
-processes, and they fail loudly in other profiles.
+processes, and they fail loudly in other profiles. Under the remote profile
+the CLI refuses them, like every command that would open a slot database or
+this machine's runtime files, before they run (exit 3; see Command Contract
+in `docs/cli.md`).
 
 ### Local profile mechanics
 
@@ -273,7 +276,9 @@ describes the config that actually launched them. Story commands use
 `remote.base_url` when the active config (see The Runtime Home) has
 `profile = "remote"`; an explicit `NEXUS_API_URL` still overrides the base
 URL. Access credentials are attached only when that override has the same
-origin as `remote.base_url`.
+origin as `remote.base_url`. A remote profile, or an override naming a
+non-loopback host, refuses the CLI's direct-database and local-operator
+commands; `docs/cli.md` lists each command's transport.
 
 ## Readiness Checks
 

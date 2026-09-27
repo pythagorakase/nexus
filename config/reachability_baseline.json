@@ -224,6 +224,7 @@
     "nexus/api/wizard_confirmation.py",
     "nexus/api/wizard_transcript.py",
     "nexus/cli.py",
+    "nexus/cli_contract.py",
     "nexus/config/__init__.py",
     "nexus/config/loader.py",
     "nexus/config/local_window.py",

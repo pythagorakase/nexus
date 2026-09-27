@@ -19,6 +19,11 @@ REPO_CONFIG = Path(__file__).resolve().parents[1] / "nexus.toml"
 LOG_LINE_COUNT_ERROR = "Log line count must be a positive integer"
 
 
+def _usage_envelope(message: str) -> dict[str, Any]:
+    """The --json stderr envelope of an argument the CLI refuses (exit 2)."""
+    return {"ok": False, "code": "usage_error", "error": message, "partial": {}}
+
+
 def _write_runtime_log_config(tmp_path: Path, lines: list[str]) -> Path:
     """Write an isolated runtime config and its captured gateway log."""
     state_dir = tmp_path / "state"
@@ -163,9 +168,9 @@ def test_global_output_flags_are_order_independent(
             assert payload["success"] is True
             assert payload["usage"]["day"] == "2099-12-31"
         else:
-            assert exit_code == 1
+            assert exit_code == 2
             assert captured.out == ""
-            assert json.loads(captured.err) == {"error": expected_error}
+            assert json.loads(captured.err) == _usage_envelope(expected_error)
         assert "Traceback" not in captured.out + captured.err
 
     assert observations[0] == observations[1]
@@ -204,7 +209,7 @@ def test_trait_audit_requires_exact_long_option_spelling(
         ],
     )
 
-    assert cli.main() == 1
+    assert cli.main() == 2
     exact = capsys.readouterr()
     assert exact.out == ""
     assert exact.err == "Error: Slot must be between 1 and 5\n"
@@ -226,13 +231,13 @@ def test_usage_invalid_day_exits_with_one_concise_error(
     argv.extend(["usage", "--day", day])
     monkeypatch.setattr(sys, "argv", argv)
 
-    assert cli.main() == 1
+    assert cli.main() == 2
 
     captured = capsys.readouterr()
     message = f"Usage day must be YYYY-MM-DD, got {day!r}"
     assert captured.out == ""
     if as_json:
-        assert captured.err == json.dumps({"error": message}) + "\n"
+        assert json.loads(captured.err) == _usage_envelope(message)
     else:
         assert captured.err == f"Error: {message}\n"
     assert "Traceback" not in captured.out + captured.err
@@ -338,7 +343,7 @@ def test_record_revelation_invalid_world_time_exits_with_one_concise_error(
     )
     monkeypatch.setattr(sys, "argv", argv)
 
-    assert cli.main() == 1
+    assert cli.main() == 2
 
     captured = capsys.readouterr()
     message = (
@@ -347,7 +352,7 @@ def test_record_revelation_invalid_world_time_exits_with_one_concise_error(
     )
     assert captured.out == ""
     if json_position is not None:
-        assert captured.err == json.dumps({"error": message}) + "\n"
+        assert json.loads(captured.err) == _usage_envelope(message)
     else:
         assert captured.err == f"Error: {message}\n"
     assert "Traceback" not in captured.out + captured.err
@@ -383,13 +388,13 @@ def test_logs_rejects_non_positive_line_counts_before_reading_logs(
         lambda _args: pytest.fail("invalid count constructed the supervisor"),
     )
 
-    assert cli.main() == 1
+    assert cli.main() == 2
 
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "must-not-be-emitted" not in captured.err
     if as_json:
-        assert json.loads(captured.err) == {"error": LOG_LINE_COUNT_ERROR}
+        assert json.loads(captured.err) == _usage_envelope(LOG_LINE_COUNT_ERROR)
     else:
         assert captured.err == f"Error: {LOG_LINE_COUNT_ERROR}\n"
 
@@ -772,8 +777,9 @@ def test_seed_completion_transition_http_failure_exits_nonzero_with_retry(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    payload = json.loads(captured.err)
-    assert payload["success"] is False
+    envelope = json.loads(captured.err)
+    assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
+    payload = envelope["partial"]
     assert payload["phase_complete"] is True
     assert payload["artifact_type"] == "story_seed"
     assert payload["artifact_data"] == {"title": "The Glass Orchard"}
@@ -783,7 +789,7 @@ def test_seed_completion_transition_http_failure_exits_nonzero_with_retry(
         "detail": detail,
     }
     assert payload["retry_command"] == "nexus continue --slot 5"
-    assert payload["retry_command"] in payload["error"]
+    assert payload["retry_command"] in envelope["error"]
 
 
 def test_seed_completion_transition_timeout_exits_nonzero_with_retry(
@@ -802,8 +808,9 @@ def test_seed_completion_transition_timeout_exits_nonzero_with_retry(
 
     assert cli.main() == 1
 
-    payload = json.loads(capsys.readouterr().err)
-    assert payload["success"] is False
+    envelope = json.loads(capsys.readouterr().err)
+    assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
+    payload = envelope["partial"]
     assert payload["phase_complete"] is True
     assert payload["artifact_data"] == {"title": "The Glass Orchard"}
     assert payload["transition_error"] == {
