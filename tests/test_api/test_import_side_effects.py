@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import tomlkit
 
@@ -61,7 +62,7 @@ _FORBIDDEN_MEMNON_IMPORT_MODULES = {
 
 def _unreachable_runtime_config(directory: Path) -> Path:
     """Write a nexus.toml copy whose ``[api.database]`` names the closed port."""
-    document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    document: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
     database = document["api"]["database"]
     database["host"] = _UNREACHABLE_DB_ENV["PGHOST"]
     database["port"] = int(_UNREACHABLE_DB_ENV["PGPORT"])
