@@ -76,3 +76,34 @@ def test_runtime_status_endpoint_offloads_sync_builder(monkeypatch):
     assert response.status_code == 200
     assert response.json() == {"ok": True}
     assert calls == [fake_build_runtime_status]
+
+
+def test_runtime_status_carries_gateway_readiness_apart_from_ok(monkeypatch):
+    """/runtime/status reports the gateway-evaluable readiness subset.
+
+    Readiness is a separate block: it never feeds the top-level ``ok`` that
+    clients gate their connected state on, and it names the checks only
+    ``nexus doctor`` runs. No active slot is set, so no database is opened.
+    """
+
+    for name in ("NEXUS_SLOT", "NEXUS_HOME", "NEXUS_RUNTIME_CONFIG"):
+        monkeypatch.delenv(name, raising=False)
+
+    status = runtime_status.build_runtime_status()
+
+    assert status["database"]["ok"] is False
+    assert status["ok"] is False
+    readiness = status["readiness"]
+    assert readiness["schema_version"] == 1
+    assert readiness["target"] == "owner-host"
+    assert [check["id"] for check in readiness["checks"]] == [
+        "config.valid",
+        "tools.pg_dump",
+        "ui.bundle",
+    ]
+    assert readiness["checks"][0]["status"] == "pass"
+    assert "postgres.reachable" in readiness["omitted"]
+    assert "secrets.seat_providers" in readiness["omitted"]
+    assert readiness["ok"] == all(
+        check["status"] != "fail" for check in readiness["checks"]
+    )

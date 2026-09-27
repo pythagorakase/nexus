@@ -891,7 +891,8 @@ class Supervisor:
     # Status
     # ------------------------------------------------------------------
 
-    def _gateway_url(self) -> str:
+    def gateway_url(self) -> str:
+        """Base URL of the gateway this profile names (the port override applied)."""
         if self.runtime.profile == "external":
             return self.runtime.external.gateway_url.rstrip("/")
         if self.runtime.profile == "remote":
@@ -900,7 +901,7 @@ class Supervisor:
         return f"http://{gateway.host}:{gateway.port}"
 
     def _fetch_runtime_status(self) -> Dict[str, Any]:
-        url = self._gateway_url() + RUNTIME_STATUS_PATH
+        url = self.gateway_url() + RUNTIME_STATUS_PATH
         try:
             remote = self.runtime.remote if self.runtime.profile == "remote" else None
             auth = build_runtime_request_auth(url, remote)
@@ -921,7 +922,7 @@ class Supervisor:
             "success": True,
             "profile": self.runtime.profile,
             "config": str(self.config_path),
-            "gateway_url": self._gateway_url(),
+            "gateway_url": self.gateway_url(),
         }
         if self.runtime.profile == "local":
             processes: Dict[str, Any] = {}

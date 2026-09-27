@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#754 experience embedding lane gives experience_embedding.py a caller inside the already-orphaned scheduler; still unreachable from a production root",
+  "reason": "#803 readiness registry is reachable from nexus doctor and /runtime/status",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -262,6 +262,7 @@
     "nexus/runtime/home.py",
     "nexus/runtime/home_plan.py",
     "nexus/runtime/logging_config.py",
+    "nexus/runtime/readiness.py",
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
