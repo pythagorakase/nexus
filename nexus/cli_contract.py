@@ -40,9 +40,16 @@ Exit Codes and Envelopes
 ------------------------
 :class:`ExitCode` is stable: 0 ok, 1 domain failure, 2 usage, 3 transport
 refused, 4 API unreachable. Every ``--json`` failure prints
-:func:`error_envelope` on stderr: ``ok`` false, a stable ``code`` from
-:data:`ERROR_CODES`, the ``error`` message string earlier releases printed,
-and ``partial``, every non-empty field of the failed result. JSON-first
+:func:`error_envelope` on stderr, argparse's rejection of the command line
+included (``nexus.cli.CliArgumentParser``): ``ok`` false, a stable ``code``
+from :data:`ERROR_CODES`, the ``error`` message string earlier releases
+printed, and ``partial``, every non-empty field of the failed result. An
+HTTP handler's broad ``except`` never absorbs a refused connection, a timeout,
+an unusable API URL, or a missing or refused runtime credential: those
+propagate to ``nexus.cli.main()``, so every HTTP command reports them alike.
+Only a command that already saved work (a confirmed artifact, a saved seed, a
+scheduled turn) reports a later failed request as a domain failure whose
+``partial`` keeps that work and its recovery command. JSON-first
 commands (:data:`ENVELOPE_COMMANDS`) print :func:`success_envelope` on stdout;
 other commands keep their established success payloads. One exception is
 kept for existing consumers: a policy gate (``trait-audit

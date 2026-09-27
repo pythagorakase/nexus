@@ -1384,6 +1384,11 @@ port_release_timeout_seconds = 5.0 # swap waits this long for the old llama-serv
 
 [runtime.cli]
 inspect_timeout_seconds = 30.0  # per request of `nexus inspect`; no answer in time exits 4
+# Per short request of load, continue, retry, undo, regenerate, clear, lock,
+# unlock and model --set/--clear (state reads, wizard setup and confirmation,
+# slot administration). Generation, wizard chat and transition requests keep
+# their own budgets.
+request_timeout_seconds = 30.0
 
 [runtime.logs]
 # The supervisor is the single log-file and rotation owner: it captures each

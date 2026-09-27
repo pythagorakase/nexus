@@ -66,14 +66,25 @@ no longer exists.
 | --- | --- | --- |
 | 0 | Success | — |
 | 1 | Domain failure: the command ran and failed | `domain_failure`, `not_found`, `api_error`, `invalid_response`, `config_error` |
-| 2 | Usage: unusable arguments (argparse errors also exit 2) | `usage_error` |
+| 2 | Usage: unusable arguments, argparse's own rejections included | `usage_error` |
 | 3 | Transport refused under a remote runtime | `transport_refused` |
 | 4 | The NEXUS API could not be reached or did not answer in time | `api_unreachable` |
 
 Expected failures are reported through these codes. A missing or invalid
-active `nexus.toml`, a malformed `NEXUS_API_URL`, or a missing runtime
-credential is a `config_error`, checked for every command but `doctor` before
-it runs. A traceback means a programming fault.
+active `nexus.toml`, or a `NEXUS_API_URL` without a host, is a `config_error`
+checked for every command but `doctor` before it runs. A `NEXUS_API_URL` that
+is not `http://` or `https://`, and a runtime credential that is missing or
+refused, are a `config_error` when the first request is sent. Every HTTP
+command reports these, and an API that refuses the connection or does not
+answer in time (exit 4), the same way. Only a command that already saved work
+(a confirmed artifact, a saved seed, a scheduled turn) reports a later failed
+request as a domain failure whose `partial` keeps that work and its recovery
+command. A traceback means a programming fault.
+
+`[runtime.cli].request_timeout_seconds` bounds each short request of `load`,
+`continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, and
+`model --set`/`--clear`; generation, wizard chat, and transition requests keep
+their own budgets.
 
 ### Transports
 
@@ -105,7 +116,8 @@ for this machine's runtime.
 
 ### JSON Failure Envelope
 
-With `--json`, every failure prints one object on stderr:
+With `--json` anywhere on the command line, every failure prints one object
+on stderr, argparse's rejection of the arguments included:
 
 ```json
 {
@@ -120,7 +132,8 @@ With `--json`, every failure prints one object on stderr:
 `{"error": ...}`. `partial` holds every non-empty field of the failed result
 (a saved seed, a session ID, a recovery command); `false` and `0` are kept,
 `null` and empty values are not. Without `--json`, a failure prints one
-`Error: <message>` line on stderr.
+`Error: <message>` line on stderr, and argparse prints its usage and error
+lines.
 
 One failure keeps its report instead: `trait-audit --fail-on-remainders`
 prints the full audit on stdout with `"failed_policy": true` and exits 1.

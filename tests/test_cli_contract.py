@@ -76,11 +76,15 @@ class Gateway:
 
     routes: dict[tuple[str, str], tuple[int, Any]] = field(default_factory=dict)
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
+    # Accept and record every request but answer none while the gateway serves:
+    # a runtime that is up yet never answers within the CLI's request timeout.
+    stall: bool = False
 
 
 @contextmanager
 def _serve(gateway: Gateway) -> Iterator[str]:
     """Serve ``gateway`` on loopback; unknown routes answer 404 like FastAPI."""
+    released = Event()
 
     class Handler(BaseHTTPRequestHandler):
         def _answer(self, method: str) -> None:
@@ -88,6 +92,9 @@ def _serve(gateway: Gateway) -> Iterator[str]:
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b""
             gateway.requests.append((method, path, json.loads(raw) if raw else None))
+            if gateway.stall:
+                released.wait()
+                return
             status, payload = gateway.routes.get(
                 (method, path), (404, {"detail": "Not Found"})
             )
@@ -104,6 +111,9 @@ def _serve(gateway: Gateway) -> Iterator[str]:
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
             self._answer("POST")
 
+        def do_PATCH(self) -> None:  # noqa: N802 - stdlib handler contract
+            self._answer("PATCH")
+
         def log_message(self, format: str, *args: object) -> None:
             return
 
@@ -113,6 +123,7 @@ def _serve(gateway: Gateway) -> Iterator[str]:
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}"
     finally:
+        released.set()
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
@@ -154,10 +165,21 @@ def _closed_port() -> int:
         return int(probe.getsockname()[1])
 
 
-def _config(tmp_path: Path, *, profile: str, base_url: Optional[str] = None) -> Path:
-    """Write a copy of the checkout config with the given runtime profile."""
+def _config(
+    tmp_path: Path,
+    *,
+    profile: str,
+    base_url: Optional[str] = None,
+    cli_settings: Optional[dict[str, float]] = None,
+) -> Path:
+    """Write a copy of the checkout config with the given runtime profile.
+
+    ``cli_settings`` overrides keys of ``[runtime.cli]``, such as its request
+    timeouts.
+    """
     document: Any = tomlkit.parse((ROOT / "nexus.toml").read_text(encoding="utf-8"))
     document["runtime"]["profile"] = profile
+    document["runtime"]["cli"].update(cli_settings or {})
     if base_url is not None:
         remote = document["runtime"]["remote"]
         remote["base_url"] = base_url
@@ -325,6 +347,50 @@ def test_inspect_slot_unreachable_api_exits_four() -> None:
     assert envelope["error"].startswith(f"Cannot connect to API server at {base_url}")
 
 
+@pytest.mark.parametrize(
+    ("argv", "sent"),
+    [
+        (("inspect", "slot", "--slot", "5"), ("GET", "/api/slot/5/state")),
+        (("load", "--slot", "5"), ("GET", "/api/slot/5/state")),
+        (("lock", "--slot", "5"), ("POST", "/api/slot/5/lock")),
+        (
+            ("model", "--slot", "5", "--set", "slot-pinned-model"),
+            ("PATCH", "/api/slot/5/settings"),
+        ),
+    ],
+    ids=["inspect-slot", "load", "lock", "model-set"],
+)
+def test_http_command_unanswered_request_exits_four(
+    tmp_path: Path, argv: tuple[str, ...], sent: tuple[str, str]
+) -> None:
+    """A gateway that accepts the request but never answers is api_unreachable.
+
+    The legacy handlers once caught the read timeout as a domain failure
+    (exit 1); every HTTP command now reports it like an unreachable API.
+    """
+    config = _config(
+        tmp_path,
+        profile="local",
+        cli_settings={"request_timeout_seconds": 0.5, "inspect_timeout_seconds": 0.5},
+    )
+    gateway = Gateway(stall=True)
+    with _serve(gateway) as base_url:
+        completed = _run(
+            *argv,
+            "--json",
+            env={"NEXUS_API_URL": base_url, "NEXUS_RUNTIME_CONFIG": str(config)},
+        )
+
+    assert completed.returncode == ExitCode.UNREACHABLE
+    envelope = _failure(completed)
+    assert envelope["code"] == "api_unreachable"
+    assert envelope["error"].startswith(
+        f"Timed out waiting for API server at {base_url}"
+    )
+    assert "read timeout=0.5" in envelope["error"]
+    assert [request[:2] for request in gateway.requests] == [sent]
+
+
 def test_inspect_slot_rejects_an_invalid_slot_before_any_request() -> None:
     """An out-of-range slot is a usage error (exit 2) and sends nothing."""
     gateway = Gateway(routes={("GET", "/api/slot/9/state"): (200, SLOT_STATE)})
@@ -350,6 +416,52 @@ def test_inspect_slot_rejects_an_invalid_slot_before_any_request() -> None:
 
 @pytest.mark.parametrize(
     "argv",
+    [
+        ("load", "--json"),
+        ("--json", "load"),
+        ("inspect", "--json", "slot"),
+    ],
+    ids=["json-after-command", "json-before-command", "nested-command"],
+)
+def test_argparse_rejection_under_json_is_the_usage_envelope(
+    argv: tuple[str, ...],
+) -> None:
+    """argparse's own rejection prints the envelope, not its usage text.
+
+    Before the contract covered it, argparse exited 2 with its plain-text usage
+    block, so a caller parsing stderr as JSON failed on a missing flag.
+    """
+    completed = _run(*argv, env={})
+
+    assert completed.returncode == ExitCode.USAGE
+    assert "usage:" not in completed.stderr
+    assert _failure(completed) == {
+        "ok": False,
+        "code": "usage_error",
+        "error": "the following arguments are required: --slot",
+        "partial": {},
+    }
+
+
+def test_argparse_rejection_without_json_keeps_argparse_output() -> None:
+    """Without --json argparse prints its usage and error, and --help still works."""
+    rejected = _run("load", env={})
+    helped = _run("--json", "load", "--help", env={})
+
+    assert rejected.returncode == ExitCode.USAGE
+    assert rejected.stdout == ""
+    assert rejected.stderr.startswith("usage: ")
+    assert rejected.stderr.endswith(
+        " load: error: the following arguments are required: --slot\n"
+    )
+    assert helped.returncode == ExitCode.OK
+    assert helped.stderr == ""
+    assert helped.stdout.startswith("usage: ")
+    assert "--slot SLOT" in helped.stdout
+
+
+@pytest.mark.parametrize(
+    "argv",
     [("inspect", "slot", "--slot", "5"), ("load", "--slot", "5")],
     ids=["inspect-slot", "load"],
 )
@@ -367,6 +479,16 @@ def test_http_command_with_a_missing_runtime_config_is_a_config_error(
     assert "NEXUS_RUNTIME_CONFIG" in envelope["error"]
 
 
+# The inspect family propagates request failures to main() by design; the
+# legacy HTTP handlers catch broadly and must re-raise them alike.
+_HTTP_COMMANDS = pytest.mark.parametrize(
+    "argv",
+    [("inspect", "slot", "--slot", "5"), ("load", "--slot", "5")],
+    ids=["inspect-slot", "load"],
+)
+
+
+@_HTTP_COMMANDS
 @pytest.mark.parametrize(
     ("api_url", "message"),
     [
@@ -375,13 +497,11 @@ def test_http_command_with_a_missing_runtime_config_is_a_config_error(
     ],
     ids=["no-scheme", "not-http"],
 )
-def test_inspect_slot_malformed_api_url_is_a_config_error(
-    api_url: str, message: str
+def test_http_command_malformed_api_url_is_a_config_error(
+    argv: tuple[str, ...], api_url: str, message: str
 ) -> None:
     """An API URL requests cannot use is a config error, not a traceback."""
-    completed = _run(
-        "inspect", "slot", "--slot", "5", "--json", env={"NEXUS_API_URL": api_url}
-    )
+    completed = _run(*argv, "--json", env={"NEXUS_API_URL": api_url})
 
     assert completed.returncode == ExitCode.DOMAIN_FAILURE
     envelope = _failure(completed)
@@ -389,19 +509,21 @@ def test_inspect_slot_malformed_api_url_is_a_config_error(
     assert envelope["error"].startswith(message)
 
 
-def test_inspect_slot_missing_access_secret_is_a_config_error(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("inspect", "slot", "--slot", "5"),
+        ("load", "--slot", "5"),
+        ("model", "--slot", "5", "--set", "slot-pinned-model"),
+    ],
+    ids=["inspect-slot", "load", "model-set"],
+)
+def test_http_command_missing_access_secret_is_a_config_error(
+    tmp_path: Path, argv: tuple[str, ...]
 ) -> None:
     """A remote profile whose Access secret is absent fails before any request."""
     config = _config(tmp_path, profile="remote")
-    completed = _run(
-        "inspect",
-        "slot",
-        "--slot",
-        "5",
-        "--json",
-        env={"NEXUS_RUNTIME_CONFIG": str(config)},
-    )
+    completed = _run(*argv, "--json", env={"NEXUS_RUNTIME_CONFIG": str(config)})
 
     assert completed.returncode == ExitCode.DOMAIN_FAILURE
     envelope = _failure(completed)
@@ -409,13 +531,13 @@ def test_inspect_slot_missing_access_secret_is_a_config_error(
     assert "CLOUDFLARE_ACCESS_CLIENT_ID_API_KEY is not set" in envelope["error"]
 
 
-def test_inspect_slot_refuses_plaintext_credentials_as_a_config_error() -> None:
+@_HTTP_COMMANDS
+def test_http_command_refuses_plaintext_credentials_as_a_config_error(
+    argv: tuple[str, ...],
+) -> None:
     """NEXUS_AUTH bound for a non-loopback plain-HTTP API is never sent."""
     completed = _run(
-        "inspect",
-        "slot",
-        "--slot",
-        "5",
+        *argv,
         "--json",
         env={
             "NEXUS_API_URL": "http://nexus.example.invalid",

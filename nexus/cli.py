@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 import functools
 import json
@@ -44,7 +45,17 @@ from pathlib import Path
 import sys
 import threading
 import time
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    NoReturn,
+    Optional,
+    Sequence,
+)
 import uuid
 
 import requests  # type: ignore[import-untyped]
@@ -1152,6 +1163,47 @@ def _api_unreachable() -> Dict[str, Any]:
     }
 
 
+# Request failures main() classifies alike for every HTTP command: no
+# connection or no answer in time (api_unreachable, exit 4), an API URL that
+# requests cannot use, and a runtime credential that is missing or refused
+# (config_error, exit 1).
+_API_URL_ERRORS: tuple[type[BaseException], ...] = (
+    requests.exceptions.InvalidURL,
+    requests.exceptions.InvalidSchema,
+    requests.exceptions.MissingSchema,
+)
+_CREDENTIAL_ERRORS: tuple[type[BaseException], ...] = (
+    InsecureRuntimeTransportError,
+    MissingSecretError,
+)
+# A handler whose broad ``except`` turns failures into a result re-raises these
+# first (``except _TRANSPORT_ERRORS: raise``), so they reach main().
+_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    *_API_URL_ERRORS,
+    *_CREDENTIAL_ERRORS,
+)
+
+
+def _runtime_cli_settings() -> RuntimeCliSettings:
+    """Read the CLI's request budgets from [runtime.cli].
+
+    A bare install with no nexus.toml (where get_api_url() targets
+    DEFAULT_API_URL) and a config without [runtime] both use the
+    RuntimeCliSettings defaults, the values the checkout's nexus.toml ships.
+    """
+    settings = _load_cli_settings()
+    if settings is None or settings.runtime is None:
+        return RuntimeCliSettings()
+    return settings.runtime.cli
+
+
+def _request_timeout_seconds() -> float:
+    """The per-request budget of a play or slot command's short API request."""
+    return _runtime_cli_settings().request_timeout_seconds
+
+
 def run_load(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Display current slot state.
@@ -1162,7 +1214,7 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
     url = f"{get_api_url()}/api/slot/{args.slot}/state"
 
     try:
-        response = _api_get(url, timeout=30)
+        response = _api_get(url, timeout=_request_timeout_seconds())
         response.raise_for_status()
         data = response.json()
 
@@ -1234,8 +1286,8 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
             ),
         }
 
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -1243,16 +1295,8 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _inspect_timeout_seconds() -> float:
-    """Read the per-request budget of ``nexus inspect`` from [runtime.cli].
-
-    A bare install with no nexus.toml (where get_api_url() targets
-    DEFAULT_API_URL) and a config without [runtime] both use the
-    RuntimeCliSettings default, the value the checkout's nexus.toml ships.
-    """
-    settings = _load_cli_settings()
-    if settings is None or settings.runtime is None:
-        return RuntimeCliSettings().inspect_timeout_seconds
-    return settings.runtime.cli.inspect_timeout_seconds
+    """Read the per-request budget of ``nexus inspect`` from [runtime.cli]."""
+    return _runtime_cli_settings().inspect_timeout_seconds
 
 
 def run_inspect_slot(args: argparse.Namespace) -> Dict[str, Any]:
@@ -1523,7 +1567,8 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
                 return failure("error", status.get("error") or "Generation failed")
             if _is_terminal_generation_status(status.get("status")):
                 response = _api_get(
-                    f"{get_api_url()}/api/slot/{slot}/state", timeout=30
+                    f"{get_api_url()}/api/slot/{slot}/state",
+                    timeout=_request_timeout_seconds(),
                 )
                 response.raise_for_status()
                 state = response.json()
@@ -1781,7 +1826,7 @@ def _confirm_wizard_artifact_and_introduce(
         response = _api_post(
             f"{get_api_url()}/api/story/new/setup/confirm",
             json={"slot": slot, **identity},
-            timeout=30,
+            timeout=_request_timeout_seconds(),
         )
         if not 200 <= response.status_code < 300:
             raise ValueError(f"Wizard confirmation failed: {response.text}")
@@ -1872,7 +1917,7 @@ def _start_wizard_character_revision(slot: int, state: Mapping[str, Any]) -> str
             "thread_id": identity["thread_id"],
             "artifact_token": identity["artifact_token"],
         },
-        timeout=30,
+        timeout=_request_timeout_seconds(),
     )
     if not 200 <= response.status_code < 300:
         raise ValueError(f"Character revision could not start: {response.text}")
@@ -1897,7 +1942,7 @@ def _record_wizard_weird_level(slot: int, level: str) -> Optional[str]:
         "put",
         f"{get_api_url()}/api/story/new/weird",
         json={"slot": slot, "weird_level": level},
-        timeout=30,
+        timeout=_request_timeout_seconds(),
     )
     if not 200 <= response.status_code < 300:
         detail = response.text.strip() or f"HTTP {response.status_code}"
@@ -1922,7 +1967,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     try:
         # First, get slot state to determine mode
         state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
-        state_response = _api_get(state_url, timeout=30)
+        state_response = _api_get(state_url, timeout=_request_timeout_seconds())
         state_response.raise_for_status()
         state = state_response.json()
 
@@ -1947,7 +1992,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             model_to_use = getattr(args, "model", None)
             if model_to_use:
                 setup_payload["model"] = model_to_use
-            setup_response = _api_post(setup_url, json=setup_payload, timeout=30)
+            setup_response = _api_post(
+                setup_url, json=setup_payload, timeout=_request_timeout_seconds()
+            )
             if not setup_response.ok:
                 return {
                     "success": False,
@@ -2063,7 +2110,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 retrograde_info = transition_response.json().get("retrograde")
 
                 # Transition complete - refresh state and continue to narrative
-                state_response = _api_get(state_url, timeout=30)
+                state_response = _api_get(state_url, timeout=_request_timeout_seconds())
                 state = state_response.json()
 
                 if state.get("is_wizard_mode"):
@@ -2327,8 +2374,8 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             "error": "Slot state was neither wizard nor narrative mode",
         }
 
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2346,7 +2393,8 @@ def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
     """
     try:
         state_response = _api_get(
-            f"{get_api_url()}/api/slot/{args.slot}/state", timeout=30
+            f"{get_api_url()}/api/slot/{args.slot}/state",
+            timeout=_request_timeout_seconds(),
         )
         state_response.raise_for_status()
         recovery = state_response.json().get("recovery")
@@ -2364,8 +2412,6 @@ def run_retry(args: argparse.Namespace) -> Dict[str, Any]:
         response.raise_for_status()
         return _wait_for_narrative_result(args.slot, response.json()["session_id"])
 
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
 
@@ -2379,7 +2425,7 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
     url = f"{get_api_url()}/api/slot/{args.slot}/undo"
 
     try:
-        response = _api_post(url, timeout=30)
+        response = _api_post(url, timeout=_request_timeout_seconds())
         response.raise_for_status()
         data = response.json()
 
@@ -2391,8 +2437,8 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
             return {"success": False, "error": message or "Undo failed"}
         return {"success": True, "message": message}
 
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2426,7 +2472,9 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
             status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
             try:
                 status_response = _api_get(
-                    status_url, params={"slot": args.slot}, timeout=30
+                    status_url,
+                    params={"slot": args.slot},
+                    timeout=_request_timeout_seconds(),
                 )
             except requests.exceptions.RequestException:
                 # Transient hang on a single status GET (event loop briefly slammed
@@ -2452,8 +2500,8 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
             time.sleep(1)
         return {"success": False, "error": "Regeneration timed out"}
 
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2484,7 +2532,10 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
         if args.set or getattr(args, "clear", False):
             # Set the model
             response = _api_request(
-                "patch", base_url, json={"skald_model": args.set}, timeout=30
+                "patch",
+                base_url,
+                json={"skald_model": args.set},
+                timeout=_request_timeout_seconds(),
             )
             response.raise_for_status()
             data = response.json()
@@ -2522,8 +2573,8 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
             "seats": [asdict(item) for item in seats],
         }
 
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -2538,14 +2589,16 @@ def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
     """
     try:
         url = f"{get_api_url()}/api/story/new/setup/reset"
-        response = _api_post(url, json={"slot": args.slot}, timeout=30)
+        response = _api_post(
+            url, json={"slot": args.slot}, timeout=_request_timeout_seconds()
+        )
         response.raise_for_status()
         return {
             "success": True,
             "message": f"Slot {args.slot} cleared",
         }
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -3585,14 +3638,14 @@ def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     try:
         url = f"{get_api_url()}/api/slot/{args.slot}/lock"
-        response = _api_post(url, timeout=30)
+        response = _api_post(url, timeout=_request_timeout_seconds())
         response.raise_for_status()
         return {
             "success": True,
             "message": f"Slot {args.slot} locked",
         }
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -3607,14 +3660,14 @@ def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     try:
         url = f"{get_api_url()}/api/slot/{args.slot}/unlock"
-        response = _api_post(url, timeout=30)
+        response = _api_post(url, timeout=_request_timeout_seconds())
         response.raise_for_status()
         return {
             "success": True,
             "message": f"Slot {args.slot} unlocked",
         }
-    except requests.exceptions.ConnectionError:
-        return _api_unreachable()
+    except _TRANSPORT_ERRORS:
+        raise
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -4223,9 +4276,59 @@ def _add_global_output_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+# Whether the command line main() is parsing asks for --json.
+_JSON_COMMAND_LINE: ContextVar[bool] = ContextVar(
+    "nexus_cli_json_command_line", default=False
+)
+
+
+class CliArgumentParser(argparse.ArgumentParser):
+    """Argument parser whose rejections follow the ``--json`` failure contract.
+
+    build_parser() creates the root parser with this class, and argparse gives
+    every subparser the class of its parent. While main() parses a command line
+    that asks for ``--json``, a rejection prints the one ``usage_error``
+    envelope on stderr instead of argparse's usage text; either way the process
+    exits 2.
+    """
+
+    def error(self, message: str) -> NoReturn:
+        """Report a rejected command line and exit 2."""
+        if _JSON_COMMAND_LINE.get():
+            emit_error(message, True, code="usage_error")
+            self.exit(int(ExitCode.USAGE))
+        super().error(message)
+
+
+def _asks_for_json(argv: Sequence[str]) -> bool:
+    """Whether ``--json`` appears as an option anywhere before a ``--``."""
+    for token in argv:
+        if token == "--":
+            return False
+        if token == "--json":
+            return True
+    return False
+
+
+def _parse_command_line(
+    parser: argparse.ArgumentParser, argv: Sequence[str]
+) -> argparse.Namespace:
+    """Parse ``argv``, reporting a rejection as the envelope when it asks for JSON.
+
+    ``--json`` is read from the whole command line because it may precede the
+    subcommand (``nexus --json load``), where the subparser that rejects the
+    arguments never sees it.
+    """
+    token = _JSON_COMMAND_LINE.set(_asks_for_json(argv))
+    try:
+        return parser.parse_args(argv)
+    finally:
+        _JSON_COMMAND_LINE.reset(token)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser with subcommands."""
-    parser = argparse.ArgumentParser(
+    parser = CliArgumentParser(
         allow_abbrev=False,
         description="NEXUS CLI - Story management command-line interface",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -5202,7 +5305,7 @@ def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
 def main() -> int:
     """Entry point for the NEXUS CLI; exit codes follow nexus.cli_contract."""
     parser = build_parser()
-    args = parser.parse_args()
+    args = _parse_command_line(parser, sys.argv[1:])
     command = command_path(parser, args)
 
     usage_error = _usage_error(args, command)
@@ -5239,17 +5342,13 @@ def main() -> int:
             **_api_unreachable(),
             "error": f"Timed out waiting for API server at {get_api_url()}: {exc}",
         }
-    except (
-        requests.exceptions.InvalidURL,
-        requests.exceptions.InvalidSchema,
-        requests.exceptions.MissingSchema,
-    ) as exc:
+    except _API_URL_ERRORS as exc:
         return _fail(
             args,
             "config_error",
             f"{exc}. Set {API_URL_ENV} to an absolute http:// or https:// URL.",
         )
-    except (InsecureRuntimeTransportError, MissingSecretError) as exc:
+    except _CREDENTIAL_ERRORS as exc:
         return _fail(args, "config_error", str(exc))
     if isinstance(outcome, int):
         return outcome
