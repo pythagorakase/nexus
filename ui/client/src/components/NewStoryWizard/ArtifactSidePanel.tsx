@@ -196,6 +196,9 @@ interface ArtifactSidePanelProps {
   // Omitted once the artifact is accepted: it can no longer be revised.
   onRevise?: () => void;
   isLoading: boolean;
+  // Holds Confirm alone, keeping its label, while something the confirmation
+  // carries is still being saved.
+  confirmDisabled?: boolean;
   // Trait selector props
   showTraitSelector?: boolean;
   suggestedTraits?: string[];
@@ -760,6 +763,7 @@ export function ArtifactSidePanel({
   onConfirm,
   onRevise,
   isLoading,
+  confirmDisabled = false,
   showTraitSelector,
   suggestedTraits,
   selectedTraits,
@@ -788,7 +792,9 @@ export function ArtifactSidePanel({
   const shouldShowFooter =
     mode === "confirm" && (pendingArtifact || showTraitSelector);
   const isConfirmDisabled =
-    isLoading || (showTraitSelector ? (selectedTraits?.length ?? 0) === 0 : false);
+    isLoading ||
+    confirmDisabled ||
+    (showTraitSelector ? (selectedTraits?.length ?? 0) === 0 : false);
 
   // Collapsed view - just show phase icons centered
   if (isCollapsed) {

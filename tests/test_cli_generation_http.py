@@ -26,6 +26,8 @@ import tomlkit
 ROOT = Path(__file__).resolve().parents[1]
 SESSION_ID = "776-opening-session"
 NARRATIVE = "Rain needles the orchard glass."
+WELCOME = "A new story waits for its world."
+WELCOME_CHOICES = ["Begin with a place.", "Begin with a person."]
 
 
 @dataclass
@@ -67,6 +69,9 @@ class GenerationScenario:
     transition_error: str | None = None
     # Detail of a refused strangeness save; None echoes the saved level.
     weird_error: str | None = None
+    # The slot holds nothing until the CLI starts a wizard on it.
+    empty: bool = False
+    wizard_started: bool = False
     ready: bool = False
     transitioned: bool = False
 
@@ -93,6 +98,18 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
             scenario.requests.append(("POST", self.path, body))
             if body.get("slot") != 5:
                 self._respond({"detail": "Explicit test slot required"}, 422)
+            elif self.path == "/api/story/new/setup/start":
+                scenario.wizard_started = True
+                self._respond(
+                    {
+                        "status": "started",
+                        "thread_id": "conv_new_story",
+                        "slot": 5,
+                        "model": "slot-model",
+                        "welcome_message": WELCOME,
+                        "welcome_choices": WELCOME_CHOICES,
+                    }
+                )
             elif self.path == "/api/story/new/chat":
                 self._respond(
                     {
@@ -218,7 +235,16 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 )
             elif url.path == "/api/slot/5/state":
                 scenario.state_reads += 1
-                if scenario.ready and not scenario.transitioned:
+                if scenario.empty and not scenario.wizard_started:
+                    self._respond(
+                        {
+                            "slot": 5,
+                            "is_empty": True,
+                            "is_wizard_mode": False,
+                            "model": "slot-model",
+                        }
+                    )
+                elif scenario.ready and not scenario.transitioned:
                     self._respond(
                         {"is_empty": False, "is_wizard_mode": True, "phase": "ready"}
                     )
@@ -279,6 +305,7 @@ def _run_cli(
     tmp_path: Path,
     *,
     json_output: bool = True,
+    choice: str | None = "1",
     extra_args: tuple[str, ...] = (),
 ) -> tuple[int, str, str]:
     """Run the actual command against this isolated gateway and config."""
@@ -307,8 +334,7 @@ def _run_cli(
                 "continue",
                 "--slot",
                 "5",
-                "--choice",
-                "1",
+                *(["--choice", choice] if choice is not None else []),
                 *extra_args,
                 *(["--json"] if json_output else []),
             ],
@@ -742,4 +768,52 @@ def test_cli_stops_when_the_wizard_refuses_the_weird_level(tmp_path: Path) -> No
     # No wizard step or transition follows a refused save.
     assert [request[:2] for request in _writes(scenario)] == [
         ("PUT", "/api/story/new/weird")
+    ]
+
+
+def test_cli_weird_on_an_empty_slot_starts_the_wizard_then_saves_the_level(
+    tmp_path: Path,
+) -> None:
+    """On an empty slot, --weird is saved on the wizard the call starts."""
+
+    scenario = GenerationScenario(empty=True)
+    code, stdout, stderr = _run_cli(
+        scenario, tmp_path, choice=None, extra_args=("--weird", "high")
+    )
+    assert code == 0, (stdout, stderr)
+    # Starting the wizard is this call's step: the level is saved on it at once,
+    # and the call ends at the welcome, before any wizard turn or transition.
+    assert scenario.requests == [
+        ("GET", "/api/slot/5/state", {}),
+        ("POST", "/api/story/new/setup/start", {"slot": 5}),
+        ("PUT", "/api/story/new/weird", {"slot": 5, "weird_level": "high"}),
+    ]
+    assert json.loads(stdout) == {
+        "success": True,
+        "message": WELCOME,
+        "choices": WELCOME_CHOICES,
+        "phase": "setting",
+        "model": "slot-model",
+    }
+
+
+def test_cli_stops_when_the_new_wizard_refuses_the_weird_level(
+    tmp_path: Path,
+) -> None:
+    """A refused save on the wizard the call just started ends the call."""
+
+    scenario = GenerationScenario(
+        empty=True, weird_error="No new-story wizard is in progress for slot 5."
+    )
+    code, stdout, stderr = _run_cli(
+        scenario, tmp_path, choice=None, extra_args=("--weird", "low")
+    )
+    assert code == 1, (stdout, stderr)
+    assert stdout == ""
+    error = json.loads(stderr)["error"]
+    assert error.startswith("Failed to save --weird low: ")
+    assert "No new-story wizard is in progress for slot 5." in error
+    assert [request[:2] for request in _writes(scenario)] == [
+        ("POST", "/api/story/new/setup/start"),
+        ("PUT", "/api/story/new/weird"),
     ]

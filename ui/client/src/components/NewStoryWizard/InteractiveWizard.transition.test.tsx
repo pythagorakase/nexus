@@ -567,6 +567,83 @@ describe("genesis strangeness", () => {
         expect(pressed()).toEqual(["medium"]);
     });
 
+    it("holds Confirm, label unchanged, while a strangeness save is in flight", async () => {
+        const gateway = stubGateway();
+        const answer = holdWeirdSave(gateway);
+        renderReadyWizard(vi.fn(), { ...readyWizard, weird_level: "low" });
+        await confirmIntroductionAvailable();
+        const confirm = screen.getByRole("button", { name: "Confirm" });
+
+        fireEvent.click(glyph("high"));
+        await waitFor(() => expect(confirm).toBeDisabled());
+        expect(confirm).toHaveTextContent("Confirm");
+        fireEvent.click(confirm);
+
+        await act(async () => answer(Response.json({ status: "recorded", slot: 5, weird_level: "high" })));
+        await waitFor(() => expect(pressed()).toEqual(["high"]));
+        expect(confirm).toBeEnabled();
+        // The click on the held Confirm started nothing.
+        expect(gateway.statusReads).toBe(0);
+        expect(gateway.transitionBodies).toEqual([]);
+
+        fireEvent.click(confirm);
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        expect(gateway.transitionBodies).toEqual([{ slot: 5, weird_level: "high" }]);
+    });
+
+    it("posts a level still being saved at Confirm only once the gateway has saved it", async () => {
+        const gateway = stubGateway();
+        const answer = holdWeirdSave(gateway);
+        renderReadyWizard(vi.fn(), { ...readyWizard, weird_level: "low" });
+        await confirmIntroductionAvailable();
+
+        // Confirm lands in the glyph's frame, before the held save disables it.
+        act(() => {
+            fireEvent.click(glyph("high"));
+            fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+        });
+        await waitFor(() => expect(gateway.weirdSaves).toEqual([{ slot: 5, weird_level: "high" }]));
+        await settle();
+        expect(gateway.transitionBodies).toEqual([]);
+
+        await act(async () => answer(Response.json({ status: "recorded", slot: 5, weird_level: "high" })));
+        await waitFor(() => expect(gateway.transition).not.toBeNull());
+        expect(gateway.transitionBodies).toEqual([{ slot: 5, weird_level: "high" }]);
+        expect(gateway.requests).toEqual([
+            "PUT /api/story/new/weird",
+            SAVE_ANSWERED,
+            `GET ${STATUS_URL}`,
+            "POST /api/story/new/transition",
+            ...gateway.requests.slice(4),
+        ]);
+    });
+
+    it("starts no transition when a save in flight at Confirm is refused", async () => {
+        const gateway = stubGateway();
+        const answer = holdWeirdSave(gateway);
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        renderReadyWizard(vi.fn(), { ...readyWizard, weird_level: "medium" });
+        await confirmIntroductionAvailable();
+
+        act(() => {
+            fireEvent.click(glyph("high"));
+            fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+        });
+        await waitFor(() => expect(gateway.weirdSaves).toEqual([{ slot: 5, weird_level: "high" }]));
+        await act(async () =>
+            answer(Response.json({ detail: "The wizard changed while this response was being generated." }, { status: 409 })),
+        );
+
+        expect(await screen.findByText("The wizard changed while this response was being generated.")).toBeInTheDocument();
+        await settle();
+        expect(gateway.requests).toEqual(["PUT /api/story/new/weird", SAVE_ANSWERED]);
+        expect(gateway.transitionBodies).toEqual([]);
+        expect(screen.queryAllByTestId("wait-stage")).toHaveLength(0);
+        expect(pressed()).toEqual(["medium"]);
+        // The Introduction can be confirmed again, with the level it shows.
+        await confirmIntroductionAvailable();
+    });
+
     it("appears only on the Introduction", async () => {
         stubGateway();
         renderReadyWizard(vi.fn(), {
@@ -585,4 +662,22 @@ describe("genesis strangeness", () => {
 /** The ready wizard has restored its introduction and offers Confirm. */
 async function confirmIntroductionAvailable() {
     expect(await screen.findByRole("button", { name: "Confirm" })).toBeEnabled();
+}
+
+// Logged among the gateway's requests when a held strangeness save is answered.
+const SAVE_ANSWERED = "answered PUT /api/story/new/weird";
+
+/** Holds the next strangeness save in flight until the returned answer settles it. */
+function holdWeirdSave(gateway: ReturnType<typeof stubGateway>) {
+    let settle!: (response: Response) => void;
+    gateway.weirdAnswer = () => new Promise<Response>((resolve) => { settle = resolve; });
+    return (response: Response) => {
+        gateway.requests.push(SAVE_ANSWERED);
+        settle(response);
+    };
+}
+
+/** Lets anything the wizard would start next reach the gateway. */
+async function settle() {
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 }

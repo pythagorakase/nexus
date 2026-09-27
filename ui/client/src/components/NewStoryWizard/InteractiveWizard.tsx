@@ -256,10 +256,12 @@ export function InteractiveWizard({
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
     const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
-    // The server-confirmed strangeness selection. The transition reads the
-    // ref, so a confirm handler created before a change posts the new level.
+    // The server-confirmed strangeness selection, and the save in flight (it
+    // settles to whether the gateway saved its level). The transition waits
+    // for that save, then reads the ref, so it posts the level the server holds.
     const [weirdLevel, setWeirdLevel] = useState<WeirdLevel | null>(null);
     const weirdLevelRef = useRef<WeirdLevel | null>(null);
+    const weirdSaveRef = useRef<Promise<boolean> | null>(null);
     const [weirdSaving, setWeirdSaving] = useState(false);
     const { toast } = useToast();
 
@@ -517,6 +519,16 @@ export function InteractiveWizard({
     // Transition handler - performs transition + triggers bootstrap, then navigates
     // NexusLayout handles detecting incubator data and showing approval modal
     const performTransition = useCallback(async () => {
+        // A strangeness save still in flight decides the level this transition
+        // carries. A refused save stops here: its toast says why, the previous
+        // level stays shown, and the Introduction can be confirmed again.
+        const weirdSave = weirdSaveRef.current;
+        if (weirdSave !== null && !(await weirdSave)) {
+            processingRef.current = false;
+            setIsLoading(false);
+            return;
+        }
+
         // Reset state on start/retry
         setWaitScreenError(null);
         setWaitScreenElapsed(0);
@@ -550,7 +562,7 @@ export function InteractiveWizard({
             );
 
             // Step 1: Transition (Retrograde history, then world writes). The
-            // shown strangeness rides along; with none chosen the server's
+            // saved strangeness rides along; with none chosen the server's
             // stored selection, or its configured default, applies.
             const weird = weirdLevelRef.current;
             const transitionRes = await fetch("/api/story/new/transition", {
@@ -648,9 +660,8 @@ export function InteractiveWizard({
     }, [slot, toast, onComplete]);
 
     // Save first, then show: the glyph reflects only a level the server holds.
-    const selectWeirdLevel = async (level: WeirdLevel) => {
-        if (weirdSaving) return;
-        setWeirdSaving(true);
+    // Settles to whether the gateway saved the level.
+    const saveWeirdLevel = async (level: WeirdLevel): Promise<boolean> => {
         try {
             const res = await fetch("/api/story/new/weird", {
                 method: "PUT",
@@ -669,6 +680,7 @@ export function InteractiveWizard({
                 throw new Error(`Strangeness was not saved as ${level}: ${JSON.stringify(data)}`);
             }
             applyWeirdLevel(level);
+            return true;
         } catch (error) {
             console.error("Strangeness save error:", error);
             toast({
@@ -676,9 +688,18 @@ export function InteractiveWizard({
                 description: error instanceof Error ? error.message : String(error),
                 variant: "destructive",
             });
-        } finally {
-            setWeirdSaving(false);
+            return false;
         }
+    };
+
+    // One save at a time; Confirm stays disabled until it settles.
+    const selectWeirdLevel = (level: WeirdLevel) => {
+        if (weirdSaveRef.current !== null) return;
+        setWeirdSaving(true);
+        weirdSaveRef.current = saveWeirdLevel(level).finally(() => {
+            weirdSaveRef.current = null;
+            setWeirdSaving(false);
+        });
     };
 
     // Cancel wait screen and return to artifact review
@@ -1438,6 +1459,7 @@ export function InteractiveWizard({
                     onConfirm={handlePanelConfirm}
                     onRevise={acceptedPhase === currentPhase ? undefined : handleRevise}
                     isLoading={isLoading}
+                    confirmDisabled={weirdSaving}
                     showTraitSelector={showTraitSelector && !pendingArtifact}
                     suggestedTraits={suggestedTraits}
                     selectedTraits={selectedTraits}
