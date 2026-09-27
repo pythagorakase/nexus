@@ -161,7 +161,10 @@ owner's golden-master content on disposable data clones of it; they are
 intentional exclusions from the PostgreSQL gate. The shared fixtures in
 `tests/pg_fixtures.py` resolve the server exactly as the runtime does:
 `[api.database]` in `nexus.toml`, then the `PG*` environment, then libpq's
-local socket as the operating-system user.
+local socket as the operating-system user. Tests connect only through those
+fixtures or `nexus.database`; the offline guard in
+`tests/test_pg_target_contract.py` rejects a test that reads `PG*` itself or
+names its own host, port, user, or database.
 Formatting and linting: `poetry run black .`, `poetry run flake8`,
 `poetry run mypy .`.
 

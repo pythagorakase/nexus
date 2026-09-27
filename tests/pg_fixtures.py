@@ -4,6 +4,14 @@ Every helper resolves its server through ``nexus.database``, the same contract
 the runtime uses: explicit ``[api.database]`` values, then the PG* environment,
 then libpq's Unix socket and the operating-system user. Fixtures that seed a
 database therefore reach the server that the code under test reads.
+
+Tests reach PostgreSQL only through these helpers (``connect``,
+``asyncpg_kwargs``, ``sqlalchemy_url``, and ``subprocess_env`` for command-line
+tools) or through ``nexus.database`` itself (``connection_kwargs``, and
+``database_url`` where a URL string is needed). The offline guard in
+``tests/test_pg_target_contract.py`` fails the default gate on any test that
+reads PG* directly, spells a PostgreSQL URL naming a server, or hands a driver
+its own host, port, user, or database.
 """
 
 from __future__ import annotations
