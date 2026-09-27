@@ -246,7 +246,9 @@ def _disposable_dsn() -> str:
 
 
 def _query(sql: str, params: Any = None) -> list[dict[str, Any]]:
-    conn = psycopg2.connect(_disposable_dsn())
+    from nexus.database import database_url
+
+    conn = psycopg2.connect(database_url(DISPOSABLE_DBNAME))
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params)

@@ -7,11 +7,15 @@ database therefore reach the server that the code under test reads.
 
 Tests reach PostgreSQL only through these helpers (``connect``,
 ``asyncpg_kwargs``, ``sqlalchemy_url``, and ``subprocess_env`` for command-line
-tools) or through ``nexus.database`` itself (``connection_kwargs``, and
-``database_url`` where a URL string is needed). The offline guard in
+tools), through ``nexus.database`` itself (``connection_kwargs``, and
+``database_url`` where a URL string is needed), or, for a save slot, through
+``nexus.api.slot_utils.get_slot_db_url``. The offline guard in
 ``tests/test_pg_target_contract.py`` fails the default gate on any test that
 reads PG* directly, spells a PostgreSQL URL naming a server, or hands a driver
-its own host, port, user, or database.
+(however imported or aliased) a target that is not a direct helper call or a
+name bound once to one in the same function: spelled host, port, user, or
+database keywords, a positional DSN or URL, an expanded mapping, or no target
+at all.
 """
 
 from __future__ import annotations
