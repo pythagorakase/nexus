@@ -14,7 +14,6 @@ entities, so no save-slot data is read or mutated.
 
 from __future__ import annotations
 
-import os
 from typing import Any, Generator, Optional
 
 import psycopg2
@@ -24,7 +23,7 @@ from nexus.agents.orrery.tag_writer import (
     apply_pair_tag_bestowal,
     clear_pair_tag,
 )
-from tests.pg_fixtures import disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -48,12 +47,7 @@ class _TestEntities:
 def _connect(dbname: str) -> Any:
     """Open a direct connection to a disposable database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture

@@ -8,7 +8,6 @@ clone even when the migration fails.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import uuid
 from typing import Any, Iterator
@@ -18,19 +17,14 @@ from psycopg2 import sql
 import pytest
 
 import scripts.migrate as migrate
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()

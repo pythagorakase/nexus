@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Iterator
 import uuid
 
-import psycopg2
 import pytest
 from psycopg2 import sql
 
@@ -26,6 +24,7 @@ from nexus.api.presence_reconciliation import (
     read_character_roster,
     reconcile_prose_mentions,
 )
+from tests.pg_fixtures import connect
 
 
 CHARACTERS = [
@@ -476,12 +475,7 @@ def test_chunk_46_shape_adds_three_mentions_and_hydrates_reference_rows() -> Non
 def _connect(dbname: str) -> Any:
     """Open a direct psycopg2 connection to a disposable database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()

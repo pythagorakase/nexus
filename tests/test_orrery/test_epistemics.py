@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
 from typing import Any, Iterator
 import uuid
@@ -50,6 +49,7 @@ from nexus.agents.orrery.substrate import (
 from nexus.agents.orrery.templates import SURVEIL
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config.settings_models import OrreryEpistemicsSettings
+from tests.pg_fixtures import asyncpg_kwargs
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_async,
     install_claim_accounts_shadow_sync,
@@ -645,12 +645,7 @@ def test_async_live_applier_has_epistemics_parity() -> None:
     import asyncpg  # type: ignore[import-untyped]
 
     async def run() -> None:
-        conn = await asyncpg.connect(
-            host=os.environ.get("PGHOST", "localhost"),
-            database="save_02",
-            user=os.environ.get("PGUSER", "pythagor"),
-            port=os.environ.get("PGPORT", "5432"),
-        )
+        conn = await asyncpg.connect(**asyncpg_kwargs("save_02"))
         transaction = conn.transaction()
         await transaction.start()
         try:

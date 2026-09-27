@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import threading
 import uuid
 from contextlib import contextmanager
@@ -13,7 +12,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 from fastapi.testclient import TestClient
 from psycopg2.extras import Json, RealDictCursor
@@ -32,7 +30,7 @@ from nexus.api.config_utils import get_max_choice_text_length
 from nexus.api.slot_state import NarrativeState, SlotState, WizardState
 from nexus.config import get_available_api_models
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 
 
 TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
@@ -568,13 +566,7 @@ def test_select_choice_records_an_edit_like_continue(
 
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     """Open a direct PostgreSQL connection for a disposable clone."""
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        cursor_factory=RealDictCursor if dict_cursor else None,
-    )
+    return connect(dbname, cursor_factory=RealDictCursor if dict_cursor else None)
 
 
 @pytest.fixture()

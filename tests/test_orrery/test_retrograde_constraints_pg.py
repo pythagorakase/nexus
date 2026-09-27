@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional
 import uuid
@@ -41,6 +40,7 @@ from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.api.trait_compiler_schemas import TraitCompileInputs
 from nexus.api.trait_input_derivation import ensure_trait_compile_inputs
 from nexus.config import load_settings
+from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -50,15 +50,7 @@ FIXTURE_PATH = (
 
 
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
-    kwargs: dict[str, Any] = {
-        "dbname": dbname,
-        "user": os.environ.get("PGUSER", "pythagor"),
-        "host": os.environ.get("PGHOST", "localhost"),
-        "port": os.environ.get("PGPORT", "5432"),
-    }
-    if dict_cursor:
-        kwargs["cursor_factory"] = RealDictCursor
-    return psycopg2.connect(**kwargs)
+    return connect(dbname, cursor_factory=RealDictCursor if dict_cursor else None)
 
 
 @pytest.fixture()

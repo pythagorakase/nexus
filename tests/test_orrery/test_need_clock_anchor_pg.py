@@ -35,6 +35,7 @@ from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.config import load_settings
 from nexus.config.loader import settings_path_scope
 from scripts import migrate
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -55,12 +56,7 @@ PAST_STORY_ANCHOR = PAST_STORY_BASE + timedelta(hours=3)
 def _connect(dbname: str) -> Any:
     """Open a direct PostgreSQL connection to a disposable clone."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @contextmanager

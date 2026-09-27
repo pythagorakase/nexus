@@ -17,19 +17,14 @@ from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.telemetry.usage import summarize_usage
 from scripts.api_openai import OpenAIProvider
-from tests.pg_fixtures import disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _connect(dbname: str) -> psycopg2.extensions.connection:
-    return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-    )
+    return connect(dbname)
 
 
 def get_slot_model(dbname: str) -> str | None:

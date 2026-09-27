@@ -26,7 +26,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-import psycopg2
 import pytest
 
 from nexus.agents.logon.apex_schema import (
@@ -55,6 +54,7 @@ from nexus.agents.orrery.retrograde_persistence import (
 from nexus.agents.orrery.substrate import ProjectPolicy
 from nexus.agents.orrery.tag_writer import _insert_entity_tag
 from nexus.api.commit_handler_sync import apply_state_updates_sync
+from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -64,12 +64,7 @@ WRITE_SLOT = 5
 def _connect() -> Any:
     database = os.environ.get("NEXUS_REPLAY_TEST_DB", f"save_{WRITE_SLOT:02d}")
     assert database == f"save_{WRITE_SLOT:02d}" or database.startswith("qa640_")
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=database,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = connect(database)
     with conn.cursor() as cur:
         _apply_migration_074(cur)
     return conn

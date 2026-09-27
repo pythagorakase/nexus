@@ -7,7 +7,6 @@ Every test uses real configured MEMNON embedding models against one disposable
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Iterator
 import uuid
 
@@ -31,6 +30,7 @@ from nexus.agents.orrery.retrograde_embedding import (
     embed_retrograde_summaries,
 )
 from nexus.api import db_pool, slot_utils
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -38,13 +38,7 @@ pytestmark = pytest.mark.requires_postgres
 
 def _connect(dbname: str) -> Any:
     """Open a direct connection to the disposable issue-665 database."""
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @pytest.fixture(scope="module")

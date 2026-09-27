@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -11,7 +10,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, List, Optional
 
-import psycopg2
 import pytest
 from psycopg2 import sql
 from psycopg2.extras import Json
@@ -47,6 +45,7 @@ from nexus.api.db_pool import close_all_pools
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.memory.manager import empty_pass2_baseline
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -96,12 +95,7 @@ class _Qa649Database:
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 def _insert_entity(cur: Any, kind: str, name: str) -> _EntityRef:

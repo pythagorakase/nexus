@@ -17,7 +17,6 @@ import pytest
 from psycopg2 import sql
 from psycopg2.errors import UniqueViolation
 from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery import worker
@@ -29,6 +28,7 @@ from nexus.agents.orrery.worker import (
     drain_narration_outbox_sync,
     promote_pending_resolutions_sync,
 )
+from tests.pg_fixtures import connect, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -56,13 +56,7 @@ class _BlockingDescriptor:
 def _connect(dbname: str) -> Any:
     """Open a PostgreSQL connection to a disposable issue-676 clone."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @contextmanager
@@ -188,13 +182,7 @@ def _materialize_pending_resolution(conn: Any, *, label: str) -> tuple[int, int]
     conn.commit()
 
     engine = create_engine(
-        URL.create(
-            "postgresql+psycopg2",
-            username=os.environ.get("PGUSER", "pythagor"),
-            host=os.environ.get("PGHOST", "localhost"),
-            port=int(os.environ.get("PGPORT", "5432")),
-            database=conn.info.dbname,
-        ),
+        sqlalchemy_url(conn.info.dbname),
         future=True,
     )
     try:

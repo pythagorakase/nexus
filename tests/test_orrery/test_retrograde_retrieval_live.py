@@ -14,6 +14,7 @@ import psycopg2
 import pytest
 
 from nexus.agents.memnon.memnon import MEMNON
+from nexus.database import database_url, verify_database_url
 
 
 TEST_DB_URL = os.environ.get("NEXUS_RETROGRADE_RETRIEVAL_TEST_DB_URL")
@@ -28,8 +29,12 @@ pytestmark = [
 ]
 
 
-def _require_disposable_database(db_url: str) -> None:
-    """Reject every known user/runtime database before opening a connection."""
+def _require_disposable_database(db_url: str) -> str:
+    """Return the disposable database ``db_url`` names on the contract's server.
+
+    Rejects every known user/runtime database, and a URL naming any server
+    other than the one ``[api.database]`` resolves, before opening a connection.
+    """
     database = urlparse(db_url).path.lstrip("/")
     protected = {"NEXUS", *(f"save_{slot:02d}" for slot in range(1, 6))}
     if database in protected or not database.startswith("test_"):
@@ -38,14 +43,16 @@ def _require_disposable_database(db_url: str) -> None:
             "whose name starts with 'test_'; got "
             f"{database!r}"
         )
+    verify_database_url(db_url, dbname=database)
+    return database
 
 
 def test_retrograde_history_comes_back_with_typed_identity() -> None:
     """Production hybrid search retrieves a pre-embedded summary as itself."""
     assert TEST_DB_URL is not None
-    _require_disposable_database(TEST_DB_URL)
+    database = _require_disposable_database(TEST_DB_URL)
 
-    with psycopg2.connect(TEST_DB_URL) as conn:
+    with psycopg2.connect(database_url(database)) as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
@@ -61,7 +68,7 @@ def test_retrograde_history_comes_back_with_typed_identity() -> None:
     summary_id, summary_text = int(row[0]), str(row[1])
     query = " ".join(summary_text.split()[:16])
 
-    memnon = MEMNON(interface=None, db_url=TEST_DB_URL)
+    memnon = MEMNON(interface=None, db_url=database_url(database))
     try:
         result = memnon.query_memory(query=query, k=15, use_hybrid=True)
     finally:

@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 from psycopg2 import sql
 from sqlalchemy import create_engine
@@ -30,7 +28,9 @@ from nexus.agents.orrery.resolver import (
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.config import load_settings_as_dict
+from nexus.database import database_url
 from nexus.memory import ContextMemoryManager
+from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -38,12 +38,7 @@ pytestmark = pytest.mark.requires_postgres
 def _connect(dbname: str) -> Any:
     """Open a direct connection to the disposable Issue 685 database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 def _insert_accepted_chunk_after_rollback_gap(dbname: str, index: int) -> int:
@@ -166,11 +161,7 @@ def recent_rulings_db() -> Iterator[dict[str, Any]]:
                 )
             )
 
-        engine = create_engine(
-            f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
-            f"{os.environ.get('PGHOST', 'localhost')}:"
-            f"{os.environ.get('PGPORT', '5432')}/{dbname}"
-        )
+        engine = create_engine(database_url(dbname))
         settings = load_settings_as_dict()
         seeded = {
             "dbname": dbname,

@@ -7,7 +7,6 @@ It never opens or mutates a save-slot database.
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from typing import Any, Iterator
 
@@ -22,18 +21,14 @@ from nexus.agents.orrery.retrograde_persistence import (
     _insert_place_stub,
     plan_retrograde_summaries,
 )
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()

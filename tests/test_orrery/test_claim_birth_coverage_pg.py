@@ -6,7 +6,6 @@ from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
 from decimal import Decimal
 from itertools import count
-import os
 from typing import Any
 from uuid import uuid4
 
@@ -42,7 +41,9 @@ from nexus.agents.orrery.substrate import (
     Slot,
     Template,
 )
+from nexus.database import database_url
 from scripts.migrate import migrate_database
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -99,13 +100,7 @@ _SCENES = count(1)
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        cursor_factory=RealDictCursor,
-    )
+    return connect(dbname, cursor_factory=RealDictCursor)
 
 
 @pytest.fixture(scope="module")
@@ -290,13 +285,7 @@ def _template(event_type: str, *, signal_event_type: str | None = None) -> Templ
 
 
 def _resolve(dbname: str, *, template: Template, anchor_chunk_id: int) -> Any:
-    engine = create_engine(
-        "postgresql+psycopg2://"
-        f"{os.environ.get('PGUSER', 'pythagor')}@"
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{dbname}",
-        future=True,
-    )
+    engine = create_engine(database_url(dbname), future=True)
     try:
         with Session(engine) as session:
             return resolve_dry_run(

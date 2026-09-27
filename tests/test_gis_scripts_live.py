@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 from psycopg2.extras import RealDictCursor
 
@@ -16,7 +15,7 @@ from scripts.gis_backfill import (
     main as backfill_main,
 )
 from scripts.gis_hygiene import audit_slot, format_slot_report
-from tests.pg_fixtures import disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -27,11 +26,7 @@ def script_conn() -> Iterator[Any]:
     """Yield a canonical disposable slot seeded for GIS script coverage."""
 
     with disposable_slot_database("qa735_gis_scripts") as dbname:
-        conn: Any = psycopg2.connect(
-            dbname=dbname,
-            user="pythagor",
-            cursor_factory=RealDictCursor,
-        )
+        conn: Any = connect(dbname, cursor_factory=RealDictCursor)
         try:
             with conn.cursor() as cur:
                 cur.execute(

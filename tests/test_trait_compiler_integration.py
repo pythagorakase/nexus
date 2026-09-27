@@ -43,6 +43,7 @@ from nexus.api.trait_compiler_schemas import (
     TraitCompileReasonCode,
     TraitCompileResult,
 )
+from tests.pg_fixtures import connect
 
 TEST_DBNAME = "save_05"
 
@@ -294,7 +295,7 @@ def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
     """Every live-trio ordering shares one planned or materialized faction."""
 
     try:
-        conn = psycopg2.connect(dbname=TEST_DBNAME)
+        conn = connect(TEST_DBNAME)
     except psycopg2.Error as exc:  # pragma: no cover - environment guard
         pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
 
@@ -551,7 +552,7 @@ def test_shared_character_relationship_is_permutation_invariant_on_save_05() -> 
     """Patron deterministically owns a shared one-row relationship slot."""
 
     try:
-        conn = psycopg2.connect(dbname=TEST_DBNAME)
+        conn = connect(TEST_DBNAME)
     except psycopg2.Error as exc:  # pragma: no cover - environment guard
         pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
 
@@ -746,7 +747,7 @@ def test_full_trait_selection_compiles_on_save_05() -> None:
     """A standard selection compiles with zero prose-only remainders."""
 
     try:
-        conn = psycopg2.connect(dbname=TEST_DBNAME)
+        conn = connect(TEST_DBNAME)
     except psycopg2.Error as exc:  # pragma: no cover - environment guard
         pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
 
@@ -894,7 +895,7 @@ def test_dependents_apply_and_dry_run_audit_on_save_05() -> None:
     """Dependents writes protects + bond; the audit surface reports cleanly."""
 
     try:
-        conn = psycopg2.connect(dbname=TEST_DBNAME)
+        conn = connect(TEST_DBNAME)
     except psycopg2.Error as exc:  # pragma: no cover - environment guard
         pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
 
@@ -978,7 +979,7 @@ def test_forbidden_relationship_traits_have_dry_run_apply_parity_on_save_05() ->
     """The constraint gate precedes #605 target pre-resolution in both modes."""
 
     try:
-        conn = psycopg2.connect(dbname=TEST_DBNAME)
+        conn = connect(TEST_DBNAME)
     except psycopg2.Error as exc:  # pragma: no cover - environment guard
         pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
 

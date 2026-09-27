@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
-import os
 from pathlib import Path
 from typing import Any, Iterator
 import uuid
@@ -19,6 +18,7 @@ import pytest
 from nexus import cli
 from nexus.api import slot_utils
 from scripts.qa_shift import qa_shift
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -27,13 +27,7 @@ pytestmark = pytest.mark.requires_postgres
 def _connect(dbname: str) -> Any:
     """Open a direct PostgreSQL connection to a disposable database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @contextmanager

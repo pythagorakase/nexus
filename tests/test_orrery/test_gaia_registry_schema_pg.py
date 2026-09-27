@@ -13,7 +13,6 @@ import os
 from typing import Any, Iterator
 import uuid
 
-import psycopg2
 import pytest
 from psycopg2 import sql
 
@@ -27,6 +26,7 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.api.slot_utils import VALID_DBNAMES
 from scripts.api_openai import OpenAIProvider
+from tests.pg_fixtures import connect
 
 
 # Measured against the shipped NEXUS_template registry on 2026-07-30:
@@ -44,12 +44,7 @@ OPENAI_LARGE_ENUM_STRING_LENGTH_LIMIT = 15_000
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture(scope="module")

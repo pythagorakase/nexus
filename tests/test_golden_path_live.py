@@ -138,7 +138,9 @@ def _dsn() -> str:
 
 
 def _query(sql: str, params: Any = None) -> List[Dict[str, Any]]:
-    conn = psycopg2.connect(_dsn())
+    from nexus.database import database_url
+
+    conn = psycopg2.connect(database_url(DBNAME))
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params)

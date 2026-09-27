@@ -7,7 +7,6 @@ from collections import deque
 import copy
 import json
 import logging
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Deque, Dict, Iterator, cast
@@ -35,6 +34,7 @@ from nexus.api.narrative_generation import generate_narrative_async
 from nexus.config import load_settings_as_dict
 from nexus.util.log_safety import quote_log_value
 from scripts import new_story_setup
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -96,12 +96,7 @@ def _declared_payload(*, listed_present: bool) -> dict[str, Any]:
 def _connect(dbname: str) -> Any:
     """Open a psycopg2 connection to a disposable test database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()

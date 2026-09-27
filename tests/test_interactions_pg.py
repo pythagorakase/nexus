@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 import uuid
@@ -12,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-import psycopg2
 import pytest
 from psycopg2 import sql
 from sqlalchemy import create_engine, text
@@ -20,6 +18,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 
+from nexus.database import database_url
 from nexus.interactions import (
     AuthorizationEnvelope,
     AuthorizationPolicy,
@@ -39,18 +38,14 @@ from nexus.interactions import (
     UnknownExecutorTransition,
     UntrustedHandlerError,
 )
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()
@@ -154,12 +149,7 @@ def interaction_harness(
     disposable_interaction_db: str,
 ) -> Iterator[_InteractionHarness]:
     """Build the genuine service over a disposable migrated PostgreSQL DB."""
-    engine = create_engine(
-        "postgresql+psycopg2://"
-        f"{os.environ.get('PGUSER', 'pythagor')}@"
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{disposable_interaction_db}"
-    )
+    engine = create_engine(database_url(disposable_interaction_db))
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory() as session, session.begin():
         participant_ids = tuple(

@@ -9,7 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast, get_args
 
-import psycopg2
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -75,6 +74,7 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import anthropic_output_config
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from scripts.api_openai import OpenAIProvider
+from tests.pg_fixtures import connect
 
 
 # Filled from the deterministic compact serializations, with modest drift room.
@@ -2025,12 +2025,7 @@ def test_presence_baseline_reads_real_slot_parent_rows() -> None:
     """Read a real parent chunk without mutating its slot database."""
 
     dbname = os.environ.get("NEXUS_BASELINE_TEST_DB", "save_05")
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = connect(dbname)
     try:
         conn.set_session(readonly=True, autocommit=True)
         with conn.cursor() as cur:

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import os
 from typing import Any, Iterator
 from uuid import uuid4
 
-import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
@@ -17,6 +15,7 @@ from nexus.agents.orrery.epistemics import (
     mint_claim_for_event,
     record_revelation,
 )
+from tests.pg_fixtures import connect
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
@@ -37,12 +36,7 @@ EPISTEMICS = {
 def live_conn() -> Iterator[Any]:
     """Use the migrated template in a transaction rolled back after each test."""
 
-    conn = psycopg2.connect(
-        dbname=LIVE_DATABASE,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = connect(LIVE_DATABASE)
     try:
         with conn.cursor() as cur:
             install_claim_accounts_shadow_sync(cur)
