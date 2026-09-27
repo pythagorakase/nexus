@@ -143,7 +143,12 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
             print("Frozen jobs after repin: " + json.dumps(before), flush=True)
             result = SlotScheduler(
                 4, dbname=dbname, settings=load_settings_as_dict()
-            ).run_pass(narration_limit=0, experience_limit=1, maturation_limit=1)
+            ).run_pass(
+                narration_limit=0,
+                experience_limit=1,
+                maturation_limit=1,
+                experience_embedding_limit=0,
+            )
             print("Scheduler pass: " + json.dumps(result), flush=True)
             for table in TABLES:
                 assert any(

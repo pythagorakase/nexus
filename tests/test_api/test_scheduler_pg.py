@@ -288,7 +288,10 @@ def seed_experiences(dbname):
 
 
 def test_scheduler_embeds_rendered_experiences_and_skips_the_rest(offline_gate_db):
-    """One pass embeds and stamps only the rendered valid recollection (#754)."""
+    """One default pass embeds and stamps only the rendered valid recollection (#754).
+
+    An isolated pass with ``experience_embedding_limit=0`` first embeds nothing.
+    """
     from nexus.agents.memnon.utils.source_embeddings import (
         CHARACTER_EXPERIENCE_SOURCE,
         active_memnon_embedding_model_dimensions,
@@ -299,6 +302,10 @@ def test_scheduler_embeds_rendered_experiences_and_skips_the_rest(offline_gate_d
         assert load_job_queues_sync(conn)["unembedded_rendered_experiences"] == 1
     scheduler = SlotScheduler(4, dbname=offline_gate_db)
     limits = {"narration_limit": 0, "experience_limit": 0, "maturation_limit": 0}
+    isolated = scheduler.run_pass(**limits, experience_embedding_limit=0)
+    assert isolated["character_experience_embeddings"] == 0
+    with closing(connect(offline_gate_db)) as conn:
+        assert load_job_queues_sync(conn)["unembedded_rendered_experiences"] == 1
     assert scheduler.run_pass(**limits)["character_experience_embeddings"] == 1
     with closing(connect(offline_gate_db)) as conn:
         with conn.cursor() as cur:

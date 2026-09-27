@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 from uuid import uuid4
 from weakref import WeakSet
@@ -29,6 +29,33 @@ def notify_generation_released(dbname: str) -> None:
     for scheduler in list(_schedulers):
         if scheduler.dbname == dbname:
             scheduler.wakeup.set()
+
+
+def experience_embedding_rounds(
+    settings: Mapping[str, Any], requested: int | None
+) -> int:
+    """Return how many rendered recollections one pass may embed.
+
+    ``None`` takes ``[orrery.experiences].max_embeddings_per_drain``. ``0``
+    skips the lane before that table is read, so an isolated pass never
+    reaches the embedder or loads a model. Any other value caps the
+    configured bound, as the Orrery queue limits do.
+
+    Args:
+        settings: Full settings mapping.
+        requested: The pass's ``experience_embedding_limit``.
+
+    Raises:
+        ValueError: If ``requested`` is negative.
+    """
+    if requested is not None and requested < 0:
+        raise ValueError("experience_embedding_limit must be non-negative")
+    if requested == 0:
+        return 0
+    from nexus.agents.orrery.experiences import experience_settings
+
+    configured = experience_settings(settings).max_embeddings_per_drain
+    return configured if requested is None else min(configured, requested)
 
 
 class SlotScheduler:
@@ -407,14 +434,34 @@ class SlotScheduler:
                 timeout=self.settings["runtime"]["health"]["stop_grace_seconds"]
             )
 
-    def run_pass(self, **limits: Any) -> dict[str, Any]:
-        """Run one operator pass under the very same ownership and heartbeat."""
+    def run_pass(
+        self,
+        *,
+        promotion_limit: int | None = None,
+        narration_limit: int | None = None,
+        experience_limit: int | None = None,
+        maturation_limit: int | None = None,
+        experience_embedding_limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Run one operator pass under the very same ownership and heartbeat.
+
+        A limit left ``None`` takes its lane's configured per-pass bound. The
+        narration, experience, maturation and experience-embedding limits cap
+        their lanes, and ``0`` skips one; ``experience_embedding_limit=0``
+        keeps an isolated pass from embedding already-rendered recollections.
+        """
         try:
             if not self.acquire():
                 return {"owner": False, "drained": False}
             self._start_heartbeat()
             try:
-                return self._drain(**limits)
+                return self._drain(
+                    promotion_limit=promotion_limit,
+                    narration_limit=narration_limit,
+                    experience_limit=experience_limit,
+                    maturation_limit=maturation_limit,
+                    experience_embedding_limit=experience_embedding_limit,
+                )
             except psycopg2.errors.ReadOnlySqlTransaction as exc:
                 self._recover(exc)
                 return {"owner": False, "drained": False}
@@ -439,12 +486,15 @@ class SlotScheduler:
         from nexus.agents.orrery.experience_embedding import (
             drain_experience_embeddings_sync,
         )
-        from nexus.agents.orrery.experiences import experience_settings
         from nexus.agents.orrery.retrograde_maturation import drain_maturation_jobs_sync
         from nexus.jobs.compaction import drain_compaction
         from nexus.jobs.embeddings import drain_embedding, enqueue_locked_embeddings
         from nexus.jobs.summaries import drain_summary
 
+        # Resolved before any lane runs, so a bad limit fails without work.
+        embedding_rounds = experience_embedding_rounds(
+            self.settings, limits.get("experience_embedding_limit")
+        )
         result: dict[str, Any] = {"owner": True, "drained": True}
         conn = self.connect()
         try:
@@ -569,9 +619,7 @@ class SlotScheduler:
                 # per checkpoint, so a failing embedder starves nothing else.
                 embeddings = "character_experience_embeddings"
                 result[embeddings] = 0
-                for _ in range(
-                    experience_settings(self.settings).max_embeddings_per_drain
-                ):
+                for _ in range(embedding_rounds):
                     self.checkpoint()
                     self._report(embeddings)
                     count = drain_experience_embeddings_sync(

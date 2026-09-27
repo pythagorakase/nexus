@@ -143,7 +143,10 @@ def test_summary_budget_fails_job_before_test_provider_call(
         scheduler = SlotScheduler(4, dbname=dbname, settings=load_settings_as_dict())
         with pytest.raises(SummaryInputTooLong, match="model 'TEST'") as caught:
             scheduler.run_pass(
-                narration_limit=0, experience_limit=0, maturation_limit=0
+                narration_limit=0,
+                experience_limit=0,
+                maturation_limit=0,
+                experience_embedding_limit=0,
             )
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(

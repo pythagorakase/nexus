@@ -281,7 +281,10 @@ order:
    `[orrery.experiences].max_embeddings_per_drain` per pass. Each stamps
    `embedding_generated_at` only after every active model's vector lands; a
    failure leaves it unstamped for the next pass. `nexus jobs` reports the
-   backlog as `unembedded_rendered_experiences`.
+   backlog as `unembedded_rendered_experiences`. An operator pass
+   (`SlotScheduler.run_pass`) lowers that bound with
+   `experience_embedding_limit`, and `0` skips the lane without loading a
+   model, as the Orrery queue limits cap their own lanes.
 
 The scheduler lease and the compaction, summary, and embedding queues are
 configured in `[runtime.scheduler]`; the Orrery queues take their limits from

@@ -57,7 +57,10 @@ def test_scheduler_drains_starved_corpus(monkeypatch, tmp_path, mock_openai_serv
             path.write_text(tomlkit.dumps(doc))
             monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(path))
             result = SlotScheduler(4).run_pass(
-                narration_limit=0, experience_limit=1, maturation_limit=0
+                narration_limit=0,
+                experience_limit=1,
+                maturation_limit=0,
+                experience_embedding_limit=0,
             )
             print(f"Paid scheduler pass: {result}", flush=True)
             events = [

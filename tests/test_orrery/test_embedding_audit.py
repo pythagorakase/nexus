@@ -14,6 +14,7 @@ import sqlite3
 from typing import Any, Iterator, Literal
 
 import pytest
+from pydantic import ValidationError
 
 from nexus import cli
 from nexus.agents.memnon.utils.source_embeddings import (
@@ -28,6 +29,7 @@ from nexus.agents.orrery.experience_embedding import (
     unembedded_rendered_experience_ids,
 )
 from nexus.config import load_settings_as_dict
+from nexus.jobs.scheduler import SlotScheduler, experience_embedding_rounds
 
 MODELS = {"alpha": 3, "beta": 5}
 
@@ -231,6 +233,46 @@ def test_disabled_experiences_drain_nothing(
     )
     assert drained == 0
     assert count_unembedded_rendered_experiences(_SqliteCursor(experiences)) == 3
+
+
+def test_zero_embedding_limit_skips_the_lane_before_reading_its_settings() -> None:
+    """An isolated pass never reads the lane's table, so it never embeds.
+
+    The same invalid ``[orrery.experiences]`` table fails a default pass, so a
+    clean zero proves the skipped lane stopped before validating it.
+    """
+    settings = load_settings_as_dict()
+    settings["orrery"]["experiences"]["max_embeddings_per_drain"] = 0
+    with pytest.raises(ValidationError, match="max_embeddings_per_drain"):
+        experience_embedding_rounds(settings, None)
+    assert experience_embedding_rounds(settings, 0) == 0
+
+
+def test_embedding_limit_defaults_to_and_is_capped_by_the_configured_bound() -> None:
+    """``None`` takes the configured bound; an explicit limit only lowers it."""
+    settings = load_settings_as_dict()
+    settings["orrery"]["experiences"]["max_embeddings_per_drain"] = 5
+    assert experience_embedding_rounds(settings, None) == 5
+    assert experience_embedding_rounds(settings, 2) == 2
+    assert experience_embedding_rounds(settings, 9) == 5
+
+
+def test_scheduler_pass_resolves_the_embedding_limit_before_connecting() -> None:
+    """A negative limit fails before the pass opens a slot connection.
+
+    The default gate fails any psycopg2 connection loudly, so this ValueError
+    proves the pass reads ``experience_embedding_limit`` before any lane runs.
+    """
+    scheduler = SlotScheduler(5, dbname="save_05", settings=load_settings_as_dict())
+    with pytest.raises(ValueError, match="experience_embedding_limit must be non-"):
+        scheduler._drain(experience_embedding_limit=-1)
+
+
+def test_scheduler_pass_refuses_an_unknown_lane_limit() -> None:
+    """A misspelled limit fails before ownership instead of isolating nothing."""
+    scheduler = SlotScheduler(5, dbname="save_05", settings=load_settings_as_dict())
+    with pytest.raises(TypeError, match="experience_embeddings_limit"):
+        scheduler.run_pass(experience_embeddings_limit=0)  # type: ignore[call-arg]
 
 
 def _jobs_payload(
