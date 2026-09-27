@@ -201,6 +201,7 @@ ROUTE_CAPABILITIES: Mapping[RouteKey, RouteCapability] = MappingProxyType(
         ("GET", "/api/narrative/episodes/{season_id}"): _NARRATIVE_READ,
         ("GET", "/api/narrative/latest-chunk"): _NARRATIVE_READ,
         ("GET", "/api/narrative/outline"): _NARRATIVE_READ,
+        ("GET", "/api/narrative/recap"): _NARRATIVE_READ,
         ("GET", "/api/narrative/chunks/{chunk_id}/adjacent"): _NARRATIVE_READ,
         ("GET", "/api/narrative/chunks/{chunk_id}/context"): _NARRATIVE_READ,
         ("GET", "/api/narrative/chunks/{season_id}/{episode_id}"): _NARRATIVE_READ,

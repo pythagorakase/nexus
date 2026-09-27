@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NarrativePane } from "@/components/nexus/NarrativePane";
+import type { RecapSlotStates } from "@/components/nexus/ReturnRecapCard";
 import type { GenerationSession, NarrativeRecovery, SlotState } from "@/types/narrative";
 import * as api from "@/lib/narrative-api";
 import { useNarrativeEngine } from "./useNarrativeEngine";
@@ -67,7 +69,8 @@ function mount() {
   client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
   function Reader() {
     engine = useNarrativeEngine(4);
-    return <NarrativePane slot={4} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />;
+    const recapState = useState<RecapSlotStates>({});
+    return <NarrativePane slot={4} engine={engine} readingChunkId={null} onNavigate={vi.fn()} recapState={recapState} />;
   }
   return render(<QueryClientProvider client={client}><ThemeProvider><Reader /></ThemeProvider></QueryClientProvider>);
 }

@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState, type ComponentProps } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import { readerDraftScope } from "@/lib/reader-draft";
 import type { SlotState } from "@/types/narrative";
 import { NarrativePane } from "./NarrativePane";
+import type { RecapSlotStates } from "./ReturnRecapCard";
 
 const TEXT = "  Léonie checks the ledger.\nKeep Sana’s note: 雨 🌙\n ";
 const base: SlotState = {
@@ -26,6 +28,12 @@ beforeAll(() => {
   });
 });
 beforeEach(() => localStorage.clear());
+
+/** The pane under the reader shell, which holds its recap state. */
+function Reader(props: Omit<ComponentProps<typeof NarrativePane>, "recapState">) {
+  const recapState = useState<RecapSlotStates>({});
+  return <NarrativePane {...props} recapState={recapState} />;
+}
 
 /** Render the pane; `show` re-renders it with a later slot state. */
 function mount(
@@ -48,7 +56,7 @@ function mount(
     return (
       <QueryClientProvider client={client}>
         <ThemeProvider>
-          <NarrativePane slot={current.slot} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />
+          <Reader slot={current.slot} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />
         </ThemeProvider>
       </QueryClientProvider>
     );

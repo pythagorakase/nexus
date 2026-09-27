@@ -23,6 +23,7 @@ import type { SettingsPayload } from "@/types/settings";
 import { LeftRail, type NexusTab } from "./LeftRail";
 import { TopBar } from "./TopBar";
 import { NarrativePane } from "./NarrativePane";
+import type { RecapSlotStates } from "./ReturnRecapCard";
 import { RightLedger } from "./RightLedger";
 import { CharactersPane } from "./CharactersPane";
 import { MapPane } from "./MapPane";
@@ -48,6 +49,10 @@ export function NexusLayout() {
   // Reading position: null = live frontier; a chunk id = historical
   // reading (read-only). Shared by the reader and the right-rail tree.
   const [readingChunkId, setReadingChunkId] = useState<number | null>(null);
+  // Return recap visibility per slot. Held here, above the panes, because
+  // switching tabs unmounts the reader: a recap the player closed stays
+  // closed when they come back.
+  const recapState = useState<RecapSlotStates>({});
 
   const engine = useNarrativeEngine(slot);
 
@@ -136,6 +141,7 @@ export function NexusLayout() {
                 engine={engine}
                 readingChunkId={readingChunkId}
                 onNavigate={setReadingChunkId}
+                recapState={recapState}
               />
             ))}
           {tab === "map" && <MapPane slot={slot} />}

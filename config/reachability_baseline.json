@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#803 readiness registry is reachable from nexus doctor and /runtime/status",
+  "reason": "#832 return recap: return_recap.py is imported by reader_endpoints.py, so it joins production_reachable",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -202,6 +202,7 @@
     "nexus/api/presence_reconciliation.py",
     "nexus/api/pydantic_ai_utils.py",
     "nexus/api/reader_endpoints.py",
+    "nexus/api/return_recap.py",
     "nexus/api/route_capabilities.py",
     "nexus/api/runtime_status.py",
     "nexus/api/save_slots.py",

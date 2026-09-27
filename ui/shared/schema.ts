@@ -183,6 +183,28 @@ export interface CurrentPlace {
   chunkId: number;
 }
 
+// GET /api/narrative/recap: the reader's return recap. Every item cites the
+// rows it came from, verified server-side: committed rows, or the pending
+// draft by the session_id slot state serves. A fact without a source is
+// omitted. due turns true once the configured hiatus has passed since
+// last_played, the last accepted player action.
+export type RecapSource =
+  | { kind: "chunk" | "place" | "character"; id: number }
+  | { kind: "draft"; id: string };
+
+export interface RecapItem {
+  kind: "location" | "roster" | "last_action" | "open_decision";
+  /** open_decision holds one presented option per line. */
+  text: string;
+  sources: RecapSource[];
+}
+
+export interface ReturnRecap {
+  due: boolean;
+  last_played: string | null;
+  items: RecapItem[];
+}
+
 export type Character = typeof characters.$inferSelect;
 
 // Character row plus presentation context for the cast pane: the resolved

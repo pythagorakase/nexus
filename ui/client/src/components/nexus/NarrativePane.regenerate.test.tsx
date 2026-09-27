@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useNarrativeEngine } from "@/hooks/useNarrativeEngine";
 import type { GenerationSession, SlotState } from "@/types/narrative";
 import { NarrativePane } from "./NarrativePane";
+import type { RecapSlotStates } from "./ReturnRecapCard";
 
 vi.mock("@/hooks/use-toast", () => ({ toast: vi.fn() }));
 
@@ -88,7 +90,8 @@ function mount() {
   client.setQueryData(["/api/settings"], { ui: { theme: "veil" } });
   function Reader() {
     engine = useNarrativeEngine(4);
-    return <NarrativePane slot={4} engine={engine} readingChunkId={null} onNavigate={vi.fn()} />;
+    const recapState = useState<RecapSlotStates>({});
+    return <NarrativePane slot={4} engine={engine} readingChunkId={null} onNavigate={vi.fn()} recapState={recapState} />;
   }
   return render(<QueryClientProvider client={client}><ThemeProvider><Reader /></ThemeProvider></QueryClientProvider>);
 }

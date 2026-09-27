@@ -31,6 +31,13 @@
  * generating. It opens one optional note; Enter or its send glyph re-rolls
  * the draft. The pending prose stays on screen until the replacement lands,
  * and a failed re-roll leaves it there beneath a failure line.
+ *
+ * Just above the latest committed chunk, a history glyph opens the return
+ * recap (ReturnRecapCard), whether or not a draft is pending below. When that
+ * chunk lies past the fetched page of a long episode, the glyph follows the
+ * last chunk shown instead, still above any pending draft. It opens on its
+ * own after a real-world hiatus, and the next accepted action closes it; the
+ * reader shell holds that state (recapState) so it outlives this pane.
  */
 import {
   Fragment,
@@ -47,12 +54,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
 import {
+  ReturnRecapCard,
+  recapBeside,
+  useReturnRecapVisibility,
+  type ReaderRecapState,
+} from "./ReturnRecapCard";
+import {
   REGENERATE_NOTE_MAX_CHARS,
   getChunk,
   getChunkContext,
   getEpisodeChunks,
   getLatestChunk,
   getOutline,
+  getReturnRecap,
 } from "@/lib/narrative-api";
 import {
   freeformPresentation,
@@ -68,6 +82,7 @@ import {
   type ChunkContext,
   type ChunkWithMetadata,
 } from "@/types/narrative";
+import type { ReturnRecap } from "@shared/schema";
 
 interface NarrativePaneProps {
   slot: number;
@@ -76,6 +91,8 @@ interface NarrativePaneProps {
   readingChunkId: number | null;
   /** Navigate the reading position (null returns to the live frontier). */
   onNavigate: (chunkId: number | null) => void;
+  /** Recap visibility, held by the reader shell so it outlives this pane. */
+  recapState: ReaderRecapState;
 }
 
 interface SceneGrounding {
@@ -163,6 +180,7 @@ export function NarrativePane({
   engine,
   readingChunkId,
   onNavigate,
+  recapState,
 }: NarrativePaneProps) {
   const { slotState, isGenerating, completedGenerations, submitTurn, phase } =
     engine;
@@ -216,6 +234,18 @@ export function NarrativePane({
     queryKey: ["/api/narrative/chunks/context", headChunkId, slot],
     queryFn: () => getChunkContext(headChunkId as number, slot),
     enabled: headChunkId !== null,
+  });
+
+  // Where the story stands, for a returning player. It sits above the latest
+  // committed chunk, so it waits for one; the reader's "/api/narrative"
+  // invalidation after an accepted action refreshes it. The gateway decides
+  // `due` against the hiatus clock, so a reader left open across the hiatus
+  // asks again when the player returns to the tab.
+  const { data: recap } = useQuery<ReturnRecap>({
+    queryKey: ["/api/narrative/recap", slot],
+    queryFn: () => getReturnRecap(slot),
+    enabled: !isHistorical && !!latestChunk,
+    refetchOnWindowFocus: "always",
   });
 
   const chunks = episodeChunks?.chunks ?? [];
@@ -308,6 +338,31 @@ export function NarrativePane({
     };
   }, [chunks, currentChunkId]);
 
+  // The recap sits just above the latest committed chunk, whose setting and
+  // cast it reports, even while a draft is pending below that chunk. The
+  // episode page is fetched from its start, so in a long episode that chunk
+  // may not be on it: once the page has loaded, the recap then follows the
+  // last chunk shown, above any pending draft.
+  const recapChunkId = latestChunk?.id ?? null;
+  const recapIndex = chunkRenders.findIndex((chunk) => chunk.id === recapChunkId);
+  const recapAfterChunks = recapIndex === -1 && episodeChunks !== undefined;
+  const shownRecap = useMemo(() => {
+    // The committed chunks bordering the card. After the page, only the
+    // pending draft, which records no player line, can follow it.
+    const beside = recapAfterChunks
+      ? chunkRenders.slice(-1)
+      : recapIndex === -1
+        ? []
+        : chunkRenders.slice(Math.max(recapIndex - 1, 0), recapIndex + 1);
+    return recapBeside(
+      recap,
+      beside
+        .filter((chunk) => chunk.parts.some((part) => part.voice === "you"))
+        .map((chunk) => chunk.id),
+    );
+  }, [recap, chunkRenders, recapIndex, recapAfterChunks]);
+  const recapView = useReturnRecapVisibility(shownRecap, slot, recapState);
+
   // The historical chunk's prose segments (storyteller + the player's
   // recorded response).
   const historicalParts = useMemo(() => {
@@ -395,19 +450,25 @@ export function NarrativePane({
 
   // The one commit path. A draft that came from a choice sends its number and
   // text together; the server records an edit only when the text differs.
+  // An accepted action closes the recap.
   const selectedChoice = draft.choice;
+  const closeRecap = recapView.close;
   const handleSend = useCallback(() => {
     const text = freeform.trim();
     if (!text || !canSubmit) return;
     void draft.submit(
-      () => submitTurn(
-        selectedChoice === null
-          ? { userText: text }
-          : { choice: selectedChoice, userText: text },
-      ),
+      async () => {
+        const accepted = await submitTurn(
+          selectedChoice === null
+            ? { userText: text }
+            : { choice: selectedChoice, userText: text },
+        );
+        if (accepted) closeRecap();
+        return accepted;
+      },
       true,
     );
-  }, [freeform, selectedChoice, canSubmit, submitTurn, draft.submit]);
+  }, [freeform, selectedChoice, canSubmit, submitTurn, draft.submit, closeRecap]);
 
   const handleFreeformKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -581,6 +642,14 @@ export function NarrativePane({
     );
   }
 
+  const recapCard = (
+    <ReturnRecapCard
+      recap={shownRecap}
+      open={recapView.open}
+      onToggle={recapView.toggle}
+    />
+  );
+
   return (
     <article className="reader" data-testid="narrative-reader" ref={headRef}>
       <div className="reader-frame">
@@ -601,6 +670,7 @@ export function NarrativePane({
           <section className="chunk-stream">
             {chunkRenders.map((chunk) => (
               <Fragment key={chunk.id}>
+                {chunk.id === recapChunkId && recapCard}
                 {chunk.intertitle && <Intertitle {...chunk.intertitle} />}
                 <div
                   className={`chunk-block ${chunk.isCurrent ? "current" : ""}`}
@@ -619,6 +689,7 @@ export function NarrativePane({
                 </div>
               </Fragment>
             ))}
+            {recapAfterChunks && recapCard}
 
             {pendingText && (
               <div className="chunk-block current" data-testid="chunk-pending">
