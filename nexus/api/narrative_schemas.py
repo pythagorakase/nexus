@@ -22,6 +22,10 @@ from nexus.api.choice_handling import ChoiceSelection
 from nexus.config import load_settings
 from nexus.config.settings_models import APINarrativeGenerationSettings
 
+# Player-facing genesis strangeness. Retrograde remaps each level onto the
+# story genre's configured band ([orrery.retrograde.weird.bands_by_genre]).
+WeirdLevel = Literal["low", "medium", "high"]
+
 
 # =============================================================================
 # Core Narrative Schemas
@@ -231,6 +235,8 @@ class ResumeSetupResponse(BaseModel):
     zone_draft: Optional[Dict[str, Any]]
     initial_location: Optional[Dict[str, Any]]
     base_timestamp: Optional[datetime]
+    # The stored strangeness selection; None until the player chooses one.
+    weird_level: Optional[WeirdLevel] = None
 
 
 class ConfirmSetupArtifactRequest(BaseModel):
@@ -322,6 +328,7 @@ class SlotStateResponse(BaseModel):
     awaiting_introduction: Optional[Literal["character", "seed"]] = None
     artifact_token: Optional[str] = None
     character_revision_pending: bool = False
+    weird_level: Optional[WeirdLevel] = None  # Stored wizard strangeness selection
     phase: Optional[str] = None  # Wizard phase if in wizard mode
     subphase: Optional[str] = None  # Character subphase (concept/traits/wildcard)
     thread_id: Optional[str] = None  # Wizard thread ID
@@ -477,6 +484,21 @@ class TransitionRequest(BaseModel):
     """Request to transition from wizard setup to narrative mode."""
 
     slot: StrictInt = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+    weird_level: Optional[WeirdLevel] = Field(
+        default=None,
+        description=(
+            "Genesis strangeness to persist on the wizard cache before the "
+            "transition runs. Omitted, the stored selection applies, or the "
+            "configured default level when none was chosen."
+        ),
+    )
+
+
+class WeirdLevelRequest(BaseModel):
+    """Record the player's genesis strangeness selection on the wizard cache."""
+
+    slot: StrictInt = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+    weird_level: WeirdLevel
 
 
 class TransitionResponse(BaseModel):

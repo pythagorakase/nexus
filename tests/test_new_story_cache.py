@@ -1,6 +1,10 @@
 """Tests for the normalized new-story setup cache."""
 
-from typing import Any
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
+from typing import Any, cast
+
+import pytest
 
 from nexus.api.new_story_cache import (
     CharacterData,
@@ -289,3 +293,117 @@ def test_clear_cache_deletes_without_dead_trait_compile_update(monkeypatch) -> N
         and "UPDATE assets.new_story_creator" in sql
         for sql in calls
     )
+
+
+_COLUMN_COMMENT_SQL = """
+    SELECT format_type(a.atttypid, a.atttypmod), col_description(c.oid, a.attnum)
+    FROM pg_attribute a
+    JOIN pg_class c ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = %s AND c.relname = %s AND a.attname = %s
+      AND NOT a.attisdropped
+"""
+
+
+@contextmanager
+def _migrated_slot_clone(prefix: str) -> Iterator[str]:
+    """A template clone with every pending migration (132 included) applied."""
+    from scripts import migrate
+    from tests.pg_fixtures import disposable_slot_database
+
+    with disposable_slot_database(prefix) as dbname:
+        # The clone carries the template's stamps; apply what it lacks.
+        _, failed = migrate.migrate_database(dbname, skip_locked=False)
+        assert failed == 0
+        yield dbname
+
+
+@pytest.mark.requires_postgres
+def test_weird_level_round_trips_and_only_a_new_wizard_clears_it() -> None:
+    """Migration 132 on a template clone: documented, checked, retry-safe state."""
+    import psycopg2  # type: ignore[import-untyped]
+
+    from nexus.api.new_story_cache import (
+        clear_cache,
+        clear_character_phase,
+        clear_seed_phase,
+        clear_setting_phase,
+        guarded_wizard_write,
+        init_cache,
+        read_cache,
+        write_weird_level,
+        write_wizard_choices,
+    )
+    from tests.pg_fixtures import connect
+
+    with _migrated_slot_clone("qa838_weird_level") as dbname:
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            for schema, table, column, kind in (
+                ("assets", "new_story_creator", "weird_level", "text"),
+                ("public", "global_variables", "genesis_weird", "jsonb"),
+            ):
+                cur.execute(_COLUMN_COMMENT_SQL, (schema, table, column))
+                row = cur.fetchone()
+                assert row is not None, f"{schema}.{table}.{column} is missing"
+                assert row[0] == kind
+                assert row[1] and row[1].strip(), f"{column} has no COMMENT"
+
+        init_cache(dbname, "thread-838", 4)
+        before = read_cache(dbname)
+        assert before is not None and before.weird_level is None
+
+        with guarded_wizard_write(dbname, before):
+            write_weird_level(dbname, "high")
+        cache = read_cache(dbname)
+        assert cache is not None and cache.weird_level == "high"
+
+        # A reply fenced on the wizard read before the selection still lands.
+        with guarded_wizard_write(dbname, before):
+            write_wizard_choices(["Open the gate."], dbname)
+
+        # The column's CHECK is the last line of defence behind the Literal.
+        with pytest.raises(psycopg2.errors.CheckViolation):
+            write_weird_level(dbname, cast(Any, "extreme"))
+
+        for clear_phase in (
+            clear_seed_phase,
+            clear_character_phase,
+            clear_setting_phase,
+        ):
+            clear_phase(dbname)
+            cleared = read_cache(dbname)
+            assert cleared is not None and cleared.weird_level == "high"
+
+        clear_cache(dbname)
+        assert read_cache(dbname) is None
+        init_cache(dbname, "thread-838-next", 4)
+        fresh = read_cache(dbname)
+        assert fresh is not None and fresh.weird_level is None
+
+
+@pytest.mark.requires_postgres
+def test_genesis_provenance_writes_on_the_transition_cursor() -> None:
+    """The transition hook stores the resolved profile, or clears a stale one.
+
+    The stored JSON keeps the selected level beside the resolved one; a
+    transition that ran on the default stores an explicit null selection.
+    """
+    from nexus.api import new_story_flow
+    from tests.pg_fixtures import connect
+
+    profile = {"level": "high", "genre": "fantasy", "raw_min": 0.55, "raw_max": 0.82}
+    with _migrated_slot_clone("qa838_genesis_weird") as dbname:
+        with closing(connect(dbname)) as conn:
+            for selected in ("high", None):
+                with conn, conn.cursor() as cur:
+                    new_story_flow._record_genesis_weird(
+                        cur, profile, selected_level=selected
+                    )
+                    cur.execute("SELECT genesis_weird FROM global_variables")
+                    assert cur.fetchall() == [
+                        ({**profile, "selected_level": selected},)
+                    ]
+            with conn, conn.cursor() as cur:
+                new_story_flow._record_genesis_weird(cur, None, selected_level=None)
+                cur.execute("SELECT genesis_weird FROM global_variables")
+                assert cur.fetchall() == [(None,)]

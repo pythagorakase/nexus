@@ -35,7 +35,7 @@ from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.choice_handling import extract_presented_choices, resolve_input_text
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_lease import RetryableFailure, read_retryable_failure
-from nexus.api.narrative_schemas import FrontierClock
+from nexus.api.narrative_schemas import FrontierClock, WeirdLevel
 from nexus.api.slot_utils import slot_dbname
 from nexus.util.clock_face import clock_face
 
@@ -62,6 +62,8 @@ class WizardState:
     has_concept: bool = False
     has_traits: bool = False
     has_wildcard: bool = False
+    # Player-selected genesis strangeness; None until chosen.
+    weird_level: Optional[WeirdLevel] = None
 
 
 @dataclass
@@ -144,6 +146,7 @@ def get_slot_state(slot: int) -> SlotState:
                        nsc.initial_location,
                        nsc.traits_confirmed,
                        nsc.choice_object,
+                       nsc.weird_level,
                        (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
                 FROM assets.new_story_creator nsc
                 WHERE nsc.id = TRUE
@@ -294,6 +297,7 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
         has_concept=has_concept,
         has_traits=has_traits,
         has_wildcard=has_wildcard,
+        weird_level=row.get("weird_level"),
     )
 
 

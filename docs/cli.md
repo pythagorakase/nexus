@@ -128,7 +128,21 @@ poetry run nexus continue --slot 5 --accept-fate
 
 # Use a specific model
 poetry run nexus continue --slot 5 --model TEST
+
+# Set the new story's strangeness (wizard only)
+poetry run nexus continue --slot 5 --weird high
 ```
+
+`--weird low|medium|high` records the new story's strangeness on the wizard
+before the step runs, so any later transition uses it, and the transition that
+creates the world carries it too. It is the player's appetite for surprise,
+not a promise of bizarre content: Retrograde maps the level onto the story
+genre's band in `[orrery.retrograde.weird.bands_by_genre]`, and a wizard with
+no selection uses `[orrery.retrograde.weird].default_level`. The transition
+records the selected level (null when none was chosen) beside the resolved
+level, genre, and band as `global_variables.genesis_weird`, and `load --json`
+shows the stored level.
+A slot already in narrative mode rejects the flag.
 
 ### `retry` — Retry a Failed Continuation
 
@@ -258,8 +272,8 @@ poetry run nexus continue --slot 5 --model TEST --accept-fate
 poetry run nexus continue --slot 5 --model TEST --accept-fate
 poetry run nexus continue --slot 5 --model TEST --accept-fate
 
-# Transition to narrative (when phase is "ready")
-poetry run nexus continue --slot 5
+# Transition to narrative (when phase is "ready"), optionally at a strangeness
+poetry run nexus continue --slot 5 --weird medium
 
 # Check narrative state
 poetry run nexus load --slot 5

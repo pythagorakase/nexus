@@ -1920,3 +1920,15 @@ def test_retry_fails_loudly_when_no_failure_is_advertised(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "Slot 5 has no failed continuation to retry." in captured.err
+
+
+def test_continue_weird_accepts_only_the_three_levels(capsys) -> None:
+    """--weird takes the player-facing levels; anything else fails parsing."""
+    parser = cli.build_parser()
+    for level in ("low", "medium", "high"):
+        args = parser.parse_args(["continue", "--slot", "5", "--weird", level])
+        assert args.weird == level
+    assert parser.parse_args(["continue", "--slot", "5"]).weird is None
+    with pytest.raises(SystemExit):
+        parser.parse_args(["continue", "--slot", "5", "--weird", "extreme"])
+    assert "invalid choice: 'extreme'" in capsys.readouterr().err

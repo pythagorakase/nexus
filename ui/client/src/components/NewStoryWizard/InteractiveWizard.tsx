@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Sparkles } from "lucide-react";
+import { Circle, Diamond, Sparkle, Sparkles, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { rememberActiveSlot } from "@/lib/active-slot";
@@ -39,6 +39,9 @@ interface Message {
     artifactData?: any;       // The tool submission data (viewable via modal)
 }
 
+/** Genesis strangeness: the player's appetite for surprise, not a promise. */
+export type WeirdLevel = "low" | "medium" | "high";
+
 export interface WizardResumeData {
     thread_id: string;
     current_phase: Phase | "ready";
@@ -57,6 +60,8 @@ export interface WizardResumeData {
     layer_draft: any;
     zone_draft: any;
     initial_location: any;
+    // The stored strangeness selection; null until the player chooses one.
+    weird_level?: WeirdLevel | null;
 }
 
 interface InteractiveWizardProps {
@@ -126,6 +131,48 @@ function pollRetrogradeStages(
     };
     timer = setTimeout(read, intervalMs);
     signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+}
+
+// Least to most strange. Each level has its own shape, and the chosen one is
+// filled, so the selection never rests on color alone.
+const WEIRD_GLYPHS: ReadonlyArray<{ level: WeirdLevel; Icon: LucideIcon }> = [
+    { level: "low", Icon: Circle },
+    { level: "medium", Icon: Diamond },
+    { level: "high", Icon: Sparkle },
+];
+
+function StrangenessGlyphs({
+    level,
+    disabled,
+    onSelect,
+}: {
+    level: WeirdLevel | null;
+    disabled: boolean;
+    onSelect: (level: WeirdLevel) => void;
+}) {
+    return (
+        <div className="flex items-center gap-0.5">
+            {WEIRD_GLYPHS.map(({ level: glyphLevel, Icon }) => {
+                const pressed = glyphLevel === level;
+                return (
+                    <button
+                        key={glyphLevel}
+                        type="button"
+                        aria-label={`Strangeness: ${glyphLevel}`}
+                        aria-pressed={pressed}
+                        disabled={disabled}
+                        onClick={() => onSelect(glyphLevel)}
+                        className={cn(
+                            "p-1 rounded-sm transition-colors disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                            pressed ? "text-primary" : "text-muted-foreground/60 hover:text-foreground",
+                        )}
+                    >
+                        <Icon className={cn("w-3.5 h-3.5", pressed && "fill-current")} />
+                    </button>
+                );
+            })}
+        </div>
+    );
 }
 
 // User-facing phase titles; the seed phase is presented as "Introduction"
@@ -209,7 +256,19 @@ export function InteractiveWizard({
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
     const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
+    // The server-confirmed strangeness selection, and the save in flight (it
+    // settles to whether the gateway saved its level). The transition waits
+    // for that save, then reads the ref, so it posts the level the server holds.
+    const [weirdLevel, setWeirdLevel] = useState<WeirdLevel | null>(null);
+    const weirdLevelRef = useRef<WeirdLevel | null>(null);
+    const weirdSaveRef = useRef<Promise<boolean> | null>(null);
+    const [weirdSaving, setWeirdSaving] = useState(false);
     const { toast } = useToast();
+
+    const applyWeirdLevel = (level: WeirdLevel | null) => {
+        weirdLevelRef.current = level;
+        setWeirdLevel(level);
+    };
 
     // Side panel state
     const [panelExpanded, setPanelExpanded] = useState(false);
@@ -265,6 +324,7 @@ export function InteractiveWizard({
                 setShowTraitSelector(false);
                 setSuggestedTraits([]);
                 setSelectedTraits([]);
+                applyWeirdLevel(resumeData?.weird_level ?? null);
 
                 if (resumeData) {
                     setThreadId(resumeData.thread_id);
@@ -459,6 +519,16 @@ export function InteractiveWizard({
     // Transition handler - performs transition + triggers bootstrap, then navigates
     // NexusLayout handles detecting incubator data and showing approval modal
     const performTransition = useCallback(async () => {
+        // A strangeness save still in flight decides the level this transition
+        // carries. A refused save stops here: its toast says why, the previous
+        // level stays shown, and the Introduction can be confirmed again.
+        const weirdSave = weirdSaveRef.current;
+        if (weirdSave !== null && !(await weirdSave)) {
+            processingRef.current = false;
+            setIsLoading(false);
+            return;
+        }
+
         // Reset state on start/retry
         setWaitScreenError(null);
         setWaitScreenElapsed(0);
@@ -491,11 +561,14 @@ export function InteractiveWizard({
                 },
             );
 
-            // Step 1: Transition (Retrograde history, then world writes)
+            // Step 1: Transition (Retrograde history, then world writes). The
+            // saved strangeness rides along; with none chosen the server's
+            // stored selection, or its configured default, applies.
+            const weird = weirdLevelRef.current;
             const transitionRes = await fetch("/api/story/new/transition", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ slot }),
+                body: JSON.stringify(weird === null ? { slot } : { slot, weird_level: weird }),
                 signal: abortController.signal,
             });
             stagePoll.abort();
@@ -585,6 +658,49 @@ export function InteractiveWizard({
             // Keep wait screen active with error state for retry
         }
     }, [slot, toast, onComplete]);
+
+    // Save first, then show: the glyph reflects only a level the server holds.
+    // Settles to whether the gateway saved the level.
+    const saveWeirdLevel = async (level: WeirdLevel): Promise<boolean> => {
+        try {
+            const res = await fetch("/api/story/new/weird", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ slot, weird_level: level }),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(
+                    typeof data?.detail === "string"
+                        ? data.detail
+                        : `Could not save strangeness (${res.status}).`,
+                );
+            }
+            if (data?.weird_level !== level) {
+                throw new Error(`Strangeness was not saved as ${level}: ${JSON.stringify(data)}`);
+            }
+            applyWeirdLevel(level);
+            return true;
+        } catch (error) {
+            console.error("Strangeness save error:", error);
+            toast({
+                title: "Transmission Error",
+                description: error instanceof Error ? error.message : String(error),
+                variant: "destructive",
+            });
+            return false;
+        }
+    };
+
+    // One save at a time; Confirm stays disabled until it settles.
+    const selectWeirdLevel = (level: WeirdLevel) => {
+        if (weirdSaveRef.current !== null) return;
+        setWeirdSaving(true);
+        weirdSaveRef.current = saveWeirdLevel(level).finally(() => {
+            weirdSaveRef.current = null;
+            setWeirdSaving(false);
+        });
+    };
 
     // Cancel wait screen and return to artifact review
     const handleWaitScreenCancel = useCallback(() => {
@@ -1151,6 +1267,13 @@ export function InteractiveWizard({
                     <h3 className="font-mono text-foreground">
                         {PHASE_TITLES[currentPhase]}
                     </h3>
+                    {currentPhase === "seed" && (
+                        <StrangenessGlyphs
+                            level={weirdLevel}
+                            disabled={!threadId || weirdSaving || waitScreenActive}
+                            onSelect={selectWeirdLevel}
+                        />
+                    )}
                 </div>
                 <Button
                     variant="ghost"
@@ -1336,6 +1459,7 @@ export function InteractiveWizard({
                     onConfirm={handlePanelConfirm}
                     onRevise={acceptedPhase === currentPhase ? undefined : handleRevise}
                     isLoading={isLoading}
+                    confirmDisabled={weirdSaving}
                     showTraitSelector={showTraitSelector && !pendingArtifact}
                     suggestedTraits={suggestedTraits}
                     selectedTraits={selectedTraits}

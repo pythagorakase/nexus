@@ -11,6 +11,7 @@ story creation, including:
 import asyncio
 import json
 import logging
+from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -32,6 +33,8 @@ from nexus.api.narrative_schemas import (
     ChatRequest,
     TransitionRequest,
     TransitionResponse,
+    WeirdLevel,
+    WeirdLevelRequest,
 )
 from nexus.api.new_story_cache import (
     WizardCache,
@@ -40,6 +43,7 @@ from nexus.api.new_story_cache import (
     complete_wizard_introduction,
     guarded_wizard_write,
     read_cache,
+    write_weird_level,
     write_wizard_choices,
 )
 from nexus.api.new_story_flow import (
@@ -1256,6 +1260,45 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
+def _record_weird_level(
+    dbname: str, cache: WizardCache, level: WeirdLevel
+) -> WizardCache:
+    """Persist a strangeness selection on the wizard the caller read.
+
+    Raises:
+        HTTPException: 409 when the wizard changed after ``cache`` was read.
+    """
+    try:
+        with guarded_wizard_write(dbname, cache):
+            write_weird_level(dbname, level)
+    except WizardStateConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return replace(cache, weird_level=level)
+
+
+@router.put("/weird")
+def record_weird_level_endpoint(request: WeirdLevelRequest) -> Dict[str, Any]:
+    """Record the player's genesis strangeness for the story's transition.
+
+    The level is player consent and calibration, not a promise of bizarre
+    content: Retrograde maps it onto the story genre's configured band.
+    """
+    require_writable_slot(request.slot)
+    dbname = slot_dbname(request.slot)
+    cache = read_cache(dbname)
+    if cache is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No active setup found for slot {request.slot}",
+        )
+    recorded = _record_weird_level(dbname, cache, request.weird_level)
+    return {
+        "status": "recorded",
+        "slot": request.slot,
+        "weird_level": recorded.weird_level,
+    }
+
+
 @router.post("/transition", response_model=TransitionResponse)
 async def transition_to_narrative_endpoint(request: TransitionRequest):
     """
@@ -1324,6 +1367,12 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             status_code=422, detail="Incomplete setup data. Missing: initial_location"
         )
 
+    # A supplied strangeness is persisted first, so a retry after a failed
+    # transition runs with the same level; the stored selection applies
+    # otherwise (None resolves to the configured default in Retrograde).
+    if request.weird_level is not None:
+        cache = _record_weird_level(dbname, cache, request.weird_level)
+
     # Build TransitionData from cache
     try:
         transition_data = build_transition_data_from_cache(cache)
@@ -1342,6 +1391,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             perform_transition_with_retrograde,
             request.slot,
             transition_data,
+            weird_level=cache.weird_level,
         )
         logger.info(
             "Transition complete for slot %s: character_id=%s retrograde=%s",

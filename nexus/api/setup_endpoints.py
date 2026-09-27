@@ -146,6 +146,7 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
             zone_draft=data.get_zone_dict(),
             initial_location=data.get_initial_location(),
             base_timestamp=data.base_timestamp,
+            weird_level=data.weird_level,
         )
     except HTTPException:
         raise
