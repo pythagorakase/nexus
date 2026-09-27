@@ -9,11 +9,9 @@ LLM involvement, so the test costs nothing but a transaction.
 
 from __future__ import annotations
 
-import os
 import uuid
 from typing import Any
 
-import psycopg2
 import pytest
 from psycopg2.extras import RealDictCursor
 
@@ -23,6 +21,7 @@ from nexus.agents.orrery.events import (
     commit_orrery_tick_sync,
 )
 from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
+from tests.pg_fixtures import connect
 
 LIVE_SLOT = 2
 
@@ -82,12 +81,7 @@ pytestmark_live = pytest.mark.requires_postgres
 
 
 def _connect() -> Any:
-    return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=f"save_{LIVE_SLOT:02d}",
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(f"save_{LIVE_SLOT:02d}")
 
 
 def _hunt_draft(actor_entity_id: int, target_entity_id: int) -> OrreryResolutionDraft:

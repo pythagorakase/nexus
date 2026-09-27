@@ -23,7 +23,6 @@ from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from psycopg2.extras import Json, RealDictCursor
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from nexus.agents.logon.skald_wire import (
@@ -58,6 +57,7 @@ from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings_as_dict
 from nexus.memory.manager import empty_pass2_baseline
 from scripts import new_story_setup
+from tests.pg_fixtures import connect, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -72,13 +72,7 @@ FORMATION_MIGRATION_SQL = (
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @contextmanager
@@ -240,13 +234,7 @@ def _insert_place(cur: Any, name: str) -> int:
 
 def _resolve_sleep(dbname: str, parent_chunk_id: int) -> Any:
     engine = create_engine(
-        URL.create(
-            "postgresql+psycopg2",
-            username=os.environ.get("PGUSER", "pythagor"),
-            host=os.environ.get("PGHOST", "localhost"),
-            port=int(os.environ.get("PGPORT", "5432")),
-            database=dbname,
-        ),
+        sqlalchemy_url(dbname),
         future=True,
     )
     try:

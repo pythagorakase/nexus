@@ -10,10 +10,8 @@ consuming gate's predicate sees the signal on real slot state.
 
 from __future__ import annotations
 
-import os
 import uuid
 
-import psycopg2
 import pytest
 
 from nexus.agents.orrery.events import commit_orrery_tick_sync
@@ -32,6 +30,7 @@ from nexus.agents.orrery.substrate import (
     recent_event,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+from tests.pg_fixtures import asyncpg_kwargs, connect
 
 WRITE_SLOT = 2
 
@@ -107,12 +106,7 @@ def test_committed_signal_feeds_consumer_gates_live() -> None:
     """The full chain, on real state: commit emits deed + signal rows, and
     the hunted target's gate predicate hears the threat next resolve."""
 
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=f"save_{WRITE_SLOT:02d}",
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = connect(f"save_{WRITE_SLOT:02d}")
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT max(id) FROM narrative_chunks")
@@ -215,11 +209,7 @@ def test_async_commit_emits_signal_rows_live() -> None:
     import asyncpg
 
     async def _run() -> None:
-        conn = await asyncpg.connect(
-            host=os.environ.get("PGHOST", "localhost"),
-            database=f"save_{WRITE_SLOT:02d}",
-            user=os.environ.get("PGUSER", "pythagor"),
-        )
+        conn = await asyncpg.connect(**asyncpg_kwargs(f"save_{WRITE_SLOT:02d}"))
         tx = conn.transaction()
         await tx.start()
         try:

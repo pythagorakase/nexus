@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import os
 from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
@@ -19,6 +18,7 @@ from nexus.agents.orrery.experiences import (
 )
 from nexus.config import load_settings_as_dict
 from scripts import new_story_setup
+from tests.pg_fixtures import connect
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -33,13 +33,7 @@ TERMINAL_STATES = ("succeeded", "stale_rejected")
 def _connect(dbname: str) -> Any:
     """Open a direct PostgreSQL connection to the disposable database."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @pytest.fixture(scope="module")

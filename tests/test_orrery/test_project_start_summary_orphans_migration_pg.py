@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Any, Iterator
 import uuid
 
-import psycopg2
 import pytest
 
 from nexus.agents.orrery.retrograde_persistence import PROJECT_STARTED_EVENT_TYPES
 from scripts import migrate
-from tests.pg_fixtures import disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -25,13 +24,7 @@ MIGRATION_PATH = ROOT / "migrations" / "101_delete_project_start_summary_orphans
 def _connect(dbname: str) -> Any:
     """Open a direct PostgreSQL connection to a disposable clone."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @pytest.fixture()

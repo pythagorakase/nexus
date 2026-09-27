@@ -14,11 +14,9 @@ transactions — zero persistent writes. Pins the issue #426 decisions:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
-import psycopg2
 import pytest
 
 from nexus.agents.logon.apex_schema import (
@@ -33,6 +31,7 @@ from nexus.agents.orrery.reconstruction import (
     set_commit_chunk_attribution_sync,
 )
 from nexus.api.commit_handler_sync import apply_state_updates_sync
+from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -40,12 +39,7 @@ WRITE_SLOT = 5
 
 
 def _connect() -> Any:
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=f"save_{WRITE_SLOT:02d}",
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = connect(f"save_{WRITE_SLOT:02d}")
     with conn.cursor() as cur:
         cur.execute(Path("migrations/074_plan_relocation_projects.sql").read_text())
         cur.execute("CREATE TEMP TABLE backstory_secrets (id bigint) ON COMMIT DROP")

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 
 from nexus.agents.logon.apex_schema import NewEntityDeclaration
@@ -16,7 +15,7 @@ from nexus.agents.orrery.retrograde_persistence import (
     _insert_place_stub as insert_retrograde_place_stub,
 )
 from nexus.api.trait_compiler import _insert_place_stub as insert_trait_place_stub
-from tests.pg_fixtures import disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -27,7 +26,7 @@ def stub_cur() -> Iterator[Any]:
     """Yield a cursor backed by a canonical disposable slot image."""
 
     with disposable_slot_database("qa735_gis_stubs") as dbname:
-        conn: Any = psycopg2.connect(dbname=dbname, user="pythagor")
+        conn: Any = connect(dbname)
         try:
             with conn.cursor() as cur:
                 cur.execute(

@@ -20,7 +20,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from nexus.agents.lore.utils.turn_context import TurnContext
@@ -43,6 +42,7 @@ from nexus.api import db_pool, narrative, orrery_dev_endpoints
 from nexus.config import load_settings, load_settings_as_dict
 from scripts import new_story_setup
 from tests.model_registry_helpers import registry_model
+from tests.pg_fixtures import connect, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -54,13 +54,7 @@ RECALL_ELIGIBILITY_MIGRATION = (
 
 
 def _connect(dbname: str) -> Any:
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return connect(dbname)
 
 
 @pytest.fixture(scope="module")
@@ -112,13 +106,7 @@ def session(recall_database: str) -> Iterator[Session]:
     """Run each proof in a rollback-only transaction in the disposable clone."""
 
     engine = create_engine(
-        URL.create(
-            "postgresql+psycopg2",
-            username=os.environ.get("PGUSER", "pythagor"),
-            host=os.environ.get("PGHOST", "localhost"),
-            port=int(os.environ.get("PGPORT", "5432")),
-            database=recall_database,
-        ),
+        sqlalchemy_url(recall_database),
         future=True,
     )
     connection = engine.connect()

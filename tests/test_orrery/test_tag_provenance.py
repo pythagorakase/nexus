@@ -16,11 +16,9 @@ guarantees from docs/orrery_audit_dashboard_notes.md step 7:
 
 from __future__ import annotations
 
-import os
 import uuid
 from typing import Any
 
-import psycopg2
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -38,6 +36,7 @@ from nexus.agents.orrery.tag_writer import (
 )
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -45,12 +44,7 @@ WRITE_SLOT = 2
 
 
 def _connect() -> Any:
-    return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=f"save_{WRITE_SLOT:02d}",
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(f"save_{WRITE_SLOT:02d}")
 
 
 def _anchor_and_actors(cur: Any) -> tuple[int, int, int]:

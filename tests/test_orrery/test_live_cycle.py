@@ -16,11 +16,9 @@ cannot turn the test into an unbounded drain.
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from typing import Any
 
-import psycopg2
 import pytest
 from psycopg2.extras import RealDictCursor
 from sqlalchemy import create_engine, text
@@ -43,6 +41,7 @@ from nexus.agents.orrery.worker import (
 )
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings_as_dict
+from tests.pg_fixtures import connect
 
 LIVE_SLOT = 2
 PROMOTION_DRAIN_ATTEMPTS = 20
@@ -52,12 +51,7 @@ pytestmark = [pytest.mark.live_llm, pytest.mark.requires_postgres]
 
 
 def _connect() -> Any:
-    return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=f"save_{LIVE_SLOT:02d}",
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return connect(f"save_{LIVE_SLOT:02d}")
 
 
 def _cleanup_resolutions(conn: Any, resolution_ids: list[int]) -> None:
