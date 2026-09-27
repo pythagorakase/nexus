@@ -72,8 +72,8 @@ no longer exists.
 
 Expected failures are reported through these codes. A missing or invalid
 active `nexus.toml`, a malformed `NEXUS_API_URL`, or a missing runtime
-credential is a `config_error`, checked for every command before it runs. A
-traceback means a programming fault.
+credential is a `config_error`, checked for every command but `doctor` before
+it runs. A traceback means a programming fault.
 
 ### Transports
 
@@ -83,7 +83,7 @@ Each command declares the most privileged resource its handler opens:
 | --- | --- | --- |
 | `http` | The NEXUS API only | `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `inspect slot`, `model --set`, `model --clear` |
 | `database` | A slot database directly | `model` (reading seat identities), `jobs`, `inspect-turn`, `prune-manifests`, `trait-audit`, `retrograde-packet`, `retrograde-seed-candidates --slot`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, and the faction, character, and place manifest and apply commands |
-| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `usage`, `window-replay`, `models lock`, `models verify`, `model --list`, `retrograde-seed-candidates --packet`, `retrograde-expand-seeds`, `backfill-review-packet` |
+| `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `window-replay`, `models lock`, `models verify`, `model --list`, `retrograde-seed-candidates --packet`, `retrograde-expand-seeds`, `backfill-review-packet` |
 
 The runtime is remote when the active `nexus.toml` sets `[runtime] profile =
 "remote"`, or when `NEXUS_API_URL` names a host other than `localhost` or a
@@ -92,7 +92,10 @@ commands with exit 3 before any connection is opened. Two exceptions follow
 the remote profile itself: `up` and `status` probe the hosted runtime's
 `/runtime/status` over HTTP. The runtime commands that accept `--config`
 (`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`)
-check the profile of that file.
+check the profile of that file. `doctor` is exempt from the refusal and from
+the configuration check below: it diagnoses this machine's configuration and
+role itself, so it runs under any profile, and an invalid `nexus.toml` is its
+`config.valid` finding rather than a `config_error`.
 
 Only the host name decides: a LAN address, a Tailscale name, or `0.0.0.0`
 counts as remote even when it reaches this machine, so every `database` and

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "#832 return recap: return_recap.py is imported by reader_endpoints.py, so it joins production_reachable",
+  "reason": "#815 CLI contract: cli_contract.py is imported by nexus/cli.py, so it joins production_reachable",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",

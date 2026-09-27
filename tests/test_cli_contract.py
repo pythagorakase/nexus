@@ -33,6 +33,7 @@ from nexus.cli_contract import (
     FLAG_TRANSPORTS,
     REMOTE_PROFILE_TRANSPORTS,
     RUNTIME_CONFIG_COMMANDS,
+    SELF_DIAGNOSTIC_COMMANDS,
     ExitCode,
     detect_remote_runtime,
     error_envelope,
@@ -245,6 +246,7 @@ def test_contract_side_tables_name_real_commands_and_flags() -> None:
             assert flag in destinations, f"{command} has no {flag} argument"
     assert set(REMOTE_PROFILE_TRANSPORTS) <= set(COMMAND_TRANSPORTS)
     assert set(ENVELOPE_COMMANDS) <= set(COMMAND_TRANSPORTS)
+    assert set(SELF_DIAGNOSTIC_COMMANDS) <= set(COMMAND_TRANSPORTS)
     for command in RUNTIME_CONFIG_COMMANDS:
         assert "--config" in leaves[command]._option_string_actions, command
 
@@ -490,6 +492,29 @@ def test_remote_profile_refuses_local_operator_commands(
     envelope = _failure(completed)
     assert envelope["code"] == "transport_refused"
     assert "uses the local_operator transport" in envelope["error"]
+
+
+def test_doctor_reports_its_own_config_under_a_remote_runtime(tmp_path: Path) -> None:
+    """The self-diagnostic command is neither refused nor pre-empted by config_error."""
+    config = tmp_path / "nexus.toml"
+    config.write_text("[runtime\n", encoding="utf-8")
+    completed = _run(
+        "doctor",
+        "--target",
+        "ci-runner",
+        "--config",
+        str(config),
+        env={"NEXUS_API_URL": "https://nexus.example.invalid"},
+    )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    assert "Traceback" not in completed.stderr, completed.stderr
+    assert "transport_refused" not in completed.stderr
+    assert "config_error" not in completed.stderr
+    lines = completed.stdout.splitlines()
+    assert len(lines) == 2, completed.stdout
+    assert lines[0].startswith(f"fail  config.valid       {config}: ")
+    assert lines[1] == "skip  reachability.gate  config.valid failed"
 
 
 def test_explicit_runtime_config_selects_the_profile_checked(tmp_path: Path) -> None:

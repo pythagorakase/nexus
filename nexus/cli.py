@@ -53,6 +53,7 @@ from nexus.cli_contract import (
     API_URL_ENV,
     ENVELOPE_COMMANDS,
     RUNTIME_CONFIG_COMMANDS,
+    SELF_DIAGNOSTIC_COMMANDS,
     ExitCode,
     RemoteRuntime,
     command_path,
@@ -5208,20 +5209,23 @@ def main() -> int:
     if usage_error is not None:
         return _fail(args, "usage_error", usage_error)
 
-    try:
-        remote = _active_remote_runtime(args, command)
-    except FileNotFoundError as exc:
-        return _fail(args, "config_error", f"{exc}. {_config_remedy(command)}")
-    except (RuntimeHomeError, ValueError) as exc:
-        # load_settings reports an invalid config as ValueError (pydantic's
-        # ValidationError, tomllib's TOMLDecodeError, an unsupported file
-        # type); is_loopback_url reports an API URL without a host likewise.
-        return _fail(args, "config_error", str(exc))
+    # A self-diagnostic command reports on the configuration and this
+    # machine's role itself, so neither check below may pre-empt its report.
+    if command not in SELF_DIAGNOSTIC_COMMANDS:
+        try:
+            remote = _active_remote_runtime(args, command)
+        except FileNotFoundError as exc:
+            return _fail(args, "config_error", f"{exc}. {_config_remedy(command)}")
+        except (RuntimeHomeError, ValueError) as exc:
+            # load_settings reports an invalid config as ValueError (pydantic's
+            # ValidationError, tomllib's TOMLDecodeError, an unsupported file
+            # type); is_loopback_url reports an API URL without a host likewise.
+            return _fail(args, "config_error", str(exc))
 
-    # Refuse before dispatch, so a refused command opens no connection.
-    refusal = transport_refusal(command, args, remote)
-    if refusal is not None:
-        return _fail(args, "transport_refused", refusal)
+        # Refuse before dispatch, so a refused command opens no connection.
+        refusal = transport_refusal(command, args, remote)
+        if refusal is not None:
+            return _fail(args, "transport_refused", refusal)
 
     try:
         outcome = _dispatch(args)

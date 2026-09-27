@@ -30,6 +30,11 @@ The runtime is remote when the active configuration's ``[runtime] profile`` is
 remote runtime, ``database`` and ``local_operator`` commands are refused
 before dispatch with ``transport_refused`` (exit 3), so they never read this
 machine's slot databases or runtime files in place of the remote runtime's.
+``doctor`` is the one self-diagnostic command (:data:`SELF_DIAGNOSTIC_COMMANDS`):
+it evaluates this machine's configuration and role itself, so it is dispatched
+without the configuration load or the remote refusal; an invalid configuration
+is its ``config.valid`` finding, and the client machine of a remote runtime
+runs ``doctor --target owner-client``.
 
 Exit Codes and Envelopes
 ------------------------
@@ -73,6 +78,7 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "status": "local_operator",
         "logs": "local_operator",
         "home": "local_operator",
+        "doctor": "local_operator",
         # Local ledgers and model artifacts.
         "usage": "local_operator",
         "window-replay": "local_operator",
@@ -134,6 +140,11 @@ RUNTIME_CONFIG_COMMANDS: FrozenSet[str] = frozenset(
 
 # Commands whose --json success output is success_envelope(data).
 ENVELOPE_COMMANDS: FrozenSet[str] = frozenset({"inspect slot"})
+
+# Commands that diagnose this machine's configuration and role themselves:
+# main() dispatches them without loading the configuration or applying the
+# remote refusal, so a broken nexus.toml is their finding, not a config_error.
+SELF_DIAGNOSTIC_COMMANDS: FrozenSet[str] = frozenset({"doctor"})
 
 REFUSED_REMOTE_TRANSPORTS: FrozenSet[Transport] = frozenset(
     {"database", "local_operator"}

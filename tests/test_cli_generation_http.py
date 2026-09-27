@@ -749,10 +749,13 @@ def test_cli_rejects_weird_for_a_story_in_narrative_mode(tmp_path: Path) -> None
     assert code == 1, (stdout, stderr)
     assert stdout == ""
     assert json.loads(stderr) == {
+        "ok": False,
+        "code": "domain_failure",
         "error": (
             "--weird applies only to a new story; slot 5 already holds a story "
             "in narrative mode."
-        )
+        ),
+        "partial": {},
     }
     assert _writes(scenario) == []
 
