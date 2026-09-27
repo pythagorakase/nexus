@@ -1452,7 +1452,11 @@ def _load_experience_sources(
 
 
 def _render_prompt(rows: Sequence[Mapping[str, Any]]) -> str:
-    prompt = load(PromptId.EXPERIENCE_RENDERER).strip()
+    """Return the renderer's user message: only the scene's seed records.
+
+    The renderer instructions travel once, as the provider's system prompt
+    (see :func:`_experience_provider`); repeating them here doubled them.
+    """
     records = [
         {
             "experience_id": int(row["id"]),
@@ -1472,10 +1476,8 @@ def _render_prompt(rows: Sequence[Mapping[str, Any]]) -> str:
         }
         for row in rows
     ]
-    return (
-        prompt
-        + "\n\nScene seed records:\n"
-        + json.dumps(records, ensure_ascii=False, sort_keys=True, default=str)
+    return "Scene seed records:\n" + json.dumps(
+        records, ensure_ascii=False, sort_keys=True, default=str
     )
 
 

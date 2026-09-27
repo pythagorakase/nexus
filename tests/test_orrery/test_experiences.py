@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 from typing import Any, Iterator, Literal
 
+from pydantic import ValidationError
 import pytest
 
 from nexus.agents.logon.skald_wire import (
@@ -27,11 +28,14 @@ from nexus.agents.orrery.experiences import (
     ExperienceRenderBatch,
     _is_sentence_initial,
     _proper_noun_candidates,
+    _render_prompt,
     validate_render_batch,
 )
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings
+from nexus.config.settings_models import OrreryExperienceSettings
 from nexus.memory.manager import empty_pass2_baseline
+from nexus.prompts.registry import PromptId, load
 
 
 ROOT = Path(__file__).parents[2]
@@ -107,6 +111,19 @@ def test_experience_config_resolves_model_and_eligibility() -> None:
     ) == pytest.approx(1.0)
 
 
+def test_experience_embedding_drain_bound_is_configured_and_validated() -> None:
+    """The scheduler's per-pass embedding bound is shipped and must be positive."""
+    settings = load_settings("nexus.toml")
+    assert settings.orrery is not None
+    shipped = settings.orrery.experiences
+    assert shipped.max_embeddings_per_drain == 12
+
+    raw = shipped.model_dump()
+    raw["max_embeddings_per_drain"] = 0
+    with pytest.raises(ValidationError, match="max_embeddings_per_drain"):
+        OrreryExperienceSettings.model_validate(raw)
+
+
 def _seed_row() -> dict[str, Any]:
     return {
         "id": 41,
@@ -116,6 +133,38 @@ def _seed_row() -> dict[str, Any]:
         "location_id": 9,
         "seed_summary": ("Mara witnessed Orrin open the Copper Observatory door."),
     }
+
+
+def test_render_prompt_carries_only_the_seed_records() -> None:
+    """Renderer instructions travel once, as the system prompt (#754)."""
+    instructions = load(PromptId.EXPERIENCE_RENDERER).strip()
+    row = {
+        **_seed_row(),
+        "character_name": "Mara",
+        "world_time": datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc),
+        "location_name": "Copper Observatory",
+        "setting_place_ids": [9],
+        "setting_place_names": ["Copper Observatory"],
+    }
+
+    prompt = _render_prompt([row])
+
+    for line in instructions.splitlines():
+        if line.strip():
+            assert line not in prompt
+    header, records = prompt.split("\n", 1)
+    assert header == "Scene seed records:"
+    assert json.loads(records) == [
+        {
+            "basis": "witness",
+            "character": "Mara",
+            "experience_id": 41,
+            "location": "Copper Observatory",
+            "seed": "Mara witnessed Orrin open the Copper Observatory door.",
+            "settings": [{"id": 9, "name": "Copper Observatory"}],
+            "world_time": "2196-07-06 23:00:00+00:00",
+        }
+    ]
 
 
 def test_renderer_validator_rejects_entity_invention() -> None:

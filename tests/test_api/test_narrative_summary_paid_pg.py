@@ -91,7 +91,10 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
         error = None
         try:
             result = scheduler.run_pass(
-                narration_limit=0, experience_limit=0, maturation_limit=0
+                narration_limit=0,
+                experience_limit=0,
+                maturation_limit=0,
+                experience_embedding_limit=0,
             )
         except Exception as exc:
             error = exc

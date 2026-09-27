@@ -489,8 +489,12 @@ def test_jobs_cli_reports_experiences_stamped_without_vectors(
             "retrograde_summaries": 0,
             "character_experiences": 1,
         }
+        # The unstamped rendered row is owed vectors, not damage (#754).
+        assert payload["unembedded_rendered_experiences"] == 1
         cli.emit_output(payload, as_json=False)
+        output = capsys.readouterr().out
         assert (
             "stamped_without_vectors: retrograde_summaries=0, "
             "character_experiences=1"
-        ) in capsys.readouterr().out
+        ) in output
+        assert "unembedded_rendered_experiences: 1" in output
