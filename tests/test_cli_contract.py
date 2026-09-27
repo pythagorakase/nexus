@@ -57,9 +57,12 @@ SLOT_STATE = {
 # Environment the CLI must not inherit from the developer's shell.
 _ISOLATED_ENV = (
     "NEXUS_API_URL",
+    "NEXUS_AUTH",
     "NEXUS_HOME",
     "NEXUS_RUNTIME_CONFIG",
     "NEXUS_GATEWAY_PORT",
+    "CLOUDFLARE_ACCESS_CLIENT_ID_API_KEY",
+    "CLOUDFLARE_ACCESS_CLIENT_SECRET_API_KEY",
     "PGHOST",
     "PGPORT",
     "PGHOSTADDR",
@@ -341,6 +344,87 @@ def test_inspect_slot_rejects_an_invalid_slot_before_any_request() -> None:
         "partial": {},
     }
     assert gateway.requests == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("inspect", "slot", "--slot", "5"), ("load", "--slot", "5")],
+    ids=["inspect-slot", "load"],
+)
+def test_http_command_with_a_missing_runtime_config_is_a_config_error(
+    tmp_path: Path, argv: tuple[str, ...]
+) -> None:
+    """HTTP commands resolve the active config before dispatch, like the rest."""
+    absent = tmp_path / "absent.toml"
+    completed = _run(*argv, "--json", env={"NEXUS_RUNTIME_CONFIG": str(absent)})
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert envelope["error"].startswith(f"Configuration file not found: {absent}")
+    assert "NEXUS_RUNTIME_CONFIG" in envelope["error"]
+
+
+@pytest.mark.parametrize(
+    ("api_url", "message"),
+    [
+        ("localhost:8002", "NEXUS_API_URL has no host: 'localhost:8002'"),
+        ("ftp://127.0.0.1:8002", "No connection adapters were found"),
+    ],
+    ids=["no-scheme", "not-http"],
+)
+def test_inspect_slot_malformed_api_url_is_a_config_error(
+    api_url: str, message: str
+) -> None:
+    """An API URL requests cannot use is a config error, not a traceback."""
+    completed = _run(
+        "inspect", "slot", "--slot", "5", "--json", env={"NEXUS_API_URL": api_url}
+    )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert envelope["error"].startswith(message)
+
+
+def test_inspect_slot_missing_access_secret_is_a_config_error(
+    tmp_path: Path,
+) -> None:
+    """A remote profile whose Access secret is absent fails before any request."""
+    config = _config(tmp_path, profile="remote")
+    completed = _run(
+        "inspect",
+        "slot",
+        "--slot",
+        "5",
+        "--json",
+        env={"NEXUS_RUNTIME_CONFIG": str(config)},
+    )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert "CLOUDFLARE_ACCESS_CLIENT_ID_API_KEY is not set" in envelope["error"]
+
+
+def test_inspect_slot_refuses_plaintext_credentials_as_a_config_error() -> None:
+    """NEXUS_AUTH bound for a non-loopback plain-HTTP API is never sent."""
+    completed = _run(
+        "inspect",
+        "slot",
+        "--slot",
+        "5",
+        "--json",
+        env={
+            "NEXUS_API_URL": "http://nexus.example.invalid",
+            "NEXUS_AUTH": "815-token",
+        },
+    )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert "Refusing to send NEXUS_AUTH over plaintext" in envelope["error"]
 
 
 # ---------------------------------------------------------------------------

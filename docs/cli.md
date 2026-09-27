@@ -70,8 +70,10 @@ no longer exists.
 | 3 | Transport refused under a remote runtime | `transport_refused` |
 | 4 | The NEXUS API could not be reached or did not answer in time | `api_unreachable` |
 
-Expected failures are reported through these codes. A traceback means a
-programming fault.
+Expected failures are reported through these codes. A missing or invalid
+active `nexus.toml`, a malformed `NEXUS_API_URL`, or a missing runtime
+credential is a `config_error`, checked for every command before it runs. A
+traceback means a programming fault.
 
 ### Transports
 
@@ -92,6 +94,12 @@ the remote profile itself: `up` and `status` probe the hosted runtime's
 (`up`, `down`, `restart`, `status`, `logs`, `models lock`, `models verify`)
 check the profile of that file.
 
+Only the host name decides: a LAN address, a Tailscale name, or `0.0.0.0`
+counts as remote even when it reaches this machine, so every `database` and
+`local_operator` command, `up`, `status` and `logs` included, is refused while
+`NEXUS_API_URL` names it. Point `NEXUS_API_URL` at `localhost` or `127.0.0.1`
+for this machine's runtime.
+
 ### JSON Failure Envelope
 
 With `--json`, every failure prints one object on stderr:
@@ -110,6 +118,9 @@ With `--json`, every failure prints one object on stderr:
 (a saved seed, a session ID, a recovery command); `false` and `0` are kept,
 `null` and empty values are not. Without `--json`, a failure prints one
 `Error: <message>` line on stderr.
+
+One failure keeps its report instead: `trait-audit --fail-on-remainders`
+prints the full audit on stdout with `"failed_policy": true` and exits 1.
 
 Success output is unchanged for existing commands. JSON-first commands
 (`inspect slot`) print `{"ok": true, "data": ...}` on stdout.

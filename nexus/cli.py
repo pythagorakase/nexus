@@ -54,12 +54,12 @@ from nexus.cli_contract import (
     ENVELOPE_COMMANDS,
     RUNTIME_CONFIG_COMMANDS,
     ExitCode,
+    RemoteRuntime,
     command_path,
     detect_remote_runtime,
     error_envelope,
     exit_code_for,
     partial_fields,
-    resolve_transport,
     success_envelope,
     transport_refusal,
 )
@@ -71,7 +71,10 @@ from nexus.config.settings_models import (
 )
 from nexus.runtime.contract import HOME_ENV, RUNTIME_CONFIG_ENV
 from nexus.runtime.home import RuntimeHomeError, locate_runtime_home
-from nexus.runtime.remote_auth import build_runtime_request_auth
+from nexus.runtime.remote_auth import (
+    InsecureRuntimeTransportError,
+    build_runtime_request_auth,
+)
 from nexus.util.secret_manager import MissingSecretError
 
 logger = logging.getLogger("nexus.cli")
@@ -1239,7 +1242,12 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _inspect_timeout_seconds() -> float:
-    """Read the per-request budget of ``nexus inspect`` from [runtime.cli]."""
+    """Read the per-request budget of ``nexus inspect`` from [runtime.cli].
+
+    A bare install with no nexus.toml (where get_api_url() targets
+    DEFAULT_API_URL) and a config without [runtime] both use the
+    RuntimeCliSettings default, the value the checkout's nexus.toml ships.
+    """
     settings = _load_cli_settings()
     if settings is None or settings.runtime is None:
         return RuntimeCliSettings().inspect_timeout_seconds
@@ -5071,23 +5079,25 @@ def _config_remedy(command: str) -> str:
     )
 
 
-def _transport_refusal(args: argparse.Namespace, command: str) -> Optional[str]:
-    """Refuse a database or local-operator command under a remote runtime.
+def _active_remote_runtime(
+    args: argparse.Namespace, command: str
+) -> Optional[RemoteRuntime]:
+    """Load the active nexus.toml and say whether the runtime it selects is remote.
 
-    Only the active nexus.toml and NEXUS_API_URL are read; no database or
-    network connection is opened. HTTP commands are never refused.
+    Runs for every command before dispatch, HTTP commands included, so a
+    missing or invalid configuration or a malformed NEXUS_API_URL is reported
+    once as ``config_error`` rather than surfacing mid-command. Only the
+    active nexus.toml and NEXUS_API_URL are read; no database or network
+    connection is opened.
     """
-    if resolve_transport(command, args, None) == "http":
-        return None
     explicit = (
         getattr(args, "config", None) if command in RUNTIME_CONFIG_COMMANDS else None
     )
     settings = _load_cli_settings(explicit)
-    remote = detect_remote_runtime(
+    return detect_remote_runtime(
         settings.runtime if settings is not None else None,
         os.environ.get(API_URL_ENV),
     )
-    return transport_refusal(command, args, remote)
 
 
 def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
@@ -5198,13 +5208,18 @@ def main() -> int:
     if usage_error is not None:
         return _fail(args, "usage_error", usage_error)
 
-    # Refuse before dispatch, so a refused command opens no connection.
     try:
-        refusal = _transport_refusal(args, command)
+        remote = _active_remote_runtime(args, command)
     except FileNotFoundError as exc:
         return _fail(args, "config_error", f"{exc}. {_config_remedy(command)}")
     except (RuntimeHomeError, ValueError) as exc:
+        # load_settings reports an invalid config as ValueError (pydantic's
+        # ValidationError, tomllib's TOMLDecodeError, an unsupported file
+        # type); is_loopback_url reports an API URL without a host likewise.
         return _fail(args, "config_error", str(exc))
+
+    # Refuse before dispatch, so a refused command opens no connection.
+    refusal = transport_refusal(command, args, remote)
     if refusal is not None:
         return _fail(args, "transport_refused", refusal)
 
@@ -5220,6 +5235,18 @@ def main() -> int:
             **_api_unreachable(),
             "error": f"Timed out waiting for API server at {get_api_url()}: {exc}",
         }
+    except (
+        requests.exceptions.InvalidURL,
+        requests.exceptions.InvalidSchema,
+        requests.exceptions.MissingSchema,
+    ) as exc:
+        return _fail(
+            args,
+            "config_error",
+            f"{exc}. Set {API_URL_ENV} to an absolute http:// or https:// URL.",
+        )
+    except (InsecureRuntimeTransportError, MissingSecretError) as exc:
+        return _fail(args, "config_error", str(exc))
     if isinstance(outcome, int):
         return outcome
     result = outcome

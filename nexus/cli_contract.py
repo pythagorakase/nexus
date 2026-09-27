@@ -39,9 +39,12 @@ refused, 4 API unreachable. Every ``--json`` failure prints
 :data:`ERROR_CODES`, the ``error`` message string earlier releases printed,
 and ``partial``, every non-empty field of the failed result. JSON-first
 commands (:data:`ENVELOPE_COMMANDS`) print :func:`success_envelope` on stdout;
-other commands keep their established success payloads. Expected failures
-(unreachable API, refusals, bad arguments, domain errors) are reported
-through the envelope; a traceback means a programming fault.
+other commands keep their established success payloads. One exception is
+kept for existing consumers: a policy gate (``trait-audit
+--fail-on-remainders``) prints its full success-shaped report, with
+``failed_policy`` true, and exits 1. Expected failures (unreachable API,
+refusals, bad arguments, missing or invalid configuration, domain errors) are
+reported through the envelope; a traceback means a programming fault.
 """
 
 from __future__ import annotations
