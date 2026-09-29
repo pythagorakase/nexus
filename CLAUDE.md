@@ -100,6 +100,8 @@ python scripts/new_story_setup.py --slot 5 --mode clone --source save_01 --force
 
 The setup script uses `pg_dump -s` to extract schema from `NEXUS_template`.
 
+Initialization and cloning fail loudly on any migration or restore error (psql runs with `ON_ERROR_STOP`, and pending-migration failures raise) and never leave a slot marked ready.
+
 **When to use each:**
 - **Migrations** → Schema changes to existing slots with data (non-destructive)
 - **Slot initialization** → Creating fresh slots or resetting test slots (destructive)

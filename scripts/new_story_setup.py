@@ -23,9 +23,11 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from typing import Optional
+from typing import Mapping, Optional
 
 import psycopg2
+
+from scripts.migrate import migrate_database
 
 LOG = logging.getLogger("nexus.new_story_setup")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -37,14 +39,6 @@ try:
     USE_POOL = True
 except ImportError:
     USE_POOL = False
-
-# Import migration runner for post-creation migration
-try:
-    from scripts.migrate import migrate_database
-
-    HAS_MIGRATE = True
-except ImportError:
-    HAS_MIGRATE = False
 
 
 def _connect(dbname: Optional[str] = None):
@@ -171,7 +165,11 @@ def _postgres_tools(*names: str) -> dict[str, str]:
 
 
 def initialize_slot_database(
-    target_db: str, source_db: Optional[str] = None, force: bool = False
+    target_db: str,
+    source_db: Optional[str] = None,
+    force: bool = False,
+    *,
+    migrations_dir: Optional[Path] = None,
 ) -> None:
     """
     Create ``target_db`` as a fresh story database cloned from the template.
@@ -182,6 +180,10 @@ def initialize_slot_database(
     migrations the template has not seen — without them, migrate.py replays
     already-applied migrations against the post-migration schema and fails
     (e.g. 053 alters factions.power_level, which 058 already dropped).
+
+    Any restore or migration failure raises before the database is seeded as
+    a fresh story, so a half-built database is never reported ready.
+    ``migrations_dir`` overrides the runner's migration tree (tests only).
     """
     dispose_database(target_db)
     # NEXUS_template is the canonical fresh-slot image (schema + seed data)
@@ -265,18 +267,19 @@ def initialize_slot_database(
     # Ensure global_variables row exists
     ensure_global_variables(target_db)
 
-    # Apply only migrations newer than the template's stamped baseline
-    if HAS_MIGRATE:
-        LOG.info("Running migrations on %s...", target_db)
-        applied, failed = migrate_database(target_db, skip_locked=False)
-        if failed:
-            LOG.warning("Some migrations failed on %s", target_db)
-        else:
-            LOG.info("Applied %d migrations to %s", applied, target_db)
-    else:
-        LOG.warning(
-            "Migration runner not available - run 'python scripts/migrate.py' manually"
+    # Apply only migrations newer than the template's stamped baseline. The
+    # runner logs which migration failed; this refuses to call the slot ready.
+    LOG.info("Running migrations on %s...", target_db)
+    applied, unapplied = migrate_database(
+        target_db, skip_locked=False, migrations_dir=migrations_dir
+    )
+    if unapplied:
+        raise RuntimeError(
+            f"Migrations failed on {target_db}: {applied} applied, "
+            f"{unapplied} unapplied. The database is not ready; fix the failing "
+            "migration and initialize it again."
         )
+    LOG.info("Applied %d migrations to %s", applied, target_db)
 
     _initialize_empty_idf_corpora(target_db)
     dispose_database(target_db)
@@ -374,19 +377,50 @@ def _require_migration_stamps(source_db: str, target_db: str) -> None:
         )
 
 
-def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None:
+def _restore_plain_dump(
+    target_db: str, dump_path: str, tools: Mapping[str, str]
+) -> None:
+    """Replay a plain-text dump into ``target_db``, stopping at the first error.
+
+    ``ON_ERROR_STOP`` makes psql exit non-zero on the first failing statement,
+    and ``check=True`` turns that into ``subprocess.CalledProcessError``, so a
+    half-restored database never reports success.
+    """
+    LOG.info("Restoring %s into %s", dump_path, target_db)
+    subprocess.run(
+        [tools["psql"], "-v", "ON_ERROR_STOP=1", target_db, "-f", dump_path],
+        check=True,
+        env=subprocess_env(),
+    )
+
+
+def clone_slot_with_data(
+    slot: int,
+    source_db: str,
+    force: bool = False,
+    *,
+    target_db: Optional[str] = None,
+) -> None:
     """
     Clone a slot by copying all data from source_db into save_XX.
-    Uses pg_dump/pg_restore to avoid template locks on the source DB.
+
+    Uses a plain pg_dump replayed through psql to avoid template locks on the
+    source DB. Every PostgreSQL tool is resolved before any change, and any
+    failing step (including one statement of the dump) raises.
+    ``target_db`` defaults to the slot's database; tests pass a disposable name.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
-    target_db = slot_dbname(slot)
+    if target_db is None:
+        target_db = slot_dbname(slot)
+    tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
     dispose_database(target_db)
 
     if force:
         subprocess.run(
-            ["dropdb", "--if-exists", target_db], check=False, env=subprocess_env()
+            [tools["dropdb"], "--if-exists", target_db],
+            check=True,
+            env=subprocess_env(),
         )
         LOG.warning("Dropped database %s if it existed", target_db)
 
@@ -397,7 +431,7 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
         # Plain text dump for easy filtering
         subprocess.run(
             [
-                "pg_dump",
+                tools["pg_dump"],
                 "-Fp",
                 "-d",
                 source_db,
@@ -411,16 +445,16 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
             check=True,
             env=subprocess_env(),
         )
-        subprocess.run(["createdb", target_db], check=True, env=subprocess_env())
+        subprocess.run([tools["createdb"], target_db], check=True, env=subprocess_env())
 
         # Ensure extensions before replaying functions/tables
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
+            [tools["psql"], target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
             check=True,
             env=subprocess_env(),
         )
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
+            [tools["psql"], target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
             check=True,
             env=subprocess_env(),
         )
@@ -436,9 +470,7 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
         with open(dump_path, "w", encoding="utf-8") as f:
             f.writelines(filtered)
 
-        subprocess.run(
-            ["psql", target_db, "-f", dump_path], check=True, env=subprocess_env()
-        )
+        _restore_plain_dump(target_db, dump_path, tools)
         _post_clone_cleanup(target_db)
         dispose_database(target_db)
         LOG.info("Cloned %s into %s (with data)", source_db, target_db)

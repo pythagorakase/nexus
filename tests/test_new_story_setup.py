@@ -7,17 +7,25 @@ already dropped). initialize_slot_database now copies the template's data —
 seed/vocab rows plus the schema_migrations stamps — so migrate.py sees a
 stamped baseline and applies nothing on a fresh clone.
 
+Issue #810/#823 hardening: setup fails loudly. A template clone replays no
+migration; a failing pending migration leaves no stamp and makes slot
+initialization raise before the database is seeded as a story; a plain-dump
+restore stops at its first failing statement; and the runner propagates a
+connection error to an existing database instead of reporting nothing pending.
+
 Uses throwaway databases created and dropped by the test itself. Live slots
-(save_01 .. save_05) are never touched.
+(save_01 .. save_05) are never touched; NEXUS_template is only read.
 """
 
 from __future__ import annotations
 
+from contextlib import closing
 import os
 from pathlib import Path
 import shutil
 import subprocess
 from typing import Generator
+import uuid
 
 import psycopg2
 from psycopg2 import sql
@@ -26,7 +34,12 @@ import tomlkit
 
 from scripts import migrate
 from scripts import new_story_setup
-from tests.pg_fixtures import connect, subprocess_env
+from tests.pg_fixtures import (
+    connect,
+    disposable_database,
+    disposable_slot_database,
+    subprocess_env,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -210,3 +223,151 @@ def test_fresh_database_is_baseline_stamped(
         subprocess.run(
             ["dropdb", "--if-exists", _TARGET_DB], check=False, env=subprocess_env()
         )
+
+
+_TEMPLATE = "NEXUS_template"
+
+# A pending migration that fails inside its transaction, in the repository's
+# migration header style.
+_FAILING_MIGRATION = """\
+-- Migration 999: Fail Loudly (issue #810 test fixture)
+--
+-- Division by zero aborts the migration transaction, so the runner must roll
+-- back, leave no 999 stamp, and report one unapplied migration.
+
+SELECT 1/0;
+"""
+
+
+def _stamps(dbname: str) -> dict[str, object]:
+    """Map every schema_migrations version in ``dbname`` to its applied_at."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT version, applied_at FROM public.schema_migrations")
+        return dict(cur.fetchall())
+
+
+def _failing_tree(tmp_path: Path) -> Path:
+    """Copy the real migration tree and add a failing 999 migration."""
+    tree = tmp_path / "migrations"
+    shutil.copytree(
+        migrate.MIGRATIONS_DIR,
+        tree,
+        ignore=shutil.ignore_patterns(*migrate.IGNORED_MIGRATION_ENTRIES),
+    )
+    (tree / "999_fail_loudly.sql").write_text(_FAILING_MIGRATION)
+    return tree
+
+
+def test_template_clone_replays_no_migration() -> None:
+    """A NEXUS_template clone keeps the template's stamps and ends fully migrated.
+
+    The template's stamps arrive with their original applied_at (copied, not
+    re-applied); the only other stamps are migrations the template has not
+    seen yet, which initialization applied; and a follow-up run is a no-op.
+    """
+    template_stamps = _stamps(_TEMPLATE)
+    discovered = {version for version, _, _ in migrate.discover_migrations()}
+    with disposable_slot_database("qa640_810_clone") as dbname:
+        clone_stamps = _stamps(dbname)
+        assert migrate.migrate_database(dbname, skip_locked=False) == (0, 0)
+
+    copied = {version: clone_stamps.get(version) for version in template_stamps}
+    assert copied == template_stamps
+    assert set(clone_stamps) == set(template_stamps) | discovered
+
+
+def test_failing_migration_is_unapplied_and_initialization_raises(
+    tmp_path: Path,
+) -> None:
+    """A failing pending migration stays unstamped and aborts initialization."""
+    tree = _failing_tree(tmp_path)
+    with disposable_slot_database("qa640_810_fail") as dbname:
+        assert migrate.migrate_database(
+            dbname, skip_locked=False, migrations_dir=tree
+        ) == (0, 1)
+        assert "999" not in _stamps(dbname)
+
+        with pytest.raises(
+            RuntimeError,
+            match=rf"^Migrations failed on {dbname}: \d+ applied, 1 unapplied\.",
+        ):
+            new_story_setup.initialize_slot_database(
+                dbname, source_db=_TEMPLATE, force=True, migrations_dir=tree
+            )
+
+        assert "999" not in _stamps(dbname)
+        # The raise precedes fresh-story seeding: no IDF corpus identities.
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM memory_idf_corpora")
+            assert cur.fetchone()[0] == 0
+
+
+def test_restore_plain_dump_stops_at_first_error(tmp_path: Path) -> None:
+    """ON_ERROR_STOP turns a failing dump statement into CalledProcessError."""
+    tools = new_story_setup._postgres_tools("psql")
+    invalid = tmp_path / "invalid.sql"
+    invalid.write_text(
+        "CREATE TABLE restore_first (id integer);\n"
+        "INSERT INTO restore_missing VALUES (1);\n"
+        "CREATE TABLE restore_never (id integer);\n"
+    )
+    valid = tmp_path / "valid.sql"
+    valid.write_text(
+        "CREATE TABLE restore_ok (id integer);\n" "INSERT INTO restore_ok VALUES (7);\n"
+    )
+    with disposable_database("qa640_810_restore") as dbname:
+        with pytest.raises(subprocess.CalledProcessError):
+            new_story_setup._restore_plain_dump(dbname, str(invalid), tools)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('restore_never')")
+            assert cur.fetchone()[0] is None
+
+        new_story_setup._restore_plain_dump(dbname, str(valid), tools)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT id FROM restore_ok")
+            assert cur.fetchall() == [(7,)]
+
+
+def test_clone_with_data_restores_template_into_disposable_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The data clone replays a real dump under ON_ERROR_STOP into ``target_db``."""
+    monkeypatch.setattr(new_story_setup, "USE_POOL", False)
+    template_stamps = _stamps(_TEMPLATE)
+    with disposable_database("qa640_810_dataclone") as dbname:
+        new_story_setup.clone_slot_with_data(
+            5, source_db=_TEMPLATE, force=True, target_db=dbname
+        )
+        assert _stamps(dbname) == template_stamps
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT new_story FROM public.global_variables WHERE id")
+            assert cur.fetchone()[0] is True
+
+
+def test_migrate_database_propagates_connection_errors() -> None:
+    """A missing database is skipped; an unreachable existing one raises."""
+    missing = f"qa640_does_not_exist_{uuid.uuid4().hex[:12]}"
+    assert migrate.migrate_database(missing) == (0, 0)
+
+    with disposable_database("qa640_810_noconn") as dbname:
+        admin = connect("postgres")
+        admin.autocommit = True
+        try:
+            with admin.cursor() as cur:
+                cur.execute(
+                    sql.SQL("ALTER DATABASE {} ALLOW_CONNECTIONS false").format(
+                        sql.Identifier(dbname)
+                    )
+                )
+            try:
+                with pytest.raises(psycopg2.Error):
+                    migrate.migrate_database(dbname)
+            finally:
+                with admin.cursor() as cur:
+                    cur.execute(
+                        sql.SQL("ALTER DATABASE {} ALLOW_CONNECTIONS true").format(
+                            sql.Identifier(dbname)
+                        )
+                    )
+        finally:
+            admin.close()

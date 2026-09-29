@@ -45,6 +45,9 @@ disposal does not coordinate transactions in other processes.
 stamps migrations in each database's `schema_migrations` table, and
 `scripts/new_story_setup.py` calls it for fresh slots. Do not apply migration SQL
 with `psql` or ad hoc scripts; an unstamped change is invisible to the runner.
+Slot initialization and data cloning in `scripts/new_story_setup.py` fail loudly
+on any migration or restore error and never leave a slot marked ready; the
+runner itself propagates connection errors instead of reporting nothing pending.
 Discovery fails loudly when an entry in `migrations/` is not an
 `NNN_name.sql` or `NNN_name.py` file (bytecode caches and `.DS_Store` excepted),
 when two files share a version, or when a Python migration's version is missing
