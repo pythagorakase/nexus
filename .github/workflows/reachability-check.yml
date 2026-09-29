@@ -22,18 +22,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install Poetry
+        run: pipx install poetry
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      # Editable, so the doctor's checkout root is this workspace.
+          cache: poetry
+      # poetry.lock pins the versions; the project installs editable, so the
+      # doctor's checkout root is this workspace.
       - name: Install NEXUS
-        run: pip install -e .
+        run: poetry install --only main
       - name: Run the ci-runner readiness checks
         shell: bash
-        run: nexus doctor --target ci-runner --json | tee readiness-report.json
+        run: poetry run nexus doctor --target ci-runner --json | tee readiness-report.json
       - name: Save readiness evidence
         if: always()
         uses: actions/upload-artifact@v4
