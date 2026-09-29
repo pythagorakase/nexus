@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import closing
 
 import psycopg2
+from psycopg2 import sql
 import pytest
 
 from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
@@ -24,8 +25,8 @@ from nexus.runtime.readiness import (
     read_only_connection,
     database_analyzer_state,
     database_migration_state,
-    idf_analyzer_outcome,
     run_readiness,
+    slot_idf_outcome,
 )
 from scripts import migrate, rebuild_memory_idf
 from tests import pg_fixtures
@@ -153,20 +154,21 @@ def test_migration_state_compares_stamps_with_this_checkout() -> None:
 
 
 def test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt() -> None:
-    """A stale corpus key fails naming the database, corpus, keys, and command."""
+    """The registered slot check fails on a stale key, naming the fix, until rebuilt.
+
+    ``slot_idf_outcome`` is the body of ``slots.idf_analyzer_current`` after
+    the probed slots are named, so the clone stands in for slot 9 through the
+    same existence lookup, lock probe, and remediation commands.
+    """
     with pg_fixtures.disposable_slot_database("qa640_1013_readiness") as dbname:
         pg_fixtures.seed_protagonist(dbname)
         pg_fixtures.seed_committed_chunk(dbname, raw_text="Gulls circle the pier.")
-        target = (
-            dbname,
-            f"{REBUILD_COMMAND} --dbname {dbname}",
-            f"python scripts/migrate.py --dbname {dbname}",
-        )
+        names = {9: dbname}
         state = database_analyzer_state(dbname)
         server = state.server_key
         assert state.current
         assert state.corpora == {"narrative": server, "retrograde_summary": server}
-        outcome = idf_analyzer_outcome([target])
+        outcome = slot_idf_outcome(names)
         assert (outcome.passed, outcome.observed) == (True, f"{dbname} at {server}")
 
         with closing(pg_fixtures.connect(dbname)) as conn, conn, conn.cursor() as cur:
@@ -175,23 +177,57 @@ def test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt() -> None:
                 "WHERE corpus_kind = 'narrative'",
                 ("pg_catalog.english/v1/0",),
             )
-        outcome = idf_analyzer_outcome([target])
-        assert outcome.passed is False
-        assert outcome.observed == (
+        stale_observed = (
             f"{dbname}: narrative pg_catalog.english/v1/0 (server {server})"
         )
-        assert outcome.remediation == f"{REBUILD_COMMAND} --dbname {dbname}"
+        outcome = slot_idf_outcome(names)
+        assert outcome.passed is False
+        assert outcome.observed == stale_observed
+        assert outcome.remediation == f"{REBUILD_COMMAND} --slot 9"
+
+        _set_read_only(dbname, True)
+        try:
+            outcome = slot_idf_outcome(names)
+            assert outcome.passed is False
+            assert outcome.observed == stale_observed
+            assert outcome.remediation == (
+                f"{REBUILD_COMMAND} --slot 9 --write-locked-slot"
+            )
+        finally:
+            _set_read_only(dbname, False)
 
         assert rebuild_memory_idf.rebuild_database(dbname).status == "rebuilt"
-        outcome = idf_analyzer_outcome([target])
+        outcome = slot_idf_outcome(names)
         assert (outcome.passed, outcome.observed) == (True, f"{dbname} at {server}")
+
+        absent = f"{dbname}_absent"
+        outcome = slot_idf_outcome({9: dbname, 8: absent})
+        assert (outcome.passed, outcome.observed) == (
+            True,
+            f"{dbname} at {server}; {absent} absent",
+        )
 
         with closing(pg_fixtures.connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("DROP TABLE memory_idf_corpora CASCADE")
-        outcome = idf_analyzer_outcome([target])
+        outcome = slot_idf_outcome(names)
         assert outcome.passed is False
         assert outcome.observed == f"{dbname}: no memory_idf_corpora table"
-        assert outcome.remediation == f"python scripts/migrate.py --dbname {dbname}"
+        assert outcome.remediation == "python scripts/migrate.py --slot 9"
+
+
+def _set_read_only(dbname: str, on: bool) -> None:
+    """Lock or unlock ``dbname`` the way a locked save slot is locked."""
+    setting = (
+        "SET default_transaction_read_only = on"
+        if on
+        else ("RESET default_transaction_read_only")
+    )
+    admin = pg_fixtures.connect("postgres")
+    admin.autocommit = True
+    with closing(admin), admin.cursor() as cur:
+        cur.execute(
+            sql.SQL("ALTER DATABASE {} " + setting).format(sql.Identifier(dbname))
+        )
 
 
 def test_readiness_sessions_refuse_writes() -> None:

@@ -662,15 +662,17 @@ def slot_idf_targets(
     return targets, absent
 
 
-def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
-    """Each probed slot that exists has IDF corpus keys matching the server."""
+def slot_idf_outcome(names: Mapping[int, str]) -> Outcome:
+    """Check each named slot database's IDF corpus keys against the server.
+
+    ``names`` maps each slot number to its database. A database the server
+    lacks is reported as absent; a locked one's remediation carries
+    ``--write-locked-slot``.
+    """
     import psycopg2
 
     from nexus.api.save_slots import is_slot_locked
-    from nexus.api.slot_utils import slot_dbname
 
-    slots = ctx.require_runtime().readiness.slots
-    names = {slot: slot_dbname(slot) for slot in slots}
     try:
         with closing(read_only_connection(MAINTENANCE_DATABASE)) as conn:
             with conn.cursor() as cur:
@@ -682,12 +684,20 @@ def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
         locked = {
             slot
             for slot, dbname in names.items()
-            if dbname in existing and is_slot_locked(slot)
+            if dbname in existing and is_slot_locked(slot, dbname)
         }
     except psycopg2.Error as exc:
         return _failed(one_line(exc), _POSTGRES_REMEDIATION)
     targets, absent = slot_idf_targets(names, existing, locked)
     return idf_analyzer_outcome(targets, absent=absent)
+
+
+def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
+    """Each probed slot that exists has IDF corpus keys matching the server."""
+    from nexus.api.slot_utils import slot_dbname
+
+    slots = ctx.require_runtime().readiness.slots
+    return slot_idf_outcome({slot: slot_dbname(slot) for slot in slots})
 
 
 # ---------------------------------------------------------------------------
