@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
+from tests.tiny_models import write_tiny_sentence_transformer
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 _PROBE = r"""
@@ -28,7 +30,7 @@ import json
 import sys
 from pathlib import Path
 
-script, call, missing = sys.argv[1], sys.argv[2], sys.argv[3]
+script, call, missing, installed = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 spec = importlib.util.spec_from_file_location("probe_script", Path(script))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -47,6 +49,22 @@ try:
             for name in module.SCRIPT_EMBEDDERS
         }
         module.load_embedding_models(registry)
+    elif call == "load_embedding_model":
+        registry = {
+            name: entry(name, f"example-org/{name}")
+            for name in module.SCRIPT_EMBEDDERS
+        }
+        module.load_embedding_model(registry, "bge-large")
+    elif call == "load_only_the_queried_model":
+        # Only the queried entry is installed; the other registered embedders
+        # point at missing folders and must not be loaded.
+        registry = {
+            name: entry(name, f"example-org/{name}")
+            for name in module.SCRIPT_EMBEDDERS
+        }
+        registry["e5-large"]["local_path"] = installed
+        model = module.load_embedding_model(registry, "e5-large")
+        assert model.encode("needle hay").shape == (8,)
     elif call == "load_model":
         registry = {"probe-embedder": entry("probe-embedder", "example-org/probe")}
         module.ModelLoader.load_model("example-org/probe", registry)
@@ -65,7 +83,9 @@ print(json.dumps(outcome))
 """
 
 
-def _probe(script: str, call: str, tmp_path: Path) -> Dict[str, Any]:
+def _probe(
+    script: str, call: str, tmp_path: Path, installed: Path | None = None
+) -> Dict[str, Any]:
     """Call one script loader offline, from a scratch cwd, and report the error."""
 
     env = {
@@ -76,7 +96,15 @@ def _probe(script: str, call: str, tmp_path: Path) -> Dict[str, Any]:
     }
     missing = tmp_path / "not-installed"
     result = subprocess.run(
-        [sys.executable, "-c", _PROBE, str(REPO_ROOT / script), call, str(missing)],
+        [
+            sys.executable,
+            "-c",
+            _PROBE,
+            str(REPO_ROOT / script),
+            call,
+            str(missing),
+            str(installed or missing),
+        ],
         capture_output=True,
         text=True,
         timeout=300,
@@ -118,10 +146,26 @@ def test_query_narratives_vector_loader_raises_for_a_missing_folder(
     """query_narratives_vector.py no longer downloads a missing embedder."""
 
     outcome = _probe(
-        "scripts/query_narratives_vector.py", "load_embedding_models", tmp_path
+        "scripts/query_narratives_vector.py", "load_embedding_model", tmp_path
     )
 
     _assert_missing_artifact(outcome, "bge-large", "example-org/bge-large")
+
+
+def test_query_narratives_vector_loads_only_the_queried_model(tmp_path: Path) -> None:
+    """A query loads its one --model; other missing embedders do not block it."""
+
+    installed = write_tiny_sentence_transformer(tmp_path / "installed")
+
+    outcome = _probe(
+        "scripts/query_narratives_vector.py",
+        "load_only_the_queried_model",
+        tmp_path,
+        installed,
+    )
+
+    assert outcome["type"] is None, outcome
+    assert outcome["cached"] == 1
 
 
 def test_regenerate_embeddings_loader_raises_for_a_missing_folder(

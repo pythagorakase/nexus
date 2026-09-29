@@ -76,38 +76,37 @@ logger = logging.getLogger("nexus.query")
 from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
 
 
-# The registered [memnon.models] entries this import-era script embeds with.
-# Each loads only from its local_path (issue #812): no Hugging Face download,
-# no hardcoded default path, and a missing folder raises with the restore
-# command instead of being skipped.
+# The registered [memnon.models] entries this import-era script can query
+# with. A query loads only the one ``--model`` it names, from its local_path
+# (issue #812): no Hugging Face download, no hardcoded default path, and a
+# missing folder raises with the restore command instead of being skipped.
 SCRIPT_EMBEDDERS = ("bge-large", "e5-large", "bge-small-custom")
 
 
-def load_embedding_models(
-    models_config: Mapping[str, Mapping[str, Any]],
-) -> Dict[str, Any]:
-    """Load every script embedder from its ``[memnon.models]`` local_path.
+def load_embedding_model(
+    models_config: Mapping[str, Mapping[str, Any]], model_key: str
+) -> Any:
+    """Load the one queried embedder from its ``[memnon.models]`` local_path.
 
     Args:
         models_config: The ``[memnon.models]`` registry, keyed by entry name
+        model_key: The entry the query embeds with
 
     Returns:
-        The loaded SentenceTransformers, keyed by entry name
+        The loaded SentenceTransformer
 
     Raises:
-        RuntimeError: When an entry is not registered, or its local artifact
+        RuntimeError: When the entry is not registered, or its local artifact
             is missing or fails to load.
     """
-    models: Dict[str, Any] = {}
-    for model_key in SCRIPT_EMBEDDERS:
-        if model_key not in models_config:
-            raise RuntimeError(
-                f"Embedding model '{model_key}' is not registered in "
-                "[memnon.models]; register it with its local_path."
-            )
-        models[model_key] = load_local_model(model_key, models_config[model_key])
-    logger.info(f"Loaded {len(models)} embedding models: {', '.join(models)}")
-    return models
+    if model_key not in models_config:
+        raise RuntimeError(
+            f"Embedding model '{model_key}' is not registered in "
+            "[memnon.models]; register it with its local_path."
+        )
+    model = load_local_model(model_key, models_config[model_key])
+    logger.info(f"Loaded embedding model: {model_key}")
+    return model
 
 
 # Try to import SQLAlchemy
@@ -144,12 +143,15 @@ class NarrativeSearcher:
     Performs semantic search over narrative chunks using vector embeddings.
     """
 
-    def __init__(self, db_url: str = None):
+    def __init__(self, db_url: str = None, model_key: Optional[str] = None):
         """
         Initialize the searcher with database connection.
 
         Args:
             db_url: PostgreSQL database URL
+            model_key: The ``[memnon.models]`` entry semantic search embeds
+                with; the only embedder loaded. None loads no embedder (text
+                search only).
         """
         # Set default database URL if not provided
         default_db_url = SETTINGS.get("database", {}).get("url", None)
@@ -159,8 +161,12 @@ class NarrativeSearcher:
         self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
-        # Initialize embedding models
-        self.embedding_models = self._initialize_embedding_models()
+        # Load only the embedder this search uses.
+        self.embedding_models: Dict[str, Any] = {}
+        if model_key is not None:
+            self.embedding_models[model_key] = load_embedding_model(
+                SETTINGS.get("models", {}), model_key
+            )
 
         # Check pgvector extension
         self._check_pgvector()
@@ -186,10 +192,6 @@ class NarrativeSearcher:
         except Exception as e:
             logger.error(f"Error checking pgvector extension: {e}")
             sys.exit(1)
-
-    def _initialize_embedding_models(self) -> Dict[str, Any]:
-        """Load the script embedders from their local artifacts or raise."""
-        return load_embedding_models(SETTINGS.get("models", {}))
 
     def generate_embedding(self, query: str, model_key: str) -> List[float]:
         """
@@ -444,7 +446,9 @@ def main():
     args = parser.parse_args()
 
     # Initialize searcher
-    searcher = NarrativeSearcher(db_url=args.db_url)
+    searcher = NarrativeSearcher(
+        db_url=args.db_url, model_key=None if args.text_only else args.model
+    )
 
     # Perform search
     if args.text_only:
