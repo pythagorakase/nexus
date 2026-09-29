@@ -167,9 +167,8 @@ def test_manifest_reference_privacy_retention_and_readonly(monkeypatch):
         assert late[1]["provider_outcome"] == "accepted"
 
 
-@pytest.mark.parametrize("acceptance", ["sync", "async"])
 def test_manifest_real_test_turn_and_child_job_correlation(
-    monkeypatch, tmp_path, request, acceptance
+    monkeypatch, tmp_path, request
 ):
     """Both real TEST seats and an accepted compaction job share the session UUID."""
     # Configure before launching the HTTP TEST provider, so it loads TEST-only defaults.
@@ -227,48 +226,22 @@ def test_manifest_real_test_turn_and_child_job_correlation(
             with closing(connect(dbname)) as conn, conn.cursor() as cur:
                 cur.execute("SELECT session_id::text FROM incubator")
                 session = cur.fetchone()[0]
-            if acceptance == "sync":
-                response = requests.post(
-                    f"{os.environ['NEXUS_API_URL']}/api/narrative/approve/{session}?slot=4&commit=true",
-                    timeout=120,
-                )
-                assert response.status_code == 200, response.text
-            else:
-                import asyncio
-                import asyncpg
-
-                from nexus.api.commit_handler import commit_incubator_to_database
-                from tests.pg_fixtures import asyncpg_kwargs
-
-                async def accept_async():
-                    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
-                    try:
-                        for name in ("json", "jsonb"):
-                            await conn.set_type_codec(
-                                name,
-                                schema="pg_catalog",
-                                encoder=json.dumps,
-                                decoder=json.loads,
-                            )
-                        return await commit_incubator_to_database(conn, session, slot=4)
-                    finally:
-                        await conn.close()
-
-                async_chunk = asyncio.run(accept_async())
+            response = requests.post(
+                f"{os.environ['NEXUS_API_URL']}/api/narrative/approve/{session}?slot=4&commit=true",
+                timeout=120,
+            )
+            assert response.status_code == 200, response.text
             with closing(connect(dbname)) as conn:
                 result = inspect_turn(conn, session=session)
-            if acceptance == "sync":
-                assert result["session"]["terminal_outcome"] == "accepted", result[
-                    "session"
-                ]
-                chunk = result["session"]["accepted_chunk_id"]
-            else:
-                chunk = async_chunk
+            assert result["session"]["terminal_outcome"] == "accepted", result[
+                "session"
+            ]
+            chunk = result["session"]["accepted_chunk_id"]
             manifests = result["manifests"]
             assert {row["seat"] for row in manifests} == {"skald_writer", "gaia"}
             assert all(
                 row["model_id"] == "TEST"
-                and (acceptance == "async" or row["outcome"] == "accepted")
+                and row["outcome"] == "accepted"
                 and row["response_sha256"]
                 and row["provider_outcome"] == "accepted"
                 for row in manifests
@@ -289,11 +262,9 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                 "staging",
                 "complete",
             }
-            if acceptance == "sync":
-                assert any(
-                    row["queue"] == "correspondence_compaction"
-                    for row in result["jobs"]
-                ), result["jobs"]
+            assert any(
+                row["queue"] == "correspondence_compaction" for row in result["jobs"]
+            ), result["jobs"]
             assert all(
                 row["generation_session_id"] == session and isinstance(row["id"], int)
                 for row in result["jobs"]
@@ -357,20 +328,19 @@ def test_manifest_real_test_turn_and_child_job_correlation(
             assert summary.startswith(f"Turn {session} (")
             assert "skald_writer #1 TEST" in summary
             assert "Session\tPhase" not in summary
-            if acceptance == "sync":
-                chunk_output = run_cli(
-                    monkeypatch,
-                    "inspect-turn",
-                    "--slot",
-                    "4",
-                    "--chunk",
-                    str(chunk),
-                    "--json",
-                )
-                assert (
-                    json.loads(chunk_output)["turn_inspection"]["session"]
-                    == result["session"]
-                )
+            chunk_output = run_cli(
+                monkeypatch,
+                "inspect-turn",
+                "--slot",
+                "4",
+                "--chunk",
+                str(chunk),
+                "--json",
+            )
+            assert (
+                json.loads(chunk_output)["turn_inspection"]["session"]
+                == result["session"]
+            )
             run_cli(monkeypatch, "jobs", "--slot", "4")
             (tmp_path / "turn-inspection.json").write_text(json.dumps(result, indent=2))
             print(
@@ -379,7 +349,6 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                     {
                         "session": session,
                         "chunk": chunk,
-                        "acceptance": acceptance,
                         "exposure_ids": exposure_ids,
                         "seats": [row["seat"] for row in manifests],
                         "jobs": result["jobs"],

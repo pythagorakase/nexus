@@ -4,22 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import closing
-import json
 from typing import Any, Iterator
 
-import asyncpg  # type: ignore[import-untyped]
 import pytest
 
 import nexus.config as config_module
-from nexus.api import commit_handler, commit_handler_sync, narrative_lease
+from nexus.api import commit_handler_sync, narrative_lease
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import (
-    asyncpg_kwargs,
-    connect,
-    disposable_slot_database,
-    seed_protagonist,
-)
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -158,84 +151,6 @@ def test_sync_commit_loads_application_config_once(
         )
     finally:
         conn.close()
-
-    assert committed_chunk_id > parent_chunk_id
-    assert len(loaded_settings) == 1
-    orrery = loaded_settings[0]["orrery"]
-    assert checkpoint_settings == [orrery]
-    assert tick_kwargs == [
-        {
-            "tick_chunk_id": committed_chunk_id,
-            "slot": None,
-            "world_layer": "primary",
-            "adjudications": [],
-            "storyteller_state_updates": {},
-            "prompt_settings": orrery.get("prompt"),
-            "ecology_settings": orrery.get("ecology"),
-            "project_settings": orrery.get("projects"),
-            "mood_settings": orrery.get("mood"),
-            "epistemics_settings": orrery.get("epistemics"),
-            "contagion_settings": orrery.get("contagion"),
-            "distortion_settings": orrery.get("distortion"),
-            "drift_settings": orrery.get("drift"),
-            "reveal_settings": orrery.get("reveal"),
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_async_commit_loads_application_config_once(
-    qa654_db: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The genuine async commit reuses one Orrery settings mapping."""
-
-    session_id = "00000000-0000-0000-0000-000000006540"
-    parent_chunk_id = await _seed_commit(qa654_db, session_id)
-    _disable_presence_audit(monkeypatch)
-
-    original_loader = config_module.load_settings_as_dict
-    original_tick = commit_handler.commit_orrery_tick_async
-    original_checkpoint = commit_handler._orrery_checkpoint_interval
-    loaded_settings: list[dict[str, Any]] = []
-    tick_kwargs: list[dict[str, Any]] = []
-    checkpoint_settings: list[Any] = []
-
-    def counted_loader() -> dict[str, Any]:
-        settings = original_loader()
-        loaded_settings.append(settings)
-        return settings
-
-    async def recording_tick(conn: Any, proposal: Any, **kwargs: Any) -> Any:
-        tick_kwargs.append(kwargs)
-        return await original_tick(conn, proposal, **kwargs)
-
-    def recording_checkpoint(settings: Any) -> int:
-        checkpoint_settings.append(settings)
-        return original_checkpoint(settings)
-
-    monkeypatch.setattr(config_module, "load_settings_as_dict", counted_loader)
-    monkeypatch.setattr(commit_handler, "commit_orrery_tick_async", recording_tick)
-    monkeypatch.setattr(
-        commit_handler,
-        "_orrery_checkpoint_interval",
-        recording_checkpoint,
-    )
-
-    conn = await asyncpg.connect(**asyncpg_kwargs(qa654_db))
-    for type_name in ("json", "jsonb"):
-        await conn.set_type_codec(
-            type_name,
-            schema="pg_catalog",
-            encoder=json.dumps,
-            decoder=json.loads,
-        )
-    try:
-        committed_chunk_id = await commit_handler.commit_incubator_to_database(
-            conn, session_id
-        )
-    finally:
-        await conn.close()
 
     assert committed_chunk_id > parent_chunk_id
     assert len(loaded_settings) == 1

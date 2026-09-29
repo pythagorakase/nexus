@@ -20,7 +20,6 @@ from nexus.agents.orrery.drift import (
 )
 from nexus.agents.orrery.relationship_provenance import relationship_producer_sqlalchemy
 from nexus.agents.orrery.resolver import _load_recent_events
-from nexus.api.commit_handler import apply_state_updates
 from nexus.api.commit_handler_sync import apply_state_updates_sync
 from tests.pg_fixtures import asyncpg_kwargs, connect, sqlalchemy_url
 from tests.test_orrery.test_drift_live import (
@@ -121,11 +120,9 @@ def test_analyst_sqlalchemy_helper_stamps_insert_and_replacement(
         engine.dispose()
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("world_layer", ["primary", "flashback", "atemporal"])
-@pytest.mark.parametrize("writer", ["sync", "async"])
-async def test_gaia_milestone_retains_layer_and_resolver_filter(
-    drift_database: str, live_conn: Any, world_layer: str, writer: str
+def test_gaia_milestone_retains_layer_and_resolver_filter(
+    drift_database: str, live_conn: Any, world_layer: str
 ) -> None:
     """Accepted non-primary crossings and claims stay outside current events."""
     with live_conn.cursor() as cur:
@@ -143,16 +140,8 @@ async def test_gaia_milestone_retains_layer_and_resolver_filter(
             }
         ]
     )
-    if writer == "sync":
-        apply_state_updates_sync(live_conn, updates, source_chunk_id=tick)
-        live_conn.commit()
-    else:
-        conn = await asyncpg.connect(**asyncpg_kwargs(drift_database))
-        try:
-            async with conn.transaction():
-                await apply_state_updates(conn, updates, source_chunk_id=tick)
-        finally:
-            await conn.close()
+    apply_state_updates_sync(live_conn, updates, source_chunk_id=tick)
+    live_conn.commit()
     engine = create_engine(sqlalchemy_url(drift_database))
     try:
         with Session(engine) as session:

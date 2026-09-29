@@ -61,9 +61,7 @@ def roster_database() -> Iterator[tuple[str, dict[str, int], int]]:
             VALID_DBNAMES.discard(dbname)
 
 
-def commit_wire(
-    dbname: str, parent_id: int, wire: SkaldTurnWire, *, commit_async: bool = False
-) -> int:
+def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:
     """Hydrate and stage a wire, then drive the genuine commit transaction."""
     from nexus.agents.logon.skald_wire import PresenceBaseline
 
@@ -108,19 +106,6 @@ def commit_wire(
                 entity_updates=data["entity_updates"],
                 new_entities=data["new_entities"],
             )
-    if commit_async:
-        import asyncio
-        from nexus.api.commit_handler import commit_incubator_to_database
-        from tests.test_commit_choice_presence_pg import _connect_async
-
-        async def accept() -> int:
-            conn = await _connect_async(dbname)
-            try:
-                return await commit_incubator_to_database(conn, session_id, slot=5)
-            finally:
-                await conn.close()
-
-        return asyncio.run(accept())
     conn = connect(dbname)
     try:
         # Slot is job provenance only; every write uses this disposable connection.
@@ -722,10 +707,7 @@ def test_experience_metadata_retains_all_historical_settings(
 
 
 @pytest.mark.parametrize("declared", ["Remote Friend", "Fox", "Juniper Moss"])
-@pytest.mark.parametrize("commit_async", [False, True])
-def test_identity_declaration_binds_or_mints_once(
-    roster_database, declared, commit_async
-):
+def test_identity_declaration_binds_or_mints_once(roster_database, declared):
     """Real hydration, staging, and acceptance reuse canonical and alias IDs."""
     from nexus.agents.logon.apex_schema import NewEntityDeclaration
 
@@ -753,7 +735,6 @@ def test_identity_declaration_binds_or_mints_once(
                     enter=[CharacterRef(kind="character", name=declared)]
                 ),
             ),
-            commit_async=commit_async,
         )
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM characters")

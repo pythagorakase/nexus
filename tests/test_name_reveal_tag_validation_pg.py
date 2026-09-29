@@ -21,9 +21,8 @@ pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.mark.parametrize("include_id", [False, True])
-@pytest.mark.parametrize("commit_async", [False, True])
 def test_reveal_registry_validation_and_acceptance_keep_active_tag_unchanged(
-    name_reveal_tag_database, include_id, commit_async
+    name_reveal_tag_database, include_id
 ):
     dbname, ids, _ = name_reveal_tag_database
     character_id, entity_id, _, parent = prepare_witness(dbname, ids)
@@ -69,7 +68,7 @@ def test_reveal_registry_validation_and_acceptance_keep_active_tag_unchanged(
     update = accepted.updates.characters[0]
     assert (update.id, update.name, update.tags_add) == (character_id, NEW, None)
 
-    commit_wire(dbname, parent, accepted, commit_async=commit_async)
+    commit_wire(dbname, parent, accepted)
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT name, current_activity FROM characters WHERE id = %s",
