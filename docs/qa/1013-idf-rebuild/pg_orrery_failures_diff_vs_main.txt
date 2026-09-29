@@ -1,0 +1,170 @@
+# tests/test_orrery failures: branch run against baseline temp/gates/pg-orrery-main-e124bd54.log
+# Branch run: NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery/ (short summary in pg_orrery_failures_branch.txt)
+# ids(log) = grep -E '^(FAILED|ERROR) ' log | awk '{print $2}' | sort -u
+#
+# grep -c 'analyzer mismatch' <branch log>: 0
+# grep -c 'analyzer mismatch' <baseline log>: 140
+# Failing ids: baseline 201, branch 81
+
+## comm -13 <(ids baseline) <(ids branch): branch failing ids absent from the baseline
+  (none: the comparison printed no ids)
+
+## Same id, different outcome kind (comm -13 over 'KIND id' pairs)
+  FAILED tests/test_orrery/test_knowledge_surfacing_live.py::test_turn_payload_conditionally_attaches_world_knowledge[False]
+  FAILED tests/test_orrery/test_knowledge_surfacing_live.py::test_turn_payload_conditionally_attaches_world_knowledge[True]
+  Both were ERROR at setup in the baseline (IDF analyzer mismatch in _insert_chunk).
+
+## Baseline IDF-class ids: failing ids whose baseline failure section contains 'analyzer mismatch' (130)
+  tests/test_orrery/test_adjudication_history.py::test_commit_persists_enriched_history_then_rolls_back
+  tests/test_orrery/test_build_venture_replay.py::test_build_venture_replays_applied_snapshots_through_completion
+  tests/test_orrery/test_card_identity.py::test_card_exposure_rank_joint_and_backstage_parity[False]
+  tests/test_orrery/test_card_identity.py::test_card_exposure_rank_joint_and_backstage_parity[True]
+  tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[False-False]
+  tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[False-True]
+  tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[True-False]
+  tests/test_orrery/test_card_identity.py::test_ren_rank_commit_replay[True-True]
+  tests/test_orrery/test_claim_awareness_replay_live.py::test_verify_reports_projection_only_awareness_drift
+  tests/test_orrery/test_claim_awareness_replay_live.py::test_verify_skips_checkpoint_that_predates_awareness_section
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_detected_signal_receipt_is_separate_from_private_deed[informant_contact-encoded_message-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_detected_signal_receipt_is_separate_from_private_deed[retaliation_attempted-threat_issued-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_detected_signal_receipt_is_separate_from_private_deed[surveillance_performed-compliance_alert-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_live_claim_replay_identity_and_sibling_account
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[hunt_called_off-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[hunt_declared-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[informant_contact-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[intel_acquired-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[intel_acted_on-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[protective_intervention-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[pursue_romance_completed-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[recruit_ally_completed-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[retaliation_attempted-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[retaliation_executed-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[rival_consulted-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[seek_redemption_completed-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[surveillance_performed-False]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_primary_resolver_birth_roles_and_provenance[warning_delivered-True]
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_relationship_drift_birth_is_actor_private_and_replays
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_resolution_free_commit_does_not_backfill_historical_event
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_retrograde_private_event_mints_actor_awareness_only
+  tests/test_orrery/test_claim_birth_coverage_pg.py::test_retrograde_private_reprocess_backfills_no_target_awareness
+  tests/test_orrery/test_court_patron_replay.py::test_court_patron_completion_replays_without_drift
+  tests/test_orrery/test_drift_live.py::test_colocated_characters_without_events_produce_no_versions
+  tests/test_orrery/test_drift_live.py::test_commit_drift_updates_versions_projects_literal_and_mints_claim
+  tests/test_orrery/test_drift_live.py::test_disabled_config_does_not_drift
+  tests/test_orrery/test_drift_live.py::test_gaia_update_attributes_version_and_emits_milestone
+  tests/test_orrery/test_drift_live.py::test_long_scale_valence_uses_same_rung_as_postgres
+  tests/test_orrery/test_drift_live.py::test_retrograde_world_layer_does_not_drift
+  tests/test_orrery/test_drift_live.py::test_unattributed_or_invalid_valence_update_raises[None]
+  tests/test_orrery/test_drift_live.py::test_unattributed_or_invalid_valence_update_raises[unattributed_pre_115]
+  tests/test_orrery/test_drift_live.py::test_unattributed_or_invalid_valence_update_raises[unknown]
+  tests/test_orrery/test_drift_live.py::test_zero_edge_tick_still_records_drain_marker
+  tests/test_orrery/test_ecology_live.py::test_outbound_pair_tag_and_detection_gate_live
+  tests/test_orrery/test_epistemics.py::test_async_live_applier_has_epistemics_parity
+  tests/test_orrery/test_epistemics.py::test_kill_switch_disables_real_retrograde_and_live_producers
+  tests/test_orrery/test_epistemics.py::test_live_applier_mints_and_ledgers_epistemics_ids
+  tests/test_orrery/test_epistemics.py::test_pydantic_epistemics_settings_coerce_and_drive_live_producer
+  tests/test_orrery/test_knowledge_surfacing_live.py::test_digest_cap_drops_oldest_and_reports_truncation
+  tests/test_orrery/test_knowledge_surfacing_live.py::test_digest_surfaces_only_possessed_safe_accounts
+  tests/test_orrery/test_knowledge_surfacing_live.py::test_turn_payload_conditionally_attaches_world_knowledge[False]
+  tests/test_orrery/test_knowledge_surfacing_live.py::test_turn_payload_conditionally_attaches_world_knowledge[True]
+  tests/test_orrery/test_narration_job_fencing_pg.py::test_completion_clock_counts_time_blocked_on_job_lock
+  tests/test_orrery/test_narration_job_fencing_pg.py::test_completion_locks_world_layer_before_comparing_anchor
+  tests/test_orrery/test_narration_job_fencing_pg.py::test_descriptor_retirement_preserves_canon_legacy_jobs_and_bleed
+  tests/test_orrery/test_narration_job_fencing_pg.py::test_duplicate_enqueue_collapses_to_one_effective_job
+  tests/test_orrery/test_narration_job_fencing_pg.py::test_expired_lease_reclaimed_and_original_completion_fenced
+  tests/test_orrery/test_narration_job_fencing_pg.py::test_normal_narration_path_succeeds_once_end_to_end
+  tests/test_orrery/test_narration_job_fencing_pg.py::test_stale_anchor_completion_is_terminally_rejected
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_atemporal_need_tick_and_replay_use_primary_world_clock
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_legacy_atemporal_travel_start_keeps_world_times_unreproducible
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_markerless_null_clock_mismatch_is_a_field_level_remainder
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_migration_provenance_counts_and_rerun_are_idempotent
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_migration_reconciles_future_poison_in_a_past_set_story
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_migration_reconciles_poisoned_rows_and_guards_fulfillment_domain
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_reconciled_wall_accrued_debt_is_an_absolute_remainder
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_reconciliation_audit_survives_need_row_delete_and_reinsert
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_replay_does_not_restamp_post_migration_fulfillment
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_replay_mirrors_reconciliation_across_migration_100_boundary
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_replay_reconstructs_post_migration_trigger_anchor
+  tests/test_orrery/test_need_clock_anchor_pg.py::test_replay_uses_marker_result_for_overlapping_post_migration_chunk
+  tests/test_orrery/test_pursue_romance_replay.py::test_pursue_romance_lifecycle_replays_between_checkpoints_without_drift
+  tests/test_orrery/test_recruit_ally_replay.py::test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift
+  tests/test_orrery/test_relationship_provenance_pg.py::test_canceling_producers_retain_versions_and_crossings[async]
+  tests/test_orrery/test_relationship_provenance_pg.py::test_canceling_producers_retain_versions_and_crossings[sync]
+  tests/test_orrery/test_relationship_provenance_pg.py::test_gaia_milestone_retains_layer_and_resolver_filter[async-atemporal]
+  tests/test_orrery/test_relationship_provenance_pg.py::test_gaia_milestone_retains_layer_and_resolver_filter[async-flashback]
+  tests/test_orrery/test_relationship_provenance_pg.py::test_gaia_milestone_retains_layer_and_resolver_filter[async-primary]
+  tests/test_orrery/test_relationship_provenance_pg.py::test_gaia_milestone_retains_layer_and_resolver_filter[sync-atemporal]
+  tests/test_orrery/test_relationship_provenance_pg.py::test_gaia_milestone_retains_layer_and_resolver_filter[sync-flashback]
+  tests/test_orrery/test_relationship_provenance_pg.py::test_gaia_milestone_retains_layer_and_resolver_filter[sync-primary]
+  tests/test_orrery/test_retrograde_embedding_pg.py::test_batch_embedding_writes_every_summary_model_pair
+  tests/test_orrery/test_retrograde_embedding_pg.py::test_cli_repairs_stamped_summary_when_vector_table_is_missing
+  tests/test_orrery/test_retrograde_embedding_pg.py::test_repaired_summary_participates_in_dedicated_vector_join
+  tests/test_orrery/test_retrograde_embedding_pg.py::test_stamped_without_vector_audit_follows_damage_and_repair
+  tests/test_orrery/test_retrograde_projects_live.py::test_between_capture_maturation_job_still_replays_under_gate
+  tests/test_orrery/test_retrograde_projects_live.py::test_cap_dropped_projects_do_not_claim_actor_keys
+  tests/test_orrery/test_retrograde_projects_live.py::test_checkpoints_without_control_key_keep_legacy_window
+  tests/test_orrery/test_retrograde_projects_live.py::test_delayed_maturation_write_is_gated_out_of_checkpoint_replay
+  tests/test_orrery/test_retrograde_projects_live.py::test_dropped_project_targets_do_not_create_entity_stubs
+  tests/test_orrery/test_retrograde_projects_live.py::test_maturation_disabled_config_drops_intent_loudly
+  tests/test_orrery/test_retrograde_projects_live.py::test_maturation_project_replays_exactly_and_hydrates_continuation
+  tests/test_orrery/test_retrograde_projects_live.py::test_maturation_seeds_only_target_actor_and_logs_advisory_drops
+  tests/test_orrery/test_retrograde_projects_live.py::test_maturation_shared_writer_validation_raises
+  tests/test_orrery/test_retrograde_projects_live.py::test_maturation_start_at_base_chunk_replays_without_drift
+  tests/test_orrery/test_retrograde_projects_live.py::test_maturation_start_at_target_chunk_is_absent_without_drift
+  tests/test_orrery/test_retrograde_projects_live.py::test_maturation_started_event_requires_applied_projection_in_replay
+  tests/test_orrery/test_retrograde_projects_live.py::test_summary_backfill_excludes_wizard_and_maturation_project_starts
+  tests/test_orrery/test_retrograde_projects_live.py::test_wizard_genesis_checkpoint_carries_seeded_project_through_replay
+  tests/test_orrery/test_retrograde_projects_live.py::test_writer_inserts_all_types_and_started_events
+  tests/test_orrery/test_retrograde_retrieval_pg.py::test_summary_planning_is_idempotent_on_disposable_database
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_accepts_complete_legacy_embedding_catalog
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_moves_ids_embeddings_manifests_and_rolls_back
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_reanchors_multi_hop_maturation_ancestry
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_reanchors_nested_maturation_job
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_refuses_lifecycle_repair_on_populated_slot
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_rejects_json_null_manifest_without_laundering
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_rejects_nested_job_manifest_request_mismatch
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_rejects_null_legacy_embedding_timestamp
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_rejects_stamped_summary_without_vector_coverage
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_requires_full_copy_schema_for_legacy_rows[chunk_metadata-scene]
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_requires_full_copy_schema_for_legacy_rows[narrative_chunks-choice_text]
+  tests/test_orrery/test_retrograde_summary_migration_pg.py::test_migration_078_rolls_back_after_late_postcondition_failure
+  tests/test_orrery/test_reveal_live.py::test_authored_and_revealed_secrets_replay_between_checkpoints
+  tests/test_orrery/test_reveal_live.py::test_authoring_grants_unpossessed_holder_and_reveal_completes
+  tests/test_orrery/test_reveal_live.py::test_authoring_rejects_non_private_and_unregistered_gate
+  tests/test_orrery/test_reveal_live.py::test_commit_reveals_promotes_grants_once_and_redrain_is_noop
+  tests/test_orrery/test_reveal_live.py::test_same_tick_reveal_waits_until_next_tick_to_propagate
+  tests/test_orrery/test_reveal_live.py::test_unregistered_gate_in_latent_row_raises_loudly
+  tests/test_orrery/test_reveal_live.py::test_verify_skips_checkpoint_that_predates_backstory_section
+  tests/test_orrery/test_reveal_live.py::test_world_layer_and_disabled_config_leave_secret_latent[primary-settings1]
+  tests/test_orrery/test_reveal_live.py::test_world_layer_and_disabled_config_leave_secret_latent[retrograde-settings0]
+  tests/test_orrery/test_seek_redemption_replay.py::test_seek_redemption_completion_replays_without_drift
+  tests/test_orrery/test_signal_events.py::test_async_commit_emits_signal_rows_live
+  tests/test_orrery/test_signal_events.py::test_committed_signal_feeds_consumer_gates_live
+  tests/test_orrery/test_stage2a_epistemics_live.py::test_common_claim_can_be_revealed_without_teller_awareness_row
+  tests/test_orrery/test_stage2a_epistemics_live.py::test_faction_participant_mints_awareness_at_source_chunk_world_time
+  tests/test_orrery/test_stage2a_epistemics_live.py::test_two_hop_revelation_threads_root_and_rejects_unpossessed_teller
+  tests/test_orrery/test_tag_provenance.py::test_chunk_keyed_bestowal_without_metadata_leaves_world_time_null
+  tests/test_orrery/test_tag_provenance.py::test_resolver_commit_stamps_bestowal_provenance
+
+## Baseline IDF-class ids that still fail on the branch (10), with the branch's first E line
+## None fails on the IDF key; reveal_live reads slot 5 (empty story, #885); knowledge_surfacing fails on RenderLimits.
+  tests/test_orrery/test_knowledge_surfacing_live.py::test_turn_payload_conditionally_attaches_world_knowledge[False]
+      pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+  tests/test_orrery/test_knowledge_surfacing_live.py::test_turn_payload_conditionally_attaches_world_knowledge[True]
+      pydantic_core._pydantic_core.ValidationError: 4 validation errors for RenderLimits
+  tests/test_orrery/test_reveal_live.py::test_authored_and_revealed_secrets_replay_between_checkpoints
+      TypeError: 'NoneType' object is not subscriptable
+  tests/test_orrery/test_reveal_live.py::test_authoring_grants_unpossessed_holder_and_reveal_completes
+      TypeError: 'NoneType' object is not subscriptable
+  tests/test_orrery/test_reveal_live.py::test_authoring_rejects_non_private_and_unregistered_gate
+      TypeError: 'NoneType' object is not subscriptable
+  tests/test_orrery/test_reveal_live.py::test_commit_reveals_promotes_grants_once_and_redrain_is_noop
+      TypeError: 'NoneType' object is not subscriptable
+  tests/test_orrery/test_reveal_live.py::test_same_tick_reveal_waits_until_next_tick_to_propagate
+      TypeError: 'NoneType' object is not subscriptable
+  tests/test_orrery/test_reveal_live.py::test_unregistered_gate_in_latent_row_raises_loudly
+      TypeError: 'NoneType' object is not subscriptable
+  tests/test_orrery/test_reveal_live.py::test_world_layer_and_disabled_config_leave_secret_latent[primary-settings1]
+      TypeError: 'NoneType' object is not subscriptable
+  tests/test_orrery/test_reveal_live.py::test_world_layer_and_disabled_config_leave_secret_latent[retrograde-settings0]
+      TypeError: 'NoneType' object is not subscriptable

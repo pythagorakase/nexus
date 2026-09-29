@@ -9,9 +9,9 @@ Server: PostgreSQL 17.11 (Postgres.app), `server_version_num` 170011, on
 
 `PYTHONPATH=$PWD python scripts/rebuild_memory_idf.py --all --dry-run --json`
 (exit 0). The coordinator had already rebuilt `NEXUS_template` and
-`save_02`..`save_05` by hand; only the locked golden master `save_01` still
-carries the 17.10-era key. `--dry-run` reads locked databases through a
-read-only session, so `save_01` is reported rather than skipped.
+`save_02`..`save_05` by hand. Like `scripts/migrate.py --all --dry-run`, the
+dry run skips the locked golden master `save_01` without
+`--write-locked-slot`; the second run below reads it.
 
 ```json
 {
@@ -49,31 +49,10 @@ read-only session, so `save_01` is reported rather than skipped.
     },
     {
       "dbname": "save_01",
-      "status": "dry_run",
+      "status": "skipped_locked",
       "locked": true,
-      "server_key": "pg_catalog.english/v1/170011",
-      "corpora": [
-        {
-          "corpus_kind": "narrative",
-          "key_before": "pg_catalog.english/v1/170010",
-          "documents_before": 1425,
-          "source_documents": 1425,
-          "stale": true,
-          "key_after": null,
-          "documents_after": null,
-          "lexeme_rows_differing": null
-        },
-        {
-          "corpus_kind": "retrograde_summary",
-          "key_before": "pg_catalog.english/v1/170010",
-          "documents_before": 0,
-          "source_documents": 0,
-          "stale": true,
-          "key_after": null,
-          "documents_after": null,
-          "lexeme_rows_differing": null
-        }
-      ],
+      "server_key": null,
+      "corpora": [],
       "error": null
     },
     {
@@ -196,15 +175,13 @@ read-only session, so `save_01` is reported rather than skipped.
 }
 ```
 
-The same run without `--json`:
+The same run without `--json` (exit 0; stderr: `WARNING Database save_01 is LOCKED (read-only), skipping; rerun with --write-locked-slot to rebuild it`):
 
 ```
 NEXUS_template: dry_run (server pg_catalog.english/v1/170011)
   narrative: key pg_catalog.english/v1/170011, documents 0 (source 0)
   retrograde_summary: key pg_catalog.english/v1/170011, documents 0 (source 0)
-save_01: dry_run [LOCKED] (server pg_catalog.english/v1/170011)
-  narrative: key pg_catalog.english/v1/170010 (stale), documents 1425 (source 1425)
-  retrograde_summary: key pg_catalog.english/v1/170010 (stale), documents 0 (source 0)
+save_01: skipped_locked [LOCKED]
 save_02: dry_run (server pg_catalog.english/v1/170011)
   narrative: key pg_catalog.english/v1/170011, documents 1425 (source 1425)
   retrograde_summary: key pg_catalog.english/v1/170011, documents 0 (source 0)
@@ -217,6 +194,56 @@ save_04: dry_run (server pg_catalog.english/v1/170011)
 save_05: dry_run (server pg_catalog.english/v1/170011)
   narrative: key pg_catalog.english/v1/170011, documents 0 (source 0)
   retrograde_summary: key pg_catalog.english/v1/170011, documents 0 (source 0)
+```
+
+`PYTHONPATH=$PWD python scripts/rebuild_memory_idf.py --slot 1
+--write-locked-slot --dry-run --json` (exit 0), read-only: `save_01` still
+carries the 17.10-era key.
+
+```json
+{
+  "dry_run": true,
+  "ok": true,
+  "databases": [
+    {
+      "dbname": "save_01",
+      "status": "dry_run",
+      "locked": true,
+      "server_key": "pg_catalog.english/v1/170011",
+      "corpora": [
+        {
+          "corpus_kind": "narrative",
+          "key_before": "pg_catalog.english/v1/170010",
+          "documents_before": 1425,
+          "source_documents": 1425,
+          "stale": true,
+          "key_after": null,
+          "documents_after": null,
+          "lexeme_rows_differing": null
+        },
+        {
+          "corpus_kind": "retrograde_summary",
+          "key_before": "pg_catalog.english/v1/170010",
+          "documents_before": 0,
+          "source_documents": 0,
+          "stale": true,
+          "key_after": null,
+          "documents_after": null,
+          "lexeme_rows_differing": null
+        }
+      ],
+      "error": null
+    }
+  ]
+}
+```
+
+Without `--json` (exit 0):
+
+```
+save_01: dry_run [LOCKED] (server pg_catalog.english/v1/170011)
+  narrative: key pg_catalog.english/v1/170010 (stale), documents 1425 (source 1425)
+  retrograde_summary: key pg_catalog.english/v1/170010 (stale), documents 0 (source 0)
 ```
 
 ## Migration 133 Is Pending on the Fleet and Untouched
@@ -294,21 +321,41 @@ All with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset.
 `NEXUS_RUN_POSTGRES=1 python -m pytest -q tests/test_rebuild_memory_idf_pg.py tests/test_new_story_setup.py tests/test_idf_dictionary_pg.py tests/test_runtime/test_readiness.py tests/test_runtime/test_readiness_pg.py`:
 
 ```
-...........................................................              [100%]
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-59 passed in 55.20s
+60 passed, 5 warnings in 65.83s (0:01:05)
 ```
+
+`test_readiness.py::test_slot_idf_targets_name_the_locked_override_and_absent_slots`
+proves a locked slot's remediation is
+`python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot` and an
+absent slot is reported. In the contract-server test, `save_01` was locked
+and stale during this run, so the assertion that the registered
+`slots.idf_analyzer_current` check fails naming it with
+`--slot 1 --write-locked-slot` ran against the live fleet.
 
 `NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery/`:
 
 ```
-57 failed, 1545 passed, 39 skipped, 24 errors in 268.80s (0:04:28)
+57 failed, 1545 passed, 39 skipped, 7 warnings, 24 errors in 291.23s (0:04:51)
 ```
+
+The full `-rfE` short summary is committed as
+[`pg_orrery_failures_branch.txt`](pg_orrery_failures_branch.txt); the id
+comparison against the baseline is committed as
+[`pg_orrery_failures_diff_vs_main.txt`](pg_orrery_failures_diff_vs_main.txt).
+`grep -c 'analyzer mismatch'` on the branch log: `0`.
 
 Baseline `temp/gates/pg-orrery-main-e124bd54.log` (main at e124bd54, before
 the hand rebuild): 173 failed, 1393 passed, 28 errors, 140 `analyzer mismatch`
-lines. This run: 81 failing ids, 0 `analyzer mismatch` lines; 79 of the 81 ids
-also fail in the baseline. The remainder by first error:
+lines, 201 failing ids, 130 of which carry `analyzer mismatch` in their
+failure section. This run: 81 failing ids, 0 `analyzer mismatch` lines.
+`comm -13` over the sorted id lists is empty: every branch id also fails in
+the baseline (79 with the same outcome kind; the 2 `knowledge_surfacing` ids
+moved from ERROR to FAILED). Ten of the 130 IDF-class ids still fail, each on
+a different cause (the diff file gives each first error line): 8 in
+`test_reveal_live.py` (slot 5 has no places, #885) and the 2
+`knowledge_surfacing` ids (`RenderLimits`, below). The remainder by first
+error:
 
 - #885 slot-5 fixture classes: `need-clock anchor unavailable` (23 ids:
   communication_graph 8, claim_consumption 8 via setup, claim_accounts 5,
