@@ -22,6 +22,7 @@ from typing import List, Tuple
 
 import pytest
 import torch
+from pydantic import ValidationError
 from sentence_transformers import CrossEncoder
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.models.bert.modeling_bert import BertForSequenceClassification
@@ -35,7 +36,6 @@ from nexus.agents.memnon.utils.artifact_manifest import (
     production_artifact_specs,
 )
 from nexus.agents.memnon.utils.cross_encoder import (
-    EIGHT_BIT_UNSUPPORTED,
     MODEL_PATH_SETTING,
     CrossEncoderReranker,
     Qwen3LMReranker,
@@ -43,6 +43,7 @@ from nexus.agents.memnon.utils.cross_encoder import (
     reranker_repo_id,
 )
 from nexus.config import load_settings
+from nexus.config.settings_models import CrossEncoderReranking
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 # The production reranker folder name, so the decoys below sit exactly where a
@@ -348,12 +349,12 @@ def test_every_cross_encoder_keyword_is_accepted_by_the_installed_library() -> N
     )
 
 
-def test_eight_bit_refusal_matches_the_installed_libraries() -> None:
-    """The 8-bit refusal rests on library source that is still installed.
+def test_eight_bit_removal_matches_the_installed_libraries() -> None:
+    """The removed 8-bit setting rests on library source that is still installed.
 
     CrossEncoder moves every model it loads with ``.to(device)``, and
     transformers raises for ``.to`` on 8-bit bitsandbytes models. When an
-    upgrade changes either line, this test fails and the 8-bit path can be
+    upgrade changes either line, this test fails and an 8-bit path can be
     rebuilt on the library's own keywords.
     """
 
@@ -370,13 +371,18 @@ def test_eight_bit_refusal_matches_the_installed_libraries() -> None:
     assert "`.to` is not supported for `8-bit` bitsandbytes models" in to_source
 
 
-def test_eight_bit_request_is_refused_before_loading(tmp_path: Path) -> None:
-    """use_8bit raises the named refusal instead of falling back or crashing."""
+def test_a_use_8bit_key_fails_config_validation() -> None:
+    """``use_8bit`` is no longer a setting, so validation rejects it loudly.
 
-    folder = _write_cross_encoder(tmp_path / "artifacts" / "reranker", 8)
+    The key could only ever be false, and ``true`` used to pass validation and
+    then silently disable reranking through the reranker-failure fallback.
+    """
 
-    with pytest.raises(RuntimeError) as raised:
-        CrossEncoderReranker(str(folder), device="cpu", use_8bit=True)
+    section = load_settings().memnon.retrieval.cross_encoder_reranking.model_dump()
+    section["use_8bit"] = True
 
-    assert str(raised.value) == EIGHT_BIT_UNSUPPORTED
-    assert raised.value.__cause__ is None
+    with pytest.raises(ValidationError) as raised:
+        CrossEncoderReranking.model_validate(section)
+
+    assert [error["loc"] for error in raised.value.errors()] == [("use_8bit",)]
+    assert raised.value.errors()[0]["type"] == "extra_forbidden"

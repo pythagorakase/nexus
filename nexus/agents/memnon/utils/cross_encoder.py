@@ -96,19 +96,13 @@ def _require_reranker_folder(kind: str, path: Path, repo_id: Optional[str]) -> s
     return remedy
 
 
-# 8-bit loading cannot go through the locked sentence-transformers 3.4.1.
+# There is no 8-bit reranker load: the locked sentence-transformers 3.4.1
 # CrossEncoder.__init__ always ends with ``if device is None: device =
 # get_device_name()`` and ``self.model.to(device)`` (CrossEncoder.py:123-126),
 # including after an ``automodel_args`` load with ``device_map="auto"``, and
 # transformers 4.51.3 raises for every ``.to`` on a model loaded in 8-bit
-# bitsandbytes (PreTrainedModel.to, modeling_utils.py:3682-3686). There is no
-# keyword that skips the move, so the request is refused before any load.
-EIGHT_BIT_UNSUPPORTED = (
-    "[memnon.retrieval.cross_encoder_reranking].use_8bit = true cannot load: "
-    "sentence-transformers CrossEncoder moves every loaded model with "
-    "`.to(device)`, and transformers refuses `.to` on 8-bit bitsandbytes "
-    "models. Set use_8bit = false."
-)
+# bitsandbytes (PreTrainedModel.to, modeling_utils.py:3682-3686). The former
+# ``use_8bit`` setting could therefore only ever be false and was removed.
 
 
 def cross_encoder_kwargs(device: Optional[str], max_length: int) -> Dict[str, Any]:
@@ -139,7 +133,6 @@ class CrossEncoderReranker:
         max_length: int = 512,
         sliding_window_overlap: int = 128,
         cache_dir: Optional[str] = None,
-        use_8bit: bool = False,
         repo_id: Optional[str] = None,
     ):
         """
@@ -156,19 +149,15 @@ class CrossEncoderReranker:
             max_length: Maximum sequence length for the model
             sliding_window_overlap: Overlap size for sliding windows
             cache_dir: Unused; the artifact is read from ``model_path``
-            use_8bit: Must be False: 8-bit loading is unsupported by the
-                locked sentence-transformers (see ``EIGHT_BIT_UNSUPPORTED``)
             repo_id: Hugging Face repository of the artifact, named in the
                 install command when the folder is missing or fails to load
 
         Raises:
             RuntimeError: When ``model_path`` does not exist, is not a
-                directory, or fails to load, or when ``use_8bit`` is set.
+                directory, or fails to load.
         """
         path = Path(model_path)
         remedy = _require_reranker_folder("Cross-encoder reranker", path, repo_id)
-        if use_8bit:
-            raise RuntimeError(EIGHT_BIT_UNSUPPORTED)
 
         self.max_length = max_length
         self.sliding_window_overlap = sliding_window_overlap
@@ -669,14 +658,13 @@ class Qwen3LMReranker:
 # keep the instance alive across calls within the process.
 # Key includes `device` so a workflow that loads first on (say) MPS doesn't
 # silently return that instance to a later caller that requests CPU.
-_RERANKER_CACHE: Dict[Tuple[str, str, Optional[str], bool], Any] = {}
+_RERANKER_CACHE: Dict[Tuple[str, str, Optional[str]], Any] = {}
 
 
 def _get_or_create_reranker(
     model_path: str,
     api_type: str,
     device: Optional[str],
-    use_8bit: bool,
     repo_id: Optional[str] = None,
 ):
     """Return a cached reranker, constructing it on first request.
@@ -684,7 +672,7 @@ def _get_or_create_reranker(
     ``repo_id`` only names the install command when a reranker folder is
     missing; it is not part of the cache key.
     """
-    key = (model_path, api_type, device, use_8bit)
+    key = (model_path, api_type, device)
     cached = _RERANKER_CACHE.get(key)
     if cached is not None:
         return cached
@@ -694,7 +682,6 @@ def _get_or_create_reranker(
         instance = CrossEncoderReranker(
             model_path=model_path,
             device=device,
-            use_8bit=use_8bit,
             repo_id=repo_id,
         )
     elif api_type == "qwen3_lm":
@@ -723,7 +710,6 @@ def rerank_results(
     use_sliding_window: bool = True,
     api_type: str = "cross_encoder",
     device: Optional[str] = None,
-    use_8bit: bool = False,
     repo_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -742,8 +728,6 @@ def rerank_results(
         api_type: "cross_encoder" (SequenceClassification: DeBERTa-v3, mxbai)
                   or "qwen3_lm" (Qwen3-Reranker yes/no causal-LM)
         device: Device to use for inference
-        use_8bit: Must be False for cross_encoder: 8-bit loading is refused
-                (see ``EIGHT_BIT_UNSUPPORTED``)
         repo_id: Hugging Face repository of the reranker, named in the
                 install command when its folder is missing
 
@@ -761,7 +745,6 @@ def rerank_results(
             model_path=model_path,
             api_type=api_type,
             device=device,
-            use_8bit=use_8bit,
             repo_id=repo_id,
         )
 

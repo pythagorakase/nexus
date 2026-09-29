@@ -362,7 +362,6 @@ class RunExecutor:
                         model_path=reranker_model_path,
                         repo_id=reranker_repo,
                         api_type=reranker_api_type,
-                        use_8bit=bool(cross_encoder_settings.get("use_8bit", False)),
                     )
 
                 elapsed_seconds = time.time() - query_start

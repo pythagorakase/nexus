@@ -1142,7 +1142,6 @@ window_overlap = 256
 
 # Query-type-specific settings
 use_query_type_weights = false
-use_8bit = false
 
 [memnon.retrieval.cross_encoder_reranking.weights_by_query_type]
 character = 0.25

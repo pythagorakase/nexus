@@ -3318,7 +3318,6 @@ class CrossEncoderReranking(BaseModel):
     window_overlap: int = Field(..., ge=0)
     weights_by_query_type: Dict[str, float]
     use_query_type_weights: bool
-    use_8bit: bool
     candidates: Dict[str, RerankerCandidate] = Field(default_factory=dict)
 
 
