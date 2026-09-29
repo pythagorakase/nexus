@@ -1205,6 +1205,9 @@ def _persist_maturation_expansion(
         create_missing_entities=True,
         summaries_enabled=summaries_enabled,
         recorded_at_chunk_id=int(row["requesting_chunk_id"]),
+        # The durable job's requesting chunk is the boundary this history
+        # belongs to; an existing summary recorded elsewhere is a conflict.
+        boundary_is_authoritative=True,
         epistemics_settings=settings.orrery.epistemics,
         project_seeding_enabled=settings.orrery.retrograde.projects.enabled,
         max_seeded_projects=1,

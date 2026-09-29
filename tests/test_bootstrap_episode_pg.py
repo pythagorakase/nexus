@@ -1,11 +1,10 @@
-"""Real sync/async acceptance of bootstrap and subsequent episode transitions.
+"""Real acceptance of bootstrap and subsequent episode transitions.
 
 Each test clones the template into a disposable database. It exercises the
 production commit readers/writers, metadata triggers, and summary job inserts;
 no provider is called and no saved campaign is used as a fixture.
 """
 
-import asyncio
 from collections.abc import Iterator
 from contextlib import closing
 from uuid import uuid4
@@ -16,11 +15,10 @@ from nexus.agents.orrery.retrograde_persistence import (
     _ensure_prologue_metadata,
     _insert_prologue_chunk,
 )
-from nexus.api.commit_handler import commit_incubator_to_database
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.slot_utils import VALID_DBNAMES
 from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
-from tests.test_commit_choice_presence_pg import _connect_async, _insert_staged_turn
+from tests.test_commit_choice_presence_pg import _insert_staged_turn
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -50,7 +48,6 @@ def _accept_turn(
     character_id: int,
     place_id: int,
     *,
-    acceptance: str,
     parent_id: int,
     transition: str,
 ) -> tuple[int, str]:
@@ -85,23 +82,12 @@ def _accept_turn(
                 "world_layer": "primary",
             },
         )
-    if acceptance == "async":
-
-        async def accept() -> int:
-            conn = await _connect_async(dbname)
-            try:
-                return await commit_incubator_to_database(conn, session_id)
-            finally:
-                await conn.close()
-
-        return asyncio.run(accept()), session_id
     with closing(connect(dbname)) as conn:
         return commit_incubator_to_database_sync(conn, session_id), session_id
 
 
-@pytest.mark.parametrize("acceptance", ["sync", "async"])
 def test_opening_and_real_transitions_schedule_only_populated_predecessors(
-    episode_database: tuple[str, int, int], acceptance: str
+    episode_database: tuple[str, int, int],
 ) -> None:
     """S1E1 opens without work; later transitions each queue valid spans once."""
     dbname, character_id, place_id = episode_database
@@ -119,7 +105,6 @@ def test_opening_and_real_transitions_schedule_only_populated_predecessors(
             dbname,
             character_id,
             place_id,
-            acceptance=acceptance,
             parent_id=parent_id,
             transition=transition,
         )

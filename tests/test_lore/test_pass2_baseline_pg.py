@@ -13,7 +13,6 @@ from types import SimpleNamespace
 from typing import Any, Iterator
 from uuid import uuid4
 
-import asyncpg  # type: ignore[import-untyped]
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -21,7 +20,7 @@ from sqlalchemy.orm import sessionmaker
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import StorytellerResponseStandard
-from nexus.api import commit_handler, commit_handler_sync, slot_utils
+from nexus.api import commit_handler_sync, slot_utils
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
@@ -35,12 +34,7 @@ from nexus.memory.manager import (
 )
 from nexus.telemetry.usage import current_usage_context
 from scripts import stamp_lore_pass_baseline
-from tests.pg_fixtures import (
-    asyncpg_kwargs,
-    connect,
-    disposable_slot_database,
-    seed_protagonist,
-)
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -229,18 +223,6 @@ def _wire_payload(narrative: str) -> dict[str, Any]:
         "new_entities": [],
         "letter": "Preserve the current continuity while advancing the scene.",
     }
-
-
-async def _connect_async(dbname: str) -> asyncpg.Connection:
-    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
-    for type_name in ("json", "jsonb"):
-        await conn.set_type_codec(
-            type_name,
-            schema="pg_catalog",
-            encoder=json.dumps,
-            decoder=json.loads,
-        )
-    return conn
 
 
 def _seed_parent(conn: Any, label: str, *, season: int = 1) -> int:
@@ -875,40 +857,38 @@ def test_acceptance_failure_rolls_back_chunk_baseline_and_incubator_delete(
         conn.close()
 
 
-@pytest.mark.asyncio
-async def test_async_regeneration_replace_and_acceptance_failure_roll_back(
+def test_regeneration_replace_and_acceptance_failure_roll_back(
     pass2_database: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Async promotion atomically preserves the replacement draft on failure."""
+    """Promotion atomically preserves the replacement draft on failure."""
 
-    sync_conn = _connect(pass2_database)
-    async_conn: asyncpg.Connection | None = None
+    conn = _connect(pass2_database)
     try:
-        parent_chunk_id = _seed_parent(sync_conn, "async rollback parent")
+        parent_chunk_id = _seed_parent(conn, "replacement rollback parent")
         first_session = str(uuid4())
-        _create_lease(sync_conn, first_session, parent_chunk_id)
-        sync_conn.commit()
+        _create_lease(conn, first_session, parent_chunk_id)
+        conn.commit()
 
         first_manager = ContextMemoryManager(_settings())
         first_manager.handle_storyteller_response(
-            narrative="Async first candidate.",
+            narrative="First candidate.",
             warm_slice=[{"chunk_id": parent_chunk_id, "text": "parent"}],
             token_usage={"total_available": 50, "warm_slice": 10},
         )
         first_payload = response_to_incubator(
-            _response("Async first candidate."),
+            _response("First candidate."),
             parent_chunk_id=parent_chunk_id,
             user_text="Continue.",
             session_id=first_session,
             lore_pass_baseline=first_manager.export_pass2_baseline(),
         )
-        await write_to_incubator(sync_conn, first_payload)
+        asyncio.run(write_to_incubator(conn, first_payload))
 
         replacement_memory_id = 999_997
         replacement_manager = ContextMemoryManager(_settings())
         replacement_manager.handle_storyteller_response(
-            narrative="Async replacement candidate.",
+            narrative="Replacement candidate.",
             warm_slice=[
                 {"chunk_id": parent_chunk_id, "text": "parent"},
                 {"chunk_id": replacement_memory_id, "text": "replacement memory"},
@@ -916,22 +896,24 @@ async def test_async_regeneration_replace_and_acceptance_failure_roll_back(
             token_usage={"total_available": 50, "warm_slice": 12},
         )
         replacement_session = str(uuid4())
-        _replace_lease(sync_conn, replacement_session, parent_chunk_id)
-        sync_conn.commit()
+        _replace_lease(conn, replacement_session, parent_chunk_id)
+        conn.commit()
         replacement_payload = response_to_incubator(
-            _response("Async replacement candidate."),
+            _response("Replacement candidate."),
             parent_chunk_id=parent_chunk_id,
             user_text="Continue again.",
             session_id=replacement_session,
             lore_pass_baseline=replacement_manager.export_pass2_baseline(),
         )
-        await write_to_incubator(
-            sync_conn,
-            replacement_payload,
-            expected_incubator_session=first_session,
+        asyncio.run(
+            write_to_incubator(
+                conn,
+                replacement_payload,
+                expected_incubator_session=first_session,
+            )
         )
 
-        with sync_conn.cursor() as cur:
+        with conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM narrative_chunks")
             before_chunks = int(cur.fetchone()[0])
             cur.execute(
@@ -939,41 +921,36 @@ async def test_async_regeneration_replace_and_acceptance_failure_roll_back(
                 "FROM incubator"
             )
             staged_text, staged_session, staged_baseline = cur.fetchone()
-        assert staged_text == "Async replacement candidate."
+        assert staged_text == "Replacement candidate."
         assert staged_session == replacement_session
         assert replacement_memory_id in staged_baseline["memory_identities"]
 
-        async def fail_metadata(*_args: Any, **_kwargs: Any) -> None:
-            raise RuntimeError("forced async metadata failure")
+        def fail_metadata(*_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("forced replacement metadata failure")
 
-        monkeypatch.setattr(commit_handler, "insert_chunk_metadata", fail_metadata)
-        async_conn = await _connect_async(pass2_database)
-        with pytest.raises(RuntimeError, match="forced async metadata failure"):
-            await commit_handler.commit_incubator_to_database(
-                async_conn, replacement_session, slot=5
+        monkeypatch.setattr(
+            commit_handler_sync, "insert_chunk_metadata_sync", fail_metadata
+        )
+        with pytest.raises(RuntimeError, match="forced replacement metadata failure"):
+            commit_incubator_to_database_sync(conn, replacement_session, slot=5)
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM narrative_chunks")
+            assert cur.fetchone()[0] == before_chunks
+            cur.execute("SELECT count(*) FROM lore_pass_baselines")
+            assert cur.fetchone()[0] == 0
+            cur.execute(
+                "SELECT storyteller_text, session_id, lore_pass_baseline "
+                "FROM incubator"
             )
-
-        assert (
-            await async_conn.fetchval("SELECT count(*) FROM narrative_chunks")
-            == before_chunks
-        )
-        assert (
-            await async_conn.fetchval("SELECT count(*) FROM lore_pass_baselines") == 0
-        )
-        preserved = await async_conn.fetchrow(
-            "SELECT storyteller_text, session_id, lore_pass_baseline " "FROM incubator"
-        )
-        assert preserved is not None
-        assert preserved["storyteller_text"] == "Async replacement candidate."
-        assert str(preserved["session_id"]) == replacement_session
-        assert (
-            replacement_memory_id
-            in preserved["lore_pass_baseline"]["memory_identities"]
-        )
+            preserved = cur.fetchall()
+        assert len(preserved) == 1
+        preserved_text, preserved_session, preserved_baseline = preserved[0]
+        assert preserved_text == "Replacement candidate."
+        assert str(preserved_session) == replacement_session
+        assert replacement_memory_id in preserved_baseline["memory_identities"]
     finally:
-        if async_conn is not None:
-            await async_conn.close()
-        sync_conn.close()
+        conn.close()
 
 
 def test_missing_tail_error_and_admin_stamp_boundary(

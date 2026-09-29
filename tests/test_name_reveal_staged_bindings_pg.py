@@ -1,16 +1,14 @@
-"""Both acceptance paths reject conflicting reveal references before writes."""
+"""Acceptance rejects conflicting reveal references before writes."""
 
-import asyncio
 from uuid import uuid4
 
 import pytest
 
-from nexus.api.commit_handler import commit_incubator_to_database
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.presence.name_reveals import CharacterNameRevealConflict
 from tests.pg_fixtures import connect
 from tests.test_character_name_reveals_pg import NEW, prepare_witness, reveal_wire
-from tests.test_commit_choice_presence_pg import _connect_async, _insert_staged_turn
+from tests.test_commit_choice_presence_pg import _insert_staged_turn
 from tests.test_name_reveal_staged_bindings import SITES, staged_data
 from tests.test_presence_roster_pg import roster_database as _roster_database
 
@@ -58,18 +56,8 @@ def stage_binding(dbname, ids, parent, character_id, site, supplied_id, name):
     return session_id
 
 
-def accept(dbname, session_id, commit_async):
+def accept(dbname, session_id):
     """Exercise the real transaction using only the test's private database."""
-    if commit_async:
-
-        async def run():
-            conn = await _connect_async(dbname)
-            try:
-                return await commit_incubator_to_database(conn, session_id, slot=5)
-            finally:
-                await conn.close()
-
-        return asyncio.run(run())
     conn = connect(dbname)
     try:
         return commit_incubator_to_database_sync(conn, session_id, slot=5)
@@ -100,9 +88,8 @@ def snapshot(dbname, session_id):
 
 
 @pytest.mark.parametrize("site", SITES)
-@pytest.mark.parametrize("commit_async", [False, True])
 def test_conflicting_reveal_id_is_rejected_before_any_acceptance_write(
-    name_reveal_binding_database, site, commit_async
+    name_reveal_binding_database, site
 ):
     dbname, ids, _ = name_reveal_binding_database
     character_id, _, _, parent = prepare_witness(dbname, ids)
@@ -117,20 +104,19 @@ def test_conflicting_reveal_id_is_rejected_before_any_acceptance_write(
     )
     before = snapshot(dbname, session_id)
     with pytest.raises(CharacterNameRevealConflict, match="supplied ID conflicts"):
-        accept(dbname, session_id, commit_async)
+        accept(dbname, session_id)
     assert snapshot(dbname, session_id) == before
 
 
-@pytest.mark.parametrize("commit_async", [False, True])
 def test_new_unique_alias_state_update_binds_before_draft_validation(
-    name_reveal_binding_database, commit_async
+    name_reveal_binding_database,
 ):
     dbname, ids, _ = name_reveal_binding_database
     character_id, _, _, parent = prepare_witness(dbname, ids)
     session_id = stage_binding(
         dbname, ids, parent, character_id, "state", None, "Anika"
     )
-    accept(dbname, session_id, commit_async)
+    accept(dbname, session_id)
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT name, current_activity FROM characters WHERE id = %s",

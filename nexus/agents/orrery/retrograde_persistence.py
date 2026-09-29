@@ -143,6 +143,7 @@ def build_retrograde_persistence_plan(
     create_missing_entities: bool = False,
     summaries_enabled: bool = True,
     recorded_at_chunk_id: Optional[int] = None,
+    boundary_is_authoritative: bool = False,
     epistemics_settings: Optional[Any] = None,
     project_seeding_enabled: bool = False,
     max_seeded_projects: int = 3,
@@ -166,7 +167,9 @@ def build_retrograde_persistence_plan(
     ``recorded_at_chunk_id`` identifies the accepted narrative boundary that
     caused this history to be generated. Wizard-time history defaults to the
     synthetic prologue anchor; runtime maturation must pass its requesting
-    accepted chunk explicitly.
+    accepted chunk explicitly, with ``boundary_is_authoritative`` set so an
+    existing summary recorded at any other chunk raises. Without that flag
+    the boundary is only the default for new summary rows.
     """
 
     expansion = validate_expansion_plan(
@@ -214,6 +217,11 @@ def build_retrograde_persistence_plan(
             else _load_base_timestamp(cur)
         )
     project_policy = coerce_project_policy(project_settings)
+    # An authoritative boundary travels with every summary source, so both
+    # passes compare it with an existing summary row; a default one does not.
+    summary_source_boundary = (
+        recorded_at_chunk_id if boundary_is_authoritative else None
+    )
 
     manifest = _build_plan(
         cur,
@@ -233,6 +241,7 @@ def build_retrograde_persistence_plan(
         prologue_was_inserted=False,
         summaries_enabled=summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
+        summary_source_boundary=summary_source_boundary,
         pair_tag_source_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
         project_seeding_enabled=project_seeding_enabled,
@@ -288,6 +297,7 @@ def build_retrograde_persistence_plan(
         prologue_was_inserted=prologue_was_inserted,
         summaries_enabled=summaries_enabled,
         recorded_at_chunk_id=effective_recorded_at_chunk_id,
+        summary_source_boundary=summary_source_boundary,
         pair_tag_source_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
         project_seeding_enabled=project_seeding_enabled,
@@ -322,6 +332,7 @@ def _build_plan(
     prologue_was_inserted: bool,
     summaries_enabled: bool,
     recorded_at_chunk_id: Optional[int],
+    summary_source_boundary: Optional[int],
     pair_tag_source_chunk_id: Optional[int],
     epistemics_settings: Optional[Any],
     project_seeding_enabled: bool,
@@ -489,6 +500,7 @@ def _build_plan(
                     "summary": str(row["summary"]),
                     "chronology": str(row["chronology"]),
                     "world_event_id": row.get("world_event_id"),
+                    "recorded_at_chunk_id": summary_source_boundary,
                     "source_status": str(row["status"]),
                 }
                 for row in event_rows
@@ -1843,8 +1855,16 @@ def plan_retrograde_summaries(
     ``retrograde_summaries.world_event_id`` is the idempotency boundary. A
     repeated write with identical summary content, chronology, and recording
     boundary reports ``already_present``; a divergent reapply raises instead
-    of quietly accepting conflicting generated history. Embedding is performed
-    after the caller's transaction commits.
+    of quietly accepting conflicting generated history. Only a boundary the
+    source itself carries is compared with an existing row; the caller's
+    ``recorded_at_chunk_id`` is the default for new rows, and an existing row
+    keeps (and reports) the boundary it was recorded at. The CLI re-apply
+    (``nexus retrograde-apply-expansion``) passes the latest playable chunk as
+    that default, so an existing summary keeps its first-recording boundary.
+    Runtime maturation marks its durable job's ``requesting_chunk_id``
+    authoritative, so every source carries it and an existing summary recorded
+    at any other chunk raises. Embedding is performed after the caller's
+    transaction commits.
 
     Args:
         cur: An open database cursor owned by the caller's transaction.
@@ -1901,10 +1921,16 @@ def plan_retrograde_summaries(
             summary = str(source.get("summary") or "").strip()
             chronology = str(source.get("chronology") or "").strip()
 
-        boundary_value = source.get("recorded_at_chunk_id")
-        if boundary_value is None:
-            boundary_value = recorded_at_chunk_id
-        source_recorded_at_chunk_id = _optional_int(boundary_value)
+        # A boundary the source carries is part of its identity and must match
+        # an existing row. The caller's boundary is only the default for new
+        # inserts: re-applying after play passes a later boundary, and it must
+        # not contradict a summary recorded earlier (for example at the prologue).
+        source_boundary = _optional_int(source.get("recorded_at_chunk_id"))
+        source_recorded_at_chunk_id = (
+            source_boundary
+            if source_boundary is not None
+            else _optional_int(recorded_at_chunk_id)
+        )
         base = {
             "event_ref": event_ref,
             "world_event_id": world_event_id,
@@ -1945,10 +1971,13 @@ def plan_retrograde_summaries(
             if existing["chronology"] != chronology:
                 divergent_fields.append("chronology")
             if (
-                source_recorded_at_chunk_id is not None
-                and existing["recorded_at_chunk_id"] != source_recorded_at_chunk_id
+                source_boundary is not None
+                and existing["recorded_at_chunk_id"] != source_boundary
             ):
-                divergent_fields.append("recorded_at_chunk_id")
+                divergent_fields.append(
+                    "recorded_at_chunk_id (existing "
+                    f"{existing['recorded_at_chunk_id']}, incoming {source_boundary})"
+                )
             if divergent_fields:
                 raise ValueError(
                     f"Retrograde world event {world_event_id} already has "
@@ -1971,6 +2000,7 @@ def plan_retrograde_summaries(
             rows.append(
                 {
                     **base,
+                    "recorded_at_chunk_id": existing["recorded_at_chunk_id"],
                     "status": (
                         "stamped_missing_vectors"
                         if embedding_stamp_present and missing_embedding_models
@@ -2235,8 +2265,7 @@ def find_latest_playable_chunk_id(cur: Any) -> Optional[int]:
         /* orrery:retrograde:latest_playable_recording_boundary */
         SELECT nc.id
         FROM narrative_chunks AS nc
-        WHERE nc.state::text = 'finalized'
-          AND btrim(COALESCE(nc.storyteller_text, nc.raw_text, '')) <> ''
+        WHERE btrim(COALESCE(nc.storyteller_text, nc.raw_text, '')) <> ''
           AND """
         + playable_narrative_predicate("nc")
         + """

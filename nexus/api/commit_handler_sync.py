@@ -1,9 +1,9 @@
 """
-Synchronous Commit Handler for Narrative Chunks
-================================================
+Commit Handler for Narrative Chunks
+===================================
 
-Synchronous version of commit_handler.py using psycopg2 for compatibility
-with the existing narrative API.
+The single commit path for accepted narrative chunks: one psycopg2
+transaction moves an incubator row into ``narrative_chunks`` and its tables.
 """
 
 import json

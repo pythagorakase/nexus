@@ -19,6 +19,7 @@ from nexus.agents.lore.logon_utility import LogonUtility, read_presence_baseline
 from nexus.api.commit_handler_sync import (
     apply_state_updates_sync,
     commit_incubator_to_database_sync,
+    insert_chunk_metadata_sync,
     resolve_character_references_sync,
 )
 from nexus.api.lore_adapter import response_to_incubator
@@ -64,6 +65,7 @@ class RecordingStateUpdateCursor:
 
     def __init__(self):
         self.statements = []
+        self.params = []
 
     def __enter__(self):
         return self
@@ -73,6 +75,7 @@ class RecordingStateUpdateCursor:
 
     def execute(self, sql, params=None):
         self.statements.append(" ".join(sql.split()))
+        self.params.append(params)
 
 
 class RecordingStateUpdateConnection:
@@ -403,6 +406,7 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
     def create_stub(connection, **kwargs):
         declaration_clock["world_time"] = kwargs["accepting_world_time"]
         declaration_clock["read_before_declaration"] = connection.child_world_time_read
+        declaration_clock["statements_before_declaration"] = len(connection.statements)
         connection.characters["Iria Vale"] = 71
         return SimpleNamespace(
             declared=1,
@@ -442,10 +446,19 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 71, "present")]
+    statements_before_declaration = declaration_clock.pop(
+        "statements_before_declaration"
+    )
     assert declaration_clock == {
         "world_time": conn.child_world_time,
         "read_before_declaration": True,
     }
+    metadata_insert_index = next(
+        index
+        for index, (statement, _params) in enumerate(conn.statements)
+        if statement.startswith("INSERT INTO chunk_metadata")
+    )
+    assert metadata_insert_index < statements_before_declaration
     baseline_writes = [
         params
         for sql, params in conn.statements
@@ -736,11 +749,12 @@ def test_sync_commit_resolves_all_name_addressed_state_updates(monkeypatch):
     }
     tag_writes = []
     _patch_sync_commit_runtime(monkeypatch)
-    monkeypatch.setattr(
-        commit_handler_sync,
-        "_apply_state_tags",
-        lambda _cur, **kwargs: tag_writes.append(kwargs),
-    )
+
+    def record_tag_write(_cur, **kwargs):
+        tag_writes.append(kwargs)
+        return {"applied": 1, "cleared": 0, "unknown": 0, "noop": 0}
+
+    monkeypatch.setattr(commit_handler_sync, "apply_tag_bestowal", record_tag_write)
 
     commit_incubator_to_database_sync(conn, "state-session", slot=5)
 
@@ -759,8 +773,10 @@ def test_sync_commit_resolves_all_name_addressed_state_updates(monkeypatch):
         sql.startswith("UPDATE character_relationships") and params[-2:] == [71, 72]
         for sql, params in update_statements
     )
-    assert tag_writes[0]["subtype_id"] == 91
-    assert tag_writes[0]["anchor_world_time"] == conn.child_world_time
+    # CommitCursor maps factions.id 91 to entity_id 3091.
+    assert tag_writes[0]["entity_id"] == 3091
+    assert tag_writes[0]["entity_kind"] == "faction"
+    assert tag_writes[0]["world_time"] == conn.child_world_time
 
 
 def test_sync_commit_aborts_on_unresolvable_state_update_name(monkeypatch):
@@ -950,6 +966,30 @@ def test_sync_faction_state_updates_do_not_write_legacy_activity():
     )
 
     assert all("UPDATE factions" not in sql for sql in conn.cursor_instance.statements)
+
+
+def test_sync_chunk_metadata_insert_carries_generation_model():
+    """The sync commit helper writes the incubator's provenance value."""
+
+    cur = RecordingStateUpdateCursor()
+
+    insert_chunk_metadata_sync(
+        cur,
+        chunk_id=42,
+        season=1,
+        episode=2,
+        scene=3,
+        world_layer="primary",
+        time_delta=60,
+        generation_date=datetime(2026, 9, 29, tzinfo=timezone.utc),
+        slug="S01E02_003",
+        generation_model="resolved-sync-model",
+        scene_weather=None,
+    )
+
+    sql, params = cur.statements[-1], cur.params[-1]
+    assert "generation_model" in sql
+    assert params[-1] == "resolved-sync-model"
 
 
 def test_sync_location_state_updates_map_conditions_to_status_column():

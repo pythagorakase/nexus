@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Iterator
 import uuid
 
-import asyncpg  # type: ignore[import-untyped]
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
@@ -24,7 +23,6 @@ from nexus.agents.orrery.substrate import (
     weather_is,
 )
 from nexus.agents.orrery.templates import STROLL
-from nexus.api.commit_handler import insert_chunk_metadata
 from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
 from nexus.config import load_settings_as_dict
 from tests import pg_fixtures
@@ -327,38 +325,3 @@ def test_sync_commit_stack_persists_scene_weather(weather_database: str) -> None
     finally:
         conn.rollback()
         conn.close()
-
-
-@pytest.mark.asyncio
-async def test_async_commit_stack_persists_scene_weather(
-    weather_database: str,
-) -> None:
-    conn = await asyncpg.connect(**pg_fixtures.asyncpg_kwargs(weather_database))
-    transaction = conn.transaction()
-    await transaction.start()
-    schema = f"weather_async_{uuid.uuid4().hex}"
-    try:
-        await conn.execute(f'CREATE SCHEMA "{schema}"')
-        await conn.execute(f'SET LOCAL search_path = "{schema}"')
-        await conn.execute(_create_metadata_table_sql())
-        await conn.execute(_migration_sql())
-        await insert_chunk_metadata(
-            conn,
-            chunk_id=1,
-            season=1,
-            episode=1,
-            scene=1,
-            world_layer="primary",
-            time_delta=0,
-            generation_model="test-model",
-            scene_weather="snow",
-        )
-        assert (
-            await conn.fetchval(
-                "SELECT scene_weather FROM chunk_metadata WHERE chunk_id = 1"
-            )
-            == "snow"
-        )
-    finally:
-        await transaction.rollback()
-        await conn.close()

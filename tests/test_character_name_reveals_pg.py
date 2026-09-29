@@ -68,15 +68,12 @@ def reveal_wire(character_id):
     )
 
 
-@pytest.mark.parametrize("commit_async", [False, True])
 def test_accepted_reveal_preserves_id_history_and_one_presence_row(
-    name_reveal_database, commit_async
+    name_reveal_database,
 ):
     dbname, ids, _ = name_reveal_database
     character_id, entity_id, count, parent = prepare_witness(dbname, ids)
-    child = commit_wire(
-        dbname, parent, reveal_wire(character_id), commit_async=commit_async
-    )
+    child = commit_wire(dbname, parent, reveal_wire(character_id))
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM characters")
         assert cur.fetchone()[0] == count
@@ -135,15 +132,13 @@ def test_accepted_reveal_preserves_id_history_and_one_presence_row(
             f"{OLD} keeps the sheet.",
             presence=PresenceDelta(mentions=[CharacterRef(kind="character", name=OLD)]),
         ),
-        commit_async=commit_async,
     )
     with connect(dbname) as conn:
         assert character_id in read_roster(conn, later).present_character_ids
 
 
-@pytest.mark.parametrize("commit_async", [False, True])
 def test_reveal_and_alias_rollback_with_acceptance_failure(
-    name_reveal_database, monkeypatch, commit_async
+    name_reveal_database, monkeypatch
 ):
     from nexus.presence import name_reveals
 
@@ -153,15 +148,9 @@ def test_reveal_and_alias_rollback_with_acceptance_failure(
     def fail(*args, **kwargs):
         raise RuntimeError("synthetic post-rename ledger failure")
 
-    async def fail_async(*args, **kwargs):
-        fail()
-
     monkeypatch.setattr(name_reveals, "log_state_delta_sync", fail)
-    monkeypatch.setattr(name_reveals, "log_state_delta_async", fail_async)
     with pytest.raises(RuntimeError, match="synthetic post-rename"):
-        commit_wire(
-            dbname, parent, reveal_wire(character_id), commit_async=commit_async
-        )
+        commit_wire(dbname, parent, reveal_wire(character_id))
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT name, entity_id FROM characters WHERE id = %s", (character_id,)
