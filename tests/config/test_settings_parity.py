@@ -957,14 +957,18 @@ def test_owner_paths_mirror_their_facade_paths(
 
 
 def _value_drift(typed: Settings, facade: dict[str, Any]) -> list[str]:
-    """Name every façade leaf whose value differs from its typed owner."""
+    """Name every façade leaf whose value or scalar type differs from its owner.
+
+    List leaves are compared element-wise, so a bool/int or int/float drift
+    inside a list fails as it does for a scalar leaf.
+    """
 
     leaves, _registries = _walk(facade)
     return [
         f"{' > '.join(path)}: façade={value!r} typed={expected!r}"
         for path, value in leaves
         for expected in [_normalize(_resolve_typed(typed, OWNERSHIP[path]))]
-        if value != expected or type(value) is not type(expected)
+        if _strict_mismatch(value, expected) is not None
     ]
 
 
@@ -998,6 +1002,25 @@ def test_planted_drift_and_unowned_leaf_are_named(
         f"façade={typed.apex.max_output_tokens + 1!r} "
         f"typed={typed.apex.max_output_tokens!r}"
     ]
+
+    # An int/float drift inside a list leaf compares equal with ``==``; the
+    # element-wise check still names it.
+    tiers_path = (
+        "Agent Settings",
+        "MEMNON",
+        "retrieval",
+        "vector_normalization",
+        "tiers",
+    )
+    float_typed = typed.model_copy(deep=True)
+    float_typed.memnon.retrieval.vector_normalization.tiers[0][0] = 1.0
+    int_facade = copy.deepcopy(facade)
+    int_facade["Agent Settings"]["MEMNON"]["retrieval"]["vector_normalization"][
+        "tiers"
+    ][0][0] = 1
+    tier_drift = _value_drift(float_typed, int_facade)
+    assert len(tier_drift) == 1
+    assert tier_drift[0].startswith(" > ".join(tiers_path) + ": façade=[[1, ")
 
     # Writer and Gaia share this value in nexus.toml, so only the structural
     # check can see an owner swapped onto its sibling seat.

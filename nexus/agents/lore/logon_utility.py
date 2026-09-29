@@ -85,6 +85,7 @@ from nexus.config.loader import get_provider_for_model  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
     GaiaSeatPolicy,
+    OrreryPromptSettings,
     OrreryRetrogradeMaturationSettings,
     Settings,
 )
@@ -434,10 +435,27 @@ class LogonUtility:
 
         return self.settings.storyteller.correspondence.max_letter_tokens
 
-    def _orrery_settings(self) -> Dict[str, Any]:
-        """Return the Orrery section in the plain form its consumers take."""
+    def _retrograde_maturation(self) -> OrreryRetrogradeMaturationSettings:
+        """Return typed Retrograde maturation controls.
 
-        return self.settings.model_dump().get("orrery") or {}
+        An absent ``[orrery]`` section takes the model defaults.
+        """
+
+        orrery = self.settings.orrery
+        if orrery is None:
+            return OrreryRetrogradeMaturationSettings()
+        return orrery.retrograde.maturation
+
+    def _orrery_prompt_settings(self) -> OrreryPromptSettings:
+        """Return typed Orrery prompt render caps.
+
+        An absent ``[orrery]`` section takes the model defaults.
+        """
+
+        orrery = self.settings.orrery
+        if orrery is None:
+            return OrreryPromptSettings()
+        return orrery.prompt
 
     def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
         """Load storyteller instructions in their original composition order."""
@@ -688,9 +706,7 @@ class LogonUtility:
             validation_dbname: Optional[str] = require_slot_dbname(dbname=self.dbname)
         except Exception:
             validation_dbname = None
-        maturation_settings = OrreryRetrogradeMaturationSettings.model_validate(
-            ((self._orrery_settings().get("retrograde") or {}).get("maturation")) or {}
-        )
+        maturation_settings = self._retrograde_maturation()
         tag_output_validator = build_storyteller_tag_validator(
             validation_dbname,
             suggestion_limit=apex_settings.tag_library.suggestion_limit,
@@ -1422,9 +1438,7 @@ class LogonUtility:
             place_reference_sites(writer.presence)
         ):
             return delegate
-        maturation = OrreryRetrogradeMaturationSettings.model_validate(
-            (self._orrery_settings().get("retrograde") or {}).get("maturation") or {}
-        )
+        maturation = self._retrograde_maturation()
 
         async def validate(ctx: Any, output: Any) -> Any:
             with get_connection(self._validation_dbname) as conn:
@@ -2860,10 +2874,7 @@ class LogonUtility:
         # (orrery_prompt_exposures): both sides must slice identically or the
         # recorded "shown set" lies. Model defaults keep a single source when
         # the orrery section is absent.
-        from nexus.config.settings_models import OrreryPromptSettings
-
-        _prompt_cfg = self._orrery_settings().get("prompt") or {}
-        prompt_settings = OrreryPromptSettings.model_validate(_prompt_cfg)
+        prompt_settings = self._orrery_prompt_settings()
 
         sections.kind = "recent orrery rulings"
         recent_rulings_section = context.get("orrery_recent_rulings_section")

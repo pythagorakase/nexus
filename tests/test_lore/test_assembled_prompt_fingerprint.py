@@ -37,8 +37,11 @@ from scripts.api_openai import OpenAIProvider
 from tests.settings_helpers import settings_with
 
 WINDOW = 75_000
-# The Writer keeps nexus.toml's [apex] values; Gaia differs on every seat
-# field the recorded requests and knobs can see.
+# The Writer keeps nexus.toml's [apex] values; Gaia differs on the output,
+# reserve and effort fields the recorded requests and knobs can see. The
+# 688cb431 export these digests come from had no Gaia temperature field, so
+# the seats share 0.7 here and a separate test below pins the temperature
+# seat mapping.
 SEAT_OVERRIDES: dict[str, Any] = {
     "apex.gaia.max_output_tokens": 23_000,
     "apex.gaia.reasoning_reserve_tokens": 19_000,
@@ -202,13 +205,16 @@ def _seat_knobs(provider: Any) -> dict[str, Any]:
     }
 
 
+def _utility(settings: Settings) -> LogonUtility:
+    return LogonUtility(settings, model_override="TEST", story_settings=StorySettings())
+
+
 def _assembled_requests(
     monkeypatch: pytest.MonkeyPatch,
+    settings: Settings | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     monkeypatch.setenv("NEXUS_SLOT", "3")
-    utility = LogonUtility(
-        _settings(), model_override="TEST", story_settings=StorySettings()
-    )
+    utility = _utility(settings if settings is not None else _settings())
     # No story database or Setting Card backs this fixture turn.
     utility._setting_context_loaded = True
     utility._setting_context = None
@@ -254,6 +260,32 @@ def _assembled_requests(
         effective_context_window=WINDOW,
     )
     return {"writer": calls[0], "gaia": calls[1]}, knobs
+
+
+def test_writer_and_gaia_temperatures_come_from_their_own_seats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each seat carries its own temperature, on the clone and on a pinned Gaia.
+
+    The recorded digests above cannot see this: the seats share 0.7 there, so
+    a Gaia site that read the Writer's ``apex.temperature`` would not change
+    them.
+    """
+
+    settings = settings_with({**SEAT_OVERRIDES, "apex.gaia.temperature": 0.3})
+    assert settings.apex.temperature == 0.7
+    _requests, knobs = _assembled_requests(monkeypatch, settings)
+    temperatures = {seat: knob["temperature"] for seat, knob in knobs.items()}
+    assert temperatures == {"provider": 0.7, "skald_writer": 0.7, "gaia": 0.3}
+
+    utility = _utility(settings)
+    route = utility._resolve_storyteller_route()
+    assert route[0] == "TEST" and route[3] != "anthropic"
+    pinned_gaia = utility._build_gaia_provider(
+        route, system_prompt=None, output_validator=None, anthropic_transport=None
+    )
+    assert isinstance(pinned_gaia, OpenAIProvider)
+    assert pinned_gaia.temperature == 0.3
 
 
 def _budget_lines() -> dict[str, Any]:
