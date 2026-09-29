@@ -11,6 +11,7 @@ from uuid import uuid4
 from psycopg2.extras import RealDictCursor
 import pytest
 
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
 )
@@ -1274,7 +1275,7 @@ def _accept_boundary_turn(
 
 @pytest.mark.requires_postgres
 def test_latest_playable_chunk_is_the_last_accepted_chunk_not_the_prologue() -> None:
-    """Accepted chunks keep the column-default state; the prologue is no boundary."""
+    """The prologue's marker, not a lifecycle column, keeps it off the boundary."""
     with disposable_slot_database("qa640_807_latest_playable") as dbname:
         VALID_DBNAMES.add(dbname)
         try:
@@ -1306,12 +1307,24 @@ def test_latest_playable_chunk_is_the_last_accepted_chunk_not_the_prologue() -> 
             assert prologue_id < first_id < second_id
 
             with closing(connect(dbname)) as conn, conn.cursor() as cur:
-                cur.execute("SELECT id, state::text FROM narrative_chunks ORDER BY id")
+                cur.execute(
+                    "SELECT nc.id, "
+                    + playable_narrative_predicate("nc")
+                    + " FROM narrative_chunks AS nc ORDER BY nc.id"
+                )
                 assert cur.fetchall() == [
-                    (prologue_id, "finalized"),
-                    (first_id, "draft"),
-                    (second_id, "draft"),
+                    (prologue_id, False),
+                    (first_id, True),
+                    (second_id, True),
                 ]
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' "
+                    "AND table_name = 'narrative_chunks' "
+                    "AND column_name IN "
+                    "('state', 'finalized_at', 'regeneration_count')"
+                )
+                assert cur.fetchall() == []
                 assert find_latest_playable_chunk_id(cur) == second_id
         finally:
             VALID_DBNAMES.discard(dbname)

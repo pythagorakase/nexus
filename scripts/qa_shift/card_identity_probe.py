@@ -320,7 +320,7 @@ def replay() -> None:
                     )
                     chunk = session.execute(
                         text(
-                            "INSERT INTO narrative_chunks (raw_text, storyteller_text, state) VALUES (:body, :body, 'accepted') RETURNING id"
+                            "INSERT INTO narrative_chunks (raw_text, storyteller_text) VALUES (:body, :body) RETURNING id"
                         ),
                         {"body": draft["storyteller_text"]},
                     ).scalar_one()

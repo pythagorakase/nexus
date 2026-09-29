@@ -2544,9 +2544,9 @@ def _insert_prologue_chunk(cur: Any) -> int:
         /* orrery:retrograde:insert_prologue_chunk */
         INSERT INTO narrative_chunks (
             raw_text, storyteller_text, choice_object, choice_text,
-            authorial_directives, state, finalized_at
+            authorial_directives
         )
-        VALUES (%s, %s, NULL, NULL, %s::jsonb, 'finalized', now())
+        VALUES (%s, %s, NULL, NULL, %s::jsonb)
         RETURNING id
         """,
         (

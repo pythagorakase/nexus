@@ -29,7 +29,20 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture()
 def disposable_retrograde_db() -> Iterator[Any]:
-    """Yield a template clone whose name cannot collide with a save slot."""
+    """Yield a template clone, named so it cannot collide with a save slot, that
+    carries the pre-134 lifecycle columns.
+
+    Migration 078 is historical: it ran while ``narrative_chunks`` still carried
+    the ChunkWorkflow lifecycle columns, which migration 134 later dropped.  The
+    fixture reads the clone's own ``schema_migrations`` stamp and takes one of
+    two explicit branches.  When 134 is stamped, it re-adds the three columns
+    with their pre-134 definitions (a strict ``ADD COLUMN`` that fails if any
+    column is already present).  When 134 is not stamped, it asserts that the
+    three columns already carry exactly those definitions and fails loudly
+    otherwise.  Either way the legacy seeds and the 078 guards run against the
+    schema 078 actually met.  Each test then rewinds 078's own artifacts with
+    ``_drop_migration_targets``.
+    """
 
     dbname = f"qa640_retro078_{uuid.uuid4().hex[:12]}"
     admin = None
@@ -61,6 +74,7 @@ def disposable_retrograde_db() -> Iterator[Any]:
                 SET base_timestamp = EXCLUDED.base_timestamp
                 """
             )
+            _restore_pre_134_lifecycle_columns(cur)
         conn.commit()
         yield conn
     finally:
@@ -793,6 +807,62 @@ def test_migration_078_rejects_stamped_summary_without_vector_coverage(
             (seeded["summary_id"],),
         )
         assert cur.fetchone()[0] == 1
+
+
+# (type, default, is_nullable) as migrations 018 and 021 left each column.
+_PRE_134_LIFECYCLE_COLUMNS = {
+    "state": ("character varying(20)", "'draft'::character varying", True),
+    "finalized_at": ("timestamp with time zone", None, True),
+    "regeneration_count": ("integer", "0", True),
+}
+
+
+def _restore_pre_134_lifecycle_columns(cur: Any) -> None:
+    """Give the clone the lifecycle columns migration 134 dropped, as 078 met them.
+
+    Branches on the clone's own 134 stamp: a stamped clone gets the columns
+    re-added strictly; an unstamped clone must already carry them with exactly
+    the pre-134 definitions: type, default, and nullability.
+    """
+
+    cur.execute("SELECT 1 FROM schema_migrations WHERE version = '134'")
+    if cur.fetchone() is not None:
+        cur.execute(
+            """
+            ALTER TABLE narrative_chunks
+                ADD COLUMN state varchar(20) DEFAULT 'draft',
+                ADD COLUMN finalized_at timestamptz,
+                ADD COLUMN regeneration_count integer DEFAULT 0
+            """
+        )
+        return
+
+    cur.execute(
+        """
+        SELECT a.attname,
+               format_type(a.atttypid, a.atttypmod),
+               pg_get_expr(d.adbin, d.adrelid),
+               NOT a.attnotnull AS is_nullable
+        FROM pg_attribute a
+        LEFT JOIN pg_attrdef d
+          ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+        WHERE a.attrelid = 'public.narrative_chunks'::regclass
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+          AND a.attname = ANY(%s)
+        """,
+        (list(_PRE_134_LIFECYCLE_COLUMNS),),
+    )
+    found = {
+        name: (col_type, default, is_nullable)
+        for name, col_type, default, is_nullable in cur.fetchall()
+    }
+    if found != _PRE_134_LIFECYCLE_COLUMNS:
+        raise AssertionError(
+            "Template clone has not stamped migration 134 but its lifecycle "
+            f"columns differ from the pre-134 definitions: expected "
+            f"{_PRE_134_LIFECYCLE_COLUMNS!r}, found {found!r}"
+        )
 
 
 def _drop_migration_targets(conn: Any) -> None:
