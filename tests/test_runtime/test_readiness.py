@@ -61,6 +61,8 @@ EXPECTED_REGISTRY = [
     ("template.present", ["owner-host"], ["postgres.reachable"]),
     ("template.migrations_current", ["owner-host"], ["template.present"]),
     ("slots.migrations_current", ["owner-host"], ["template.present"]),
+    ("template.idf_analyzer_current", ["owner-host"], ["template.present"]),
+    ("slots.idf_analyzer_current", ["owner-host"], ["template.present"]),
     ("tools.pg_dump", ["owner-host"], ["config.valid"]),
     ("ui.bundle", ["owner-host"], []),
     ("secrets.seat_providers", ["owner-host"], ["config.valid"]),
@@ -261,6 +263,8 @@ def test_invalid_config_fails_and_skips_every_dependent_by_root_cause(
         "template.present",
         "template.migrations_current",
         "slots.migrations_current",
+        "template.idf_analyzer_current",
+        "slots.idf_analyzer_current",
         "tools.pg_dump",
         "secrets.seat_providers",
     ):

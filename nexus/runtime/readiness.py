@@ -518,6 +518,148 @@ def _check_slot_migrations(ctx: ReadinessContext) -> Outcome:
     return _passed(observed)
 
 
+@dataclass(frozen=True)
+class AnalyzerState:
+    """One database's IDF corpus keys against the live server's analyzer key.
+
+    ``tracked`` is false when ``memory_idf_corpora`` does not exist (the
+    database predates migration 114). ``corpora`` maps each corpus row to its
+    stored key; a database with no rows has nothing to compare.
+    """
+
+    dbname: str
+    server_key: str
+    tracked: bool
+    corpora: dict[str, str]
+
+    @property
+    def stale(self) -> dict[str, str]:
+        """The corpora whose key differs from the server's."""
+        return {
+            kind: key for kind, key in self.corpora.items() if key != self.server_key
+        }
+
+    @property
+    def current(self) -> bool:
+        """Whether every corpus row matches the server's analyzer key."""
+        return self.tracked and not self.stale
+
+    def describe(self) -> str:
+        """Summarize the state in one clause."""
+        if not self.tracked:
+            return f"{self.dbname}: no memory_idf_corpora table"
+        if not self.corpora:
+            return f"{self.dbname}: no IDF corpus rows"
+        if not self.stale:
+            return f"{self.dbname} at {self.server_key}"
+        listed = ", ".join(f"{kind} {key}" for kind, key in self.stale.items())
+        return f"{self.dbname}: {listed} (server {self.server_key})"
+
+
+def database_analyzer_state(dbname: str) -> AnalyzerState:
+    """Read ``dbname``'s IDF corpus keys and the server's in a read-only session."""
+    from nexus.agents.memnon.utils.idf_dictionary import ANALYZER_KEY_SQL
+
+    with closing(read_only_connection(dbname)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT {ANALYZER_KEY_SQL}, "
+                "to_regclass('public.memory_idf_corpora') IS NOT NULL"
+            )
+            server_key, tracked = cur.fetchone()
+            corpora: dict[str, str] = {}
+            if tracked:
+                cur.execute(
+                    "SELECT corpus_kind, analyzer_version FROM memory_idf_corpora "
+                    "ORDER BY corpus_kind"
+                )
+                corpora = dict(cur.fetchall())
+    return AnalyzerState(dbname, server_key, bool(tracked), corpora)
+
+
+def idf_analyzer_outcome(
+    targets: Sequence[tuple[str, str, str]], *, absent: Sequence[str] = ()
+) -> Outcome:
+    """Compare each target's IDF keys with the server's and name the fix.
+
+    Each target is ``(dbname, rebuild_command, migrate_command)``: the command
+    that rebuilds a stale corpus and the one that installs missing IDF tables.
+    ``absent`` databases are reported, not failed.
+    """
+    import psycopg2
+
+    observations: list[str] = []
+    steps: list[str] = []
+    try:
+        for dbname, rebuild_command, migrate_command in targets:
+            state = database_analyzer_state(dbname)
+            observations.append(state.describe())
+            if not state.tracked:
+                steps.append(migrate_command)
+            elif state.stale:
+                steps.append(rebuild_command)
+    except psycopg2.Error as exc:
+        return _failed(one_line(exc), _POSTGRES_REMEDIATION)
+    observations.extend(f"{dbname} absent" for dbname in absent)
+    observed = "; ".join(observations)
+    if steps:
+        return _failed(observed, "; ".join(steps))
+    return _passed(observed)
+
+
+def _check_template_idf_analyzer(ctx: ReadinessContext) -> Outcome:
+    """NEXUS_template's IDF corpus keys match the live server's analyzer."""
+    from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
+    from scripts.migrate import TEMPLATE_DB
+
+    return idf_analyzer_outcome(
+        [
+            (
+                TEMPLATE_DB,
+                f"{REBUILD_COMMAND} --template",
+                "python scripts/migrate.py --template",
+            )
+        ]
+    )
+
+
+def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
+    """Each probed slot that exists has IDF corpus keys matching the server."""
+    import psycopg2
+
+    from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
+    from nexus.api.save_slots import is_slot_locked
+    from nexus.api.slot_utils import slot_dbname
+
+    slots = ctx.require_runtime().readiness.slots
+    names = {slot: slot_dbname(slot) for slot in slots}
+    try:
+        with closing(read_only_connection(MAINTENANCE_DATABASE)) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT datname FROM pg_database WHERE datname = ANY(%s)",
+                    (list(names.values()),),
+                )
+                existing = {row[0] for row in cur.fetchall()}
+    except psycopg2.Error as exc:
+        return _failed(one_line(exc), _POSTGRES_REMEDIATION)
+    targets = []
+    for slot, dbname in names.items():
+        if dbname not in existing:
+            continue
+        override = " --write-locked-slot" if is_slot_locked(slot) else ""
+        targets.append(
+            (
+                dbname,
+                f"{REBUILD_COMMAND} --slot {slot}{override}",
+                f"python scripts/migrate.py --slot {slot}{override}",
+            )
+        )
+    return idf_analyzer_outcome(
+        targets, absent=[name for name in names.values() if name not in existing]
+    )
+
+
 # ---------------------------------------------------------------------------
 # Host files and tools
 # ---------------------------------------------------------------------------
@@ -799,6 +941,18 @@ REGISTRY: tuple[CheckSpec, ...] = (
         _HOST,
         ("template.present",),
         _check_slot_migrations,
+    ),
+    CheckSpec(
+        "template.idf_analyzer_current",
+        _HOST,
+        ("template.present",),
+        _check_template_idf_analyzer,
+    ),
+    CheckSpec(
+        "slots.idf_analyzer_current",
+        _HOST,
+        ("template.present",),
+        _check_slot_idf_analyzer,
     ),
     CheckSpec(
         "tools.pg_dump",
