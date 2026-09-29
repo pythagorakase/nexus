@@ -181,8 +181,10 @@ def initialize_slot_database(
     already-applied migrations against the post-migration schema and fails
     (e.g. 053 alters factions.power_level, which 058 already dropped).
 
-    Any restore or migration failure raises before the database is seeded as
-    a fresh story, so a half-built database is never reported ready.
+    The fresh-story ``global_variables`` row is written before the migrations
+    run (a pending migration may expect it). Any restore or migration failure
+    raises before the fresh-slot IDF corpora are seeded and before the
+    database is logged ready, so a half-built database is never reported ready.
     ``migrations_dir`` overrides the runner's migration tree (tests only).
     """
     dispose_database(target_db)

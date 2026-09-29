@@ -27,9 +27,11 @@ No migration was applied to the template or any save.
 `tests/test_new_story_setup.py::test_template_clone_replays_no_migration` builds
 a clone of `NEXUS_template` through `tests.pg_fixtures.disposable_slot_database`
 (which calls `initialize_slot_database`). Every template stamp arrives with the
-template's own `applied_at` (copied, never re-applied); the only other stamps
-are the migrations the template has not seen; a follow-up
-`migrate_database(clone)` returns `(0, 0)`.
+template's own `applied_at` (copied, never re-applied), and the only other
+stamps are the migrations the template has not seen. Those two assertions are
+the proof. The follow-up `migrate_database(clone) == (0, 0)` is an idempotence
+check only: initialization already raises on any unapplied migration, so a
+second pass must return `(0, 0)`.
 
 The fleet template currently lags `main` by 128-132 (land-time migrations), so
 initialization applies exactly those five and nothing earlier:
@@ -47,6 +49,21 @@ INFO     nexus.migrate:migrate.py:406 Migrating qa640_810_clone_927a2709a9bf...
 INFO     nexus.migrate:migrate.py:445   No pending migrations
 ```
 
+`test_template_clone_first_runner_pass_applies_nothing` makes the first
+runner pass itself observable, independent of fleet lag. It builds a `tmp_path`
+tree that holds only the migration files whose versions `NEXUS_template` has
+stamped, then runs `initialize_slot_database(<disposable>, force=True,
+migrations_dir=tree)` on a database made directly (not through the fixture).
+The clone's stamps equal the template's stamps, with identical `applied_at`:
+the first pass applied nothing. With the filter disabled (the full tree), the
+same test fails because the clone gains stamps 128-132 with fresh `applied_at`:
+
+```
+E             Left contains 5 more items:
+E             {'128': datetime.datetime(2026, 9, 29, 17, 1, 16, 479802, tzinfo=datetime.timezone.utc),
+E              '129': datetime.datetime(2026, 9, 29, 17, 1, 16, 482769, tzinfo=datetime.timezone.utc),
+```
+
 ## Proof 2: A Failing Migration Is Unapplied and Initialization Raises
 
 `test_failing_migration_is_unapplied_and_initialization_raises` copies the real
@@ -56,7 +73,9 @@ and runs the real runner on a real template clone:
 `initialize_slot_database(clone, force=True, migrations_dir=tree)` raises
 `RuntimeError: Migrations failed on <db>: 5 applied, 1 unapplied. ...`, still
 no `999` stamp, and `memory_idf_corpora` is empty (the raise precedes the
-fresh-story seeding and the "ready" log line).
+fresh-slot IDF corpora and the "ready" log line). The fresh-story
+`global_variables` row is written before the migrations run, because a pending
+migration may expect it; the raise does not undo that row.
 
 ```
 INFO     nexus.migrate:migrate.py:406 Migrating qa640_810_fail_f5af830c5fec...
@@ -139,6 +158,14 @@ FAILED tests/test_connection_lifecycle.py::test_connection_two_clusters_story_li
 1 failed, 46 passed in 32.38s
 ```
 
+Rerun after the review fixes (one new test,
+`test_template_clone_first_runner_pass_applies_nothing`):
+
+```
+FAILED tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+1 failed, 47 passed, 5 warnings in 36.71s
+```
+
 The one failure is pre-existing and outside this change: the lifecycle fixture
 restores the fleet template's schema, hand-applies only migration 123, and then
 the CLI hits `column nsc.setting_confirmed does not exist` (migration 129, which
@@ -158,20 +185,67 @@ The one failure is pre-existing and outside this change: `prompts/storyteller_ga
 no longer contains the phrase "rather than invent" that the test pins. This
 branch touches no prompt or that test.
 
-Fleet status (read-only) after all work, unchanged from before it: the template
-and `save_02..05` show the same five land-time migrations pending (128-132)
-that they showed before this branch ran anything; `save_01` is locked.
+Fleet status (read-only), captured after all work including the review fixes.
+The `grep` removes only the `[x]` (applied) lines; every header and every `[ ]`
+line is verbatim. The template and `save_02..05` each show 128-132 pending;
+`save_01` is locked, so the runner does not list its stamps.
 
 ```
 $ PYTHONPATH=$PWD $PY scripts/migrate.py --status | grep -v '\[x\]'
+Found 129 managed migrations in /Users/pythagor/nexus/.claude/worktrees/810-setup-fails-loud/migrations
+
 NEXUS_template:
   [ ] 128_character_identity_rulings
   [ ] 129_wizard_confirmation
   [ ] 130_retire_psychology_endpoint_comments
   [ ] 131_regeneration_lineage
   [ ] 132_genesis_weird_level
+
 save_01: [LOCKED]
-save_02 .. save_05: the same five pending
+  (locked - use --write-locked-slot to apply migrations)
+save_02:
+  [ ] 128_character_identity_rulings
+  [ ] 129_wizard_confirmation
+  [ ] 130_retire_psychology_endpoint_comments
+  [ ] 131_regeneration_lineage
+  [ ] 132_genesis_weird_level
+
+save_03:
+  [ ] 128_character_identity_rulings
+  [ ] 129_wizard_confirmation
+  [ ] 130_retire_psychology_endpoint_comments
+  [ ] 131_regeneration_lineage
+  [ ] 132_genesis_weird_level
+
+save_04:
+  [ ] 128_character_identity_rulings
+  [ ] 129_wizard_confirmation
+  [ ] 130_retire_psychology_endpoint_comments
+  [ ] 131_regeneration_lineage
+  [ ] 132_genesis_weird_level
+
+save_05:
+  [ ] 128_character_identity_rulings
+  [ ] 129_wizard_confirmation
+  [ ] 130_retire_psychology_endpoint_comments
+  [ ] 131_regeneration_lineage
+  [ ] 132_genesis_weird_level
+```
+
+Per-database stamps (read-only `SELECT`), `save_01` included. Every
+`max(applied_at)` is 2026-09-24 20:28-20:29 -04, before this branch's first
+commit (`0d315d72`, 2026-09-29 11:52 -05), so no database in the fleet was
+written by this work:
+
+```
+$ for db in NEXUS_template save_01 save_02 save_03 save_04 save_05; do printf "%s: " $db; \
+    psql -X -At -d $db -c "SELECT count(*), max(version), max(applied_at) FROM schema_migrations"; done
+NEXUS_template: 124|127|2026-09-24 20:28:59.167323-04
+save_01: 124|127|2026-09-24 20:29:00.021847-04
+save_02: 124|127|2026-09-24 20:28:59.285609-04
+save_03: 124|127|2026-09-24 20:28:59.357078-04
+save_04: 124|127|2026-09-24 20:28:59.428947-04
+save_05: 124|127|2026-09-24 20:28:59.499842-04
 ```
 
 Reachability, Black, flake8, mypy on changed files:

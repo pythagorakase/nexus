@@ -9,7 +9,7 @@ stamped baseline and applies nothing on a fresh clone.
 
 Issue #810/#823 hardening: setup fails loudly. A template clone replays no
 migration; a failing pending migration leaves no stamp and makes slot
-initialization raise before the database is seeded as a story; a plain-dump
+initialization raise before the fresh-slot IDF corpora are seeded; a plain-dump
 restore stops at its first failing statement; and the runner propagates a
 connection error to an existing database instead of reporting nothing pending.
 
@@ -269,11 +269,39 @@ def test_template_clone_replays_no_migration() -> None:
     discovered = {version for version, _, _ in migrate.discover_migrations()}
     with disposable_slot_database("qa640_810_clone") as dbname:
         clone_stamps = _stamps(dbname)
+        # Idempotence check only: initialization already raises on any
+        # unapplied migration. The applied_at and stamp-set assertions below
+        # are the proof that nothing was replayed.
         assert migrate.migrate_database(dbname, skip_locked=False) == (0, 0)
 
     copied = {version: clone_stamps.get(version) for version in template_stamps}
     assert copied == template_stamps
     assert set(clone_stamps) == set(template_stamps) | discovered
+
+
+def test_template_clone_first_runner_pass_applies_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A raw template clone's first runner pass finds nothing to replay.
+
+    The runner sees a tree holding only the migrations the template has
+    stamped, so the result does not depend on how far the fleet template lags
+    ``main``. Initialization copies the template's stamps with their original
+    applied_at and adds none: nothing was replayed on the first pass.
+    """
+    monkeypatch.setattr(new_story_setup, "USE_POOL", False)
+    template_stamps = _stamps(_TEMPLATE)
+    tree = tmp_path / "migrations"
+    tree.mkdir()
+    for version, _, path in migrate.discover_migrations():
+        if version in template_stamps:
+            shutil.copy2(path, tree / path.name)
+
+    with disposable_database("qa640_810_firstpass") as dbname:
+        new_story_setup.initialize_slot_database(
+            dbname, source_db=_TEMPLATE, force=True, migrations_dir=tree
+        )
+        assert _stamps(dbname) == template_stamps
 
 
 def test_failing_migration_is_unapplied_and_initialization_raises(
@@ -296,7 +324,8 @@ def test_failing_migration_is_unapplied_and_initialization_raises(
             )
 
         assert "999" not in _stamps(dbname)
-        # The raise precedes fresh-story seeding: no IDF corpus identities.
+        # The raise precedes the fresh-slot IDF corpora and the "ready" log
+        # line (the global_variables row is already written by then).
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM memory_idf_corpora")
             assert cur.fetchone()[0] == 0
