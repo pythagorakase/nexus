@@ -90,7 +90,11 @@ def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:
     response = hydrate_skald_turn(wire, presence_baseline=baseline)
     session_id = str(uuid4())
     data = response_to_incubator(
-        response, parent_id, "Continue.", session_id, empty_pass2_baseline({})
+        response,
+        parent_id,
+        "Continue.",
+        session_id,
+        empty_pass2_baseline(load_settings()),
     )
     with connect(dbname) as conn:
         with conn.cursor() as cur:
@@ -236,7 +240,7 @@ def test_roster_real_commit_promotion_audience_and_writer_seat(roster_database) 
     finally:
         engine.dispose()
     baseline = read_presence_baseline(dbname, first)
-    utility = LogonUtility(load_settings().model_dump(mode="json"), dbname=dbname)
+    utility = LogonUtility(load_settings(), dbname=dbname)
     context = {
         "metadata": {"target_chunk_id": first},
         "user_input": "Wait by the door.",

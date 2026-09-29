@@ -61,10 +61,10 @@ def test_character_dossier_tags_preserve_featured_details(seat: str) -> None:
 @pytest.mark.parametrize("limit", [1, 8, 12])
 def test_character_dossier_tag_cap_preserves_order(seat: str, limit: int) -> None:
     """Configured caps apply to both tiers without changing source attribution."""
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
 
-    settings = load_settings_as_dict()
-    settings["lore"]["render_limits"]["character_tags"] = limit
+    settings = load_settings()
+    settings.lore.render_limits.character_tags = limit
     utility = window_logon(settings)
     tags = [f"capacity:tag_{index:02}" for index in range(10)]
     character = {"name": "Iona", "orrery_tag_summary": ", ".join(tags)}

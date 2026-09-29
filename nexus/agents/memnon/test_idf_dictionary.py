@@ -6,7 +6,6 @@ Test script for the IDF Dictionary implementation
 import sys
 import os
 import logging
-import json
 from pathlib import Path
 
 # Setup basic logging
@@ -23,19 +22,11 @@ from agents.memnon.utils.idf_dictionary import IDFDictionary
 import argparse
 
 
-def load_settings():
-    """Load settings from settings.json file."""
-    try:
-        settings_path = Path("settings.json")
-        if settings_path.exists():
-            with open(settings_path, "r") as f:
-                return json.load(f)
-        else:
-            print(f"Warning: settings.json not found at {settings_path.absolute()}")
-            return {}
-    except Exception as e:
-        print(f"Error loading settings: {e}")
-        return {}
+def load_database_url() -> str:
+    """Return the MEMNON database URL configured in nexus.toml."""
+    from nexus.config import load_settings
+
+    return load_settings().memnon.database.url
 
 
 def main():
@@ -48,12 +39,8 @@ def main():
     parser.add_argument("--query", help="Test query to generate weighted format")
     args = parser.parse_args()
 
-    # Load settings
-    settings = load_settings()
-    memnon_settings = settings.get("Agent Settings", {}).get("MEMNON", {})
-
     # Get database URL
-    db_url = args.db_url or memnon_settings.get("database", {}).get("url")
+    db_url = args.db_url or load_database_url()
     if not db_url:
         logger.error(
             "No database URL provided. Use --db-url or configure in settings.json"

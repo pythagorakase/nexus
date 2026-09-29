@@ -123,7 +123,7 @@ def test_replay_under_recorded_settings_changes_nothing() -> None:
     for model in (settings.apex.model, _local_model(settings)):
         budget = resolve_seat_window(dumped, model, seat="skald_writer", window=window)
         record = _record(budget, input_tokens=budget.input_ceiling - 700)
-        row = replay_record(record, dumped, baseline=dumped)
+        row = replay_record(record, settings, baseline=settings)
         assert row.candidate_ceiling == record.effective_ceiling
         assert row.headroom_delta == row.overflow_tokens == 0
         assert row.freed_tokens == record.headroom == 700
@@ -146,9 +146,9 @@ def test_raised_output_allowance_tightens_a_model_limited_writer(
     raised = settings.apex.max_output_tokens + 15_000
     candidate = load_settings(
         _candidate(tmp_path, "raised", {"apex.max_output_tokens": raised})
-    ).model_dump()
+    )
 
-    rows = replay_run(SESSION, LEDGER_DAY, candidate, baseline=settings.model_dump())
+    rows = replay_run(SESSION, LEDGER_DAY, candidate, baseline=settings)
 
     by_seat = {row.seat: row for row in rows}
     assert by_seat["gaia"].headroom_delta == 0
@@ -167,7 +167,7 @@ def test_capped_flags_a_zero_delta_that_hides_freed_capacity(
 ) -> None:
     """Lowering output on a capped spend replays flat until --window lifts it."""
     settings = load_settings(REPO_CONFIG)
-    baseline = settings.model_dump()
+    baseline = settings
     budget = _local_budget(settings, "skald_writer")
     record = _record(budget, input_tokens=budget.input_ceiling - 500)
     lowered = settings.apex.max_output_tokens - 10_000
@@ -178,7 +178,7 @@ def test_capped_flags_a_zero_delta_that_hides_freed_capacity(
             settings.apex.reasoning_reserve_tokens, lowered
         ),
     }
-    candidate = load_settings(_candidate(tmp_path, "lowered", changes)).model_dump()
+    candidate = load_settings(_candidate(tmp_path, "lowered", changes))
 
     flat = replay_record(record, candidate, baseline=baseline)
     wider = replay_record(
@@ -209,9 +209,9 @@ def test_overflow_beyond_trimmable_memory_is_infeasible(tmp_path: Path) -> None:
     raised = settings.apex.response_reserve_tokens + trimmable + 500 + 1
     candidate = load_settings(
         _candidate(tmp_path, "harsh", {"apex.response_reserve_tokens": raised})
-    ).model_dump()
+    )
 
-    row = replay_record(record, candidate, baseline=settings.model_dump())
+    row = replay_record(record, candidate, baseline=settings)
 
     assert row.overflow_tokens == trimmable + 1
     assert row.trimmable_tokens == trimmable
@@ -226,9 +226,9 @@ def test_smaller_response_reserve_frees_frontier_input(tmp_path: Path) -> None:
     reserve = settings.apex.response_reserve_tokens - 3_000
     candidate = load_settings(
         _candidate(tmp_path, "reserve", {"apex.response_reserve_tokens": reserve})
-    ).model_dump()
+    )
 
-    row = replay_record(record, candidate, baseline=settings.model_dump())
+    row = replay_record(record, candidate, baseline=settings)
 
     assert not row.capped
     assert row.candidate_policy_headroom == reserve
@@ -240,12 +240,11 @@ def test_smaller_response_reserve_frees_frontier_input(tmp_path: Path) -> None:
 def test_explicit_window_replaces_the_recorded_spend() -> None:
     """An explicit spend is resolved against the candidate model's limits."""
     settings = load_settings(REPO_CONFIG)
-    dumped = settings.model_dump()
     budget = _frontier_budget(settings)
     record = _record(budget, input_tokens=budget.input_ceiling - 100)
     smaller = record.effective_ceiling + record.policy_headroom - 10_000
 
-    row = replay_record(record, dumped, baseline=dumped, window=smaller)
+    row = replay_record(record, settings, baseline=settings, window=smaller)
 
     assert row.window == smaller
     assert row.headroom_delta == -10_000
@@ -265,7 +264,7 @@ def test_changed_configured_window_is_refused_without_explicit_window(
 ) -> None:
     """A candidate window is never silently replaced by the recorded spend."""
     settings = load_settings(REPO_CONFIG)
-    baseline = settings.model_dump()
+    baseline = settings
     configured = settings.lore.token_budget
     baseline_window = (
         configured.provider_overrides["local"]
@@ -277,9 +276,7 @@ def test_changed_configured_window_is_refused_without_explicit_window(
         _local_budget(settings, "skald_writer") if local else _frontier_budget(settings)
     )
     record = _record(budget, input_tokens=budget.input_ceiling - 100)
-    candidate = load_settings(
-        _candidate(tmp_path, "window", {key: candidate_window})
-    ).model_dump()
+    candidate = load_settings(_candidate(tmp_path, "window", {key: candidate_window}))
 
     with pytest.raises(ValueError) as refused:
         replay_record(record, candidate, baseline=baseline)
@@ -298,51 +295,51 @@ def test_changed_configured_window_is_refused_without_explicit_window(
 def test_model_swap_to_another_configured_window_is_refused() -> None:
     """A candidate model whose provider has its own window needs --window."""
     settings = load_settings(REPO_CONFIG)
-    dumped = settings.model_dump()
     record = _record(_frontier_budget(settings), input_tokens=60_000)
     local = _local_model(settings)
     with pytest.raises(ValueError, match="pass --window"):
-        replay_record(record, dumped, baseline=dumped, model=local)
+        replay_record(record, settings, baseline=settings, model=local)
     override = settings.lore.token_budget.provider_overrides["local"]
-    row = replay_record(record, dumped, baseline=dumped, model=local, window=override)
+    row = replay_record(
+        record, settings, baseline=settings, model=local, window=override
+    )
     assert row.candidate_model == local and row.window == override
 
 
 def test_candidate_resolution_errors_propagate() -> None:
     """An unregistered model or an impossible allowance is never replayed."""
     settings = load_settings(REPO_CONFIG)
-    baseline = settings.model_dump()
-    dumped = settings.model_dump()
+    baseline = settings
+    candidate = settings.model_copy(deep=True)
     budget = _local_budget(settings, "skald_writer")
     record = _record(budget, input_tokens=budget.input_ceiling - 100)
     with pytest.raises(ValueError, match="must have one registry entry"):
         replay_record(
-            record, dumped, baseline=baseline, model="unregistered/replay-candidate"
+            record, candidate, baseline=baseline, model="unregistered/replay-candidate"
         )
     maximum = settings.model_entry(_local_model(settings)).max_output_tokens
     assert maximum is not None
-    dumped["apex"]["max_output_tokens"] = maximum + 1
+    candidate.apex.max_output_tokens = maximum + 1
     with pytest.raises(ValueError, match="exceeds model maximum"):
-        replay_record(record, dumped, baseline=baseline)
+        replay_record(record, candidate, baseline=baseline)
 
 
 def test_replay_run_reads_one_session_and_rejects_empty_or_bad_days() -> None:
     """Only the requested run is replayed; a missing run is an error."""
     settings = load_settings(REPO_CONFIG)
-    dumped = settings.model_dump()
     budget = _local_budget(settings, "skald_writer")
     _record(budget, input_tokens=budget.input_ceiling - 100)
     _record(budget, input_tokens=budget.input_ceiling - 200, attempt=2)
     _record(budget, input_tokens=budget.input_ceiling - 300, session="unrelated")
 
-    rows = replay_run(SESSION, LEDGER_DAY, dumped, baseline=dumped)
+    rows = replay_run(SESSION, LEDGER_DAY, settings, baseline=settings)
 
     assert [(row.attempt, row.freed_tokens) for row in rows] == [(1, 100), (2, 200)]
     assert all(isinstance(row, ReplayRow) for row in rows)
     with pytest.raises(NoPromptWindowsError, match="'missing-run'"):
-        replay_run("missing-run", LEDGER_DAY, dumped, baseline=dumped)
+        replay_run("missing-run", LEDGER_DAY, settings, baseline=settings)
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
-        replay_run(SESSION, "2026-2-3", dumped, baseline=dumped)
+        replay_run(SESSION, "2026-2-3", settings, baseline=settings)
 
 
 def test_cli_window_replay_json_and_table(

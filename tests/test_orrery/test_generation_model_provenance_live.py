@@ -9,6 +9,7 @@ import pytest
 from psycopg2.extras import Json
 from sqlalchemy import create_engine, text
 
+from nexus.config import load_settings
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.api.narrative_lease import (
@@ -22,7 +23,7 @@ from nexus.memory.manager import empty_pass2_baseline
 pytestmark = pytest.mark.requires_postgres
 
 LIVE_SLOT = 5
-TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline(load_settings()).model_dump(mode="json")
 
 
 class _NonCommittingConnection:

@@ -25,7 +25,9 @@ from nexus.agents.orrery.bleed import (
     select_bleed_menu,
 )
 from nexus.agents.orrery.relationship_provenance import relationship_producer
+from nexus.config.settings_models import OrreryBleedSettings
 from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
+from tests.settings_helpers import settings_with, table
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -530,17 +532,20 @@ class _FixtureMemnon:
 
 class _FixtureLore:
     def __init__(self, session: Session):
-        self.settings = {
-            "orrery": {
-                "enabled": True,
-                "bleed": {
-                    "density": 1.0,
-                    "max_candidates": 2,
-                    "near_distance_max": 2,
-                    "reserved_remote_slots": 1,
-                },
+        self.settings = settings_with(
+            {
+                "orrery.enabled": True,
+                "orrery.bleed": table(
+                    OrreryBleedSettings,
+                    {
+                        "density": 1.0,
+                        "max_candidates": 2,
+                        "near_distance_max": 2,
+                        "reserved_remote_slots": 1,
+                    },
+                ),
             }
-        }
+        )
         self.memnon = _FixtureMemnon(session)
 
 

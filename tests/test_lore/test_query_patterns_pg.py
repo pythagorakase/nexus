@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import psycopg2
 import pytest
 
+from nexus.config import load_settings
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
 from tests.pg_fixtures import (
@@ -37,7 +38,7 @@ def test_query_patterns_follow_seeded_cast_and_aliases() -> None:
                 [(character_id, alias) for alias in ["Ember", "C++", "Dr. [V]", " "]],
             )
         analyzer = QueryAnalyzer(db_url=sqlalchemy_url(dbname))
-        lore = SimpleNamespace(settings={}, memnon=None)
+        lore = SimpleNamespace(settings=load_settings(), memnon=None)
         turn_cycle = TurnCycleManager(lore)
         lore.memnon = SimpleNamespace(query_analyzer=analyzer)
         assert turn_cycle._classify_query_type("Ember") == "character"

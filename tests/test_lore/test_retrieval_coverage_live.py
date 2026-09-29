@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, text
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.memory import ContextMemoryManager
 from scripts.report_retrieval_coverage import format_retrieval_coverage_report
+from tests.settings_helpers import settings_with
 
 pytestmark = pytest.mark.requires_postgres
 LIVE_SLOT = 5
@@ -92,12 +93,12 @@ def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
             ).one()
 
             manager = ContextMemoryManager(
-                {
-                    "Agent Settings": {
-                        "LORE": {"token_budget": {"apex_context_window": 75_000}}
-                    },
-                    "memory": {"skip_simple_choices": False},
-                },
+                settings_with(
+                    {
+                        "lore.token_budget.apex_context_window": 75_000,
+                        "memory.skip_simple_choices": False,
+                    }
+                ),
                 memnon=LiveReferenceMemnon(connection, int(covered.chunk_id)),
                 provider_wire_type="openai",
                 provider_name="openai",

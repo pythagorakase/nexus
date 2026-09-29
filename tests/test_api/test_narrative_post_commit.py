@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from fastapi import BackgroundTasks
 
+from nexus.config import load_settings
 from nexus.agents.orrery import retrograde_maturation
 from nexus.api import commit_handler_sync, narrative, narrative_lease
 from nexus.api.narrative_generation import write_to_incubator
@@ -304,7 +305,9 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
                 "metadata_updates": {},
                 "entity_updates": {},
                 "reference_updates": {},
-                "lore_pass_baseline": empty_pass2_baseline({}).model_dump(mode="json"),
+                "lore_pass_baseline": empty_pass2_baseline(load_settings()).model_dump(
+                    mode="json"
+                ),
                 "session_id": pending_session,
                 "llm_response_id": None,
                 "status": "provisional",

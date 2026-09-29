@@ -39,9 +39,17 @@ from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
 from nexus.api import db_pool, narrative, orrery_dev_endpoints
-from nexus.config import load_settings, load_settings_as_dict
+from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import (
+    OrreryBleedSettings,
+    OrreryDisclosureSettings,
+    OrreryExperienceSettings,
+    OrreryKnowledgeSettings,
+    OrreryRecallSettings,
+)
 from scripts import new_story_setup
 from tests.model_registry_helpers import registry_model
+from tests.settings_helpers import settings_with, table
 from tests.pg_fixtures import connect, sqlalchemy_url
 
 
@@ -1986,42 +1994,44 @@ class _TurnLoreHarness:
 
     def __init__(self, session: Session) -> None:
         self.memnon = _TurnMemnonHarness(session)
-        self.settings = {
-            "Agent Settings": {
-                "LORE": {
-                    "token_budget": {
-                        "apex_context_window": 75_000,
-                        "prompt_overhead_tokens": 4_000,
-                    }
-                },
-                "MEMNON": {
-                    "retrieval": {"hybrid_search": {"presence_boost_enabled": False}}
-                },
-            },
-            "orrery": {
-                "enabled": True,
-                "bleed": {"max_candidates": 0},
-                "knowledge": {
-                    "enabled": True,
-                    "max_entries": 1,
-                    "recent_reveal_window_chunks": 3,
-                },
-                "experiences": {
-                    "include_player_character": True,
-                    "model": registry_model("openai"),
-                },
-                "recall": {
-                    "semantic_fit_weight": 1.0,
-                    "event_severity_weight": 0.0,
-                    "actor_involvement_weight": 0.0,
-                    "emotional_salience_weight": 0.0,
-                    "recency_weight": 0.0,
-                    "place_match_weight": 0.0,
-                    "per_character_max_entries": 1,
-                    "mandatory_reserved_entries": 0,
-                },
-            },
-        }
+        self.settings = settings_with(
+            {
+                "lore.token_budget.apex_context_window": 75_000,
+                "lore.token_budget.prompt_overhead_tokens": 4_000,
+                "memnon.retrieval.hybrid_search.presence_boost_enabled": False,
+                "orrery.enabled": True,
+                "orrery.bleed": table(OrreryBleedSettings, {"max_candidates": 0}),
+                "orrery.knowledge": table(
+                    OrreryKnowledgeSettings,
+                    {
+                        "enabled": True,
+                        "max_entries": 1,
+                        "recent_reveal_window_chunks": 3,
+                    },
+                ),
+                "orrery.experiences": table(
+                    OrreryExperienceSettings,
+                    {
+                        "include_player_character": True,
+                        "model": registry_model("openai"),
+                    },
+                ),
+                "orrery.recall": table(
+                    OrreryRecallSettings,
+                    {
+                        "semantic_fit_weight": 1.0,
+                        "event_severity_weight": 0.0,
+                        "actor_involvement_weight": 0.0,
+                        "emotional_salience_weight": 0.0,
+                        "recency_weight": 0.0,
+                        "place_match_weight": 0.0,
+                        "per_character_max_entries": 1,
+                        "mandatory_reserved_entries": 0,
+                    },
+                ),
+                "orrery.disclosure": table(OrreryDisclosureSettings),
+            }
+        )
 
 
 def test_turn_inputs_change_experience_ranking_via_shared_query_embedding(
@@ -2060,9 +2070,6 @@ def test_turn_inputs_change_experience_ranking_via_shared_query_embedding(
         {"fire": fire_experience, "harbor": harbor_experience},
     )
     lore = _TurnLoreHarness(session)
-    lore.settings["lore"] = {
-        "render_limits": load_settings().lore.render_limits.model_dump()
-    }
     manager = TurnCycleManager(lore)
 
     selected: list[int] = []

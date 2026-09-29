@@ -93,12 +93,9 @@ AUDITED_SOURCES: Tuple[EmbeddingSource, ...] = (
 
 def load_memnon_settings() -> Dict[str, Any]:
     """Load MEMNON's model registry without importing the MEMNON agent."""
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
 
-    settings = load_settings_as_dict().get("Agent Settings", {}).get("MEMNON", {})
-    if not settings:
-        raise RuntimeError("nexus.toml has no MEMNON embedding settings")
-    return settings
+    return load_settings().memnon.model_dump(by_alias=True)
 
 
 def active_embedding_models(

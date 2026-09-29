@@ -31,10 +31,11 @@ from nexus.api import (
     slot_utils,
 )
 from nexus.api.narrative_generation import generate_narrative_async
-from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import Settings
 from nexus.util.log_safety import quote_log_value
 from scripts import new_story_setup
 from tests.pg_fixtures import connect
+from tests.settings_helpers import settings_with
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -378,13 +379,10 @@ class _ProgressRecorder:
         self.statuses.append(status)
 
 
-def _route_settings() -> dict[str, Any]:
+def _route_settings() -> Settings:
     """Use the production settings with the ordinary control pinned single-pass."""
 
-    settings = copy.deepcopy(load_settings_as_dict())
-    settings["API Settings"]["apex"]["turn_pipeline"] = "single_pass"
-    settings["apex"]["turn_pipeline"] = "single_pass"
-    return settings
+    return settings_with({"apex.turn_pipeline": "single_pass"})
 
 
 def _install_route_boundaries(
@@ -419,7 +417,7 @@ def _install_route_boundaries(
     def load_route_settings(
         lore: LORE,
         settings_path: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> Settings:
         """Give the genuine LORE route the same validated test settings."""
 
         del settings_path
@@ -612,7 +610,7 @@ def _stage_narrative(
     dbname: str,
     *,
     parent_chunk_id: int,
-    settings: dict[str, Any],
+    settings: Settings,
 ) -> tuple[str, int]:
     """Drive the canonical generator through durable incubator staging."""
 
@@ -761,7 +759,7 @@ def _assert_committed_prose_names_character(
     assert character_name in row[0]
 
 
-def _accept_opening(dbname: str, settings: dict[str, Any]) -> int:
+def _accept_opening(dbname: str, settings: Settings) -> int:
     """Create the accepted ordinary-turn parent used by issue #715 controls."""
 
     session_id, staged_chunk_id = _stage_narrative(

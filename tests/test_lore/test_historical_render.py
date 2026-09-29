@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.settings_models import RenderLimits
 from nexus.memory import ContextMemoryManager
 from tests.test_lore.window_helpers import window_logon
@@ -17,8 +17,8 @@ from tests.test_lore.window_helpers import window_logon
 @pytest.mark.parametrize("limit", [1, 5, 15])
 def test_historical_render_limit_preserves_passages(seat: str, limit: int) -> None:
     """Only the configured prefix prints, with unchanged passage formatting."""
-    settings = load_settings_as_dict()
-    settings["lore"]["render_limits"]["historical_passages"] = limit
+    settings = load_settings()
+    settings.lore.render_limits.historical_passages = limit
     utility = window_logon(settings)
     passages = [
         {"chunk_id": i, "text": f"Passage {i}.", "score": 1 - i / 100}
@@ -37,8 +37,7 @@ def test_historical_render_limit_preserves_passages(seat: str, limit: int) -> No
 
 def test_historical_render_limit_validation() -> None:
     """The typed default matches retrieval k and rejects nonpositive caps."""
-    settings = load_settings_as_dict()
-    limits = settings["lore"]["render_limits"]
+    limits = load_settings().lore.render_limits.model_dump()
     assert RenderLimits.model_validate(limits).historical_passages == 15
     limits.pop("historical_passages")
     assert RenderLimits.model_validate(limits).historical_passages == 15
@@ -49,7 +48,7 @@ def test_historical_render_limit_validation() -> None:
 
 def test_historical_window_trims_lowest_ranked_first() -> None:
     """Subtractive costs agree with rerendering after removing the ranked tail."""
-    settings = load_settings_as_dict()
+    settings = load_settings()
     utility = window_logon(settings)
     passages = [
         {"chunk_id": i, "text": " Passage." * 2500, "score": 1 - i / 100}

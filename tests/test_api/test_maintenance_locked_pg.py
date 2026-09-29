@@ -10,7 +10,7 @@ import sys
 
 import pytest
 
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.story_model import read_story_settings, story_context_settings
 from nexus.memory.manager import pass2_baseline_config_fingerprint
 from scripts.migrate import is_db_locked
@@ -127,9 +127,7 @@ def test_stamp_and_refresh_locked_cli(offline_gate_db: str) -> None:
                             (tail,),
                         )
             expected = pass2_baseline_config_fingerprint(
-                story_context_settings(
-                    load_settings_as_dict(), read_story_settings(dbname)
-                )
+                story_context_settings(load_settings(), read_story_settings(dbname))
             )
             with observer.cursor() as cur:
                 cur.execute(

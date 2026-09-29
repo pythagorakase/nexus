@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg2.extras import Json, RealDictCursor
 
+from nexus.config import load_settings
 from nexus.agents.logon.apex_schema import StorytellerResponseMinimal
 from nexus.api import (
     commit_handler_sync,
@@ -33,7 +34,7 @@ from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 
 
-TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline(load_settings()).model_dump(mode="json")
 
 
 @pytest.fixture(autouse=True)

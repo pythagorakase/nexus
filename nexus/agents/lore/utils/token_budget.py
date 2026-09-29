@@ -7,6 +7,7 @@ Handles dynamic token budget calculation and allocation.
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from nexus.config.settings_models import Settings
 from nexus.config.story_model import StorySettings, resolve_seat
 from nexus.telemetry.prompt_window import estimator_for
 
@@ -16,15 +17,15 @@ logger = logging.getLogger("nexus.lore.token_budget")
 class TokenBudgetManager:
     """Manages token budget allocation for context assembly"""
 
-    def __init__(self, settings: Dict[str, Any]):
-        """Initialize with LORE settings"""
+    def __init__(self, settings: Settings):
+        """Initialize with validated NEXUS settings"""
         self.settings = settings
-        lore_settings = settings.get("Agent Settings", {}).get("LORE", {})
-        self.token_budget_config = lore_settings.get("token_budget", {})
-        allocation = lore_settings.get("component_allocation")
-        if not allocation:
-            allocation = lore_settings.get("payload_percent_budget", {})
-        self.allocation_config = allocation or {}
+        self.token_budget_config = settings.lore.token_budget
+        self.percent_budget = settings.lore.payload_percent_budget
+        # Plain ranges for callers that pass override constraints of this shape.
+        self.allocation_config: Dict[str, Dict[str, int]] = (
+            self.percent_budget.model_dump()
+        )
 
     def calculate_budget(
         self,
@@ -58,36 +59,28 @@ class TokenBudgetManager:
             )
         apex_window = apex_context_window
 
-        system_prompt = self.token_budget_config.get("system_prompt_tokens", 5000)
+        system_prompt = self.token_budget_config.system_prompt_tokens
 
         # Check if we're using a reasoning model
         if not apex_model:
-            apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-            configured_model = apex_settings.get("model")
-            if not isinstance(configured_model, str) or not configured_model.strip():
-                raise RuntimeError(
-                    "Storyteller model must be configured before calculating its "
-                    "token budget"
-                )
-            apex_model = configured_model
+            apex_model = self.settings.apex.model
 
         user_input_tokens = estimator_for(apex_model)(user_input)
 
         from nexus.config.seat_window import resolve_seat_window
 
         window = resolve_seat_window(
-            self.settings, apex_model, seat="skald_writer", window=apex_window
+            self.settings.model_dump(),
+            apex_model,
+            seat="skald_writer",
+            window=apex_window,
         )
         available_context = window.input_ceiling
 
         # Calculate component allocations using minimum percentages initially
-        warm_slice_min = self.allocation_config.get("warm_slice", {}).get("min", 40)
-        structured_min = self.allocation_config.get("structured_summaries", {}).get(
-            "min", 10
-        )
-        augmentation_min = self.allocation_config.get(
-            "contextual_augmentation", {}
-        ).get("min", 25)
+        warm_slice_min = self.percent_budget.warm_slice.min
+        structured_min = self.percent_budget.structured_summaries.min
+        augmentation_min = self.percent_budget.contextual_augmentation.min
 
         # Start with minimum allocations
         warm_slice_tokens = int(available_context * warm_slice_min / 100)
@@ -286,10 +279,9 @@ class TokenBudgetManager:
             summary = entity.get("summary", "")
             text_candidates.append(f"{name}: {summary}")
 
-        model = self.settings.get("apex", {}).get("model") or self.settings.get(
-            "API Settings", {}
-        ).get("apex", {}).get("model")
-        model = resolve_seat("skald", story=StorySettings(skald_model=model)).model
+        model = resolve_seat(
+            "skald", story=StorySettings(skald_model=self.settings.apex.model)
+        ).model
         tokens = estimator_for(model)("\n".join(text_candidates))
         entity["token_count"] = tokens
         return tokens

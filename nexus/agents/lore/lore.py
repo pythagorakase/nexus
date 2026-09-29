@@ -41,7 +41,8 @@ from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 # Import NEXUS configuration loader
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
+from nexus.config.settings_models import Settings
 from nexus.runtime.home import resolve_config_path
 from nexus.telemetry.generation import report_generation_phase
 from nexus.telemetry.usage import usage_context
@@ -156,7 +157,7 @@ class LORE:
 
         logger.info("LORE agent initialized successfully")
 
-    def _load_settings(self, settings_path: Optional[str] = None) -> Dict[str, Any]:
+    def _load_settings(self, settings_path: Optional[str] = None) -> Settings:
         """
         Load and validate settings from nexus.toml.
 
@@ -173,7 +174,7 @@ class LORE:
         self.settings_path = effective_settings_path
 
         try:
-            settings = load_settings_as_dict(effective_settings_path)
+            settings = load_settings(effective_settings_path)
             logger.info(
                 "✓ Loaded and validated settings from effective config path %s",
                 effective_settings_path,
@@ -204,11 +205,6 @@ class LORE:
 
         # LOGON is initialized lazily on first use when enabled
         if self.enable_logon and not self._logon_initialized:
-            apex_settings = self.settings.get("API Settings", {}).get("apex")
-            if apex_settings is None:
-                logger.warning(
-                    "LOGON enabled but no explicit apex configuration found; using default provider settings"
-                )
             logger.info(
                 "LOGON lazy initialization enabled; provider will be created on first use"
             )
@@ -694,7 +690,7 @@ class LORE:
                 "turn_manager": self.turn_manager is not None,
                 "memory_manager": self.memory_manager is not None,
             },
-            "settings_loaded": bool(self.settings),
+            "settings_loaded": self.settings is not None,
             "debug_mode": self.debug,
             "memory": (
                 self.memory_manager.get_memory_summary() if self.memory_manager else {}

@@ -19,9 +19,8 @@ from psycopg2.extras import RealDictCursor
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.commit_handler_sync import compact_accepted_correspondence_sync
 from nexus.api.slot_utils import VALID_DBNAMES
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.memory.correspondence import (
-    correspondence_settings,
     load_accepted_correspondence,
     persist_staged_correspondence,
 )
@@ -84,8 +83,8 @@ def test_live_two_seat_exchange_and_compaction(
     disposable_live_correspondence_db: str,
 ) -> None:
     dbname = disposable_live_correspondence_db
-    settings = load_settings_as_dict()
-    config = correspondence_settings(settings)
+    settings = load_settings()
+    config = settings.storyteller.correspondence
     with _connect(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -119,12 +118,12 @@ def test_live_two_seat_exchange_and_compaction(
 
     private_context = load_accepted_correspondence(
         dbname,
-        max_tokens=int(config["max_rendered_tokens"]),
+        max_tokens=config.max_rendered_tokens,
     )
     utility = LogonUtility(
         settings,
         dbname=dbname,
-        model_override=str(settings["apex"]["model"]),
+        model_override=settings.apex.model,
     )
     response = utility.generate_narrative(
         {

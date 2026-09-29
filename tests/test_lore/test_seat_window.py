@@ -1,7 +1,5 @@
 """Real configuration, rendering, and tokenizer proofs for seat window truth."""
 
-from copy import deepcopy
-
 import pytest
 from pydantic import ValidationError
 
@@ -64,13 +62,13 @@ def test_story_window_above_declared_input_ceiling_names_both_limits():
 
 
 def test_model_and_seat_policy_do_not_change_stamped_memory_fingerprint():
-    settings = load_settings_as_dict()
+    settings = load_settings()
     original = pass2_baseline_config_fingerprint(settings)
-    changed = deepcopy(settings)
-    changed["apex"]["response_reserve_tokens"] += 1
-    changed["global"]["model"]["api_models"]["openai"]["models"][0][
-        "context_window"
-    ] += 1
+    changed = settings.model_copy(deep=True)
+    changed.apex.response_reserve_tokens += 1
+    entry = changed.global_.model.api_models["openai"].models[0]
+    assert entry.context_window is not None
+    entry.context_window += 1
     assert pass2_baseline_config_fingerprint(changed) == original
 
 
@@ -246,7 +244,7 @@ def test_shared_trim_reserves_maximal_writer_response_for_gaia():
     from nexus.memory import ContextMemoryManager
     from nexus.telemetry.prompt_window import rendered_request_counter
 
-    settings = load_settings_as_dict()
+    settings = load_settings()
     logon = window_logon(settings)
     payload = {
         "user_input": "Continue.",
@@ -273,7 +271,7 @@ def test_shared_trim_reserves_maximal_writer_response_for_gaia():
     )
     manager._enforce_context_payload_budget(ctx)
     writer, gaia = logon._assembly_window_requests
-    assert gaia.reserved_output == settings["apex"]["max_output_tokens"]
+    assert gaia.reserved_output == settings.apex.max_output_tokens
     assert writer.tokens <= writer.target and gaia.tokens <= gaia.target
     # Fill the remaining shared capacity using a one-token-per-repeat string.
     count = writer.counter.text_count

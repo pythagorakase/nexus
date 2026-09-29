@@ -24,7 +24,8 @@ from nexus.agents.lore.utils.entity_inclusion import resolve_entity_inclusion
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.api import db_pool
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
+from nexus.config.settings_models import Settings
 from nexus.config.story_model import StorySettings
 from nexus.memory.manager import (
     pass2_baseline_config_fingerprint,
@@ -111,8 +112,8 @@ def _digest(payload: Any) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _settings() -> Any:
-    return load_settings_as_dict()
+def _settings() -> Settings:
+    return load_settings()
 
 
 class _NoStoryConnection:

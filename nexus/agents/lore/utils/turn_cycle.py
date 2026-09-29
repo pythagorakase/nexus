@@ -19,7 +19,6 @@ from nexus.agents.lore.utils.scene_order import (
 )
 from nexus.agents.orrery.cards import rendered_selection
 from nexus.agents.orrery.player_identity import canonical_player_character_id
-from nexus.config.settings_models import RenderLimits
 from nexus.memory.context_state import memory_identity
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 
@@ -57,13 +56,13 @@ try:
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.config.settings_models import (
-        LORERetrievalSettings,
         OrreryBleedSettings,
         OrreryDisclosureSettings,
         OrreryExperienceSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
         OrreryRecallSettings,
+        Settings,
     )
 except ImportError:
     # If relative import fails, try absolute
@@ -98,13 +97,13 @@ except ImportError:
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.config.settings_models import (
-        LORERetrievalSettings,
         OrreryBleedSettings,
         OrreryDisclosureSettings,
         OrreryExperienceSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
         OrreryRecallSettings,
+        Settings,
     )
 
 STRUCTURED_RESPONSE_TYPES = (
@@ -244,32 +243,22 @@ class TurnCycleManager:
             lore_agent: Reference to the parent LORE instance
         """
         self.lore = lore_agent
-        self.settings = lore_agent.settings
+        self.settings: Settings = lore_agent.settings
+
+    def _orrery_settings(self) -> Dict[str, Any]:
+        """Return the Orrery section in the plain form its consumers take."""
+
+        return self.settings.model_dump().get("orrery") or {}
 
     def _max_deep_queries(self) -> int:
         """Resolve the configured deep-query budget for one turn."""
 
-        retrieval_settings = self.settings.get("lore", {}).get("retrieval") or (
-            self.settings.get("Agent Settings", {}).get("LORE", {}).get("retrieval", {})
-        )
-        default_budget = LORERetrievalSettings().max_deep_queries
-        budget = retrieval_settings.get("max_deep_queries", default_budget)
-        try:
-            return max(1, int(budget))
-        except (TypeError, ValueError) as exc:
-            raise RuntimeError(
-                f"Invalid LORE retrieval max_deep_queries setting: {budget!r}"
-            ) from exc
+        return self.settings.lore.retrieval.max_deep_queries
 
     def _presence_boost_enabled(self) -> bool:
         """Return the required MEMNON presence-boost feature flag."""
 
-        enabled = self.settings["Agent Settings"]["MEMNON"]["retrieval"][
-            "hybrid_search"
-        ]["presence_boost_enabled"]
-        if not isinstance(enabled, bool):
-            raise TypeError("presence_boost_enabled must be a boolean")
-        return enabled
+        return self.settings.memnon.retrieval.hybrid_search.presence_boost_enabled
 
     def _raw_chunk_retrieval_query(self, turn_context: TurnContext) -> Optional[str]:
         """Build one raw scene-and-input representation for retrieval."""
@@ -404,9 +393,7 @@ class TurnCycleManager:
         if self.lore.memnon:
             try:
                 # Get chunk parameters from settings
-                initial_chunks = self.settings["lore"]["chunk_parameters"][
-                    "warm_slice_initial"
-                ]
+                initial_chunks = self.settings.lore.chunk_parameters.warm_slice_initial
 
                 # Select the configured window ending at the requested parent.
                 recent_chunks = self.lore.memnon.get_recent_chunks(
@@ -705,6 +692,7 @@ class TurnCycleManager:
         all_results: List[Dict[str, Any]] = []
         query_type_counts: Dict[str, int] = {}
         max_deep_queries = self._max_deep_queries()
+        orrery_settings = self._orrery_settings()
 
         for query_obj in queries[:max_deep_queries]:
             if getattr(self.lore, "memory_manager", None):
@@ -718,7 +706,6 @@ class TurnCycleManager:
                     "use_hybrid": True,
                 }
                 query_embeddings: Dict[str, List[float]] | None = None
-                orrery_settings = self.settings.get("orrery", {})
                 if orrery_settings.get("enabled", False) and orrery_settings.get(
                     "knowledge", {}
                 ).get("enabled", False):
@@ -781,7 +768,7 @@ class TurnCycleManager:
         The proposal is intentionally kept on TurnContext only. It is not injected
         into the storyteller payload until a later phase proves the no-write path.
         """
-        orrery_settings = self.settings.get("orrery", {})
+        orrery_settings = self._orrery_settings()
         if not orrery_settings.get("enabled", False):
             turn_context.phase_states["orrery_resolve"] = {
                 "enabled": False,
@@ -1039,7 +1026,7 @@ class TurnCycleManager:
                 rendered_cards=tuple(
                     rendered_selection(
                         proposal.to_dict(),
-                        self.settings.get("orrery", {}).get("prompt"),
+                        self._orrery_settings().get("prompt"),
                     )
                 ),
             )
@@ -1118,7 +1105,7 @@ class TurnCycleManager:
     ) -> list[str]:
         """Read and render recent rulings before payload-budget accounting."""
 
-        orrery_settings = self.settings.get("orrery", {})
+        orrery_settings = self._orrery_settings()
         if not orrery_settings.get("enabled", False):
             return []
         if not self.lore.memnon:
@@ -1149,9 +1136,7 @@ class TurnCycleManager:
 
     def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
         """Freeze the deduplicated, capped selection before hydration and trimming."""
-        limits = RenderLimits.model_validate(
-            self.lore.settings.get("lore", {}).get("render_limits", {})
-        )
+        limits = self.settings.lore.render_limits
         warm, retrieved = select_scene_memories(
             payload["warm_slice"]["chunks"],
             payload["retrieved_passages"]["results"],
@@ -1395,7 +1380,7 @@ class TurnCycleManager:
     def _build_world_knowledge(self, turn_context: TurnContext) -> list[dict[str, Any]]:
         """Load optional spoiler-limited knowledge for the current scene."""
 
-        orrery_settings = self.settings.get("orrery", {})
+        orrery_settings = self._orrery_settings()
         knowledge_settings = OrreryKnowledgeSettings.model_validate(
             orrery_settings.get("knowledge", {})
         )
@@ -1460,7 +1445,7 @@ class TurnCycleManager:
     async def select_orrery_bleed(self, turn_context: TurnContext) -> None:
         """Populate optional Orrery Bleed menu before payload assembly."""
 
-        orrery_settings = self.settings.get("orrery", {})
+        orrery_settings = self._orrery_settings()
         if not orrery_settings.get("enabled", False):
             return
 

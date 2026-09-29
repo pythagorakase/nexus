@@ -44,10 +44,18 @@ from nexus.api.native_structured_output import (
     structured_output_error_text,
 )
 from nexus.config import resolve_model_ref
+from nexus.config.settings_models import Settings
 from scripts import api_openai
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 from tests.model_registry_helpers import registry_model
+from tests.settings_helpers import settings_with
+
+
+def _single_pass() -> Settings:
+    """Return real settings on the single-pass storyteller pipeline."""
+
+    return settings_with({"apex.turn_pipeline": "single_pass"})
 
 
 def _bootstrap_response() -> StorytellerResponseBootstrap:
@@ -484,7 +492,7 @@ def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
     reasoning_effort: str | None,
     expected_effort: str | None,
 ) -> None:
-    utility = LogonUtility({})
+    utility = LogonUtility(_single_pass())
     utility._provider_wire_type = "anthropic"
     schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
     writer = SkaldWriterWire.model_validate(
@@ -536,7 +544,7 @@ def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
 
 
 def test_two_pass_gaia_tool_envelope_reaches_forced_non_strict_tool() -> None:
-    utility = LogonUtility({})
+    utility = LogonUtility(_single_pass())
     utility._provider_wire_type = "anthropic"
     utility.provider = SimpleNamespace(structured_transport="tool_envelope")
     schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
@@ -584,7 +592,7 @@ def test_two_pass_gaia_tool_envelope_reaches_forced_non_strict_tool() -> None:
 
 @pytest.mark.asyncio
 async def test_two_pass_gaia_tool_envelope_async_uses_effort_only_config() -> None:
-    utility = LogonUtility({})
+    utility = LogonUtility(_single_pass())
     utility._provider_wire_type = "anthropic"
     utility.provider = SimpleNamespace(structured_transport="tool_envelope")
     schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
@@ -1129,13 +1137,9 @@ async def test_logon_terminal_validation_propagation_logs_no_payload_prose(
     )
     provider.client = cast(Any, SimpleNamespace(responses=FakeResponses()))
     utility = LogonUtility(
-        {"API Settings": {"apex": {"turn_pipeline": "single_pass"}}},
+        _single_pass(),
         model_override=provider.model,
     )
-    from nexus.config import load_settings_as_dict
-
-    utility.settings.update(load_settings_as_dict())
-    utility.settings["apex"]["turn_pipeline"] = "single_pass"
     utility.provider = provider
     utility._provider_bootstrap_mode = False
     utility._provider_wire_type = "openai"

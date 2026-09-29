@@ -15,6 +15,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException
 from psycopg2.extras import Json, RealDictCursor
 
+from nexus.config import load_settings
 from nexus.api import narrative, narrative_lease, slot_state
 from nexus.api.choice_recovery import recover_orphaned_choice
 from nexus.api.narrative_schemas import RetryNarrativeRequest
@@ -484,7 +485,9 @@ def _seed_pending(dbname: str, parent: int) -> tuple[str, int]:
         "orrery_proposal": {},
         "orrery_adjudications": [],
         "new_entities": [],
-        "lore_pass_baseline": empty_pass2_baseline({}).model_dump(mode="json"),
+        "lore_pass_baseline": empty_pass2_baseline(load_settings()).model_dump(
+            mode="json"
+        ),
         "session_id": pending_session,
         "llm_response_id": None,
         "status": "complete",

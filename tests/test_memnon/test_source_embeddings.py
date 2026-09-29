@@ -4,7 +4,7 @@ Only the true external boundaries are replaced: the pooled PostgreSQL
 connection (a recording stand-in that keeps ``get_connection``'s commit-or-
 rollback contract and answers the orchestrator's queries from in-memory rows)
 and the sentence-transformer embedder. Configuration flows through the real
-``load_settings_as_dict`` seam with an explicit model registry, and the real
+``load_settings`` seam with an explicit model registry, and the real
 dimension-table DDL helpers run against the recording cursor.
 
 The public wrappers are exercised through seams the pre-#848 modules also
@@ -32,6 +32,8 @@ from nexus.agents.memnon.utils.source_embeddings import (
 from nexus.agents.orrery import retrograde_embedding
 from nexus.agents.orrery.experience_embedding import embed_character_experiences
 from nexus.agents.orrery.retrograde_embedding import embed_retrograde_summaries
+from nexus.config import load_settings
+from nexus.config.settings_models import EmbeddingModelConfig
 
 STAMP = datetime(2196, 1, 1, tzinfo=timezone.utc)
 REGISTRY = {
@@ -175,10 +177,14 @@ def _install(
     monkeypatch.setattr(
         "nexus.agents.memnon.utils.embedding_manager.EmbeddingManager", Embedder
     )
-    monkeypatch.setattr(
-        "nexus.config.load_settings_as_dict",
-        lambda *_args: {"Agent Settings": {"MEMNON": {"models": REGISTRY}}},
-    )
+    # Two active embedders exercise multi-model ordering; the live config
+    # validator admits one, so the registry is assigned after loading.
+    registry_settings = load_settings()
+    registry_settings.memnon.models = {
+        name: EmbeddingModelConfig(**config, weight=0.0)
+        for name, config in REGISTRY.items()
+    }
+    monkeypatch.setattr("nexus.config.load_settings", lambda *_args: registry_settings)
 
 
 def _summaries(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> _Database:

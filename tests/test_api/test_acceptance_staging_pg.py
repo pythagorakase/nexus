@@ -13,6 +13,7 @@ from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from nexus.config import load_settings
 from nexus.api import (
     narrative,
     save_slots,
@@ -110,7 +111,9 @@ def draft(parent: int, resolution: int, session: str) -> dict:
         "orrery_proposal": {"_bleed_offer_resolution_ids": [resolution]},
         "orrery_adjudications": [],
         "new_entities": [],
-        "lore_pass_baseline": empty_pass2_baseline({}).model_dump(mode="json"),
+        "lore_pass_baseline": empty_pass2_baseline(load_settings()).model_dump(
+            mode="json"
+        ),
         "session_id": session,
         "llm_response_id": None,
         "status": "provisional",

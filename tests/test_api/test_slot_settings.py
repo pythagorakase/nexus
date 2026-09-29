@@ -8,7 +8,7 @@ import pytest
 import tomlkit
 
 from nexus.api import new_story_flow, slot_endpoints
-from nexus.config import load_settings, load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.preferences import save_preferences
 from nexus.config.story_model import (
     StorySettings,
@@ -80,7 +80,7 @@ def test_retired_pin_raises_and_can_be_cleared(
 def test_context_fingerprint_is_scoped_to_story(
     client: TestClient, offline_gate_db: str
 ) -> None:
-    defaults = load_settings_as_dict()
+    defaults = load_settings()
     other = story_context_settings(defaults, StorySettings(apex_context_window=75_000))
     other_fingerprint = pass2_baseline_config_fingerprint(other)
     before = pass2_baseline_config_fingerprint(defaults)
@@ -100,7 +100,7 @@ def test_window_patch_rebases_matching_tail_in_same_transaction(
     client: TestClient, offline_gate_db: str
 ) -> None:
     """A player window change unbricks a schema-1 tail it can vouch for (#805)."""
-    defaults = load_settings_as_dict()
+    defaults = load_settings()
     before = story_context_settings(defaults, read_story_settings(offline_gate_db))
     with connect(offline_gate_db) as conn, conn.cursor() as cur:
         cur.execute(
@@ -208,7 +208,7 @@ def test_setting_card_database_failure_is_loud(offline_gate_db: str) -> None:
     import psycopg2
     from nexus.agents.lore.logon_utility import LogonUtility
 
-    utility = LogonUtility(load_settings_as_dict(), dbname=offline_gate_db)
+    utility = LogonUtility(load_settings(), dbname=offline_gate_db)
     with connect(offline_gate_db) as conn, conn.cursor() as cur:
         cur.execute(
             "ALTER TABLE global_variables RENAME COLUMN setting TO unavailable_setting"

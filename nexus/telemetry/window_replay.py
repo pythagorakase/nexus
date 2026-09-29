@@ -11,13 +11,11 @@ Decision 9 (#858).
 
 from __future__ import annotations
 
-from typing import Any, Mapping
-
 from pydantic import BaseModel, ConfigDict
 
 from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
 from nexus.config.seat_window import resolve_seat_window
-from nexus.config.settings_models import NATIVE_API_PROVIDERS
+from nexus.config.settings_models import NATIVE_API_PROVIDERS, Settings
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.usage import read_prompt_windows, validate_usage_day
 
@@ -65,14 +63,14 @@ def recorded_window(record: PromptWindowRecord) -> int:
     return record.effective_ceiling + record.policy_headroom
 
 
-def configured_window(settings: Mapping[str, Any], model: str) -> int:
+def configured_window(settings: Settings, model: str) -> int:
     """Return the configured prompt spend for a model's registry provider."""
     from nexus.memory.manager import resolve_storyteller_context_window
 
     providers = [
         name
-        for name, provider in settings["global"]["model"]["api_models"].items()
-        if any(entry["id"] == model for entry in provider["models"])
+        for name, provider in settings.global_.model.api_models.items()
+        if any(entry.id == model for entry in provider.models)
     ]
     if len(providers) != 1:
         raise ValueError(f"Model {model!r} must have one registry entry")
@@ -84,9 +82,9 @@ def configured_window(settings: Mapping[str, Any], model: str) -> int:
 
 def replay_record(
     record: PromptWindowRecord,
-    settings: Mapping[str, Any],
+    settings: Settings,
     *,
-    baseline: Mapping[str, Any],
+    baseline: Settings,
     model: str | None = None,
     window: int | None = None,
 ) -> ReplayRow:
@@ -104,7 +102,7 @@ def replay_record(
     candidate_model = record.model if model is None else model
     spend = recorded_window(record) if window is None else window
     budget = resolve_seat_window(
-        settings, candidate_model, seat=record.seat, window=spend
+        settings.model_dump(), candidate_model, seat=record.seat, window=spend
     )
     if window is None:
         recorded = configured_window(baseline, record.model)
@@ -116,7 +114,9 @@ def replay_record(
                 f"the replay holds the recorded spend {spend}, so pass --window "
                 "to replay a different spend"
             )
-    maximum = resolve_seat_window(baseline, record.model, seat=record.seat, window=None)
+    maximum = resolve_seat_window(
+        baseline.model_dump(), record.model, seat=record.seat, window=None
+    )
     ceiling = budget.input_ceiling
     overflow = max(0, record.input_tokens - ceiling)
     # A kind absent from the record was not rendered for this attempt.
@@ -145,9 +145,9 @@ def replay_record(
 def replay_run(
     run_id: str,
     day: str,
-    settings: Mapping[str, Any],
+    settings: Settings,
     *,
-    baseline: Mapping[str, Any],
+    baseline: Settings,
     model: str | None = None,
     window: int | None = None,
 ) -> list[ReplayRow]:

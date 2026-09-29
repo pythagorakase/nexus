@@ -15,6 +15,7 @@ import pytest
 from pydantic import ValidationError
 from pydantic_ai import ModelRetry
 
+from nexus.config import load_settings
 from nexus.agents.logon.skald_wire import (
     SkaldGaiaWire,
     SkaldTurnWire,
@@ -213,7 +214,7 @@ def test_private_artifacts_never_enter_public_response_or_raw_text() -> None:
         parent_chunk_id=4,
         user_text="Inspect the room.",
         session_id="private-test",
-        lore_pass_baseline=empty_pass2_baseline({}),
+        lore_pass_baseline=empty_pass2_baseline(load_settings()),
         correspondence=secrets,
     )
     raw_text = compute_raw_text(

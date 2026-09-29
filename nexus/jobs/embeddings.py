@@ -16,7 +16,7 @@ from nexus.agents.memnon.utils.source_embeddings import (
     upsert_source_vectors,
 )
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
-from nexus.config.settings_models import NarrativeJobSettings
+from nexus.config.settings_models import MEMNONSettings, NarrativeJobSettings
 from nexus.jobs.gate import before_provider_call
 from nexus.jobs.narrative_jobs import drain_job
 
@@ -60,7 +60,7 @@ def enqueue_locked_embeddings(cur: Any, parent_chunk_id: int, session_id: str) -
 
 
 def drain_embedding(
-    conn: Any, *, settings: dict[str, Any], cfg: NarrativeJobSettings, owner: str
+    conn: Any, *, memnon: MEMNONSettings, cfg: NarrativeJobSettings, owner: str
 ) -> int:
     """Generate locally, then atomically fence vectors, ironman stamp and job."""
 
@@ -73,7 +73,7 @@ def drain_embedding(
             text, embedded = cur.fetchone()
         if embedded is not None:
             return {}
-        models = active_embedding_models(settings["Agent Settings"]["MEMNON"])
+        models = active_embedding_models(memnon.model_dump(by_alias=True))
         from nexus.agents.memnon.utils.embedding_manager import load_local_model
 
         def encode(chunk_text: str, name: str) -> list[float]:

@@ -11,12 +11,14 @@ from nexus.agents.lore.utils.turn_cycle import (
     _deduplicate_retrieval_results,
     _narrative_chunk_ids,
 )
+from nexus.config import load_settings
 from nexus.memory import ContextMemoryManager
 from nexus.memory.context_state import memory_identity
 from nexus.memory.divergence import DivergenceResult
 from nexus.memory.incremental import _normalize_retrieval_memory
 from nexus.memory.manager import Pass2Update
 from nexus.memory.retrieval_coverage import coerce_chunk_id
+from tests.settings_helpers import settings_with
 
 
 def _summary(summary_id: int, text: str = "A season-zero consequence.") -> dict:
@@ -68,7 +70,7 @@ def test_retrieval_deduplication_uses_typed_memory_identity() -> None:
 
 
 def test_pass_state_keeps_and_deduplicates_typed_summary_memories() -> None:
-    manager = ContextMemoryManager({"memory": {}})
+    manager = ContextMemoryManager(load_settings())
     summary = _summary(7)
 
     package = manager.handle_storyteller_response(
@@ -122,7 +124,9 @@ def test_prompts_label_each_retrieval_corpus_without_fake_chunk_ids() -> None:
     summary["metadata"]["recorded_at_world_time"] = "2189-10-17T22:23:00+00:00"
     narrative = {"id": "9", "text": "A narrative retrieval.", "score": 0.7}
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(
+        settings_with({"apex.turn_pipeline": "single_pass"})
+    )._format_context_prompt(
         {
             "user_input": "Continue.",
             "retrieved_passages": {"results": [summary, narrative]},

@@ -25,6 +25,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from nexus.config import load_settings
 from nexus.agents.logon.skald_wire import (
     CharacterRef,
     PlaceRef,
@@ -287,7 +288,7 @@ def _stage_incubator(
         user_text="Continue.",
         session_id=session_id,
         orrery_proposal=proposal,
-        lore_pass_baseline=empty_pass2_baseline({}),
+        lore_pass_baseline=empty_pass2_baseline(load_settings()),
     )
     staged["generation_model"] = "TEST"
     staged["llm_response_id"] = f"response-{session_id}"

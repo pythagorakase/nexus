@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import closing
-from copy import deepcopy
 from dataclasses import dataclass
 import logging
 from typing import Any, Literal, Mapping
@@ -317,20 +316,15 @@ def persisted_job_model(job: Mapping[str, Any], *, table: str) -> str:
 
 
 def story_context_settings(
-    settings: dict[str, Any], story: StorySettings, *, override: int | None = None
-) -> dict[str, Any]:
+    settings: Settings, story: StorySettings, *, override: int | None = None
+) -> Settings:
     """Copy settings with the per-story window used for sizing and fingerprints."""
-    resolved = deepcopy(settings)
+    resolved = settings.model_copy(deep=True)
     window = override if override is not None else story.apex_context_window
     if window is None:
         return resolved
     StorySettings(apex_context_window=window)
-    for lore in (
-        resolved.get("lore"),
-        resolved.get("Agent Settings", {}).get("LORE"),
-    ):
-        if lore is not None:
-            lore["token_budget"]["apex_context_window"] = window
-            # An explicit story window outranks repository resource defaults.
-            lore["token_budget"]["provider_overrides"] = {}
+    resolved.lore.token_budget.apex_context_window = window
+    # An explicit story window outranks repository resource defaults.
+    resolved.lore.token_budget.provider_overrides = {}
     return resolved

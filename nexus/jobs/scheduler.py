@@ -16,7 +16,7 @@ from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
 from nexus.config import load_settings_as_dict
-from nexus.config.settings_models import DeferredWorkSettings
+from nexus.config.settings_models import DeferredWorkSettings, MEMNONSettings
 from nexus.database import connection_kwargs, is_connection_failure, transaction
 from nexus.jobs.gate import SchedulerStopped, provider_gate
 
@@ -597,7 +597,9 @@ class SlotScheduler:
                         self.cfg.embeddings,
                         lambda: drain_embedding(
                             conn,
-                            settings=self.settings,
+                            memnon=MEMNONSettings.model_validate(
+                                self.settings["memnon"]
+                            ),
                             cfg=self.cfg.embeddings,
                             owner=self.owner,
                         ),

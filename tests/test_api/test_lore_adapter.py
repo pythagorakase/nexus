@@ -1,5 +1,6 @@
 """Tests for adapting LOGON responses into incubator payloads."""
 
+from nexus.config import load_settings
 from nexus.agents.logon.apex_schema import (
     ReferencedEntities,
     StateUpdates,
@@ -9,7 +10,7 @@ from nexus.api.lore_adapter import response_to_incubator, split_staged_orrery_pa
 from nexus.memory.manager import empty_pass2_baseline
 
 
-TEST_BASELINE = empty_pass2_baseline({})
+TEST_BASELINE = empty_pass2_baseline(load_settings())
 
 
 def test_response_to_incubator_serializes_current_reference_schema() -> None:

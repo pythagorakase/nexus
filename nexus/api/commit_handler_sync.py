@@ -63,7 +63,6 @@ from nexus.memory.context_state import (
     bind_pass2_baseline,
 )
 from nexus.memory.correspondence import (
-    correspondence_settings,
     insert_digest_version,
     load_compaction_system_prompt,
     persist_staged_correspondence,
@@ -920,12 +919,12 @@ def compact_accepted_correspondence_sync(
     """Run and persist post-accept hysteresis compaction when it is due."""
 
     from nexus.agents.lore.logon_utility import LogonUtility
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
 
-    settings = load_settings_as_dict()
-    config = correspondence_settings(settings)
-    floor_turns = int(config["floor_turns"])
-    ceiling_turns = int(config["ceiling_turns"])
+    settings = load_settings()
+    config = settings.storyteller.correspondence
+    floor_turns = config.floor_turns
+    ceiling_turns = config.ceiling_turns
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             plan = plan_correspondence_compaction(
@@ -942,14 +941,16 @@ def compact_accepted_correspondence_sync(
 
         with conn, conn.cursor() as cur:
             resolved_model = resolve_enqueued_seat(
-                "storyteller.correspondence.compaction_model", cur, settings=settings
+                "storyteller.correspondence.compaction_model",
+                cur,
+                settings=settings.model_dump(),
             ).model
     model = resolved_model
     dbname = getattr(getattr(conn, "info", None), "dbname", None)
     if not isinstance(dbname, str) or not dbname:
         raise RuntimeError("Correspondence compaction requires a slot DB connection")
-    max_digest_tokens = int(config["max_digest_tokens"])
-    digest_hard_cap_multiplier = float(config["digest_hard_cap_multiplier"])
+    max_digest_tokens = config.max_digest_tokens
+    digest_hard_cap_multiplier = config.digest_hard_cap_multiplier
     utility = LogonUtility(
         settings,
         dbname=dbname,

@@ -29,6 +29,8 @@ from pydantic import (
     model_validator,
 )
 
+from nexus.config.settings_models import Settings
+
 from .baseline_compat import (
     Pass2ConfigSnapshot,
     pass2_baseline_config_fingerprint,
@@ -126,7 +128,7 @@ class Pass2BaselineV2(BaseModel):
     @classmethod
     def for_settings(
         cls,
-        settings: Mapping[str, Any],
+        settings: Settings,
         *,
         memory_identities: List[MemoryIdentity],
         prior_token_accounting: Dict[str, int],
@@ -160,7 +162,7 @@ def parse_pass2_baseline(payload: Any) -> Pass2Baseline:
 
 
 def restamp_pass2_baseline(
-    baseline: Pass2Baseline, settings: Mapping[str, Any]
+    baseline: Pass2Baseline, settings: Settings
 ) -> Pass2BaselineV2:
     """Re-fingerprint a baseline under ``settings``, keeping its recorded state.
 

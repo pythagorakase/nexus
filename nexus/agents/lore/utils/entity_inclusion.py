@@ -3,46 +3,17 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Optional
 
-from nexus.config.settings_models import EntityInclusionConfig
+from nexus.config.settings_models import EntityInclusionConfig, Settings
 
 logger = logging.getLogger("nexus.lore.entity_inclusion")
 
 _STORYTELLER_WIRE_CLASSES = frozenset({"openai", "anthropic", "local"})
 
 
-def _base_entity_inclusion(
-    settings: Mapping[str, Any],
-) -> EntityInclusionConfig:
-    """Return the validated base entity-inclusion configuration."""
-    legacy_agent_settings = settings.get("Agent Settings")
-    legacy_lore_settings = (
-        legacy_agent_settings.get("LORE")
-        if isinstance(legacy_agent_settings, Mapping)
-        else None
-    )
-    lore_settings = (
-        legacy_lore_settings
-        if isinstance(legacy_lore_settings, Mapping)
-        else settings.get("lore")
-    )
-    if not isinstance(lore_settings, Mapping):
-        raise ValueError(
-            "LORE settings are required to resolve storyteller entity inclusion"
-        )
-
-    entity_inclusion = lore_settings.get("entity_inclusion")
-    if not isinstance(entity_inclusion, Mapping):
-        raise ValueError(
-            "entity_inclusion must be configured under the LORE settings section"
-        )
-    return EntityInclusionConfig.model_validate(entity_inclusion)
-
-
 def resolve_entity_inclusion(
-    settings: Mapping[str, Any],
+    settings: Settings,
     provider_wire_type: Optional[str],
     provider_name: Optional[str],
 ) -> EntityInclusionConfig:
@@ -70,7 +41,7 @@ def resolve_entity_inclusion(
             f"{sorted(_STORYTELLER_WIRE_CLASSES)}, got {provider_wire_type!r}"
         )
 
-    base = _base_entity_inclusion(settings)
+    base = settings.lore.entity_inclusion
     if provider_wire_type is None or provider_name is None:
         return base
 

@@ -8,6 +8,7 @@ All validation is done in tokens and percentages, not chunk counts.
 import logging
 from typing import Dict, Any, Tuple, List
 
+from nexus.config.settings_models import Settings
 from nexus.memory.manager import resolve_storyteller_context_window
 
 logger = logging.getLogger("nexus.lore.context_validation")
@@ -15,7 +16,7 @@ logger = logging.getLogger("nexus.lore.context_validation")
 
 def validate_context(
     context: Dict[str, Any],
-    settings: Dict[str, Any],
+    settings: Settings,
     provider_wire_type: str,
     provider_name: str,
 ) -> Tuple[bool, List[str]]:
@@ -24,7 +25,7 @@ def validate_context(
 
     Args:
         context: Context payload to validate
-        settings: Settings dictionary
+        settings: Validated NEXUS settings
         provider_wire_type: Active LOGON storyteller wire class
         provider_name: Active registry provider name (override lookup key)
 
@@ -33,18 +34,15 @@ def validate_context(
     """
     errors = []
 
-    # Get LORE settings
-    lore_settings = settings.get("Agent Settings", {}).get("LORE", {})
-
     apex_window = resolve_storyteller_context_window(
         settings, provider_wire_type, provider_name
     )
 
     # Get the percentage ranges
-    ranges = lore_settings.get("payload_percent_budget", {})
-    warm_range = ranges.get("warm_slice", {"min": 40, "max": 70})
-    struct_range = ranges.get("structured_summaries", {"min": 10, "max": 25})
-    augment_range = ranges.get("contextual_augmentation", {"min": 25, "max": 40})
+    ranges = settings.lore.payload_percent_budget
+    warm_range = ranges.warm_slice
+    struct_range = ranges.structured_summaries
+    augment_range = ranges.contextual_augmentation
 
     # Check token limits and allocations
     metadata = context.get("metadata", {})
@@ -73,37 +71,37 @@ def validate_context(
             ) * 100
 
             # Validate warm slice percentage
-            if warm_pct < warm_range["min"]:
+            if warm_pct < warm_range.min:
                 errors.append(
-                    f"Warm slice below minimum: {warm_pct:.1f}% < {warm_range['min']}%"
+                    f"Warm slice below minimum: {warm_pct:.1f}% < {warm_range.min}%"
                 )
-            elif warm_pct > warm_range["max"]:
+            elif warm_pct > warm_range.max:
                 errors.append(
-                    f"Warm slice above maximum: {warm_pct:.1f}% > {warm_range['max']}%"
+                    f"Warm slice above maximum: {warm_pct:.1f}% > {warm_range.max}%"
                 )
 
             # Validate structured data percentage
-            if struct_pct < struct_range["min"]:
+            if struct_pct < struct_range.min:
                 errors.append(
                     f"Structured data below minimum: {struct_pct:.1f}% "
-                    f"< {struct_range['min']}%"
+                    f"< {struct_range.min}%"
                 )
-            elif struct_pct > struct_range["max"]:
+            elif struct_pct > struct_range.max:
                 errors.append(
                     f"Structured data above maximum: {struct_pct:.1f}% "
-                    f"> {struct_range['max']}%"
+                    f"> {struct_range.max}%"
                 )
 
             # Validate augmentation percentage
-            if augment_pct < augment_range["min"]:
+            if augment_pct < augment_range.min:
                 errors.append(
                     f"Augmentation below minimum: {augment_pct:.1f}% "
-                    f"< {augment_range['min']}%"
+                    f"< {augment_range.min}%"
                 )
-            elif augment_pct > augment_range["max"]:
+            elif augment_pct > augment_range.max:
                 errors.append(
                     f"Augmentation above maximum: {augment_pct:.1f}% "
-                    f"> {augment_range['max']}%"
+                    f"> {augment_range.max}%"
                 )
 
     # Check required fields exist
@@ -122,7 +120,7 @@ def validate_context(
 
 
 def validate_token_allocation(
-    allocations: Dict[str, int], total_budget: int, settings: Dict[str, Any]
+    allocations: Dict[str, int], total_budget: int, settings: Settings
 ) -> Tuple[bool, List[str]]:
     """
     Validate that token allocations meet percentage constraints from settings.
@@ -130,7 +128,7 @@ def validate_token_allocation(
     Args:
         allocations: Proposed token allocations
         total_budget: Total available token budget
-        settings: Settings dictionary
+        settings: Validated NEXUS settings
 
     Returns:
         Tuple of (is_valid, list_of_errors)
@@ -138,14 +136,13 @@ def validate_token_allocation(
     errors = []
 
     # Get allocation ranges from settings
-    lore_settings = settings.get("Agent Settings", {}).get("LORE", {})
-    ranges = lore_settings.get("payload_percent_budget", {})
+    ranges = settings.lore.payload_percent_budget
 
     # Check warm slice constraints
     warm_tokens = allocations.get("warm_slice", 0)
-    warm_range = ranges.get("warm_slice", {"min": 40, "max": 70})
-    warm_min_tokens = int(total_budget * warm_range["min"] / 100)
-    warm_max_tokens = int(total_budget * warm_range["max"] / 100)
+    warm_range = ranges.warm_slice
+    warm_min_tokens = int(total_budget * warm_range.min / 100)
+    warm_max_tokens = int(total_budget * warm_range.max / 100)
 
     if not (warm_min_tokens <= warm_tokens <= warm_max_tokens):
         errors.append(
@@ -155,9 +152,9 @@ def validate_token_allocation(
 
     # Check structured data constraints
     structured_tokens = allocations.get("structured_data", 0)
-    struct_range = ranges.get("structured_summaries", {"min": 10, "max": 25})
-    struct_min_tokens = int(total_budget * struct_range["min"] / 100)
-    struct_max_tokens = int(total_budget * struct_range["max"] / 100)
+    struct_range = ranges.structured_summaries
+    struct_min_tokens = int(total_budget * struct_range.min / 100)
+    struct_max_tokens = int(total_budget * struct_range.max / 100)
 
     if not (struct_min_tokens <= structured_tokens <= struct_max_tokens):
         errors.append(
@@ -167,9 +164,9 @@ def validate_token_allocation(
 
     # Check augmentation constraints
     augment_tokens = allocations.get("contextual_augmentation", 0)
-    augment_range = ranges.get("contextual_augmentation", {"min": 25, "max": 40})
-    augment_min_tokens = int(total_budget * augment_range["min"] / 100)
-    augment_max_tokens = int(total_budget * augment_range["max"] / 100)
+    augment_range = ranges.contextual_augmentation
+    augment_min_tokens = int(total_budget * augment_range.min / 100)
+    augment_max_tokens = int(total_budget * augment_range.max / 100)
 
     if not (augment_min_tokens <= augment_tokens <= augment_max_tokens):
         errors.append(
