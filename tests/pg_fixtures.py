@@ -312,12 +312,25 @@ def seed_protagonist(
     """Bind a fixture-owned player to the save and return character/entity IDs.
 
     Sets ``global_variables.base_timestamp`` before the character insert, which
-    satisfies the need-clock anchor (migration 100) and the playable predicate's
-    bootstrap clock; ``seed_story_clock`` can then add a head chunk after it.
+    satisfies the need-clock anchor (migration 100); ``seed_story_clock`` can
+    then add a head chunk after it. Refuses to move a clock that is already
+    set (for example by ``seed_story_clock``): resetting ``base_timestamp``
+    under stored chunks would desynchronize their ``world_time`` from the
+    summed deltas until the next ``chunk_metadata`` write re-stamps them.
     """
 
     with closing(_connect(dbname)) as conn, conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
+            row = cur.fetchone()
+            assert row is not None, f"{dbname} has no global_variables row"
+            cur.execute("SELECT %s::timestamptz", (base_timestamp,))
+            requested = cur.fetchone()[0]
+            assert row[0] is None or row[0] == requested, (
+                f"seed_protagonist would reset base_timestamp from {row[0]} to "
+                f"{requested}; run it before seed_story_clock, or pass the "
+                "clock already set"
+            )
             cur.execute(
                 "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
                 (base_timestamp,),
@@ -360,6 +373,10 @@ def seed_committed_chunk(
     statement-level ``trg_chunk_metadata_refresh_world_time`` trigger stamps
     ``chunk_metadata.world_time`` as ``base_timestamp`` plus the cumulative
     deltas, so the chunk's clock is exact only once ``base_timestamp`` is set.
+
+    The chunk carries no ``authorial_directives``, so it satisfies
+    ``playable_narrative_predicate`` (reconstruction.py) and counts toward the
+    playable ordinal and head-chunk reads.
     """
 
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
@@ -642,7 +659,15 @@ def seed_entity_tag(
     tag: str,
     source_kind: str = "template",
 ) -> int:
-    """Bestow one active, registered tag on an entity; return the row ID."""
+    """Bestow one active, registered tag on an entity; return the row ID.
+
+    ``tag`` must be a non-deprecated tag from the template's seeded vocabulary;
+    an unknown or deprecated tag fails the row-count assertion. The row is
+    active (``cleared_at`` NULL), so checkpoints and ``entity_tags_current`` see
+    it. A tag on a character entity fires the need-applicability sync (migration
+    100), so the save needs the need-clock anchor first (``seed_story_clock`` or
+    ``seed_protagonist``).
+    """
 
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(

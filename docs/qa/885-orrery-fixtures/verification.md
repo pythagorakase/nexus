@@ -1,6 +1,17 @@
 # Orrery Tests Own Their Data: Verification
 
-Work order 885/816-A. Issues #885 (the `seed_disposable_clone` route) and #816 (shared factories, Sketch 1). Base: `origin/main` at 626b2293. No migration, no gateway lane, no paid calls. Every database written here was a disposable `qa640_*` template clone created and dropped by `tests.pg_fixtures.disposable_slot_database`; no `save_NN` or `NEXUS_template` was written.
+Work order 885/816-A. Issues #885 (the `seed_disposable_clone` route) and #816 (shared factories, Sketch 1). Base: `origin/main` at 626b2293. No migration, no gateway lane, no paid calls.
+
+**Write safety.** Every fixture this PR changes writes only disposable `qa640_*` template clones, created and dropped by `tests.pg_fixtures.disposable_slot_database`; none writes a `save_NN` or `NEXUS_template`. The gate recorded below is not that clean. The `test_migrate.py` isolation run (first recorded as `77 passed in 1.71s`) and the `tests/test_orrery/test_[a-o]*.py` batch ran the repository's existing suite, and in that suite six vocabulary migration re-run tests that this PR had not yet changed connected to the owner's `save_05`. Each ran its migration twice (`migration.run(conn)`), which commits, and then wrote the snapshotted rows back through `_restore_tags`, `_restore_tag_categories`, `_restore_pair_tags`, or `_restore_event_types`, as the common rules allow for the existing suite. Other untouched slot-hardwired files in the gate (see the audit below) connect to `save_05` the same way. The six tests were:
+
+- `tests/test_orrery/test_migrate.py::test_character_tag_vocab_migration_executes_against_slot_db`
+- `tests/test_orrery/test_migrate.py::test_completed_tag_vocab_migration_executes_against_slot_db`
+- `tests/test_orrery/test_migrate.py::test_entity_tag_expiry_substrate_migration_executes_against_slot_db`
+- `tests/test_orrery/test_migrate.py::test_faction_tag_vocab_migration_executes_against_slot_db`
+- `tests/test_orrery/test_migrate.py::test_state_clearance_event_type_migration_executes_against_slot_db`
+- `tests/test_orrery/test_migrate.py::test_kind_qualified_contact_migration_executes_against_slot_db`
+
+The review-fix commit ports all six to a `qa640_vocab_migration` clone (see Review Fixes), so the current `test_migrate.py` no longer connects to `save_05`.
 
 ## What Changed
 
@@ -182,7 +193,7 @@ All 54 failed or errored on main before this PR, pass after it, and are named in
 
 ## Slot-5 Reference Audit
 
-`grep -rn "slot=5\|save_05\|LIVE_SLOT\|WRITE_SLOT" tests/test_orrery/`: 259 lines before, 236 after.
+`grep -rn "slot=5\|save_05\|LIVE_SLOT\|WRITE_SLOT" tests/test_orrery/`: 259 lines before, 236 after the first push, 224 after the review fixes (the six vocabulary tests' 12 lines are gone).
 
 ### Changed Files, Before
 
@@ -229,28 +240,15 @@ tests/test_orrery/test_status_bestow_delta_live.py:29:    conn = psycopg2.connec
 ### Changed Files, After
 
 ```
-tests/test_orrery/test_migrate.py:95:        migrate.migrate_database("save_05")
-tests/test_orrery/test_migrate.py:119:        "NEXUS_template, save_01, save_02. Not attempted: save_04, save_05."
-tests/test_orrery/test_migrate.py:1641:        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-tests/test_orrery/test_migrate.py:1643:        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-tests/test_orrery/test_migrate.py:1718:        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-tests/test_orrery/test_migrate.py:1720:        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-tests/test_orrery/test_migrate.py:1807:        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-tests/test_orrery/test_migrate.py:1809:        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-tests/test_orrery/test_migrate.py:1857:        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-tests/test_orrery/test_migrate.py:1859:        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-tests/test_orrery/test_migrate.py:1932:        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-tests/test_orrery/test_migrate.py:1934:        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-tests/test_orrery/test_migrate.py:1975:        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-tests/test_orrery/test_migrate.py:1977:        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+tests/test_orrery/test_migrate.py:94:        migrate.migrate_database("save_05")
+tests/test_orrery/test_migrate.py:118:        "NEXUS_template, save_01, save_02. Not attempted: save_04, save_05."
 ```
 
-Why these stay:
+Why these stay: both name `save_05` as a string only. The first proves `migrate_database` refuses an invalid migration tree before touching any database (every database call is monkeypatched to fail); the second is the expected `--all` log line. Neither connects.
 
-- `test_migrate.py:95` and `:119` name `save_05` as a string only: the first proves `migrate_database` refuses an invalid migration tree before touching any database (every database call is monkeypatched to fail), the second is the expected `--all` log line. Neither connects.
-- `test_migrate.py:1641-1977`: six sibling migration re-run tests (`test_character_tag_vocab_…`, `test_completed_tag_vocab_…`, `test_entity_tag_expiry_substrate_…`, `test_faction_tag_vocab_…`, `test_state_clearance_event_type_…`, `test_kind_qualified_contact_…`). They pass on the empty save_05, are not in either failure class, and are outside this order; they still roll back and restore vocabulary rows on the owner slot, so they are candidates for the next #816 slice.
+The six vocabulary migration re-run tests that the first push left on `save_05` (formerly `test_migrate.py:1641-1977`) now run on a `qa640_vocab_migration` clone through `_vocab_clone()`. Their `pytest.skip` on an unavailable slot, and the snapshot and restore helpers (`_snapshot_tags`/`_restore_tags`, `_snapshot_tag_categories`/`_restore_tag_categories`, `_snapshot_pair_tags`/`_restore_pair_tags`, `_snapshot_event_types`/`_restore_event_types`), and migration 049's column and index teardown are gone, because the clone is dropped.
 
-### Unchanged Files (Counts Before and After)
+### Every File (Counts Before and After)
 
 | File | Before | After |
 | --- | ---: | ---: |
@@ -270,7 +268,7 @@ Why these stay:
 | `tests/test_orrery/test_geo_resolver_live.py` | 1 | 1 |
 | `tests/test_orrery/test_knowledge_surfacing_live.py` | 2 | 2 |
 | `tests/test_orrery/test_live_cycle.py` | 6 | 6 |
-| `tests/test_orrery/test_migrate.py` | 16 | 14 |
+| `tests/test_orrery/test_migrate.py` | 16 | 2 |
 | `tests/test_orrery/test_mood_migration_pg.py` | 1 | 1 |
 | `tests/test_orrery/test_orbit_distance_live.py` | 2 | 0 |
 | `tests/test_orrery/test_pair_tag_predicates.py` | 4 | 4 |
@@ -293,7 +291,65 @@ Why these stay:
 | `tests/test_orrery/test_weather_migration_pg.py` | 1 | 1 |
 | `tests/test_orrery/test_worker.py` | 11 | 11 |
 
-The unchanged files are outside this order. The ones hardwired to an empty save_05 (`test_reveal_live`, `test_faction_project_contexts_live`, `test_evidence`, `test_tag_library`, `test_polymorphic_patron_live`, and, live-LLM gated so they skip in this gate, `test_composition_sources_live`, `test_stage2a_status_live`, `test_claim_propagation_live`) remain #885 work for a later slice. `test_adjudication_history`, `test_ecology_live`, `test_live_cycle`, `test_signal_events`, and `test_tag_provenance` read save_02 through `WRITE_SLOT`/`LIVE_SLOT` names. `test_events`, `test_retrograde_*`, `test_worker`, and `test_embedding_audit` pass `slot=5` or `dbname="save_05"` as labels into offline or rolled-back calls.
+The eight changed files are the rows whose count falls. The unchanged files are outside this order; each keeps its references for one of these reasons:
+
+- **Hardwired to an empty `save_05`, left for #885:** `test_reveal_live`, `test_faction_project_contexts_live`, `test_evidence`, `test_tag_library`, `test_polymorphic_patron_live`; and, live-LLM gated so they skip in this gate, `test_composition_sources_live`, `test_stage2a_status_live`, `test_claim_propagation_live`.
+- **Hardwired to slot 5 in other ways:** `test_distortion_live` (imports `LIVE_SLOT` from `test_claim_propagation_live` for its asyncpg connection), `test_generation_model_provenance_live` (`LIVE_SLOT = 5` passed as the production slot), `test_geo_resolver_live` (`get_slot_db_url(slot=5)`), `test_knowledge_surfacing_live` (`LIVE_SLOT = 5` engine), `test_pair_tag_predicates` and `test_pair_tag_substrate` (`TEST_DBNAME = "save_05"`).
+- **Migration probes that connect to slot 5:** `test_mood_migration_pg`, `test_polymorphic_patron_migration_pg`, `test_weather_migration_pg` (each `psycopg2.connect(get_slot_db_url(slot=5))`).
+- **Reads `save_02` and `save_05`:** `test_adjudication_history` (`WRITE_SLOT = 2`, `HISTORY_SLOTS = (2, 5)`).
+- **Reads `save_02`:** `test_ecology_live`, `test_live_cycle`, `test_signal_events`, `test_tag_provenance` (through `WRITE_SLOT`/`LIVE_SLOT` names).
+- **Pass `slot=5` or `save_05` only as a label** into offline or rolled-back calls: `test_events`, `test_retrograde_*`, `test_worker`, `test_embedding_audit`.
+
+## Review Fixes
+
+Applied after the first review:
+
+- `tests/test_orrery/test_migrate.py`: the six vocabulary re-run tests above run on a `qa640_vocab_migration` clone; their skip, snapshot, and restore scaffolding is deleted.
+- `tests/pg_fixtures.py`: `seed_protagonist`'s docstring no longer claims a playable-predicate clock. `seed_committed_chunk` states the playable-predicate invariant (no `authorial_directives`, so the chunk counts toward the playable ordinal and head-chunk reads). `seed_entity_tag` states its invariants. `seed_protagonist` now refuses to move a `base_timestamp` that is already set to a different value (for example by `seed_story_clock`). A stricter "no chunk may exist yet" guard was tried first; it broke `test_narrative_retry_pg`'s `_seed_pending`, which seeds a parent chunk on a clockless clone before the protagonist, so the guard checks the clock value instead.
+- `tests/test_orrery/test_replay.py`: `test_travel_replay_start_advance_arrive` asserts the two seeded places before unpacking. `test_reconstruction_refuses_pre_instrumentation_chunks` always fabricates the pre-genesis chunk and asserts it came back; the missing-row branch is gone.
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_migrate.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+77 passed, 5 warnings in 8.32s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_replay.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+25 passed, 5 warnings in 3.07s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_reconstruction.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+5 passed, 5 warnings in 1.88s
+```
+
+The five warnings are OpenTelemetry `DeprecationWarning`s from the shared venv.
+
+Every test file that calls `seed_protagonist`, `seed_checkpointed_story`, or `seed_entity_tag` (34 files), for the `seed_protagonist` guard:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line -p no:warnings <34 files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_api/test_narrative_post_commit.py::test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit
+FAILED tests/test_api/test_narrative_retry_pg.py::test_staging_failure_resumes_as_recovery_and_retries_once
+FAILED tests/test_api/test_narrative_retry_pg.py::test_dead_worker_is_advertised_exactly_as_retry_accepts_it
+FAILED tests/test_api/test_narrative_retry_pg.py::test_restart_reopens_the_menu_when_no_retry_can_resume
+FAILED tests/test_api/test_return_recap_pg.py::test_live_loop_at_rest_offers_the_pending_drafts_decision
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt[False-character_experience_jobs]
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_gateway_sigkill_resumes_inflight_experience
+7 failed, 258 passed in 295.80s (0:04:55)
+```
+
+The same seven fail identically on a `git archive` of this PR's base `626b2293` (and of the pre-fix branch head `f3d9b4fe`), run over the five files that hold them:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=<archive> $PY -m pytest -q --tb=line -p no:warnings \
+    tests/test_api/test_narrative_post_commit.py tests/test_api/test_narrative_retry_pg.py tests/test_api/test_return_recap_pg.py \
+    tests/test_api/test_scheduler_recovery_pg.py tests/test_api/test_scheduler_pg.py
+7 failed, 42 passed in 119.25s (0:01:59)
+```
+
+The 34-file run also includes untouched files that still connect to `save_05` as the repository runs them (`test_distortion_live`, `test_generation_model_provenance_live`); the changed fixtures in it write only clones. None of the seven fails in `pg_fixtures.py`; the retry trio fails with `psycopg2.ProgrammingError: the connection cannot be re-entered recursively` at `nexus/api/choice_recovery.py:68`. They are pre-existing and outside this order.
+
+Black: `tests/pg_fixtures.py`, `tests/test_orrery/test_migrate.py`, `tests/test_orrery/test_replay.py` clean after formatting. Flake8 on `tests/pg_fixtures.py` and `tests/test_orrery/test_migrate.py`: clean.
 
 ## Deferred
 

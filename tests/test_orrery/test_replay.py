@@ -1165,23 +1165,22 @@ def test_reconstruction_refuses_pre_instrumentation_chunks(replay_db: str) -> No
             assert (
                 earliest is not None
             ), "seed_checkpointed_story must seed a genesis checkpoint"
+            # The genesis checkpoint sits on the seeded story's first chunk, so
+            # a pre-instrumentation chunk is always fabricated just before it.
             cur.execute(
-                "SELECT max(id) FROM narrative_chunks WHERE id < %s", (earliest,)
+                """
+                INSERT INTO narrative_chunks (id, raw_text, created_at)
+                SELECT %s, 'pre-instrumentation replay probe',
+                       created_at - interval '1 second'
+                FROM narrative_chunks
+                WHERE id = %s
+                RETURNING id
+                """,
+                (earliest - 1, earliest),
             )
-            ancient = cur.fetchone()[0]
-            if ancient is None:
-                cur.execute(
-                    """
-                    INSERT INTO narrative_chunks (id, raw_text, created_at)
-                    SELECT %s, 'pre-instrumentation replay probe',
-                           created_at - interval '1 second'
-                    FROM narrative_chunks
-                    WHERE id = %s
-                    RETURNING id
-                    """,
-                    (earliest - 1, earliest),
-                )
-                ancient = cur.fetchone()[0]
+            row = cur.fetchone()
+            assert row is not None, "the genesis chunk must exist to precede it"
+            ancient = row[0]
             with pytest.raises(ValueError, match="instrumentation era"):
                 reconstruct_state_at_sync(cur, ancient)
     finally:
@@ -1359,7 +1358,9 @@ def test_travel_replay_start_advance_arrive(replay_db: str) -> None:
             head = _head_chunk(cur)
             _, char_entity, _, _ = _probe_character(cur)
             cur.execute("SELECT id FROM places ORDER BY id LIMIT 2")
-            (origin,), (destination,) = cur.fetchall()
+            places = cur.fetchall()
+            assert len(places) == 2, "seed_checkpointed_story seeds two located places"
+            (origin,), (destination,) = places
 
             base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
             start_chunk = _fabricate_chunk(cur, _next_world_time(cur))
