@@ -13,6 +13,7 @@ import psycopg2
 import pytest
 
 from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
+from nexus.api.save_slots import is_slot_locked
 from nexus.api.slot_utils import slot_dbname
 from nexus.config import load_settings
 from nexus.database import connection_kwargs, connection_target
@@ -93,6 +94,27 @@ def test_owner_host_database_checks_run_against_the_contract_server() -> None:
         assert REBUILD_COMMAND in (slots_idf.remediation or "") or (
             "python scripts/migrate.py --slot" in (slots_idf.remediation or "")
         )
+    existing = _existing_databases(
+        [slot_dbname(slot) for slot in settings.runtime.readiness.slots]
+    )
+    for slot in settings.runtime.readiness.slots:
+        dbname = slot_dbname(slot)
+        if dbname not in existing or not is_slot_locked(slot):
+            continue
+        state = database_analyzer_state(dbname)
+        if state.tracked and state.stale:
+            assert slots_idf.status == "fail"
+            assert state.describe() in slots_idf.observed
+            assert f"{REBUILD_COMMAND} --slot {slot} --write-locked-slot" in (
+                (slots_idf.remediation or "").split("; ")
+            )
+
+
+def _existing_databases(names: list[str]) -> set[str]:
+    """The subset of ``names`` the contract server holds."""
+    with closing(read_only_connection("postgres")) as conn, conn.cursor() as cur:
+        cur.execute("SELECT datname FROM pg_database WHERE datname = ANY(%s)", (names,))
+        return {row[0] for row in cur.fetchall()}
 
 
 def test_migration_state_compares_stamps_with_this_checkout() -> None:

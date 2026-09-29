@@ -31,7 +31,16 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from typing import Any, Callable, Literal, Optional, Sequence, get_args
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    get_args,
+)
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -623,11 +632,40 @@ def _check_template_idf_analyzer(ctx: ReadinessContext) -> Outcome:
     )
 
 
+def slot_idf_targets(
+    names: Mapping[int, str], existing: Collection[str], locked: Collection[int]
+) -> tuple[list[tuple[str, str, str]], list[str]]:
+    """Build the slot IDF check's targets and absent databases.
+
+    ``names`` maps each probed slot to its database, ``existing`` holds the
+    databases the server has, and ``locked`` the slots whose database is
+    locked. Each target is ``(dbname, rebuild_command, migrate_command)`` as
+    :func:`idf_analyzer_outcome` takes it; a locked slot's commands carry
+    ``--write-locked-slot``.
+    """
+    from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
+
+    targets: list[tuple[str, str, str]] = []
+    absent: list[str] = []
+    for slot, dbname in names.items():
+        if dbname not in existing:
+            absent.append(dbname)
+            continue
+        override = " --write-locked-slot" if slot in locked else ""
+        targets.append(
+            (
+                dbname,
+                f"{REBUILD_COMMAND} --slot {slot}{override}",
+                f"python scripts/migrate.py --slot {slot}{override}",
+            )
+        )
+    return targets, absent
+
+
 def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
     """Each probed slot that exists has IDF corpus keys matching the server."""
     import psycopg2
 
-    from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
     from nexus.api.save_slots import is_slot_locked
     from nexus.api.slot_utils import slot_dbname
 
@@ -641,23 +679,15 @@ def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
                     (list(names.values()),),
                 )
                 existing = {row[0] for row in cur.fetchall()}
+        locked = {
+            slot
+            for slot, dbname in names.items()
+            if dbname in existing and is_slot_locked(slot)
+        }
     except psycopg2.Error as exc:
         return _failed(one_line(exc), _POSTGRES_REMEDIATION)
-    targets = []
-    for slot, dbname in names.items():
-        if dbname not in existing:
-            continue
-        override = " --write-locked-slot" if is_slot_locked(slot) else ""
-        targets.append(
-            (
-                dbname,
-                f"{REBUILD_COMMAND} --slot {slot}{override}",
-                f"python scripts/migrate.py --slot {slot}{override}",
-            )
-        )
-    return idf_analyzer_outcome(
-        targets, absent=[name for name in names.values() if name not in existing]
-    )
+    targets, absent = slot_idf_targets(names, existing, locked)
+    return idf_analyzer_outcome(targets, absent=absent)
 
 
 # ---------------------------------------------------------------------------

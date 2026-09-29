@@ -22,6 +22,7 @@ import pytest
 import tomlkit
 
 from nexus import cli
+from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
 from nexus.api.secrets_endpoints import required_secret_accounts
 from nexus.config import load_settings
 from nexus.runtime.contract import (
@@ -44,6 +45,7 @@ from nexus.runtime.readiness import (
     render_report,
     run_readiness,
     runtime_version,
+    slot_idf_targets,
     validate_registry,
 )
 from nexus.util.secret_manager import InMemorySecretBackend, get_secret, set_secret
@@ -671,3 +673,27 @@ def test_doctor_parser_defaults_to_owner_host_and_rejects_other_roles() -> None:
     )
     with pytest.raises(SystemExit):
         parser.parse_args(["doctor", "--target", "guest-ready-host"])
+
+
+def test_slot_idf_targets_name_the_locked_override_and_absent_slots() -> None:
+    """A locked slot's commands carry the override; an absent slot is reported."""
+    names = {1: "save_01", 2: "save_02", 3: "save_03"}
+    targets, absent = slot_idf_targets(
+        names, existing={"save_01", "save_02"}, locked={1}
+    )
+    assert targets == [
+        (
+            "save_01",
+            f"{REBUILD_COMMAND} --slot 1 --write-locked-slot",
+            "python scripts/migrate.py --slot 1 --write-locked-slot",
+        ),
+        (
+            "save_02",
+            f"{REBUILD_COMMAND} --slot 2",
+            "python scripts/migrate.py --slot 2",
+        ),
+    ]
+    assert targets[0][1] == (
+        "python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot"
+    )
+    assert absent == ["save_03"]
