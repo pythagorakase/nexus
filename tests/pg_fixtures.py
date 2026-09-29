@@ -896,7 +896,10 @@ def _require_story_preconditions(cur: Any, helper: str) -> None:
     ``seed_played_story``) supplies both.
     """
 
-    from nexus.agents.orrery.player_identity import canonical_player_character_id
+    from nexus.agents.orrery.player_identity import (
+        PlayerIdentityNotEstablishedError,
+        canonical_player_character_id,
+    )
 
     cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
     row = cur.fetchone()
@@ -906,10 +909,40 @@ def _require_story_preconditions(cur: Any, helper: str) -> None:
     )
     try:
         canonical_player_character_id(cur)
-    except Exception as exc:
+    except PlayerIdentityNotEstablishedError as exc:
         raise AssertionError(
             f"{helper} needs a canonical player: call seed_protagonist first"
         ) from exc
+
+
+def _require_free_staging_slot(cur: Any, helper: str) -> None:
+    """Fail by name unless no draft is pending and no live lease is held.
+
+    ``acquire_generation_lease`` commits a session and a lease before the
+    incubator write can refuse a pending draft, so both are checked before
+    the lease is taken. An expired lease is not a conflict: acquisition
+    replaces it, as in production.
+    """
+
+    from nexus.api.narrative_lease import OWNER_EXPIRED_SQL
+
+    cur.execute("SELECT session_id FROM incubator")
+    pending = cur.fetchone()
+    if pending is not None:
+        raise RuntimeError(
+            f"{helper} needs an empty incubator: the singleton is owned by "
+            f"session {pending[0]}"
+        )
+    cur.execute(
+        "SELECT session_id, operation FROM narrative_generation_lease "
+        f"WHERE id = TRUE AND NOT ({OWNER_EXPIRED_SQL})"
+    )
+    owner = cur.fetchone()
+    if owner is not None:
+        raise RuntimeError(
+            f"{helper} lease conflict: session {owner[0]} holds a live "
+            f"{owner[1]!r} lease"
+        )
 
 
 def _default_scene_references(cur: Any) -> dict[str, list[dict[str, Any]]]:
@@ -1044,15 +1077,23 @@ def seed_pending_turn(
     not claimed: that is the gateway route's step before generation, not part
     of staging or acceptance.
 
-    Fails loudly when the save has no world clock (``base_timestamp``) or no
-    canonical player, when another session owns the lease, or when a draft is
-    already pending.
+    ``choices`` is empty or at least two presented choices: the gateway
+    stages no choice object for fewer than two (``extract_choice_object``), so
+    a single choice is refused rather than staged in a shape play never
+    writes.
+
+    Fails loudly, before taking the lease, when the save has no world clock
+    (``base_timestamp``) or no canonical player, when another session holds a
+    live lease, or when a draft is already pending. A failure after the lease
+    is taken abandons the staging session, releasing its lease, before it
+    propagates.
     """
 
     require_disposable_target(dbname)
     from nexus.api.config_utils import get_generation_lease_timeout_seconds
     from nexus.api.narrative_generation import write_to_incubator
     from nexus.api.narrative_lease import (
+        abandon_generation,
         acquire_generation_lease,
         bind_generation_parent,
     )
@@ -1060,6 +1101,10 @@ def seed_pending_turn(
     from nexus.config.story_model import read_story_settings, story_context_settings
     from nexus.memory.manager import empty_pass2_baseline
 
+    if choices and len(choices) < 2:
+        raise ValueError(
+            "seed_pending_turn needs at least two choices, as Skald presents them"
+        )
     total_minutes, remainder = divmod(int(time_delta.total_seconds()), 60)
     if remainder:
         raise ValueError("seed_pending_turn needs a whole-minute time_delta")
@@ -1074,6 +1119,7 @@ def seed_pending_turn(
     with closing(_connect(dbname)) as conn:
         with conn.cursor() as cur:
             _require_story_preconditions(cur, "seed_pending_turn")
+            _require_free_staging_slot(cur, "seed_pending_turn")
             parent_chunk_id = _playable_frontier_chunk_id(cur)
             references = (
                 dict(reference_updates)
@@ -1098,44 +1144,56 @@ def seed_pending_turn(
             stale_timeout_seconds=get_generation_lease_timeout_seconds(),
         )
         assert conflict is None, f"seed_pending_turn lease conflict: {conflict}"
-        bind_generation_parent(
-            conn, session_id=session_id, parent_chunk_id=parent_chunk_id
-        )
-        data: dict[str, Any] = {
-            "chunk_id": None,
-            "parent_chunk_id": parent_chunk_id,
-            "user_text": user_text,
-            "storyteller_text": storyteller_text,
-            "generation_model": generation_model,
-            "choice_object": (
-                {"presented": list(choices), "selected": None} if choices else None
-            ),
-            "choice_text": None,
-            "metadata_updates": {
-                "chronology": {
-                    "episode_transition": episode_transition
-                    or ("new_episode" if is_bootstrap else "continue"),
-                    "time_delta_minutes": minutes,
-                    "time_delta_hours": hours or None,
-                    "time_delta_days": days or None,
-                    "time_delta_description": "Fixture turn",
+        try:
+            bind_generation_parent(
+                conn, session_id=session_id, parent_chunk_id=parent_chunk_id
+            )
+            data: dict[str, Any] = {
+                "chunk_id": None,
+                "parent_chunk_id": parent_chunk_id,
+                "user_text": user_text,
+                "storyteller_text": storyteller_text,
+                "generation_model": generation_model,
+                "choice_object": (
+                    {"presented": list(choices), "selected": None} if choices else None
+                ),
+                "choice_text": None,
+                "metadata_updates": {
+                    "chronology": {
+                        "episode_transition": episode_transition
+                        or ("new_episode" if is_bootstrap else "continue"),
+                        "time_delta_minutes": minutes,
+                        "time_delta_hours": hours or None,
+                        "time_delta_days": days or None,
+                        "time_delta_description": "Fixture turn",
+                    },
+                    "world_layer": "primary",
+                    "scene_boundary": scene_boundary,
                 },
-                "world_layer": "primary",
-                "scene_boundary": scene_boundary,
-            },
-            "entity_updates": dict(entity_updates or {}),
-            "reference_updates": references,
-            "orrery_proposal": orrery_proposal,
-            "orrery_adjudications": [],
-            "new_entities": [dict(item) for item in new_entities or []],
-            "correspondence_writer_letter": correspondence_writer_letter,
-            "correspondence_gaia_letter": correspondence_gaia_letter,
-            "lore_pass_baseline": baseline.model_dump(mode="json"),
-            "session_id": session_id,
-            "llm_response_id": f"fixture_{uuid.uuid4().hex[:8]}",
-            "status": "provisional",
-        }
-        _run_staging_coroutine(write_to_incubator(conn, data, complete_session=True))
+                "entity_updates": dict(entity_updates or {}),
+                "reference_updates": references,
+                "orrery_proposal": orrery_proposal,
+                "orrery_adjudications": [],
+                "new_entities": [dict(item) for item in new_entities or []],
+                "correspondence_writer_letter": correspondence_writer_letter,
+                "correspondence_gaia_letter": correspondence_gaia_letter,
+                "lore_pass_baseline": baseline.model_dump(mode="json"),
+                "session_id": session_id,
+                "llm_response_id": f"fixture_{uuid.uuid4().hex[:8]}",
+                "status": "provisional",
+            }
+            _run_staging_coroutine(
+                write_to_incubator(conn, data, complete_session=True)
+            )
+        except Exception as exc:
+            conn.rollback()
+            abandon_generation(
+                conn,
+                session_id=session_id,
+                error=f"seed_pending_turn staging failed: {exc!r}",
+                error_class=type(exc).__name__,
+            )
+            raise
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT i.parent_chunk_id, s.status, s.terminal_outcome "

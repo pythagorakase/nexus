@@ -9,11 +9,14 @@ clone, and prove the factory refuses a save missing its preconditions.
 
 from __future__ import annotations
 
+import uuid
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from nexus.api.config_utils import get_generation_lease_timeout_seconds
+from nexus.api.narrative_lease import acquire_generation_lease
 from nexus.config import load_settings_as_dict
 from nexus.config.story_model import read_story_settings, story_context_settings
 from nexus.memory.manager import pass2_baseline_config_fingerprint
@@ -21,6 +24,7 @@ from tests.pg_fixtures import (
     FIXTURE_TURN_CHOICES,
     connect,
     disposable_slot_database,
+    seed_accepted_turn,
     seed_pending_turn,
     seed_played_story,
     seed_story_clock,
@@ -31,6 +35,17 @@ pytestmark = pytest.mark.requires_postgres
 BASE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
 TURN_GAP = timedelta(hours=6)
 CAST = ("Mara Quill", "Oren Vale")
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep an exported ``NEXUS_SLOT`` from labelling the clone's jobs.
+
+    These tests pass no ``slot`` and route none, so the factory's ambient-slot
+    guard would refuse any exported owner slot before seeding.
+    """
+
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
 
 
 def test_played_story_writes_every_accepted_turn_record() -> None:
@@ -159,10 +174,78 @@ def test_pending_turn_is_the_draft_continue_accepts() -> None:
             )
             cur.execute("SELECT count(*) FROM narrative_generation_lease")
             assert cur.fetchone()[0] == 0
+        with pytest.raises(ValueError, match="at least two choices"):
+            seed_pending_turn(
+                dbname,
+                user_text="Again.",
+                storyteller_text="A one-choice draft.",
+                choices=[FIXTURE_TURN_CHOICES[0]],
+            )
         with pytest.raises(RuntimeError, match="singleton is owned by session"):
             seed_pending_turn(
                 dbname, user_text="Again.", storyteller_text="A second draft."
             )
+        # The refusals took no lease and opened no session.
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM narrative_generation_lease")
+            assert cur.fetchone()[0] == 0
+            cur.execute(
+                "SELECT session_id::text, terminal_outcome "
+                "FROM narrative_generation_sessions ORDER BY created_at"
+            )
+            assert [(row[0] == session_id, row[1]) for row in cur.fetchall()] == [
+                (False, "accepted"),
+                (True, None),
+            ]
+            cur.execute("SELECT session_id::text FROM incubator")
+            assert cur.fetchall() == [(session_id,)]
+
+
+def test_turn_factory_records_free_text_and_refuses_a_foreign_lease() -> None:
+    """Free text is the player's wording; a live foreign lease is loud."""
+
+    with disposable_slot_database("qa640_816_free_text") as dbname:
+        seed_played_story(dbname, turns=1)
+        free_text = "I climb the fire escape instead."
+        chunk_id = seed_accepted_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text="The fixture turn the player answers in their words.",
+            choices=list(FIXTURE_TURN_CHOICES),
+            choice_text=free_text,
+        )
+        with closing(connect(dbname)) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT choice_text FROM narrative_chunks WHERE id = %s",
+                    (chunk_id,),
+                )
+                assert cur.fetchone() == (free_text,)
+            conn.rollback()
+            foreign = str(uuid.uuid4())
+            assert (
+                acquire_generation_lease(
+                    conn,
+                    session_id=foreign,
+                    operation="continue",
+                    stale_timeout_seconds=get_generation_lease_timeout_seconds(),
+                )
+                is None
+            )
+        with pytest.raises(RuntimeError, match="seed_pending_turn lease conflict"):
+            seed_pending_turn(
+                dbname,
+                user_text=free_text,
+                storyteller_text="A draft the foreign lease blocks.",
+            )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT (SELECT count(*) FROM incubator), "
+                "(SELECT session_id::text FROM narrative_generation_lease), "
+                "(SELECT count(*) FROM narrative_generation_sessions "
+                "WHERE terminal_outcome IS NULL)"
+            )
+            assert cur.fetchone() == (0, foreign, 1)
 
 
 def test_turn_factory_refuses_a_save_missing_its_preconditions() -> None:

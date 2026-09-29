@@ -1,6 +1,6 @@
 # The Accepted-Turn Factory: Verification
 
-Work order 816-B. Issues #816 (production-path factories) and #885 (the `seed_disposable_clone` route). Cut from `origin/main` at 00545d7c, then merged with `origin/main` at 4d4dca91 (migration 134, #1017, which retires `narrative_chunks.state` and `finalized_at`; and the retry-test fix, #1018), so every tail below ran against the post-134 `NEXUS_template` (`schema_migrations` max 134). No migration, no paid calls: every turn runs on the TEST provider. Code HEAD for every "After" tail below: `77dc0c64`; the commit after it changes only this file.
+Work order 816-B. Issues #816 (production-path factories) and #885 (the `seed_disposable_clone` route). Cut from `origin/main` at 00545d7c, then merged with `origin/main` at 4d4dca91 (migration 134, #1017, which retires `narrative_chunks.state` and `finalized_at`; and the retry-test fix, #1018), so every tail below ran against the post-134 `NEXUS_template` (`schema_migrations` max 134). No migration, no paid calls: every turn runs on the TEST provider. Code HEAD for the gate-tier and offline tails below: `77dc0c64`. The review-fix commit after it changes only the factory's staging guards in `tests/pg_fixtures.py`, the factory's own tests, and this file; the proof set, the per-file tails, and the factory tails below were rerun at that commit.
 
 **Write safety.** Every fixture this PR adds or changes writes only disposable `qa640_*` template clones created and dropped by `tests.pg_fixtures.disposable_slot_database`. No changed test reads or clones `save_04` any more. The gate batches below run the repository's existing suite, whose untouched slot-hardwired files still read or roll back writes on owner slots as inventoried on #885; this PR adds none. `test_knowledge_surfacing_live.py` keeps its pre-existing rollback-only fixture on `save_05` (only its settings harness changed here).
 
@@ -12,9 +12,9 @@ All three helpers live in `tests/pg_fixtures.py`, call `require_disposable_targe
 - `seed_accepted_turn(dbname, *, user_text, storyteller_text, choice_text=None, choices=None, slot=None, **staging) -> chunk_id`. Stages with `seed_pending_turn`, records the player's response with the gateway's own `_record_player_response_for_chunk` (a presented choice by number, other text as the player's wording), and commits through `commit_incubator_to_database_sync` on the same connection, as `_resolve_and_approve_pending_sync` does. Chunk and metadata, the trigger-stamped world clock, the bound baseline, sessions, presence and reference rows, the Orrery tick, experience seeds and scene-boundary render jobs, checkpoints, correspondence and compaction, summary scheduling, and the IDF corpus triggers all run as in play. It asserts the accepted chunk, its `choice_text`, the accepted session, one bound baseline, and an empty incubator.
 - `seed_played_story(dbname, *, turns, protagonist_name, base_timestamp, time_delta=5 min, cast=(), correspondence=False, slot=None) -> [chunk_id, ...]`. Seeds what the wizard transition leaves (a bounded zone, a located place, the protagonist standing there, the clock at `base_timestamp`), then accepts the bootstrap opening and `turns - 1` continuations. Each turn presents `FIXTURE_TURN_CHOICES` and records the first; each continuation's input is the previous response. `cast` seeds off-screen characters at a second place and mentions them in every turn, which makes them the Orrery's actors, so continuations stage real resolutions and acceptance writes their events and experience seeds. `correspondence` stages writer and Gaia letters with each turn.
 
-Loud preconditions: no world clock (`needs a world clock`), no canonical player (`needs a canonical player`), an already played save for `seed_played_story` (`needs an unplayed save`), a lease owned by another session, an already pending draft (`singleton is owned by session`), and a `slot` label that does not route to the clone (`Slot 4 routes to 'save_04'`). The slot label is stamped on enqueued jobs and handed to the production commit, so it is accepted only while `tests.scheduler_helpers.route_slot` routes it to the clone. `slot=None` is checked as the slot the commit resolves: a declared entity's maturation job is labelled with `get_active_slot()`, so a set `NEXUS_SLOT` must route to the clone too (`Ambient NEXUS_SLOT=4 routes to 'save_04'`); with `NEXUS_SLOT` unset, the commit's own label resolution raises before it enqueues a routed job. The factory reads the validated Orrery settings by index (`settings["orrery"]`, its `enabled`, `bleed`, and `binding.window_chunks`), so a changed settings shape raises a `KeyError` instead of defaulting.
+Loud preconditions: no world clock (`needs a world clock`), no canonical player (`needs a canonical player`, raised only for `PlayerIdentityNotEstablishedError`; a dangling or entity-less player row or a database error propagates unchanged), a single presented choice (`needs at least two choices`, since the gateway's `extract_choice_object` stages no choice object for fewer than two), an already played save for `seed_played_story` (`needs an unplayed save`), a live lease held by another session (`seed_pending_turn lease conflict`), an already pending draft (`needs an empty incubator: the singleton is owned by session`), and a `slot` label that does not route to the clone (`Slot 4 routes to 'save_04'`). The slot label is stamped on enqueued jobs and handed to the production commit, so it is accepted only while `tests.scheduler_helpers.route_slot` routes it to the clone. `slot=None` is checked as the slot the commit resolves: a declared entity's maturation job is labelled with `get_active_slot()`, so a set `NEXUS_SLOT` must route to the clone too (`Ambient NEXUS_SLOT=4 routes to 'save_04'`); with `NEXUS_SLOT` unset, the commit's own label resolution raises before it enqueues a routed job. The clock, player, choice, lease, and pending-draft checks all run before `acquire_generation_lease`, so those refusals take no lease and open no session. A failure after the lease is taken (a draft `validate_commit_draft_sync` rejects, for example) calls `abandon_generation`, which releases the lease and records the staging session as `error`, then re-raises. The factory reads the validated Orrery settings by index (`settings["orrery"]`, its `enabled`, `bleed`, and `binding.window_chunks`), so a changed settings shape raises a `KeyError` instead of defaulting.
 
-`tests/test_pg_accepted_turn_factory.py` reads the written state back (chunks, slugs, exact world times, bound baselines, accepted sessions, empty incubator and lease, IDF documents, presence counts, setting references, letters, Orrery resolutions from the second turn, cast experience seeds), proves a pending draft is what `continue` accepts (parent, TEST model, presented choices, current config fingerprint, completed session without a lease), and proves each refusal leaves no incubator or session rows. `tests/test_pg_disposable_target.py` adds the three helpers to its owner-name refusal matrix and two offline tests that refuse, before any connection, an unrouted slot label and (with `slot=None` and a `new_entities` declaration) an unrouted ambient `NEXUS_SLOT=4`.
+`tests/test_pg_accepted_turn_factory.py` reads the written state back (chunks, slugs, exact world times, bound baselines, accepted sessions, empty incubator and lease, IDF documents, presence counts, setting references, letters, Orrery resolutions from the second turn, cast experience seeds), proves a pending draft is what `continue` accepts (parent, TEST model, presented choices, current config fingerprint, completed session without a lease), records free text as the player's own wording (`narrative_chunks.choice_text` is the typed text, not a presented choice), and proves the refusals are loud and take no lease: the missing-clock and missing-player refusals leave no incubator or session rows; the one-choice and second-draft refusals on a save with a pending draft leave no lease and only the accepted session and the pending one; a live foreign lease refuses the draft with `seed_pending_turn lease conflict` and leaves no incubator row and no session beyond the foreign one. The module clears `NEXUS_SLOT` with an autouse `monkeypatch` fixture, because its tests pass no `slot` and the ambient-slot guard would otherwise refuse an exported owner slot. `tests/test_pg_disposable_target.py` adds the three helpers to its owner-name refusal matrix and two offline tests that refuse, before any connection, an unrouted slot label and (with `slot=None` and a `new_entities` declaration) an unrouted ambient `NEXUS_SLOT=4`.
 
 ## What Changed
 
@@ -47,40 +47,42 @@ The trio passed seven of eight on this machine only because `save_04` holds the 
 
 ## After: The Proof Set Together
 
+The gate commands unset `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT`: an exported owner slot is refused by the factory's ambient-slot guard in any test that neither routes nor clears it. Each file in isolation runs under the same environment (`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 $PY -m pytest -q <file>`), except where noted.
+
 ```
-$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q \
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 $PY -m pytest -q \
     tests/test_orrery/test_retrograde_constraints_pg.py tests/test_api/test_attempt_manifest_pg.py \
     tests/test_api/test_scheduler_corpus_pg.py tests/test_api/test_seat_policy_jobs_pg.py \
     tests/test_orrery/test_knowledge_surfacing_live.py tests/test_pg_disposable_target.py \
     tests/test_pg_accepted_turn_factory.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-44 passed, 9 warnings in 57.18s
+45 passed, 9 warnings in 57.67s
 
-$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q \
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 $PY -m pytest -q \
     tests/test_orrery/test_retrograde_constraints_pg.py tests/test_api/test_attempt_manifest_pg.py \
     tests/test_api/test_scheduler_corpus_pg.py tests/test_api/test_seat_policy_jobs_pg.py \
     tests/test_orrery/test_knowledge_surfacing_live.py tests/test_pg_disposable_target.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-41 passed, 9 warnings in 54.53s
+41 passed, 9 warnings in 55.04s
 ```
 
 ## After: Each File in Isolation
 
 ```
 == tests/test_orrery/test_retrograde_constraints_pg.py
-4 passed, 5 warnings in 7.01s
+4 passed, 5 warnings in 6.06s
 == tests/test_api/test_attempt_manifest_pg.py
-4 passed, 9 warnings in 21.51s
+4 passed, 9 warnings in 21.07s
 == tests/test_api/test_scheduler_corpus_pg.py
-3 passed, 9 warnings in 23.68s
+3 passed, 9 warnings in 22.87s
 == tests/test_api/test_seat_policy_jobs_pg.py
-1 passed, 9 warnings in 14.12s
+1 passed, 9 warnings in 15.06s
 == tests/test_orrery/test_knowledge_surfacing_live.py
 4 passed, 5 warnings in 0.78s
 == tests/test_pg_disposable_target.py
-25 passed, 5 warnings in 0.33s
-== tests/test_pg_accepted_turn_factory.py
-3 passed, 7 warnings in 5.36s
+25 passed, 5 warnings in 0.32s
+== tests/test_pg_accepted_turn_factory.py (run with NEXUS_SLOT=1 exported, to prove the module clears it)
+4 passed, 7 warnings in 6.80s
 ```
 
 ## Gate Tiers at the Head
@@ -139,7 +141,7 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 38 passed in 8.01s
 ```
 
-Black leaves every changed file unchanged. flake8 on the files the fix commit `77dc0c64` touched reports the same per-file counts before and after it (E501 and F811 only). flake8 on the changed files reports only findings present on main (long SQL lines and the `mock_openai_server` fixture-import F811 pattern); this PR removes four F401s and adds none. mypy (`--explicit-package-bases`) reports nothing in `tests/pg_fixtures.py` or `tests/test_pg_accepted_turn_factory.py`; the remaining reports in the touched test modules (missing `requests` stubs, `WizardCache | None` narrowing in `test_retrograde_constraints_pg.py`) are present on main.
+Black leaves every changed file unchanged. At the review-fix commit, flake8 on `tests/pg_fixtures.py` and `tests/test_pg_accepted_turn_factory.py` is clean and `$PY -m mypy -m tests.pg_fixtures -m tests.test_pg_accepted_turn_factory` reports `Success: no issues found in 2 source files`. flake8 on the files the fix commit `77dc0c64` touched reports the same per-file counts before and after it (E501 and F811 only). flake8 on the changed files reports only findings present on main (long SQL lines and the `mock_openai_server` fixture-import F811 pattern); this PR removes four F401s and adds none. mypy (`--explicit-package-bases`) reports nothing in `tests/pg_fixtures.py` or `tests/test_pg_accepted_turn_factory.py`; the remaining reports in the touched test modules (missing `requests` stubs, `WizardCache | None` narrowing in `test_retrograde_constraints_pg.py`) are present on main.
 
 ## Audit: `grep -rn "save_04\|slot=4\b\|slot_dbname(4)" tests/`
 
