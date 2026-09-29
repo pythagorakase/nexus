@@ -14,7 +14,6 @@ import tomlkit
 import uvicorn
 
 from nexus.api import narrative, slot_endpoints
-from nexus.database import database_url
 from nexus.telemetry import usage
 from tests.pg_fixtures import connect, disposable_slot_database
 from tests.scheduler_helpers import (
@@ -61,26 +60,6 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
         "qa640_775_browser", source_db="save_04", include_data=True
     ) as dbname:
         route_slot(monkeypatch, dbname)
-        real_run = subprocess.run
-
-        def run_in_clone(command, *args, **kwargs):
-            # The embedding CLI validates --database against saved-slot names
-            # in its fresh process. Use its existing explicit URL interface for
-            # this fixture, while still executing the real embedding script.
-            if (
-                isinstance(command, list)
-                and "scripts/regenerate_embeddings.py" in command
-            ):
-                command = list(command)
-                index = command.index("--database")
-                assert command[index + 1] == dbname
-                command[index : index + 2] = [
-                    "--db-url",
-                    database_url(dbname),
-                ]
-            return real_run(command, *args, **kwargs)
-
-        monkeypatch.setattr(subprocess, "run", run_in_clone)
         monkeypatch.setattr(
             slot_endpoints, "slot_dbname", lambda slot: dbname if slot == 4 else None
         )
