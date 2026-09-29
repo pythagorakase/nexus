@@ -35,6 +35,7 @@ from psycopg2 import sql
 from sqlalchemy import text
 from sqlalchemy.engine import URL, make_url
 
+from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.api import db_pool
 from nexus.config.story_model import StorySettings, write_story_settings
 from nexus.database import (
@@ -317,6 +318,13 @@ def seed_protagonist(
     set (for example by ``seed_story_clock``): resetting ``base_timestamp``
     under stored chunks would desynchronize their ``world_time`` from the
     summed deltas until the next ``chunk_metadata`` write re-stamps them.
+
+    When the clock is first set under chunks that already exist, those chunks
+    carry wall-clock ``world_time`` stamps (the refresh trigger falls back to
+    ``now()`` while ``base_timestamp`` is NULL). The helper re-stamps them
+    through the ``UPDATE OF time_delta`` statement trigger and asserts the
+    head clock is ``base_timestamp`` plus the summed deltas before the
+    character insert, so need clocks never anchor to wall time (#640/#645).
     """
 
     with closing(_connect(dbname)) as conn, conn:
@@ -336,6 +344,9 @@ def seed_protagonist(
                 (base_timestamp,),
             )
             assert cur.rowcount == 1
+            if row[0] is None:
+                cur.execute("UPDATE chunk_metadata SET time_delta = time_delta")
+            _require_need_clock_anchor(cur, "seed_protagonist")
             cur.execute(
                 "INSERT INTO entities (kind, is_active) "
                 "VALUES ('character', true) RETURNING id"
@@ -409,21 +420,44 @@ def seed_committed_chunk(
 
 
 def _require_need_clock_anchor(cur: Any, helper: str) -> None:
-    """Fail by name when the save has no clock for the need-state trigger."""
+    """Fail by name when the save has no exact story clock for need rows.
+
+    ``orrery_sync_character_need_states`` anchors need clocks at
+    ``MAX(chunk_metadata.world_time)``, then at ``base_timestamp``. The anchor
+    is exact only when ``base_timestamp`` is set and, if chunks exist, the head
+    ``world_time`` equals ``base_timestamp`` plus the summed deltas. Chunks
+    stamped while ``base_timestamp`` was NULL carry wall-clock ``world_time``
+    and fail here rather than seeding wall-clock need clocks.
+    """
 
     cur.execute(
         """
-        SELECT COALESCE(
+        SELECT
+            gv.base_timestamp,
+            (SELECT count(*) FROM chunk_metadata),
             (SELECT max(world_time) FROM chunk_metadata),
-            (SELECT base_timestamp FROM global_variables WHERE id = true)
-        )
+            gv.base_timestamp + COALESCE(
+                (SELECT sum(COALESCE(time_delta, interval '0'))
+                 FROM chunk_metadata),
+                interval '0'
+            )
+        FROM global_variables gv
+        WHERE gv.id = true
         """
     )
-    anchor = cur.fetchone()[0]
-    assert anchor is not None, (
+    row = cur.fetchone()
+    assert row is not None, f"{helper}: the save has no global_variables row"
+    base_timestamp, chunk_count, head_world_time, expected_head = row
+    assert base_timestamp is not None, (
         f"{helper} needs a need-clock anchor: call seed_story_clock or "
         "seed_protagonist before seeding characters (migration 100 refuses "
         "to anchor need clocks to wall time)"
+    )
+    assert chunk_count == 0 or head_world_time == expected_head, (
+        f"{helper} found a wall-clock need-clock anchor: head world_time "
+        f"{head_world_time} is not base_timestamp {base_timestamp} plus the "
+        f"summed deltas ({expected_head}); re-stamp chunk_metadata after "
+        "setting base_timestamp"
     )
 
 
@@ -502,6 +536,58 @@ def seed_story_clock(
     return chunk_id
 
 
+def seed_zone(
+    dbname: str,
+    *,
+    name: str,
+    min_longitude: float,
+    min_latitude: float,
+    max_longitude: float,
+    max_latitude: float,
+    summary: str = "Fixture zone.",
+) -> int:
+    """Insert one bounded zone under its own layer; return the zone ID.
+
+    Production place writers resolve every place's ``zone`` through
+    ``nexus.agents.orrery.geo`` and raise when no zone has a boundary, so a
+    save needs a bounded zone before ``seed_place``. The boundary is the
+    envelope of the given corners as a ``MultiPolygon`` in SRID 4326, and the
+    layer row mirrors the new-story mapper's ``layers`` insert.
+    """
+
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO layers (name, type, description) "
+            "VALUES (%s, 'planet', %s) RETURNING id",
+            (f"{name} Layer", summary),
+        )
+        layer_row = cur.fetchone()
+        assert layer_row is not None and cur.rowcount == 1
+        cur.execute(
+            """
+            INSERT INTO zones (name, summary, boundary, layer)
+            VALUES (
+                %s, %s,
+                ST_Multi(ST_MakeEnvelope(%s, %s, %s, %s, 4326)),
+                %s
+            )
+            RETURNING id
+            """,
+            (
+                name,
+                summary,
+                min_longitude,
+                min_latitude,
+                max_longitude,
+                max_latitude,
+                layer_row[0],
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0])
+
+
 def seed_place(
     dbname: str,
     *,
@@ -511,25 +597,29 @@ def seed_place(
     latitude: float = 40.7484,
     place_type: str = "fixed_location",
 ) -> tuple[int, int]:
-    """Insert one located place; return its place and entity IDs.
+    """Insert one located, zoned place; return its place and entity IDs.
 
-    The row takes the production insert shape (``db_converters``): the
-    subtype trigger mints the ``place`` entity, and the point is a
-    ``PointZM`` geography, so the place is on the map and a character's
-    ``current_location`` or a travel payload can reference it.
+    The row takes the production insert shape (``db_converters``): the zone
+    is resolved from the point through ``resolve_zone_for_point`` (covering
+    zone, else nearest bounded zone), the subtype trigger mints the ``place``
+    entity, and the point is a ``PointZM`` geography. The place is on the map,
+    and a protagonist placed there has a current zoned place for
+    ``story_active_zone``. The save needs a bounded zone first (``seed_zone``);
+    without one the resolver raises, as it does in production.
     """
 
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        zone_id = resolve_zone_for_point(cur, longitude=longitude, latitude=latitude)
         cur.execute(
             """
-            INSERT INTO places (name, type, summary, coordinates)
+            INSERT INTO places (name, type, summary, zone, coordinates)
             VALUES (
-                %s, %s::place_type, %s,
+                %s, %s::place_type, %s, %s,
                 ST_SetSRID(ST_MakePoint(%s, %s, 0, 0), 4326)::geography
             )
             RETURNING id, entity_id
             """,
-            (name, place_type, summary, longitude, latitude),
+            (name, place_type, summary, zone_id, longitude, latitude),
         )
         row = cur.fetchone()
         assert row is not None and cur.rowcount == 1
