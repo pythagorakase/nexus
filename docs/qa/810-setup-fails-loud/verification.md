@@ -254,12 +254,54 @@ Reachability, Black, flake8, mypy on changed files:
 $ $PY -m pytest -q tests/test_reachability.py
 38 passed in 10.21s
 $ $PY -m black --check scripts/migrate.py scripts/new_story_setup.py tests/pg_fixtures.py tests/test_new_story_setup.py
+All done! ✨ 🍰 ✨
 4 files would be left unchanged.
 $ $PY -m flake8 scripts/migrate.py scripts/new_story_setup.py tests/pg_fixtures.py tests/test_new_story_setup.py
-(10 E501 findings, all on lines this branch did not write; origin/main has the same
-lines plus two F401s this branch removed)
+scripts/migrate.py:185:89: E501 line too long (94 > 88 characters)
+scripts/migrate.py:206:89: E501 line too long (99 > 88 characters)
+scripts/migrate.py:210:89: E501 line too long (92 > 88 characters)
+scripts/new_story_setup.py:7:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:50:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:63:89: E501 line too long (91 > 88 characters)
+scripts/new_story_setup.py:112:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:203:89: E501 line too long (96 > 88 characters)
+scripts/new_story_setup.py:303:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:512:89: E501 line too long (116 > 88 characters)
 $ $PY -m mypy --explicit-package-bases scripts/migrate.py scripts/new_story_setup.py tests/pg_fixtures.py tests/test_new_story_setup.py
+tests/test_new_story_setup.py:178: error: Value of type "Item | Container" is not indexable  [index]
+tests/test_new_story_setup.py:178: error: Unsupported target for indexed assignment ("Any | Item | Container")  [index]
+tests/test_new_story_setup.py:203: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/test_new_story_setup.py:205: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
 Found 4 errors in 1 file (checked 4 source files)
-(all 4 in pre-existing lines of test_fresh_database_is_baseline_stamped; origin/main's
-file reports the same 4)
+```
+
+The same tools on the `origin/main` versions of the four files, for comparison.
+Each file was written with `git show origin/main:<path>` into a scratch copy
+`<origin/main>/` (the repository's `.flake8` copied beside it for flake8; mypy
+run from the worktree root so `nexus` resolves as it does above). Every E501
+above has an identical line on `origin/main`, shifted only by the lines this
+branch added or removed; the two F401s are the imports this branch removed.
+The four mypy errors are the same four, in `test_fresh_database_is_baseline_stamped`
+(`origin/main` lines 165/190/192 are branch lines 178/203/205):
+
+```
+$ (cd <origin/main> && $PY -m flake8 scripts/migrate.py scripts/new_story_setup.py tests/pg_fixtures.py tests/test_new_story_setup.py)
+scripts/migrate.py:24:1: F401 'os' imported but unused
+scripts/migrate.py:29:1: F401 'typing.Optional' imported but unused
+scripts/migrate.py:185:89: E501 line too long (94 > 88 characters)
+scripts/migrate.py:205:89: E501 line too long (99 > 88 characters)
+scripts/migrate.py:209:89: E501 line too long (92 > 88 characters)
+scripts/new_story_setup.py:7:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:56:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:69:89: E501 line too long (91 > 88 characters)
+scripts/new_story_setup.py:118:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:199:89: E501 line too long (96 > 88 characters)
+scripts/new_story_setup.py:298:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:478:89: E501 line too long (116 > 88 characters)
+$ $PY -m mypy --explicit-package-bases <origin/main>/scripts/migrate.py <origin/main>/scripts/new_story_setup.py <origin/main>/tests/pg_fixtures.py <origin/main>/tests/test_new_story_setup.py
+<origin/main>/tests/test_new_story_setup.py:165: error: Value of type "Item | Container" is not indexable  [index]
+<origin/main>/tests/test_new_story_setup.py:165: error: Unsupported target for indexed assignment ("Any | Item | Container")  [index]
+<origin/main>/tests/test_new_story_setup.py:190: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+<origin/main>/tests/test_new_story_setup.py:192: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+Found 4 errors in 1 file (checked 4 source files)
 ```
