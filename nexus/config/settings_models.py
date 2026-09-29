@@ -3244,7 +3244,6 @@ class HybridSearchConfig(BaseModel):
     presence_boost_factors: Dict[str, float]
     use_query_type_weights: bool
     use_query_type_temporal_factors: bool
-    target_model: str
     temporal_boost_factor: float = Field(..., ge=0.0)
 
     @field_validator("presence_boost_factors")

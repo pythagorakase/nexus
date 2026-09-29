@@ -323,7 +323,6 @@ def print_configuration_details(
                 print(f"  Enabled: {hybrid.get('enabled', False)}")
                 print(f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}")
                 print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
-                print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
                 print(
                     f"  Temporal boost factor: {hybrid.get('temporal_boost_factor', 'N/A')}"
                 )
@@ -372,7 +371,6 @@ def print_configuration_details(
                 print(f"  Enabled: {hybrid.get('enabled', False)}")
                 print(f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}")
                 print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
-                print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
                 print(
                     f"  Temporal boost factor: {hybrid.get('temporal_boost_factor', 'N/A')}"
                 )

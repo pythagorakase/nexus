@@ -41,8 +41,7 @@ All hybrid search parameters are configurable in `settings.json`:
         "theme": { "vector": 0.75, "text": 0.25 },
         "general": { "vector": 0.7, "text": 0.3 }
     },
-    "use_query_type_weights": true,
-    "target_model": "inf-retriever-v1-1.5b"
+    "use_query_type_weights": true
 }
 ```
 
@@ -53,7 +52,8 @@ All hybrid search parameters are configurable in `settings.json`:
 - **text_weight_default**: Default weight for text match scores (0-1)
 - **weights_by_query_type**: Specific weights for different query types
 - **use_query_type_weights**: Whether to use query-specific weights or just the defaults
-- **target_model**: Which embedding model to use for the vector portion
+
+The vector portion always uses the one active embedder in `[memnon.models]`; there is no per-search model selector.
 
 ## Usage
 

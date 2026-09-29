@@ -2044,7 +2044,6 @@ class IREvalCLI:
                         f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}"
                     )
                     print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
-                    print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
 
                 # User character focus boost
                 if "user_character_focus_boost" in retrieval:
@@ -2089,7 +2088,6 @@ class IREvalCLI:
                         f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}"
                     )
                     print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
-                    print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
 
                 # User character focus boost
                 if "user_character_focus_boost" in retrieval:

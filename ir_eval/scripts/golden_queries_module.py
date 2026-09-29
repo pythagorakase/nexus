@@ -101,9 +101,6 @@ def get_memnon_settings_summary(memnon_settings: Dict[str, Any]) -> Dict[str, An
                 "text_weight_default": retrieval["hybrid_search"].get(
                     "text_weight_default", 0
                 ),
-                "target_model": retrieval["hybrid_search"].get(
-                    "target_model", "unknown"
-                ),
             }
 
         # Cross-encoder reranking settings
@@ -163,7 +160,6 @@ def format_settings_summary_text(settings: Dict[str, Any]) -> str:
         if hybrid.get("enabled", False):
             lines.append(f"  Vector weight: {hybrid.get('vector_weight_default', 0)}")
             lines.append(f"  Text weight: {hybrid.get('text_weight_default', 0)}")
-            lines.append(f"  Target model: {hybrid.get('target_model', 'unknown')}")
 
     # Cross-encoder reranking settings
     if "cross_encoder_reranking" in settings:

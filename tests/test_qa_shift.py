@@ -376,8 +376,6 @@ DIRECTLY_PINNED_ROUTES = {
 }
 
 NON_REMOTE_ROUTES = {
-    # Local embedding retriever; never a provider API call.
-    "memnon.retrieval.hybrid_search.target_model",
     "local_models.model",
 }
 
