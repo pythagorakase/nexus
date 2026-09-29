@@ -1,6 +1,7 @@
-"""Real TEST acceptance and durable seat identities on a populated save clone."""
+"""Real TEST acceptance and durable seat identities on a factory-played clone."""
 
 from contextlib import closing
+from datetime import timedelta
 import json
 import logging
 import os
@@ -12,7 +13,13 @@ import tomlkit
 
 from nexus.config import load_settings, load_settings_as_dict
 from nexus.jobs.scheduler import SlotScheduler
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
+    connect,
+    disposable_slot_database,
+    seed_played_story,
+    seed_pending_turn,
+)
 from tests.scheduler_helpers import gateway_lane, route_slot, run_cli
 from tests.scheduler_helpers import test_provider_config as configure_test
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
@@ -39,15 +46,31 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
     config.write_text(tomlkit.dumps(doc))
     monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8019")
     monkeypatch.setenv("NEXUS_API_URL", "http://127.0.0.1:8019")
-    with disposable_slot_database(
-        "qa640_814_seats", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_814_seats") as dbname:
         print(f"Migration 126 runner target: {dbname}", flush=True)
         route_slot(monkeypatch, dbname)
         from nexus.api import slot_endpoints
 
         monkeypatch.setattr(slot_endpoints, "slot_dbname", lambda slot: dbname)
-        from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
+        # A played story whose off-screen cast has formed experience seeds and
+        # whose correspondence crosses the compaction floor, with the next
+        # turn staged for ``continue --choice 1``.
+        seed_played_story(
+            dbname,
+            turns=4,
+            cast=("Mara Quill", "Oren Vale"),
+            time_delta=timedelta(hours=6),
+            correspondence=True,
+            slot=4,
+        )
+        seed_pending_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text="The pending fixture turn waits for the player's choice.",
+            choices=list(FIXTURE_TURN_CHOICES),
+            correspondence_writer_letter="Writer note for the pending fixture turn.",
+            correspondence_gaia_letter="Gaia note for the pending fixture turn.",
+        )
 
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
@@ -58,12 +81,6 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
                 cur.execute(
                     f"UPDATE {table} SET state='stale_rejected' WHERE state IN ('queued','leased','failed')"
                 )
-        _, _, fingerprint = refresh_tail_fingerprint(dbname=dbname)
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE incubator SET lore_pass_baseline=jsonb_set(lore_pass_baseline, '{config_fingerprint}', to_jsonb(%s::text), false) WHERE lore_pass_baseline IS NOT NULL",
-                (fingerprint,),
-            )
         with gateway_lane(monkeypatch) as scheduler:
             scheduler.stop()
             output = run_cli(

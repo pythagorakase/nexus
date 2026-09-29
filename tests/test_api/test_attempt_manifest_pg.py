@@ -1,9 +1,9 @@
 """Real PostgreSQL and TEST-provider proof of attempt correlation and retention."""
 
 from contextlib import closing
+from datetime import timedelta
 import json
 import os
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -20,7 +20,15 @@ from nexus.telemetry.attempt_manifest import (
     update_validation,
 )
 from nexus.telemetry.prompt_window import PromptWindowRecord
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
+    connect,
+    disposable_slot_database,
+    seed_accepted_turn,
+    seed_played_story,
+    seed_relationship,
+    seed_pending_turn,
+)
 from tests.scheduler_helpers import (
     gateway_lane,
     route_slot,
@@ -30,23 +38,33 @@ from tests.scheduler_helpers import (
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
+FIXTURE_CAST = ("Mara Quill", "Oren Vale")
+# Hours between turns let the cast's needs come due, so the Orrery resolves.
+FIXTURE_TURN_GAP = timedelta(hours=6)
+
+
+def _stage_pending_turn(dbname):
+    """Stage the draft the next ``continue --choice 1`` accepts, as play leaves it."""
+    return seed_pending_turn(
+        dbname,
+        user_text=FIXTURE_TURN_CHOICES[0],
+        storyteller_text="The pending fixture turn waits for the player's choice.",
+        choices=list(FIXTURE_TURN_CHOICES),
+        correspondence_writer_letter="Writer note for the pending fixture turn.",
+        correspondence_gaia_letter="Gaia note for the pending fixture turn.",
+    )
 
 
 def test_manifest_reference_privacy_retention_and_readonly(monkeypatch):
-    """A migrated populated clone preserves canon; pruning touches terminal manifests only."""
-    with closing(connect("save_04")) as conn, conn.cursor() as cur:
-        cur.execute("SELECT id, md5(raw_text) FROM narrative_chunks ORDER BY id")
-        original = cur.fetchall()
-    with disposable_slot_database(
-        "qa640_764_manifest", source_db="save_04", include_data=True
-    ) as dbname:
+    """A played clone keeps its canon; pruning touches terminal manifests only."""
+    with disposable_slot_database("qa640_764_manifest") as dbname:
         route_slot(monkeypatch, dbname)
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        chunk_ids = seed_played_story(dbname, turns=3, slot=4)
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SELECT id, md5(raw_text) FROM narrative_chunks ORDER BY id")
-            assert cur.fetchall() == original
-            print(
-                f"Migration 124 preserved {len(original)} existing chunk IDs and text hashes"
-            )
+            original = cur.fetchall()
+        assert [row[0] for row in original] == chunk_ids
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             sessions = [str(uuid4()) for _ in range(3)]
             for session in sessions:
                 cur.execute(
@@ -134,6 +152,11 @@ def test_manifest_reference_privacy_retention_and_readonly(monkeypatch):
                     (sessions,),
                 )
                 assert cur.fetchone()[0] == 3
+                cur.execute(
+                    "SELECT id, md5(raw_text) FROM narrative_chunks ORDER BY id"
+                )
+                assert cur.fetchall() == original
+            print(f"Pruning preserved {len(original)} chunk IDs and text hashes")
         output = run_cli(
             monkeypatch, "inspect-turn", "--slot", "4", "--session", sessions[1]
         )
@@ -179,10 +202,17 @@ def test_manifest_real_test_turn_and_child_job_correlation(
     doc["storyteller"]["correspondence"]["floor_turns"] = 1
     config.write_text(tomlkit.dumps(doc))
     monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
-    with disposable_slot_database(
-        "qa640_764_turn", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_764_turn") as dbname:
         route_slot(monkeypatch, dbname)
+        seed_played_story(
+            dbname,
+            turns=3,
+            cast=FIXTURE_CAST,
+            time_delta=FIXTURE_TURN_GAP,
+            correspondence=True,
+            slot=4,
+        )
+        _stage_pending_turn(dbname)
         import subprocess
         from nexus.database import database_url
 
@@ -203,19 +233,6 @@ def test_manifest_real_test_turn_and_child_job_correlation(
             return real_run(command, *args, **kwargs)
 
         monkeypatch.setattr(subprocess, "run", run_in_clone)
-        from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
-
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
-            cur.execute(
-                "UPDATE character_experience_jobs SET available_at=now()+interval '1 hour' WHERE state='queued'"
-            )
-        _, _, fingerprint = refresh_tail_fingerprint(dbname=dbname)
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE incubator SET lore_pass_baseline=jsonb_set(lore_pass_baseline, '{config_fingerprint}', to_jsonb(%s::text), false) WHERE lore_pass_baseline IS NOT NULL",
-                (fingerprint,),
-            )
         with gateway_lane(monkeypatch):
             # Real public CLI, real HTTP providers, real accepting transaction.
             output = run_cli(
@@ -365,12 +382,30 @@ def test_child_job_enqueue_correlation_and_transaction_reset(monkeypatch):
     )
     from nexus.agents.orrery.job_queues import load_job_queues_sync
     from nexus.config import load_settings_as_dict
-    from tests.test_orrery.test_character_experiences_pg import _insert_chunk
 
-    with disposable_slot_database(
-        "qa640_764_jobs", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_764_jobs") as dbname:
         route_slot(monkeypatch, dbname)
+        parent = seed_played_story(
+            dbname, turns=4, cast=FIXTURE_CAST, time_delta=FIXTURE_TURN_GAP, slot=4
+        )[-1]
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM characters WHERE name = ANY(%s) ORDER BY name",
+                (list(FIXTURE_CAST),),
+            )
+            subject, object_ = (row[0] for row in cur.fetchall())
+        seed_relationship(
+            dbname,
+            subject_character_id=subject,
+            object_character_id=object_,
+            relationship_type="professional",
+        )
+        chunk = seed_accepted_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text="Manifest child-job boundary",
+            slot=4,
+        )
         session = str(uuid4())
         settings = load_settings_as_dict()
         with closing(connect(dbname)) as conn:
@@ -379,9 +414,6 @@ def test_child_job_enqueue_correlation_and_transaction_reset(monkeypatch):
                     "INSERT INTO narrative_generation_sessions (session_id, operation, status) VALUES (%s,'continue','initiated')",
                     (session,),
                 )
-                cur.execute("SELECT max(id) FROM narrative_chunks")
-                parent = cur.fetchone()[0]
-                chunk = _insert_chunk(cur, "Manifest child-job boundary")
                 cur.execute(
                     "SELECT set_config('nexus.generation_session_id', %s, true)",
                     (session,),
@@ -476,24 +508,29 @@ def test_inspect_turn_pre_session_chunk_and_duplicate_sessions(monkeypatch, caps
     import sys
     from nexus import cli
 
-    with disposable_slot_database(
-        "qa640_800b_inspect", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_800b_inspect") as dbname:
         route_slot(monkeypatch, dbname)
+        chunk = seed_played_story(dbname, turns=2, slot=4)[0]
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute("SELECT id FROM narrative_chunks WHERE id=49")
-            assert cur.fetchone() == (49,)
+            cur.execute("SELECT id FROM narrative_chunks WHERE id=%s", (chunk,))
+            assert cur.fetchone() == (chunk,)
+            # The factory binds every accepted turn; unbind one to stand for a
+            # chunk accepted before session binding existed.
             cur.execute(
-                "UPDATE narrative_generation_sessions SET chunk_id=NULL WHERE chunk_id=49"
+                "UPDATE narrative_generation_sessions SET chunk_id=NULL WHERE chunk_id=%s",
+                (chunk,),
             )
+            assert cur.rowcount == 1
+        capsys.readouterr()
         monkeypatch.setattr(
-            sys, "argv", ["nexus", "inspect-turn", "--slot", "4", "--chunk", "49"]
+            sys,
+            "argv",
+            ["nexus", "inspect-turn", "--slot", "4", "--chunk", str(chunk)],
         )
         assert cli.main() == 1
         captured = capsys.readouterr()
-        assert (
-            captured.out
-            == "chunk 49: no generation session (accepted before session binding)\n"
+        assert captured.out == (
+            f"chunk {chunk}: no generation session (accepted before session binding)\n"
         )
         assert captured.err == ""
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
@@ -501,8 +538,8 @@ def test_inspect_turn_pre_session_chunk_and_duplicate_sessions(monkeypatch, caps
                 cur.execute(
                     "INSERT INTO narrative_generation_sessions "
                     "(session_id, operation, status, chunk_id, terminal_outcome) "
-                    "VALUES (%s, 'continue', 'complete', 49, 'accepted')",
-                    (str(uuid4()),),
+                    "VALUES (%s, 'continue', 'complete', %s, 'accepted')",
+                    (str(uuid4()), chunk),
                 )
         with pytest.raises(
             ValueError, match="Expected one generation session; found 2"

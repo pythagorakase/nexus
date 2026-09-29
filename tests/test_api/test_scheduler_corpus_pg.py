@@ -1,4 +1,9 @@
-"""Run the deferred owner against a disposable copy of the starved corpus.
+"""Run the deferred owner against a disposable, factory-played story.
+
+Each test plays a story on a template clone through the accepted-turn factory
+(``tests.pg_fixtures.seed_played_story``): off-screen cast, real Orrery
+resolutions, experience seeds, and a scene reset whose render jobs wait in the
+queue, all pinned to TEST by the clone default.
 
 The default proof uses TEST. NEXUS_800_PAID_PROOF=1 explicitly enables one
 experience job with the configured real provider, before the TEST idle drain.
@@ -6,6 +11,7 @@ It disables structured repair retries and limits the paid pass to one job.
 """
 
 from contextlib import closing
+from datetime import timedelta
 import json
 import os
 from pathlib import Path
@@ -14,10 +20,16 @@ import pytest
 import tomlkit
 
 from nexus.agents.orrery.job_queues import load_job_queues_sync
-from nexus.config import load_settings_as_dict
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry import usage
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
+    connect,
+    disposable_slot_database,
+    seed_accepted_turn,
+    seed_played_story,
+    seed_pending_turn,
+)
 from tests.scheduler_helpers import (
     route_slot,
     run_cli,
@@ -27,22 +39,58 @@ from tests.test_api.test_scheduler_pg import wait_until
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
+FIXTURE_CAST = ("Mara Quill", "Oren Vale")
+
+
+def _seed_starved_story(dbname):
+    """Play a story whose scene reset leaves experience renders queued.
+
+    Returns the IDs of the render jobs the reset enqueued, in order.
+    """
+    seed_played_story(
+        dbname,
+        turns=4,
+        cast=FIXTURE_CAST,
+        time_delta=timedelta(hours=6),
+        correspondence=True,
+        slot=4,
+    )
+    boundary = seed_accepted_turn(
+        dbname,
+        user_text=FIXTURE_TURN_CHOICES[0],
+        storyteller_text="The scene resets as the plaza empties for the night.",
+        choices=list(FIXTURE_TURN_CHOICES),
+        choice_text=FIXTURE_TURN_CHOICES[0],
+        scene_boundary=True,
+        time_delta=timedelta(hours=1),
+        correspondence_writer_letter="Writer note for the scene reset.",
+        correspondence_gaia_letter="Gaia note for the scene reset.",
+        slot=4,
+    )
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM character_experience_jobs "
+            "WHERE boundary_chunk_id=%s AND state='queued' ORDER BY id",
+            (boundary,),
+        )
+        job_ids = [row[0] for row in cur.fetchall()]
+    assert job_ids, "The scene reset enqueued no experience render jobs"
+    return job_ids
 
 
 def test_scheduler_drains_starved_corpus(monkeypatch, tmp_path, mock_openai_server):
-    """The nine original jobs become terminal with no accepting transaction."""
-    with disposable_slot_database(
-        "qa640_800_corpus", source_db="save_04", include_data=True
-    ) as dbname:
+    """The story's queued render jobs become terminal with no accepting transaction."""
+    with disposable_slot_database("qa640_800_corpus") as dbname:
         route_slot(monkeypatch, dbname)
         print(f"Disposable corpus: {dbname}", flush=True)
+        enqueued_ids = _seed_starved_story(dbname)
         run_cli(monkeypatch, "jobs", "--slot", "4")
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT id FROM character_experience_jobs WHERE state='queued' ORDER BY id"
             )
             original_ids = [row[0] for row in cur.fetchall()]
-            assert len(original_ids) == 9
+            assert original_ids == enqueued_ids
             cur.execute(
                 "SELECT id, state::text FROM orrery_maturation_jobs ORDER BY id"
             )
@@ -124,28 +172,20 @@ def test_scheduler_live_turn_starts_before_queued_render(
     from tests.scheduler_helpers import gateway_lane
 
     configure_test(tmp_path, mock_openai_server, monkeypatch)
-    with disposable_slot_database(
-        "qa640_800_turn", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_800_turn") as dbname:
         route_slot(monkeypatch, dbname)
+        _seed_starved_story(dbname)
+        seed_pending_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text="The pending fixture turn waits for the player's choice.",
+            choices=list(FIXTURE_TURN_CHOICES),
+        )
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
             cur.execute(
                 "UPDATE character_experience_jobs SET available_at=clock_timestamp()+interval '1 hour' WHERE state='queued'"
             )
-        # The clone still carries the pre-#916 fingerprint. Preserve its
-        # memory contents while adapting both the tail and pending acceptance
-        # to this TEST configuration; never stamp the source save.
-        from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
-
-        _, _, fingerprint = refresh_tail_fingerprint(dbname=dbname)
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE incubator SET lore_pass_baseline = jsonb_set("
-                "lore_pass_baseline, '{config_fingerprint}', to_jsonb(%s::text), false) "
-                "WHERE lore_pass_baseline IS NOT NULL",
-                (fingerprint,),
-            )
+            assert cur.rowcount > 0
         generation_started = threading.Event()
         render_started = threading.Event()
         order = []
@@ -218,10 +258,9 @@ def test_scheduler_rechecks_generation_after_leasing_before_provider(
     from nexus.api import narrative_lease
 
     configure_test(tmp_path, mock_openai_server, monkeypatch)
-    with disposable_slot_database(
-        "qa640_800_call_gate", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_800_call_gate") as dbname:
         route_slot(monkeypatch, dbname)
+        _seed_starved_story(dbname)
         session = str(uuid4())
         selected = Event()
         render_prompt = experiences._render_prompt
