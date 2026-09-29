@@ -67,6 +67,15 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
         pg_fixtures.seed_entity_tag,
         {"entity_id": 1, "tag": "kin_protector"},
     ),
+    "seed_pending_turn": (
+        pg_fixtures.seed_pending_turn,
+        {"user_text": "Refused.", "storyteller_text": "Refused."},
+    ),
+    "seed_accepted_turn": (
+        pg_fixtures.seed_accepted_turn,
+        {"user_text": "Refused.", "storyteller_text": "Refused."},
+    ),
+    "seed_played_story": (pg_fixtures.seed_played_story, {"turns": 1}),
     "seed_checkpointed_story": (seed_checkpointed_story, {}),
 }
 
@@ -121,6 +130,29 @@ def test_seed_helpers_refuse_owner_databases_before_connecting(
     for dbname in OWNER_DATABASES:
         with pytest.raises(RuntimeError, match=re.escape(repr(dbname))):
             seed(dbname, **arguments)
+
+
+@pytest.mark.parametrize(
+    "helper", [pg_fixtures.seed_accepted_turn, pg_fixtures.seed_played_story]
+)
+def test_turn_factory_refuses_a_slot_label_routed_elsewhere(
+    helper: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A slot label must route to the clone before any turn is staged.
+
+    The accepting commit stamps the slot on the jobs it enqueues and may
+    resolve story state through it, so an unrouted slot 4 (the owner's
+    ``save_04``) is refused before a connection is opened.
+    """
+
+    monkeypatch.setattr(psycopg2, "connect", _refuse_connection)
+    arguments: dict[str, Any] = (
+        {"turns": 1}
+        if helper is pg_fixtures.seed_played_story
+        else {"user_text": "Refused.", "storyteller_text": "Refused."}
+    )
+    with pytest.raises(RuntimeError, match="Slot 4 routes to 'save_04'"):
+        helper("qa640_unrouted", slot=4, **arguments)
 
 
 def _sessions(cur: Any, dbname: str) -> int:

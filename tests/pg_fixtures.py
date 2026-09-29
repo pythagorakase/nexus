@@ -24,6 +24,7 @@ save slots and ``NEXUS_template`` by name.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -814,3 +815,540 @@ def seed_entity_tag(
         row = cur.fetchone()
         assert row is not None and cur.rowcount == 1, f"tag {tag!r} is not seeded"
     return int(row[0])
+
+
+# The TEST provider's registered model id; a fixture turn records it as the
+# model that generated the staged prose, as the TEST seats do.
+FIXTURE_GENERATION_MODEL = "TEST"
+
+
+def _run_staging_coroutine(coroutine: Any) -> None:
+    """Run the production staging coroutine from a synchronous seed helper."""
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(coroutine)
+        return
+    coroutine.close()
+    raise RuntimeError(
+        "seed helpers are synchronous: stage fixture turns from a synchronous "
+        "fixture or test, not inside a running event loop"
+    )
+
+
+def _require_slot_routes_to(dbname: str, slot: int | None) -> None:
+    """Refuse a slot label that does not route to the disposable target.
+
+    ``slot`` is stamped on the jobs an accepted turn enqueues and handed to
+    the production commit, which may resolve story state through it. Tests
+    pass a slot only while ``tests.scheduler_helpers.route_slot`` routes that
+    slot to the clone; any other routing would reach an owner database.
+    """
+
+    if slot is None:
+        return
+    from nexus.api import slot_utils
+
+    routed = slot_utils.slot_dbname(slot)
+    if routed != dbname:
+        raise RuntimeError(
+            f"Slot {slot} routes to {routed!r}, not the disposable target "
+            f"{dbname!r}; route the slot to the clone before seeding turns"
+        )
+
+
+def _playable_frontier_chunk_id(cur: Any) -> int:
+    """Return the committed frontier chunk ID, or 0 before the first turn."""
+
+    from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+
+    cur.execute(
+        "SELECT max(nc.id) FROM narrative_chunks nc WHERE "
+        + playable_narrative_predicate()
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row is not None and row[0] is not None else 0
+
+
+def _require_story_preconditions(cur: Any, helper: str) -> None:
+    """Fail by name unless the save has a world clock and a canonical player.
+
+    The wizard transition leaves both behind before the first turn: the
+    clock anchors every chunk's ``world_time`` and need clock, and the
+    canonical player is who the turn is played by. ``seed_protagonist`` (or
+    ``seed_played_story``) supplies both.
+    """
+
+    from nexus.agents.orrery.player_identity import canonical_player_character_id
+
+    cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
+    row = cur.fetchone()
+    assert row is not None and row[0] is not None, (
+        f"{helper} needs a world clock: seed_protagonist sets base_timestamp "
+        "before the first turn"
+    )
+    try:
+        canonical_player_character_id(cur)
+    except Exception as exc:
+        raise AssertionError(
+            f"{helper} needs a canonical player: call seed_protagonist first"
+        ) from exc
+
+
+def _default_scene_references(cur: Any) -> dict[str, list[dict[str, Any]]]:
+    """Reference the canonical player as present at their current place.
+
+    This is the reference shape Skald stages for an ordinary turn (and the
+    bootstrap stages for the opening): the protagonist present, the scene's
+    place as its setting. The player must exist; a story without one is a
+    missing precondition, not a turn to stage.
+    """
+
+    from nexus.agents.orrery.player_identity import canonical_player_character_id
+
+    character_id = canonical_player_character_id(cur)
+    cur.execute(
+        "SELECT name, current_location FROM characters WHERE id = %s",
+        (character_id,),
+    )
+    name, place_id = cur.fetchone()
+    references: dict[str, list[dict[str, Any]]] = {
+        "characters": [
+            {
+                "character_id": character_id,
+                "character_name": name,
+                "reference_type": "present",
+            }
+        ],
+        "places": [],
+        "factions": [],
+    }
+    if place_id is not None:
+        references["places"].append(
+            {"place_id": int(place_id), "reference_type": "setting"}
+        )
+    return references
+
+
+def _resolve_turn_orrery_proposal(
+    dbname: str, *, anchor_chunk_id: int, orrery_settings: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Resolve the no-write Orrery proposal LORE stages for a continuation.
+
+    Mirrors ``TurnCycleManager.resolve_orrery``: the production resolver runs
+    over ``BUILTIN_TEMPLATES`` at the playable frontier with the configured
+    Orrery sections, and the proposal is staged by ``_serialize_orrery_staging``
+    with an empty Bleed offer manifest (no Bleed menu is offered to a fixture
+    turn). The session is read-only and rolled back.
+    """
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from nexus.agents.orrery.ambient import shared_ambient_pacing_allows
+    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+    from nexus.api.lore_adapter import _serialize_orrery_staging
+    from nexus.config.settings_models import OrreryBleedSettings
+
+    bleed = OrreryBleedSettings.model_validate(orrery_settings.get("bleed", {}))
+    ambient_pacing_allowed = shared_ambient_pacing_allows(
+        anchor_chunk_id, bleed.density
+    )
+    engine = create_engine(sqlalchemy_url(dbname), future=True)
+    try:
+        with Session(engine) as session:
+            proposal = resolve_dry_run(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=int(
+                    orrery_settings.get("binding", {}).get("window_chunks", 30)
+                ),
+                sunhelm_settings=orrery_settings.get("sunhelm"),
+                selection_settings=orrery_settings.get("selection"),
+                habituation_settings=orrery_settings.get("habituation"),
+                package_selection_settings=orrery_settings.get("package_selection"),
+                project_settings=orrery_settings.get("projects"),
+                epistemics_settings=orrery_settings.get("epistemics"),
+                fanout_settings=orrery_settings.get("fanout"),
+                contagion_settings=orrery_settings.get("contagion"),
+                weather_settings=orrery_settings.get("weather"),
+                mood_settings=orrery_settings.get("mood"),
+                composition_settings=orrery_settings.get("composition"),
+                ambient_settings=orrery_settings.get("ambient"),
+                ambient_pacing_allowed=ambient_pacing_allowed,
+            )
+            session.rollback()
+    finally:
+        engine.dispose()
+    return _serialize_orrery_staging(proposal, bleed_offer_resolution_ids=())
+
+
+def seed_pending_turn(
+    dbname: str,
+    *,
+    user_text: str,
+    storyteller_text: str,
+    choices: list[str] | None = None,
+    time_delta: timedelta = timedelta(minutes=5),
+    episode_transition: str | None = None,
+    scene_boundary: bool = False,
+    reference_updates: Mapping[str, Any] | None = None,
+    entity_updates: Mapping[str, Any] | None = None,
+    new_entities: list[Mapping[str, Any]] | None = None,
+    correspondence_writer_letter: str | None = None,
+    correspondence_gaia_letter: str | None = None,
+    generation_model: str = FIXTURE_GENERATION_MODEL,
+    resolve_orrery: bool = True,
+) -> str:
+    """Stage one pending turn exactly as the gateway does; return its session.
+
+    The turn continues the committed frontier (the bootstrap opening, parent
+    0, when the story has no playable chunk yet). A continuation stages the
+    Orrery proposal LORE would stage, from the production resolver at the
+    frontier (``resolve_orrery=False`` stages none, as with Orrery disabled);
+    the bootstrap opening stages none, as ``generate_bootstrap_narrative``
+    does. Staging takes the
+    production route's steps in order: ``acquire_generation_lease`` records
+    the ``continue`` session and owns the slot, ``bind_generation_parent``
+    binds the frontier, and ``write_to_incubator`` validates the draft with
+    ``validate_commit_draft_sync``, writes the incubator singleton, and
+    completes the session while releasing the lease. The draft is the shape
+    ``response_to_incubator`` (or ``generate_bootstrap_narrative``) builds:
+    ``generation_model`` names the TEST model, ``session_id`` is the staging
+    session, the ``lore_pass_baseline`` is the unbound empty baseline that
+    bootstrap and ``scripts/stamp_lore_pass_baseline.py`` stage, fingerprinted
+    under the current settings and the clone's story pins, and
+    ``authorial_directives`` keeps its empty default, so the committed chunk
+    satisfies ``playable_narrative_predicate``.
+
+    ``reference_updates`` defaults to the canonical player present at their
+    current place. ``time_delta`` must fit the chronology fields (under one
+    hour for minutes, under a day for hours). The parent chunk's embedding is
+    not claimed: that is the gateway route's step before generation, not part
+    of staging or acceptance.
+
+    Fails loudly when the save has no world clock (``base_timestamp``) or no
+    canonical player, when another session owns the lease, or when a draft is
+    already pending.
+    """
+
+    require_disposable_target(dbname)
+    from nexus.api.config_utils import get_generation_lease_timeout_seconds
+    from nexus.api.narrative_generation import write_to_incubator
+    from nexus.api.narrative_lease import (
+        acquire_generation_lease,
+        bind_generation_parent,
+    )
+    from nexus.config import load_settings_as_dict
+    from nexus.config.story_model import read_story_settings, story_context_settings
+    from nexus.memory.manager import empty_pass2_baseline
+
+    total_minutes, remainder = divmod(int(time_delta.total_seconds()), 60)
+    if remainder:
+        raise ValueError("seed_pending_turn needs a whole-minute time_delta")
+    days, minutes_of_day = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(minutes_of_day, 60)
+    settings = story_context_settings(
+        load_settings_as_dict(), read_story_settings(dbname)
+    )
+    orrery_settings = settings.get("orrery") or {}
+    baseline = empty_pass2_baseline(settings)
+    session_id = str(uuid.uuid4())
+    with closing(_connect(dbname)) as conn:
+        with conn.cursor() as cur:
+            _require_story_preconditions(cur, "seed_pending_turn")
+            parent_chunk_id = _playable_frontier_chunk_id(cur)
+            references = (
+                dict(reference_updates)
+                if reference_updates is not None
+                else _default_scene_references(cur)
+            )
+        conn.rollback()
+        is_bootstrap = parent_chunk_id == 0
+        orrery_proposal = (
+            _resolve_turn_orrery_proposal(
+                dbname,
+                anchor_chunk_id=parent_chunk_id,
+                orrery_settings=orrery_settings,
+            )
+            if resolve_orrery
+            and not is_bootstrap
+            and orrery_settings.get("enabled", False)
+            else None
+        )
+        conflict = acquire_generation_lease(
+            conn,
+            session_id=session_id,
+            operation="continue",
+            stale_timeout_seconds=get_generation_lease_timeout_seconds(),
+        )
+        assert conflict is None, f"seed_pending_turn lease conflict: {conflict}"
+        bind_generation_parent(
+            conn, session_id=session_id, parent_chunk_id=parent_chunk_id
+        )
+        data: dict[str, Any] = {
+            "chunk_id": None,
+            "parent_chunk_id": parent_chunk_id,
+            "user_text": user_text,
+            "storyteller_text": storyteller_text,
+            "generation_model": generation_model,
+            "choice_object": (
+                {"presented": list(choices), "selected": None} if choices else None
+            ),
+            "choice_text": None,
+            "metadata_updates": {
+                "chronology": {
+                    "episode_transition": episode_transition
+                    or ("new_episode" if is_bootstrap else "continue"),
+                    "time_delta_minutes": minutes,
+                    "time_delta_hours": hours or None,
+                    "time_delta_days": days or None,
+                    "time_delta_description": "Fixture turn",
+                },
+                "world_layer": "primary",
+                "scene_boundary": scene_boundary,
+            },
+            "entity_updates": dict(entity_updates or {}),
+            "reference_updates": references,
+            "orrery_proposal": orrery_proposal,
+            "orrery_adjudications": [],
+            "new_entities": [dict(item) for item in new_entities or []],
+            "correspondence_writer_letter": correspondence_writer_letter,
+            "correspondence_gaia_letter": correspondence_gaia_letter,
+            "lore_pass_baseline": baseline.model_dump(mode="json"),
+            "session_id": session_id,
+            "llm_response_id": f"fixture_{uuid.uuid4().hex[:8]}",
+            "status": "provisional",
+        }
+        _run_staging_coroutine(write_to_incubator(conn, data, complete_session=True))
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT i.parent_chunk_id, s.status, s.terminal_outcome "
+                "FROM incubator i JOIN narrative_generation_sessions s "
+                "ON s.session_id = i.session_id WHERE i.session_id = %s",
+                (session_id,),
+            )
+            staged = cur.fetchone()
+        conn.rollback()
+    assert staged == (
+        parent_chunk_id,
+        "complete",
+        None,
+    ), f"seed_pending_turn left {staged!r} for session {session_id}"
+    return session_id
+
+
+def seed_accepted_turn(
+    dbname: str,
+    *,
+    user_text: str,
+    storyteller_text: str,
+    choice_text: str | None = None,
+    choices: list[str] | None = None,
+    slot: int | None = None,
+    **staging: Any,
+) -> int:
+    """Stage one turn and accept it through the production commit; return its ID.
+
+    The turn is staged by ``seed_pending_turn`` (``staging`` passes through
+    to it), the player's response is recorded on the incubator by the
+    gateway's own ``_record_player_response_for_chunk``, and the draft is
+    committed by ``commit_incubator_to_database_sync`` on the same connection,
+    as ``_resolve_and_approve_pending_sync`` does. Every trigger and writer
+    of an accepted turn therefore runs: the chunk and its metadata (the world
+    clock is stamped by the ``chunk_metadata`` trigger), the bound Pass-2
+    baseline, presence and reference rows, the Orrery tick, experience seeds,
+    checkpoints, summary scheduling, and the IDF corpus triggers.
+
+    ``choice_text`` is the player's response to this turn's ``choices``: a
+    presented choice is selected by its number, other text is recorded as the
+    player's own wording. ``slot`` labels the jobs the commit enqueues and is
+    accepted only while it routes to ``dbname``.
+    """
+
+    require_disposable_target(dbname)
+    _require_slot_routes_to(dbname, slot)
+    from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
+
+    session_id = seed_pending_turn(
+        dbname,
+        user_text=user_text,
+        storyteller_text=storyteller_text,
+        choices=choices,
+        **staging,
+    )
+    with closing(_connect(dbname)) as conn:
+        if choice_text is not None:
+            from nexus.api.narrative import _record_player_response_for_chunk
+
+            presented = list(choices or [])
+            _record_player_response_for_chunk(
+                slot=slot,
+                chunk_id=None,
+                user_text="" if choice_text in presented else choice_text,
+                choice=(
+                    presented.index(choice_text) + 1
+                    if choice_text in presented
+                    else None
+                ),
+                accept_fate=False,
+                require_response=True,
+                connection=conn,
+                incubator_session_id=session_id,
+            )
+        chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT nc.choice_text, s.terminal_outcome, s.chunk_id,
+                       (SELECT count(*) FROM lore_pass_baselines b
+                        WHERE b.chunk_id = nc.id),
+                       (SELECT count(*) FROM incubator)
+                FROM narrative_chunks nc
+                JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+                JOIN narrative_generation_sessions s ON s.session_id = %s
+                WHERE nc.id = %s AND cm.world_time IS NOT NULL
+                """,
+                (session_id, chunk_id),
+            )
+            accepted = cur.fetchone()
+    assert accepted == (
+        choice_text,
+        "accepted",
+        chunk_id,
+        1,
+        0,
+    ), f"seed_accepted_turn committed chunk {chunk_id} as {accepted!r}"
+    return int(chunk_id)
+
+
+FIXTURE_TURN_CHOICES = (
+    "Press on toward the lit doorway.",
+    "Wait and watch the street.",
+    "Ask the nearest stranger for directions.",
+)
+
+
+def seed_played_story(
+    dbname: str,
+    *,
+    turns: int,
+    protagonist_name: str = "Fixture Player",
+    base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    time_delta: timedelta = timedelta(minutes=5),
+    cast: tuple[str, ...] = (),
+    correspondence: bool = False,
+    slot: int | None = None,
+) -> list[int]:
+    """Seed a played story of ``turns`` accepted turns; return their chunk IDs.
+
+    Seeds what the wizard transition leaves behind (a bounded zone, a located
+    place, and the canonical player standing there, with the world clock at
+    ``base_timestamp``), then accepts the bootstrap opening and ``turns - 1``
+    continuations through ``seed_accepted_turn``, each ``time_delta`` of
+    story time after the last. Each turn presents ``FIXTURE_TURN_CHOICES``
+    and records the first as the player's response; each continuation's input
+    is the previous turn's response, as in play.
+
+    ``cast`` names off-screen characters, seeded at a second place and
+    mentioned by every turn's prose and references. Mentioned characters are
+    the Orrery's actors, so continuations stage real resolver proposals for
+    them and acceptance writes their resolutions, events, and experience
+    seeds. ``correspondence`` stages a writer and a Gaia letter with every
+    turn, as the two-pass seats do.
+
+    Refuses a save that already holds a player or narrative.
+    """
+
+    require_disposable_target(dbname)
+    _require_slot_routes_to(dbname, slot)
+    if turns < 1:
+        raise ValueError("seed_played_story needs at least one turn")
+    with closing(_connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT (SELECT user_character FROM global_variables WHERE id = true), "
+            "(SELECT count(*) FROM narrative_chunks)"
+        )
+        player, chunk_count = cur.fetchone()
+    assert player is None and chunk_count == 0, (
+        f"seed_played_story needs an unplayed save; {dbname} has player "
+        f"{player!r} and {chunk_count} chunks"
+    )
+    seed_zone(
+        dbname,
+        name="Fixture Zone",
+        min_longitude=-74.1,
+        min_latitude=40.6,
+        max_longitude=-73.8,
+        max_latitude=40.9,
+    )
+    place_id, _ = seed_place(dbname, name="Fixture Plaza")
+    player_id, _ = seed_protagonist(
+        dbname,
+        name=protagonist_name,
+        base_timestamp=base_timestamp,
+        current_location=place_id,
+    )
+    references: dict[str, list[dict[str, Any]]] = {
+        "characters": [
+            {
+                "character_id": player_id,
+                "character_name": protagonist_name,
+                "reference_type": "present",
+            }
+        ],
+        "places": [{"place_id": place_id, "reference_type": "setting"}],
+        "factions": [],
+    }
+    offstage = ""
+    if cast:
+        elsewhere_id, _ = seed_place(
+            dbname, name="Fixture Docks", longitude=-74.0, latitude=40.7
+        )
+        for name in cast:
+            character_id, _ = seed_character(
+                dbname,
+                name=name,
+                summary=f"{name} works the night shift at Fixture Docks.",
+                current_location=elsewhere_id,
+            )
+            references["characters"].append(
+                {
+                    "character_id": character_id,
+                    "character_name": name,
+                    "reference_type": "mentioned",
+                }
+            )
+        offstage = (
+            f" Across town at Fixture Docks, {' and '.join(cast)} "
+            "keep to their own business."
+        )
+    chunk_ids: list[int] = []
+    user_text = "Begin the story."
+    for turn in range(1, turns + 1):
+        chunk_ids.append(
+            seed_accepted_turn(
+                dbname,
+                user_text=user_text,
+                storyteller_text=(
+                    f"Fixture turn {turn}: {protagonist_name} crosses Fixture "
+                    f"Plaza as the evening crowd thins.{offstage}"
+                ),
+                choices=list(FIXTURE_TURN_CHOICES),
+                choice_text=FIXTURE_TURN_CHOICES[0],
+                time_delta=timedelta(0) if turn == 1 else time_delta,
+                reference_updates=references,
+                correspondence_writer_letter=(
+                    f"Writer note for fixture turn {turn}." if correspondence else None
+                ),
+                correspondence_gaia_letter=(
+                    f"Gaia note for fixture turn {turn}." if correspondence else None
+                ),
+                slot=slot,
+            )
+        )
+        user_text = FIXTURE_TURN_CHOICES[0]
+    return chunk_ids
