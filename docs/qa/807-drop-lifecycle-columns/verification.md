@@ -45,10 +45,15 @@ which wrote `'accepted'`.
   the three columns are absent, instead of `state` values.
 - `test_orrery/test_retrograde_summary_migration_pg.py`: migration 078 is
   historical and ran while the columns existed; it still requires `state`
-  for its legacy copy and recreates it on an empty table. The fixture now
-  restores the pre-134 columns (`ADD COLUMN IF NOT EXISTS`, definitions from
-  migrations 018 and 021), so the legacy seeds and every 078 guard test run
-  against the schema 078 met, before and after the template takes 134.
+  for its legacy copy and recreates it on an empty table. The fixture reads
+  the clone's own `schema_migrations` stamp and takes one of two explicit
+  branches (definitions from migrations 018 and 021). A clone that stamped
+  134 gets a strict `ADD COLUMN` for the three columns. A clone that did not
+  must already carry exactly `character varying(20)` / `'draft'`,
+  `timestamp with time zone` / no default, and `integer` / `0`, or the
+  fixture raises. The legacy seeds and every 078 guard test then run against
+  the schema 078 met; each test rewinds 078's own artifacts with
+  `_drop_migration_targets`.
 - New `tests/test_chunk_lifecycle_columns_migration_pg.py`: on a disposable
   template clone, restores the columns, unstamps 134, adds a hand-made view
   and materialized view, and runs the real `migrate.migrate_database`. The
@@ -59,8 +64,11 @@ which wrote `'accepted'`.
   `nexus/docs/idf_dictionary.md` no longer mentions `state = 'finalized'`.
 
 Remaining grep hits for the column names are historical migrations (018, 021,
-078), `docs/qa/807-*` evidence, the 078 test fixture above, and the new
-migration and test.
+078), `docs/qa/807-*` evidence, the 078 test fixture above, the new migration
+and test, the absence assertion in
+`tests/test_orrery/test_retrograde_persistence.py:1325`, and the historical
+`docs/qa/909-long-absence-probe/live/*` captures, which are frozen evidence
+and stay unchanged.
 
 ## Migration on a Template Clone
 
@@ -98,8 +106,12 @@ save_04 -> clone: level=134 rows 46->46 columns=['id', 'raw_text', 'created_at',
 
 ## Fleet Untouched
 
+Filtered to the database headers and pending lines (the unfiltered output is
+669 lines, mostly `[x]` stamps):
+
 ```
-$ PYTHONPATH=$PWD $PY scripts/migrate.py --status
+$ PYTHONPATH=$PWD $PY scripts/migrate.py --status 2>&1 | grep -E '^[A-Za-z]|LOCKED|\[ \]'
+Found 131 managed migrations in <worktree>/migrations
 NEXUS_template:
   [ ] 134_drop_chunk_lifecycle_columns
 save_01: [LOCKED]
@@ -113,9 +125,54 @@ save_05:
   [ ] 134_drop_chunk_lifecycle_columns
 ```
 
-Every fleet database is at level 133 and still has all three columns
-(`save_01` included, read-only query). The coordinator applies 134 at land
-time, `save_01` through `--write-locked-slot`.
+`--status` prints only `[LOCKED]` for `save_01`, so its level and columns
+come from read-only SQL. Every fleet database is at level 133 and still has
+all three columns:
+
+```
+$ for db in NEXUS_template save_01 save_02 save_03 save_04 save_05; do
+    echo "== $db"
+    psql -d $db -Atc "select max(version::int) from schema_migrations"
+    psql -d $db -Atc "select column_name, data_type, column_default
+      from information_schema.columns where table_schema='public'
+      and table_name='narrative_chunks'
+      and column_name in ('state','finalized_at','regeneration_count')
+      order by column_name"
+  done
+== NEXUS_template
+133
+finalized_at|timestamp with time zone|
+regeneration_count|integer|0
+state|character varying|'draft'::character varying
+== save_01
+133
+finalized_at|timestamp with time zone|
+regeneration_count|integer|0
+state|character varying|'draft'::character varying
+== save_02
+133
+finalized_at|timestamp with time zone|
+regeneration_count|integer|0
+state|character varying|'draft'::character varying
+== save_03
+133
+finalized_at|timestamp with time zone|
+regeneration_count|integer|0
+state|character varying|'draft'::character varying
+== save_04
+133
+finalized_at|timestamp with time zone|
+regeneration_count|integer|0
+state|character varying|'draft'::character varying
+== save_05
+133
+finalized_at|timestamp with time zone|
+regeneration_count|integer|0
+state|character varying|'draft'::character varying
+```
+
+The coordinator applies 134 at land time, `save_01` through
+`--write-locked-slot`.
 
 ## Gates
 
@@ -147,6 +204,32 @@ three fail identically on an export of `588fc543` (`git archive`, run with its
 own `PYTHONPATH`), with
 `psycopg2.ProgrammingError: the connection cannot be re-entered recursively`
 at `nexus/api/choice_recovery.py:68`. They do not touch the dropped columns.
+
+The 078 fixture's two branches, after the review fix (commit `1effefba`).
+Unstamped branch, against the live pre-134 template:
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:warnings tests/test_orrery/test_retrograde_summary_migration_pg.py
+13 passed in 3.34s
+```
+
+Stamped branch: `createdb -T NEXUS_template qa640_807b_tpl134`, the runner
+applied 134 (`level 134`), and the file's template name was swapped to that
+clone (uncommitted, reverted with `git checkout`):
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:warnings tests/test_orrery/test_retrograde_summary_migration_pg.py
+13 passed in 3.55s
+```
+
+Drift check: on an unstamped template clone with
+`regeneration_count` default set to `1`, the helper raises:
+
+```
+AssertionError: Template clone has not stamped migration 134 but its lifecycle columns differ from the pre-134 definitions: expected {'state': ('character varying(20)', "'draft'::character varying"), 'finalized_at': ('timestamp with time zone', None), 'regeneration_count': ('integer', '0')}, found {'finalized_at': ('timestamp with time zone', None), 'regeneration_count': ('integer', '1'), 'state': ('character varying(20)', "'draft'::character varying")}
+```
+
+Both `qa640_807b_*` clones were dropped afterward.
 
 Offline gate:
 
