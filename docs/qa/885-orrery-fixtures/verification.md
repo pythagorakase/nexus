@@ -391,6 +391,88 @@ These are the same seven pre-existing failures as in the first round, with the s
 
 Black, flake8, and mypy (`-p tests.pg_fixtures -m tests.test_orrery.checkpointed_story_support`) are clean on the two changed files.
 
+## Astra Review: Fail-Closed Guard
+
+Astra's independent review of `025e5f82` graded a disposable-target guard on the seed helpers as P3 fail-closed insurance, consistent with doctrine: `assert_one_target` proves that the fixture and runtime clients reach one server, not that the database is disposable. The review's six P1 findings are pre-existing owner writes in files this PR does not change (`test_ecology_live`, `test_pair_tag_predicates` and `test_pair_tag_substrate`, `test_reader_asset_endpoints`, `test_live_cycle` and `test_retrograde_maturation_live`, `test_tag_provenance` and the other rolled-back owner writes it names, and the wizard and golden-path live gates). The coordinator routes them to the next #816 slice.
+
+Applied:
+
+- `tests/pg_fixtures.py`: `require_disposable_target(dbname)` raises `RuntimeError` naming the database when it is `NEXUS_template` or a save slot, and otherwise returns it. There is no environment override and no allowlist. The slot names come from `nexus.api.slot_utils` (`slot_dbname` over `all_slots()`) and are bound once, at import. `offline_gate_db`, the reader-provenance and recap tests, and `test_pass2_baseline_pg` monkeypatch `slot_utils.slot_dbname` to return their clone during a test, so a lookup at call time would refuse the clone and admit the owner's slot. Wherever the tree patches it, `tests.pg_fixtures` is already imported, or never imported (the gateway subprocess in `test_scheduler_recovery_pg`).
+- Every seed helper calls the guard as its first statement, before any connection: `seed_protagonist`, `seed_committed_chunk`, `seed_story_clock` (ahead of its timezone check), `seed_zone`, `seed_place`, `seed_character`, `seed_faction`, `seed_relationship`, `seed_entity_tag`, and `checkpointed_story_support.seed_checkpointed_story`. `seed_zone` is not in the order's list, but it is a seed this PR added and it writes `layers` and `zones`, so it is guarded too.
+- `tests/test_pg_disposable_target.py` (new):
+  - Offline: each of `save_01` through `save_05` and `NEXUS_template` raises with its name; `qa640_x` passes through unchanged.
+  - Offline: each guarded helper raises on all six owner names under a `psycopg2.connect` tripwire. The tripwire is the one the conftest applies offline; the test installs it in both gates, so a lost guard fails without reaching an owner database. A completeness check fails when a `seed_*` function in `tests.pg_fixtures` is missing from the test's list.
+  - PostgreSQL-gated: `seed_entity_tag("save_05", ...)` raises, and `pg_stat_database.sessions` for `save_05` is unchanged across the call. `pg_stat_activity` cannot show this: it lists only open backends, and a helper's `closing()` shuts its connection before the exception leaves it. `sessions` counts every session a database has had, and PostgreSQL 17 counts one before `connect()` returns: 25 of 25 transient connections to `postgres` read one more session both while open and after close. A control connection in the test proves the counter moves. The call cannot write even without its guard: no tag matches, so its `INSERT ... SELECT` inserts nothing, and the only user trigger on `entity_tags` is row-level.
+
+Every seed call site in the tree passes a `disposable_slot_database` clone or `offline_gate_db` (itself a `qa640_offline_gate` clone); none passes an owner name. The private-cluster `save_04` in `test_connection_lifecycle.py` is seeded by its own `_seed_background_work`, not by these helpers.
+
+Mutations, each applied to the working tree and then restored byte for byte:
+
+```
+M1: seed_faction's guard deleted; run offline, then with NEXUS_RUN_POSTGRES=1
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL [NEXUS_RUN_POSTGRES=1] PYTHONPATH=$PWD $PY -m pytest -q --tb=line -p no:warnings \
+    "tests/test_pg_disposable_target.py::test_seed_helpers_refuse_owner_databases_before_connecting"
+FAILED tests/test_pg_disposable_target.py::test_seed_helpers_refuse_owner_databases_before_connecting[seed_faction]
+1 failed, 9 passed in 0.24s
+  (identical in both gates; the failure is the tripwire's
+  "A seed helper opened a PostgreSQL connection before refusing its target.")
+M2: seed_entity_tag's guard moved inside its connection block; NEXUS_RUN_POSTGRES=1
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q --tb=short -p no:warnings \
+    "tests/test_pg_disposable_target.py::test_seed_helper_refuses_save_05_before_connecting"
+E   AssertionError: PostgreSQL recorded 1 new save_05 session(s) during a refused seed
+1 failed in 0.35s
+```
+
+M2 opened one connection to `save_05` and executed no statement on it (psycopg2 sends no `ROLLBACK` outside a transaction).
+
+The order's gate, with the new tests:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q \
+    tests/test_orrery/test_replay.py tests/test_orrery/test_reconstruction.py \
+    tests/test_orrery/test_communication_graph_live.py tests/test_orrery/test_claim_accounts_live.py \
+    tests/test_orrery/test_claim_consumption_live.py tests/test_orrery/test_orbit_distance_live.py \
+    tests/test_orrery/test_status_bestow_delta_live.py tests/test_orrery/test_migrate.py \
+    tests/test_pg_target_contract.py tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+261 passed, 5 warnings in 25.55s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_RUN_POSTGRES PYTHONPATH=$PWD $PY -m pytest -q -rs tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+SKIPPED [1] tests/test_pg_disposable_target.py:135: Set NEXUS_RUN_POSTGRES=1 to run PostgreSQL integration tests.
+18 passed, 1 skipped, 5 warnings in 0.22s
+```
+
+Seed callers that reroute `slot_dbname` to their clone while the guard runs (the reason the owner names bind at import), chosen because none of them reaches an owner database:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q --tb=line -p no:warnings \
+    tests/test_api/test_scheduler_pg.py tests/test_api/test_frontier_clock_pg.py \
+    tests/test_api/test_reader_character_provenance_pg.py tests/test_api/test_reader_place_provenance_pg.py \
+    tests/test_api/test_return_recap_pg.py tests/test_lore/test_pass2_baseline_pg.py \
+    tests/test_api/test_narrative_post_commit.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_api/test_return_recap_pg.py::test_live_loop_at_rest_offers_the_pending_drafts_decision
+FAILED tests/test_api/test_narrative_post_commit.py::test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit
+2 failed, 34 passed in 63.14s (0:01:03)
+```
+
+Both failures are among the seven pre-existing ones above, with the same signatures (`test_return_recap_pg.py:527`, `test_narrative_post_commit.py:425`); no seed refused its target.
+
+Offline gate:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_RUN_POSTGRES PYTHONPATH=$PWD $PY -m pytest -q --tb=line -p no:warnings
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_lore/test_two_pass_pipeline.py::test_gaia_prompt_is_concise_and_self_contained
+1 failed, 4096 passed, 1055 skipped in 262.43s (0:04:22)
+```
+
+Against the earlier offline run, the new file accounts for all 18 new passes and the one new skip (its PostgreSQL-gated test). The one failure is the same pre-existing Gaia prompt word budget (`assert 711 < 700`) as before.
+
+Black, flake8, and mypy (`-m tests.pg_fixtures -m tests.test_orrery.checkpointed_story_support -m tests.test_pg_disposable_target`) are clean on the three changed files.
+
 ## Deferred
 
 - The accepted-turn factory through `commit_incubator_to_database_sync` (no ported test needed it).

@@ -16,6 +16,10 @@ reads PG* directly, spells a PostgreSQL URL naming a server, or hands a driver
 name bound once to one in the same function: spelled host, port, user, or
 database keywords, a positional DSN or URL, an expanded mapping, or no target
 at all.
+
+Seed helpers write only disposable databases: each calls
+``require_disposable_target`` before it connects, which refuses the owner's
+save slots and ``NEXUS_template`` by name.
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ from sqlalchemy.engine import URL, make_url
 
 from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.api import db_pool
+from nexus.api.slot_utils import all_slots, slot_dbname
 from nexus.config.story_model import StorySettings, write_story_settings
 from nexus.database import (
     asyncpg_kwargs as contract_asyncpg_kwargs,
@@ -302,6 +307,33 @@ def disposable_database(prefix: str) -> Iterator[str]:
             admin.close()
 
 
+# Derived once, at import, from the slot contract. Fixtures such as
+# ``offline_gate_db`` monkeypatch ``slot_utils.slot_dbname`` to return their
+# clone while a test runs; resolving the owner names through that attribute at
+# call time would refuse the clone and admit the owner's database.
+_OWNER_DATABASES = frozenset(
+    {"NEXUS_template", *(slot_dbname(slot) for slot in all_slots())}
+)
+
+
+def require_disposable_target(dbname: str) -> str:
+    """Return ``dbname`` unless it names an owner database, which raises.
+
+    The owner databases are ``NEXUS_template`` and every save slot that
+    ``nexus.api.slot_utils`` defines (``save_01`` through ``save_05``). A seed
+    aimed at one is always a test bug, so there is no override or allowlist:
+    every seed helper calls this before it opens a connection, and tests seed
+    only clones from ``disposable_slot_database`` or ``disposable_database``.
+    """
+
+    if dbname in _OWNER_DATABASES:
+        raise RuntimeError(
+            f"Refusing to seed owner database {dbname!r}: seed helpers write "
+            "only disposable clones from disposable_slot_database"
+        )
+    return dbname
+
+
 def seed_protagonist(
     dbname: str,
     *,
@@ -327,6 +359,7 @@ def seed_protagonist(
     character insert, so need clocks never anchor to wall time (#640/#645).
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn:
         with conn.cursor() as cur:
             cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
@@ -390,6 +423,7 @@ def seed_committed_chunk(
     playable ordinal and head-chunk reads.
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
             "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
@@ -487,6 +521,7 @@ def seed_story_clock(
     the chunk ID returned.
     """
 
+    require_disposable_target(dbname)
     if world_time.tzinfo is None:
         raise ValueError("seed_story_clock needs a timezone-aware world_time")
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
@@ -555,6 +590,7 @@ def seed_zone(
     layer row mirrors the new-story mapper's ``layers`` insert.
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
             "INSERT INTO layers (name, type, description) "
@@ -608,6 +644,7 @@ def seed_place(
     without one the resolver raises, as it does in production.
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         zone_id = resolve_zone_for_point(cur, longitude=longitude, latitude=latitude)
         cur.execute(
@@ -643,6 +680,7 @@ def seed_character(
     by name rather than inside the trigger.
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         _require_need_clock_anchor(cur, "seed_character")
         cur.execute(
@@ -679,6 +717,7 @@ def seed_faction(
     subtype trigger mints the ``faction`` entity.
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
         cur.execute(
@@ -716,6 +755,7 @@ def seed_relationship(
     ``nexus.write_producer``, so the insert is attributed to ``manual``.
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute("SET LOCAL nexus.write_producer = 'manual'")
         cur.execute(
@@ -759,6 +799,7 @@ def seed_entity_tag(
     ``seed_protagonist``).
     """
 
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
             """

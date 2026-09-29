@@ -18,6 +18,7 @@ from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import reconstruct_state_at_sync
 from tests.pg_fixtures import (
     connect,
+    require_disposable_target,
     seed_character,
     seed_entity_tag,
     seed_place,
@@ -67,6 +68,7 @@ def seed_checkpointed_story(dbname: str) -> CheckpointedStory:
     asserted to hold the checkpoint's relationships.
     """
 
+    require_disposable_target(dbname)
     seed_zone(
         dbname,
         name="Replay Coast",
