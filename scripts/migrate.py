@@ -21,12 +21,11 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import logging
-import os
 import re
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import psycopg2
 
@@ -125,43 +124,42 @@ def is_db_locked(dbname: str) -> bool:
     Check if a database is locked (read-only).
 
     Uses PostgreSQL's pg_db_role_setting to check for default_transaction_read_only.
+    A connection or query error propagates: an unreadable lock state is not an
+    unlocked database.
     """
+    conn = get_connection("postgres")
     try:
-        conn = get_connection("postgres")
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT setconfig
-                    FROM pg_db_role_setting s
-                    JOIN pg_database d ON d.oid = s.setdatabase
-                    WHERE d.datname = %s AND s.setrole = 0
-                    """,
-                    (dbname,),
-                )
-                row = cur.fetchone()
-                if row and row[0]:
-                    return "default_transaction_read_only=on" in row[0]
-                return False
-        finally:
-            conn.close()
-    except psycopg2.Error as e:
-        LOG.debug("Error checking lock status for %s: %s", dbname, e)
-        return False
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT setconfig
+                FROM pg_db_role_setting s
+                JOIN pg_database d ON d.oid = s.setdatabase
+                WHERE d.datname = %s AND s.setrole = 0
+                """,
+                (dbname,),
+            )
+            row = cur.fetchone()
+            if row and row[0]:
+                return "default_transaction_read_only=on" in row[0]
+            return False
+    finally:
+        conn.close()
 
 
 def db_exists(dbname: str) -> bool:
-    """Check if a database exists."""
+    """Check if a database exists.
+
+    A connection or query error propagates: an unreachable server is not a
+    missing database.
+    """
+    conn = get_connection("postgres")
     try:
-        conn = get_connection("postgres")
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
-                return cur.fetchone() is not None
-        finally:
-            conn.close()
-    except psycopg2.Error:
-        return False
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
+            return cur.fetchone() is not None
+    finally:
+        conn.close()
 
 
 def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
@@ -172,10 +170,12 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
     """
     with conn.cursor() as cur:
         # Check if table exists with correct schema
-        cur.execute("""
+        cur.execute(
+            """
             SELECT column_name FROM information_schema.columns
             WHERE table_name = 'schema_migrations' AND table_schema = 'public'
-            """)
+            """
+        )
         columns = {row[0] for row in cur.fetchall()}
 
         if columns and "version" not in columns:
@@ -193,7 +193,8 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
             if dry_run:
                 LOG.info("  [DRY-RUN] Would create schema_migrations table")
                 return False
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -207,7 +208,8 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
                     'Migration name from the migration filename or bootstrap list.';
                 COMMENT ON COLUMN schema_migrations.applied_at IS
                     'Database transaction timestamp when the migration stamp was inserted.';
-                """)
+                """
+            )
     conn.commit()
     return True
 
@@ -249,13 +251,16 @@ def get_applied_migrations(conn) -> set:
         return {row[0] for row in cur.fetchall()}
 
 
-def discover_migrations() -> List[Tuple[str, str, Path]]:
+def discover_migrations(
+    migrations_dir: Optional[Path] = None,
+) -> List[Tuple[str, str, Path]]:
     """
     Discover SQL and managed Python migration files.
 
-    Every entry in MIGRATIONS_DIR other than IGNORED_MIGRATION_ENTRIES must be a
-    file matching MIGRATION_FILENAME whose version no other file uses, and every
-    Python migration's version must be in PYTHON_MIGRATION_ALLOWLIST.
+    Every entry in ``migrations_dir`` (default: MIGRATIONS_DIR, read at call
+    time) other than IGNORED_MIGRATION_ENTRIES must be a file matching
+    MIGRATION_FILENAME whose version no other file uses, and every Python
+    migration's version must be in PYTHON_MIGRATION_ALLOWLIST.
 
     Returns list of (version, name, path) tuples sorted by version.
 
@@ -263,16 +268,17 @@ def discover_migrations() -> List[Tuple[str, str, Path]]:
         RuntimeError: If an entry is not a migration file, two files share a
             version, or a Python migration is not allowlisted.
     """
+    root = MIGRATIONS_DIR if migrations_dir is None else migrations_dir
     migrations = []
     seen: dict[str, Path] = {}
 
-    for path in sorted(MIGRATIONS_DIR.iterdir()):
+    for path in sorted(root.iterdir()):
         if path.name in IGNORED_MIGRATION_ENTRIES:
             continue
         match = MIGRATION_FILENAME.match(path.name)
         if match is None or not path.is_file():
             raise RuntimeError(
-                f"Unrecognized entry in {MIGRATIONS_DIR}: {path}. Migrations are "
+                f"Unrecognized entry in {root}: {path}. Migrations are "
                 "files named NNN_name.sql or NNN_name.py (lowercase snake_case)."
             )
         version, name, extension = match.groups()
@@ -368,17 +374,26 @@ def migrate_database(
     dry_run: bool = False,
     skip_locked: bool = True,
     write_locked_slot: bool = False,
+    migrations_dir: Optional[Path] = None,
 ) -> Tuple[int, int]:
     """
     Apply pending migrations to a single database.
 
-    Returns (applied_count, skipped_count).
+    Returns (applied_count, unapplied_count). The second value counts the
+    pending migrations left unapplied after the first failure (the runner stops
+    there and logs which migration failed); it is zero on success.
 
-    The migration tree is validated before the database is touched, so a
-    duplicate, misnamed, or unallowlisted migration fails without leaving a
-    tracking table or bootstrap stamps behind.
+    Returns (0, 0) without touching anything when the database does not exist,
+    or when it is locked and neither ``skip_locked=False`` nor
+    ``write_locked_slot`` was given. Any other error, including a failure to
+    connect to an existing database, propagates.
+
+    The migration tree (``migrations_dir``, default MIGRATIONS_DIR) is
+    validated before the database is touched, so a duplicate, misnamed, or
+    unallowlisted migration fails without leaving a tracking table or bootstrap
+    stamps behind.
     """
-    all_migrations = discover_migrations()
+    all_migrations = discover_migrations(migrations_dir)
 
     if not db_exists(dbname):
         LOG.warning("Database %s does not exist, skipping", dbname)
@@ -390,13 +405,9 @@ def migrate_database(
 
     LOG.info("Migrating %s...", dbname)
 
-    try:
-        conn = maintenance_connection(
-            dbname, write_locked_slot=write_locked_slot, operation="migrate"
-        )
-    except psycopg2.Error as e:
-        LOG.error("Cannot connect to %s: %s", dbname, e)
-        return (0, 0)
+    conn = maintenance_connection(
+        dbname, write_locked_slot=write_locked_slot, operation="migrate"
+    )
 
     try:
         table_ready = ensure_tracking_table(conn, dry_run)
@@ -448,6 +459,37 @@ def migrate_database(
         conn.close()
 
 
+def migrate_targets(
+    targets: Sequence[str], migrate_one: Callable[[str], Tuple[int, int]]
+) -> Tuple[int, int]:
+    """
+    Migrate each database in ``targets`` in order with ``migrate_one``.
+
+    Returns the summed (applied_count, unapplied_count). A database whose
+    migration fails reports it in its unapplied count and the run continues.
+    A database that raises (for example, one that refuses connections) stops
+    the run: the error log names the databases processed before it, the one
+    that raised, and the ones not attempted, then the exception propagates.
+    """
+    total_applied = 0
+    total_unapplied = 0
+    for index, dbname in enumerate(targets):
+        try:
+            applied, unapplied = migrate_one(dbname)
+        except Exception:
+            LOG.error(
+                "Stopped at %s, which raised. Processed before it: %s. "
+                "Not attempted: %s.",
+                dbname,
+                ", ".join(targets[:index]) or "none",
+                ", ".join(targets[index + 1 :]) or "none",
+            )
+            raise
+        total_applied += applied
+        total_unapplied += unapplied
+    return (total_applied, total_unapplied)
+
+
 def show_status() -> None:
     """Show migration status for all databases."""
     all_migrations = discover_migrations()
@@ -472,10 +514,12 @@ def show_status() -> None:
             conn = get_connection(dbname)
             # Don't modify in status mode - just check if table exists with right schema
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT column_name FROM information_schema.columns
                     WHERE table_name = 'schema_migrations' AND table_schema = 'public'
-                    """)
+                    """
+                )
                 columns = {row[0] for row in cur.fetchall()}
 
             if not columns or "version" not in columns:
@@ -581,15 +625,12 @@ def main():
     if args.dry_run:
         LOG.info("[DRY-RUN MODE - no changes will be made]")
 
-    total_applied = 0
-    total_skipped = 0
-
-    for dbname in targets:
-        applied, skipped = migrate_database(
+    total_applied, total_skipped = migrate_targets(
+        targets,
+        lambda dbname: migrate_database(
             dbname, dry_run=args.dry_run, write_locked_slot=args.write_locked_slot
-        )
-        total_applied += applied
-        total_skipped += skipped
+        ),
+    )
 
     LOG.info("")
     LOG.info("Summary: %d applied, %d skipped/failed", total_applied, total_skipped)

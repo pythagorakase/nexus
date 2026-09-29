@@ -100,6 +100,8 @@ python scripts/new_story_setup.py --slot 5 --mode clone --source save_01 --force
 
 The setup script uses `pg_dump -s` to extract schema from `NEXUS_template`.
 
+Initialization and cloning raise on any migration or restore error (psql runs with `ON_ERROR_STOP`) and never log success, but the partial database remains: initialization can leave committed migrations, seed rows, and the `global_variables` row without IDF initialization, and a failed clone can keep the source's `new_story = false`, which lists the slot as active. `start_setup` reuses an existing database without checking its migrations, so recreate the target with `--force` after fixing the cause; durable quarantine and staged replacement belong to #823.
+
 **When to use each:**
 - **Migrations** → Schema changes to existing slots with data (non-destructive)
 - **Slot initialization** → Creating fresh slots or resetting test slots (destructive)

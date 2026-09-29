@@ -1,6 +1,7 @@
 """Tests for migration discovery around Orrery's Python migration."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -89,6 +90,45 @@ def test_migrate_database_validates_the_tree_before_touching_the_database(
 
     with pytest.raises(RuntimeError, match="version 130"):
         migrate.migrate_database("save_05")
+
+
+def test_migrate_targets_stops_at_a_raise_and_names_unattempted_databases(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The --all loop stops at the database that raises and names the rest."""
+
+    targets = [migrate.TEMPLATE_DB, *migrate.SLOT_DBS]
+    attempted: list[str] = []
+
+    def migrate_one(dbname: str) -> tuple[int, int]:
+        attempted.append(dbname)
+        if dbname == "save_03":
+            raise psycopg2.OperationalError("save_03 refused the connection")
+        return (1, 0)
+
+    with caplog.at_level(logging.ERROR, logger=migrate.LOG.name):
+        with pytest.raises(psycopg2.OperationalError, match="refused"):
+            migrate.migrate_targets(targets, migrate_one)
+
+    assert attempted == ["NEXUS_template", "save_01", "save_02", "save_03"]
+    assert [record.getMessage() for record in caplog.records] == [
+        "Stopped at save_03, which raised. Processed before it: "
+        "NEXUS_template, save_01, save_02. Not attempted: save_04, save_05."
+    ]
+
+
+def test_migrate_targets_sums_counts_and_continues_past_unapplied() -> None:
+    """A failed migration is counted, not raised, so later databases still run."""
+
+    counts = {"qa640_a": (2, 0), "qa640_b": (0, 3), "qa640_c": (1, 0)}
+    attempted: list[str] = []
+
+    def migrate_one(dbname: str) -> tuple[int, int]:
+        attempted.append(dbname)
+        return counts[dbname]
+
+    assert migrate.migrate_targets(list(counts), migrate_one) == (3, 3)
+    assert attempted == list(counts)
 
 
 def test_discover_migrations_rejects_version_zero(
@@ -1681,7 +1721,8 @@ def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
         clearance_kind_migration.run(conn)
         with conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO tags (
                         tag, category, is_ephemeral, clearance_kind,
                         reapplication_policy, clear_on, synonym_for,
@@ -1700,7 +1741,8 @@ def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
                         synonym_for = NULL,
                         deprecated = FALSE,
                         description = EXCLUDED.description
-                    """)
+                    """
+                )
 
         migration.run(conn)
         migration.run(conn)
@@ -2083,11 +2125,13 @@ def test_canonical_grieving_migration_executes_against_slot_db() -> None:
         migration.run(conn)
 
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT id, reapplication_policy, deprecated, synonym_for
                 FROM tags
                 WHERE tag = 'grieving'
-                """)
+                """
+            )
             grieving_id, reapply, deprecated, synonym_for = cur.fetchone()
             assert reapply == "extend_expiry"
             assert deprecated is False

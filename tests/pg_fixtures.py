@@ -254,6 +254,51 @@ def disposable_slot_database(
                     admin.close()
 
 
+@contextmanager
+def disposable_database(prefix: str) -> Iterator[str]:
+    """Yield a uniquely named empty database and always remove it afterward.
+
+    The database is created from ``template0`` with no schema, seed rows, or
+    migration stamps, for tests that exercise restore and runner mechanics on
+    a bare target. Teardown re-allows connections (a test may have closed
+    them), terminates remaining sessions, and drops the database.
+    """
+
+    assert_one_target("postgres")
+    dbname = f"{prefix}_{uuid.uuid4().hex[:12]}"
+    admin = _connect("postgres")
+    admin.autocommit = True
+    try:
+        with admin.cursor() as cur:
+            cur.execute(
+                sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
+                    sql.Identifier(dbname)
+                )
+            )
+        yield dbname
+    finally:
+        try:
+            db_pool.dispose_database(dbname)
+            with admin.cursor() as cur:
+                cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
+                if cur.fetchone() is not None:
+                    cur.execute(
+                        sql.SQL("ALTER DATABASE {} ALLOW_CONNECTIONS true").format(
+                            sql.Identifier(dbname)
+                        )
+                    )
+                    cur.execute(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                        "WHERE datname = %s AND pid <> pg_backend_pid()",
+                        (dbname,),
+                    )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+        finally:
+            admin.close()
+
+
 def seed_protagonist(
     dbname: str,
     *,

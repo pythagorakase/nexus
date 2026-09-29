@@ -45,6 +45,17 @@ disposal does not coordinate transactions in other processes.
 stamps migrations in each database's `schema_migrations` table, and
 `scripts/new_story_setup.py` calls it for fresh slots. Do not apply migration SQL
 with `psql` or ad hoc scripts; an unstamped change is invisible to the runner.
+Slot initialization and data cloning in `scripts/new_story_setup.py` raise on
+any migration or restore error and never log success, but the partial target
+database remains: initialization can leave committed migrations, seed rows, and
+the `global_variables` row without IDF initialization, and a failed clone can
+keep the source's `new_story = false`, which lists the slot as active.
+`start_setup` reuses an existing database without checking its migrations, so
+recreate the target with `--force` after fixing the cause; durable quarantine
+and staged replacement belong to #823. The runner itself propagates connection
+errors instead of reporting nothing pending, and `migrate.py --all` stops at the
+first database that raises, logging the databases it processed and the ones it
+did not reach.
 Discovery fails loudly when an entry in `migrations/` is not an
 `NNN_name.sql` or `NNN_name.py` file (bytecode caches and `.DS_Store` excepted),
 when two files share a version, or when a Python migration's version is missing
