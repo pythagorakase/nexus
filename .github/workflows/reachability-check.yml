@@ -1,5 +1,12 @@
 name: Python reachability check
 
+# Runs the ci-runner readiness contract (nexus/runtime/readiness.py, issue
+# #803): `config.valid` loads nexus.toml through the Pydantic settings models,
+# and `reachability.gate` starts `python -S scripts/check_reachability.py`, so
+# the static import gate still runs without site-packages. Run the same thing
+# from a checkout with `nexus doctor --target ci-runner --json`
+# (docs/runtime.md, Readiness Checks).
+
 on:
   push:
     branches: [main]
@@ -15,16 +22,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install Poetry
+        run: pipx install poetry
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Check static import reachability
-        run: python -S scripts/check_reachability.py --report reachability-report.json
-      - name: Save graph evidence
+          cache: poetry
+      # poetry.lock pins the versions; the project installs editable, so the
+      # doctor's checkout root is this workspace.
+      - name: Install NEXUS
+        run: poetry install --only main
+      - name: Run the ci-runner readiness checks
+        shell: bash
+        run: poetry run nexus doctor --target ci-runner --json | tee readiness-report.json
+      # The doctor reports only a count per finding list; on failure, rerun the
+      # checker directly so the log names the offending paths and the full
+      # import graph is saved.
+      - name: Print the reachability findings
+        if: failure()
+        run: poetry run python -S scripts/check_reachability.py --report reachability-report.json || true
+      - name: Save readiness evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: python-reachability
-          path: reachability-report.json
-          if-no-files-found: ignore
+          name: ci-runner-readiness
+          path: |
+            readiness-report.json
+            reachability-report.json
