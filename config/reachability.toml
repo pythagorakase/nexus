@@ -123,6 +123,12 @@ expression = "importlib.util.spec_from_file_location('regenerate_embeddings_prob
 target = "scripts/regenerate_embeddings.py"
 reason = "The truncate-safety PostgreSQL test imports the real script fresh after pointing NEXUS_RUNTIME_CONFIG at a registry whose local_path is missing, because the script reads its model registry at import time. This edge is test-only: the script (and scripts/utils/embedding_utils.py through it) still has no operator entry point and is import-era tooling for #811."
 
+[[dynamic_edges]]
+source = "tests/test_config/test_ir_eval_golden_overrides.py:_merge_golden_overrides"
+expression = "importlib.util.spec_from_file_location('ir_eval_cli', REPO_ROOT / 'ir_eval' / 'ir_eval.py')"
+target = "ir_eval/ir_eval.py"
+reason = "The golden-query override test loads the V1 IR-evaluation CLI by file in a fresh interpreter to run its real override merge on the checked-in ir_eval/golden_queries.json. This edge is test-only: ir_eval/ir_eval.py (and the ir_eval/scripts modules it imports) still has no operator entry point."
+
 [[import_search_paths]]
 source = "scripts/*.py"
 paths = ["scripts"]

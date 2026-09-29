@@ -384,3 +384,66 @@ tests/test_memnon_script_model_loaders.py branch=0 head=0
 mypy (embedding_manager.py and both test files), branch: Found 7 errors in 1 file (checked 3 source files)
 mypy, previous branch head: Found 7 errors in 1 file (checked 3 source files)
 ```
+
+## Codex P1: Stale Golden-Query Overrides
+
+The review bot flagged `ir_eval/golden_queries.json`: `create_temp_settings_file`
+(`ir_eval/ir_eval.py:101`) merges its `settings` block into the control MEMNON
+settings, and the `extra="forbid"` models reject `hybrid_search.target_model`,
+which this PR retired. The same block also carried
+`cross_encoder_reranking.use_8bit`, retired here too. Both keys are gone from
+`ir_eval/golden_queries.json` and its tracked twin
+`ir_eval/golden_queries.json.bak`; `target_model` is gone from
+`ir_eval/golden_queries_backup.json`, which has no reranking block. The
+`ir_eval/results/*.json` files and the run rows in `ir_eval/ir_eval.db` are
+historical outputs and stay as recorded.
+
+`tests/test_config/test_ir_eval_golden_overrides.py` runs the CLI's own
+`reload_settings` and `create_temp_settings_file` in a fresh interpreter,
+because `ir_eval/__init__.py` binds the root `scripts` package and the CLI's
+`from scripts.auto_judge import AIJudge` then raises `ModuleNotFoundError`. The
+temporary document lands in `tmp_path` through `TMPDIR`, and the test validates
+the merged MEMNON section with `Settings` inside canonical `nexus.toml`,
+asserting no field-level error. It does not assert full validation, because two
+failures predate this PR and reproduce on a `git archive origin/main` tree
+(`626b2293`):
+
+- `load_settings_as_dict(<merged>.json)` fails with `nexus.toml is missing
+  required [storyteller.correspondence] section`. The legacy JSON loader never
+  maps that section, so no legacy document validates.
+- `Settings` with the merged MEMNON fails with `[memnon.models] must mark
+  exactly one embedder is_active = true (the production embedder); 4 are
+  active`. The golden `models` block is a three-embedder ensemble, and the
+  invariant arrived with `c7359174`.
+
+On that `origin/main` tree the merge has no field-level error. With this
+branch's schema and the unedited golden file, the test fails:
+
+```text
+memnon.retrieval.hybrid_search.target_model
+  Extra inputs are not permitted [type=extra_forbidden, input_value='inf-retriever-v1-1.5b', input_type=str]
+memnon.retrieval.cross_encoder_reranking.use_8bit
+  Extra inputs are not permitted [type=extra_forbidden, input_value=True, input_type=bool]
+1 failed, 5 warnings in 0.96s
+```
+
+The test's file-based load is a test-only dynamic edge in
+`config/reachability.toml`, and the ratchet retired the five orphan exemptions
+it reaches: `ir_eval/ir_eval.py` and `ir_eval/scripts/auto_judge.py`,
+`golden_queries_module.py`, `pg_qrels.py`, and `settings_compare.py`.
+
+```sh
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_config/test_ir_eval_golden_overrides.py
+PYTHONPATH=$PWD $PY -m pytest -q tests/test_config tests/test_qa_shift.py tests/test_reachability.py
+$PY -m black --check tests/test_config/test_ir_eval_golden_overrides.py
+$PY -m flake8 tests/test_config/test_ir_eval_golden_overrides.py
+PYTHONPATH=$PWD $PY -m mypy tests/test_config/test_ir_eval_golden_overrides.py
+```
+
+```text
+1 passed, 5 warnings in 0.95s
+167 passed, 5 warnings in 19.95s
+1 file would be left unchanged.
+(flake8: no output, exit 0)
+Success: no issues found in 1 source file
+```

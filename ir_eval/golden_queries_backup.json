@@ -45,7 +45,6 @@
                     "general": { "vector": 0.8, "text": 0.2 }
                 },
                 "use_query_type_weights": true,
-                "target_model": "inf-retriever-v1-1.5b",
                 "temporal_boost_factor": 0.6,
                 "temporal_boost_factors": {
                     "character": 0.4,

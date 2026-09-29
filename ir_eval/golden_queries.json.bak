@@ -124,7 +124,6 @@
                 },
                 "use_query_type_weights": true,
                 "use_query_type_temporal_factors": true,
-                "target_model": "inf-retriever-v1-1.5b",
                 "temporal_boost_factor": 0.6
             },
             "cross_encoder_reranking": {
@@ -144,8 +143,7 @@
                     "theme": 0.2,
                     "general": 0.3
                 },
-                "use_query_type_weights": false,
-                "use_8bit": true
+                "use_query_type_weights": false
             },
             "structured_data_enabled": false
         },
