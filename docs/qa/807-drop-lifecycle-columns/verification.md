@@ -356,3 +356,155 @@ $ diff <(sed -E 's/:[0-9]+(:[0-9]+)?:/:/' base.mypy | sort) <(sed -E 's/:[0-9]+(
 flake8: 21 findings at the base, 20 at HEAD. Two pre-existing E501 lines got
 shorter (141 to 122, 147 to 128) and one (94) now fits in 88; no new finding. mypy:
 the same 30 errors in the same 7 files; the new migration test adds none.
+
+## Astra Review Fixes
+
+Astra's review of `65dc2338` raised two findings; both are fixed.
+
+**[P2] Function bodies the view guard cannot see.** PostgreSQL records no
+dependency for a column named inside a function body, so a `BEFORE INSERT`
+trigger whose function assigns `NEW.state` passed the view-only guard, the
+drop stamped 134, and every later insert failed inside the trigger. The `DO`
+block in `migrations/134_drop_chunk_lifecycle_columns.sql` keeps the view and
+materialized-view check unchanged and adds a second check. It reads the
+source of every function that a non-internal trigger on `narrative_chunks`
+calls (any schema or language) and of every PL/pgSQL function in `public`.
+It refuses, naming each function and column, when a trigger function has
+`NEW.<column>` / `OLD.<column>`, or when any function read has a statement
+(the text between two semicolons) that names `narrative_chunks` and the column
+as a whole identifier, bare or qualified. The migration header documents both
+regexes, what they exclude (`chunk_state`, `state_updates`, `SQLSTATE`,
+`NEW.state` in another table's trigger, a job table's `state` in a statement
+that does not name `narrative_chunks`), and the conservative cases.
+
+New cases in `tests/test_chunk_lifecycle_columns_migration_pg.py`, each on a
+disposable `disposable_slot_database` template clone that is rewound to
+pre-134 (columns restored, stamp removed) and run through
+`migrate.migrate_database`:
+
+- `test_migration_134_refuses_a_trigger_function_that_writes_a_lifecycle_column`:
+  a real `BEFORE INSERT` PL/pgSQL trigger assigns `NEW.state := 'draft'`.
+  Dropping the columns by hand and inserting a row fails with
+  `record "new" has no field "state"` (rolled back). The runner returns
+  `(0, 1)`, and the message names exactly
+  `public.qa_default_chunk_state() (state)`; the columns and the missing
+  stamp are unchanged. The decoys stay in place for the whole case: a job
+  table whose trigger assigns its own `NEW.state`, a `narrative_chunks`
+  trigger that queues a job row by `state` in a statement that does not name
+  `narrative_chunks`, and a function that reads `chunk_state`,
+  `state_updates`, `finalized_at_utc`, and `regeneration_count_total` from
+  `narrative_chunks`. After the offender is dropped, the runner returns
+  `(1, 0)` and stamps 134. A new chunk insert then succeeds, and both decoy
+  triggers fire (the job row reads `queued`).
+- `test_migration_134_passes_the_template_trigger_functions`: a plain
+  template clone carries migration 114's IDF trigger functions
+  (`lock_memory_idf_corpora`, `maintain_memory_idf`) on `narrative_chunks`.
+  Its `sync_memory_idf_document` (migration 133's body) names
+  `narrative_chunks`. The runner applies 134 past them: `(1, 0)`, stamped,
+  columns gone.
+
+The refusal case fails against the pre-fix migration (`HEAD`'s file swapped
+in temporarily, then restored byte for byte), which reproduces the finding:
+
+```
+>               assert migrate.migrate_database(dbname, skip_locked=False) == (0, 1)
+E               assert (1, 0) == (0, 1)
+FAILED tests/test_chunk_lifecycle_columns_migration_pg.py::test_migration_134_refuses_a_trigger_function_that_writes_a_lifecycle_column
+1 failed, 2 passed in 3.84s
+```
+
+A scratch probe (not committed) on one more disposable clone added the
+decoys plus nine probe functions, then ran the runner once. The scan named
+the seven expected functions: an `OLD.finalized_at` read, a quoted
+mixed-case `New . "regeneration_count"`, a trigger function in another
+schema, an `UPDATE narrative_chunks SET regeneration_count`, an
+alias-qualified `nc.finalized_at`, and dynamic SQL in an `EXECUTE` string.
+The seventh is the documented conservative case, a job table's `state` in a
+statement that joins `narrative_chunks`. The scan did not name the decoys, a
+`SQLSTATE` handler, or an unattached trigger function that assigns
+`NEW.finalized_at`:
+
+```
+runner: (0, 1)
+  named: public.qa_p_alias_select() (finalized_at)
+  named: public.qa_p_dynamic() (state)
+  named: public.qa_p_join_job_state() (state)
+  named: public.qa_p_old_finalized() (finalized_at)
+  named: public.qa_p_quoted_mixed_case() (regeneration_count)
+  named: public.qa_p_update_regen(chunk bigint) (regeneration_count)
+  named: qa_probe_schema.qa_p_other_schema() (state)
+```
+
+The fleet, read-only: the migration's own function query, extracted from the
+file with only the `INTO` line removed, run in `BEGIN READ ONLY ... ROLLBACK`
+on each database. It returns nothing (no refusal) on all six. Each reads 55
+functions, and four of them (`hybrid_search` x3 and
+`sync_memory_idf_document`) have real `narrative_chunks` statements:
+
+```
+== NEXUS_template
+string_agg
+
+(1 row)
+read_functions
+55
+(1 row)
+bodies_naming_narrative_chunks
+hybrid_search, hybrid_search, hybrid_search, sync_memory_idf_document
+(1 row)
+```
+
+`save_01` through `save_05` print the identical block. Every one has the
+same four `narrative_chunks` triggers
+(`acquire_idf_corpus_ownership`, `maintain_idf_row`, `maintain_idf_truncate`,
+`trg_narrative_chunks_reject_retrograde_summary`) and stays at level 133.
+
+**[P3] Nullability in the unstamped fixture check.**
+`_PRE_134_LIFECYCLE_COLUMNS` in
+`tests/test_orrery/test_retrograde_summary_migration_pg.py` now holds
+`(type, default, is_nullable)`, and the unstamped branch compares
+`NOT attnotnull` as well. All three columns are nullable on every fleet
+database (read-only `pg_attribute` query), which matches the stamped
+branch's `ADD COLUMN`. Drift check on a raw, unstamped template clone
+(`CREATE DATABASE ... TEMPLATE "NEXUS_template"`, dropped afterward) with
+`ALTER COLUMN state SET NOT NULL`:
+
+```
+134 stamps on clone: 0
+old helper (HEAD 65dc2338): None -> accepted
+new helper: AssertionError: Template clone has not stamped migration 134 but its lifecycle columns differ from the pre-134 definitions: expected {'state': ('character varying(20)', "'draft'::character varying", True), 'finalized_at': ('timestamp with time zone', None, True), 'regeneration_count': ('integer', '0', True)}, found {'finalized_at': ('timestamp with time zone', None, True), 'regeneration_count': ('integer', '0', True), 'state': ('character varying(20)', "'draft'::character varying", False)}
+```
+
+Gates, `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset, against the live
+(pre-134) template:
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_orrery/test_retrograde_summary_migration_pg.py tests/test_orrery/test_retrograde_persistence.py tests/test_schema_documentation_pg.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+53 passed, 5 warnings in 18.23s
+$ $PY -m black --check tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_orrery/test_retrograde_summary_migration_pg.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+$ $PY -m flake8 tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_orrery/test_retrograde_summary_migration_pg.py
+$ echo $?
+0
+$ PYTHONPATH=$PWD $PY scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+```
+
+The runner and slot-setup suites also ran with the PostgreSQL gate on:
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_migration_comment_lint.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py tests/test_reachability.py
+FAILED tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_executes_against_slot_db
+1 failed, 149 passed in 16.87s
+```
+
+That one failure connects to the owner's `save_05`
+(`get_slot_db_url(dbname="save_05")`), which is an empty story. It raises
+`need-clock anchor unavailable: no canonical world time or base_timestamp`
+inside `orrery_sync_character_need_states`: the issue #885 exemption,
+unrelated to the lifecycle columns. mypy on the two changed test files
+reports one error, `test_retrograde_summary_migration_pg.py:232` (the
+`allowed_manifests` annotation), which is in the pre-existing list above.

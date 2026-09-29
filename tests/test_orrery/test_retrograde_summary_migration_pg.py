@@ -809,10 +809,11 @@ def test_migration_078_rejects_stamped_summary_without_vector_coverage(
         assert cur.fetchone()[0] == 1
 
 
+# (type, default, is_nullable) as migrations 018 and 021 left each column.
 _PRE_134_LIFECYCLE_COLUMNS = {
-    "state": ("character varying(20)", "'draft'::character varying"),
-    "finalized_at": ("timestamp with time zone", None),
-    "regeneration_count": ("integer", "0"),
+    "state": ("character varying(20)", "'draft'::character varying", True),
+    "finalized_at": ("timestamp with time zone", None, True),
+    "regeneration_count": ("integer", "0", True),
 }
 
 
@@ -821,7 +822,7 @@ def _restore_pre_134_lifecycle_columns(cur: Any) -> None:
 
     Branches on the clone's own 134 stamp: a stamped clone gets the columns
     re-added strictly; an unstamped clone must already carry them with exactly
-    the pre-134 definitions.
+    the pre-134 definitions: type, default, and nullability.
     """
 
     cur.execute("SELECT 1 FROM schema_migrations WHERE version = '134'")
@@ -840,7 +841,8 @@ def _restore_pre_134_lifecycle_columns(cur: Any) -> None:
         """
         SELECT a.attname,
                format_type(a.atttypid, a.atttypmod),
-               pg_get_expr(d.adbin, d.adrelid)
+               pg_get_expr(d.adbin, d.adrelid),
+               NOT a.attnotnull AS is_nullable
         FROM pg_attribute a
         LEFT JOIN pg_attrdef d
           ON d.adrelid = a.attrelid AND d.adnum = a.attnum
@@ -851,7 +853,10 @@ def _restore_pre_134_lifecycle_columns(cur: Any) -> None:
         """,
         (list(_PRE_134_LIFECYCLE_COLUMNS),),
     )
-    found = {name: (col_type, default) for name, col_type, default in cur.fetchall()}
+    found = {
+        name: (col_type, default, is_nullable)
+        for name, col_type, default, is_nullable in cur.fetchall()
+    }
     if found != _PRE_134_LIFECYCLE_COLUMNS:
         raise AssertionError(
             "Template clone has not stamped migration 134 but its lifecycle "

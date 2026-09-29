@@ -28,6 +28,41 @@
 -- materialized view depends on one, and names that view, instead of letting
 -- a CASCADE remove it without notice.
 --
+-- PostgreSQL records no dependency for a column named inside a function
+-- body, so the view guard cannot see a trigger that the drop would break: a
+-- BEFORE INSERT trigger whose function assigns NEW.state would let the drop
+-- succeed, and every later narrative_chunks insert would then fail inside
+-- the trigger. The second guard reads function source text (pg_proc.prosrc)
+-- and refuses, naming each function and the column it references. It reads
+-- every function that a non-internal trigger on narrative_chunks calls (any
+-- schema or language) and every PL/pgSQL function in public. Matching is
+-- case-insensitive, and a column name matches only as a whole identifier
+-- (no letter, digit, underscore, or $ on either side), so chunk_state,
+-- state_updates, and SQLSTATE never match. A function refuses the drop for a
+-- column when either pattern matches:
+--   1. Trigger record field, checked only in a function that a trigger on
+--      narrative_chunks calls:
+--        (?<![\w$.])(new|old)\s*\.\s*"?<column>"?(?![\w$])
+--      NEW.state in a trigger function on another table (a job table's own
+--      state column) is not checked against this pattern.
+--   2. Statement adjacency, checked in every function read: one statement
+--      (the text between two semicolons) names the table,
+--        (?<![\w$])"?narrative_chunks"?(?![\w$])
+--      and also names the column, bare or qualified (nc.state,
+--      narrative_chunks.state):
+--        (?<![\w$])"?<column>"?(?![\w$])
+--      A job table's state column in a statement that does not name
+--      narrative_chunks does not match.
+-- The patterns err toward refusing. Comments and string literals are read
+-- too, so dynamic SQL is covered, and a statement that names both
+-- narrative_chunks and another table's state column also refuses; read the
+-- named function before changing it. On 2026-09-29 neither pattern matched
+-- on NEXUS_template or save_01..save_05. Their only narrative_chunks trigger
+-- functions are migration 114's IDF functions (lock_memory_idf_corpora, and
+-- maintain_memory_idf, which calls sync_memory_idf_document as migration 133
+-- rewrote it) and migration 078's
+-- nexus_reject_legacy_retrograde_summary_chunk; none names the three columns.
+--
 -- embedding_generated_at is now the only lifecycle signal on narrative_chunks.
 -- Its comment (migration 018) still names ChunkWorkflow as the writer, so this
 -- migration rewrites it to name the job that sets it today
@@ -40,6 +75,7 @@
 DO $$
 DECLARE
     dependents text;
+    referencing_functions text;
 BEGIN
     SELECT string_agg(
                DISTINCT format('%I.%I (%s)', vn.nspname, v.relname, a.attname),
@@ -63,6 +99,62 @@ BEGIN
         RAISE EXCEPTION
             'Migration 134 cannot drop narrative_chunks lifecycle columns; dependent views: %',
             dependents;
+    END IF;
+
+    WITH chunk_trigger_functions AS (
+        SELECT t.tgfoid AS function_oid
+        FROM pg_trigger AS t
+        WHERE t.tgrelid = 'public.narrative_chunks'::regclass
+          AND NOT t.tgisinternal
+    ),
+    read_functions AS (
+        SELECT format(
+                   '%I.%I(%s)',
+                   fn.nspname,
+                   p.proname,
+                   pg_get_function_identity_arguments(p.oid)
+               ) AS signature,
+               p.prosrc AS body,
+               p.oid IN (
+                   SELECT function_oid FROM chunk_trigger_functions
+               ) AS fires_on_narrative_chunks
+        FROM pg_proc AS p
+        JOIN pg_namespace AS fn ON fn.oid = p.pronamespace
+        JOIN pg_language AS l ON l.oid = p.prolang
+        WHERE p.oid IN (SELECT function_oid FROM chunk_trigger_functions)
+           OR (fn.nspname = 'public' AND l.lanname = 'plpgsql')
+    ),
+    lifecycle_columns (column_name) AS (
+        VALUES ('state'), ('finalized_at'), ('regeneration_count')
+    )
+    SELECT string_agg(
+               DISTINCT format('%s (%s)', f.signature, c.column_name),
+               ', '
+           )
+    INTO referencing_functions
+    FROM read_functions AS f
+    CROSS JOIN lifecycle_columns AS c
+    WHERE (
+            f.fires_on_narrative_chunks
+            AND f.body ~* (
+                '(?<![\w$.])(new|old)\s*\.\s*"?'
+                || c.column_name
+                || '"?(?![\w$])'
+            )
+        )
+       OR EXISTS (
+            SELECT 1
+            FROM regexp_split_to_table(f.body, ';') AS s (statement_text)
+            WHERE s.statement_text ~* '(?<![\w$])"?narrative_chunks"?(?![\w$])'
+              AND s.statement_text ~* (
+                  '(?<![\w$])"?' || c.column_name || '"?(?![\w$])'
+              )
+        );
+
+    IF referencing_functions IS NOT NULL THEN
+        RAISE EXCEPTION
+            'Migration 134 cannot drop narrative_chunks lifecycle columns; functions reference them: %',
+            referencing_functions;
     END IF;
 END $$;
 
