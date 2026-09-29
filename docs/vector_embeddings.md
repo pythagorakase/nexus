@@ -45,9 +45,10 @@ path, followed by
 repository, pointing `model_path` at the downloaded folder) and then
 `nexus models verify`. The reranker loads on the first reranked search, and
 MEMNON search still catches that error, logs it, and returns the results
-without reranking. `use_8bit = true` is refused before loading: the locked
+without reranking. There is no 8-bit reranker setting: the locked
 sentence-transformers moves every `CrossEncoder` model with `.to(device)`, and
-transformers rejects `.to` on 8-bit bitsandbytes models.
+transformers rejects `.to` on 8-bit bitsandbytes models, so a `use_8bit` key
+in `[memnon.retrieval.cross_encoder_reranking]` fails config validation.
 
 ### Locking and Verifying Artifacts
 
@@ -92,14 +93,17 @@ production embedder and reranker as they sit on the owner's host, and
 different active embedder, reranker, repository, or embedder dimension than
 the lock does. `nexus models verify` then checks, read-only, that every locked
 file on this host has its locked size and sha256, that no unlisted file
-appears, and that `nexus.toml` still names the locked models. Every loader is
-local-only by construction, so an artifact that fails `verify` fails to load
-rather than being repaired from the Hub: the embedder loader
+appears, and that `nexus.toml` still names the locked models. Every embedder
+and reranker loader passes `local_files_only=True` after checking that the
+configured folder exists: the embedder loader
 (`get_or_load_sentence_transformer`, shared by `EmbeddingManager`, the
 embedding job, and the operator scripts `import_narratives.py`,
 `query_narratives_vector.py`, and `regenerate_embeddings.py`) and both
-rerankers pass `local_files_only=True` after checking that the configured
-folder exists.
+rerankers. An artifact with missing files therefore fails to load rather than
+being repaired from the Hub; a modified or extra file still loads, and only
+`nexus models verify` catches it. The prompt-window tokenizer in
+`nexus/telemetry/prompt_window.py` is not a retrieval artifact and is outside
+this rule.
 
 ## Database Storage Strategy
 
