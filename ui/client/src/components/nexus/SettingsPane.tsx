@@ -262,10 +262,6 @@ function TypographySection() {
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// 3. Test Mode
-// ──────────────────────────────────────────────────────────────────────────
-
 function AdvancedSection() {
   const { developerMode, setDeveloperMode } = useDeveloperMode();
 
@@ -285,11 +281,6 @@ function AdvancedSection() {
           <span className="lever-tick r">DEV</span>
         </button>
       </div>
-      <p className="nexus-dev-mode-explainer">
-        Exposes the story machinery — seat correspondence, state writes, Orrery
-        activity. Present only when the server gate is open
-        (NEXUS_DEV_DASHBOARD=1); this section does not ship.
-      </p>
     </SettingsCard>
   );
 }

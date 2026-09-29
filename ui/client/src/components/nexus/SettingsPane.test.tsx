@@ -104,11 +104,7 @@ describe("SettingsPane developer mode", () => {
     fireEvent.click(lever);
     expect(lever).toHaveAttribute("aria-checked", "true");
     expect(localStorage.getItem("nexus-developer-mode")).toBe("true");
-    expect(
-      screen.getByText(
-        /Exposes the story machinery — seat correspondence, state writes, Orrery activity/,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/Exposes the story machinery/)).not.toBeInTheDocument();
   });
 });
 

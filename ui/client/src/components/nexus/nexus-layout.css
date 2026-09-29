@@ -1604,14 +1604,6 @@
   font-size: 15px;
   color: var(--fg);
 }
-.nexus-dev-mode-explainer {
-  margin: 10px 2px 0;
-  max-width: 72ch;
-  font-family: var(--font-body);
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--fg-muted);
-}
 
 /* ═══ BACKSTAGE — dev-gated read-only machinery drawer ═══ */
 @keyframes orr-pulse {
