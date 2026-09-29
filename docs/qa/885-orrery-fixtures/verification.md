@@ -2,7 +2,7 @@
 
 Work order 885/816-A. Issues #885 (the `seed_disposable_clone` route) and #816 (shared factories, Sketch 1). Base: `origin/main` at 626b2293. No migration, no gateway lane, no paid calls.
 
-**Write safety.** Every fixture this PR changes writes only disposable `qa640_*` template clones, created and dropped by `tests.pg_fixtures.disposable_slot_database`; none writes a `save_NN` or `NEXUS_template`. The gate recorded below is not that clean. The `test_migrate.py` isolation run (first recorded as `77 passed in 1.71s`) and the `tests/test_orrery/test_[a-o]*.py` batch ran the repository's existing suite, and in that suite six vocabulary migration re-run tests that this PR had not yet changed connected to the owner's `save_05`. Each ran its migration twice (`migration.run(conn)`), which commits, and then wrote the snapshotted rows back through `_restore_tags`, `_restore_tag_categories`, `_restore_pair_tags`, or `_restore_event_types`, as the common rules allow for the existing suite. Other untouched slot-hardwired files in the gate (see the audit below) connect to `save_05` the same way. The six tests were:
+**Write safety.** Every fixture this PR changes writes only disposable `qa640_*` template clones, created and dropped by `tests.pg_fixtures.disposable_slot_database`; none writes a `save_NN` or `NEXUS_template`. The first push's gate (at `f3d9b4fe`, since replaced below by runs at `18fa15e3`) was not that clean. Its `test_migrate.py` isolation run (`77 passed in 1.71s`) and its `tests/test_orrery/test_[a-o]*.py` batch ran the repository's existing suite, and in that suite six vocabulary migration re-run tests that this PR had not yet changed connected to the owner's `save_05`. Each ran its migration twice (`migration.run(conn)`), which commits, and then wrote the snapshotted rows back through `_restore_tags`, `_restore_tag_categories`, `_restore_pair_tags`, or `_restore_event_types`, as the common rules allow for the existing suite. Other untouched slot-hardwired files in the gate (see the audit below) connect to `save_05` the same way. The six tests were:
 
 - `tests/test_orrery/test_migrate.py::test_character_tag_vocab_migration_executes_against_slot_db`
 - `tests/test_orrery/test_migrate.py::test_completed_tag_vocab_migration_executes_against_slot_db`
@@ -11,12 +11,12 @@ Work order 885/816-A. Issues #885 (the `seed_disposable_clone` route) and #816 (
 - `tests/test_orrery/test_migrate.py::test_state_clearance_event_type_migration_executes_against_slot_db`
 - `tests/test_orrery/test_migrate.py::test_kind_qualified_contact_migration_executes_against_slot_db`
 
-The review-fix commit ports all six to a `qa640_vocab_migration` clone (see Review Fixes), so the current `test_migrate.py` no longer connects to `save_05`.
+The review-fix commit `8780961e` ports all six to a `qa640_vocab_migration` clone (see Review Fixes), so the current `test_migrate.py` no longer connects to `save_05`. Every gate tail below was rerun at code HEAD `18fa15e3`; the commit after it changes only this file.
 
 ## What Changed
 
-- `tests/pg_fixtures.py`: new shared seeds `seed_story_clock`, `seed_character`, `seed_place`, `seed_faction`, `seed_relationship`, `seed_entity_tag`. `seed_committed_chunk` takes `time_delta`; `seed_protagonist` takes `current_location` and closes its connection. Each seed takes the production insert shape, asserts its own row count, and returns IDs.
-- `tests/test_orrery/checkpointed_story_support.py`: `seed_checkpointed_story` composes those seeds into a three-character, two-place story with two relationships, one active tag, a clocked head chunk, and a genesis checkpoint.
+- `tests/pg_fixtures.py`: new shared seeds `seed_story_clock`, `seed_character`, `seed_zone`, `seed_place`, `seed_faction`, `seed_relationship`, `seed_entity_tag`. `seed_committed_chunk` takes `time_delta`; `seed_protagonist` takes `current_location` and closes its connection. Each seed takes the production insert shape, asserts its own row count, and returns IDs.
+- `tests/test_orrery/checkpointed_story_support.py`: `seed_checkpointed_story` composes those seeds into a three-character, two-place, one-zone story with two relationships, one active tag, a clocked head chunk seeded after every other row, and a genesis checkpoint.
 - Need-clock files (`test_communication_graph_live`, `test_claim_accounts_live`, `test_claim_consumption_live`, `test_orbit_distance_live`, `test_migrate::test_canonical_grieving_migration_executes_against_slot_db`): module-scoped clones with `seed_story_clock`; every slot-5 URL, engine, and asyncpg target points at the clone.
 - Unpack files (`test_replay`, `test_reconstruction`, `test_status_bestow_delta_live`): module-scoped clones; every probe asserts its row and names the seed that owns it; `_fabricate_chunk` takes its ID from the sequence.
 
@@ -33,38 +33,42 @@ $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest 
 
 ## After: Each Changed File in Isolation
 
+At code HEAD `18fa15e3`. The first push's `test_migrate.py` row (`77 passed in 1.71s`, at `f3d9b4fe`) was the run in which the six vocabulary tests still wrote `save_05`; it is replaced here by a run of the current file.
+
 ```
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_communication_graph_live.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-9 passed in 2.00s
+9 passed in 1.90s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_claim_accounts_live.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-6 passed in 1.70s
+6 passed in 1.79s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_claim_consumption_live.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-8 passed in 1.96s
+8 passed in 2.27s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_orbit_distance_live.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1 passed in 1.52s
+1 passed in 1.46s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_migrate.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-77 passed in 1.71s
+77 passed in 8.26s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_replay.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-25 passed in 3.19s
+25 passed in 3.14s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_reconstruction.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-5 passed in 2.73s
+5 passed in 1.91s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_status_bestow_delta_live.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-3 passed in 1.98s
+3 passed in 1.51s
 ```
 
 ## After: Full Orrery PostgreSQL Tier
 
-Run in two batches (68 files `test_[a-o]*`, 65 files `test_[p-z]*`), gateway variables unset.
+Run at code HEAD `18fa15e3` in two batches (68 files `test_[a-o]*`, 65 files `test_[p-z]*`), gateway variables unset. The first push's batches at `f3d9b4fe` (`4 failed, 792 passed, 29 skipped, 8 errors in 160.36s` and `10 failed, 807 passed, 10 skipped, 5 errors in 111.87s`) ran while the six vocabulary tests still wrote `save_05`; they are replaced by these runs and failed on the same nodes.
 
 ```
+$ git rev-parse --short HEAD
+18fa15e3
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line tests/test_orrery/test_[a-o]*.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 =========================== short test summary info ============================
@@ -80,7 +84,7 @@ ERROR tests/test_orrery/test_faction_project_contexts_live.py::test_live_gating_
 ERROR tests/test_orrery/test_faction_project_contexts_live.py::test_live_faction_rebinding_raises_loudly
 ERROR tests/test_orrery/test_faction_project_contexts_live.py::test_live_target_faction_product_is_bounded_and_deterministic
 ERROR tests/test_orrery/test_faction_project_contexts_live.py::test_live_production_and_explain_compose_same_faction_bindings
-4 failed, 792 passed, 29 skipped, 8 errors in 160.36s (0:02:40)
+4 failed, 792 passed, 29 skipped, 7 warnings, 8 errors in 146.66s (0:02:26)
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line tests/test_orrery/test_[p-z]*.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 =========================== short test summary info ============================
@@ -99,7 +103,7 @@ ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_real_cache_packe
 ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_real_cache_compiler_gate_suppresses_all_named_target_materialization
 ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_persistence_identity_binds_database_alias_without_packet_alias
 ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_seek_redemption_dependency_is_repaired_before_mapper_transaction
-10 failed, 807 passed, 10 skipped, 5 errors in 111.87s (0:01:51)
+10 failed, 807 passed, 10 skipped, 7 warnings, 5 errors in 105.18s (0:01:45)
 ```
 
 The need-clock class (`need-clock anchor unavailable`) and the unpack class (`cannot unpack non-iterable NoneType object`) are gone: neither signature appears in either batch. The #1013 IDF class (`IDF analyzer mismatch`) appears zero times. Every remaining failure is in a file this PR does not change:
@@ -117,15 +121,17 @@ The need-clock class (`need-clock anchor unavailable`) and the unpack class (`ca
 
 ## Offline Gate, Reachability, and Linters
 
+At code HEAD `18fa15e3`.
+
 ```
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_RUN_POSTGRES $PY -m pytest -q --tb=line
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 =========================== short test summary info ============================
 FAILED tests/test_lore/test_two_pass_pipeline.py::test_gaia_prompt_is_concise_and_self_contained
-1 failed, 4078 passed, 1054 skipped in 283.93s (0:04:43)
+1 failed, 4078 passed, 1054 skipped, 7 warnings in 267.19s (0:04:27)
 $ $PY -m pytest -q tests/test_pg_target_contract.py tests/test_reachability.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-145 passed, 1 skipped in 13.22s
+145 passed, 1 skipped, 5 warnings in 11.16s
 ```
 
 The one offline failure (`assert 711 < 700`, the Gaia prompt word budget) fails identically on a `git archive` of `origin/main`; it follows #1011's prompt change, not this PR.
@@ -350,6 +356,40 @@ $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=<ar
 The 34-file run also includes untouched files that still connect to `save_05` as the repository runs them (`test_distortion_live`, `test_generation_model_provenance_live`); the changed fixtures in it write only clones. None of the seven fails in `pg_fixtures.py`; the retry trio fails with `psycopg2.ProgrammingError: the connection cannot be re-entered recursively` at `nexus/api/choice_recovery.py:68`. They are pre-existing and outside this order.
 
 Black: `tests/pg_fixtures.py`, `tests/test_orrery/test_migrate.py`, `tests/test_orrery/test_replay.py` clean after formatting. Flake8 on `tests/pg_fixtures.py` and `tests/test_orrery/test_migrate.py`: clean.
+
+## Second Review Round
+
+Applied at `18fa15e3`:
+
+- `tests/test_orrery/checkpointed_story_support.py`: `seed_checkpointed_story` seeded its head chunk before the characters, relationships, and tag, then took the genesis checkpoint at that head. The relationship version rows carry a NULL `source_chunk_id` and a `created_at` later than the head chunk's, so replay's insert-drop filter (`nexus/agents/orrery/replay.py`, `_unwind_relationships`: `source_chunk_id IS NULL AND created_at > target_created_at`) dropped both relationships from a reconstruction at the head that the checkpoint still held. The protagonist now sets `base_timestamp` first, every other row follows, and `seed_story_clock` runs last, just before the checkpoint. The helper asserts that `reconstruct_state_at_sync(head)` holds as many `character_relationships` as the genesis checkpoint (two). Reproduction of the old order on a `qa640_repro885` clone: `old order: checkpoint rels 1 replayed rels 0`.
+- `tests/pg_fixtures.py`: new `seed_zone` inserts one bounded zone under its own layer. `seed_place` resolves its `zone` through `nexus.agents.orrery.geo.resolve_zone_for_point`, as `db_converters` does, and raises the resolver's `Cannot resolve GIS point: no zone has a boundary` on a zoneless save. `seed_checkpointed_story` seeds one zone covering both of its places.
+- `tests/pg_fixtures.py`: when `seed_protagonist` first sets `base_timestamp` under chunks that already exist, it re-stamps them (`UPDATE chunk_metadata SET time_delta = time_delta`, which fires the `UPDATE OF time_delta` statement trigger). `_require_need_clock_anchor`, which `seed_protagonist` now calls before its character insert, fails by name unless `base_timestamp` is set and, when chunks exist, `max(world_time)` equals `base_timestamp` plus the summed deltas. On a clone with one chunk seeded before the protagonist: `before: 2026-09-29 20:21:43.384320+00:00`, `after: 2073-07-31 12:01:00+00:00`, and the protagonist's need rows anchor at `2073-07-31 12:01:00+00:00`.
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=short tests/test_orrery/test_replay.py tests/test_orrery/test_reconstruction.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+30 passed, 5 warnings in 4.46s
+```
+
+Every test file that calls a shared seed (`seed_protagonist`, `seed_checkpointed_story`, `seed_entity_tag`, `seed_place`, `seed_character`, `seed_story_clock`, `seed_relationship`, `seed_faction`, or `seed_zone`; 44 files):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line -p no:warnings <44 files>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_api/test_narrative_post_commit.py::test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit
+FAILED tests/test_api/test_narrative_retry_pg.py::test_staging_failure_resumes_as_recovery_and_retries_once
+FAILED tests/test_api/test_narrative_retry_pg.py::test_dead_worker_is_advertised_exactly_as_retry_accepts_it
+FAILED tests/test_api/test_narrative_retry_pg.py::test_restart_reopens_the_menu_when_no_retry_can_resume
+FAILED tests/test_api/test_return_recap_pg.py::test_live_loop_at_rest_offers_the_pending_drafts_decision
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt[False-character_experience_jobs]
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_gateway_sigkill_resumes_inflight_experience
+7 failed, 442 passed in 354.38s (0:05:54)
+```
+
+These are the same seven pre-existing failures as in the first round, with the same signatures (`choice_recovery.py:68` re-entry for the retry trio, `test_scheduler_pg.py:41` durable-state timeouts, `test_narrative_post_commit.py:425`, `test_return_recap_pg.py:527`). No need-clock anchor assertion fires.
+
+Black, flake8, and mypy (`-p tests.pg_fixtures -m tests.test_orrery.checkpointed_story_support`) are clean on the two changed files.
 
 ## Deferred
 
