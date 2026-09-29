@@ -1843,7 +1843,10 @@ def plan_retrograde_summaries(
     ``retrograde_summaries.world_event_id`` is the idempotency boundary. A
     repeated write with identical summary content, chronology, and recording
     boundary reports ``already_present``; a divergent reapply raises instead
-    of quietly accepting conflicting generated history. Embedding is performed
+    of quietly accepting conflicting generated history. Only a boundary the
+    source itself carries is compared with an existing row; the caller's
+    ``recorded_at_chunk_id`` is the default for new rows, and an existing row
+    keeps (and reports) the boundary it was recorded at. Embedding is performed
     after the caller's transaction commits.
 
     Args:
@@ -1901,10 +1904,16 @@ def plan_retrograde_summaries(
             summary = str(source.get("summary") or "").strip()
             chronology = str(source.get("chronology") or "").strip()
 
-        boundary_value = source.get("recorded_at_chunk_id")
-        if boundary_value is None:
-            boundary_value = recorded_at_chunk_id
-        source_recorded_at_chunk_id = _optional_int(boundary_value)
+        # A boundary the source carries is part of its identity and must match
+        # an existing row. The caller's boundary is only the default for new
+        # inserts: re-applying after play passes a later boundary, and it must
+        # not contradict a summary recorded earlier (for example at the prologue).
+        source_boundary = _optional_int(source.get("recorded_at_chunk_id"))
+        source_recorded_at_chunk_id = (
+            source_boundary
+            if source_boundary is not None
+            else _optional_int(recorded_at_chunk_id)
+        )
         base = {
             "event_ref": event_ref,
             "world_event_id": world_event_id,
@@ -1945,8 +1954,8 @@ def plan_retrograde_summaries(
             if existing["chronology"] != chronology:
                 divergent_fields.append("chronology")
             if (
-                source_recorded_at_chunk_id is not None
-                and existing["recorded_at_chunk_id"] != source_recorded_at_chunk_id
+                source_boundary is not None
+                and existing["recorded_at_chunk_id"] != source_boundary
             ):
                 divergent_fields.append("recorded_at_chunk_id")
             if divergent_fields:
@@ -1971,6 +1980,7 @@ def plan_retrograde_summaries(
             rows.append(
                 {
                     **base,
+                    "recorded_at_chunk_id": existing["recorded_at_chunk_id"],
                     "status": (
                         "stamped_missing_vectors"
                         if embedding_stamp_present and missing_embedding_models

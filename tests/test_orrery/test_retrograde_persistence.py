@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, timezone
 import json
 from typing import Any, Optional
+from uuid import uuid4
 
+from psycopg2.extras import RealDictCursor
 import pytest
 
 from nexus.agents.orrery.retrograde_expansion import (
@@ -13,7 +16,10 @@ from nexus.agents.orrery.retrograde_expansion import (
 )
 from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
 from nexus.agents.orrery.retrograde_persistence import (
+    _ensure_prologue_metadata,
+    _insert_prologue_chunk,
     build_retrograde_persistence_plan,
+    find_latest_playable_chunk_id,
     plan_retrograde_summaries,
 )
 from nexus.agents.orrery.retrograde_seed_candidates import (
@@ -23,6 +29,10 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
+from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
+from nexus.api.slot_utils import VALID_DBNAMES
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.test_commit_choice_presence_pg import _insert_staged_turn
 
 
 def test_persistence_plan_resolves_row_shaped_dry_run() -> None:
@@ -1223,13 +1233,6 @@ def _accept_boundary_turn(
     text: str,
 ) -> int:
     """Stage one complete draft and accept it through the production commit."""
-    from contextlib import closing
-    from uuid import uuid4
-
-    from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
-    from tests.pg_fixtures import connect
-    from tests.test_commit_choice_presence_pg import _insert_staged_turn
-
     session_id = str(uuid4())
     with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
         _insert_staged_turn(
@@ -1266,16 +1269,6 @@ def _accept_boundary_turn(
 @pytest.mark.requires_postgres
 def test_latest_playable_chunk_is_the_last_accepted_chunk_not_the_prologue() -> None:
     """Accepted chunks keep the column-default state; the prologue is no boundary."""
-    from contextlib import closing
-
-    from nexus.agents.orrery.retrograde_persistence import (
-        _ensure_prologue_metadata,
-        _insert_prologue_chunk,
-        find_latest_playable_chunk_id,
-    )
-    from nexus.api.slot_utils import VALID_DBNAMES
-    from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
-
     with disposable_slot_database("qa640_807_latest_playable") as dbname:
         VALID_DBNAMES.add(dbname)
         try:
@@ -1314,5 +1307,101 @@ def test_latest_playable_chunk_is_the_last_accepted_chunk_not_the_prologue() -> 
                     (second_id, "draft"),
                 ]
                 assert find_latest_playable_chunk_id(cur) == second_id
+        finally:
+            VALID_DBNAMES.discard(dbname)
+
+
+def _reapply_expansion_inputs(
+    vocabulary: SeedEligibleVocabulary,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """One Mara-only event, so the plan resolves against a fresh template clone."""
+    packet = _packet(vocabulary)
+    seed_response = _seed_response(vocabulary)
+    hints = seed_response["candidates"][0]["mechanical_hints"]
+    hints["events"][0]["participating_entities"] = ["Mara"]
+    hints["single_entity_tags"] = []
+    expansion = _valid_expansion(vocabulary)
+    event = expansion["event_plan"][0]
+    event["participants"] = [
+        {"entity_ref": "Mara", "entity_kind": "character", "role": "actor"}
+    ]
+    event["location_ref"] = None
+    event["changed_fields"] = ["world_events"]
+    expansion["entity_tag_plan"] = []
+    expansion["pair_tag_plan"] = []
+    expansion["relationship_plan"] = []
+    return packet, seed_response, expansion
+
+
+@pytest.mark.requires_postgres
+def test_reapplying_expansion_after_play_keeps_existing_summary_boundary() -> None:
+    """A re-apply after an accepted turn reports the wizard summary as present.
+
+    The CLI passes the latest playable chunk as the boundary. That boundary is
+    the default for new summaries only; it must not contradict a summary that
+    was recorded at the prologue before play began.
+    """
+    with disposable_slot_database("qa640_807_reapply") as dbname:
+        VALID_DBNAMES.add(dbname)
+        try:
+            character_id, _ = seed_protagonist(dbname, name="Mara")
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO places (name, type) "
+                    "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+                )
+                place_id = cur.fetchone()[0]
+            vocabulary = enumerate_seed_eligible_vocabulary(dbname)
+            packet, seed_response, expansion = _reapply_expansion_inputs(vocabulary)
+
+            def apply(*, dry_run: bool) -> dict[str, Any]:
+                with (
+                    closing(connect(dbname, cursor_factory=RealDictCursor)) as conn,
+                    conn,
+                    conn.cursor() as cur,
+                ):
+                    if dry_run:
+                        cur.execute("SET TRANSACTION READ ONLY")
+                    return build_retrograde_persistence_plan(
+                        cur,
+                        packet=packet,
+                        seed_candidate_response=seed_response,
+                        expansion_plan_payload=expansion,
+                        slot=5,
+                        dbname=dbname,
+                        dry_run=dry_run,
+                        summaries_enabled=True,
+                        recorded_at_chunk_id=find_latest_playable_chunk_id(cur),
+                    )
+
+            first = apply(dry_run=False)
+            prologue_id = first["prologue_anchor"]["chunk_id"]
+            assert first["counters"]["events_inserted"] == 1
+            assert first["counters"]["summaries_inserted"] == 1
+            summary_id = first["summary_rows"][0]["summary_id"]
+            assert first["summary_rows"][0]["recorded_at_chunk_id"] == prologue_id
+
+            played_id = _accept_boundary_turn(
+                dbname,
+                character_id=character_id,
+                place_id=place_id,
+                parent_id=0,
+                text="Rain darkens the harbor office windows.",
+            )
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                assert find_latest_playable_chunk_id(cur) == played_id
+
+            for dry_run in (True, False):
+                again = apply(dry_run=dry_run)
+                assert again["counters"]["events_already_present"] == 1
+                assert again["counters"]["summaries_already_present"] == 1
+                row = again["summary_rows"][0]
+                assert row["status"] == "already_present"
+                assert row["summary_id"] == summary_id
+                assert row["recorded_at_chunk_id"] == prologue_id
+
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute("SELECT id, recorded_at_chunk_id FROM retrograde_summaries")
+                assert cur.fetchall() == [(summary_id, prologue_id)]
         finally:
             VALID_DBNAMES.discard(dbname)
