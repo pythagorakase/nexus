@@ -36,10 +36,17 @@ jobs:
       - name: Run the ci-runner readiness checks
         shell: bash
         run: poetry run nexus doctor --target ci-runner --json | tee readiness-report.json
+      # The doctor reports only a count per finding list; on failure, rerun the
+      # checker directly so the log names the offending paths and the full
+      # import graph is saved.
+      - name: Print the reachability findings
+        if: failure()
+        run: poetry run python -S scripts/check_reachability.py --report reachability-report.json || true
       - name: Save readiness evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ci-runner-readiness
-          path: readiness-report.json
-          if-no-files-found: ignore
+          path: |
+            readiness-report.json
+            reachability-report.json

@@ -325,8 +325,13 @@ databases read. PostgreSQL checks connect exactly as the runtime does, so
 variables only and says so.
 
 CI runs `nexus doctor --target ci-runner --json` in
-`.github/workflows/reachability-check.yml` and uploads the report; run the
-same command from a checkout to reproduce it.
+`.github/workflows/reachability-check.yml` and uploads the report. To
+reproduce it, run `poetry run nexus doctor --target ci-runner --json` from a
+checkout whose own `poetry install` provides the `nexus` package, with
+`NEXUS_HOME` and `NEXUS_RUNTIME_CONFIG` unset. In a worktree that shares the
+main checkout's venv, run `PYTHONPATH=$PWD python -m nexus.cli doctor --target
+ci-runner --json` instead. The doctor checks the checkout that its imported
+`nexus` package belongs to; the working directory does not change this.
 
 `/runtime/status` carries the checks the gateway evaluates in-process
 (`config.valid`, `tools.pg_dump`, `ui.bundle`): the gateway's own `PATH` and
