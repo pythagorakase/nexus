@@ -78,13 +78,16 @@ refused, are a `config_error` when the first request is sent. Every HTTP
 command reports these, and an API that refuses the connection or does not
 answer in time (exit 4), the same way. Only a command that already saved work
 (a confirmed artifact, a saved seed, a scheduled turn) reports a later failed
-request as a domain failure whose `partial` keeps that work and its recovery
-command. A traceback means a programming fault.
+request itself, with a `partial` that keeps that work and its recovery
+command: as `api_unreachable` (exit 4) when the gateway refused or dropped the
+connection, otherwise as a domain failure. A traceback means a programming
+fault.
 
 `[runtime.cli].request_timeout_seconds` bounds each short request of `load`,
 `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, and
 `model --set`/`--clear`; generation, wizard chat, and transition requests keep
-their own budgets.
+their own budgets. Waiting on a generation session is described in Waiting on
+a Generation below.
 
 ### Transports
 
@@ -92,7 +95,7 @@ Each command declares the most privileged resource its handler opens:
 
 | Transport | Opens | Commands |
 | --- | --- | --- |
-| `http` | The NEXUS API only | `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, `inspect slot`, `model --set`, `model --clear` |
+| `http` | The NEXUS API only | `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, every `inspect` verb, `model --set`, `model --clear` |
 | `database` | A slot database directly | `model` (reading seat identities), `jobs`, `inspect-turn`, `prune-manifests`, `trait-audit`, `retrograde-packet`, `retrograde-seed-candidates --slot`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, and the faction, character, and place manifest and apply commands |
 | `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `window-replay`, `models lock`, `models verify`, `model --list`, `retrograde-seed-candidates --packet`, `retrograde-expand-seeds`, `backfill-review-packet` |
 
@@ -139,23 +142,70 @@ One failure keeps its report instead: `trait-audit --fail-on-remainders`
 prints the full audit on stdout with `"failed_policy": true` and exits 1.
 
 Success output is unchanged for existing commands. JSON-first commands
-(`inspect slot`) print `{"ok": true, "data": ...}` on stdout.
+(every `inspect` verb) print `{"ok": true, "data": ...}` on stdout.
+
+### Waiting on a Generation
+
+`continue`, `retry`, `regenerate`, and the opening turn after the seed is
+saved all schedule a generation session and then wait on it through one
+helper, `nexus.cli.wait_for_session`:
+
+- It reads `GET /api/narrative/status/{session_id}?slot=N` every
+  `[runtime.cli].poll_interval_seconds` until the session reports a terminal
+  status, then loads the new turn from the slot's state.
+- `[apex].generation_timeout_seconds` bounds the whole wait. A single status
+  read may take the remaining budget, since a turn generating inside the
+  gateway can hold the read until it finishes.
+- A session the API reports as failed is a domain failure (exit 1) whose
+  `error` is the API's own message.
+- A session still running when the budget ends, an HTTP error answer, or an
+  unusable payload is a domain failure (exit 1).
+- A gateway that refuses or drops the connection mid-wait is
+  `api_unreachable` (exit 4). A failed read is never retried.
+
+Every failed wait keeps the scheduled work in `partial`: `session_id`,
+`generation_error` (`status` and `detail`), and `recovery_command`
+(`nexus load --slot N`), plus the saved seed when the opening turn failed.
 
 ## Commands
 
-### `inspect slot` — Read a Slot's State as JSON
+### `inspect` — Read Story Records as JSON
 
-Reads `GET /api/slot/{slot}/state`, the player-plane `slot.read` route, and
-returns its body unchanged under `data`. Nothing is written. The request
-timeout is `[runtime.cli].inspect_timeout_seconds`.
+Each verb reads GET routes that `nexus/api/route_capabilities.py` declares on
+the player plane and returns their bodies unchanged under `data`. Nothing is
+written. Each request's timeout is `[runtime.cli].inspect_timeout_seconds`.
+`--slot` is required.
+
+| Verb | Routes | `data` |
+| --- | --- | --- |
+| `inspect slot` | `/api/slot/{slot}/state` | The slot state |
+| `inspect chunks --last N` | `/api/narrative/latest-chunk`, then `/api/narrative/chunks/{id}/adjacent` backwards | The newest N committed chunks, oldest first; `[]` for an unplayed story |
+| `inspect chunks --from A --to B` | `/api/narrative/chunks/{id}/adjacent` forwards from A | The committed chunks with ids A through B; either bound may be left out |
+| `inspect chunk ID` | `/api/narrative/chunks/{id}` | One committed chunk |
+| `inspect incubator` | `/api/narrative/incubator` | The pending draft, or `null` when none waits |
+| `inspect characters [ID]` | `/api/characters` (with `startId`/`endId` for one) | The list, or the one character |
+| `inspect places [ID]` | `/api/places` | The list, or the one place |
+| `inspect factions [ID]` | `/api/factions` | The list, or the one faction |
 
 ```bash
 poetry run nexus inspect slot --slot 5 --json
+poetry run nexus inspect chunks --slot 5 --last 2 --json
+poetry run nexus inspect chunks --slot 5 --from 40 --to 45 --json
+poetry run nexus inspect chunk 45 --slot 5 --json
+poetry run nexus inspect incubator --slot 5 --json
+poetry run nexus inspect characters --slot 5 --json
+poetry run nexus inspect places 3 --slot 5 --json
 ```
 
-Exits 1 with `not_found` when the gateway answers 404, and 4 with
-`api_unreachable` when nothing answers. Without `--json`, the state prints as
-one field per line.
+`inspect chunks` takes `--last` or a `--from`/`--to` range, not both; a bad
+combination is a usage error (exit 2). A chunk or entity id the route does not
+serve exits 1 with `not_found`, a body the verb cannot pass through unchanged
+exits 1 with `invalid_response`, and nothing answering exits 4 with
+`api_unreachable`. Without `--json`, a record prints as one field per line, a
+list as one such block per record.
+
+Interactions, queues, settings, and secrets status have no inspect verb yet:
+they have no player-plane read route.
 
 ### `usage` — View Exact API Token Usage
 
