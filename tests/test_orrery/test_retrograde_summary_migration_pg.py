@@ -29,8 +29,8 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture()
 def disposable_retrograde_db() -> Iterator[Any]:
-    """Yield a template clone carrying the pre-134 lifecycle columns that cannot
-    collide with a save slot.
+    """Yield a template clone, named so it cannot collide with a save slot, that
+    carries the pre-134 lifecycle columns.
 
     Migration 078 is historical: it ran while ``narrative_chunks`` still carried
     the ChunkWorkflow lifecycle columns, which migration 134 later dropped.  The

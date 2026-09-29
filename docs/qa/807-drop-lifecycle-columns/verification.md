@@ -32,7 +32,11 @@ which wrote `'accepted'`.
 
 - `migrations/134_drop_chunk_lifecycle_columns.sql`: a `DO` block raises
   and names each view or materialized view that depends on the columns; then
-  one `ALTER TABLE ... DROP COLUMN` for the three columns.
+  one `ALTER TABLE ... DROP COLUMN` for the three columns; then a
+  `COMMENT ON COLUMN narrative_chunks.embedding_generated_at` that names the
+  narrative embedding job (`nexus/jobs/embeddings.py:101` sets the column)
+  instead of the deleted `ChunkWorkflow`, since that column is now the only
+  lifecycle signal on the table.
 - Writers: `_insert_prologue_chunk` and the card-identity QA probe no longer
   name the columns.
 - Tests that inserted the columns stop doing so:
@@ -94,6 +98,18 @@ $ psql -d qa640_807_tpl134 -c '\d narrative_chunks'
  choice_text            | text                     |           |          |
  authorial_directives   | jsonb                    |           | not null | '[]'::jsonb
  orrery_proposal        | jsonb                    |           |          |
+```
+
+The rewritten column comment, on a fresh disposable clone
+(`createdb -T NEXUS_template qa640_807b_comment`, the runner, then
+`dropdb qa640_807b_comment`):
+
+```
+$ PYTHONPATH=$PWD $PY scripts/migrate.py --dbname qa640_807b_comment
+INFO Summary: 1 applied, 0 skipped/failed
+INFO qa640_807b_comment: 131 migration stamps; level 134
+$ psql -d qa640_807b_comment -Atc "select col_description('narrative_chunks'::regclass, attnum) from pg_attribute where attrelid='narrative_chunks'::regclass and attname='embedding_generated_at'"
+Set by the narrative embedding job (nexus/jobs/embeddings.py) once the chunk has a row in a chunk_embeddings_*d table; NULL until then. IS NOT NULL is the authoritative embedded predicate.
 ```
 
 Data clones through `tests/pg_fixtures.disposable_slot_database(include_data=True)`
@@ -248,7 +264,95 @@ $ $PY -m black --check <changed .py files>
 12 files would be left unchanged.
 ```
 
-flake8 and mypy (`--explicit-package-bases --ignore-missing-imports
---follow-imports=silent`) on the changed `.py` files report the same findings
-as on `588fc543` (line numbers stripped, diffed): no new finding; two
-pre-existing E501 lines got shorter but remain over 88.
+flake8 and mypy on the twelve changed `.py` files (`FILES` below), at HEAD,
+verbatim:
+
+```
+$ FILES="nexus/agents/orrery/retrograde_persistence.py scripts/qa_shift/card_identity_probe.py tests/test_api/test_narrative_continue_validation.py tests/test_api/test_narrative_retry_pg.py tests/test_api/test_orrery_config_reuse_pg.py tests/test_chunk_lifecycle_columns_migration_pg.py tests/test_orrery/test_acquisition_scan_pg.py tests/test_orrery/test_card_identity.py tests/test_orrery/test_retrograde_persistence.py tests/test_orrery/test_retrograde_retrieval_pg.py tests/test_orrery/test_retrograde_summary_migration_pg.py tests/test_presence_boost_pg.py"
+$ $PY -m flake8 $FILES
+scripts/qa_shift/card_identity_probe.py:156:89: E501 line too long (210 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:251:89: E501 line too long (111 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:292:89: E501 line too long (209 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:323:89: E501 line too long (122 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:329:89: E501 line too long (233 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:347:89: E501 line too long (137 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:404:89: E501 line too long (105 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:415:89: E501 line too long (152 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:419:89: E501 line too long (173 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:427:89: E501 line too long (153 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:430:89: E501 line too long (117 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:453:89: E501 line too long (210 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:496:89: E501 line too long (210 > 88 characters)
+scripts/qa_shift/card_identity_probe.py:508:89: E501 line too long (206 > 88 characters)
+tests/test_orrery/test_card_identity.py:195:89: E501 line too long (109 > 88 characters)
+tests/test_orrery/test_card_identity.py:196:89: E501 line too long (96 > 88 characters)
+tests/test_orrery/test_card_identity.py:234:89: E501 line too long (96 > 88 characters)
+tests/test_orrery/test_card_identity.py:376:89: E501 line too long (110 > 88 characters)
+tests/test_orrery/test_card_identity.py:457:89: E501 line too long (128 > 88 characters)
+tests/test_orrery/test_retrograde_persistence.py:847:89: E501 line too long (101 > 88 characters)
+$ echo $?
+1
+$ $PY -m mypy --explicit-package-bases --ignore-missing-imports --follow-imports=silent $FILES
+tests/test_orrery/test_retrograde_summary_migration_pg.py:232: error: Need type annotation for "allowed_manifests"  [var-annotated]
+tests/test_presence_boost_pg.py:236: error: Argument "embedding_manager" to "SearchManager" has incompatible type "FixedEmbeddingManager"; expected "EmbeddingManager"  [arg-type]
+tests/test_presence_boost_pg.py:237: error: Argument "idf_dictionary" to "SearchManager" has incompatible type "None"; expected "IDFDictionary"  [arg-type]
+nexus/agents/orrery/retrograde_persistence.py:2765: error: Incompatible types in assignment (expression has type "_EntityRecord | None", variable has type "_EntityRecord")  [assignment]
+nexus/agents/orrery/retrograde_persistence.py:2930: error: Argument "kind" to "RosterEntry" has incompatible type "str"; expected "Literal['character', 'place', 'faction']"  [arg-type]
+tests/test_orrery/test_card_identity.py:134: error: Value of type variable "SupportsRichComparisonT" of "sorted" cannot be "float | None"  [type-var]
+tests/test_orrery/test_card_identity.py:137: error: Need type annotation for "places" (hint: "places: dict[<type>, <type>] = ...")  [var-annotated]
+tests/test_orrery/test_card_identity.py:138: error: Argument 1 to "dict" has incompatible type "Sequence[Row[Any]]"; expected "Iterable[tuple[Never, Never]]"  [arg-type]
+tests/test_orrery/test_card_identity.py:146: error: "object" has no attribute "binding_names"  [attr-defined]
+tests/test_orrery/test_card_identity.py:147: error: "object" has no attribute "binding_names"  [attr-defined]
+tests/test_orrery/test_card_identity.py:148: error: "object" has no attribute "bindings"  [attr-defined]
+tests/test_orrery/test_card_identity.py:150: error: "object" has no attribute "evaluated_at"  [attr-defined]
+tests/test_orrery/test_card_identity.py:324: error: Argument 1 to "proposal_handles" has incompatible type "tuple[Mapping[str, str], ...] | None"; expected "Sequence[Mapping[str, str]]"  [arg-type]
+tests/test_orrery/test_card_identity.py:497: error: Item "None" of "tuple[Mapping[str, str], ...] | None" has no attribute "__iter__" (not iterable)  [union-attr]
+tests/test_orrery/test_card_identity.py:504: error: Argument 1 to "list" has incompatible type "tuple[Mapping[str, str], ...] | None"; expected "Iterable[Mapping[str, str]]"  [arg-type]
+tests/test_orrery/test_card_identity.py:512: error: Argument 1 to "proposal_handles" has incompatible type "tuple[Mapping[str, str], ...] | None"; expected "Sequence[Mapping[str, str]]"  [arg-type]
+scripts/qa_shift/card_identity_probe.py:74: error: Incompatible types in assignment (expression has type "Callable[[Arg(int, 'slot')], str]", variable has type "Callable[[Arg(int, 'slot_number')], str]")  [assignment]
+scripts/qa_shift/card_identity_probe.py:132: error: Cannot assign to a method  [method-assign]
+scripts/qa_shift/card_identity_probe.py:132: error: Incompatible types in assignment (expression has type "Callable[[Any, Any, str, NamedArg(str, 'seat'), NamedArg(int | None, 'window')], None]", variable has type "Callable[[LogonUtility, Any, str, NamedArg(str, 'seat'), NamedArg(int | None, 'window'), DefaultNamedArg(str | None, 'narrative')], None]")  [assignment]
+scripts/qa_shift/card_identity_probe.py:137: error: Item "None" of "FrameType | None" has no attribute "f_back"  [union-attr]
+scripts/qa_shift/card_identity_probe.py:138: error: Item "None" of "FrameType | Any | None" has no attribute "f_locals"  [union-attr]
+scripts/qa_shift/card_identity_probe.py:164: error: Item "None" of "Any | None" has no attribute "model"  [union-attr]
+scripts/qa_shift/card_identity_probe.py:214: error: Argument 1 to "proposal_handles" has incompatible type "tuple[Mapping[str, str], ...] | None"; expected "Sequence[Mapping[str, str]]"  [arg-type]
+scripts/qa_shift/card_identity_probe.py:233: error: Argument 1 to "list" has incompatible type "tuple[Mapping[str, str], ...] | None"; expected "Iterable[Mapping[str, str]]"  [arg-type]
+scripts/qa_shift/card_identity_probe.py:261: error: Need type annotation for "blocks" (hint: "blocks: list[<type>] = ...")  [var-annotated]
+scripts/qa_shift/card_identity_probe.py:287: error: Unsupported left operand type for < ("object")  [operator]
+scripts/qa_shift/card_identity_probe.py:352: error: Argument 1 to "list" has incompatible type "tuple[Mapping[str, str], ...] | None"; expected "Iterable[Mapping[str, str]]"  [arg-type]
+scripts/qa_shift/card_identity_probe.py:439: error: Argument 1 to "Path" has incompatible type "str | None"; expected "str | PathLike[str]"  [arg-type]
+tests/test_api/test_narrative_continue_validation.py:839: error: Argument 3 has incompatible type "dict[str, Any] | None"; expected "dict[Any, Any]"  [arg-type]
+tests/test_api/test_narrative_retry_pg.py:470: error: Need type annotation for "draft"  [var-annotated]
+tests/test_api/test_narrative_retry_pg.py:757: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+tests/test_api/test_narrative_retry_pg.py:758: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+Found 30 errors in 7 files (checked 12 source files)
+$ echo $?
+1
+```
+
+Every finding above is pre-existing. The same two commands ran on a
+`git archive 588fc543` export (the merge base) over the same files (11 of them
+exist there; the migration test is new), and the outputs were diffed with line
+numbers stripped:
+
+```
+$ diff <(sed -E 's/:[0-9]+(:[0-9]+)?:/:/' base.flake8 | sort) <(sed -E 's/:[0-9]+(:[0-9]+)?:/:/' head.flake8 | sort)
+3a4
+> scripts/qa_shift/card_identity_probe.py: E501 line too long (122 > 88 characters)
+5d5
+< scripts/qa_shift/card_identity_probe.py: E501 line too long (141 > 88 characters)
+17,18c17
+< tests/test_orrery/test_card_identity.py: E501 line too long (147 > 88 characters)
+< tests/test_orrery/test_card_identity.py: E501 line too long (94 > 88 characters)
+---
+> tests/test_orrery/test_card_identity.py: E501 line too long (128 > 88 characters)
+$ diff <(sed -E 's/:[0-9]+(:[0-9]+)?:/:/' base.mypy | sort) <(sed -E 's/:[0-9]+(:[0-9]+)?:/:/' head.mypy | sort)
+1c1
+< Found 30 errors in 7 files (checked 11 source files)
+---
+> Found 30 errors in 7 files (checked 12 source files)
+```
+
+flake8: 21 findings at the base, 20 at HEAD. Two pre-existing E501 lines got
+shorter (141 to 122, 147 to 128) and one (94) now fits in 88; no new finding. mypy:
+the same 30 errors in the same 7 files; the new migration test adds none.

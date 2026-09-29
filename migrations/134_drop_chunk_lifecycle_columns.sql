@@ -28,6 +28,11 @@
 -- materialized view depends on one, and names that view, instead of letting
 -- a CASCADE remove it without notice.
 --
+-- embedding_generated_at is now the only lifecycle signal on narrative_chunks.
+-- Its comment (migration 018) still names ChunkWorkflow as the writer, so this
+-- migration rewrites it to name the job that sets it today
+-- (nexus/jobs/embeddings.py).
+--
 -- Migration 078 requires and, on empty tables, recreates state. It is
 -- historical, runs before this migration in numeric order, and is stamped on
 -- every slot and on the template, so it does not run again after this drop.
@@ -65,3 +70,5 @@ ALTER TABLE narrative_chunks
     DROP COLUMN state,
     DROP COLUMN finalized_at,
     DROP COLUMN regeneration_count;
+
+COMMENT ON COLUMN narrative_chunks.embedding_generated_at IS 'Set by the narrative embedding job (nexus/jobs/embeddings.py) once the chunk has a row in a chunk_embeddings_*d table; NULL until then. IS NOT NULL is the authoritative embedded predicate.';
