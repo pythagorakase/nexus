@@ -1,8 +1,9 @@
 """Issue #812: ``nexus models lock|verify`` over real artifact directories.
 
 Each test builds synthetic embedder and reranker directories on disk (real
-files, real hashes), points a copy of the repository nexus.toml at them, and
-drives the same entry point the CLI uses. Nothing is downloaded.
+files, real hashes, real git checkouts), points a copy of the repository
+nexus.toml at them, and drives the same entry point the CLI uses. Nothing is
+downloaded.
 """
 
 from __future__ import annotations
@@ -10,22 +11,30 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import pytest
 import tomlkit
 
 from nexus.agents.memnon.utils.artifact_manifest import (
     EMBEDDER_ROLE,
+    ArtifactLockError,
     ArtifactSpec,
+    artifact_revision,
     lock_artifact,
     run_models_command,
 )
+from nexus.agents.memnon.utils.cross_encoder import (
+    MODEL_PATH_SETTING,
+    CrossEncoderReranker,
+)
+from nexus.agents.memnon.utils.embedding_manager import load_local_model
 from nexus.config.loader import RUNTIME_CONFIG_ENV, settings_path_scope
 from nexus.runtime.contract import HOME_ENV
 
@@ -207,6 +216,7 @@ def test_lock_records_artifacts_and_verify_passes(tmp_path: Path) -> None:
     assert embedder["name"] == PRODUCTION.embedder
     assert embedder["repo_id"] == PRODUCTION.embedder_repo
     assert embedder["revision"] == COMMIT
+    assert embedder["revision_source"] == "huggingface"
     assert embedder["license"] == "apache-2.0"
     assert embedder["dimensions"] == PRODUCTION.dimensions
     assert [entry["path"] for entry in embedder["files"]] == [
@@ -228,6 +238,7 @@ def test_lock_records_artifacts_and_verify_passes(tmp_path: Path) -> None:
     assert reranker["name"] == PRODUCTION.reranker
     assert reranker["repo_id"] == PRODUCTION.reranker_repo
     assert reranker["revision"] is None
+    assert reranker["revision_source"] is None
     assert reranker["dimensions"] is None
 
     verified = run_models_command("verify", str(workspace.config))
@@ -530,4 +541,243 @@ def test_lock_reads_revision_from_hub_cache_snapshot(tmp_path: Path) -> None:
         )
     )
     assert entry["revision"] == COMMIT
+    assert entry["revision_source"] == "huggingface"
     assert entry["dimensions"] == 16
+
+
+def _git(*args: str, cwd: Path) -> str:
+    """Run git in ``cwd``, isolated from the user's config and any hook's GIT_*."""
+
+    env = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=NEXUS test",
+            "-c",
+            "user.email=test@nexus.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "init.defaultBranch=main",
+            *args,
+        ],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _commit_checkout(root: Path, *, git_dir: Optional[Path] = None) -> str:
+    """Make ``root`` a git checkout holding its files in one commit; return HEAD.
+
+    With ``git_dir`` the repository lives there and ``root/.git`` is a gitfile,
+    as ``git init --separate-git-dir``, submodules and worktrees leave it.
+    """
+
+    separate = [f"--separate-git-dir={git_dir}"] if git_dir else []
+    _git("init", "-q", *separate, cwd=root)
+    _git("add", "-A", cwd=root)
+    _git("commit", "-q", "--no-verify", "-m", "artifact", cwd=root)
+    return _git("rev-parse", "HEAD", cwd=root)
+
+
+def _checkout_workspace(tmp_path: Path) -> Tuple[Workspace, str]:
+    """A workspace whose embedder is a git checkout and whose reranker has
+    ``hf download --local-dir`` metadata at ``COMMIT``.
+
+    Returns:
+        The workspace and the embedder checkout's HEAD commit.
+    """
+
+    workspace = _workspace(tmp_path)
+    shutil.rmtree(workspace.embedder_dir / ".cache")
+    head = _commit_checkout(workspace.embedder_dir)
+    _hf_local_dir_metadata(
+        workspace.reranker_dir,
+        {path.name: b"" for path in workspace.reranker_dir.iterdir()},
+    )
+    return workspace, head
+
+
+@pytest.mark.parametrize("separate", [False, True], ids=["git-directory", "gitfile"])
+def test_lock_reads_revision_from_a_git_checkout(
+    tmp_path: Path, separate: bool
+) -> None:
+    """A git checkout's HEAD is the revision; its .git is not an artifact file."""
+
+    root = tmp_path / "Octen-Embedding-probe"
+    files = _embedder_files(16)
+    _write_files(root, files)
+    head = _commit_checkout(root, git_dir=tmp_path / "store.git" if separate else None)
+    assert (root / ".git").is_file() is separate
+
+    entry = lock_artifact(
+        ArtifactSpec(
+            role=EMBEDDER_ROLE,
+            name="checkout-embedder",
+            repo_id="example/embedder",
+            local_path=root,
+            dimensions=16,
+        )
+    )
+    assert entry["revision"] == head
+    assert entry["revision_source"] == "git"
+    assert [file["path"] for file in entry["files"]] == sorted(files)
+
+
+def test_git_revision_never_comes_from_an_enclosing_repository(
+    tmp_path: Path,
+) -> None:
+    """A folder without its own valid .git never reports its parent's HEAD.
+
+    Model folders live inside this checkout (``models/``), so git's upward
+    repository discovery would otherwise name the checkout's commit.
+    """
+
+    outer_head = _commit_checkout(_write_outer(tmp_path))
+    plain = tmp_path / "models" / "plain"
+    _write_files(plain, _embedder_files(16))
+    assert artifact_revision(plain) == (None, None)
+
+    broken = tmp_path / "models" / "broken"
+    _write_files(broken, _embedder_files(16))
+    (broken / ".git").mkdir()
+    with pytest.raises(ArtifactLockError) as raised:
+        artifact_revision(broken)
+    assert "not a git repository" in str(raised.value)
+    assert outer_head not in str(raised.value)
+
+
+def _write_outer(tmp_path: Path) -> Path:
+    """An enclosing repository with one commit, as this checkout encloses models/."""
+
+    _write_files(tmp_path, {"nexus.toml": b"[memnon]\n"})
+    return tmp_path
+
+
+def test_verify_reports_a_moved_checkout_with_the_pinned_restore(
+    tmp_path: Path,
+) -> None:
+    """verify compares the checkout's HEAD with the lock and pins the restore."""
+
+    workspace, head = _checkout_workspace(tmp_path)
+    manifest = _lock(workspace)
+    embedder, reranker = manifest["artifacts"]
+    assert (embedder["revision"], embedder["revision_source"]) == (head, "git")
+    assert (reranker["revision"], reranker["revision_source"]) == (
+        COMMIT,
+        "huggingface",
+    )
+    assert run_models_command("verify", str(workspace.config))["success"] is True
+
+    _git(
+        "commit",
+        "-q",
+        "--no-verify",
+        "--allow-empty",
+        "-m",
+        "moved",
+        cwd=workspace.embedder_dir,
+    )
+    moved = _git("rev-parse", "HEAD", cwd=workspace.embedder_dir)
+
+    result = run_models_command("verify", str(workspace.config))
+    assert result["success"] is False
+    assert result["problems"] == [
+        f"embedder '{PRODUCTION.embedder}': git revision {moved!r} differs from "
+        f"the locked {head!r}"
+    ]
+    assert (
+        f"hf download {PRODUCTION.embedder_repo} --revision {head} "
+        f"--local-dir {workspace.embedder_dir}"
+    ) in result["error"]
+
+
+def test_lock_of_a_missing_directory_names_the_locked_revision(
+    tmp_path: Path,
+) -> None:
+    """lock pins the restore of a missing folder to the lock it replaces."""
+
+    workspace, head = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    absent = tmp_path / "models" / "absent"
+    config = _write_config(
+        tmp_path, absent, workspace.reranker_dir, workspace.lock, name="absent"
+    )
+
+    result = run_models_command("lock", str(config))
+    assert result["success"] is False
+    assert (
+        f"`hf download {PRODUCTION.embedder_repo} --revision {head} "
+        f"--local-dir {absent}`, then re-run `nexus models lock`."
+    ) in result["error"]
+
+
+def test_loader_remedies_pin_the_locked_revision(tmp_path: Path) -> None:
+    """A missing embedder or reranker names hf download at the lock's revision."""
+
+    workspace, head = _checkout_workspace(tmp_path)
+    _lock(workspace)
+    embedder = tmp_path / "restored" / "embedder"
+    reranker = tmp_path / "restored" / "reranker"
+
+    with settings_path_scope(workspace.config):
+        with pytest.raises(RuntimeError) as missing_embedder:
+            load_local_model(
+                PRODUCTION.embedder,
+                {"local_path": str(embedder), "remote_path": PRODUCTION.embedder_repo},
+            )
+        with pytest.raises(RuntimeError) as missing_reranker:
+            CrossEncoderReranker(
+                str(reranker), device="cpu", repo_id=PRODUCTION.reranker_repo
+            )
+
+    assert str(missing_embedder.value) == (
+        f"Embedding model '{PRODUCTION.embedder}' is not installed: local_path "
+        f"{embedder} does not exist. Restore it with `hf download "
+        f"{PRODUCTION.embedder_repo} --revision {head} --local-dir {embedder}`, "
+        "then run `nexus models verify`."
+    )
+    assert str(missing_reranker.value) == (
+        f"Cross-encoder reranker is not installed: {MODEL_PATH_SETTING} "
+        f"{reranker} does not exist. Download it with `hf download "
+        f"{PRODUCTION.reranker_repo} --revision {COMMIT} --local-dir {reranker}`, "
+        "then run `nexus models verify`."
+    )
+
+
+def test_loader_remedy_pins_the_folder_revision_when_the_lock_has_none(
+    tmp_path: Path,
+) -> None:
+    """A half-copied git checkout names hf download at its own HEAD."""
+
+    workspace = _workspace(tmp_path)
+    assert not workspace.lock.exists()
+    half_copied = tmp_path / "models" / "half-copied"
+    _write_files(half_copied, {"README.md": b"# Card\n"})
+    head = _commit_checkout(half_copied)
+
+    with settings_path_scope(workspace.config):
+        with pytest.raises(RuntimeError) as raised:
+            load_local_model(
+                "probe-embedder",
+                {"local_path": str(half_copied), "remote_path": "example-org/probe"},
+            )
+
+    message = str(raised.value)
+    assert message.startswith(
+        f"Embedding model 'probe-embedder' failed to load from local_path "
+        f"{half_copied}: "
+    )
+    assert message.endswith(
+        f"Restore it with `hf download example-org/probe --revision {head} "
+        f"--local-dir {half_copied}`, then run `nexus models verify`."
+    )
+    assert raised.value.__cause__ is not None

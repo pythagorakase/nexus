@@ -5,7 +5,7 @@ Loads the configured sentence-transformer embedding models from their local
 artifact directories only. There is no download path and no default model:
 an active model whose ``local_path`` is missing, is not a directory, or fails
 to load raises a RuntimeError naming the model, the path and the corrective
-command (issue #812).
+command, pinned to the locked revision when one is known (issue #812).
 """
 
 import logging
@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 from sentence_transformers import SentenceTransformer
+
+from nexus.agents.memnon.utils.artifact_manifest import restore_command
 
 logger = logging.getLogger("nexus.memnon.embedding_manager")
 
@@ -92,11 +94,14 @@ def get_or_load_sentence_transformer(
 
 
 def artifact_remedy(local_path: str, remote_path: Optional[str]) -> str:
-    """Name the command that restores and checks a missing local artifact."""
+    """Name the command that restores and checks a missing local artifact.
+
+    The ``hf download`` command carries ``--revision`` whenever the model
+    artifact lock or the folder itself records one. Building it reads the
+    lock and the folder, so callers build it only once a load has failed.
+    """
     if remote_path:
-        restore = (
-            f"Restore it with `hf download {remote_path} --local-dir {local_path}`"
-        )
+        restore = f"Restore it with `{restore_command(remote_path, local_path)}`"
     else:
         restore = f"Restore the artifact directory at {local_path}"
     return f"{restore}, then run `nexus models verify`."
@@ -132,24 +137,23 @@ def load_local_model(
             f"Embedding model '{model_name}' declares no local_path in "
             "[memnon.models]; embedders load only from local artifacts."
         )
-    remedy = artifact_remedy(str(local_path), remote_path)
     path = Path(local_path)
     if not path.exists():
         raise RuntimeError(
             f"Embedding model '{model_name}' is not installed: local_path "
-            f"{path} does not exist. {remedy}"
+            f"{path} does not exist. {artifact_remedy(str(local_path), remote_path)}"
         )
     if not path.is_dir():
         raise RuntimeError(
             f"Embedding model '{model_name}' local_path {path} is not a "
-            f"directory. {remedy}"
+            f"directory. {artifact_remedy(str(local_path), remote_path)}"
         )
     try:
         model = get_or_load_sentence_transformer(str(path), device=device)
     except Exception as exc:
         raise RuntimeError(
             f"Embedding model '{model_name}' failed to load from local_path "
-            f"{path}: {exc}. {remedy}"
+            f"{path}: {exc}. {artifact_remedy(str(local_path), remote_path)}"
         ) from exc
     logger.info(f"Loaded {model_name} from local path: {path}")
     return model

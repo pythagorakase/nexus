@@ -97,7 +97,8 @@
       "license": "apache-2.0",
       "name": "Octen-Embedding-4B",
       "repo_id": "Octen/Octen-Embedding-4B",
-      "revision": null,
+      "revision": "fea468fae3f0caffbae8a12ba792d1c394b6277d",
+      "revision_source": "git",
       "role": "embedder",
       "total_size": 8059517232
     },
@@ -159,6 +160,7 @@
       "name": "deberta-v3-trecdl22",
       "repo_id": "naver/trecdl22-crossencoder-debertav3",
       "revision": "24f6a61d11707432d5780a1d5cf4e3af25cfaddb",
+      "revision_source": "huggingface",
       "role": "reranker",
       "total_size": 1742869078
     }

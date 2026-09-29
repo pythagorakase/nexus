@@ -9,7 +9,8 @@ Both rerankers (the SequenceClassification cross-encoder and the Qwen3 yes/no
 causal LM) load only from the local folder they are given (the production
 ``[memnon.retrieval.cross_encoder_reranking].model_path``) with
 ``local_files_only=True``; a missing or broken folder raises a RuntimeError
-naming the folder and the install command.
+naming the folder and the install command, pinned to the locked revision when
+one is known.
 """
 
 import logging
@@ -20,6 +21,8 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import numpy as np
 import torch
 from sentence_transformers import CrossEncoder
+
+from nexus.agents.memnon.utils.artifact_manifest import restore_command
 
 # Set up logging
 logger = logging.getLogger("nexus.memnon.cross_encoder")
@@ -57,16 +60,21 @@ def reranker_repo_id(
 
 
 def _reranker_remedy(path: Path, repo_id: Optional[str]) -> str:
-    """Name the command that installs a missing reranker, then the check."""
+    """Name the command that installs a missing reranker, then the check.
+
+    The ``hf download`` command carries ``--revision`` whenever the model
+    artifact lock or the folder itself records one. Building it reads the
+    lock and the folder, so loaders build it only once a load has failed.
+    """
     if repo_id:
-        install = f"Download it with `hf download {repo_id} --local-dir {path}`"
+        install = f"Download it with `{restore_command(repo_id, path)}`"
     else:
         install = f"Point {MODEL_PATH_SETTING} at the downloaded reranker folder"
     return f"{install}, then run `nexus models verify`."
 
 
-def _require_reranker_folder(kind: str, path: Path, repo_id: Optional[str]) -> str:
-    """Check that ``path`` is an existing local folder and return the remedy.
+def _require_reranker_folder(kind: str, path: Path, repo_id: Optional[str]) -> None:
+    """Check that ``path`` is an existing local folder.
 
     Every reranker loader runs this check before it touches the folder, so a
     missing folder or a file in its place is never passed to ``from_pretrained``
@@ -77,23 +85,19 @@ def _require_reranker_folder(kind: str, path: Path, repo_id: Optional[str]) -> s
         path: The local folder that will be loaded
         repo_id: Hugging Face repository of the artifact, if known
 
-    Returns:
-        The remedy sentence to append to a later load error
-
     Raises:
         RuntimeError: When ``path`` does not exist or is not a directory.
     """
-    remedy = _reranker_remedy(path, repo_id)
     if not path.exists():
         raise RuntimeError(
             f"{kind} is not installed: {MODEL_PATH_SETTING} "
-            f"{path} does not exist. {remedy}"
+            f"{path} does not exist. {_reranker_remedy(path, repo_id)}"
         )
     if not path.is_dir():
         raise RuntimeError(
-            f"{kind} {MODEL_PATH_SETTING} {path} is not a directory. {remedy}"
+            f"{kind} {MODEL_PATH_SETTING} {path} is not a directory. "
+            f"{_reranker_remedy(path, repo_id)}"
         )
-    return remedy
 
 
 # There is no 8-bit reranker load: the locked sentence-transformers 3.4.1
@@ -157,7 +161,7 @@ class CrossEncoderReranker:
                 directory, or fails to load.
         """
         path = Path(model_path)
-        remedy = _require_reranker_folder("Cross-encoder reranker", path, repo_id)
+        _require_reranker_folder("Cross-encoder reranker", path, repo_id)
 
         self.max_length = max_length
         self.sliding_window_overlap = sliding_window_overlap
@@ -181,7 +185,7 @@ class CrossEncoderReranker:
         except Exception as exc:
             raise RuntimeError(
                 f"Cross-encoder reranker failed to load from {MODEL_PATH_SETTING} "
-                f"{path}: {str(exc).rstrip('.')}. {remedy}"
+                f"{path}: {str(exc).rstrip('.')}. {_reranker_remedy(path, repo_id)}"
             ) from exc
         logger.info(f"Cross-encoder model loaded from {path}")
 
@@ -554,7 +558,7 @@ class Qwen3LMReranker:
         self.max_length = max_length
 
         path = Path(model_name_or_path)
-        remedy = _require_reranker_folder("Qwen3 reranker", path, repo_id)
+        _require_reranker_folder("Qwen3 reranker", path, repo_id)
         logger.info(f"Loading Qwen3-Reranker from {path} on {device}")
         # fp32 on CPU (no native bf16 acceleration on most CPUs); bf16 on CUDA
         # to match Qwen3's native dtype.
@@ -573,7 +577,7 @@ class Qwen3LMReranker:
         except Exception as exc:
             raise RuntimeError(
                 f"Qwen3 reranker failed to load from {MODEL_PATH_SETTING} "
-                f"{path}: {str(exc).rstrip('.')}. {remedy}"
+                f"{path}: {str(exc).rstrip('.')}. {_reranker_remedy(path, repo_id)}"
             ) from exc
 
         self._token_yes = self.tokenizer.convert_tokens_to_ids("yes")

@@ -23,6 +23,7 @@ import pytest
 import tomlkit
 from pydantic import ValidationError
 
+from nexus.agents.memnon.utils.artifact_manifest import lock_file_path, read_manifest
 from nexus.config import load_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -224,9 +225,13 @@ def test_lore_startup_surfaces_the_embedder_remedy(
     ]
     missing = tmp_path / "not-installed"
     settings["models"][active]["local_path"] = str(missing)
-    remedy = (
-        f"hf download {settings['models'][active]['remote_path']} --local-dir {missing}"
-    )
+    repo = settings["models"][active]["remote_path"]
+    (revision,) = [
+        entry["revision"]
+        for entry in read_manifest(lock_file_path(load_settings(config)))["artifacts"]
+        if entry["repo_id"] == repo
+    ]
+    remedy = f"hf download {repo} --revision {revision} --local-dir {missing}"
 
     def memnon_without_database(**_kwargs: Any) -> EmbeddingManager:
         return EmbeddingManager(settings=settings)

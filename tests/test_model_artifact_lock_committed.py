@@ -16,6 +16,8 @@ from typing import Any, Dict
 from nexus.agents.memnon.utils.artifact_manifest import (
     EMBEDDER_ROLE,
     RERANKER_ROLE,
+    REVISION_SOURCE_GIT,
+    REVISION_SOURCE_HUGGINGFACE,
     read_manifest,
 )
 
@@ -60,3 +62,13 @@ def test_committed_lock_names_the_production_models() -> None:
     assert reranker["name"] == candidate[0]
     assert reranker["repo_id"] == candidate[1]["remote_path"]
     assert all(entry["files"] for entry in by_role.values())
+
+    # Restore commands pin --revision from the lock, so every artifact that
+    # restores from a repository records its revision and where it was read.
+    for entry in by_role.values():
+        if entry["repo_id"]:
+            assert entry["revision"], f"{entry['role']} records no revision"
+            assert entry["revision_source"] in {
+                REVISION_SOURCE_GIT,
+                REVISION_SOURCE_HUGGINGFACE,
+            }
