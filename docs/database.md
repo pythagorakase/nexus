@@ -76,7 +76,8 @@ releases by itself, so after any update every existing slot and
 `NEXUS_template` refuse narrative and summary writes (`IDF analyzer mismatch
 for corpus narrative: expected ..., found ...`) until their corpora are rebuilt.
 `nexus doctor` reports it first: `template.idf_analyzer_current` and
-`slots.idf_analyzer_current` compare each corpus key with the live server and
+`slots.idf_analyzer_current` compare each corpus key with the live server,
+fail unless exactly the `narrative` and `retrograde_summary` rows exist, and
 name the command. Fresh slots are unaffected; `scripts/new_story_setup.py`
 seeds them with the live key.
 
@@ -87,12 +88,15 @@ database that does not exist, and skips a locked slot unless
 Like `migrate.py --dbname`, an explicit `--dbname` that does not exist raises,
 and one that is read-only without `--write-locked-slot` is refused (exit 2).
 For each database, one transaction locks `narrative_chunks`, `chunk_metadata`
-and `retrograde_summaries`, locks both corpus rows, clears
-`memory_idf_lexemes` and `memory_idf_documents`, stamps the live key, advances
-each corpus epoch, and recomputes every chunk and summary through the trigger's
-own `sync_memory_idf_document`. It commits only if each corpus keeps its
-document count and carries the live key; otherwise it rolls back, reports the
-database as `failed`, and exits non-zero. The report gives each corpus's key
+and `retrograde_summaries`, locks the corpus rows, seeds a missing `narrative`
+or `retrograde_summary` row at the live key as migration 114 does (the report
+marks it `seeded`), clears `memory_idf_lexemes` and `memory_idf_documents`,
+stamps the live key, advances each corpus epoch, and recomputes every chunk and
+summary through the trigger's own `sync_memory_idf_document`. It commits only
+if each corpus keeps its document count (a seeded corpus starts at 0 and must
+reach the documents the trigger admits) and carries the live key; otherwise it
+rolls back, reports the database as `failed`, and exits non-zero. A database
+without `memory_idf_corpora` is refused, naming the migration runner. The report gives each corpus's key
 and document count before and after, and the number of lexemes whose row
 differs from the pre-rebuild state (added, dropped, or given a new frequency;
 each counts once), which is a diagnostic, not a failure. `--dry-run` reads

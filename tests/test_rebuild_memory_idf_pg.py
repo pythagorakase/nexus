@@ -222,6 +222,22 @@ def _insert_chunk(dbname: str, text: str) -> None:
         )
 
 
+def _drop_corpus_rows(dbname: str, *kinds: str) -> None:
+    """Delete corpus rows and the projection rows that reference them."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        for table in (
+            "memory_idf_lexemes",
+            "memory_idf_documents",
+            "memory_idf_corpora",
+        ):
+            cur.execute(
+                sql.SQL("DELETE FROM {} WHERE corpus_kind = ANY(%s)").format(
+                    sql.Identifier(table)
+                ),
+                (list(kinds),),
+            )
+
+
 @pg
 def test_stale_key_blocks_writes_until_the_rebuild_recomputes(
     seeded_clone: str,
@@ -332,6 +348,88 @@ def test_rebuild_counts_each_corrupted_lexeme_once(seeded_clone: str) -> None:
 
 
 @pg
+def test_rebuild_seeds_a_missing_corpus_row(
+    seeded_clone: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A missing corpus row blocks its writes until the tool seeds it at the live key.
+
+    With no rows at all both are seeded; without the table the tool fails.
+    """
+    dbname = seeded_clone
+    server = _server_key(dbname)
+    before = _idf_state(dbname)
+    first_chunk = before["documents"][0][1]
+    _drop_corpus_rows(dbname, "retrograde_summary")
+    missing = _idf_state(dbname)
+    assert [row[0] for row in missing["corpora"]] == ["narrative"]
+
+    # The trigger's SELECT ... INTO STRICT finds no corpus row.
+    with pytest.raises(psycopg2.errors.NoDataFound):
+        _seed_summary(dbname, first_chunk, "A write the missing row must refuse.")
+    assert _idf_state(dbname) == missing
+
+    # --dry-run names the missing row and changes nothing.
+    dry = rebuild.rebuild_database(dbname, dry_run=True)
+    assert (dry.status, dry.error) == ("dry_run", None)
+    assert [
+        (c.corpus_kind, c.key_before, c.documents_before, c.source_documents)
+        for c in dry.corpora
+    ] == [("narrative", server, 2, 2), ("retrograde_summary", None, 0, 1)]
+    assert not any(c.seeded for c in dry.corpora)
+    assert _idf_state(dbname) == missing
+
+    assert rebuild.main(["--dbname", dbname, "--json"]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["ok"] is True
+    (database,) = printed["databases"]
+    assert database["status"] == "rebuilt"
+    summary_lexemes = sum(1 for row in _ts_stat(dbname) if row[0] != "narrative")
+    assert [
+        (
+            c["corpus_kind"],
+            c["seeded"],
+            c["key_before"],
+            c["key_after"],
+            c["documents_before"],
+            c["documents_after"],
+            c["lexeme_rows_differing"],
+        )
+        for c in database["corpora"]
+    ] == [
+        ("narrative", False, server, server, 2, 2, 0),
+        ("retrograde_summary", True, None, server, 0, 1, summary_lexemes),
+    ]
+    rebuilt = _idf_state(dbname)
+    assert [row[:3] for row in rebuilt["corpora"]] == [
+        ("narrative", server, 2),
+        ("retrograde_summary", server, 1),
+    ]
+    assert rebuilt["documents"] == before["documents"]
+    assert rebuilt["lexemes"] == before["lexemes"] == _ts_stat(dbname)
+
+    _seed_summary(dbname, first_chunk, "The harbor lights return.")
+    assert _idf_state(dbname)["corpora"][1][2] == 2
+
+    # With no corpus rows at all, the rebuild seeds both.
+    _drop_corpus_rows(dbname, *rebuild.CORPORA)
+    report = rebuild.rebuild_database(dbname)
+    assert (report.status, report.error) == ("rebuilt", None)
+    assert [
+        (c.corpus_kind, c.seeded, c.documents_before, c.documents_after)
+        for c in report.corpora
+    ] == [("narrative", True, 0, 2), ("retrograde_summary", True, 0, 2)]
+    assert _idf_state(dbname)["lexemes"] == _ts_stat(dbname)
+
+    # Without the table there is nothing to seed; it fails naming the runner.
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("DROP TABLE memory_idf_corpora CASCADE")
+    report = rebuild.rebuild_database(dbname)
+    assert report.status == "failed"
+    assert "lacks memory_idf_corpora" in (report.error or "")
+    assert "(python scripts/migrate.py)" in (report.error or "")
+
+
+@pg
 def test_guard_rejects_document_count_drift_and_the_rollback_keeps_state(
     seeded_clone: str,
 ) -> None:
@@ -360,6 +458,14 @@ def test_guard_rejects_document_count_drift_and_the_rollback_keeps_state(
                 rebuild.verify_rebuild(cur, drifted, server)
             with pytest.raises(rebuild.IDFRebuildError, match="differs from server"):
                 rebuild.verify_rebuild(cur, before, STALE_KEY)
+            # A seeded corpus starts at 0 and must end at the documents the
+            # trigger admits, counted before the recompute.
+            rebuild.verify_rebuild(cur, before, server, seeded={"narrative": 2})
+            with pytest.raises(
+                rebuild.IDFRebuildError,
+                match="narrative seeded: document_count 2, expected 3",
+            ):
+                rebuild.verify_rebuild(cur, before, server, seeded={"narrative": 3})
         conn.rollback()
     assert _idf_state(dbname) == before_state
 

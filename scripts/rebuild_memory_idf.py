@@ -8,12 +8,16 @@ stale; narrative and summary writes then fail inside
 ``sync_memory_idf_document`` and IDF readers raise ``IDFStateError`` until the
 corpus is rebuilt. This is that rebuild.
 
-One transaction per database locks the three source tables, locks both corpus
-rows, clears the lexeme and document projections, stamps the live key,
-advances each corpus epoch, and recomputes every document through the
-trigger's own ``sync_memory_idf_document``. It commits only when each corpus's
-document count equals its count before the rebuild and each key equals the
-live server's; otherwise it rolls back and the command exits non-zero.
+One transaction per database locks the three source tables, locks the corpus
+rows, seeds a missing ``narrative`` or ``retrograde_summary`` row at the live
+key (as migration 114 seeds it), clears the lexeme and document projections,
+stamps the live key, advances each corpus epoch, and recomputes every document
+through the trigger's own ``sync_memory_idf_document``. It commits only when
+each corpus's document count equals its count before the rebuild (for a
+seeded corpus, which starts at 0, the documents the trigger admits) and each
+key equals the live server's; otherwise it rolls back and the command exits
+non-zero. A database without ``memory_idf_corpora`` fails, naming the
+migration runner.
 
 Targets mirror ``scripts/migrate.py``: a locked slot is skipped unless
 ``--write-locked-slot`` is given, and a database that does not exist is
@@ -117,10 +121,14 @@ class CorpusState:
 
 @dataclass
 class CorpusReport:
-    """One corpus before, and after a real rebuild, the recompute."""
+    """One corpus before, and after a real rebuild, the recompute.
+
+    A corpus with no row has ``key_before`` None and ``documents_before`` 0;
+    a real rebuild seeds it and sets ``seeded``.
+    """
 
     corpus_kind: str
-    key_before: str
+    key_before: Optional[str]
     documents_before: int
     source_documents: int
     stale: bool
@@ -128,6 +136,7 @@ class CorpusReport:
     documents_after: Optional[int] = None
     # Lexemes added, dropped, or given a new document_frequency; each counts once.
     lexeme_rows_differing: Optional[int] = None
+    seeded: bool = False
 
 
 @dataclass
@@ -135,9 +144,8 @@ class DatabaseReport:
     """One target database's outcome.
 
     ``status`` is ``absent`` or ``skipped_locked`` (not touched), ``dry_run``
-    (read only), ``empty`` (no corpus rows and no documents: nothing to
-    rebuild), ``rebuilt`` (committed), or ``failed`` (rolled back; ``error``
-    says why).
+    (read only), ``rebuilt`` (committed), or ``failed`` (rolled back;
+    ``error`` says why).
     """
 
     dbname: str
@@ -216,30 +224,62 @@ def source_documents(cur: Any) -> dict[str, int]:
     return {"narrative": narrative, "retrograde_summary": summaries}
 
 
-def _require_corpora(states: Mapping[str, CorpusState], dbname: str) -> None:
-    if set(states) != set(CORPORA):
+def _require_known_corpora(states: Mapping[str, CorpusState], dbname: str) -> None:
+    unexpected = sorted(set(states) - set(CORPORA))
+    if unexpected:
         raise IDFRebuildError(
-            f"{dbname} memory_idf_corpora holds {sorted(states)}; the rebuild "
-            f"needs exactly {list(CORPORA)}"
+            f"{dbname} memory_idf_corpora holds unexpected corpora {unexpected}; "
+            f"the rebuild serves exactly {list(CORPORA)}"
         )
 
 
+def seed_missing_corpora(cur: Any, states: Mapping[str, CorpusState]) -> list[str]:
+    """Insert each missing corpus row at the live key, as migration 114 seeds it.
+
+    A seeded row starts at document_count 0 and corpus_epoch 0; the recompute
+    in the same transaction fills it. Returns the kinds seeded.
+    """
+    missing = [kind for kind in CORPORA if kind not in states]
+    if missing:
+        cur.execute(
+            "INSERT INTO memory_idf_corpora (corpus_kind, analyzer_version) "
+            f"SELECT kind, {ANALYZER_KEY_SQL} FROM unnest(%s::text[]) AS kind",
+            (missing,),
+        )
+    return missing
+
+
 def verify_rebuild(
-    cur: Any, before: Mapping[str, CorpusState], server_key: str
+    cur: Any,
+    before: Mapping[str, CorpusState],
+    server_key: str,
+    *,
+    seeded: Optional[Mapping[str, int]] = None,
 ) -> dict[str, CorpusState]:
     """Guard a recompute before commit and return the corpus rows it produced.
 
-    Raises ``IDFRebuildError`` when a corpus's document count differs from its
-    count before the rebuild, or its key differs from ``server_key``. The
-    caller rolls the transaction back.
+    ``seeded`` maps each corpus row this transaction seeded to the documents
+    the trigger admits to it, counted under the table lock before the
+    recompute; such a corpus starts at 0 and must end at that count. Every
+    other corpus must keep its count in ``before``. Raises ``IDFRebuildError``
+    on a count mismatch or a key that differs from ``server_key``. The caller
+    rolls the transaction back.
     """
+    seeded = seeded or {}
     after = corpus_states(cur, lock=False)
     problems = []
     for kind in CORPORA:
-        was, now = before[kind], after[kind]
-        if now.document_count != was.document_count:
+        now = after[kind]
+        if kind in seeded:
+            if now.document_count != seeded[kind]:
+                problems.append(
+                    f"{kind} seeded: document_count {now.document_count}, "
+                    f"expected {seeded[kind]}"
+                )
+        elif now.document_count != before[kind].document_count:
             problems.append(
-                f"{kind} document_count {was.document_count} -> {now.document_count}"
+                f"{kind} document_count {before[kind].document_count} -> "
+                f"{now.document_count}"
             )
         if now.analyzer_version != server_key:
             problems.append(
@@ -256,16 +296,20 @@ def _observe(
     cur: Any, states: Mapping[str, CorpusState], server_key: str
 ) -> list[CorpusReport]:
     members = source_documents(cur)
-    return [
-        CorpusReport(
-            corpus_kind=kind,
-            key_before=states[kind].analyzer_version,
-            documents_before=states[kind].document_count,
-            source_documents=members[kind],
-            stale=states[kind].analyzer_version != server_key,
+    reports = []
+    for kind in CORPORA:
+        state = states.get(kind)
+        key = state.analyzer_version if state is not None else None
+        reports.append(
+            CorpusReport(
+                corpus_kind=kind,
+                key_before=key,
+                documents_before=state.document_count if state is not None else 0,
+                source_documents=members[kind],
+                stale=key != server_key,
+            )
         )
-        for kind in CORPORA
-    ]
+    return reports
 
 
 def _dry_run(dbname: str, report: DatabaseReport) -> None:
@@ -276,10 +320,7 @@ def _dry_run(dbname: str, report: DatabaseReport) -> None:
             require_schema(cur, dbname)
             report.server_key = live_key(cur)
             states = corpus_states(cur, lock=False)
-            if not states and not any(source_documents(cur).values()):
-                report.status = "empty"
-                return
-            _require_corpora(states, dbname)
+            _require_known_corpora(states, dbname)
             report.corpora = _observe(cur, states, report.server_key)
         conn.rollback()
     report.status = "dry_run"
@@ -299,15 +340,21 @@ def _rebuild(dbname: str, report: DatabaseReport, write_locked_slot: bool) -> No
                 )
                 report.server_key = live_key(cur)
                 before = corpus_states(cur, lock=True)
-                if not before and not any(source_documents(cur).values()):
-                    conn.rollback()
-                    report.status = "empty"
-                    return
-                _require_corpora(before, dbname)
+                _require_known_corpora(before, dbname)
                 corpora = _observe(cur, before, report.server_key)
+                seeded = seed_missing_corpora(cur, before)
+                for corpus in corpora:
+                    corpus.seeded = corpus.corpus_kind in seeded
                 lexemes_before = lexeme_rows(cur)
                 cur.execute(RECOMPUTE_SQL)
-                after = verify_rebuild(cur, before, report.server_key)
+                after = verify_rebuild(
+                    cur,
+                    before,
+                    report.server_key,
+                    seeded={
+                        c.corpus_kind: c.source_documents for c in corpora if c.seeded
+                    },
+                )
                 lexemes_after = lexeme_rows(cur)
             for corpus in corpora:
                 kind = corpus.corpus_kind
@@ -370,17 +417,25 @@ def render(report: DatabaseReport) -> list[str]:
     lines = [head]
     for corpus in report.corpora:
         if corpus.key_after is None:
+            state = (
+                "no corpus row"
+                if corpus.key_before is None
+                else f"key {corpus.key_before}{' (stale)' if corpus.stale else ''}"
+            )
             line = (
-                f"  {corpus.corpus_kind}: key {corpus.key_before}"
-                f"{' (stale)' if corpus.stale else ''}, documents "
+                f"  {corpus.corpus_kind}: {state}, documents "
                 f"{corpus.documents_before} (source {corpus.source_documents})"
             )
         else:
+            keys = (
+                f"seeded at {corpus.key_after}"
+                if corpus.seeded
+                else f"key {corpus.key_before} -> {corpus.key_after}"
+            )
             line = (
-                f"  {corpus.corpus_kind}: key {corpus.key_before} -> "
-                f"{corpus.key_after}, documents {corpus.documents_before} -> "
-                f"{corpus.documents_after}, lexeme rows differing "
-                f"{corpus.lexeme_rows_differing}"
+                f"  {corpus.corpus_kind}: {keys}, documents "
+                f"{corpus.documents_before} -> {corpus.documents_after}, "
+                f"lexeme rows differing {corpus.lexeme_rows_differing}"
             )
         lines.append(line)
     if report.error:

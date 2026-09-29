@@ -207,12 +207,83 @@ def test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt() -> None:
             f"{dbname} at {server}; {absent} absent",
         )
 
+        # Past migration 114 a missing table is a missing corpus set.
         with closing(pg_fixtures.connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("DROP TABLE memory_idf_corpora CASCADE")
         outcome = slot_idf_outcome(names)
         assert outcome.passed is False
-        assert outcome.observed == f"{dbname}: no memory_idf_corpora table"
+        assert outcome.observed == (
+            f"{dbname}: no memory_idf_corpora table though migration 114 is "
+            "applied (missing corpora narrative and retrograde_summary)"
+        )
+        assert outcome.remediation == f"{REBUILD_COMMAND} --slot 9"
+
+        # Before migration 114 the runner installs the table.
+        with closing(pg_fixtures.connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM schema_migrations WHERE version = '114'")
+            assert cur.rowcount == 1
+        outcome = slot_idf_outcome(names)
+        assert outcome.passed is False
+        assert outcome.observed == (
+            f"{dbname}: no memory_idf_corpora table (migration 114 pending)"
+        )
         assert outcome.remediation == "python scripts/migrate.py --slot 9"
+
+
+def _drop_corpus_rows(dbname: str, *kinds: str) -> None:
+    """Delete corpus rows and the projection rows that reference them."""
+    with closing(pg_fixtures.connect(dbname)) as conn, conn, conn.cursor() as cur:
+        for table in (
+            "memory_idf_lexemes",
+            "memory_idf_documents",
+            "memory_idf_corpora",
+        ):
+            cur.execute(
+                sql.SQL("DELETE FROM {} WHERE corpus_kind = ANY(%s)").format(
+                    sql.Identifier(table)
+                ),
+                (list(kinds),),
+            )
+
+
+def test_idf_analyzer_check_fails_on_missing_corpus_rows_until_rebuilt() -> None:
+    """A missing corpus row fails the registered slot check until the tool seeds it.
+
+    Zero rows fail too; only both rows at the server's key pass.
+    """
+    with pg_fixtures.disposable_slot_database("qa640_1013_readiness") as dbname:
+        pg_fixtures.seed_protagonist(dbname)
+        pg_fixtures.seed_committed_chunk(dbname, raw_text="Gulls circle the pier.")
+        names = {9: dbname}
+        server = database_analyzer_state(dbname).server_key
+
+        _drop_corpus_rows(dbname, "narrative")
+        outcome = slot_idf_outcome(names)
+        assert outcome.passed is False
+        assert outcome.observed == f"{dbname}: missing corpus narrative"
+        assert outcome.remediation == f"{REBUILD_COMMAND} --slot 9"
+        with pytest.raises(psycopg2.errors.NoDataFound):
+            pg_fixtures.seed_committed_chunk(
+                dbname, raw_text="The pier refuses this write.", scene=2
+            )
+
+        assert rebuild_memory_idf.main(["--dbname", dbname]) == 0
+        state = database_analyzer_state(dbname)
+        assert state.corpora == {"narrative": server, "retrograde_summary": server}
+        outcome = slot_idf_outcome(names)
+        assert (outcome.passed, outcome.observed) == (True, f"{dbname} at {server}")
+        pg_fixtures.seed_committed_chunk(
+            dbname, raw_text="The tide takes the pier.", scene=2
+        )
+
+        _drop_corpus_rows(dbname, "narrative", "retrograde_summary")
+        assert database_analyzer_state(dbname).corpora == {}
+        outcome = slot_idf_outcome(names)
+        assert outcome.passed is False
+        assert outcome.observed == (
+            f"{dbname}: missing corpora narrative and retrograde_summary"
+        )
+        assert outcome.remediation == f"{REBUILD_COMMAND} --slot 9"
 
 
 def _set_read_only(dbname: str, on: bool) -> None:

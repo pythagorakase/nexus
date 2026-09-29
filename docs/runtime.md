@@ -299,7 +299,7 @@ second.
 | `template.present` | owner-host | `postgres.reachable` | `NEXUS_template` exists |
 | `template.migrations_current` | owner-host | `template.present` | its `schema_migrations` stamps match `migrations/` exactly |
 | `slots.migrations_current` | owner-host | `template.present` | every probed slot that exists matches `migrations/`; an absent slot is reported, not failed |
-| `template.idf_analyzer_current` | owner-host | `template.present` | every `memory_idf_corpora` key equals the live server's `pg_catalog.english/v1/<server_version_num>`; a stale key names `python scripts/rebuild_memory_idf.py --template` |
+| `template.idf_analyzer_current` | owner-host | `template.present` | `memory_idf_corpora` holds exactly the `narrative` and `retrograde_summary` rows, each keyed to the live server's `pg_catalog.english/v1/<server_version_num>`; a stale key or a missing or unexpected row names `python scripts/rebuild_memory_idf.py --template` (a missing table, while migration 114 is pending, names `python scripts/migrate.py --template`) |
 | `slots.idf_analyzer_current` | owner-host | `template.present` | the same for every probed slot that exists, naming `python scripts/rebuild_memory_idf.py --slot N` (plus `--write-locked-slot` for a locked slot); an absent slot is reported, not failed |
 | `tools.pg_dump` | owner-host | `config.valid` | `pg_dump` resolves on `PATH` or `[api.database].tool_search_paths` |
 | `ui.bundle` | owner-host | — | `ui/dist/public/index.html` exists |

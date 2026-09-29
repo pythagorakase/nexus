@@ -410,3 +410,103 @@ FAILED tests/test_lore/test_two_pass_pipeline.py::test_gaia_prompt_is_concise_an
 
 The one failure is `assert 711 < 700` on the Gaia prompt word count
 (`prompts/`, from #1011 at e124bd54); this change touches no prompt.
+
+## Codex P2: Reject an Incomplete Corpus Set
+
+The bot's inline P2 on `nexus/runtime/readiness.py`: a `memory_idf_corpora`
+missing a corpus row passed readiness (only stale keys were failed), while
+the next write to that corpus fails in `sync_memory_idf_document` at
+`SELECT ... INTO STRICT` and the rebuild refused the incomplete set.
+
+- Readiness (`AnalyzerState`, `idf_analyzer_outcome`): only exactly the
+  `narrative` and `retrograde_summary` rows, each at the live key, pass. A
+  missing or unexpected row fails, naming the database, the corpus kinds, and
+  the rebuild command (`--slot N`, plus `--write-locked-slot` when locked, or
+  `--template`). Zero rows fail (`missing corpora narrative and
+  retrograde_summary`); the "no IDF corpus rows" pass is gone. A missing table
+  on a database stamped with migration 114 fails the same way, naming the
+  rebuild; while 114 is pending it names `python scripts/migrate.py`.
+- Rebuild (`scripts/rebuild_memory_idf.py`): a missing row is inserted at the
+  live key in the same transaction, before the recompute (migration 114's
+  seed shape); the per-corpus report carries `seeded: true`. A seeded corpus
+  starts at 0 and the guard requires it to end at the documents the trigger
+  admits, counted under the table lock; every other corpus keeps its count.
+  The `empty` status is gone: zero rows seed both. Unexpected rows and a
+  missing table still fail loudly (the latter naming the migration runner).
+- Tests: `test_rebuild_seeds_a_missing_corpus_row` (a summary write fails
+  with `NoDataFound`; `--dry-run` reports the row as missing and changes
+  nothing; `main(["--dbname", clone, "--json"])` seeds it, `seeded: true`,
+  0 -> 1 documents, the rows equal `ts_stat`; a summary insert then succeeds;
+  zero rows seed both; a dropped table fails naming `python scripts/migrate.py`),
+  seeded-count assertions in the guard test, and
+  `test_idf_analyzer_check_fails_on_missing_corpus_rows_until_rebuilt` (the
+  registered slot check body on a clone standing in for slot 9: a deleted
+  `narrative` row fails with `missing corpus narrative` and
+  `python scripts/rebuild_memory_idf.py --slot 9`, a chunk insert fails, the
+  tool seeds the row at the live key, the check passes, an insert succeeds;
+  zero rows fail). The dropped-table tail of the stale-key test now asserts
+  the rebuild for a 114-stamped clone and `migrate.py --slot 9` once the 114
+  stamp is removed; this supersedes the dropped-table sentence under Test
+  Gates above.
+
+Run against the pre-fix code at b1d1a954 (fixed files swapped in and
+restored byte-identical), the new tests fail on the defect; after deleting
+the `narrative` row the check returned
+`Outcome(passed=True, observed='qa640_1013_readiness_a54770687a98 at pg_catalog.english/v1/170011', remediation=None)`:
+
+```
+FAILED tests/test_rebuild_memory_idf_pg.py::test_rebuild_seeds_a_missing_corpus_row
+FAILED tests/test_runtime/test_readiness_pg.py::test_idf_analyzer_check_fails_on_missing_corpus_rows_until_rebuilt
+FAILED tests/test_runtime/test_readiness_pg.py::test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt
+3 failed, 5 warnings in 4.52s
+```
+
+With the fix, `NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD python -m pytest -q tests/test_rebuild_memory_idf_pg.py tests/test_runtime/test_readiness.py tests/test_runtime/test_readiness_pg.py tests/test_new_story_setup.py`
+(`NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset):
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+45 passed, 5 warnings in 31.27s
+```
+
+`PYTHONPATH=$PWD python -m pytest -q tests/test_reachability.py`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed in 8.24s
+```
+
+Black (`4 files would be left unchanged`), flake8 (exit 0), and mypy
+(`Success: no issues found in 4 source files`) on `nexus/runtime/readiness.py`,
+`scripts/rebuild_memory_idf.py`, `tests/test_rebuild_memory_idf_pg.py`, and
+`tests/test_runtime/test_readiness_pg.py`.
+
+Every fleet database holds both rows, so no verdict changes.
+`PYTHONPATH=$PWD python scripts/rebuild_memory_idf.py --all --dry-run` (exit 0):
+
+```
+NEXUS_template: dry_run (server pg_catalog.english/v1/170011)
+  narrative: key pg_catalog.english/v1/170011, documents 0 (source 0)
+  retrograde_summary: key pg_catalog.english/v1/170011, documents 0 (source 0)
+save_01: skipped_locked [LOCKED]
+save_02: dry_run (server pg_catalog.english/v1/170011)
+  narrative: key pg_catalog.english/v1/170011, documents 1425 (source 1425)
+  retrograde_summary: key pg_catalog.english/v1/170011, documents 0 (source 0)
+save_03: dry_run (server pg_catalog.english/v1/170011)
+  narrative: key pg_catalog.english/v1/170011, documents 39 (source 39)
+  retrograde_summary: key pg_catalog.english/v1/170011, documents 18 (source 18)
+save_04: dry_run (server pg_catalog.english/v1/170011)
+  narrative: key pg_catalog.english/v1/170011, documents 45 (source 45)
+  retrograde_summary: key pg_catalog.english/v1/170011, documents 27 (source 27)
+save_05: dry_run (server pg_catalog.english/v1/170011)
+  narrative: key pg_catalog.english/v1/170011, documents 0 (source 0)
+  retrograde_summary: key pg_catalog.english/v1/170011, documents 0 (source 0)
+```
+
+`nexus doctor` IDF lines (`NEXUS_KEYRING_DISABLE=1`), the same as before the
+fix:
+
+```
+pass  template.idf_analyzer_current  NEXUS_template at pg_catalog.english/v1/170011
+fail  slots.idf_analyzer_current     save_01: narrative pg_catalog.english/v1/170010, retrograde_summary pg_catalog.english/v1/170010 (server pg_catalog.english/v1/170011); save_02 at pg_catalog.english/v1/170011; save_03 at pg_catalog.english/v1/170011; save_04 at pg_catalog.english/v1/170011; save_05 at pg_catalog.english/v1/170011  -> python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
+```
