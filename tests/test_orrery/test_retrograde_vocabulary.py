@@ -19,12 +19,12 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     enumerate_seed_eligible_vocabulary,
     validate_bare_entity_ref,
 )
+from nexus.agents.orrery.status_family import STATUS_TAGS
 from nexus.api.native_structured_output import (
     anthropic_json_schema,
     strict_json_schema,
     structured_output_error_text,
 )
-from nexus.agents.orrery.status_family import STATUS_TAGS
 
 
 def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
