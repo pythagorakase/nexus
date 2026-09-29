@@ -93,13 +93,14 @@ document count and carries the live key; otherwise it rolls back, reports the
 database as `failed`, and exits non-zero. The report gives each corpus's key
 and document count before and after, and the number of `(lexeme, frequency)`
 rows that differ from the pre-rebuild state, which is a diagnostic, not a
-failure. `--dry-run` reads keys and counts in a read-only session (locked
-databases included) and changes nothing; `--json` prints the report as JSON.
+failure. `--dry-run` reads keys and counts in a read-only session and changes nothing
+(a locked slot is skipped without `--write-locked-slot`, as in the runner); `--json` prints the report as JSON.
 
 After a PostgreSQL update:
 
 ```bash
 python scripts/rebuild_memory_idf.py --all --dry-run
+python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot --dry-run
 python scripts/rebuild_memory_idf.py --all
 python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 ```

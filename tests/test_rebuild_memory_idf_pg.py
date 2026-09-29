@@ -406,7 +406,7 @@ def _set_read_only(dbname: str, on: bool) -> None:
 def test_locked_database_needs_the_write_locked_slot_override(
     seeded_clone: str,
 ) -> None:
-    """A locked database is skipped, read by --dry-run, rebuilt with the override."""
+    """A locked database is skipped, even by --dry-run, until given the override."""
     dbname = seeded_clone
     _set_keys(dbname, STALE_KEY)
     before = _idf_state(dbname)
@@ -421,10 +421,18 @@ def test_locked_database_needs_the_write_locked_slot_override(
         )
         assert _idf_state(dbname) == before
 
-        dry = rebuild.rebuild_database(dbname, dry_run=True)
+        dry_skipped = rebuild.rebuild_database(dbname, dry_run=True)
+        assert (dry_skipped.status, dry_skipped.locked, dry_skipped.corpora) == (
+            "skipped_locked",
+            True,
+            [],
+        )
+
+        dry = rebuild.rebuild_database(dbname, dry_run=True, write_locked_slot=True)
         assert (dry.status, dry.locked) == ("dry_run", True)
         assert all(corpus.stale for corpus in dry.corpora)
         assert _idf_state(dbname) == before
+        assert is_db_locked(dbname)
 
         report = rebuild.rebuild_database(dbname, write_locked_slot=True)
         assert (report.status, report.locked) == ("rebuilt", True)

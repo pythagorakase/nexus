@@ -18,11 +18,12 @@ live server's; otherwise it rolls back and the command exits non-zero.
 Targets mirror ``scripts/migrate.py``: a locked slot is skipped unless
 ``--write-locked-slot`` is given, and a database that does not exist is
 reported and skipped. ``--dry-run`` reads keys and counts in a read-only
-session and changes nothing; it reads locked databases too, since it cannot
-write.
+session and changes nothing; like the runner's, it skips a locked slot unless
+``--write-locked-slot`` is given.
 
 Usage:
-    python scripts/rebuild_memory_idf.py --all --dry-run   # Report every key
+    python scripts/rebuild_memory_idf.py --all --dry-run   # Report; change nothing
+    python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot --dry-run
     python scripts/rebuild_memory_idf.py --all             # Template + unlocked slots
     python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
     python scripts/rebuild_memory_idf.py --template
@@ -317,9 +318,9 @@ def rebuild_database(
     """Rebuild (or, with ``dry_run``, inspect) one database's IDF state.
 
     A missing database is ``absent``; a locked one is ``skipped_locked``
-    unless ``write_locked_slot`` or ``dry_run``. A rebuild or schema failure
-    rolls back and is reported as ``failed`` with its error; the database is
-    left exactly as it was.
+    unless ``write_locked_slot`` is given, even under ``dry_run``. A rebuild
+    or schema failure rolls back and is reported as ``failed`` with its error;
+    the database is left exactly as it was.
     """
     report = DatabaseReport(dbname=dbname, status="failed")
     if not db_exists(dbname):
@@ -327,7 +328,7 @@ def rebuild_database(
         report.status = "absent"
         return report
     report.locked = is_db_locked(dbname)
-    if report.locked and not (dry_run or write_locked_slot):
+    if report.locked and not write_locked_slot:
         LOG.warning(
             "Database %s is LOCKED (read-only), skipping; rerun with "
             "--write-locked-slot to rebuild it",
