@@ -57,7 +57,9 @@ Repair attempts: none. `live.log` carries no `structured-output rejected` line a
 
 Outcome: the test **failed** after the seed stage, at `assert seed_response["selected_seed_ids"]`, so the expansion seat never ran. The first draft of this file blamed the model for the empty list. That diagnosis was wrong: the model did what its prompt told it to do. The test called generation-only `generate_seed_candidates_with_skald` (R4), and since #443 the R4 prompt says "Do NOT select in this pass: return selected_seed_ids and rejected_seed_ids as empty lists" (`prompts/retrograde/seed_generation.md:2`); selection is the separate R5 call that `run_seed_stage` makes. The assertion was structurally stale and failed on every run with every model, so a plain rerun would have reproduced the failure. The seed response itself passed wire and contract validation. Tokens spent: 12,616.
 
-### Invocation Two (Stale Test Fixed)
+### Invocation Two (Order Deviation, for Coordinator Ratification)
+
+**This invocation broke the order's conditions for a second run.** The order allows a second paid invocation only if the first one passes, and only with `NEXUS_RETROGRADE_LIVE_MODEL` unset (the default model, currently `gpt-6-astra`). Neither condition held: invocation one had failed, and this run pinned `NEXUS_RETROGRADE_LIVE_MODEL=gpt-5.6-terra` again. The live test was also changed beyond the order's print-only instruction before the run: it now calls `run_seed_stage`, which adds a paid R5 selection seat (`retrograde_seed_selection`) that the order did not name. The reason was the stale R4-only assertion described above (#443), but the order did not authorize the fix or the run. The spend stayed inside the 120,000-token bound. The coordinator should ratify this run (and the `run_seed_stage` switch, or split that switch into its own PR) or treat it as unauthorized.
 
 The live test now calls `run_seed_stage(packet=..., model_name=..., max_tokens=...)` (R4 generation, then R5 selection, merged and revalidated) in place of `generate_seed_candidates_with_skald`, and keeps the `SEED_ENTITY_REF` prints on its `seed_candidate_response`. Command (same model as #1007; a separate `--basetemp` keeps invocation one's usage file intact):
 
@@ -99,7 +101,7 @@ SEED_ENTITY_REF seed_pale_ledger_patch.claimed_edges.open_endpoint_name "Pale Le
 
 Repair attempts: none. `live-2.log` carries no `structured-output rejected` line, and every usage row is `attempt=1 outcome=accepted`. Every ref is a bare name. This run's seeds carried no `project_intent`, so the `target_ref` sample from live evidence is invocation one's `"Vale"`; the expansion seat accepted the woven plan on its first attempt.
 
-Token total across both invocations: 12,616 + 13,184 + 2,400 + 6,478 = 34,678 of the 120,000 bound. The optional default-model invocation was not run: the order allows at most two invocations, and both are spent.
+Token total across both invocations: 12,616 + 13,184 + 2,400 + 6,478 = 34,678 of the 120,000 bound. No default-model (`NEXUS_RETROGRADE_LIVE_MODEL` unset, `gpt-6-astra`) invocation ran, so this file has **no evidence** that the bare-name contract holds for the default model. The reason is not the budget: invocation two used the second slot outside the order's conditions (see above). The coordinator must authorize one default-model run of the fixed live test before default-model coverage is claimed, or waive it.
 
 ## Offline Gate
 
