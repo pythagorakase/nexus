@@ -589,8 +589,9 @@ def _commit_checkout(root: Path, *, git_dir: Optional[Path] = None) -> str:
 
 
 def _checkout_workspace(tmp_path: Path) -> Tuple[Workspace, str]:
-    """A workspace whose embedder is a git checkout and whose reranker has
-    ``hf download --local-dir`` metadata at ``COMMIT``.
+    """A workspace with a git-checkout embedder and an hf-downloaded reranker.
+
+    The reranker carries ``hf download --local-dir`` metadata at ``COMMIT``.
 
     Returns:
         The workspace and the embedder checkout's HEAD commit.
@@ -641,7 +642,8 @@ def test_git_revision_never_comes_from_an_enclosing_repository(
     repository discovery would otherwise name the checkout's commit.
     """
 
-    outer_head = _commit_checkout(_write_outer(tmp_path))
+    _write_files(tmp_path, {"nexus.toml": b"[memnon]\n"})
+    outer_head = _commit_checkout(tmp_path)
     plain = tmp_path / "models" / "plain"
     _write_files(plain, _embedder_files(16))
     assert artifact_revision(plain) == (None, None)
@@ -653,13 +655,6 @@ def test_git_revision_never_comes_from_an_enclosing_repository(
         artifact_revision(broken)
     assert "not a git repository" in str(raised.value)
     assert outer_head not in str(raised.value)
-
-
-def _write_outer(tmp_path: Path) -> Path:
-    """An enclosing repository with one commit, as this checkout encloses models/."""
-
-    _write_files(tmp_path, {"nexus.toml": b"[memnon]\n"})
-    return tmp_path
 
 
 def test_verify_reports_a_moved_checkout_with_the_pinned_restore(
