@@ -7,8 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 import logging
-from types import SimpleNamespace
-from typing import Any, Iterator, cast
+from typing import Any, Iterator
 from uuid import uuid4
 
 import pytest

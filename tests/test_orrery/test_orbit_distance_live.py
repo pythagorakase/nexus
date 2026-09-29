@@ -1,26 +1,39 @@
 """Live PostgreSQL coverage for neutral narrative-orbit hydration.
 
-Activated by ``NEXUS_RUN_POSTGRES=1``. The fixture graph is created inside an
-external SQLAlchemy transaction and always rolled back, so no narrative state
-persists in the target slot.
+Activated by ``NEXUS_RUN_POSTGRES=1``. The test owns a seeded template clone;
+its fixture graph is created inside an external SQLAlchemy transaction and
+always rolled back.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Iterator
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer_sqlalchemy,
+)
 from nexus.agents.orrery.resolver import hydrate_world_state
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
 
-LIVE_SLOT = 5
+WORLD_TIME = datetime(2073, 8, 1, tzinfo=timezone.utc)
+
+
+@pytest.fixture(scope="module")
+def orbit_slot() -> Iterator[str]:
+    """Own a template clone whose story clock anchors character need clocks."""
+
+    with disposable_slot_database("qa640_orbit_distance") as dbname:
+        seed_story_clock(dbname, world_time=WORLD_TIME)
+        yield dbname
 
 
 def _insert_entity(session: Session, *, active: bool) -> int:
@@ -67,6 +80,8 @@ def _insert_relationship(
     relationship_type: str,
     emotional_valence: str,
 ) -> None:
+    # Migration 115 refuses relationship writes without a producer.
+    relationship_producer_sqlalchemy(session, "manual")
     session.execute(
         text(
             """
@@ -98,10 +113,12 @@ def _insert_relationship(
     )
 
 
-def test_hydrate_orbit_distance_from_active_relationship_graph() -> None:
+def test_hydrate_orbit_distance_from_active_relationship_graph(
+    orbit_slot: str,
+) -> None:
     """Hydration treats current active-character relationships as neutral hops."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
+    engine = create_engine(sqlalchemy_url(orbit_slot), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -160,7 +177,7 @@ def test_hydrate_orbit_distance_from_active_relationship_graph() -> None:
             session,
             anchor_chunk_id=None,
             window_chunks=0,
-            world_time_override=datetime(2073, 8, 1, tzinfo=timezone.utc),
+            world_time_override=WORLD_TIME,
             epistemics_settings={"enabled": False},
         )
 

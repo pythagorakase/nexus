@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timezone
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 
 from nexus.agents.orrery.events import (
@@ -18,15 +18,26 @@ from nexus.agents.orrery.needs import load_need_tuning
 from nexus.agents.orrery.replay import TAG_DELTA_KEYS
 from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
 from nexus.agents.orrery.substrate import ProjectPolicy
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database, seed_story_clock
 
 
 pytestmark = pytest.mark.requires_postgres
 
+WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(scope="module")
+def status_delta_slot() -> Iterator[str]:
+    """Own a template clone with one clocked head chunk for the delta source."""
+
+    with disposable_slot_database("qa640_status_bestow") as dbname:
+        seed_story_clock(dbname, world_time=WORLD_TIME)
+        yield dbname
+
 
 @pytest.fixture()
-def status_delta_db() -> Iterator[dict[str, Any]]:
-    conn = psycopg2.connect(get_slot_db_url(slot=5))
+def status_delta_db(status_delta_slot: str) -> Iterator[dict[str, Any]]:
+    conn = connect(status_delta_slot)
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -46,7 +57,9 @@ def status_delta_db() -> Iterator[dict[str, Any]]:
                 LIMIT 1
                 """
             )
-            chunk, world_time = cur.fetchone()
+            clock = cur.fetchone()
+            assert clock is not None, "status_delta_slot seeds seed_story_clock"
+            chunk, world_time = clock
         yield {
             "conn": conn,
             "actor": actor,
