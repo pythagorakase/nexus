@@ -25,7 +25,7 @@ import re
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import psycopg2
 
@@ -459,6 +459,37 @@ def migrate_database(
         conn.close()
 
 
+def migrate_targets(
+    targets: Sequence[str], migrate_one: Callable[[str], Tuple[int, int]]
+) -> Tuple[int, int]:
+    """
+    Migrate each database in ``targets`` in order with ``migrate_one``.
+
+    Returns the summed (applied_count, unapplied_count). A database whose
+    migration fails reports it in its unapplied count and the run continues.
+    A database that raises (for example, one that refuses connections) stops
+    the run: the error log names the databases processed before it, the one
+    that raised, and the ones not attempted, then the exception propagates.
+    """
+    total_applied = 0
+    total_unapplied = 0
+    for index, dbname in enumerate(targets):
+        try:
+            applied, unapplied = migrate_one(dbname)
+        except Exception:
+            LOG.error(
+                "Stopped at %s, which raised. Processed before it: %s. "
+                "Not attempted: %s.",
+                dbname,
+                ", ".join(targets[:index]) or "none",
+                ", ".join(targets[index + 1 :]) or "none",
+            )
+            raise
+        total_applied += applied
+        total_unapplied += unapplied
+    return (total_applied, total_unapplied)
+
+
 def show_status() -> None:
     """Show migration status for all databases."""
     all_migrations = discover_migrations()
@@ -594,15 +625,12 @@ def main():
     if args.dry_run:
         LOG.info("[DRY-RUN MODE - no changes will be made]")
 
-    total_applied = 0
-    total_skipped = 0
-
-    for dbname in targets:
-        applied, skipped = migrate_database(
+    total_applied, total_skipped = migrate_targets(
+        targets,
+        lambda dbname: migrate_database(
             dbname, dry_run=args.dry_run, write_locked_slot=args.write_locked_slot
-        )
-        total_applied += applied
-        total_skipped += skipped
+        ),
+    )
 
     LOG.info("")
     LOG.info("Summary: %d applied, %d skipped/failed", total_applied, total_skipped)

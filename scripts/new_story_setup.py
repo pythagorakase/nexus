@@ -278,8 +278,9 @@ def initialize_slot_database(
     if unapplied:
         raise RuntimeError(
             f"Migrations failed on {target_db}: {applied} applied, "
-            f"{unapplied} unapplied. The database is not ready; fix the failing "
-            "migration and initialize it again."
+            f"{unapplied} unapplied. The partial database was left in place; "
+            "after fixing the failing migration, recreate it with --force "
+            "(force=True)."
         )
     LOG.info("Applied %d migrations to %s", applied, target_db)
 

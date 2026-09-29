@@ -318,10 +318,12 @@ def test_failing_migration_is_unapplied_and_initialization_raises(
         with pytest.raises(
             RuntimeError,
             match=rf"^Migrations failed on {dbname}: \d+ applied, 1 unapplied\.",
-        ):
+        ) as raised:
             new_story_setup.initialize_slot_database(
                 dbname, source_db=_TEMPLATE, force=True, migrations_dir=tree
             )
+        assert "partial database was left in place" in str(raised.value)
+        assert "recreate it with --force (force=True)" in str(raised.value)
 
         assert "999" not in _stamps(dbname)
         # The raise precedes the fresh-slot IDF corpora and the "ready" log

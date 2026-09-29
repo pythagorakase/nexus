@@ -305,3 +305,100 @@ $ $PY -m mypy --explicit-package-bases <origin/main>/scripts/migrate.py <origin/
 <origin/main>/tests/test_new_story_setup.py:192: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
 Found 4 errors in 1 file (checked 4 source files)
 ```
+
+## Review Fixes After `7587081`
+
+Astra's review of `7587081` returned three findings; this round applies exactly
+those three.
+
+- **[P2] Readiness over-claim.** `docs/database.md` and `CLAUDE.md` no longer say
+  setup never leaves a slot marked ready. They state what the code enforces:
+  initialization and cloning raise and never log success, but the partial target
+  database remains (committed migrations, seed rows, and the `global_variables`
+  row without IDF initialization; a failed clone can keep the source's
+  `new_story = false`, which `nexus/api/save_slots.py:113` reports as an active
+  slot). `start_setup` (`nexus/api/new_story_flow.py:130-138`) only probes
+  connectivity and reuses an existing database, so the docs say to recreate the
+  target with `--force` after fixing the cause. Durable quarantine and staged
+  replacement stay on #823.
+- **[P3] `--all` names the databases it did not reach.** `main()` now runs its
+  targets through `migrate_targets(targets, migrate_one)` in `scripts/migrate.py`.
+  A database that raises stops the run; before the exception propagates, one
+  error line names the databases processed before it, the one that raised, and
+  the ones not attempted. A migration failure that does not raise still counts
+  as unapplied and the run continues, as before. `tests/test_orrery/test_migrate.py`
+  has no pattern for driving `main()` against disposable databases, so two
+  offline tests cover the helper with the real `--all` target list:
+  `test_migrate_targets_stops_at_a_raise_and_names_unattempted_databases` raises
+  at `save_03`, asserts the exact log line, and asserts `save_04` and `save_05`
+  were never called; `test_migrate_targets_sums_counts_and_continues_past_unapplied`
+  asserts the totals and that an unapplied count does not stop the run.
+  `docs/database.md` states the abort behavior in one sentence.
+- **[P3] The recovery message names `--force`.** The `RuntimeError` now reads
+  `Migrations failed on <db>: N applied, M unapplied. The partial database was
+  left in place; after fixing the failing migration, recreate it with --force
+  (force=True).` `test_failing_migration_is_unapplied_and_initialization_raises`
+  asserts both new phrases.
+
+The fleet has since been migrated to 132 at land time, so the template lag in
+Proof 1 and the fleet status above describe the earlier run. Read-only:
+
+```
+$ psql -X -At -d NEXUS_template -c "SELECT count(*), max(version), max(applied_at) FROM schema_migrations"
+129|132|2026-09-29 13:13:33.412024-04
+```
+
+Gates, from the worktree root with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL`
+unset:
+
+```
+$ PYTHONPATH=$PWD $PY -m pytest -q tests/test_orrery/test_migrate.py tests/test_postgres_tools.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+73 passed, 7 skipped, 5 warnings in 0.63s
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_new_story_setup.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+8 passed, 5 warnings in 9.54s
+```
+
+The 7 skips are the pre-existing `*_executes_against_slot_db` tests in
+`tests/test_orrery/test_migrate.py`, gated on `NEXUS_RUN_POSTGRES=1`. The
+review's run of the same two files ended `71 passed, 7 skipped`; the two new
+tests account for the difference.
+
+Black, flake8, and mypy on the four changed Python files. Black 25.1.0 (the
+version `pyproject.toml` pins) also rewrapped two untouched `cur.execute("""`
+calls in `tests/test_orrery/test_migrate.py`, as it did four times in
+`scripts/migrate.py` in `0d315d72`; the change is formatting only. Every flake8
+E501 is one listed under Gates above (`scripts/new_story_setup.py` 304 and 513
+were 303 and 512, shifted by the one added message line). The two
+`tests/test_orrery/test_migrate.py` mypy errors are pre-existing: the
+`origin/main` copy reports them at lines 2073 and 2091.
+
+```
+$ $PY -m black --check scripts/migrate.py scripts/new_story_setup.py tests/test_new_story_setup.py tests/test_orrery/test_migrate.py
+All done! ✨ 🍰 ✨
+4 files would be left unchanged.
+$ $PY -m flake8 scripts/migrate.py scripts/new_story_setup.py tests/test_new_story_setup.py tests/test_orrery/test_migrate.py
+scripts/migrate.py:185:89: E501 line too long (94 > 88 characters)
+scripts/migrate.py:206:89: E501 line too long (99 > 88 characters)
+scripts/migrate.py:210:89: E501 line too long (92 > 88 characters)
+scripts/new_story_setup.py:7:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:50:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:63:89: E501 line too long (91 > 88 characters)
+scripts/new_story_setup.py:112:89: E501 line too long (101 > 88 characters)
+scripts/new_story_setup.py:203:89: E501 line too long (96 > 88 characters)
+scripts/new_story_setup.py:304:89: E501 line too long (90 > 88 characters)
+scripts/new_story_setup.py:513:89: E501 line too long (116 > 88 characters)
+$ PYTHONPATH=$PWD $PY -m mypy --explicit-package-bases scripts/migrate.py scripts/new_story_setup.py tests/test_new_story_setup.py tests/test_orrery/test_migrate.py
+tests/test_orrery/test_migrate.py:2115: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/test_orrery/test_migrate.py:2135: error: "None" object is not iterable  [misc]
+tests/test_new_story_setup.py:178: error: Value of type "Item | Container" is not indexable  [index]
+tests/test_new_story_setup.py:178: error: Unsupported target for indexed assignment ("Any | Item | Container")  [index]
+tests/test_new_story_setup.py:203: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+tests/test_new_story_setup.py:205: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+Found 6 errors in 2 files (checked 4 source files)
+$ PYTHONPATH=$PWD $PY -m mypy --explicit-package-bases <origin/main>/tests/test_orrery/test_migrate.py
+<origin/main>/tests/test_orrery/test_migrate.py:2073: error: Value of type "tuple[Any, ...] | None" is not indexable  [index]
+<origin/main>/tests/test_orrery/test_migrate.py:2091: error: "None" object is not iterable  [misc]
+Found 2 errors in 1 file (checked 1 source file)
+```
