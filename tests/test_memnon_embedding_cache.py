@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import gc
 from pathlib import Path
-from typing import Any, Dict, Iterator
+from typing import Any, Dict, Iterator, Optional
 
 import pytest
 import tomlkit
@@ -115,14 +115,15 @@ def test_model_cache_normalizes_local_path_aliases(
     loads = []
 
     class FakeSentenceTransformer:
-        def __init__(self, path: str, *, local_files_only: bool):
+        def __init__(self, path: str, *, device: Optional[str], local_files_only: bool):
             assert local_files_only, "embedders load only from local artifacts"
+            assert device is None, "an unpinned load lets sentence-transformers pick"
             loads.append(path)
 
     monkeypatch.setattr(em, "SentenceTransformer", FakeSentenceTransformer)
 
-    first = em._get_or_load_sentence_transformer(str(alias))
-    second = em._get_or_load_sentence_transformer(str(target))
+    first = em.get_or_load_sentence_transformer(str(alias))
+    second = em.get_or_load_sentence_transformer(str(target))
 
     assert first is second
     assert loads == [str(alias)]

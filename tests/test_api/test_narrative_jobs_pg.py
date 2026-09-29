@@ -68,14 +68,14 @@ def test_scheduler_accepts_summary_and_embeds_once_in_process(
 
     # Match a gateway that already holds the real embedder in its process cache.
     from nexus.agents.memnon.utils.embedding_manager import (
-        _get_or_load_sentence_transformer,
+        get_or_load_sentence_transformer,
     )
 
     settings = load_settings_as_dict()
     models = settings["Agent Settings"]["MEMNON"]["models"]
     active = {name: config for name, config in models.items() if config["is_active"]}
     cached = {
-        name: _get_or_load_sentence_transformer(config["local_path"])
+        name: get_or_load_sentence_transformer(config["local_path"])
         for name, config in active.items()
     }
     spawned = []
@@ -106,7 +106,7 @@ def test_scheduler_accepts_summary_and_embeds_once_in_process(
     assert result["narrative_embedding_jobs"] == 1
     assert result["narrative_summary_jobs"] == len(expected)
     for name, config in active.items():
-        assert _get_or_load_sentence_transformer(config["local_path"]) is cached[name]
+        assert get_or_load_sentence_transformer(config["local_path"]) is cached[name]
     with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute("SELECT summary FROM episodes WHERE season=1 AND episode=1")
         assert cur.fetchone()[0]["summary"]

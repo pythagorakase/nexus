@@ -54,7 +54,7 @@ import json
 import logging
 import time
 import tempfile
-from typing import Dict, List, Tuple, Any, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import tqdm
 import argparse
 import numpy as np
@@ -139,6 +139,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexus.embeddings")
 
+from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
+
 # Try to import SQLAlchemy
 try:
     import sqlalchemy as sa
@@ -163,102 +165,78 @@ class ModelLoader:
     """Handles loading different types of embedding models"""
 
     @staticmethod
-    def load_model(model_name: str) -> Any:
+    def resolve_registered_model(
+        model_name: str, models_config: Mapping[str, Mapping[str, Any]]
+    ) -> Tuple[str, Mapping[str, Any]]:
+        """Find the ``[memnon.models]`` entry that ``model_name`` names.
+
+        ``model_name`` may be the entry name (``Octen-Embedding-4B``), its
+        ``remote_path`` (``infly/inf-retriever-v1-1.5b``), or the legacy
+        slash-to-underscore form of the repository id.
+
+        Args:
+            model_name: The model named on the command line
+            models_config: The ``[memnon.models]`` registry
+
+        Returns:
+            The entry name and its configuration
+
+        Raises:
+            RuntimeError: When no entry matches.
         """
-        Load a model based on its name/type
+        if model_name in models_config:
+            return model_name, models_config[model_name]
+        legacy_key = model_name.replace("/", "_")
+        if legacy_key in models_config:
+            return legacy_key, models_config[legacy_key]
+        for key, config in models_config.items():
+            if config.get("remote_path") == model_name:
+                return key, config
+        raise RuntimeError(
+            f"Embedding model '{model_name}' is not registered in [memnon.models] "
+            f"(registered: {sorted(models_config)}); embeddings are generated "
+            "only from a registered local_path."
+        )
+
+    @staticmethod
+    def load_model(
+        model_name: str,
+        models_config: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    ) -> Any:
+        """
+        Load a registered model from its local artifact directory.
+
+        There is no Hugging Face download and no Hub-cache snapshot probe
+        (issue #812): the ``[memnon.models]`` entry's ``local_path`` loads
+        with ``local_files_only`` through the shared embedder loader, or the
+        load raises with the restore command.
 
         Args:
             model_name: Name of the model to load
+            models_config: The ``[memnon.models]`` registry; defaults to the
+                one in nexus.toml
 
         Returns:
             Loaded model
 
         Raises:
-            ImportError: If required libraries aren't installed
-            ValueError: If model can't be loaded
+            RuntimeError: If the model is not registered, or its local
+                artifact is missing or fails to load
         """
         logger.info(f"Loading model: {model_name}")
+        if models_config is None:
+            models_config = SETTINGS.get("models", {})
+        key, config = ModelLoader.resolve_registered_model(model_name, models_config)
 
-        # Check for settings that might provide local paths
-        model_local_path = None
-        try:
-            if SETTINGS.get("models") and SETTINGS["models"].get(
-                model_name.replace("/", "_")
-            ):
-                model_local_path = SETTINGS["models"][model_name.replace("/", "_")].get(
-                    "local_path"
-                )
-                if model_local_path:
-                    logger.info(
-                        f"Found local path for {model_name}: {model_local_path}"
-                    )
-        except Exception as e:
-            logger.warning(f"Error checking settings for local path: {e}")
-
-        # Default local path for infly/inf-retriever models
-        if "infly/inf-retriever" in model_name and not model_local_path:
-            # Extract model name to use as directory name
-            model_dir = model_name.split("/")[-1]  # Just get the part after the slash
-            model_local_path = os.path.abspath(
-                os.path.join(os.path.dirname(__file__), "..", "models", model_dir)
-            )
-            if os.path.exists(model_local_path):
-                logger.info(
-                    f"Using default local path for {model_name}: {model_local_path}"
-                )
-
-        # Load using sentence-transformers for all models
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            # Special handling for inf-retriever models which may use a snapshot structure
-            if (
-                "infly/inf-retriever" in model_name
-                and model_local_path
-                and os.path.exists(model_local_path)
-            ):
-                snapshot_dir = os.path.join(model_local_path, "snapshots")
-                if os.path.exists(snapshot_dir):
-                    snapshot_candidates = os.listdir(snapshot_dir)
-                    if snapshot_candidates:
-                        # Get first snapshot directory
-                        snapshot_path = os.path.join(
-                            snapshot_dir, snapshot_candidates[0]
-                        )
-                        logger.info(
-                            f"Loading model from snapshot path: {snapshot_path}"
-                        )
-
-                        try:
-                            return SentenceTransformer(snapshot_path)
-                        except Exception as e:
-                            logger.warning(f"Failed to load from snapshot: {e}")
-
-            # INT8-quantized models use bitsandbytes, which has no working MPS
-            # backend on Apple Silicon — force CPU to avoid mixed-device matmul
-            # errors. Other models use SentenceTransformer's auto-detection.
-            device = "cpu" if "INT8" in model_name else None
-
-            # For other models or fallback
-            if model_local_path and os.path.exists(model_local_path):
-                logger.info(
-                    f"Loading model from local path: {model_local_path} (device={device or 'auto'})"
-                )
-                return SentenceTransformer(model_local_path, device=device)
-            else:
-                logger.info(
-                    f"Loading model from Hugging Face hub: {model_name} (device={device or 'auto'})"
-                )
-                return SentenceTransformer(model_name, device=device)
-
-        except ImportError:
-            logger.error(
-                "sentence-transformers not found. Install with: pip install sentence-transformers"
-            )
-            raise ImportError("sentence-transformers library required")
-        except Exception as e:
-            logger.error(f"Error loading model {model_name}: {e}")
-            raise ValueError(f"Failed to load model: {e}")
+        # INT8-quantized models use bitsandbytes, which has no working MPS
+        # backend on Apple Silicon — force CPU to avoid mixed-device matmul
+        # errors. Other models use SentenceTransformer's auto-detection.
+        device = "cpu" if "INT8" in model_name or "INT8" in key else None
+        logger.info(
+            f"Loading {key} from local path: {config.get('local_path')} "
+            f"(device={device or 'auto'})"
+        )
+        return load_local_model(key, config, device=device)
 
     @staticmethod
     def get_embedding(model: Any, text: str, model_name: str) -> np.ndarray:

@@ -23,7 +23,7 @@ import json
 from pathlib import Path
 import argparse
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Mapping, Optional, Union
 
 # Add parent directory to sys.path to import from nexus package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -60,14 +60,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexus.import")
 
-# Try to import sentence-transformers
-try:
-    from sentence_transformers import SentenceTransformer
-except ImportError:
-    logger.error(
-        "sentence-transformers not found. Please install with: pip install sentence-transformers"
-    )
-    sys.exit(1)
+from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
+
+
+# The registered [memnon.models] entries this import-era script embeds with.
+# Each loads only from its local_path (issue #812): no Hugging Face download,
+# no hardcoded default path, and a missing folder raises with the restore
+# command instead of being skipped.
+SCRIPT_EMBEDDERS = ("bge-large", "e5-large", "bge-small-custom")
+
+
+def load_embedding_models(
+    models_config: Mapping[str, Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Load every script embedder from its ``[memnon.models]`` local_path.
+
+    Args:
+        models_config: The ``[memnon.models]`` registry, keyed by entry name
+
+    Returns:
+        The loaded SentenceTransformers, keyed by entry name
+
+    Raises:
+        RuntimeError: When an entry is not registered, or its local artifact
+            is missing or fails to load.
+    """
+    models: Dict[str, Any] = {}
+    for model_key in SCRIPT_EMBEDDERS:
+        if model_key not in models_config:
+            raise RuntimeError(
+                f"Embedding model '{model_key}' is not registered in "
+                "[memnon.models]; register it with its local_path."
+            )
+        models[model_key] = load_local_model(model_key, models_config[model_key])
+    logger.info(f"Loaded {len(models)} embedding models: {', '.join(models)}")
+    return models
+
 
 # Try to import SQLAlchemy
 try:
@@ -247,104 +275,8 @@ class NarrativeImporter:
         logger.info(f"Initialized {len(self.embedding_models)} embedding models")
 
     def _initialize_embedding_models(self) -> Dict[str, Any]:
-        """Initialize embedding models for semantic retrieval."""
-        embedding_models = {}
-
-        # Define model paths from settings, falling back to defaults if not available
-        settings_models = SETTINGS.get("models", {})
-
-        model_paths = {
-            "bge-large": [
-                Path(
-                    settings_models.get("bge-large", {}).get(
-                        "local_path",
-                        "/Users/pythagor/nexus/models/models--BAAI--bge-large-en",
-                    )
-                ),
-                settings_models.get("bge-large", {}).get(
-                    "remote_path", "BAAI/bge-large-en"
-                ),
-            ],
-            "e5-large": [
-                Path(
-                    settings_models.get("e5-large", {}).get(
-                        "local_path",
-                        "/Users/pythagor/nexus/models/models--intfloat--e5-large-v2",
-                    )
-                ),
-                settings_models.get("e5-large", {}).get(
-                    "remote_path", "intfloat/e5-large-v2"
-                ),
-            ],
-            "bge-small-custom": [
-                Path(
-                    settings_models.get("bge-small-custom", {}).get(
-                        "local_path",
-                        "/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654",
-                    )
-                ),
-                settings_models.get("bge-small-custom", {}).get(
-                    "remote_path"
-                ),  # May be None
-            ],
-            "bge-small": [
-                None,  # No local path for standard model
-                "BAAI/bge-small-en",
-            ],
-        }
-
-        try:
-            # Try to load each model
-            for model_key, paths in model_paths.items():
-                local_path, remote_path = paths
-
-                # Skip if this is the standard BGE-small and we already have the custom one
-                if model_key == "bge-small" and "bge-small-custom" in embedding_models:
-                    continue
-
-                # Try local path first if it exists
-                if local_path and local_path.exists():
-                    try:
-                        logger.info(
-                            f"Loading {model_key} from local path: {local_path}"
-                        )
-                        model = SentenceTransformer(str(local_path))
-                        embedding_models[model_key] = model
-                        logger.info(f"Successfully loaded {model_key} from local path")
-                        continue
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load {model_key} from local path: {e}"
-                        )
-
-                # Fall back to remote path if available
-                if remote_path:
-                    try:
-                        logger.info(
-                            f"Loading {model_key} from HuggingFace: {remote_path}"
-                        )
-                        model = SentenceTransformer(remote_path)
-                        embedding_models[model_key] = model
-                        logger.info(f"Successfully loaded {model_key} from HuggingFace")
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load {model_key} from HuggingFace: {e}"
-                        )
-
-            # Log summary of loaded models
-            if embedding_models:
-                logger.info(
-                    f"Loaded {len(embedding_models)} embedding models: {', '.join(embedding_models.keys())}"
-                )
-            else:
-                logger.error("Failed to load any embedding models")
-
-            return embedding_models
-
-        except Exception as e:
-            logger.error(f"Error in embedding model initialization process: {e}")
-            # Return any successfully loaded models rather than failing completely
-            return embedding_models
+        """Load the script embedders from their local artifacts or raise."""
+        return load_embedding_models(SETTINGS.get("models", {}))
 
     def generate_embedding(self, text: str, model_key: str) -> List[float]:
         """

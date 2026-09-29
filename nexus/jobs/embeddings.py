@@ -76,7 +76,7 @@ def drain_embedding(
             return {}
         models = active_embedding_models(settings["Agent Settings"]["MEMNON"])
         from nexus.agents.memnon.utils.embedding_manager import (
-            _get_or_load_sentence_transformer,
+            get_or_load_sentence_transformer,
         )
 
         def encode(chunk_text: str, name: str) -> list[float]:
@@ -87,7 +87,7 @@ def drain_embedding(
                 raise ValueError(
                     f"Configured embedding model {name} is not installed at {path}"
                 )
-            model = _get_or_load_sentence_transformer(path)
+            model = get_or_load_sentence_transformer(path)
             before_provider_call()
             vector = model.encode(chunk_text).tolist()
             if len(vector) != config["dimensions"]:
