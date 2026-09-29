@@ -78,12 +78,23 @@ nexus/agents/memnon/utils/cross_encoder.py:119:        Keyword arguments for ``C
 nexus/agents/memnon/utils/cross_encoder.py:178:            self.model = CrossEncoder(
 nexus/agents/memnon/utils/cross_encoder.py:563:            self.tokenizer = AutoTokenizer.from_pretrained(
 nexus/agents/memnon/utils/cross_encoder.py:567:                AutoModelForCausalLM.from_pretrained(
-nexus/agents/memnon/utils/embedding_manager.py:71:            model = SentenceTransformer(path, device=device, local_files_only=True)
+nexus/agents/memnon/utils/embedding_manager.py:54:        Keyword arguments for ``SentenceTransformer(path, **kwargs)``
+nexus/agents/memnon/utils/embedding_manager.py:87:            model = SentenceTransformer(path, **sentence_transformer_kwargs(device))
 nexus/telemetry/prompt_window.py:338:    return AutoTokenizer.from_pretrained(repository, trust_remote_code=False)
 ```
 
-- `embedding_manager.py:71` is the one SentenceTransformer loader
-  (`get_or_load_sentence_transformer`), and it passes `local_files_only=True`.
+- `embedding_manager.py:87` is the one SentenceTransformer loader
+  (`get_or_load_sentence_transformer`). It passes
+  `**sentence_transformer_kwargs(device)`, which always holds
+  `local_files_only=True` (review finding: the rewritten alias test had
+  dropped the old stub's `local_files_only` assertion). Two tests in
+  `tests/test_memnon_embedding_cache.py` replace it:
+  `test_every_sentence_transformer_keyword_is_accepted_and_local_only` checks
+  the helper against the installed `SentenceTransformer.__init__` signature,
+  and `test_the_one_loader_passes_only_the_local_only_keywords` parses
+  `embedding_manager.py` and asserts its single `SentenceTransformer(...)` call
+  spreads exactly that helper. Each fails when the keyword is dropped from the
+  helper or the call bypasses it (both mutations checked).
 - `cross_encoder.py:178` passes `**cross_encoder_kwargs(...)`, which always
   holds `local_files_only=True`. The test
   `test_every_cross_encoder_keyword_is_accepted_by_the_installed_library` checks
@@ -130,6 +141,15 @@ E       AssertionError: assert 0 == 2
 (none for `--text-only`); `test_query_narratives_vector_loads_only_the_queried_model`
 loads a tiny real model for `e5-large` while the other registered embedders
 point at missing folders.
+
+`regenerate_all_models` (`--all-models`) no longer swallows settings errors,
+no longer prints "Using HuggingFace remote" for an entry without a
+`local_path` (`load_local_model` rejects it), and raises
+`RuntimeError("No active model in [memnon.models]")` instead of defaulting to
+the unregistered `infly/inf-retriever-v1` (review finding). The `--model` help
+example is now the registered `Octen-Embedding-4B`.
+`test_regenerate_all_models_refuses_a_registry_with_no_active_model` proves
+the raise offline.
 
 ## Gates
 
@@ -215,9 +235,12 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 ```
 
 The truncate test's dynamic import of `scripts/regenerate_embeddings.py` is
-declared in `config/reachability.toml`, and that script and
-`scripts/utils/embedding_utils.py` leave the orphan baseline because the test
-now reaches them.
+declared in `config/reachability.toml`. That script and
+`scripts/utils/embedding_utils.py` leave the orphan baseline only because the
+test imports them; neither gained an operator entry point.
+`scripts/import_narratives.py` and `scripts/query_narratives_vector.py` stay
+orphan-baselined. #811's quarantine triage should treat all four as
+import-era tooling, not operator tools.
 
 Black:
 
@@ -258,7 +281,7 @@ nexus/config/settings_models.py branch=6 main=6
 nexus/jobs/embeddings.py branch=2 main=2
 scripts/import_narratives.py branch=9 main=13
 scripts/query_narratives_vector.py branch=18 main=22
-scripts/regenerate_embeddings.py branch=70 main=75
+scripts/regenerate_embeddings.py branch=68 main=75
 scripts/run_golden_queries.py branch=10 main=10
 tests/test_api/test_narrative_jobs_pg.py branch=12 main=12
 tests/test_memnon_cross_encoder_artifact.py branch=0 main=0
@@ -328,3 +351,36 @@ The four new test files add no errors (55 on 14 files equals 55 on the 10
 files that also exist on `origin/main`), and the branch clears the two
 `cross_encoder.py` errors. Every remaining file count matches what `origin/main`
 already reports.
+
+## Review Round Three Gates
+
+Three review findings: the orphan-baseline wording, `regenerate_all_models`'s
+Hub-era default, and the lost `local_files_only` assertion for the embedder.
+With `PY=/Users/pythagor/nexus/.venv/bin/python`:
+
+```sh
+NEXUS_RUN_POSTGRES=1 env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL $PY -m pytest -q -p no:cacheprovider \
+  tests/test_memnon_embedding_cache.py tests/test_memnon_script_model_loaders.py \
+  tests/test_regenerate_embeddings_truncate_pg.py tests/test_reachability.py \
+  tests/test_doc_front_matter.py tests/test_memnon_cross_encoder_artifact.py \
+  tests/test_embedding_artifacts.py tests/test_memnon_embedding_contract.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+119 passed, 6 warnings in 47.57s
+```
+
+Black, flake8 (branch vs the previous branch head), and mypy on the four
+changed Python files:
+
+```text
+All done! ✨ 🍰 ✨
+4 files would be left unchanged.
+nexus/agents/memnon/utils/embedding_manager.py branch=0 head=0
+scripts/regenerate_embeddings.py branch=68 head=70
+tests/test_memnon_embedding_cache.py branch=1 head=1
+tests/test_memnon_script_model_loaders.py branch=0 head=0
+mypy (embedding_manager.py and both test files), branch: Found 7 errors in 1 file (checked 3 source files)
+mypy, previous branch head: Found 7 errors in 1 file (checked 3 source files)
+```
