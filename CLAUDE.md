@@ -106,6 +106,18 @@ Initialization and cloning raise on any migration or restore error (psql runs wi
 - **Migrations** → Schema changes to existing slots with data (non-destructive)
 - **Slot initialization** → Creating fresh slots or resetting test slots (destructive)
 
+#### IDF Rebuild After a PostgreSQL Update
+
+Each slot's IDF corpora carry the analyzer key `pg_catalog.english/v1/<server_version_num>`, so any server version change, including a patch release that Postgres.app installs by itself, makes the key stale. Narrative writes then fail loudly (`IDF analyzer mismatch ...`) until the corpora are recomputed under the live analyzer. `nexus doctor` reports it first (`template.idf_analyzer_current`, `slots.idf_analyzer_current`). Rebuild with:
+
+```bash
+python scripts/rebuild_memory_idf.py --all --dry-run        # Report every key; change nothing
+python scripts/rebuild_memory_idf.py --all                  # Template + unlocked slots
+python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot   # The locked golden master
+```
+
+One transaction per database recomputes every document through the trigger's own `sync_memory_idf_document` and rolls back if a corpus's document count would change; see `docs/database.md`.
+
 #### Refreshing the Template
 
 The template is the canonical fresh-slot image: latest schema **plus**

@@ -47,17 +47,21 @@ and reads the union of its lexemes in one statement and snapshot. The diagnostic
 current counts but does not repair or mutate them.
 
 The analyzer identity includes the exact PostgreSQL version and membership
-contract version. An analyzer upgrade or a change to searchable membership
-requires an explicit migration that locks the source tables, rebuilds the
-projection and counts, and advances the epoch before updating the version.
-It must not be repaired implicitly by a retrieval request. Fresh schema-only slot creation initializes empty corpus identities instead
+contract version. Any server version change (a patch release is enough) makes
+writes and reads fail with `IDF analyzer mismatch for corpus <kind>: expected
+<live key>, found <stored key>` until `python scripts/rebuild_memory_idf.py`
+runs; it locks the source tables, rebuilds the projection and counts through
+`sync_memory_idf_document`, advances the epoch, and stamps the live key in one
+transaction (docs/database.md, IDF Rebuild After a PostgreSQL Update). A change
+to searchable membership needs a migration that does the same. The state must
+not be repaired implicitly by a retrieval request. Fresh schema-only slot creation initializes empty corpus identities instead
 of copying the source story's counts. Existing pickle
 files are ignored and can be removed separately.
 
 Validate with:
 
 ```sh
-NEXUS_RUN_POSTGRES=1 poetry run pytest tests/test_idf_dictionary_pg.py tests/test_presence_boost.py
+NEXUS_RUN_POSTGRES=1 poetry run pytest tests/test_idf_dictionary_pg.py tests/test_presence_boost.py tests/test_rebuild_memory_idf_pg.py
 ```
 
 These tests create disposable databases through the shared slot factory; they

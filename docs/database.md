@@ -66,6 +66,44 @@ giving the reason. Offline tests in `tests/test_orrery/test_migrate.py` pin the
 allowlist to the Python files on disk, keep versions unique and increasing, and
 fail on any numbering gap beyond the historical `KNOWN_GAPS` (013 and 119).
 
+## IDF Rebuild After a PostgreSQL Update
+
+Migration 114 keys each IDF corpus row (`memory_idf_corpora.analyzer_version`)
+on `pg_catalog.english/v1/<server_version_num>`, the exact server version, and
+`sync_memory_idf_document` and `IDFStateError` reject a mismatch. The key stays
+exact because a patch release can change lexing. Postgres.app installs patch
+releases by itself, so after any update every existing slot and
+`NEXUS_template` refuse narrative and summary writes (`IDF analyzer mismatch
+for corpus narrative: expected ..., found ...`) until their corpora are rebuilt.
+`nexus doctor` reports it first: `template.idf_analyzer_current` and
+`slots.idf_analyzer_current` compare each corpus key with the live server and
+name the command. Fresh slots are unaffected; `scripts/new_story_setup.py`
+seeds them with the live key.
+
+`scripts/rebuild_memory_idf.py` is the rebuild. It takes the migration runner's
+targets (`--slot N`, `--template`, `--all`, `--dbname qa640_*|ref_*`), skips a
+database that does not exist, and skips a locked slot unless
+`--write-locked-slot` is given (the override lasts one maintenance session).
+For each database, one transaction locks `narrative_chunks`, `chunk_metadata`
+and `retrograde_summaries`, locks both corpus rows, clears
+`memory_idf_lexemes` and `memory_idf_documents`, stamps the live key, advances
+each corpus epoch, and recomputes every chunk and summary through the trigger's
+own `sync_memory_idf_document`. It commits only if each corpus keeps its
+document count and carries the live key; otherwise it rolls back, reports the
+database as `failed`, and exits non-zero. The report gives each corpus's key
+and document count before and after, and the number of `(lexeme, frequency)`
+rows that differ from the pre-rebuild state, which is a diagnostic, not a
+failure. `--dry-run` reads keys and counts in a read-only session (locked
+databases included) and changes nothing; `--json` prints the report as JSON.
+
+After a PostgreSQL update:
+
+```bash
+python scripts/rebuild_memory_idf.py --all --dry-run
+python scripts/rebuild_memory_idf.py --all
+python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
+```
+
 ## Schema Documentation
 
 PostgreSQL comments are the schema reference (`\d+` in psql or
