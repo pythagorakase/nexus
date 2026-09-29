@@ -7,8 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 import logging
-from types import SimpleNamespace
-from typing import Any, Iterator, cast
+from typing import Any, Iterator
 from uuid import uuid4
 
 import pytest
@@ -20,6 +19,7 @@ from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
 from nexus.api.slot_utils import get_slot_db_url
+from nexus.config import load_settings_as_dict
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
@@ -571,6 +571,9 @@ class _LiveLoreHarness:
                     }
                 }
             },
+            # Turn assembly validates the real render caps; take them from
+            # nexus.toml rather than restating them here.
+            "lore": {"render_limits": load_settings_as_dict()["lore"]["render_limits"]},
             "orrery": {
                 "enabled": True,
                 "bleed": {"max_candidates": 0},
