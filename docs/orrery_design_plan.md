@@ -398,7 +398,7 @@ CREATE TABLE orrery_resolutions (
 );
 ```
 
-`tick_chunk_id` is `NOT NULL`, but the in-cycle `OrreryTickProposal` carries no `tick_chunk_id` — it's stamped during `CommitOrreryTick` after `insert_narrative_chunk` returns the new chunk's id. The `UNIQUE` constraint fires at write time, not at proposal time.
+`tick_chunk_id` is `NOT NULL`, but the in-cycle `OrreryTickProposal` carries no `tick_chunk_id` — it's stamped during `CommitOrreryTick` after the `INSERT INTO narrative_chunks` in `commit_incubator_to_database_sync` returns the new chunk's id. The `UNIQUE` constraint fires at write time, not at proposal time.
 
 ### Narration Outbox
 
@@ -461,7 +461,7 @@ Storyteller-time Bleed chooses deterministically from these eligible promoted ev
 
 ### Tick, Resolver Firing, World Time
 
-- **Tick = the accepted player-visible chunk's id**, not the latest `narrative_chunks` row. The id is generated at `commit_handler_sync.py:354` and stamped onto every Orrery write in the same transaction.
+- **Tick = the accepted player-visible chunk's id**, not the latest `narrative_chunks` row. The id is generated at `commit_handler_sync.py:512` and stamped onto every Orrery write in the same transaction.
 - **Resolve runs in-cycle** during LORE Phase 4.5 (`TurnPhase.ORRERY_RESOLVE`), between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`. Pure Python; no writes.
 - **CommitOrreryTick** runs as Step 8.5 inside `commit_incubator_to_database{,_sync}`. All canonical writes happen here.
 - **Clear (event)** runs in the same commit transaction as the triggering event.
@@ -610,10 +610,10 @@ Model IDs and their component `uses` live in `[global.model.api_models]`. Runtim
 - `nexus/agents/orrery/worker.py` — deterministic Promote policy, durable narration outbox drain, conservative semantic-clearance no-op
 
 **Commit path (production = sync)**
-- `nexus/api/narrative.py:387` — `_approve_narrative_impl`; acceptance seam
-- `nexus/api/narrative.py:407` — calls `commit_incubator_to_database_sync`
-- `nexus/api/commit_handler_sync.py:233` — `commit_incubator_to_database_sync`; `CommitOrreryTick` at Step 8.5
-- `nexus/api/commit_handler_sync.py:354` — where the new chunk id is created
+- `nexus/api/narrative.py::_approve_narrative_impl` — acceptance seam; its worker `_approve_narrative_sync` calls `commit_incubator_to_database_sync`
+- `nexus/api/narrative.py::_resolve_and_approve_pending_sync` — choice-resolution seam; also calls `commit_incubator_to_database_sync`
+- `nexus/api/commit_handler_sync.py:324` — `commit_incubator_to_database_sync`; `CommitOrreryTick` at Step 8.5
+- `nexus/api/commit_handler_sync.py:512` — where the new chunk id is created
 
 **MEMNON**
 - `nexus/agents/memnon/memnon.py:1486` — `get_recent_chunks` (warm slice; `narrative_chunks`-only)
