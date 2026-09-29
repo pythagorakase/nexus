@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 from typing import Any, Iterator
@@ -33,9 +33,8 @@ from nexus.agents.orrery.substrate import (
     knows_recent_event,
 )
 from nexus.database import asyncpg_kwargs
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
 from tests.test_orrery.test_claim_propagation_live import (
-    LIVE_SLOT,
     _insert_character,
     _insert_chunk,
     _insert_relationship,
@@ -53,6 +52,16 @@ EPISTEMICS = {
     "claim_event_types": ["threat_issued"],
     "aware_roles": ["actor"],
 }
+WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(scope="module")
+def account_slot() -> Iterator[str]:
+    """Own a template clone whose story clock anchors character need clocks."""
+
+    with disposable_slot_database("qa640_claim_accounts") as dbname:
+        seed_story_clock(dbname, world_time=WORLD_TIME)
+        yield dbname
 
 
 def _install_account_shadow(cur: Any) -> None:
@@ -97,10 +106,10 @@ def _install_account_shadow(cur: Any) -> None:
 
 
 @pytest.fixture()
-def account_connection() -> Iterator[Any]:
-    """Expose one slot-5 transaction with schema-local migrated claim tables."""
+def account_connection(account_slot: str) -> Iterator[Any]:
+    """Expose one rolled-back transaction with schema-local claim tables."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
+    engine = create_engine(sqlalchemy_url(account_slot))
     connection = engine.connect()
     transaction = connection.begin()
     try:
@@ -122,8 +131,9 @@ def account_connection() -> Iterator[Any]:
                 """
             )
             migration_state = cur.fetchone()
-            if not migration_state["registered"] or not migration_state["shaped"]:
-                pytest.skip("slot 5 requires migration 083 for account propagation")
+            assert (
+                migration_state["registered"] and migration_state["shaped"]
+            ), "account propagation requires migration 083 on the clone"
             schema = f"claim_accounts_{uuid4().hex[:12]}"
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET LOCAL search_path = "{schema}", public')
@@ -565,10 +575,10 @@ def test_sibling_accounts_hydrate_predicates_and_propagate_independently(
 
 
 @pytest.mark.asyncio
-async def test_async_variant_primitive_uses_real_postgres() -> None:
+async def test_async_variant_primitive_uses_real_postgres(account_slot: str) -> None:
     """The async twin copies anchor/scope and writes no awareness rows."""
 
-    conn = await asyncpg.connect(**asyncpg_kwargs(f"save_{LIVE_SLOT:02d}"))
+    conn = await asyncpg.connect(**asyncpg_kwargs(account_slot))
     transaction = conn.transaction()
     await transaction.start()
     try:

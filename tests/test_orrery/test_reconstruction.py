@@ -1,7 +1,8 @@
 """Live tests for the reconstruction-sufficiency layer (migration 065).
 
-Real writers and real triggers against save_05 inside always-rolled-back
-transactions — zero persistent writes. Pins the issue #426 decisions:
+Real writers and real triggers against a fixture-owned template clone seeded
+by ``seed_checkpointed_story``, inside always-rolled-back transactions. Pins
+the issue #426 decisions:
 
 - 7b: every Skald-side scalar write lands in ``state_delta_log``, chunk-keyed.
 - 7c: checkpoints capture every section of the mutable state surface and are
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import pytest
 
@@ -31,27 +32,43 @@ from nexus.agents.orrery.reconstruction import (
     set_commit_chunk_attribution_sync,
 )
 from nexus.api.commit_handler_sync import apply_state_updates_sync
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, disposable_slot_database
+from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
 
 pytestmark = pytest.mark.requires_postgres
 
-WRITE_SLOT = 5
+
+@pytest.fixture(scope="module")
+def reconstruction_db() -> Iterator[str]:
+    """Own one seeded, checkpointed template clone for the whole module."""
+
+    with disposable_slot_database("qa640_reconstruction") as dbname:
+        seed_checkpointed_story(dbname)
+        yield dbname
 
 
-def _connect() -> Any:
-    conn = connect(f"save_{WRITE_SLOT:02d}")
+def _head_chunk(cur: Any) -> int:
+    cur.execute("SELECT max(id) FROM narrative_chunks")
+    head = cur.fetchone()[0]
+    assert head is not None, "seed_checkpointed_story seeds a head chunk"
+    return int(head)
+
+
+def _connect(dbname: str) -> Any:
+    conn = connect(dbname)
     with conn.cursor() as cur:
         cur.execute(Path("migrations/074_plan_relocation_projects.sql").read_text())
         cur.execute("CREATE TEMP TABLE backstory_secrets (id bigint) ON COMMIT DROP")
     return conn
 
 
-def test_checkpoint_captures_every_section_and_is_idempotent() -> None:
-    conn = _connect()
+def test_checkpoint_captures_every_section_and_is_idempotent(
+    reconstruction_db: str,
+) -> None:
+    conn = _connect(reconstruction_db)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT max(id) FROM narrative_chunks")
-            chunk_id = cur.fetchone()[0]
+            chunk_id = _head_chunk(cur)
             checkpoint_id = capture_state_checkpoint_sync(
                 cur, chunk_id=chunk_id, label="manual"
             )
@@ -72,7 +89,7 @@ def test_checkpoint_captures_every_section_and_is_idempotent() -> None:
             cur.execute("SELECT count(*) FROM entity_tags WHERE cleared_at IS NULL")
             active_tags = cur.fetchone()[0]
             assert len(state["entity_tags"]) == active_tags
-            assert active_tags > 0, "save_05 must carry active tags"
+            assert active_tags > 0, "seed_checkpointed_story seeds an active tag"
             assert state["characters"], "character scalars must be captured"
             cur.execute("SELECT count(*) FROM entities")
             assert len(state["entities"]) == cur.fetchone()[0]
@@ -92,12 +109,11 @@ def test_checkpoint_captures_every_section_and_is_idempotent() -> None:
         conn.close()
 
 
-def test_skald_state_updates_are_ledgered() -> None:
-    conn = _connect()
+def test_skald_state_updates_are_ledgered(reconstruction_db: str) -> None:
+    conn = _connect(reconstruction_db)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT max(id) FROM narrative_chunks")
-            chunk_id = cur.fetchone()[0]
+            chunk_id = _head_chunk(cur)
             cur.execute("SELECT COALESCE(max(id), 0) FROM state_delta_log")
             state_delta_baseline = cur.fetchone()[0]
             cur.execute(
@@ -106,9 +122,13 @@ def test_skald_state_updates_are_ledgered() -> None:
                 WHERE c.entity_id IS NOT NULL ORDER BY c.id LIMIT 1
                 """
             )
-            character_id, entity_id = cur.fetchone()
+            character = cur.fetchone()
+            assert character is not None, "seed_checkpointed_story seeds characters"
+            character_id, entity_id = character
             cur.execute("SELECT id, entity_id FROM places ORDER BY id LIMIT 1")
-            place_id, place_entity_id = cur.fetchone()
+            place = cur.fetchone()
+            assert place is not None, "seed_checkpointed_story seeds places"
+            place_id, place_entity_id = place
 
         apply_state_updates_sync(
             conn,
@@ -159,12 +179,13 @@ def test_skald_state_updates_are_ledgered() -> None:
         conn.close()
 
 
-def test_relationship_triggers_version_updates_and_deletes() -> None:
-    conn = _connect()
+def test_relationship_triggers_version_updates_and_deletes(
+    reconstruction_db: str,
+) -> None:
+    conn = _connect(reconstruction_db)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT max(id) FROM narrative_chunks")
-            chunk_id = cur.fetchone()[0]
+            chunk_id = _head_chunk(cur)
             set_commit_chunk_attribution_sync(cur, chunk_id)
 
             cur.execute("SET LOCAL nexus.write_producer = 'manual'")
@@ -179,7 +200,11 @@ def test_relationship_triggers_version_updates_and_deletes() -> None:
                 RETURNING character1_id, character2_id
                 """
             )
-            c1, c2 = cur.fetchone()
+            updated = cur.fetchone()
+            assert (
+                updated is not None
+            ), "seed_checkpointed_story seeds a relationship to version"
+            c1, c2 = updated
             cur.execute(
                 """
                 SELECT operation, source_chunk_id, old_row
@@ -217,11 +242,13 @@ def test_relationship_triggers_version_updates_and_deletes() -> None:
         conn.close()
 
 
-def test_unattributed_relationship_write_versions_with_null_chunk() -> None:
+def test_unattributed_relationship_write_versions_with_null_chunk(
+    reconstruction_db: str,
+) -> None:
     """A manual writer without source-chunk attribution is versioned with NULL
     chunk. Explicit producer attribution is still required."""
 
-    conn = _connect()
+    conn = _connect(reconstruction_db)
     try:
         with conn.cursor() as cur:
             cur.execute("SET LOCAL nexus.write_producer = 'manual'")

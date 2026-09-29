@@ -2,8 +2,10 @@
 
 import json
 import logging
+from contextlib import closing, contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterator
 
 import psycopg2
 import pytest
@@ -11,7 +13,7 @@ import pytest
 import scripts.migrate as migrate
 from nexus.agents.orrery.needs import NEED_IMMUNITY_TAGS as RUNTIME_NEED_IMMUNITY_TAGS
 from nexus.agents.orrery.needs import NEED_TYPES, need_applies_to_tags
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database, seed_story_clock
 
 
 def test_discover_migrations_includes_python_and_skips_seed_script(
@@ -1607,6 +1609,19 @@ def test_character_tag_vocab_guard_rejects_silent_alias_promotion() -> None:
         )
 
 
+@contextmanager
+def _vocab_clone() -> Iterator[Any]:
+    """Yield a connection to a disposable template clone for migration re-runs.
+
+    The clone is dropped afterward, so the re-run tests commit freely and never
+    restore rows on an owner slot.
+    """
+
+    with disposable_slot_database("qa640_vocab_migration") as dbname:
+        with closing(connect(dbname)) as conn:
+            yield conn
+
+
 @pytest.mark.requires_postgres
 def test_character_tag_vocab_migration_executes_against_slot_db() -> None:
     """Migration 055 executes guard, registry updates, and tag seed live."""
@@ -1634,14 +1649,7 @@ def test_character_tag_vocab_migration_executes_against_slot_db() -> None:
         ),
     ]
 
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-    except psycopg2.Error as exc:
-        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-
-    tag_snapshot = _snapshot_tags(conn, tag_names)
-    category_snapshot = _snapshot_tag_categories(conn, category_names)
-    try:
+    with _vocab_clone() as conn:
         migration.run(conn)
         migration.run(conn)
 
@@ -1686,16 +1694,11 @@ def test_character_tag_vocab_migration_executes_against_slot_db() -> None:
             ["role.function"],
         )
         assert rows["hunter"][0] == "role.function"
-    finally:
-        conn.rollback()
-        _restore_tags(conn, tag_snapshot, tag_names)
-        _restore_tag_categories(conn, category_snapshot, category_names)
-        conn.close()
 
 
 @pytest.mark.requires_postgres
 def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
-    """Migration 054 executes its guard, upserts, and post-check on a real slot."""
+    """Migration 054 executes its guard, upserts, and post-check on a clone."""
 
     migration_path = (
         Path(__file__).parent.parent.parent
@@ -1711,13 +1714,7 @@ def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
     expected = migration._expected_rows()
     tag_names = list(expected)
 
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-    except psycopg2.Error as exc:
-        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-
-    snapshot = _snapshot_tags(conn, tag_names)
-    try:
+    with _vocab_clone() as conn:
         clearance_kind_migration.run(conn)
         with conn:
             with conn.cursor() as cur:
@@ -1784,15 +1781,11 @@ def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
             assert rows[tag] == (*expected_row[:-1], None, expected_row[-1])
         assert rows["wilderness"][0] == "place_environment"
         assert rows["intoxicated:stimulant"][3] == "extend_expiry"
-    finally:
-        conn.rollback()
-        _restore_tags(conn, snapshot, tag_names)
-        conn.close()
 
 
 @pytest.mark.requires_postgres
 def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> None:
-    """Migration 049 DDL is idempotent against a real slot schema."""
+    """Migration 049 DDL is idempotent against a template clone's schema."""
 
     migration_path = (
         Path(__file__).parent.parent.parent
@@ -1800,14 +1793,7 @@ def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> Non
         / "049_orrery_entity_tag_expiry_substrate.py"
     )
     migration = migrate._load_python_migration(migration_path)
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-    except psycopg2.Error as exc:
-        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-
-    column_existed = _column_exists(conn, "entity_tags", "expires_at_world_time")
-    index_definition_before = _index_definition(conn, "ix_entity_tags_expiring")
-    try:
+    with _vocab_clone() as conn:
         migration.run(conn)
         migration.run(conn)
 
@@ -1817,22 +1803,11 @@ def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> Non
         assert "expires_at_world_time" in index_definition
         assert "cleared_at IS NULL" in index_definition
         assert "expires_at_world_time IS NOT NULL" in index_definition
-    finally:
-        with conn:
-            with conn.cursor() as cur:
-                if index_definition_before is None:
-                    cur.execute("DROP INDEX IF EXISTS ix_entity_tags_expiring")
-                if not column_existed:
-                    cur.execute(
-                        "ALTER TABLE entity_tags "
-                        "DROP COLUMN IF EXISTS expires_at_world_time"
-                    )
-        conn.close()
 
 
 @pytest.mark.requires_postgres
 def test_faction_tag_vocab_migration_executes_against_slot_db() -> None:
-    """Migration 052 seeds all faction anchors idempotently against a real slot."""
+    """Migration 052 seeds all faction anchors idempotently against a clone."""
 
     migration_path = (
         Path(__file__).parent.parent.parent
@@ -1850,13 +1825,7 @@ def test_faction_tag_vocab_migration_executes_against_slot_db() -> None:
     }
     faction_tags = [*durable, *ephemeral]
 
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-    except psycopg2.Error as exc:
-        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-
-    snapshot = _snapshot_tags(conn, faction_tags)
-    try:
+    with _vocab_clone() as conn:
         migration.run(conn)
         migration.run(conn)
 
@@ -1908,15 +1877,11 @@ def test_faction_tag_vocab_migration_executes_against_slot_db() -> None:
                 None,
                 description,
             )
-    finally:
-        conn.rollback()
-        _restore_tags(conn, snapshot, faction_tags)
-        conn.close()
 
 
 @pytest.mark.requires_postgres
 def test_state_clearance_event_type_migration_executes_against_slot_db() -> None:
-    """Migration 050 event-type seeding is idempotent against a real slot."""
+    """Migration 050 event-type seeding is idempotent against a template clone."""
 
     migration_path = (
         Path(__file__).parent.parent.parent
@@ -1925,13 +1890,7 @@ def test_state_clearance_event_type_migration_executes_against_slot_db() -> None
     )
     migration = migrate._load_python_migration(migration_path)
     event_types = [event_type for event_type, *_rest in migration.EVENT_TYPES]
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-    except psycopg2.Error as exc:
-        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-
-    snapshot = _snapshot_event_types(conn, event_types)
-    try:
+    with _vocab_clone() as conn:
         migration.run(conn)
         migration.run(conn)
 
@@ -1949,9 +1908,6 @@ def test_state_clearance_event_type_migration_executes_against_slot_db() -> None
         assert set(rows) == set(event_types)
         assert all(row[2] is False for row in rows.values())
         assert all(row[3] is None for row in rows.values())
-    finally:
-        _restore_event_types(conn, snapshot, event_types)
-        conn.close()
 
 
 @pytest.mark.requires_postgres
@@ -1968,16 +1924,8 @@ def test_kind_qualified_contact_migration_executes_against_slot_db() -> None:
     legacy_pair_tags = [tag for tag, _note in migration.LEGACY_CONTACT_PAIR_TAGS]
     legacy_tags = [tag for tag, _note in migration.LEGACY_CONTACT_TAGS]
 
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-    except psycopg2.Error as exc:
-        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
-
     pair_tag_names = [*contact_pair_tags, *legacy_pair_tags]
-    pair_tag_snapshot = _snapshot_pair_tags(conn, pair_tag_names)
-    tag_snapshot = _snapshot_tags(conn, legacy_tags)
-
-    try:
+    with _vocab_clone() as conn:
         with conn:
             with conn.cursor() as cur:
                 for tag in legacy_pair_tags:
@@ -2068,11 +2016,6 @@ def test_kind_qualified_contact_migration_executes_against_slot_db() -> None:
             for tag in legacy_tags:
                 assert tag_rows[tag][0] is True
                 assert tag_rows[tag][1].count("Replaced by") == 1
-    finally:
-        conn.rollback()
-        _restore_pair_tags(conn, pair_tag_snapshot, pair_tag_names)
-        _restore_tags(conn, tag_snapshot, legacy_tags)
-        conn.close()
 
 
 @pytest.mark.requires_postgres
@@ -2085,107 +2028,102 @@ def test_canonical_grieving_migration_executes_against_slot_db() -> None:
         / "046_canonical_grieving_state.py"
     )
     migration = migrate._load_python_migration(migration_path)
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
-    except psycopg2.Error as exc:
-        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+    with disposable_slot_database("qa640_grieving_migration") as dbname:
+        # Tag writes on character entities sync need states, which need the
+        # story clock (migration 100); the clone owns one.
+        seed_story_clock(
+            dbname, world_time=datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+        )
+        with closing(connect(dbname)) as conn:
+            _exercise_canonical_grieving_migration(conn, migration)
+
+
+def _exercise_canonical_grieving_migration(conn: Any, migration: Any) -> None:
+    """Seed legacy grief tags, rerun migration 046, and check the canonical move."""
 
     created_entity_ids: list[int] = []
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT tag, id
-                    FROM tags
-                    WHERE tag = ANY(%s)
-                    """,
-                    (list(migration.LEGACY_TAGS),),
-                )
-                legacy_ids = {tag: tag_id for tag, tag_id in cur.fetchall()}
-                missing = set(migration.LEGACY_TAGS) - set(legacy_ids)
-                if missing:
-                    pytest.skip(f"Missing legacy grief tags: {sorted(missing)}")
-
-                for tag in migration.LEGACY_TAGS:
-                    cur.execute(
-                        "INSERT INTO entities (kind, is_active) "
-                        "VALUES ('character', true) RETURNING id"
-                    )
-                    entity_id = cur.fetchone()[0]
-                    created_entity_ids.append(entity_id)
-                    cur.execute(
-                        """
-                        INSERT INTO entity_tags (entity_id, tag_id, source_kind)
-                        VALUES (%s, %s, 'skald_inline')
-                        """,
-                        (entity_id, legacy_ids[tag]),
-                    )
-
-        migration.run(conn)
-
+    with conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, reapplication_policy, deprecated, synonym_for
+                SELECT tag, id
                 FROM tags
-                WHERE tag = 'grieving'
-                """
-            )
-            grieving_id, reapply, deprecated, synonym_for = cur.fetchone()
-            assert reapply == "extend_expiry"
-            assert deprecated is False
-            assert synonym_for is None
-
-            cur.execute(
-                """
-                SELECT t.tag, t.deprecated, t.synonym_for
-                FROM tags t
-                WHERE t.tag = ANY(%s)
-                ORDER BY t.tag
+                WHERE tag = ANY(%s)
                 """,
                 (list(migration.LEGACY_TAGS),),
             )
-            assert {
-                tag: (is_deprecated, alias_target)
-                for tag, is_deprecated, alias_target in cur.fetchall()
-            } == {tag: (True, grieving_id) for tag in migration.LEGACY_TAGS}
+            legacy_ids = {tag: tag_id for tag, tag_id in cur.fetchall()}
+            missing = set(migration.LEGACY_TAGS) - set(legacy_ids)
+            assert not missing, f"template lacks legacy grief tags {missing}"
 
-            cur.execute(
-                """
-                SELECT e.id, active.tag, legacy.tag
-                FROM entities e
-                JOIN entity_tags et
-                  ON et.entity_id = e.id
-                 AND et.cleared_at IS NULL
-                JOIN tags active ON active.id = et.tag_id
-                LEFT JOIN entity_tags old_et
-                  ON old_et.entity_id = e.id
-                 AND old_et.tag_id = ANY(%s)
-                 AND old_et.cleared_at IS NULL
-                LEFT JOIN tags legacy ON legacy.id = old_et.tag_id
-                WHERE e.id = ANY(%s)
-                ORDER BY e.id
-                """,
-                (
-                    [legacy_ids[tag] for tag in migration.LEGACY_TAGS],
-                    created_entity_ids,
-                ),
-            )
-            assert cur.fetchall() == [
-                (entity_id, "grieving", None) for entity_id in created_entity_ids
-            ]
-    finally:
-        try:
-            with conn:
-                with conn.cursor() as cur:
-                    if created_entity_ids:
-                        cur.execute(
-                            "DELETE FROM entities WHERE id = ANY(%s)",
-                            (created_entity_ids,),
-                        )
-        finally:
-            conn.close()
+            for tag in migration.LEGACY_TAGS:
+                cur.execute(
+                    "INSERT INTO entities (kind, is_active) "
+                    "VALUES ('character', true) RETURNING id"
+                )
+                entity_id = cur.fetchone()[0]
+                created_entity_ids.append(entity_id)
+                cur.execute(
+                    """
+                    INSERT INTO entity_tags (entity_id, tag_id, source_kind)
+                    VALUES (%s, %s, 'skald_inline')
+                    """,
+                    (entity_id, legacy_ids[tag]),
+                )
+
+    migration.run(conn)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, reapplication_policy, deprecated, synonym_for
+            FROM tags
+            WHERE tag = 'grieving'
+            """
+        )
+        grieving_id, reapply, deprecated, synonym_for = cur.fetchone()
+        assert reapply == "extend_expiry"
+        assert deprecated is False
+        assert synonym_for is None
+
+        cur.execute(
+            """
+            SELECT t.tag, t.deprecated, t.synonym_for
+            FROM tags t
+            WHERE t.tag = ANY(%s)
+            ORDER BY t.tag
+            """,
+            (list(migration.LEGACY_TAGS),),
+        )
+        assert {
+            tag: (is_deprecated, alias_target)
+            for tag, is_deprecated, alias_target in cur.fetchall()
+        } == {tag: (True, grieving_id) for tag in migration.LEGACY_TAGS}
+
+        cur.execute(
+            """
+            SELECT e.id, active.tag, legacy.tag
+            FROM entities e
+            JOIN entity_tags et
+              ON et.entity_id = e.id
+             AND et.cleared_at IS NULL
+            JOIN tags active ON active.id = et.tag_id
+            LEFT JOIN entity_tags old_et
+              ON old_et.entity_id = e.id
+             AND old_et.tag_id = ANY(%s)
+             AND old_et.cleared_at IS NULL
+            LEFT JOIN tags legacy ON legacy.id = old_et.tag_id
+            WHERE e.id = ANY(%s)
+            ORDER BY e.id
+            """,
+            (
+                [legacy_ids[tag] for tag in migration.LEGACY_TAGS],
+                created_entity_ids,
+            ),
+        )
+        assert cur.fetchall() == [
+            (entity_id, "grieving", None) for entity_id in created_entity_ids
+        ]
 
 
 def _column_exists(conn: Any, table_name: str, column_name: str) -> bool:
@@ -2222,190 +2160,3 @@ def _normalize_jsonb(value: Any) -> Any:
     if isinstance(value, str):
         return json.loads(value)
     return value
-
-
-def _snapshot_event_types(
-    conn: Any,
-    event_types: Iterable[str],
-) -> dict[str, tuple[Any, ...]]:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT type, category, severity::text, description,
-                   deprecated, synonym_for
-            FROM event_types
-            WHERE type = ANY(%s)
-            """,
-            (list(event_types),),
-        )
-        return {row[0]: row[1:] for row in cur.fetchall()}
-
-
-def _restore_event_types(
-    conn: Any,
-    snapshot: dict[str, tuple[Any, ...]],
-    event_types: Iterable[str],
-) -> None:
-    with conn:
-        with conn.cursor() as cur:
-            for event_type in event_types:
-                row = snapshot.get(event_type)
-                if row is None:
-                    cur.execute(
-                        "DELETE FROM event_types WHERE type = %s", (event_type,)
-                    )
-                    continue
-                cur.execute(
-                    """
-                    UPDATE event_types
-                    SET category = %s,
-                        severity = %s::event_severity_kind,
-                        description = %s,
-                        deprecated = %s,
-                        synonym_for = %s
-                    WHERE type = %s
-                    """,
-                    (*row, event_type),
-                )
-
-
-def _snapshot_pair_tags(
-    conn: Any,
-    tag_names: Iterable[str],
-) -> dict[str, tuple[Any, ...]]:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT tag, subject_kinds, object_kinds, is_ephemeral,
-                   clearance_kind::text, reapplication_policy::text,
-                   clear_on::text, deprecated, description
-            FROM pair_tags
-            WHERE tag = ANY(%s)
-            """,
-            (list(tag_names),),
-        )
-        return {row[0]: row[1:] for row in cur.fetchall()}
-
-
-def _restore_pair_tags(
-    conn: Any,
-    snapshot: dict[str, tuple[Any, ...]],
-    tag_names: Iterable[str],
-) -> None:
-    with conn:
-        with conn.cursor() as cur:
-            for tag in tag_names:
-                row = snapshot.get(tag)
-                if row is None:
-                    cur.execute("DELETE FROM pair_tags WHERE tag = %s", (tag,))
-                    continue
-                cur.execute(
-                    """
-                    UPDATE pair_tags
-                    SET subject_kinds = %s,
-                        object_kinds = %s,
-                        is_ephemeral = %s,
-                        clearance_kind = %s::entity_tag_clearance_kind,
-                        reapplication_policy =
-                            %s::entity_tag_reapplication_policy,
-                        clear_on = %s::jsonb,
-                        deprecated = %s,
-                        description = %s
-                    WHERE tag = %s
-                    """,
-                    (*row, tag),
-                )
-
-
-def _snapshot_tags(
-    conn: Any,
-    tag_names: Iterable[str],
-) -> dict[str, tuple[Any, ...]]:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT tag, category, is_ephemeral, clearance_kind::text,
-                   reapplication_policy::text, clear_on::text, synonym_for,
-                   deprecated, description
-            FROM tags
-            WHERE tag = ANY(%s)
-            """,
-            (list(tag_names),),
-        )
-        return {row[0]: row[1:] for row in cur.fetchall()}
-
-
-def _restore_tags(
-    conn: Any,
-    snapshot: dict[str, tuple[Any, ...]],
-    tag_names: Iterable[str],
-) -> None:
-    with conn:
-        with conn.cursor() as cur:
-            for tag in tag_names:
-                row = snapshot.get(tag)
-                if row is None:
-                    cur.execute("DELETE FROM tags WHERE tag = %s", (tag,))
-                    continue
-                cur.execute(
-                    """
-                    UPDATE tags
-                    SET category = %s,
-                        is_ephemeral = %s,
-                        clearance_kind = %s::entity_tag_clearance_kind,
-                        reapplication_policy =
-                            %s::entity_tag_reapplication_policy,
-                        clear_on = %s::jsonb,
-                        synonym_for = %s,
-                        deprecated = %s,
-                        description = %s
-                    WHERE tag = %s
-                    """,
-                    (*row, tag),
-                )
-
-
-def _snapshot_tag_categories(
-    conn: Any,
-    category_names: Iterable[str],
-) -> dict[str, tuple[Any, ...]]:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT category, entity_kind::text, prompt_order, description,
-                   deprecated, replacement_categories
-            FROM tag_category_registry
-            WHERE category = ANY(%s)
-            """,
-            (list(category_names),),
-        )
-        return {row[0]: row[1:] for row in cur.fetchall()}
-
-
-def _restore_tag_categories(
-    conn: Any,
-    snapshot: dict[str, tuple[Any, ...]],
-    category_names: Iterable[str],
-) -> None:
-    with conn:
-        with conn.cursor() as cur:
-            for category in category_names:
-                row = snapshot.get(category)
-                if row is None:
-                    cur.execute(
-                        "DELETE FROM tag_category_registry WHERE category = %s",
-                        (category,),
-                    )
-                    continue
-                cur.execute(
-                    """
-                    UPDATE tag_category_registry
-                    SET entity_kind = %s::entity_kind,
-                        prompt_order = %s,
-                        description = %s,
-                        deprecated = %s,
-                        replacement_categories = %s
-                    WHERE category = %s
-                    """,
-                    (*row, category),
-                )

@@ -16,16 +16,22 @@ reads PG* directly, spells a PostgreSQL URL naming a server, or hands a driver
 name bound once to one in the same function: spelled host, port, user, or
 database keywords, a positional DSN or URL, an expanded mapping, or no target
 at all.
+
+Seed helpers write only disposable databases: each calls
+``require_disposable_target`` before it connects, which refuses the owner's
+save slots and ``NEXUS_template`` by name.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
+from datetime import datetime, timedelta
 from typing import Any
 
 import psycopg2
@@ -33,7 +39,9 @@ from psycopg2 import sql
 from sqlalchemy import text
 from sqlalchemy.engine import URL, make_url
 
+from nexus.agents.orrery.geo import resolve_zone_for_point
 from nexus.api import db_pool
+from nexus.api.slot_utils import all_slots, slot_dbname
 from nexus.config.story_model import StorySettings, write_story_settings
 from nexus.database import (
     asyncpg_kwargs as contract_asyncpg_kwargs,
@@ -299,22 +307,79 @@ def disposable_database(prefix: str) -> Iterator[str]:
             admin.close()
 
 
+# Derived once, at import, from the slot contract. Fixtures such as
+# ``offline_gate_db`` monkeypatch ``slot_utils.slot_dbname`` to return their
+# clone while a test runs; resolving the owner names through that attribute at
+# call time would refuse the clone and admit the owner's database.
+_OWNER_DATABASES = frozenset(
+    {"NEXUS_template", *(slot_dbname(slot) for slot in all_slots())}
+)
+
+
+def require_disposable_target(dbname: str) -> str:
+    """Return ``dbname`` unless it names an owner database, which raises.
+
+    The owner databases are ``NEXUS_template`` and every save slot that
+    ``nexus.api.slot_utils`` defines (``save_01`` through ``save_05``). A seed
+    aimed at one is always a test bug, so there is no override or allowlist:
+    every seed helper calls this before it opens a connection, and tests seed
+    only clones from ``disposable_slot_database`` or ``disposable_database``.
+    """
+
+    if dbname in _OWNER_DATABASES:
+        raise RuntimeError(
+            f"Refusing to seed owner database {dbname!r}: seed helpers write "
+            "only disposable clones from disposable_slot_database"
+        )
+    return dbname
+
+
 def seed_protagonist(
     dbname: str,
     *,
     name: str = "Fixture Player",
     summary: str = "Canonical player for PostgreSQL coverage.",
     base_timestamp: str = "2100-01-01T00:00:00+00:00",
+    current_location: int | None = None,
 ) -> tuple[int, int]:
-    """Bind a fixture-owned player to the save and return character/entity IDs."""
+    """Bind a fixture-owned player to the save and return character/entity IDs.
 
-    with _connect(dbname) as conn:
+    Sets ``global_variables.base_timestamp`` before the character insert, which
+    satisfies the need-clock anchor (migration 100); ``seed_story_clock`` can
+    then add a head chunk after it. Refuses to move a clock that is already
+    set (for example by ``seed_story_clock``): resetting ``base_timestamp``
+    under stored chunks would desynchronize their ``world_time`` from the
+    summed deltas until the next ``chunk_metadata`` write re-stamps them.
+
+    When the clock is first set under chunks that already exist, those chunks
+    carry wall-clock ``world_time`` stamps (the refresh trigger falls back to
+    ``now()`` while ``base_timestamp`` is NULL). The helper re-stamps them
+    through the ``UPDATE OF time_delta`` statement trigger and asserts the
+    head clock is ``base_timestamp`` plus the summed deltas before the
+    character insert, so need clocks never anchor to wall time (#640/#645).
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
+            row = cur.fetchone()
+            assert row is not None, f"{dbname} has no global_variables row"
+            cur.execute("SELECT %s::timestamptz", (base_timestamp,))
+            requested = cur.fetchone()[0]
+            assert row[0] is None or row[0] == requested, (
+                f"seed_protagonist would reset base_timestamp from {row[0]} to "
+                f"{requested}; run it before seed_story_clock, or pass the "
+                "clock already set"
+            )
             cur.execute(
                 "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
                 (base_timestamp,),
             )
             assert cur.rowcount == 1
+            if row[0] is None:
+                cur.execute("UPDATE chunk_metadata SET time_delta = time_delta")
+            _require_need_clock_anchor(cur, "seed_protagonist")
             cur.execute(
                 "INSERT INTO entities (kind, is_active) "
                 "VALUES ('character', true) RETURNING id"
@@ -322,11 +387,11 @@ def seed_protagonist(
             entity_id = int(cur.fetchone()[0])
             cur.execute(
                 """
-                INSERT INTO characters (name, summary, entity_id)
-                VALUES (%s, %s, %s)
+                INSERT INTO characters (name, summary, entity_id, current_location)
+                VALUES (%s, %s, %s, %s)
                 RETURNING id
                 """,
-                (name, summary, entity_id),
+                (name, summary, entity_id, current_location),
             )
             character_id = int(cur.fetchone()[0])
             cur.execute(
@@ -344,9 +409,21 @@ def seed_committed_chunk(
     season: int = 1,
     episode: int = 1,
     scene: int = 1,
+    time_delta: timedelta = timedelta(minutes=1),
 ) -> int:
-    """Insert one committed chunk with its primary-layer metadata; return its ID."""
+    """Insert one committed chunk with its primary-layer metadata; return its ID.
 
+    ``time_delta`` is the story time elapsing during the chunk. The
+    statement-level ``trg_chunk_metadata_refresh_world_time`` trigger stamps
+    ``chunk_metadata.world_time`` as ``base_timestamp`` plus the cumulative
+    deltas, so the chunk's clock is exact only once ``base_timestamp`` is set.
+
+    The chunk carries no ``authorial_directives``, so it satisfies
+    ``playable_narrative_predicate`` (reconstruction.py) and counts toward the
+    playable ordinal and head-chunk reads.
+    """
+
+    require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
             "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
@@ -360,7 +437,7 @@ def seed_committed_chunk(
                 chunk_id, season, episode, scene, world_layer,
                 time_delta, generation_date, slug
             ) VALUES (
-                %s, %s, %s, %s, 'primary', interval '1 minute', now(), %s
+                %s, %s, %s, %s, 'primary', %s, now(), %s
             )
             """,
             (
@@ -368,7 +445,372 @@ def seed_committed_chunk(
                 season,
                 episode,
                 scene,
+                time_delta,
                 f"S{season:02d}E{episode:02d}_{scene:03d}",
             ),
         )
+        assert cur.rowcount == 1
     return chunk_id
+
+
+def _require_need_clock_anchor(cur: Any, helper: str) -> None:
+    """Fail by name when the save has no exact story clock for need rows.
+
+    ``orrery_sync_character_need_states`` anchors need clocks at
+    ``MAX(chunk_metadata.world_time)``, then at ``base_timestamp``. The anchor
+    is exact only when ``base_timestamp`` is set and, if chunks exist, the head
+    ``world_time`` equals ``base_timestamp`` plus the summed deltas. Chunks
+    stamped while ``base_timestamp`` was NULL carry wall-clock ``world_time``
+    and fail here rather than seeding wall-clock need clocks.
+    """
+
+    cur.execute(
+        """
+        SELECT
+            gv.base_timestamp,
+            (SELECT count(*) FROM chunk_metadata),
+            (SELECT max(world_time) FROM chunk_metadata),
+            gv.base_timestamp + COALESCE(
+                (SELECT sum(COALESCE(time_delta, interval '0'))
+                 FROM chunk_metadata),
+                interval '0'
+            )
+        FROM global_variables gv
+        WHERE gv.id = true
+        """
+    )
+    row = cur.fetchone()
+    assert row is not None, f"{helper}: the save has no global_variables row"
+    base_timestamp, chunk_count, head_world_time, expected_head = row
+    assert base_timestamp is not None, (
+        f"{helper} needs a need-clock anchor: call seed_story_clock or "
+        "seed_protagonist before seeding characters (migration 100 refuses "
+        "to anchor need clocks to wall time)"
+    )
+    assert chunk_count == 0 or head_world_time == expected_head, (
+        f"{helper} found a wall-clock need-clock anchor: head world_time "
+        f"{head_world_time} is not base_timestamp {base_timestamp} plus the "
+        f"summed deltas ({expected_head}); re-stamp chunk_metadata after "
+        "setting base_timestamp"
+    )
+
+
+def seed_story_clock(
+    dbname: str,
+    *,
+    world_time: datetime,
+    raw_text: str = "Fixture story clock.",
+    season: int = 1,
+    episode: int = 1,
+    scene: int = 1,
+) -> int:
+    """Advance the canonical story clock to ``world_time`` with one chunk.
+
+    Satisfies the need-clock anchor: migration 100's
+    ``orrery_sync_character_need_states`` anchors every character's need
+    clock at ``MAX(chunk_metadata.world_time)``, then at
+    ``global_variables.base_timestamp``, and raises when both are NULL. It
+    also gives the save a head chunk, which replay, checkpoint, and resolver
+    reads anchor on.
+
+    When the save has no ``base_timestamp`` yet, ``world_time`` becomes the
+    bootstrap clock and the chunk elapses no time. Otherwise the chunk's
+    ``time_delta`` is the gap from the current head clock, which must not be
+    later than ``world_time``. The chunk is inserted through
+    ``seed_committed_chunk``; the stored ``world_time`` is asserted exact and
+    the chunk ID returned.
+    """
+
+    require_disposable_target(dbname)
+    if world_time.tzinfo is None:
+        raise ValueError("seed_story_clock needs a timezone-aware world_time")
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
+        row = cur.fetchone()
+        assert row is not None, f"{dbname} has no global_variables row"
+        if row[0] is None:
+            cur.execute(
+                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                (world_time,),
+            )
+            assert cur.rowcount == 1
+        cur.execute(
+            """
+            SELECT gv.base_timestamp + COALESCE(
+                (SELECT sum(COALESCE(time_delta, interval '0'))
+                 FROM chunk_metadata),
+                interval '0'
+            )
+            FROM global_variables gv
+            WHERE gv.id = true
+            """
+        )
+        head_clock = cur.fetchone()[0]
+    time_delta = world_time - head_clock
+    assert time_delta >= timedelta(0), (
+        f"seed_story_clock cannot move the clock backward from {head_clock} "
+        f"to {world_time}"
+    )
+    chunk_id = seed_committed_chunk(
+        dbname,
+        raw_text=raw_text,
+        season=season,
+        episode=episode,
+        scene=scene,
+        time_delta=time_delta,
+    )
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+            (chunk_id,),
+        )
+        stamped = cur.fetchone()
+    assert (
+        stamped is not None and stamped[0] == world_time
+    ), f"seed_story_clock stamped {stamped!r}, expected {world_time}"
+    return chunk_id
+
+
+def seed_zone(
+    dbname: str,
+    *,
+    name: str,
+    min_longitude: float,
+    min_latitude: float,
+    max_longitude: float,
+    max_latitude: float,
+    summary: str = "Fixture zone.",
+) -> int:
+    """Insert one bounded zone under its own layer; return the zone ID.
+
+    Production place writers resolve every place's ``zone`` through
+    ``nexus.agents.orrery.geo`` and raise when no zone has a boundary, so a
+    save needs a bounded zone before ``seed_place``. The boundary is the
+    envelope of the given corners as a ``MultiPolygon`` in SRID 4326, and the
+    layer row mirrors the new-story mapper's ``layers`` insert.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO layers (name, type, description) "
+            "VALUES (%s, 'planet', %s) RETURNING id",
+            (f"{name} Layer", summary),
+        )
+        layer_row = cur.fetchone()
+        assert layer_row is not None and cur.rowcount == 1
+        cur.execute(
+            """
+            INSERT INTO zones (name, summary, boundary, layer)
+            VALUES (
+                %s, %s,
+                ST_Multi(ST_MakeEnvelope(%s, %s, %s, %s, 4326)),
+                %s
+            )
+            RETURNING id
+            """,
+            (
+                name,
+                summary,
+                min_longitude,
+                min_latitude,
+                max_longitude,
+                max_latitude,
+                layer_row[0],
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0])
+
+
+def seed_place(
+    dbname: str,
+    *,
+    name: str,
+    summary: str = "Fixture place.",
+    longitude: float = -73.9857,
+    latitude: float = 40.7484,
+    place_type: str = "fixed_location",
+) -> tuple[int, int]:
+    """Insert one located, zoned place; return its place and entity IDs.
+
+    The row takes the production insert shape (``db_converters``): the zone
+    is resolved from the point through ``resolve_zone_for_point`` (covering
+    zone, else nearest bounded zone), the subtype trigger mints the ``place``
+    entity, and the point is a ``PointZM`` geography. The place is on the map,
+    and a protagonist placed there has a current zoned place for
+    ``story_active_zone``. The save needs a bounded zone first (``seed_zone``);
+    without one the resolver raises, as it does in production.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        zone_id = resolve_zone_for_point(cur, longitude=longitude, latitude=latitude)
+        cur.execute(
+            """
+            INSERT INTO places (name, type, summary, zone, coordinates)
+            VALUES (
+                %s, %s::place_type, %s, %s,
+                ST_SetSRID(ST_MakePoint(%s, %s, 0, 0), 4326)::geography
+            )
+            RETURNING id, entity_id
+            """,
+            (name, place_type, summary, zone_id, longitude, latitude),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0]), int(row[1])
+
+
+def seed_character(
+    dbname: str,
+    *,
+    name: str,
+    summary: str = "Fixture character.",
+    current_location: int | None = None,
+    current_activity: str | None = None,
+) -> tuple[int, int]:
+    """Insert one active character; return its character and entity IDs.
+
+    The row takes the production insert shape: the subtype trigger mints the
+    ``character`` entity and the need-state trigger seeds its need rows. That
+    trigger needs the need-clock anchor, so the save must already carry
+    ``seed_story_clock`` or ``seed_protagonist``; a clockless save fails here
+    by name rather than inside the trigger.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        _require_need_clock_anchor(cur, "seed_character")
+        cur.execute(
+            """
+            INSERT INTO characters (
+                name, summary, current_location, current_activity
+            ) VALUES (%s, %s, %s, %s)
+            RETURNING id, entity_id
+            """,
+            (name, summary, current_location, current_activity),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+        character_id, entity_id = int(row[0]), int(row[1])
+        cur.execute(
+            "SELECT count(*) FROM character_need_states "
+            "WHERE character_entity_id = %s",
+            (entity_id,),
+        )
+        assert cur.fetchone()[0] > 0, "the need-state trigger seeded no need rows"
+    return character_id, entity_id
+
+
+def seed_faction(
+    dbname: str,
+    *,
+    name: str,
+    summary: str = "Fixture faction.",
+) -> tuple[int, int]:
+    """Insert one active faction; return its faction and entity IDs.
+
+    ``factions.id`` has no default, so the ID is allocated the way the
+    production writers do (``MAX(id) + 1`` under a table lock), and the
+    subtype trigger mints the ``faction`` entity.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
+        cur.execute(
+            """
+            INSERT INTO factions (id, name, summary)
+            SELECT COALESCE(max(id), 0) + 1, %s, %s FROM factions
+            RETURNING id, entity_id
+            """,
+            (name, summary),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0]), int(row[1])
+
+
+def seed_relationship(
+    dbname: str,
+    *,
+    subject_character_id: int,
+    object_character_id: int,
+    relationship_type: str,
+    emotional_valence: str = "+3|trusting",
+    dynamic: str = "Fixture relationship.",
+    recent_events: str = "None.",
+    history: str = "Seeded for PostgreSQL coverage.",
+    extra_data: Mapping[str, Any] | None = None,
+) -> tuple[int, int]:
+    """Insert one directed character relationship; return its key.
+
+    ``character_relationships`` has no surrogate ID: its primary key is the
+    ``(character1_id, character2_id)`` pair returned here. The row takes the
+    trait compiler's production insert shape; ``valence_current`` is derived
+    by ``trg_character_relationships_valence_boundary``. Migration 115's
+    provenance trigger refuses any write without a transaction-local
+    ``nexus.write_producer``, so the insert is attributed to ``manual``.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SET LOCAL nexus.write_producer = 'manual'")
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            RETURNING character1_id, character2_id
+            """,
+            (
+                subject_character_id,
+                object_character_id,
+                relationship_type,
+                emotional_valence,
+                dynamic,
+                recent_events,
+                history,
+                json.dumps(dict(extra_data or {})),
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0]), int(row[1])
+
+
+def seed_entity_tag(
+    dbname: str,
+    *,
+    entity_id: int,
+    tag: str,
+    source_kind: str = "template",
+) -> int:
+    """Bestow one active, registered tag on an entity; return the row ID.
+
+    ``tag`` must be a non-deprecated tag from the template's seeded vocabulary;
+    an unknown or deprecated tag fails the row-count assertion. The row is
+    active (``cleared_at`` NULL), so checkpoints and ``entity_tags_current`` see
+    it. A tag on a character entity fires the need-applicability sync (migration
+    100), so the save needs the need-clock anchor first (``seed_story_clock`` or
+    ``seed_protagonist``).
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO entity_tags (entity_id, tag_id, source_kind)
+            SELECT %s, t.id, %s
+            FROM tags t
+            WHERE t.tag = %s AND NOT t.deprecated
+            RETURNING id
+            """,
+            (entity_id, source_kind, tag),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1, f"tag {tag!r} is not seeded"
+    return int(row[0])
