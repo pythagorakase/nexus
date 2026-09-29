@@ -179,6 +179,7 @@ $ env -u NEXUS_HOME -u NEXUS_RUNTIME_CONFIG /Users/pythagor/nexus/.venv/bin/nexu
 | https://github.com/pythagorakase/nexus/actions/runs/36645262937 | d8c10f20 | `poetry install --only main`, warm cache (restore 44 s) | success | 1m23s |
 | https://github.com/pythagorakase/nexus/actions/runs/36646110349 | 4f232462 | `poetry install --only main`, warm cache (restore 41 s); failure-only step added | success | 1m04s |
 | https://github.com/pythagorakase/nexus/actions/runs/36646252897 | 4e0d9154 | `poetry install --only main`, warm cache (restore 49 s) | success | 1m20s |
+| https://github.com/pythagorakase/nexus/actions/runs/36646736879 | 4d34ceae | `poetry install --only main`, warm cache (restore 32 s) | success | 59s |
 
 The first run is why the install uses the lock: the unlocked resolve took
 opentelemetry-api 1.45.0 (the lock pins 1.39.1), and pydantic-ai-slim 1.30.1
