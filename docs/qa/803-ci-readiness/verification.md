@@ -178,6 +178,7 @@ $ env -u NEXUS_HOME -u NEXUS_RUNTIME_CONFIG /Users/pythagor/nexus/.venv/bin/nexu
 | https://github.com/pythagorakase/nexus/actions/runs/36645090955 | a3160bf3 | `poetry install --only main`, warm cache | success | 50s |
 | https://github.com/pythagorakase/nexus/actions/runs/36645262937 | d8c10f20 | `poetry install --only main`, warm cache (restore 44 s) | success | 1m23s |
 | https://github.com/pythagorakase/nexus/actions/runs/36646110349 | 4f232462 | `poetry install --only main`, warm cache (restore 41 s); failure-only step added | success | 1m04s |
+| https://github.com/pythagorakase/nexus/actions/runs/36646252897 | 4e0d9154 | `poetry install --only main`, warm cache (restore 49 s) | success | 1m20s |
 
 The first run is why the install uses the lock: the unlocked resolve took
 opentelemetry-api 1.45.0 (the lock pins 1.39.1), and pydantic-ai-slim 1.30.1
@@ -246,9 +247,9 @@ entry is 2.42 GiB (`gh cache list`:
 `setup-python-Linux-x64-python-3.11.16-poetry-v2-c40aa032...  2.42 GiB`; the
 runner log reports `Cache Size: ~2488 MB (2608434451 B)`), about a quarter of
 the 10 GB per-repository Actions cache limit, and each `poetry.lock` change
-adds another entry of about that size. Restoring it takes 28 to 44 s,
+adds another entry of about that size. Restoring it takes 28 to 49 s,
 against a 68 s cold install plus 25 s to save the cache. So a warm cache
-saves roughly 25 to 40 s of install time per run; whether that pays for the
+saves roughly 18 to 40 s of install time per run; whether that pays for the
 quota is the owner's call (deferred in the PR body).
 
 Doctor step output on the runner (run 36644838541; identical on 36645090955),
