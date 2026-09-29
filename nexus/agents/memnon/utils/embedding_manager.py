@@ -40,6 +40,22 @@ def _cache_key_for_path(path: str) -> str:
     return path
 
 
+def sentence_transformer_kwargs(device: Optional[str]) -> Dict[str, Any]:
+    """Return the keyword arguments the one SentenceTransformer load passes.
+
+    ``local_files_only`` keeps the load off the Hugging Face Hub: an incomplete
+    local folder fails instead of being patched from the network.
+
+    Args:
+        device: Device to place the model on; None lets sentence-transformers
+            choose.
+
+    Returns:
+        Keyword arguments for ``SentenceTransformer(path, **kwargs)``
+    """
+    return {"device": device, "local_files_only": True}
+
+
 def get_or_load_sentence_transformer(
     path: str, device: Optional[str] = None
 ) -> SentenceTransformer:
@@ -68,7 +84,7 @@ def get_or_load_sentence_transformer(
     with _MODEL_CACHE_LOCK:
         model = _MODEL_CACHE.get(cache_key)
         if model is None:
-            model = SentenceTransformer(path, device=device, local_files_only=True)
+            model = SentenceTransformer(path, **sentence_transformer_kwargs(device))
             _MODEL_CACHE[cache_key] = model
         else:
             logger.info(f"Reusing process-cached SentenceTransformer: {cache_key}")

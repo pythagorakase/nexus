@@ -17,12 +17,15 @@ disk, so they always run and never download anything.
 
 from __future__ import annotations
 
+import ast
 import gc
+import inspect
 from pathlib import Path
 from typing import Any, Dict, Iterator
 
 import pytest
 import tomlkit
+from sentence_transformers import SentenceTransformer
 
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.config import load_settings_as_dict
@@ -118,6 +121,51 @@ def test_model_cache_normalizes_local_path_aliases(tmp_path: Path) -> None:
 
     assert first is second
     assert list(em._MODEL_CACHE) == [str(target.resolve())]
+
+
+def test_every_sentence_transformer_keyword_is_accepted_and_local_only() -> None:
+    """The one embedder load stays local-only and uses keywords the library takes.
+
+    A real check against the installed sentence-transformers, not a mock:
+    dropping ``local_files_only`` would let a half-copied folder be patched
+    from the Hugging Face Hub, and a keyword the library does not accept
+    would raise TypeError before anything loads.
+    """
+
+    accepted = inspect.signature(SentenceTransformer.__init__).parameters
+    passed = em.sentence_transformer_kwargs("cpu")
+
+    assert passed["local_files_only"] is True
+    assert set(passed) <= set(accepted), sorted(set(passed) - set(accepted))
+    assert all(
+        accepted[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+        for name in passed
+    )
+
+
+def test_the_one_loader_passes_only_the_local_only_keywords() -> None:
+    """The single SentenceTransformer call spreads exactly the helper's keywords.
+
+    Guards embedding_manager.py's one load against losing ``local_files_only``
+    by bypassing ``sentence_transformer_kwargs`` or adding keywords beside it.
+    """
+
+    source = Path(inspect.getsourcefile(em) or "").read_text()
+    calls = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "SentenceTransformer"
+    ]
+
+    assert len(calls) == 1
+    (call,) = calls
+    assert [keyword.arg for keyword in call.keywords] == [None]
+    spread = call.keywords[0].value
+    assert isinstance(spread, ast.Call)
+    assert isinstance(spread.func, ast.Name)
+    assert spread.func.id == "sentence_transformer_kwargs"
 
 
 def test_pinned_device_gets_its_own_cached_instance(tmp_path: Path) -> None:
