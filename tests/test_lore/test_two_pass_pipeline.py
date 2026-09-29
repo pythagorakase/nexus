@@ -1554,10 +1554,13 @@ def test_chat_route_gaia_sends_the_registry_effort_not_the_gaia_profile(
     )
     pinned_utility, pinned_apex = _divergent_gaia_profile_utility("openai")
     for profile in (apex, pinned_apex):
-        profile.gaia.reasoning_effort = next(
-            effort
-            for effort in ("low", "medium", "high")
-            if effort not in {profile.reasoning_effort, registry_effort}
+        profile.gaia.reasoning_effort = cast(
+            Any,
+            next(
+                effort
+                for effort in ("low", "medium", "high")
+                if effort not in {profile.reasoning_effort, registry_effort}
+            ),
         )
     slot_following = slot_utility._clone_provider_for_two_pass(
         system_prompt="Gaia", output_validator=None, usage_seat="gaia"

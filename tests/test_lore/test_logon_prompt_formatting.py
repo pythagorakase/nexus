@@ -86,15 +86,12 @@ def _setting_card() -> dict[str, Any]:
     }
 
 
-def _pipeline(turn_pipeline: str = "single_pass", **overrides: Any) -> Settings:
+def _pipeline(
+    turn_pipeline: str = "single_pass", overrides: dict[str, Any] | None = None
+) -> Settings:
     """Return real settings running one storyteller pipeline."""
 
-    return settings_with(
-        {
-            "apex.turn_pipeline": turn_pipeline,
-            **{key.replace("__", "."): value for key, value in overrides.items()},
-        }
-    )
+    return settings_with({"apex.turn_pipeline": turn_pipeline, **(overrides or {})})
 
 
 def test_private_letter_prompts_keep_token_budget_as_a_placeholder() -> None:
@@ -364,7 +361,7 @@ def test_context_prompt_rejects_nonpositive_recent_rulings_cap() -> None:
     """The recent-rulings cap is validated with its sibling prompt limits."""
 
     with pytest.raises(ValueError, match="max_rendered_recent_rulings"):
-        _pipeline(orrery__prompt__max_rendered_recent_rulings=0)
+        _pipeline(overrides={"orrery.prompt.max_rendered_recent_rulings": 0})
 
 
 @pytest.mark.parametrize("invalid_section", ["", {}, ()])
@@ -721,7 +718,7 @@ def test_contextual_false_restores_full_library(monkeypatch) -> None:
     )
 
     prompt = LogonUtility(
-        _pipeline(apex__tag_library__contextual=False),
+        _pipeline(overrides={"apex.tag_library.contextual": False}),
         dbname="save_05",
     )._format_context_prompt({"user_input": "Continue."}, seat="gaia")
 
@@ -816,7 +813,9 @@ def test_render_limits_and_signed_relationship_valence(
     """Each cap changes its own block, including limits beyond the old five."""
     names = ("relationships", "events", "threats", "bleed_menu")
     settings = _pipeline(
-        **{f"lore__render_limits__{name}": limit for name, limit in zip(names, limits)}
+        overrides={
+            f"lore.render_limits.{name}": limit for name, limit in zip(names, limits)
+        }
     )
     context = {
         "entity_data": {
@@ -963,4 +962,4 @@ def test_relationship_missing_prose_column_fails_loudly(column: str) -> None:
 def test_render_limits_reject_nonpositive_caps(key: str) -> None:
     """Invalid limits fail validation instead of silently truncating blocks."""
     with pytest.raises(ValueError, match=key):
-        _pipeline(**{f"lore__render_limits__{key}": 0})
+        _pipeline(overrides={f"lore.render_limits.{key}": 0})

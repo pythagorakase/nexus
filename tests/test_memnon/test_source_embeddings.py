@@ -181,7 +181,7 @@ def _install(
     # validator admits one, so the registry is assigned after loading.
     registry_settings = load_settings()
     registry_settings.memnon.models = {
-        name: EmbeddingModelConfig(**config, weight=0.0)
+        name: EmbeddingModelConfig.model_validate({**config, "weight": 0.0})
         for name, config in REGISTRY.items()
     }
     monkeypatch.setattr("nexus.config.load_settings", lambda *_args: registry_settings)
