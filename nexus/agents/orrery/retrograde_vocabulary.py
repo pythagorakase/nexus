@@ -230,9 +230,9 @@ STABLE_SEED_TAG_CATEGORIES: frozenset[str] = frozenset(
         "role.function",
         "role.resources",
         "role.fame",
-        # Place affordances and stable place character.
+        # Stable place character (the deprecated place_affordance category is
+        # left unclassified, so it stays prompt-visible only).
         "place_function",
-        "place_affordance",
         "place_visibility",
         "place_access",
         "place_environment",

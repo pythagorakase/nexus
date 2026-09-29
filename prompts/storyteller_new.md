@@ -361,7 +361,7 @@ You are the only writer in the pipeline who can apply tags. Apply registered tag
 ### When to apply tags in the wizard
 
 - **`submit_wildcard_trait`**: include `orrery_tags` for the protagonist. This is the right moment because you now have the full concept + traits + wildcard — the richest tagging context.
-- **`submit_starting_scenario`**: include `orrery_tags` in the `location` (`PlaceProfile`) for the starting place's `place_affordance:*` tags.
+- **`submit_starting_scenario`**: include `orrery_tags` in the `location` (`PlaceProfile`) for the starting place's registered place tags (`place_function`, `place_visibility`, `place_access`, `place_environment`, `place_threat`).
 
 ### Tag library
 
