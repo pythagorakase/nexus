@@ -12,20 +12,30 @@ NNN_*.py migration, numbered above WATERMARK, the lint finds:
 * CREATE TABLE: the table and every column declared in its body;
 * ALTER TABLE ... ADD [COLUMN]: each added column;
 * CREATE TYPE ... AS ENUM;
-* CREATE [OR REPLACE] FUNCTION, matched by name and argument count;
+* CREATE [OR REPLACE] FUNCTION and PROCEDURE, one per argument signature;
 * CREATE [OR REPLACE] VIEW and CREATE MATERIALIZED VIEW;
 
 including DDL inside DO blocks and EXECUTE commands (``||`` operands are
 joined, with ``{}`` standing for each operand that is not a literal), and
-requires a non-blank COMMENT ON TABLE/COLUMN/TYPE/FUNCTION/VIEW/MATERIALIZED
-VIEW for each in the same file. Unqualified names resolve to ``public``, or to
-the schema a CREATE SCHEMA statement creates for its own elements; unquoted
+requires a non-blank COMMENT ON TABLE/COLUMN/TYPE/FUNCTION/PROCEDURE/VIEW/
+MATERIALIZED VIEW for each in the same file (COMMENT ON ROUTINE documents a
+function or a procedure). Unqualified names resolve to ``public``, or to the
+schema a CREATE SCHEMA statement creates for its own elements; unquoted
 identifiers fold to lower case, quoted identifiers keep their exact spelling.
 Temporary tables and views are exempt because they end with the migration
 session. Not seen: SQL a Python migration does not spell as a string literal in
 its own file (an imported constant such as ``from nexus.x import DDL;
 cur.execute(DDL)``, names joined only at run time such as
 ``cur.execute(A + B)``, a file it reads, or a bytes literal).
+
+A routine comment documents the overload PostgreSQL resolves it to. Argument
+types compare after parameter names, modes, and DEFAULT clauses are dropped,
+unquoted words fold to lower case, and whitespace collapses; type aliases are
+not resolved, so ``int`` does not match ``integer``. A function comment lists
+the function's non-OUT argument types; a procedure comment may instead list
+every argument type when it marks none OUT. A comment without an argument list
+names the one overload of its kind that the file creates, and a comment that
+names more than one documents none, because PostgreSQL rejects it as not unique.
 
 DDL that cannot be verified statically fails rather than passing: verbs,
 object kinds, names, and ALTER TABLE actions built at run time (f-strings,
@@ -90,7 +100,9 @@ _ADD_ACTION = re.compile(
 )
 _CREATE_TYPE = re.compile(r"\bCREATE\s+TYPE\s+", _I)
 _AS_ENUM = re.compile(r"\s*AS\s+ENUM\b", _I)
-_CREATE_FUNCTION = re.compile(r"\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+", _I)
+_CREATE_ROUTINE = re.compile(
+    r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?P<kind>FUNCTION|PROCEDURE)\s+", _I
+)
 _CREATE_VIEW = re.compile(
     r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:(?P<temp>TEMP|TEMPORARY)\s+)?"
     r"(?:RECURSIVE\s+)?VIEW\s+",
@@ -101,7 +113,7 @@ _CREATE_MATVIEW = re.compile(
 )
 _COMMENT_ON = re.compile(
     r"\bCOMMENT\s+ON\s+(?P<kind>MATERIALIZED\s+VIEW|TABLE|COLUMN|TYPE|FUNCTION"
-    r"|ROUTINE|VIEW)\s+",
+    r"|PROCEDURE|ROUTINE|VIEW)\s+",
     _I,
 )
 _IS = re.compile(r"\s*IS\b", _I)
@@ -141,7 +153,7 @@ _CREATE_MODIFIERS = {
     "PROCEDURAL",
 }
 _DDL_AFTER_PLACEHOLDER = re.compile(
-    r"\s+(?:\S+\s+){0,2}(?:TABLE|VIEW|TYPE|FUNCTION|COLUMN)\b", _I
+    r"\s+(?:\S+\s+){0,2}(?:TABLE|VIEW|TYPE|FUNCTION|PROCEDURE|COLUMN)\b", _I
 )
 _INHERITS = re.compile(r"\bINHERITS\b", _I)
 _LIKE_OPTION = re.compile(r"\b(INCLUDING|EXCLUDING)\s+(\w+)", _I)
@@ -154,7 +166,8 @@ _NON_COLUMN_WORDS = {"CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "EXC
 # first argument of these methods is SQL by construction and always lexed.
 _EXECUTION_METHODS = {"execute", "executemany"}
 _PY_SQL_HINT = re.compile(
-    r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:\w+\s+){0,3}(?:TABLE|TYPE|FUNCTION|VIEW)\b"
+    r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:\w+\s+){0,3}"
+    r"(?:TABLE|TYPE|FUNCTION|PROCEDURE|VIEW)\b"
     r"|^\s*(?:CREATE|ALTER)\b"
     rf"|\b(?:CREATE|ALTER)\s+(?:\w+\s+){{0,3}}{_PLACEHOLDER_SOURCE}"
     r"|\bALTER\s+TABLE\b|\bADD\s+COLUMN\b|\bCOMMENT\s+ON\b"
@@ -165,7 +178,8 @@ _PY_SQL_HINT = re.compile(
 # A placeholder before DDL words ("{} TABLE t") marks SQL only alongside a DDL
 # verb; alone it is ordinary log text such as "{} rows copied into table t".
 _PY_PLACEHOLDER_DDL_HINT = re.compile(
-    rf"{_PLACEHOLDER_SOURCE}\s+(?:\w+\s+){{0,3}}(?:TABLE|TYPE|FUNCTION|VIEW|COLUMN)\b",
+    rf"{_PLACEHOLDER_SOURCE}\s+(?:\w+\s+){{0,3}}"
+    r"(?:TABLE|TYPE|FUNCTION|PROCEDURE|VIEW|COLUMN)\b",
     _I,
 )
 _PY_DDL_VERB = re.compile(r"\b(?:CREATE|ALTER)\b", _I)
@@ -185,11 +199,32 @@ _COMMENT_KINDS = {
     "column": "COLUMN",
     "enum": "TYPE",
     "function": "FUNCTION",
+    "procedure": "PROCEDURE",
     "view": "VIEW",
     "materialized view": "MATERIALIZED VIEW",
 }
 _DOCUMENTED_KINDS = {label: kind for kind, label in _COMMENT_KINDS.items()}
-_DOCUMENTED_KINDS["ROUTINE"] = "function"
+# COMMENT ON object types that document a routine, and the kinds each covers.
+_ROUTINE_COMMENT_KINDS = {
+    "FUNCTION": frozenset({"function"}),
+    "PROCEDURE": frozenset({"procedure"}),
+    "ROUTINE": frozenset({"function", "procedure"}),
+}
+# Argument modes; PostgreSQL accepts one before or after the parameter name.
+_ARGUMENT_MODES = frozenset({"IN", "OUT", "INOUT", "VARIADIC"})
+# Words that start a built-in type and cannot name a parameter, so an argument
+# that begins with one has no name: ``character varying`` is one type, while
+# ``p character varying`` names p. ``double`` can name a parameter, so it
+# starts a type only before ``precision``.
+_TYPE_START_WORDS = frozenset(
+    "bigint bit boolean char character dec decimal float int integer interval "
+    "national nchar numeric real smallint time timestamp varchar".split()
+)
+
+# One routine argument: its mode (None when unmarked) and its spelled type.
+_Argument = tuple[str | None, str]
+# What identifies a routine overload: kind, qualified name, and input types.
+_Overload = tuple[str, tuple[str, ...], tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -228,20 +263,84 @@ class _Literal:
 
 
 @dataclass(frozen=True)
+class _Signature:
+    """A routine's argument types, spelled as the lint compares them."""
+
+    inputs: tuple[str, ...]  # IN, INOUT, and VARIADIC arguments
+    everything: tuple[str, ...]  # every argument, OUT included
+
+    @classmethod
+    def of(cls, arguments: tuple[_Argument, ...]) -> _Signature:
+        return cls(
+            tuple(spelled for mode, spelled in arguments if mode != "OUT"),
+            tuple(spelled for _, spelled in arguments),
+        )
+
+
+def _routine_display(key: tuple[str, ...], types: tuple[str, ...]) -> str:
+    return f"{_display(key)}({', '.join(types)})"
+
+
+@dataclass(frozen=True)
 class _Obligation:
     """An object a migration creates, which needs a COMMENT ON in the same file."""
 
     kind: str
     key: tuple[str, ...]
     line: int
-    arity: int | None = None
+    signature: _Signature | None = None  # functions and procedures only
 
     def describe(self) -> str:
         name = _display(self.key)
-        if self.kind == "function":
-            plural = "" if self.arity == 1 else "s"
-            name = f"{name} ({self.arity} argument{plural})"
+        if self.signature is not None:
+            name = _routine_display(self.key, self.signature.inputs)
         return f"{self.kind} {name} has no COMMENT ON {_COMMENT_KINDS[self.kind]}"
+
+
+@dataclass(frozen=True)
+class _RoutineComment:
+    """A non-blank COMMENT ON FUNCTION, PROCEDURE, or ROUTINE."""
+
+    label: str
+    key: tuple[str, ...]
+    arguments: tuple[_Argument, ...] | None  # None when it gives no list
+    line: int
+
+    def names(self, kind: str, key: tuple[str, ...], signature: _Signature) -> bool:
+        """Whether PostgreSQL could resolve this comment to that routine.
+
+        Checked against PostgreSQL 17: a function comment names the function's
+        non-OUT types (OUT-marked entries are ignored); a procedure comment
+        that marks no argument OUT may list either the input types or every
+        argument type.
+        """
+        if key != self.key or kind not in _ROUTINE_COMMENT_KINDS[self.label]:
+            return False
+        if self.arguments is None:
+            return True
+        listed = _Signature.of(self.arguments)
+        if kind == "procedure" and listed.inputs == listed.everything:
+            return listed.everything in (signature.inputs, signature.everything)
+        return listed.inputs == signature.inputs
+
+    def ambiguity(self, named: set[_Overload]) -> str:
+        shown = _display(self.key)
+        if self.arguments is not None:
+            shown = _routine_display(
+                self.key,
+                tuple(
+                    f"OUT {spelled}" if mode == "OUT" else spelled
+                    for mode, spelled in self.arguments
+                ),
+            )
+        listed = ", ".join(
+            sorted(_routine_display(key, inputs) for _, key, inputs in named)
+        )
+        return (
+            f"COMMENT ON {self.label} {shown} matches {len(named)} overloads this "
+            f"migration creates ({listed}); PostgreSQL rejects it as not unique, "
+            "so it documents none"
+        )
 
 
 @dataclass
@@ -249,16 +348,42 @@ class _Scan:
     """Obligations, documenting comments, and findings collected from one file."""
 
     obligations: list[_Obligation] = field(default_factory=list)
-    comments: set[tuple[str, tuple[str, ...], int | None]] = field(default_factory=set)
+    comments: set[tuple[str, tuple[str, ...]]] = field(default_factory=set)
+    routine_comments: list[_RoutineComment] = field(default_factory=list)
     findings: list[tuple[int, str]] = field(default_factory=list)
 
-    def documents(self, obligation: _Obligation) -> bool:
-        if obligation.kind != "function":
-            return (obligation.kind, obligation.key, None) in self.comments
-        return any(
-            (obligation.kind, obligation.key, arity) in self.comments
-            for arity in (None, obligation.arity)
-        )
+    def resolve(self) -> list[tuple[int, str]]:
+        """Return (line, message) for every finding once the file is scanned.
+
+        A routine comment documents the one overload it names; a comment that
+        names several documents none and is reported instead.
+        """
+        findings = list(self.findings)
+        documented: set[_Overload] = set()
+        for comment in self.routine_comments:
+            named = {
+                (obligation.kind, obligation.key, signature.inputs)
+                for obligation in self.obligations
+                if (signature := obligation.signature) is not None
+                and comment.names(obligation.kind, obligation.key, signature)
+            }
+            if len(named) == 1:
+                documented |= named
+            elif named:
+                findings.append((comment.line, comment.ambiguity(named)))
+        for obligation in self.obligations:
+            if obligation.signature is None:
+                is_documented = (obligation.kind, obligation.key) in self.comments
+            else:
+                overload = (
+                    obligation.kind,
+                    obligation.key,
+                    obligation.signature.inputs,
+                )
+                is_documented = overload in documented
+            if not is_documented:
+                findings.append((obligation.line, obligation.describe()))
+        return findings
 
 
 class _LexError(Exception):
@@ -495,10 +620,89 @@ def _is_keyword(token: str, words: set[str]) -> bool:
     return not token.startswith('"') and token.upper() in words
 
 
-def _arguments(masked: str, pos: int) -> tuple[int | None, int]:
-    """Count non-OUT arguments of the list at pos; return (count, end offset).
+def _argument_words(text: str) -> list[str]:
+    """Split one argument into words, stopping at its DEFAULT or ``=`` clause.
 
-    The count is None when no parenthesized list starts at pos.
+    Unquoted text folds to lower case; quoted identifiers keep their spelling
+    and quotes. Whitespace inside parentheses and brackets is dropped, and a
+    word that starts with ``.``, ``(``, or ``[``, or follows a ``.``, joins
+    the word before it, so ``numeric( 5, 2 )`` reads ``numeric(5,2)`` and
+    ``assets . mood []`` reads ``assets.mood[]``. ``ARRAY`` and ``ARRAY[n]``
+    after a type read ``[]`` and ``[n]``.
+    """
+    raw: list[str] = []
+    word, depth, index = "", 0, 0
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            close = index + 1
+            while True:
+                close = text.find('"', close)
+                if close == -1 or not text.startswith('""', close):
+                    break
+                close += 2
+            end = len(text) if close == -1 else close + 1
+            word += text[index:end]
+            index = end
+            continue
+        index += 1
+        if char.isspace():
+            if depth == 0 and word:
+                raw.append(word)
+                word = ""
+            continue
+        if depth == 0 and char == "=":
+            break
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        word += char.lower()
+    if word:
+        raw.append(word)
+    words: list[str] = []
+    for item in raw:
+        if item == "default":
+            break
+        if item == "array" or item.startswith("array["):
+            item = item[len("array") :] or "[]"
+        if words and (item[0] in ".([" or words[-1].endswith(".")):
+            words[-1] += item
+        else:
+            words.append(item)
+    return words
+
+
+def _word_base(word: str) -> str:
+    """Return a word without its type modifiers or array bounds."""
+    return re.split(r"[(\[]", word, maxsplit=1)[0]
+
+
+def _parse_argument(text: str) -> _Argument:
+    """Return (mode, spelled type) for one argument, dropping name and DEFAULT."""
+    words = _argument_words(text)
+    mode: str | None = None
+    if words and words[0].upper() in _ARGUMENT_MODES:
+        mode, words = words[0].upper(), words[1:]
+    elif len(words) > 2 and words[1].upper() in _ARGUMENT_MODES:
+        mode, words = words[1].upper(), [words[0], *words[2:]]
+    if len(words) > 1:
+        first = _word_base(words[0])
+        if first == "double":
+            names_parameter = _word_base(words[1]) != "precision"
+        else:
+            names_parameter = first not in _TYPE_START_WORDS
+        if names_parameter:
+            words = words[1:]
+    return mode, " ".join(words)
+
+
+def _routine_arguments(
+    masked: str, pos: int
+) -> tuple[tuple[_Argument, ...] | None, int]:
+    """Parse the argument list at pos; return (arguments, end offset).
+
+    The arguments are None when no parenthesized list starts at pos.
     """
     while pos < len(masked) and masked[pos].isspace():
         pos += 1
@@ -507,12 +711,12 @@ def _arguments(masked: str, pos: int) -> tuple[int | None, int]:
     close = _matching_paren(masked, pos)
     if close is None:
         return None, pos
-    tokens = [
-        _first_token(text)[1]
+    arguments = tuple(
+        _parse_argument(text)
         for _, text in _split_top_level(masked[pos + 1 : close])
         if text.strip()
-    ]
-    return sum(1 for token in tokens if not _is_keyword(token, {"OUT"})), close + 1
+    )
+    return arguments, close + 1
 
 
 class _SqlScanner:
@@ -539,10 +743,14 @@ class _SqlScanner:
         )
 
     def require(
-        self, kind: str, key: tuple[str, ...], offset: int, arity: int | None = None
+        self,
+        kind: str,
+        key: tuple[str, ...],
+        offset: int,
+        signature: _Signature | None = None,
     ) -> None:
         self.scan.obligations.append(
-            _Obligation(kind, key, self.line_at(offset), arity)
+            _Obligation(kind, key, self.line_at(offset), signature)
         )
 
     def run(self) -> None:
@@ -774,24 +982,25 @@ class _SqlScanner:
                 self.require("column", (*table, column[0]), action_offset)
 
     def _create_named(self, statement: str, start: int) -> None:
-        """Enums, functions, views, and materialized views."""
+        """Enums, functions, procedures, views, and materialized views."""
         for match in _CREATE_TYPE.finditer(statement):
             raw, parts, pos = _read_name(statement, match.end())
             if not _AS_ENUM.match(statement, pos):
                 continue
             self._require_named("enum", "CREATE TYPE", parts, raw, start, match)
-        for match in _CREATE_FUNCTION.finditer(statement):
+        for match in _CREATE_ROUTINE.finditer(statement):
+            kind = match.group("kind").lower()
+            label = f"CREATE {kind.upper()}"
             raw, parts, pos = _read_name(statement, match.end())
-            arity, _ = _arguments(statement, pos)
-            if arity is None and parts is not None:
+            arguments, _ = _routine_arguments(statement, pos)
+            if arguments is None and parts is not None:
                 self.finding(
                     start + match.start(),
-                    f"CREATE FUNCTION {raw} has no parseable argument list",
+                    f"{label} {raw} has no parseable argument list",
                 )
                 continue
-            self._require_named(
-                "function", "CREATE FUNCTION", parts, raw, start, match, arity
-            )
+            signature = None if arguments is None else _Signature.of(arguments)
+            self._require_named(kind, label, parts, raw, start, match, signature)
         for pattern, kind in (
             (_CREATE_VIEW, "view"),
             (_CREATE_MATVIEW, "materialized view"),
@@ -811,24 +1020,24 @@ class _SqlScanner:
         raw: str,
         start: int,
         match: re.Match[str],
-        arity: int | None = None,
+        signature: _Signature | None = None,
     ) -> None:
         key = _qualify(parts, 1, self.schema)
         offset = start + match.start()
         if key is None:
             self.unresolvable(offset, statement_label, raw)
             return
-        self.require(kind, key, offset, arity)
+        self.require(kind, key, offset, signature)
 
     def _comments(self, statement: str, start: int) -> None:
         for match in _COMMENT_ON.finditer(statement):
             label = " ".join(match.group("kind").upper().split())
-            kind = _DOCUMENTED_KINDS[label]
+            routine = label in _ROUTINE_COMMENT_KINDS
             raw, parts, pos = _read_name(statement, match.end())
-            key = _qualify(parts, 2 if kind == "column" else 1, self.schema)
-            arity = None
-            if kind == "function":
-                arity, pos = _arguments(statement, pos)
+            key = _qualify(parts, 2 if label == "COLUMN" else 1, self.schema)
+            arguments: tuple[_Argument, ...] | None = None
+            if routine:
+                arguments, pos = _routine_arguments(statement, pos)
             is_match = _IS.match(statement, pos)
             if key is None or is_match is None:
                 continue
@@ -845,7 +1054,13 @@ class _SqlScanner:
                     "removes documentation",
                 )
                 continue
-            self.scan.comments.add((kind, key, arity))
+            if routine:
+                line = self.line_at(start + match.start())
+                self.scan.routine_comments.append(
+                    _RoutineComment(label, key, arguments, line)
+                )
+            else:
+                self.scan.comments.add((_DOCUMENTED_KINDS[label], key))
 
 
 def _scan_sql(sql: str, first_line: int, scan: _Scan) -> None:
@@ -940,12 +1155,7 @@ def check_file(path: Path) -> list[Finding]:
             return [Finding(path, error.lineno or 1, f"cannot parse Python: {error}")]
         for sql, line in literals:
             _scan_sql(sql, line, scan)
-    findings = [Finding(path, line, message) for line, message in scan.findings]
-    findings.extend(
-        Finding(path, obligation.line, obligation.describe())
-        for obligation in scan.obligations
-        if not scan.documents(obligation)
-    )
+    findings = [Finding(path, line, message) for line, message in scan.resolve()]
     return sorted(findings, key=lambda finding: (finding.line, finding.message))
 
 
@@ -981,8 +1191,8 @@ def main(argv: list[str] | None = None) -> int:
     for finding in findings:
         print(f"  {finding.render()}", file=sys.stderr)
     print(
-        "\nNew tables, columns, enums, functions, and views need a non-blank "
-        "COMMENT ON in the same migration (docs/database.md).",
+        "\nNew tables, columns, enums, functions, procedures, and views need a "
+        "non-blank COMMENT ON in the same migration (docs/database.md).",
         file=sys.stderr,
     )
     return 1

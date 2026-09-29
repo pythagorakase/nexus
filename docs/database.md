@@ -148,20 +148,26 @@ column, enum, function, and view comments.
 New migrations are also checked offline, before any database exists.
 `scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`
 and the `migration-comment-check.yml` CI workflow) requires every table, column,
-enum, function, view, and materialized view that a migration numbered above its
-watermark (129) creates or replaces, including DDL in DO blocks, `EXECUTE`
+enum, function, procedure, view, and materialized view that a migration numbered
+above its watermark (129) creates or replaces, including DDL in DO blocks, `EXECUTE`
 commands, and Python migration strings, to have a non-blank `COMMENT ON` in the
 same file. `CREATE OR REPLACE` counts as a change, so the migration restates the
 comment even though PostgreSQL would keep the old one. Unqualified names mean
-`public`, or the schema a `CREATE SCHEMA` statement creates for its own elements;
-functions match by name and argument count. What cannot be read statically fails
-rather than passes: verbs, object kinds, names, and `ALTER TABLE` actions built at
+`public`, or the schema a `CREATE SCHEMA` statement creates for its own elements.
+Functions and procedures match by name and argument types, as PostgreSQL resolves
+a routine comment: parameter names, modes, and `DEFAULT` clauses are ignored, `OUT`
+arguments may be omitted (a function comment omits them unless it marks them
+`OUT`), and unquoted words fold to lower case, but type aliases are not resolved,
+so `int` does not match `integer`. A comment without an argument list names the
+one overload of its kind that the migration creates; a comment that matches
+several overloads documents none. What cannot be read statically fails rather
+than passes: verbs, object kinds, names, and `ALTER TABLE` actions built at
 run time (f-strings, `+` or `||` with a non-literal operand, `{}` and `%I`
 placeholders), an `EXECUTE` of a variable or of anything not starting with literal
 text, and columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
-include `COMMENTS`). Not covered: procedures, domains, composite types, triggers,
-indexes, sequences, DDL inside a function body, even when the migration calls
+include `COMMENTS`). Not covered: domains, composite types, triggers, indexes,
+sequences, DDL inside a function body, even when the migration calls
 that function, and SQL a Python migration does not spell as a string literal in
 its own file (an imported constant such as `from nexus.x import DDL;
 cur.execute(DDL)`, names joined only at run time such as `cur.execute(A + B)`, a

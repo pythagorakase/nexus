@@ -211,12 +211,14 @@ only for types off the session `search_path`. `_inventory` therefore pins
 `search_path` to `public` for its transaction
 (`set_config('search_path', 'public', true)`), the path the baseline was rendered
 under. A read-only probe of `NEXUS_template` with the session path set to
-`assets` (`options='-c search_path=assets'`) showed the effect: the raw query
-produced 10 keys that differ from the pinned inventory (the three `hybrid_search`
-overloads, `orrery_need_applies_to_tags`, and the two `pad_vector_*` helpers,
-spelled `public.vector` / `public.character_need_type` instead of the baseline's
-unqualified names), while the pinned inventory matched the baseline with zero
-untracked and zero retired entries, and the session path read `assets` again
+`assets` (`options='-c search_path=assets'`) showed the effect: the raw query and
+the pinned inventory differed in 10 keys, two spellings each of five functions
+(the two `vector`-typed `hybrid_search` overloads, `orrery_need_applies_to_tags`,
+and the two `pad_vector_*` helpers, spelled `public.vector` /
+`public.character_need_type` instead of the baseline's unqualified names). The
+third overload, `hybrid_search(..., query_embedding bytea, ...)`, has no argument
+type in `public` and kept its key. The pinned inventory matched the baseline with
+zero untracked and zero retired entries, and the session path read `assets` again
 after the rollback.
 
 ## Refresh Survival
@@ -277,12 +279,110 @@ $PY -m pytest -q
 4119 passed, 1070 skipped, 8 warnings in 293.69s (0:04:53)
 ```
 
+## Astra Review Fixes
+
+Astra's independent review of eb156a9f found two gaps between the offline lint and
+the ratchet and two errors in this file. This pass fixes those four and nothing
+else.
+
+- **Procedures (P2).** `scripts/check_migration_comments.py` now handles
+  `CREATE [OR REPLACE] PROCEDURE` the way it handles functions and accepts
+  `COMMENT ON PROCEDURE` or `COMMENT ON ROUTINE` as its documentation; a Python
+  migration string that creates a procedure is scanned like one that creates a
+  function. The review's `CREATE PROCEDURE public.review_p() LANGUAGE sql AS
+  'SELECT 1';` without a comment now reports `procedure public.review_p() has no
+  COMMENT ON PROCEDURE`; before, it passed while the ratchet rejected
+  `function:public.review_p()`.
+- **Overloads (P2).** Routine comments now match by argument types instead of
+  argument count. The `CREATE` and `COMMENT` lists both drop parameter names,
+  modes, and `DEFAULT` clauses, fold unquoted words to lower case, and collapse
+  whitespace. Type aliases are not resolved, so `int` and `integer` are different
+  spellings, and such a pair fails rather than passes. A comment without an
+  argument list documents the one overload of its kind that the migration
+  creates; with two or more, it is reported as ambiguous and documents none. The
+  review's `review_f(integer)` and `review_f(text)`, with only the integer
+  overload commented, now report `function public.review_f(text) has no COMMENT
+  ON FUNCTION`.
+- **`search_path` paragraph (P3).** Corrected above. A rerun of the read-only
+  probe on `NEXUS_template` listed the same 10 differing keys (five functions, two
+  spellings each) and left the `bytea` `hybrid_search` key unchanged.
+- **Commit attribution (P3).** Rewritten below.
+
+The lint follows how PostgreSQL 17 (Postgres.app 17.11) resolves routine comments,
+probed on disposable `qa640_procprobe_*` databases, dropped afterwards:
+
+| Comment | Routines | PostgreSQL 17 |
+| --- | --- | --- |
+| `COMMENT ON FUNCTION f_out(int)` | function `f_out(IN a int, OUT b int)` | documents it |
+| `COMMENT ON FUNCTION f_out(int, int)` | same | `function f_out(integer, integer) does not exist` |
+| `COMMENT ON FUNCTION f_out(IN int, OUT int)` | same | documents it |
+| `COMMENT ON PROCEDURE p_out(int)` | procedure `p_out(IN a int, OUT b int)` | documents it |
+| `COMMENT ON PROCEDURE p_out(int, int)` | same | documents it |
+| `COMMENT ON PROCEDURE p_out(OUT text)` | procedure `p_out(IN a int, OUT b text)` | `procedure p_out() does not exist` |
+| `COMMENT ON FUNCTION review_p()` | procedure `review_p()` | `review_p() is not a function` |
+| `COMMENT ON FUNCTION review_f` | functions `review_f(integer)`, `review_f(text)` | `function name "review_f" is not unique` |
+| `COMMENT ON FUNCTION mixed` | function `mixed(int)`, procedure `mixed(text)` | documents the function |
+| `COMMENT ON ROUTINE mixed` | same | `routine name "mixed" is not unique` |
+| `COMMENT ON PROCEDURE q(int, int)` | procedures `q(a int, b int)`, `q(IN a int, OUT b int)` | `procedure name "q" is not unique` |
+
+New lint tests: `test_missing_object_comment_fails[procedure]` (finding);
+`test_procedure_comments_follow_postgresql_lookup` (input-list, full-list, and
+bare `ROUTINE` comments document their procedures; a `COMMENT ON FUNCTION` on a
+procedure and an uncommented procedure in a Python DDL constant are findings);
+`test_each_function_overload_needs_its_own_comment` (finding names
+`public.review_f(text)`); `test_function_signatures_ignore_names_modes_defaults_and_case`
+(both overloads commented in other spellings, clean); and
+`test_bare_function_name_must_name_one_overload` (the ambiguous comment and both
+overloads are findings; a bare name with one overload still documents it). They
+replace `test_function_comments_match_argument_count`. Each test's SQL was also
+applied to a disposable `qa640_linttests_*` database: the documented routines
+received their comments, and the bare `review_f` comment and
+`COMMENT ON FUNCTION purge()` failed as the tests state. Against the pre-fix lint
+(`git show HEAD:scripts/check_migration_comments.py` beside the new test module
+in a scratch directory), the procedure, overload, bare-name, and procedure-lookup
+tests fail because that lint reports nothing for them, and the `function` case
+differs only in message format. Over every migration (watermark 0) the lint
+returns the same 405 findings before and after; only function signatures print
+differently (`public.orrery_active_character_tag_names(bigint)` for
+`public.orrery_active_character_tag_names (1 argument)`).
+
+From the worktree root with `PY=/Users/pythagor/nexus/.venv/bin/python`; the import
+proof printed
+`/Users/pythagor/nexus/.claude/worktrees/819-ratchet-extension/nexus/__init__.py`,
+and `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` were unset:
+
+```text
+$ $PY -m pytest -q tests/test_migration_comment_lint.py tests/test_reachability.py
+.....................................................................    [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+69 passed in 8.02s
+
+$ PYTHONPATH=$PWD $PY scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+
+$ $PY -S scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_schema_documentation_pg.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+33 passed, 5 warnings in 4.76s
+
+$ $PY -m black --check scripts/check_migration_comments.py tests/test_migration_comment_lint.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+
+$ $PY -m flake8 scripts/check_migration_comments.py tests/test_migration_comment_lint.py
+(no output)
+
+$ $PY -m mypy scripts/check_migration_comments.py tests/test_migration_comment_lint.py
+Success: no issues found in 2 source files
+```
+
 ## Commit Attribution
 
-The branch commits end with `Co-Authored-By: Claude Opus 5.5`, the model that
-wrote them, where the common rules ask for `Claude Fable 5.1`. The fix pass was
-told not to rewrite history, so the existing trailers stand; whether to reword
-them or record a waiver is the coordinator's call.
+Under the amended common rule, the Opus 5.5 commits on this branch carry their own
+`Co-Authored-By: Claude Opus 5.5` line.
 
 ## Remaining on #819
 
