@@ -1,0 +1,169 @@
+# Schema-Documentation Ratchet Extension Verification
+
+## Scope
+
+Work order 819-B, branch `claude/819-ratchet-enums-functions-views`, cut from
+`origin/main` at 6b9c3e17. This slice adds no migration and writes no comment on a
+legacy object. No gateway was started and no paid provider was called. Hand-built
+databases use `qa640_*`; the test suite's fixtures keep their own disposable names.
+Nothing was written to `NEXUS_template` or any save; counts below come from a
+read-only session on `NEXUS_template` (migration head 134).
+
+`tests/test_schema_documentation_pg.py` now inventories five object kinds in
+`public` and `assets`, each excluding extension members through `pg_depend`
+(`deptype = 'e'`) with the classid of its own catalog:
+
+| Kind | Catalog Predicate | Key | Comment Source |
+| --- | --- | --- | --- |
+| Table | `pg_class.relkind IN ('r','p','f')` | `table:<schema>.<name>` | `obj_description(oid, 'pg_class')` |
+| Column | `pg_attribute` of any inventoried table or view | `column:<schema>.<relation>.<name>` | `col_description` |
+| Enum | `pg_type.typtype = 'e'` | `enum:<schema>.<name>` | `obj_description(oid, 'pg_type')` |
+| Function | `pg_proc.prokind IN ('f','w','p')` | `function:<schema>.<name>(<pg_get_function_identity_arguments>)` | `obj_description(oid, 'pg_proc')` |
+| View | `pg_class.relkind IN ('v','m')` | `view:<schema>.<name>` | `obj_description(oid, 'pg_class')` |
+
+Trigger functions are ordinary `pg_proc` rows and are covered. Procedures key as
+PostgreSQL prints their identity arguments (for example
+`function:assets.schema_docs_probe(IN n integer)`, exercised by the
+`new-procedure` test case). Aggregates (`prokind = 'a'`) stay outside the gate.
+
+## Counts
+
+Read-only inventory of `NEXUS_template`, produced by the test module's own
+`_inventory` and `_baseline` (the coverage assertion passes on the same data):
+
+| Kind | Inventoried | Documented | Baselined |
+| --- | ---: | ---: | ---: |
+| table | 85 | 85 | 0 |
+| column (table) | 867 | 853 | 14 |
+| column (view) | 118 | 3 | 115 |
+| enum | 41 | 0 | 41 |
+| function | 34 | 13 | 21 |
+| view | 16 | 11 | 5 |
+| total | 1161 | 965 | 196 |
+
+The enum, function, and view totals match the slice-A inventory in
+`docs/qa/819-schema-docs/verification.md` (41/41, 34/21, 16/5 undocumented):
+migrations 128–134 added comments with every object they created or replaced.
+The 14 table-column entries are unchanged from slice A.
+
+## Baseline Reasons
+
+`config/schema_docs_baseline.json` grows from 14 to 196 entries. Every reason was
+checked against the catalog or `git grep` at this base:
+
+- **Enums (41).** 34 name the table and view columns they type (catalog join on
+  `pg_attribute.atttypid` over the enum and its array type). Seven
+  (`emotional_valence`, `entity_type`, `item_type`, `relationship_type`,
+  `threat_domain_type`, `threat_lifecycle_type`, `trait`) type no column in the
+  template and no SQL under `nexus/`, `scripts/`, or `migrations/` casts to them;
+  they are marked as decision-ledger (#817) questions.
+- **Functions (21).** Twelve trigger functions name their trigger and table
+  (from `pg_trigger.tgfoid`) and state what the body does. Three helpers name
+  their single caller (`orrery_sync_character_need_states` calls
+  `orrery_active_character_tag_names` and `orrery_need_applies_to_tags`;
+  `refresh_world_time_from_chunk_trigger` calls `refresh_world_time_from_chunk`).
+  Six have no caller in `nexus/`, `scripts/`, or another NEXUS function: the three
+  `hybrid_search` overloads (MEMNON's `execute_hybrid_search` in
+  `nexus/agents/memnon/utils/db_access.py:401` builds its own query),
+  `migrate_embeddings()` (it names `chunk_embeddings` and
+  `chunk_embeddings_small`; `to_regclass` finds neither in the template), and the
+  two `pad_vector_*` helpers.
+- **Views (5) and view columns (115).** Each reason names the Python files under
+  `nexus/` and `scripts/` that mention the view (`git grep -lw`), or says that none
+  does, and whether the view itself is documented.
+
+No reason is a comment in disguise: purposes are stated only where a trigger
+binding or a single caller shows them, and every entry says the comment waits for
+the evidence-backed backfill slice.
+
+## Ratchet Proof
+
+The suite exercises each failure mode with real catalog DDL on the module's
+`qa640_schema_docs_*` clone, rolled back after each case:
+
+- New undocumented object: `new-enum`, `new-trigger-function`, `new-overload`
+  (a second `schema_docs_refresh_probe` signature gets its own key),
+  `new-procedure`, `new-view`, `new-materialized-view`, `new-view-column`, plus the
+  slice-A table and column cases.
+- Comment removed or blanked: `blank-enum-comment`, `removed-function-comment`
+  (`public.clear_incubator()`), `removed-view-comment` (`public.narrative_view`).
+- Baseline entry now documented or removed, per kind: `test_baseline_retirement`
+  over column, enum, function, and view, each documented and each dropped.
+- Baseline key naming no object: `test_baseline_rejects_nonexistent_keys` for
+  table, enum, function, and view keys.
+- Extension exclusion: the coverage test asserts that the PostGIS views
+  `geometry_columns` and `geography_columns` and the functions
+  `postgis_full_version()` and `vector_dims(vector)` are absent from the
+  inventory, and that `pg_depend` really records them as extension members.
+
+Hand-built red/green run (`disposable_slot_database("qa640_ratchet_manual")`, then
+an undocumented enum, PL/pgSQL trigger function, and view committed by hand; the
+view's one column was commented so that the three new kinds are the only
+findings; then `COMMENT ON TYPE`, `COMMENT ON FUNCTION`, and `COMMENT ON VIEW`):
+
+```text
+clone: qa640_ratchet_manual_99756455684e
+[fresh clone] GREEN
+[after undocumented enum/function/view] RED:
+Undocumented objects absent from baseline: ['enum:public.manual_probe_mood', 'function:public.manual_probe_touch()', 'view:public.manual_probe_view']
+Retire documented or removed baseline entries: []
+[after COMMENT ON TYPE/FUNCTION/VIEW] GREEN
+```
+
+The fixture dropped the clone on exit.
+
+## Refresh Survival
+
+The module fixture commits documented probes to its clone: enum
+`public.schema_docs_refresh_probe`, function
+`public.schema_docs_refresh_probe(integer)`, view
+`public.schema_docs_refresh_probe_v`, and that view's column. Every legacy enum
+is still debt, so a probe is the only way to prove an enum comment survives.
+`test_schema_only_refresh_preserves_comments` (real `pg_dump -s` into a
+`qa640_schema_docs_*` database) and `test_story_setup_and_runner_preserve_comments`
+(`scripts/new_story_setup.py` schema copy, seed copy, and migration runner via
+`disposable_slot_database(source_db=...)`) both assert full inventory equality with
+the source and the four exact probe comments on the target.
+
+## Commands
+
+All from the worktree root with `PY=/Users/pythagor/nexus/.venv/bin/python`.
+Import proof printed
+`/Users/pythagor/nexus/.claude/worktrees/819-ratchet-extension/nexus/__init__.py`.
+
+PostgreSQL gate (`NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset):
+
+```bash
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_schema_documentation_pg.py tests/test_new_story_setup.py
+```
+
+```text
+38 passed, 5 warnings in 14.14s
+```
+
+Reachability, style, and types:
+
+```bash
+$PY -m pytest -q tests/test_reachability.py
+$PY -m black --check tests/test_schema_documentation_pg.py
+$PY -m flake8 tests/test_schema_documentation_pg.py
+$PY -m mypy tests/test_schema_documentation_pg.py
+```
+
+```text
+38 passed in 9.11s
+1 file would be left unchanged.
+(flake8: no output)
+Success: no issues found in 1 source file
+```
+
+The offline `$PY -m pytest -q` tail is in the PR body.
+
+## Remaining on #819
+
+1. A backfill migration that comments enums, functions, views, and view columns
+   whose semantics a reader or writer site establishes, citing that evidence as
+   migration 127 does, and retiring the matching baseline entries.
+2. The 14 table-column entries and every object without such evidence (including
+   the seven unused enums and the six uncalled functions) go to the decision
+   ledger (#817).

@@ -122,19 +122,25 @@ python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 ## Schema Documentation
 
 PostgreSQL comments are the schema reference (`\d+` in psql or
-`MEMNON.get_schema_summary`); add a non-empty `COMMENT ON TABLE` and
-`COMMENT ON COLUMN` with each new table and column. The PostgreSQL-gated
-`tests/test_schema_documentation_pg.py` ratchet checks every table and column in
-`public` and `assets`, excluding extension ownership through `pg_depend`
-(`deptype = 'e'`). Legacy debt is listed by qualified object name and reason in
-`config/schema_docs_baseline.json`. To retire an entry, establish its contract
-from reader/writer code, cite that evidence in the comment migration, add the
-comment, and remove the baseline entry in the same change; documented or removed
-objects left in the baseline fail, as do new undocumented objects. Run with
-`NEXUS_RUN_POSTGRES=1`; the test migrates disposable template clones and proves
-that schema-only dumps and the actual new-story setup preserve comments. This
-ratchet enforces tables and columns; it only inventories enums, functions, and
-views, which the offline lint below enforces for new migrations.
+`MEMNON.get_schema_summary`); add a non-empty `COMMENT ON` with each new table,
+column, enum, function, and view. The PostgreSQL-gated
+`tests/test_schema_documentation_pg.py` ratchet checks five object kinds that
+NEXUS owns in `public` and `assets`: tables (`table:<schema>.<name>`), columns of
+tables and views (`column:<schema>.<relation>.<name>`), enums
+(`enum:<schema>.<name>`), functions and procedures, trigger functions included
+(`function:<schema>.<name>(<identity arguments>)`, so each overload has its own
+key), and views and materialized views (`view:<schema>.<name>`). Extension
+members (PostGIS, pgvector) are excluded through `pg_depend` (`deptype = 'e'`) in
+each object's own catalog, not by name. Legacy debt is listed by that key and a
+one-line reason in `config/schema_docs_baseline.json`. To retire an entry,
+establish its contract from reader/writer code, cite that evidence in the comment
+migration, add the comment, and remove the baseline entry in the same change; a
+dropped object's entry is removed with the drop. The ratchet fails on a new
+undocumented object of any kind, on a baseline entry whose object is now
+documented, and on a baseline key that names no object, so the list only shrinks.
+Run with `NEXUS_RUN_POSTGRES=1`; the test migrates disposable template clones and
+proves that schema-only dumps and the actual new-story setup preserve table,
+column, enum, function, and view comments.
 
 New migrations are also checked offline, before any database exists.
 `scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`
