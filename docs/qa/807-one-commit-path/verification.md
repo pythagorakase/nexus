@@ -123,12 +123,111 @@ E                   ValueError: Retrograde world event 1 already has divergent s
 1 failed, 25 deselected, 5 warnings in 2.06s
 ```
 
+## Astra Review Fix
+
+Review finding (P2, `review-1012`): the boundary relaxation above is right for
+the CLI re-apply, whose boundary is a computed default that advances with play,
+but it also switched off an authoritative check. Runtime maturation
+(`_persist_maturation_expansion`) passes the durable job's
+`requesting_chunk_id`, yet `_build_plan` built the summary sources without a
+boundary, so a maturation job anchored at one chunk silently accepted an
+otherwise matching summary recorded at another, where it used to raise.
+
+Fix:
+
+- `build_retrograde_persistence_plan` takes `boundary_is_authoritative`
+  (default `False`). When it is set, `_build_plan` carries the caller's boundary
+  into every summary source, so `plan_retrograde_summaries` compares it with an
+  existing row in both the planning and the execute pass. The wizard and the
+  CLI leave it unset and keep the first-recording boundary.
+- `_persist_maturation_expansion` sets it (`retrograde_maturation.py`).
+- The divergence error now names both boundaries:
+  `divergent summary fields: recorded_at_chunk_id (existing N, incoming M)`.
+- The `plan_retrograde_summaries` docstring states the invariant, one sentence
+  per caller.
+
+New PostgreSQL test
+`tests/test_orrery/test_retrograde_persistence.py::test_maturation_rejects_existing_summary_at_another_boundary`,
+on a disposable template clone: accepts two turns through
+`commit_incubator_to_database_sync`, inserts a durable
+`orrery_maturation_jobs` row anchored at the second chunk, and applies that
+job's namespaced expansion with the summary recorded at the first chunk. The
+real `_persist_maturation_expansion`, given the job row read back from the
+table, raises `Retrograde world event W already has divergent summary fields:
+recorded_at_chunk_id (existing <first>, incoming <second>)`. The CLI re-apply
+with `find_latest_playable_chunk_id` (the second chunk) then reports
+`already_present` at the first chunk in dry-run and execute, and the table
+still holds that one row. With `boundary_is_authoritative=True` removed from
+the maturation call it fails:
+
+```
+E               Failed: DID NOT RAISE <class 'ValueError'>
+tests/test_orrery/test_retrograde_persistence.py:1534: Failed
+1 failed, 26 deselected, 5 warnings in 1.78s
+```
+
+Runs on this fix (parent `c1ed76e3`; `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL`
+unset; `PYTHONPATH=$PWD`; clones of the template are IDF-current):
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_orrery/test_retrograde_persistence.py tests/test_orrery/test_retrograde_maturation.py tests/test_orrery/test_retrograde_projects_live.py -k "not live_llm"
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+70 passed, 5 warnings in 44.15s
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -v tests/test_orrery/test_retrograde_persistence.py -k "maturation_rejects or reapplying or latest_playable"
+tests/test_orrery/test_retrograde_persistence.py::test_latest_playable_chunk_is_the_last_accepted_chunk_not_the_prologue PASSED [ 33%]
+tests/test_orrery/test_retrograde_persistence.py::test_reapplying_expansion_after_play_keeps_existing_summary_boundary PASSED [ 66%]
+tests/test_orrery/test_retrograde_persistence.py::test_maturation_rejects_existing_summary_at_another_boundary PASSED [100%]
+================= 3 passed, 24 deselected, 5 warnings in 4.36s =================
+```
+
+Extra check, the other modules that drive the changed entry point (wizard,
+CLI, retrieval): no new failure. The four errors are the `DUPCOL` fixture
+errors recorded in the gate below (`column "provenance" of relation
+"character_aliases" already exists`).
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_orrery/test_retrograde_orchestrator.py tests/test_orrery/test_retrograde_constraints_pg.py tests/test_orrery/test_retrograde_retrieval_pg.py tests/test_orrery/test_stage2a_status_live.py tests/test_api/test_wizard_weird_level.py tests/test_cli.py -k "not live_llm"
+ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_real_cache_packet_and_transition_keep_event_without_adversarial_rows
+ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_real_cache_compiler_gate_suppresses_all_named_target_materialization
+ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_persistence_identity_binds_database_alias_without_packet_alias
+ERROR tests/test_orrery/test_retrograde_constraints_pg.py::test_seek_redemption_dependency_is_repaired_before_mapper_transaction
+139 passed, 5 deselected, 5 warnings, 4 errors in 5.16s
+```
+
+Black, flake8 and mypy on the three changed files (`retrograde_persistence.py`,
+`retrograde_maturation.py`, `test_retrograde_persistence.py`):
+
+```
+$ $PY -m black --check <3 changed files>
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+
+$ $PY -m flake8 <file>   (finding count, HEAD c1ed76e3 copy vs working tree)
+nexus/agents/orrery/retrograde_persistence.py HEAD=0 branch=0
+nexus/agents/orrery/retrograde_maturation.py HEAD=3 branch=3
+tests/test_orrery/test_retrograde_persistence.py HEAD=1 branch=1
+
+$ $PY -m mypy --cache-dir <fresh> --explicit-package-bases --ignore-missing-imports <3 changed files>   (in place, HEAD versions vs this fix)
+HEAD c1ed76e3: Found 5 errors in 2 files (checked 3 source files)
+branch:        Found 5 errors in 2 files (checked 3 source files)
+retrograde_persistence.py :2745 [assignment], :2910 [arg-type]  ->  :2765, :2930
+retrograde_maturation.py  :422 [arg-type], :1450 [arg-type], :1450 [return-value]  ->  :422, :1453, :1453
+```
+
+No new finding: the four flake8 findings (`F401 'os'` at 34, `E501` at 649 and
+`F401 require_slot_dbname` at 732 in `retrograde_maturation.py`; `E501` in the
+test module, at 840 on HEAD and 846 after the six added import lines) and the
+five mypy findings predate this fix and sit on lines it does not touch; the
+shifted ones move only by the lines added above them.
+
 ## Gates
 
 Environment: `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset;
 `PYTHONPATH=$PWD`; `$PY=/Users/pythagor/nexus/.venv/bin/python`; import proof
 `nexus.__file__` = `.claude/worktrees/807-one-commit-path/nexus/__init__.py`.
-Every gate below ran at `a966bc1e` (the code is unchanged after it) and every
+Every gate below ran at `a966bc1e` (the code is unchanged after it except for
+the Astra review fix above, whose runs are listed there) and every
 run's terminal summary carries `secret-store guard: active; nexus-api: denied`.
 
 ### Fleet State During These Runs

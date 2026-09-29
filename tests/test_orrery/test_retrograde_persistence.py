@@ -14,6 +14,11 @@ import pytest
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
 )
+from nexus.agents.orrery.retrograde_maturation import (
+    MATURATION_EVENT_REF_PREFIX,
+    _persist_maturation_expansion,
+    namespace_expansion_event_refs,
+)
 from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
 from nexus.agents.orrery.retrograde_persistence import (
     _ensure_prologue_metadata,
@@ -31,6 +36,7 @@ from nexus.agents.orrery.retrograde_vocabulary import (
 )
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.slot_utils import VALID_DBNAMES
+from nexus.config import load_settings
 from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 from tests.test_commit_choice_presence_pg import _insert_staged_turn
 
@@ -1403,5 +1409,166 @@ def test_reapplying_expansion_after_play_keeps_existing_summary_boundary() -> No
             with closing(connect(dbname)) as conn, conn.cursor() as cur:
                 cur.execute("SELECT id, recorded_at_chunk_id FROM retrograde_summaries")
                 assert cur.fetchall() == [(summary_id, prologue_id)]
+        finally:
+            VALID_DBNAMES.discard(dbname)
+
+
+@pytest.mark.requires_postgres
+def test_maturation_rejects_existing_summary_at_another_boundary() -> None:
+    """A durable maturation boundary is authoritative; the CLI default is not.
+
+    A summary recorded at the first played chunk conflicts with a maturation
+    job anchored at the second chunk, and the error names both boundaries. The
+    CLI re-apply, whose default boundary is that same second chunk, keeps the
+    first recording.
+    """
+    with disposable_slot_database("qa640_807_maturation_boundary") as dbname:
+        VALID_DBNAMES.add(dbname)
+        try:
+            character_id, _ = seed_protagonist(dbname, name="Mara")
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO places (name, type) "
+                    "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+                )
+                place_id = cur.fetchone()[0]
+                prologue_id = _insert_prologue_chunk(cur)
+                _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_id)
+            first_id = _accept_boundary_turn(
+                dbname,
+                character_id=character_id,
+                place_id=place_id,
+                parent_id=0,
+                text="Rain darkens the harbor office windows.",
+            )
+            second_id = _accept_boundary_turn(
+                dbname,
+                character_id=character_id,
+                place_id=place_id,
+                parent_id=first_id,
+                text="The harbor clock strikes the hour.",
+            )
+            declaration = {
+                "kind": "character",
+                "name": "Vale",
+                "summary": "A debt broker.",
+            }
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO entities (kind, is_active) "
+                    "VALUES ('character', true) RETURNING id"
+                )
+                vale_entity_id = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO characters (name, summary, entity_id) "
+                    "VALUES (%s, %s, %s) RETURNING id",
+                    (declaration["name"], declaration["summary"], vale_entity_id),
+                )
+                vale_character_id = cur.fetchone()[0]
+                cur.execute(
+                    """
+                    INSERT INTO orrery_maturation_jobs (
+                        entity_id, entity_kind, entity_subtype_id, entity_name,
+                        slot, requesting_chunk_id, declaration
+                    ) VALUES (%s, 'character', %s, %s, '5', %s, %s::jsonb)
+                    RETURNING id
+                    """,
+                    (
+                        vale_entity_id,
+                        vale_character_id,
+                        declaration["name"],
+                        second_id,
+                        json.dumps(declaration),
+                    ),
+                )
+                job_id = cur.fetchone()[0]
+            vocabulary = enumerate_seed_eligible_vocabulary(dbname)
+            packet, seed_response, expansion = _reapply_expansion_inputs(vocabulary)
+            expansion = namespace_expansion_event_refs(
+                expansion, prefix=f"{MATURATION_EVENT_REF_PREFIX}_{job_id}"
+            )
+
+            def apply(
+                *, dry_run: bool, recorded_at_chunk_id: Optional[int]
+            ) -> dict[str, Any]:
+                with (
+                    closing(connect(dbname, cursor_factory=RealDictCursor)) as conn,
+                    conn,
+                    conn.cursor() as cur,
+                ):
+                    if dry_run:
+                        cur.execute("SET TRANSACTION READ ONLY")
+                    return build_retrograde_persistence_plan(
+                        cur,
+                        packet=packet,
+                        seed_candidate_response=seed_response,
+                        expansion_plan_payload=expansion,
+                        slot=5,
+                        dbname=dbname,
+                        dry_run=dry_run,
+                        summaries_enabled=True,
+                        recorded_at_chunk_id=recorded_at_chunk_id,
+                    )
+
+            first = apply(dry_run=False, recorded_at_chunk_id=first_id)
+            assert first["counters"]["summaries_inserted"] == 1
+            world_event_id = first["summary_rows"][0]["world_event_id"]
+            summary_id = first["summary_rows"][0]["summary_id"]
+            assert first["summary_rows"][0]["recorded_at_chunk_id"] == first_id
+
+            with (
+                closing(connect(dbname, cursor_factory=RealDictCursor)) as conn,
+                conn.cursor() as cur,
+            ):
+                cur.execute(
+                    """
+                    SELECT id AS job_id, entity_id, entity_kind, requesting_chunk_id
+                    FROM orrery_maturation_jobs
+                    WHERE id = %s
+                    """,
+                    (job_id,),
+                )
+                job_row = dict(cur.fetchone())
+            assert job_row["requesting_chunk_id"] == second_id
+
+            with (
+                closing(connect(dbname, cursor_factory=RealDictCursor)) as conn,
+                pytest.raises(
+                    ValueError,
+                    match=(
+                        rf"Retrograde world event {world_event_id} already has "
+                        r"divergent summary fields: recorded_at_chunk_id "
+                        rf"\(existing {first_id}, incoming {second_id}\)"
+                    ),
+                ),
+                conn,
+                conn.cursor() as cur,
+            ):
+                _persist_maturation_expansion(
+                    cur,
+                    packet=packet,
+                    seed_response=seed_response,
+                    expansion_payload=expansion,
+                    row=job_row,
+                    slot=5,
+                    dbname=dbname,
+                    settings=load_settings(),
+                    summaries_enabled=True,
+                )
+
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                latest_id = find_latest_playable_chunk_id(cur)
+            assert latest_id == second_id
+            for dry_run in (True, False):
+                again = apply(dry_run=dry_run, recorded_at_chunk_id=latest_id)
+                assert again["counters"]["summaries_already_present"] == 1
+                row = again["summary_rows"][0]
+                assert row["status"] == "already_present"
+                assert row["summary_id"] == summary_id
+                assert row["recorded_at_chunk_id"] == first_id
+
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute("SELECT id, recorded_at_chunk_id FROM retrograde_summaries")
+                assert cur.fetchall() == [(summary_id, first_id)]
         finally:
             VALID_DBNAMES.discard(dbname)
