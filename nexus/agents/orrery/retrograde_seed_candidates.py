@@ -5,24 +5,18 @@ from __future__ import annotations
 
 import json
 from types import GenericAlias
-from typing import Annotated, Any, Literal, Mapping, Optional, Sequence, cast
+from typing import Any, Literal, Mapping, Optional, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_vocabulary import (
     ENTITY_REF_MAX_LENGTH,
+    EntityRef,
+    OptionalWireEntityRef,
     SeedEligibleVocabulary,
 )
 from nexus.prompts.registry import PromptId, load
-
-EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
-"""Prompt-local entity ref: a proper name, never a description.
-
-Bounded because refs become canonical ``name`` values when persistence
-stages minimum-viable stubs (``characters.name``/``places.name`` are
-``varchar(50)``).
-"""
 
 SeedCandidateSchemaVersion = Literal["orrery_retrograde_seed_candidates.v0"]
 SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION: SeedCandidateSchemaVersion = (
@@ -208,10 +202,7 @@ class RetrogradeWireClaimedEdge(BaseModel):
     """Provider-facing claimed dangling edge (issue #442)."""
 
     edge_id: str = Field(min_length=1)
-    open_endpoint_name: str = Field(
-        min_length=1,
-        max_length=ENTITY_REF_MAX_LENGTH,
-    )
+    open_endpoint_name: EntityRef
     open_endpoint_kind: str = Field(min_length=1)
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -223,7 +214,9 @@ class RetrogradeProjectIntent(BaseModel):
     project_type: RetrogradeProjectType
     target_ref: Optional[EntityRef] = Field(
         default=None,
-        description="Compact character/place ref when the project type needs one.",
+        description=(
+            "Bare proper name of the target character or place, never " "kind-prefixed."
+        ),
     )
     rationale: str = Field(min_length=1, max_length=500)
 
@@ -243,10 +236,13 @@ class RetrogradeWireProjectIntent(BaseModel):
     """Provider-facing twin of :class:`RetrogradeProjectIntent`."""
 
     project_type: RetrogradeProjectType
-    target_ref: str = Field(
+    target_ref: OptionalWireEntityRef = Field(
         default="",
         max_length=ENTITY_REF_MAX_LENGTH,
-        description="Compact target ref, or an empty string when targetless.",
+        description=(
+            "Bare proper name of the target character or place, never "
+            "kind-prefixed; empty string when targetless."
+        ),
     )
     rationale: str = Field(min_length=1, max_length=500)
 
@@ -292,9 +288,7 @@ class RetrogradeClaimedEdge(BaseModel):
     """
 
     edge_id: str = Field(min_length=1, description="Dangling edge id claimed.")
-    open_endpoint_name: str = Field(
-        min_length=1,
-        max_length=ENTITY_REF_MAX_LENGTH,
+    open_endpoint_name: EntityRef = Field(
         description="Name for the edge's unknown endpoint (new or existing).",
     )
     open_endpoint_kind: str = Field(

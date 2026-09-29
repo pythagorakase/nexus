@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 from typing import (
     AbstractSet,
-    Annotated,
     Any,
     Iterable,
     Literal,
@@ -37,19 +36,13 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
     ENTITY_REF_MAX_LENGTH,
+    EntityRef,
+    OptionalWireEntityRef,
     SeedEligibleVocabulary,
     fold_entity_ref_for_identity,
     normalize_entity_ref,
 )
 from nexus.prompts.registry import PromptId, load
-
-EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
-"""Prompt-local entity ref: a proper name, never a description.
-
-Bounded because refs become canonical ``name`` values when persistence
-stages minimum-viable stubs (``characters.name``/``places.name`` are
-``varchar(50)``).
-"""
 
 ExpansionSchemaVersion = Literal["orrery_retrograde_expansion_plan.v0"]
 RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION: ExpansionSchemaVersion = (
@@ -269,10 +262,13 @@ class RetrogradeWireProjectPlan(BaseModel):
     seed_id: str = Field(min_length=1)
     project_type: RetrogradeProjectType
     actor_ref: EntityRef
-    target_ref: str = Field(
+    target_ref: OptionalWireEntityRef = Field(
         default="",
         max_length=ENTITY_REF_MAX_LENGTH,
-        description="Compact target ref, or an empty string when targetless.",
+        description=(
+            "Bare proper name of the target character or place, never "
+            "kind-prefixed; empty string when targetless."
+        ),
     )
     rationale: str = Field(min_length=1, max_length=700)
 
@@ -327,7 +323,7 @@ class RetrogradeExpansionWireEventPlan(BaseModel):
     summary: str = Field(min_length=1)
     chronology: Literal["deep_past", "recent_past", "opening_pressure"]
     participants: list[RetrogradeExpansionParticipant] = Field(default_factory=list)
-    location_ref: str = Field(
+    location_ref: OptionalWireEntityRef = Field(
         default="",
         description="Prompt-local place name, or empty string when absent.",
     )
@@ -351,7 +347,7 @@ class RetrogradeExpansionWireMechanicPlan(BaseModel):
         default="",
         description="Single-entity or pair tag; empty for relationship rows.",
     )
-    object_ref: str = Field(
+    object_ref: OptionalWireEntityRef = Field(
         default="",
         description="Object entity ref for pair tags/relationships; empty otherwise.",
     )
@@ -1101,12 +1097,13 @@ def _planned_project_dependency_relationships(
         try:
             relationships.extend(planned_project_start_relationships([relationship]))
         except ValueError as exc:
+            relationship_type = relationship.relationship_type
             issues.append(
                 load(
                     PromptId.RETROGRADE_RELATIONSHIP_TYPE_RETRY,
                     REDEMPTION_SEED_IDS=f"{redemption_seed_ids!r}",
                     INDEX=f"{index}",
-                    RELATIONSHIP_RELATIONSHIP_TYPE=f"{relationship.relationship_type!r}",
+                    RELATIONSHIP_RELATIONSHIP_TYPE=f"{relationship_type!r}",
                     EXC=f"{exc}",
                     SORTED_RELATIONSHIP_TYPES=f"{sorted(relationship_types)!r}",
                 )
@@ -1173,7 +1170,7 @@ def _new_entity_budget_issues(
     )
     if len(new_keys) <= max_new_entity_stubs:
         return []
-    listed = ", ".join(f"{kind}:{ref}" for kind, ref in new_keys)
+    listed = ", ".join(f"{ref} ({kind})" for kind, ref in new_keys)
     return [
         f"expansion introduces {len(new_keys)} entities beyond the first-class "
         f"starting set, exceeding budget.max_new_entity_stubs="
