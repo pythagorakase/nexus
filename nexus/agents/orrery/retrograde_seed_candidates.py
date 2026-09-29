@@ -215,7 +215,7 @@ class RetrogradeProjectIntent(BaseModel):
     target_ref: Optional[EntityRef] = Field(
         default=None,
         description=(
-            "Bare proper name of the target character or place, never " "kind-prefixed."
+            "Bare proper name of the target character or place, never kind-prefixed."
         ),
     )
     rationale: str = Field(min_length=1, max_length=500)
