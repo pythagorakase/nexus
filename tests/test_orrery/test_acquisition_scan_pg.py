@@ -116,12 +116,11 @@ def _insert_chunk(
 
     cur.execute(
         """
-        INSERT INTO narrative_chunks (
-            raw_text, storyteller_text, state, finalized_at
-        ) VALUES (%s, %s, 'accepted', %s)
+        INSERT INTO narrative_chunks (raw_text, storyteller_text)
+        VALUES (%s, %s)
         RETURNING id
         """,
-        (label, label, world_time),
+        (label, label),
     )
     chunk_id = int(cur.fetchone()[0])
     cur.execute(
@@ -475,12 +474,9 @@ def test_representative_plan_uses_both_acquisition_indexes(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO narrative_chunks (
-                    id, raw_text, state, finalized_at
-                )
+                INSERT INTO narrative_chunks (id, raw_text)
                 SELECT %s + ordinal,
-                       'Issue 723 plan chunk ' || ordinal,
-                       'accepted', now()
+                       'Issue 723 plan chunk ' || ordinal
                 FROM generate_series(1, %s) AS ordinal
                 """,
                 (chunk_base, chunk_count),

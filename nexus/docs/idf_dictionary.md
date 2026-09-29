@@ -8,9 +8,10 @@ triggers. There is no shared pickle or TTL cache.
 The narrative corpus contains the rows admitted by the canonical
 `playable_narrative_predicate` and the production text search's
 `chunk_metadata` join. This excludes the synthetic Retrograde prologue and
-rows that have not acquired their retrieval metadata. It deliberately does
-not require `state = 'finalized'`: accepted legacy rows also belong. The
-separate `retrograde_summary` corpus contains persisted summaries, whose
+rows that have not acquired their retrieval metadata. Admission does not
+depend on any lifecycle state (`narrative_chunks` has had no state column since
+migration 134), so accepted legacy rows that carry retrieval metadata belong.
+The separate `retrograde_summary` corpus contains persisted summaries, whose
 nonempty text is available to production text search independently of their
 embedding readiness. Actor-owned experience recall does not use this IDF
 path and is not mixed into either corpus.

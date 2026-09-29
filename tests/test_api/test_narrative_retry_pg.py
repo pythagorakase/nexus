@@ -9,6 +9,7 @@ import asyncio
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from types import SimpleNamespace
 
 import pytest
@@ -179,8 +180,8 @@ def test_retry_rejects_changed_durable_state_before_session_creation(
             )
         elif change == "newer_chunk":
             cur.execute(
-                "INSERT INTO narrative_chunks (raw_text, storyteller_text, state) "
-                "VALUES ('New scene', 'New scene', 'finalized')"
+                "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+                "VALUES ('New scene', 'New scene')"
             )
         elif change == "missing_action":
             cur.execute(
@@ -244,7 +245,7 @@ def test_staging_failure_resumes_as_recovery_and_retries_once(recovery_db):
     )
 
     # A restart runs orphan recovery; the retryable action must survive it.
-    with connect(dbname) as conn:
+    with closing(connect(dbname)) as conn:
         assert recover_orphaned_choice(conn) is None
     assert resume_state(dbname).recovery == state.recovery
     original = snapshot(dbname)[0]
@@ -321,7 +322,7 @@ def test_dead_worker_is_advertised_exactly_as_retry_accepts_it(recovery_db):
         (dead, "initiated")
     ]
     assert [str(row["session_id"]) for row in leases] == [dead]
-    with connect(dbname) as conn:
+    with closing(connect(dbname)) as conn:
         assert recover_orphaned_choice(conn) is None
 
     response, tasks = retry(state.recovery.session_id)
@@ -345,7 +346,7 @@ def test_restart_reopens_the_menu_when_no_retry_can_resume(recovery_db):
             (failed,),
         )
     assert resume_state(dbname).recovery is None
-    with connect(dbname) as conn:
+    with closing(connect(dbname)) as conn:
         assert recover_orphaned_choice(conn) == parent
     reopened = resume_state(dbname)
     assert reopened.recorded_action is None
