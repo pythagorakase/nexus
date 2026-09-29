@@ -6,10 +6,7 @@ import copy
 import json
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional
-import uuid
 
-import psycopg2
-from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 import pytest
 
@@ -40,7 +37,7 @@ from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.api.trait_compiler_schemas import TraitCompileInputs
 from nexus.api.trait_input_derivation import ensure_trait_compile_inputs
 from nexus.config import load_settings
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -53,69 +50,29 @@ def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     return connect(dbname, cursor_factory=RealDictCursor if dict_cursor else None)
 
 
+BASE_TIMESTAMP = "2026-05-14T10:48:00+00:00"
+
+
 @pytest.fixture()
 def disposable_dbname() -> Iterator[str]:
-    """Yield a current-template clone and remove it after the regression."""
+    """Yield a migrated template clone with the canonical clock already set.
 
-    dbname = f"qa640_issue601_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    try:
-        try:
-            admin = _connect("postgres")
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
-        admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier("NEXUS_template"),
-                )
-            )
-        with _connect(dbname) as conn:
-            with conn.cursor() as cur:
-                migration = (
-                    Path(__file__).parents[2]
-                    / "migrations"
-                    / "097_trait_cold_start_relationship_constraints.sql"
-                )
-                cur.execute(migration.read_text())
-                cur.execute(
-                    (
-                        Path(__file__).parents[2]
-                        / "migrations"
-                        / "123_character_alias_provenance.sql"
-                    ).read_text()
-                )
-                # Fixture invariant: production persists the canonical clock
-                # before any character INSERT fires need-state initialization.
-                cur.execute(
-                    """
-                    INSERT INTO global_variables (
-                        id, new_story, base_timestamp
-                    ) VALUES (
-                        true, true, '2026-05-14T10:48:00+00:00'::timestamptz
-                    )
-                    ON CONFLICT (id) DO UPDATE
-                    SET base_timestamp = EXCLUDED.base_timestamp
-                    """
-                )
+    ``disposable_slot_database`` migrates the clone through the runner, so the
+    clone carries every migration (097 and 123 included) exactly once.
+    Production persists the canonical clock before any character insert fires
+    need-state initialization; ``seed_protagonist`` sets that clock (the
+    cache's ``base_timestamp``) and binds a placeholder player, which the
+    wizard transition's clean slate then replaces with the cache's protagonist.
+    """
+
+    with disposable_slot_database("qa640_issue601") as dbname:
+        seed_protagonist(dbname, base_timestamp=BASE_TIMESTAMP)
         VALID_DBNAMES.add(dbname)
-        yield dbname
-    finally:
-        close_all_pools()
-        VALID_DBNAMES.discard(dbname)
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
+        try:
+            yield dbname
+        finally:
+            close_all_pools()
+            VALID_DBNAMES.discard(dbname)
 
 
 def _fixture_payload() -> dict[str, Any]:
@@ -140,7 +97,7 @@ def _hydrate_fixture(
         layer_draft=seed["layer"],
         zone_draft=seed["zone"],
         initial_location=seed["initial_location"],
-        base_timestamp="2026-05-14T10:48:00+00:00",
+        base_timestamp=BASE_TIMESTAMP,
         target_slot=3,
         dbname=dbname,
     )
