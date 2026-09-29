@@ -126,4 +126,6 @@ evidence. No providers or live services should be started merely to refresh this
 static report.
 
 The ordinary pytest gate includes `tests/test_reachability.py`; CI also runs the standalone
-checker without installing application dependencies and uploads its JSON evidence.
+checker through `nexus doctor --target ci-runner --json` (the `reachability.gate` check in
+`docs/runtime.md`, Readiness Checks), which starts it with `python -S` so it still reads no
+installed packages, and uploads the readiness report.

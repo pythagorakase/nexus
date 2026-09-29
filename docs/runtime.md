@@ -324,6 +324,10 @@ databases read. PostgreSQL checks connect exactly as the runtime does, so
 `NEXUS_KEYRING_DISABLE=1`, `secrets.seat_providers` reads environment
 variables only and says so.
 
+CI runs `nexus doctor --target ci-runner --json` in
+`.github/workflows/reachability-check.yml` and uploads the report; run the
+same command from a checkout to reproduce it.
+
 `/runtime/status` carries the checks the gateway evaluates in-process
 (`config.valid`, `tools.pg_dump`, `ui.bundle`): the gateway's own `PATH` and
 build directory are the ones that matter to it. Guest-host checks, slot
