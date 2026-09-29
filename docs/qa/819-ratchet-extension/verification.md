@@ -75,8 +75,12 @@ checked against the catalog or `git grep` at this base:
   does, and whether the view itself is documented.
 
 No reason is a comment in disguise: purposes are stated only where a trigger
-binding or a single caller shows them, and every entry says the comment waits for
-the evidence-backed backfill slice.
+binding, a single caller, or the function body itself shows them
+(`migrate_embeddings` and the two `pad_vector_*` helpers are described from their
+bodies). Entries with reader/writer evidence defer the comment to the backfill
+slice. The seven unused enums defer to the decision ledger (#817), and the six
+uncalled functions state that no caller exists (the three `hybrid_search`
+overloads add that no evidence establishes their contract).
 
 ## Ratchet Proof
 
@@ -87,12 +91,14 @@ The suite exercises each failure mode with real catalog DDL on the module's
   (a second `schema_docs_refresh_probe` signature gets its own key),
   `new-procedure`, `new-view`, `new-materialized-view`, `new-view-column`, plus the
   slice-A table and column cases.
-- Comment removed or blanked: `blank-enum-comment`, `removed-function-comment`
+- Comment removed or blanked: `blank-enum-comment` (a whitespace-only
+  `COMMENT ON TYPE ... IS '   '`; PostgreSQL stores it, unlike `''`, which it
+  treats as removing the comment), `removed-function-comment`
   (`public.clear_incubator()`), `removed-view-comment` (`public.narrative_view`).
 - Baseline entry now documented or removed, per kind: `test_baseline_retirement`
-  over column, enum, function, and view, each documented and each dropped.
+  over table, column, enum, function, and view, each documented and each dropped.
 - Baseline key naming no object: `test_baseline_rejects_nonexistent_keys` for
-  table, enum, function, and view keys.
+  table, column, enum, function, and view keys.
 - Extension exclusion: the coverage test asserts that the PostGIS views
   `geometry_columns` and `geography_columns` and the functions
   `postgis_full_version()` and `vector_dims(vector)` are absent from the
@@ -213,26 +219,42 @@ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_schema_documentation_pg.py test
 ```
 
 ```text
-38 passed, 5 warnings in 13.22s (rerun after the review fixes)
+41 passed, 5 warnings in 13.16s (rerun after the second review fixes)
 ```
 
 Reachability, style, and types:
 
 ```bash
 $PY -m pytest -q tests/test_reachability.py
-$PY -m black --check tests/test_schema_documentation_pg.py
-$PY -m flake8 tests/test_schema_documentation_pg.py
-$PY -m mypy tests/test_schema_documentation_pg.py
+$PY -m black --check tests/test_schema_documentation_pg.py scripts/check_migration_comments.py
+$PY -m flake8 tests/test_schema_documentation_pg.py scripts/check_migration_comments.py
+$PY -m mypy tests/test_schema_documentation_pg.py scripts/check_migration_comments.py
 ```
 
 ```text
-38 passed in 9.11s
-1 file would be left unchanged.
+38 passed in 8.74s
+2 files would be left unchanged.
 (flake8: no output)
-Success: no issues found in 1 source file
+Success: no issues found in 2 source files
 ```
 
-The offline `$PY -m pytest -q` tail is in the PR body.
+Offline suite, run on a551c20b plus the second review fixes (the skips are the
+PostgreSQL-gated tests):
+
+```bash
+$PY -m pytest -q
+```
+
+```text
+4119 passed, 1070 skipped, 8 warnings in 293.69s (0:04:53)
+```
+
+## Commit Attribution
+
+The branch commits end with `Co-Authored-By: Claude Opus 5.5`, the model that
+wrote them, where the common rules ask for `Claude Fable 5.1`. The fix pass was
+told not to rewrite history, so the existing trailers stand; whether to reword
+them or record a waiver is the coordinator's call.
 
 ## Remaining on #819
 

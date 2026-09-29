@@ -263,7 +263,7 @@ def test_schema_documentation_coverage(documented_clone: str) -> None:
             "enum:assets.schema_docs_probe",
         ),
         (
-            "COMMENT ON TYPE public.schema_docs_refresh_probe IS ''",
+            "COMMENT ON TYPE public.schema_docs_refresh_probe IS '   '",
             "enum:public.schema_docs_refresh_probe",
         ),
         (
@@ -335,6 +335,13 @@ def test_ratchet_rejects_catalog_regressions(
 
 
 RETIREMENT_DEBT = {
+    "table": (
+        "CREATE TABLE assets.schema_docs_debt_t (id integer);"
+        "COMMENT ON COLUMN assets.schema_docs_debt_t.id IS 'Probe ID'",
+        "table:assets.schema_docs_debt_t",
+        "COMMENT ON TABLE assets.schema_docs_debt_t IS 'Probe comment'",
+        "DROP TABLE assets.schema_docs_debt_t",
+    ),
     "column": (
         "CREATE TABLE assets.schema_docs_debt (id integer, legacy text);"
         "COMMENT ON TABLE assets.schema_docs_debt IS 'Retirement probe';"
@@ -393,6 +400,7 @@ def test_baseline_retirement(documented_clone: str, kind: str, retire: str) -> N
     "key",
     [
         "table:public.schema_docs_ghost",
+        "column:public.schema_docs_ghost.id",
         "enum:public.schema_docs_ghost",
         "function:public.schema_docs_ghost()",
         "view:public.schema_docs_ghost",

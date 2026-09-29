@@ -2,9 +2,9 @@
 """Require COMMENT ON for every schema object a new migration creates.
 
 PostgreSQL comments are the NEXUS schema reference (docs/database.md). The
-PostgreSQL-gated ratchet in tests/test_schema_documentation_pg.py checks table
-and column coverage on a live clone; this stdlib-only lint runs offline at
-commit time and covers every object kind a migration adds.
+PostgreSQL-gated ratchet in tests/test_schema_documentation_pg.py checks table,
+column, enum, function, and view coverage on a live clone; this stdlib-only lint
+runs offline at commit time and covers every object kind a migration adds.
 
 For each migrations/NNN_*.sql file, and each SQL string literal in an
 NNN_*.py migration, numbered above WATERMARK, the lint finds:
