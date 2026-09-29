@@ -22,10 +22,6 @@ class TokenBudgetManager:
         self.settings = settings
         self.token_budget_config = settings.lore.token_budget
         self.percent_budget = settings.lore.payload_percent_budget
-        # Plain ranges for callers that pass override constraints of this shape.
-        self.allocation_config: Dict[str, Dict[str, int]] = (
-            self.percent_budget.model_dump()
-        )
 
     def calculate_budget(
         self,
@@ -170,79 +166,6 @@ class TokenBudgetManager:
         )
 
         return result
-
-    def validate_budget_constraints(
-        self,
-        allocations: Dict[str, int],
-        constraints: Optional[Dict[str, Dict[str, int]]] = None,
-    ) -> bool:
-        """
-        Validate that allocations meet min/max constraints.
-        NO LLM NEEDED - just comparison operators!
-
-        Args:
-            allocations: Proposed token allocations
-            constraints: Optional override constraints (defaults to config)
-
-        Returns:
-            True if allocations are valid, False otherwise
-        """
-        if not constraints:
-            constraints = self.allocation_config
-
-        total = sum(allocations.values())
-
-        # Check warm slice constraints
-        warm_tokens = allocations.get("warm_slice", 0)
-        warm_min = int(total * constraints.get("warm_slice", {}).get("min", 40) / 100)
-        warm_max = int(total * constraints.get("warm_slice", {}).get("max", 70) / 100)
-
-        if not (warm_min <= warm_tokens <= warm_max):
-            logger.warning(
-                "Warm slice allocation %s outside bounds [%s, %s]",
-                warm_tokens,
-                warm_min,
-                warm_max,
-            )
-            return False
-
-        # Check structured data constraints
-        structured_tokens = allocations.get("structured_data", 0)
-        structured_min = int(
-            total * constraints.get("structured_summaries", {}).get("min", 10) / 100
-        )
-        structured_max = int(
-            total * constraints.get("structured_summaries", {}).get("max", 25) / 100
-        )
-
-        if not (structured_min <= structured_tokens <= structured_max):
-            logger.warning(
-                "Structured data allocation %s outside bounds [%s, %s]",
-                structured_tokens,
-                structured_min,
-                structured_max,
-            )
-            return False
-
-        # Check augmentation constraints
-        augment_tokens = allocations.get("contextual_augmentation", 0)
-        augment_min = int(
-            total * constraints.get("contextual_augmentation", {}).get("min", 25) / 100
-        )
-        augment_max = int(
-            total * constraints.get("contextual_augmentation", {}).get("max", 40) / 100
-        )
-
-        if not (augment_min <= augment_tokens <= augment_max):
-            logger.warning(
-                "Augmentation allocation %s outside bounds [%s, %s]",
-                augment_tokens,
-                augment_min,
-                augment_max,
-            )
-            return False
-
-        return True
 
     def estimate_entity_tokens(self, entity: Dict[str, Any]) -> int:
         """

@@ -1,9 +1,10 @@
 # Issue 809: Typed Settings Readers Verification
 
 Branch `claude/809-typed-settings-readers`, cut from `588fc543` on
-2026-09-29. No `save_NN` database or `NEXUS_template` was written; the
-PostgreSQL-backed tests ran on their fixtures' own disposable clones. No paid
-provider call was made.
+2026-09-29. No `save_NN` or `NEXUS_template` was written by this branch's
+code; the pre-existing `test_retrieval_coverage_live` (#885) opens a
+rolled-back transaction on live `save_05` as part of the ordered gate (its id
+sequences advance). No paid provider call was made.
 
 ## Ownership Table
 
@@ -16,11 +17,12 @@ blocks, and proves the effective values agree with `load_settings()`.
 | `Agent Settings.global` | `global_` | 4 |
 | `Agent Settings.LORE` | `lore` | 26 |
 | `Agent Settings.MEMNON` | `memnon` | 69 |
-| `API Settings.apex` | `apex` | 18 |
-| **Total** | | **117** |
+| `API Settings.apex` | `apex` | 20 |
+| **Total** | | **119** |
 
 Nine open-keyed registries are allowlisted in `DYNAMIC_REGISTRIES` and
-compared as whole sub-trees: the provider registry
+compared as whole sub-trees, type-strictly (a bool/int or int/float change
+inside a registry fails, as it does for a leaf): the provider registry
 (`global_.model.api_models`), the two provider-override tables
 (`lore.token_budget.provider_overrides`,
 `lore.entity_inclusion.provider_overrides`), the embedding registry
@@ -28,18 +30,44 @@ compared as whole sub-trees: the provider registry
 
 The walk fails on a façade leaf with no owner, an owner path that does not
 exist on `Settings` (it caught `memnon.import` versus the field `import_`), an
-owner outside its root, or a value drift. A planted drift and a planted
-unowned leaf are both named, so the walk is not vacuous.
+owner outside its root, an owner that is not its façade path mapped through
+each model's field aliases (`OWNER_PATH_EXCEPTIONS` is empty), or a value
+drift. A planted drift, a planted unowned leaf, and a planted Writer-to-Gaia
+owner swap (`apex.max_output_tokens` pointed at `apex.gaia.max_output_tokens`,
+which holds the same value) are all named, so the walk is not vacuous.
 
 ## Assembled-Request Fingerprint
 
 `tests/test_lore/test_assembled_prompt_fingerprint.py` builds one fixed
-two-pass turn on the real TEST route and records the SHA-256 of the exact
-`responses.create` kwargs for the Writer and Gaia seats, plus the budget
-lines (payload budget, per-provider context windows and entity inclusion,
-deep-query budget, presence-boost flag, Pass-2 config fingerprint). The
-values were recorded at the parity commit `688cb431`, before any reader
-moved, and pass unchanged at the head.
+two-pass turn on the TEST route with a recording client. The route comes from
+`LogonUtility._resolve_storyteller_route()`. The settings come from
+`settings_with()` with distinct Gaia values (`apex.gaia.max_output_tokens`
+23000, reserves 19000/3500, `reasoning_effort` `high`; the Writer keeps
+25000, 21000/4000, `medium`), so a seat swap is visible. The test records the
+SHA-256 of the exact `responses.create` kwargs for the Writer and Gaia seats;
+the per-seat request knobs (`max_output_tokens`, `reasoning_effort`,
+`temperature`) of the writer provider after `_initialize_provider` and of each
+pass provider after `_clone_provider_for_two_pass`; and the budget lines
+(payload budget, per-provider context windows and entity inclusion,
+deep-query budget, presence-boost flag, Pass-2 config fingerprint, and both
+seats' resolved windows).
+
+The values were recorded from an export of the parity commit `688cb431`,
+where every reader still used the alias dict, by running the same fixture
+with the overrides delivered as the legacy dict. They pass unchanged at the
+head. Planting `self.settings.apex.max_output_tokens` in place of the Gaia
+clone's `gaia.max_output_tokens` fails the request test.
+
+## Temperature and Dead Readers
+
+The storyteller sampling temperature is now typed configuration:
+`apex.temperature` and `apex.gaia.temperature` (both `0.7` in `nexus.toml`,
+the value the old unreachable `apex.get("temperature", 0.7)` fallback sent).
+The Writer and the pinned Gaia provider read them, and the slot-following
+Gaia clone takes `apex.gaia.temperature` alongside its output allowance and
+effort. `correspondence_settings()` and
+`TokenBudgetManager.validate_budget_constraints()` (with its `allocation_config`
+dict mirror) had no production caller and are deleted.
 
 ## Grep Proof
 
@@ -66,30 +94,35 @@ nexus/api/settings_endpoints.py:106:    payload["API Settings"] = {"apex": raw.g
 
 ## Gate Tails
 
-Parity and fingerprint at the parity commit (`git archive 688cb431`, import
-proven from that tree) and at the head:
+Parity and fingerprint at the head, plus the correspondence and seat-policy
+tests the review fixes touched:
 
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-9 passed in 0.79s
-secret-store guard: active; nexus-api: denied; disposable keychain: denied
-9 passed in 0.82s
+92 passed, 5 warnings in 3.63s
 ```
 
 `NEXUS_RUN_POSTGRES=1 python -m pytest -q tests/test_lore` (then
 `tests/config`, `tests/test_config`, `tests/test_memnon`), with
-`NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset:
+`NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset. `tests/test_lore`:
 
 ```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
 FAILED tests/test_lore/test_pass2_chunk1369.py::test_pass2_handles_karaoke_divergence
 FAILED tests/test_lore/test_retrieval_coverage_live.py::test_handle_user_input_writes_exact_coverage_and_empty_detection
-2 failed, 452 passed, 1 skipped in 114.74s (0:01:54)
+2 failed, 452 passed, 1 skipped, 9 warnings in 114.18s (0:01:54)
+```
+
+`tests/config`, `tests/test_config`, `tests/test_memnon`:
+
+```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-109 passed in 3.08s
+111 passed, 5 warnings in 3.29s
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-82 passed in 3.79s
+82 passed, 5 warnings in 3.84s
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-51 passed in 28.06s
+51 passed, 5 warnings in 28.00s
 ```
 
 Both lore failures reproduce unchanged on an export of `588fc543`:
@@ -98,20 +131,27 @@ exempt: `need-clock anchor unavailable: no canonical world time or
 base_timestamp`), and `test_pass2_chunk1369` patches `get_recent_chunks`
 with a lambda that rejects the `through_chunk_id` keyword the turn cycle
 already passed at the base (`FATAL: No warm slice chunks retrieved`).
+`test_pass2_chunk1369` is not a #885 exemption: it is a pre-existing failure
+left for the coordinator's triage.
 
-Offline suite, `python -m pytest -q`:
-
-```
-secret-store guard: active; nexus-api: denied; disposable keychain: denied
-4110 passed, 1043 skipped in 287.89s (0:04:47)
-```
-
-`python -m pytest -q tests/test_reachability.py`:
+Offline suite, `PYTHONPATH=$PWD python -m pytest -q` (the worktree must be
+on `PYTHONPATH`: `test_postgres_installer_helper_from_foreign_directory` runs
+a subprocess from another directory, and without it that subprocess imports
+the main checkout's `nexus`, whose models reject the new temperature keys):
 
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-38 passed in 9.25s
+4112 passed, 1043 skipped in 282.43s (0:04:42)
 ```
+
+`python -m pytest -q tests/test_reachability.py tests/test_correspondence.py`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+62 passed, 5 warnings in 9.74s
+```
+
+(That run also included `tests/test_correspondence.py`.)
 
 UI, `npm --prefix ui ci` then `npm --prefix ui test` (and `tsc` clean):
 
@@ -122,4 +162,5 @@ UI, `npm --prefix ui ci` then `npm --prefix ui test` (and `tsc` clean):
 
 Black reports every changed Python file unchanged. flake8 and mypy on the
 changed files report no finding that is absent from the same files at
-`588fc543`; both trees carry the repository's existing findings.
+`588fc543`; both trees carry the repository's existing findings. The review
+fixes add no flake8 or mypy finding over the previous head `64229627`.

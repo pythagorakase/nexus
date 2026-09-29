@@ -1231,6 +1231,7 @@ reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Output allowance, including inside-output reasoning
 reasoning_reserve_tokens = 21000 # Inside output when the model declares inside_output
 response_reserve_tokens = 4000 # Input headroom for response framing and retries
+temperature = 0.7 # Writer sampling temperature on OpenAI-compatible routes that accept it
 anthropic_storyteller_transport = "prompted" # "prompted", "native", or "tool_envelope"
 turn_pipeline = "two_pass" # "single_pass" or "two_pass"; two_pass default per #578 casting ruling (owner, 2026-07-26)
 # Gaia — the turn's second movement (#578 rung 2, renamed from "clerk"):
@@ -1257,6 +1258,7 @@ reasoning_effort = "medium"
 max_output_tokens = 25000
 reasoning_reserve_tokens = 21000
 response_reserve_tokens = 4000
+temperature = 0.7 # Gaia sampling temperature on OpenAI-compatible routes that accept it
 
 [apex.tag_library]
 # Measurement-stage A/B lever: false restores the complete described library.

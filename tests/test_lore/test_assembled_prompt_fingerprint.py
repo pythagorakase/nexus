@@ -2,10 +2,12 @@
 
 The digests below were recorded before the storyteller readers moved from the
 ``API Settings`` / ``Agent Settings`` aliases to the typed settings models
-(issue #809). A reader that maps to the wrong budget or apex field changes an
-assembled request or a budget line, so the move shows up here instead of as
-silent drift. Prompt or ``nexus.toml`` edits legitimately change these values;
-refresh them from the failure message after reviewing the diff.
+(issue #809). The fixture gives the Writer and Gaia seats distinct output,
+reserve and effort values, so a reader that maps to the wrong budget or apex
+field, including one seat's field read for the other, changes an assembled
+request, a recorded seat knob or a budget line instead of drifting silently.
+Prompt or ``nexus.toml`` edits legitimately change these values; refresh them
+from the failure message after reviewing the diff.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from nexus.agents.lore.utils.entity_inclusion import resolve_entity_inclusion
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.api import db_pool
-from nexus.config import load_settings
+from nexus.config.seat_window import resolve_seat_window
 from nexus.config.settings_models import Settings
 from nexus.config.story_model import StorySettings
 from nexus.memory.manager import (
@@ -32,8 +34,17 @@ from nexus.memory.manager import (
     resolve_storyteller_context_window,
 )
 from scripts.api_openai import OpenAIProvider
+from tests.settings_helpers import settings_with
 
 WINDOW = 75_000
+# The Writer keeps nexus.toml's [apex] values; Gaia differs on every seat
+# field the recorded requests and knobs can see.
+SEAT_OVERRIDES: dict[str, Any] = {
+    "apex.gaia.max_output_tokens": 23_000,
+    "apex.gaia.reasoning_reserve_tokens": 19_000,
+    "apex.gaia.response_reserve_tokens": 3_500,
+    "apex.gaia.reasoning_effort": "high",
+}
 USER_INPUT = "Open the archive."
 BASELINE = PresenceBaseline(
     present=[CharacterRef(kind="character", name="Iona Vale", id=4)],
@@ -57,10 +68,30 @@ GAIA_OUTPUT: dict[str, Any] = {
     "letter": "Agreed. The ringer stays unresolved.",
 }
 
-# Recorded at 588fc543, before the alias readers moved (issue #809).
+# Recorded from an export of 688cb431, where every reader still used the alias
+# dict, with SEAT_OVERRIDES applied (issue #809).
 EXPECTED_REQUEST_DIGESTS: dict[str, str] = {
     "writer": "09b26dfed922d661ebbed44ac7f8e5621f5a21734d99d078c2718cb5b505cac6",
-    "gaia": "cf619d7092fe80a3e4dd3680b046d3e26ac4e6166077980d91e84b7d52d1ed43",
+    "gaia": "cac3d730f8b3e3081aa4f297a642694fb1f937ffd0639f4f906c70c14e11da6f",
+}
+# "provider" is the writer route after _initialize_provider; the seat entries
+# are each pass's provider after _clone_provider_for_two_pass configures it.
+EXPECTED_SEAT_KNOBS: dict[str, Any] = {
+    "provider": {
+        "max_output_tokens": 25000,
+        "reasoning_effort": "medium",
+        "temperature": 0.7,
+    },
+    "skald_writer": {
+        "max_output_tokens": 25000,
+        "reasoning_effort": "medium",
+        "temperature": 0.7,
+    },
+    "gaia": {
+        "max_output_tokens": 23000,
+        "reasoning_effort": "high",
+        "temperature": 0.7,
+    },
 }
 _LOCAL_ENTITY_OVERRIDE: dict[str, Any] = {
     "include_all_relationships": False,
@@ -104,6 +135,22 @@ EXPECTED_BUDGET_LINES: dict[str, Any] = {
         "warm_slice": 3550,
     },
     "presence_boost_enabled": True,
+    "seat_windows": {
+        "gaia": {
+            "input_ceiling": 71500,
+            "max_output_tokens": 23000,
+            "model": "TEST",
+            "policy_headroom": 3500,
+            "seat": "gaia",
+        },
+        "skald_writer": {
+            "input_ceiling": 71000,
+            "max_output_tokens": 25000,
+            "model": "TEST",
+            "policy_headroom": 4000,
+            "seat": "skald_writer",
+        },
+    },
 }
 
 
@@ -113,7 +160,7 @@ def _digest(payload: Any) -> str:
 
 
 def _settings() -> Settings:
-    return load_settings()
+    return settings_with(SEAT_OVERRIDES)
 
 
 class _NoStoryConnection:
@@ -145,7 +192,19 @@ def _recording_client(calls: list[dict[str, Any]]) -> Any:
     return SimpleNamespace(responses=SimpleNamespace(create=create))
 
 
-def _assembled_requests(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def _seat_knobs(provider: Any) -> dict[str, Any]:
+    """Return the per-seat request knobs a provider carries into its call."""
+
+    return {
+        "max_output_tokens": provider.max_output_tokens,
+        "reasoning_effort": provider.reasoning_effort,
+        "temperature": provider.temperature,
+    }
+
+
+def _assembled_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     monkeypatch.setenv("NEXUS_SLOT", "3")
     utility = LogonUtility(
         _settings(), model_override="TEST", story_settings=StorySettings()
@@ -153,19 +212,21 @@ def _assembled_requests(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     # No story database or Setting Card backs this fixture turn.
     utility._setting_context_loaded = True
     utility._setting_context = None
-    endpoint: dict[str, Any] = {
-        "base_url": "http://127.0.0.1:5102/v1",
-        "api_key": "test-dummy-key",
-        "structured_transport": "responses",
-        "request_timeout_seconds": None,
-        "request_params": {},
-    }
-    utility._initialize_provider(
-        False, resolved_route=("TEST", "test", endpoint, "local")
-    )
+    route = utility._resolve_storyteller_route()
+    assert route[0] == "TEST" and route[1] == "test"
+    utility._initialize_provider(False, resolved_route=route)
     assert isinstance(utility.provider, OpenAIProvider)
+    knobs: dict[str, Any] = {"provider": _seat_knobs(utility.provider)}
     calls: list[dict[str, Any]] = []
     utility.provider.client = _recording_client(calls)
+    clone = utility._clone_provider_for_two_pass
+
+    def recording_clone(**kwargs: Any) -> Any:
+        pass_provider = clone(**kwargs)
+        knobs[kwargs["usage_seat"]] = _seat_knobs(pass_provider)
+        return pass_provider
+
+    monkeypatch.setattr(utility, "_clone_provider_for_two_pass", recording_clone)
     monkeypatch.setattr(
         utility,
         "_read_presence_baseline_for_context",
@@ -192,7 +253,7 @@ def _assembled_requests(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         },
         effective_context_window=WINDOW,
     )
-    return {"writer": calls[0], "gaia": calls[1]}
+    return {"writer": calls[0], "gaia": calls[1]}, knobs
 
 
 def _budget_lines() -> dict[str, Any]:
@@ -213,6 +274,12 @@ def _budget_lines() -> dict[str, Any]:
         "max_deep_queries": turn_cycle._max_deep_queries(),
         "presence_boost_enabled": turn_cycle._presence_boost_enabled(),
         "pass2_config_fingerprint": pass2_baseline_config_fingerprint(settings),
+        "seat_windows": {
+            seat: resolve_seat_window(
+                settings.model_dump(), "TEST", seat=seat, window=WINDOW
+            ).model_dump()
+            for seat in ("skald_writer", "gaia")
+        },
     }
 
 
@@ -221,11 +288,15 @@ def test_assembled_writer_and_gaia_requests_are_unchanged(
 ) -> None:
     """Both seats send exactly the recorded request for the fixture turn."""
 
-    requests = _assembled_requests(monkeypatch)
+    requests, knobs = _assembled_requests(monkeypatch)
     digests = {seat: _digest(request) for seat, request in requests.items()}
     assert digests == EXPECTED_REQUEST_DIGESTS, (
         "Assembled storyteller requests changed; if intended, record: "
         f"{json.dumps(digests, indent=4)}"
+    )
+    assert knobs == EXPECTED_SEAT_KNOBS, (
+        "Per-seat request knobs changed; if intended, record: "
+        f"{json.dumps(knobs, indent=4, sort_keys=True)}"
     )
 
 

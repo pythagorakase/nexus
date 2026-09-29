@@ -31,7 +31,6 @@ from nexus.agents.logon.skald_wire import (
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.lore_adapter import compute_raw_text, response_to_incubator
-from nexus.config.loader import load_settings_as_dict
 from nexus.config.settings_models import (
     CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE,
     Settings,
@@ -46,7 +45,6 @@ from nexus.memory.correspondence import (
     GeneratedCorrespondence,
     build_digest_length_validator,
     build_letter_length_validator,
-    correspondence_settings,
     load_compaction_system_prompt,
     plan_correspondence_compaction,
 )
@@ -113,10 +111,11 @@ def test_digest_budget_render_fails_when_placeholder_is_missing() -> None:
 def test_compaction_prompt_and_validator_share_real_digest_budget() -> None:
     """Real settings bind the same digest budget to prompt and validator."""
 
-    settings = load_settings_as_dict(PROMPTS_DIR.parent / "nexus.toml")
-    configured = correspondence_settings(settings)
-    expected = int(configured["max_digest_tokens"])
-    multiplier = float(configured["digest_hard_cap_multiplier"])
+    configured = load_settings(
+        PROMPTS_DIR.parent / "nexus.toml"
+    ).storyteller.correspondence
+    expected = configured.max_digest_tokens
+    multiplier = configured.digest_hard_cap_multiplier
     hard_cap = calculate_digest_hard_cap_tokens(
         max_digest_tokens=expected,
         digest_hard_cap_multiplier=multiplier,
@@ -296,16 +295,16 @@ def test_context_render_is_complete_and_token_cap_fails_loudly() -> None:
 def test_rendered_context_invariant_budgets_failed_compaction_pileup() -> None:
     """Six failed compactions keep their turns without breaching the invariant."""
 
-    settings = load_settings_as_dict(PROMPTS_DIR.parent / "nexus.toml")
-    configured = correspondence_settings(settings)
-    max_letter_tokens = int(configured["max_letter_tokens"])
+    configured = load_settings(
+        PROMPTS_DIR.parent / "nexus.toml"
+    ).storyteller.correspondence
+    max_letter_tokens = configured.max_letter_tokens
     hard_cap_tokens = calculate_digest_hard_cap_tokens(
-        max_digest_tokens=int(configured["max_digest_tokens"]),
-        digest_hard_cap_multiplier=float(configured["digest_hard_cap_multiplier"]),
+        max_digest_tokens=configured.max_digest_tokens,
+        digest_hard_cap_multiplier=configured.digest_hard_cap_multiplier,
     )
     exchange_count = (
-        int(configured["ceiling_turns"])
-        + CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE
+        configured.ceiling_turns + CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE
     )
     letter = _text_with_exact_tokens("letter", max_letter_tokens)
     context = CorrespondenceContext(
@@ -320,12 +319,12 @@ def test_rendered_context_invariant_budgets_failed_compaction_pileup() -> None:
         ),
     )
 
-    rendered = context.render(max_tokens=int(configured["max_rendered_tokens"]))
+    rendered = context.render(max_tokens=configured.max_rendered_tokens)
 
     rendered_tokens = calculate_chunk_tokens(rendered)
     assert exchange_count == 16
     assert rendered_tokens == 12063
-    assert rendered_tokens <= int(configured["max_rendered_tokens"])
+    assert rendered_tokens <= configured.max_rendered_tokens
 
 
 @pytest.mark.parametrize("token_count", [9, 10])

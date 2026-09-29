@@ -712,6 +712,8 @@ OWNERSHIP: dict[FacadePath, str] = {
         "response_reserve_tokens",
     ): "apex.gaia.response_reserve_tokens",
     ("API Settings", "apex", "gaia", "reasoning_effort"): "apex.gaia.reasoning_effort",
+    ("API Settings", "apex", "gaia", "temperature"): "apex.gaia.temperature",
+    ("API Settings", "apex", "temperature"): "apex.temperature",
     ("API Settings", "apex", "provider"): "apex.provider",
     ("API Settings", "apex", "model"): "apex.model",
     ("API Settings", "apex", "reasoning_effort"): "apex.reasoning_effort",
@@ -882,6 +884,78 @@ def test_owner_paths_start_at_their_facade_root() -> None:
     assert not misplaced, f"owners outside their façade root: {misplaced}"
 
 
+# Owners that deliberately sit somewhere other than the façade path's mirror.
+# Empty today; an entry here needs a one-line reason beside it.
+OWNER_PATH_EXCEPTIONS: dict[FacadePath, str] = {}
+
+
+def _mirrored_owner(settings: Settings, path: FacadePath) -> str:
+    """Map a façade path to the typed path that mirrors it through field aliases."""
+
+    root = FACADE_ROOTS[path[:2]]
+    parts = [root]
+    node: Any = getattr(settings, root)
+    for key in path[2:]:
+        if isinstance(node, BaseModel):
+            fields = type(node).model_fields
+            name = next(
+                (
+                    field
+                    for field, info in fields.items()
+                    if (info.alias or field) == key
+                ),
+                None,
+            )
+            if name is None:
+                raise LookupError(
+                    f"{type(node).__name__} has no field dumped as {key!r}"
+                )
+            parts.append(name)
+            node = getattr(node, name)
+        elif isinstance(node, dict):
+            parts.append(key)
+            node = node[key]
+        else:
+            raise LookupError(f"cannot descend into {type(node).__name__} at {key!r}")
+    return ".".join(parts)
+
+
+def _misrouted_owners(
+    settings: Settings, ownership: dict[FacadePath, str]
+) -> list[str]:
+    """Name every owner that is not the aliased mirror of its façade path."""
+
+    misrouted: list[str] = []
+    for path, owner in {
+        **ownership,
+        **{path: owner for path, (owner, _) in DYNAMIC_REGISTRIES.items()},
+    }.items():
+        if path in OWNER_PATH_EXCEPTIONS:
+            continue
+        expected = _mirrored_owner(settings, path)
+        if owner != expected:
+            misrouted.append(f"{' > '.join(path)} -> {owner} (mirror: {expected})")
+    return misrouted
+
+
+def test_owner_paths_mirror_their_facade_paths(
+    loaded: tuple[Settings, dict[str, Any]],
+) -> None:
+    """Each owner is its façade path mapped through the models' field aliases.
+
+    Value equality alone cannot catch an owner mis-mapped to a sibling that
+    happens to hold the same value; this structural check does.
+    """
+
+    typed, _facade = loaded
+    misrouted = _misrouted_owners(typed, OWNERSHIP)
+    assert not misrouted, f"owners that do not mirror their façade path: {misrouted}"
+    stale = [
+        " > ".join(path) for path in OWNER_PATH_EXCEPTIONS if path not in OWNERSHIP
+    ]
+    assert not stale, f"owner-path exceptions with no ownership entry: {stale}"
+
+
 def _value_drift(typed: Settings, facade: dict[str, Any]) -> list[str]:
     """Name every façade leaf whose value differs from its typed owner."""
 
@@ -925,6 +999,17 @@ def test_planted_drift_and_unowned_leaf_are_named(
         f"typed={typed.apex.max_output_tokens!r}"
     ]
 
+    # Writer and Gaia share this value in nexus.toml, so only the structural
+    # check can see an owner swapped onto its sibling seat.
+    swapped = dict(OWNERSHIP)
+    swapped[("API Settings", "apex", "max_output_tokens")] = (
+        "apex.gaia.max_output_tokens"
+    )
+    assert _misrouted_owners(typed, swapped) == [
+        "API Settings > apex > max_output_tokens -> apex.gaia.max_output_tokens "
+        "(mirror: apex.max_output_tokens)"
+    ]
+
 
 def test_dynamic_registries_match_as_whole_subtrees(
     loaded: tuple[Settings, dict[str, Any]],
@@ -938,4 +1023,46 @@ def test_dynamic_registries_match_as_whole_subtrees(
         node: Any = facade
         for key in path:
             node = node[key]
-        assert node == _normalize(_resolve_typed(typed, owner)), " > ".join(path)
+        mismatch = _strict_mismatch(node, _normalize(_resolve_typed(typed, owner)))
+        assert mismatch is None, f"{' > '.join(path)}: {mismatch}"
+
+
+def _strict_mismatch(actual: Any, expected: Any, where: str = "") -> str | None:
+    """Describe the first place two trees differ in value or scalar type."""
+
+    if type(actual) is not type(expected):
+        return (
+            f"{where or '<root>'}: type {type(actual).__name__} "
+            f"!= {type(expected).__name__} ({actual!r} vs {expected!r})"
+        )
+    if isinstance(actual, dict):
+        if actual.keys() != expected.keys():
+            return f"{where or '<root>'}: keys {sorted(actual)} != {sorted(expected)}"
+        for key in actual:
+            found = _strict_mismatch(actual[key], expected[key], f"{where}/{key}")
+            if found is not None:
+                return found
+        return None
+    if isinstance(actual, list):
+        if len(actual) != len(expected):
+            return f"{where or '<root>'}: length {len(actual)} != {len(expected)}"
+        for index, (left, right) in enumerate(zip(actual, expected)):
+            found = _strict_mismatch(left, right, f"{where}[{index}]")
+            if found is not None:
+                return found
+        return None
+    if actual != expected:
+        return f"{where or '<root>'}: {actual!r} != {expected!r}"
+    return None
+
+
+def test_registry_comparison_is_type_strict() -> None:
+    """A bool/int or int/float drift inside a registry is not equal."""
+
+    assert _strict_mismatch({"a": [1, {"b": 2.0}]}, {"a": [1, {"b": 2.0}]}) is None
+    assert _strict_mismatch({"a": True}, {"a": 1}) == (
+        "/a: type bool != int (True vs 1)"
+    )
+    assert _strict_mismatch({"a": [1]}, {"a": [1.0]}) == (
+        "/a[0]: type int != float (1 vs 1.0)"
+    )

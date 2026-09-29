@@ -117,11 +117,6 @@ from scripts.api_anthropic import AnthropicProvider  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
 
-# Sampling temperature sent to non-reasoning OpenAI-compatible storyteller and
-# gaia models. It was always the fallback of an `apex.temperature` read that
-# APEXSettings forbids, so no configuration ever reached it (issue #809).
-_STORYTELLER_TEMPERATURE = 0.7
-
 # One resolved storyteller/gaia seat: (model id, registry provider name,
 # OpenAI-compatible endpoint or None, wire class). Shared by the slot-model
 # route and the pinned gaia route so the tuple shape cannot drift.
@@ -730,7 +725,7 @@ class LogonUtility:
             # base_url in [global.model.api_models] (mock TEST, Ollama, vLLM).
             self.provider = OpenAIProvider(
                 model=model,
-                temperature=_STORYTELLER_TEMPERATURE,
+                temperature=apex_settings.temperature,
                 max_output_tokens=apex_settings.max_output_tokens,
                 reasoning_effort=apex_settings.reasoning_effort,
                 system_prompt=system_prompt,
@@ -1144,9 +1139,9 @@ class LogonUtility:
                     gaia.max_output_tokens
                 )
             else:
-                cast(OpenAIProvider, pass_provider).max_output_tokens = (
-                    gaia.max_output_tokens
-                )
+                openai_pass = cast(OpenAIProvider, pass_provider)
+                openai_pass.max_output_tokens = gaia.max_output_tokens
+                openai_pass.temperature = gaia.temperature
         return pass_provider
 
     def _gaia_seat_policy(self) -> GaiaSeatPolicy:
@@ -1276,7 +1271,7 @@ class LogonUtility:
         request_timeout = endpoint["request_timeout_seconds"] if endpoint else None
         return OpenAIProvider(
             model=gaia_model,
-            temperature=_STORYTELLER_TEMPERATURE,
+            temperature=gaia.temperature,
             max_output_tokens=gaia.max_output_tokens,
             reasoning_effort=gaia.reasoning_effort,
             system_prompt=system_prompt,
