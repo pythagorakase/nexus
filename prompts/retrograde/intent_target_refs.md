@@ -1,1 +1,4 @@
-Use the same compact entity-ref language as mechanical_hints.
+target_ref is the bare proper name of the intended character or place, written exactly as that entity's name appears in entity_ref, subject_ref, object_ref, participating_entities, a claimed edge's open_endpoint_name, or a candidate_graph node's name field.
+Never prefix it with an entity kind: write "Sister Orla", not "character:Sister Orla" or "character|Sister Orla".
+The kind is fixed by project_type: plan_relocation targets a place; recruit_ally, pursue_romance, court_patron, and seek_redemption target a character; build_venture has no target, so leave target_ref empty.
+A prefixed target_ref fails validation and costs a repair attempt.

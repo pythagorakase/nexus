@@ -6,15 +6,17 @@ These tests are skipped unless ``NEXUS_RUN_LIVE_LLM=1`` is set.
 from __future__ import annotations
 
 
+import json
 import os
+from typing import Any, Mapping
 
 import pytest
 
 from nexus.agents.orrery.retrograde_expansion import generate_expansion_with_skald
 from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
 from nexus.agents.orrery.retrograde_seed_candidates import (
-    generate_seed_candidates_with_skald,
     render_seed_generation_prompt,
+    run_seed_stage,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
     SeedEligibleVocabulary,
@@ -35,12 +37,19 @@ def test_live_retrograde_seed_and_expansion_round_trip() -> None:
     )
     max_tokens = int(os.environ.get("NEXUS_RETROGRADE_LIVE_MAX_TOKENS", "8000"))
 
-    seed_generation = generate_seed_candidates_with_skald(
+    # R4 generation returns empty selections by prompt contract (#443);
+    # run_seed_stage adds the decoupled R5 selection call before R6.
+    seed_generation = run_seed_stage(
         packet=packet,
         model_name=model_name,
         max_tokens=max_tokens,
     )
     seed_response = seed_generation["seed_candidate_response"]
+    # Evidence for #1007: every entity ref the validated seed response
+    # carries, visible under ``pytest -s`` (print, not logging, so a passing
+    # run still shows it).
+    for location, ref in _seed_entity_refs(seed_response):
+        print(f"SEED_ENTITY_REF {location} {json.dumps(ref)}")
 
     assert seed_response["candidates"]
     assert seed_response["selected_seed_ids"]
@@ -57,6 +66,35 @@ def test_live_retrograde_seed_and_expansion_round_trip() -> None:
     assert expansion_plan["thread_plan"]
     assert expansion_plan["commit_readiness"]["writes"] == "none"
     assert "pre_game_tick_chunk_id" in expansion_plan["commit_readiness"]["blocked_by"]
+
+
+def _seed_entity_refs(seed_response: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """List every prompt-local entity ref in a validated seed response."""
+
+    refs: list[tuple[str, str]] = []
+    for candidate in seed_response.get("candidates") or []:
+        seed_id = candidate.get("seed_id")
+        hints = candidate.get("mechanical_hints") or {}
+        for event in hints.get("events") or []:
+            for name in event.get("participating_entities") or []:
+                refs.append((f"{seed_id}.events.participating_entities", name))
+        for tag in hints.get("single_entity_tags") or []:
+            refs.append((f"{seed_id}.single_entity_tags.entity_ref", tag["entity_ref"]))
+        for section in ("pair_tags", "relationships"):
+            for row in hints.get(section) or []:
+                refs.append((f"{seed_id}.{section}.subject_ref", row["subject_ref"]))
+                refs.append((f"{seed_id}.{section}.object_ref", row["object_ref"]))
+        for edge in candidate.get("claimed_edges") or []:
+            refs.append(
+                (
+                    f"{seed_id}.claimed_edges.open_endpoint_name",
+                    edge["open_endpoint_name"],
+                )
+            )
+        intent = candidate.get("project_intent")
+        if intent and intent.get("target_ref"):
+            refs.append((f"{seed_id}.project_intent.target_ref", intent["target_ref"]))
+    return refs
 
 
 def _compact_live_packet() -> dict[str, object]:

@@ -764,7 +764,7 @@ class AnthropicProvider(LLMProvider):
                 )
                 if attempt >= self.structured_output_retries:
                     raise
-                active_prompt = retry_prompt(prompt, str(exc))
+                active_prompt = retry_prompt(prompt, structured_output_error_text(exc))
             finally:
                 result_recorder = getattr(self, "attempt_manifest_result", None)
                 if result_recorder is not None:
@@ -864,7 +864,7 @@ class AnthropicProvider(LLMProvider):
                 )
                 if attempt >= self.structured_output_retries:
                     raise
-                active_prompt = retry_prompt(prompt, str(exc))
+                active_prompt = retry_prompt(prompt, structured_output_error_text(exc))
             finally:
                 result_recorder = getattr(self, "attempt_manifest_result", None)
                 if result_recorder is not None:
@@ -960,7 +960,7 @@ class AnthropicProvider(LLMProvider):
                 )
                 if attempt >= self.structured_output_retries:
                     raise
-                active_prompt = retry_prompt(prompt, str(exc))
+                active_prompt = retry_prompt(prompt, structured_output_error_text(exc))
             finally:
                 result_recorder = getattr(self, "attempt_manifest_result", None)
                 if result_recorder is not None:

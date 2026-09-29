@@ -1,0 +1,51 @@
+
+tests/test_orrery/test_retrograde_live.py::test_live_retrograde_seed_and_expansion_round_trip 
+-------------------------------- live log call ---------------------------------
+INFO     nexus.metadata:api_openai.py:376 Using reasoning model: gpt-6-astra with effort: None
+INFO     httpx:_client.py:1025 HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-6-astra seat=retrograde_seed_candidates slot=- run=- attempt=1 outcome=accepted in=11249 out=1380 total=12629 cached=0 reasoning=267 tier=default effort=- max_output=8000
+INFO     nexus.usage:usage.py:558 token_estimate seat=retrograde_seed_candidates model=gpt-6-astra estimated=12327 reported=11249 ratio=1.10
+INFO     nexus.metadata:api_openai.py:376 Using reasoning model: gpt-6-astra with effort: None
+INFO     httpx:_client.py:1025 HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-6-astra seat=retrograde_seed_selection slot=- run=- attempt=1 outcome=accepted in=2590 out=199 total=2789 cached=0 reasoning=42 tier=default effort=- max_output=8000
+INFO     nexus.usage:usage.py:558 token_estimate seat=retrograde_seed_selection model=gpt-6-astra estimated=2652 reported=2590 ratio=1.02
+SEED_ENTITY_REF seed_01.events.participating_entities "Mara"
+SEED_ENTITY_REF seed_01.events.participating_entities "Vale"
+SEED_ENTITY_REF seed_01.events.participating_entities "Shutter Hall"
+SEED_ENTITY_REF seed_01.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_01.pair_tags.object_ref "Sable Exchange"
+SEED_ENTITY_REF seed_01.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_01.pair_tags.object_ref "Sable Exchange"
+SEED_ENTITY_REF seed_01.claimed_edges.open_endpoint_name "Sable Exchange"
+SEED_ENTITY_REF seed_01.claimed_edges.open_endpoint_name "Vale"
+SEED_ENTITY_REF seed_02.events.participating_entities "Mara"
+SEED_ENTITY_REF seed_02.events.participating_entities "Vale"
+SEED_ENTITY_REF seed_02.events.participating_entities "Shutter Hall"
+SEED_ENTITY_REF seed_02.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_02.pair_tags.object_ref "Shutter Hall"
+SEED_ENTITY_REF seed_02.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_02.pair_tags.object_ref "Vale"
+SEED_ENTITY_REF seed_02.claimed_edges.open_endpoint_name "Shutter Hall"
+SEED_ENTITY_REF seed_02.claimed_edges.open_endpoint_name "Vale"
+INFO     nexus.metadata:api_openai.py:376 Using reasoning model: gpt-6-astra with effort: None
+INFO     httpx:_client.py:1025 HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-6-astra seat=retrograde_expansion slot=- run=- attempt=1 outcome=accepted in=5714 out=1833 total=7547 cached=0 reasoning=238 tier=default effort=- max_output=8000
+INFO     nexus.usage:usage.py:558 token_estimate seat=retrograde_expansion model=gpt-6-astra estimated=6435 reported=5714 ratio=1.13
+PASSED
+
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
+=================== 1 passed, 5 warnings in 84.05s (0:01:24) ===================

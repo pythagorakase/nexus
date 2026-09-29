@@ -11,6 +11,9 @@ from __future__ import annotations
 import pytest
 
 from nexus.agents.orrery.retrograde_graph import build_candidate_graph
+from nexus.agents.orrery.retrograde_vocabulary import (
+    enumerate_seed_eligible_vocabulary,
+)
 
 SCAFFOLDS = {
     "core_entities": [
@@ -121,6 +124,29 @@ def test_shared_entity_junction_is_deterministic_and_kind_compatible() -> None:
         leg["open_endpoint_kind"] == junction["open_endpoint_kind"] for leg in legs
     )
     assert len({(leg["kind"], leg["edge_type"]) for leg in legs}) == 2
+
+
+def test_graph_refuses_node_kind_outside_graph_card_kinds() -> None:
+    """A kind the bare entity-ref validator does not reject never becomes a node.
+
+    Each node identifier is ``kind:name``; an identifier with an unknown kind
+    could pass as an entity ref, so the graph refuses the card loudly (#1007).
+    """
+
+    scaffolds = {
+        "core_entities": [
+            *SCAFFOLDS["core_entities"],
+            {"kind": "region", "role": "starting_region", "name": "Low Quarter"},
+        ]
+    }
+    with pytest.raises(ValueError, match="not in GRAPH_CARD_KINDS"):
+        build_candidate_graph(
+            candidate_scaffolds=scaffolds,
+            vocabulary=enumerate_seed_eligible_vocabulary(),
+            weird=WEIRD,
+            generate_candidates=6,
+            rng_seed_material="test:mara",
+        )
 
 
 def test_different_seed_material_rolls_a_different_graph() -> None:

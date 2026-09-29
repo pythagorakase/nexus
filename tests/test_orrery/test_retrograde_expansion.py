@@ -365,6 +365,160 @@ def test_project_plan_carries_exact_woven_seed_intent() -> None:
     assert response.project_plan[0].seed_id == "seed_001"
 
 
+def _court_patron_case(
+    *,
+    intent_target: str,
+    plan_target: str,
+    plan_actor: str = "Mara",
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Return packet, seed response, and plan for one court_patron project."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    seed_response = _seed_response(vocabulary)
+    seed_response["candidates"][0]["project_intent"] = {
+        "project_type": "court_patron",
+        "target_ref": intent_target,
+        "rationale": "The old debt can become patronage.",
+    }
+    payload = _valid_expansion(vocabulary)
+    payload["project_plan"] = [
+        {
+            "seed_id": "seed_001",
+            "project_type": "court_patron",
+            "actor_ref": plan_actor,
+            "target_ref": plan_target,
+            "rationale": "Mara courts a patron's backing.",
+        }
+    ]
+    return packet, seed_response, payload
+
+
+def test_project_plan_rejects_different_bare_target() -> None:
+    """A genuinely different target still fails the strict comparison."""
+
+    packet, seed_response, payload = _court_patron_case(
+        intent_target="Vale",
+        plan_target="Orla",
+    )
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="changes target_ref from 'Vale' to 'Orla'",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+def test_project_plan_rejects_kind_prefixed_target_ref() -> None:
+    """A prefixed plan target fails the bare-name rule, not the budget (#1007)."""
+
+    packet, seed_response, payload = _court_patron_case(
+        intent_target="Vale",
+        plan_target="character:Vale",
+    )
+
+    with pytest.raises(ValidationError, match="entity-kind prefix") as exc_info:
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+    assert "max_new_entity_stubs" not in str(exc_info.value)
+
+    wire_payload = {"project_plan": payload["project_plan"]}
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        RetrogradeExpansionWireResponse.model_validate(wire_payload)
+
+
+def test_project_plan_rejects_kind_prefixed_actor_ref() -> None:
+    """actor_ref carries the same bare-name contract as target_ref."""
+
+    packet, seed_response, payload = _court_patron_case(
+        intent_target="Vale",
+        plan_target="Vale",
+        plan_actor="character:Mara",
+    )
+
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "row"),
+    [
+        (
+            "event_plan",
+            "location_ref",
+            {
+                "event_ref": "retro_event_001",
+                "seed_ids": ["seed_001"],
+                "event_type": "placeholder",
+                "summary": "The handler died.",
+                "chronology": "recent_past",
+                "location_ref": "place|Shutter Hall",
+            },
+        ),
+        (
+            "event_plan",
+            "participants",
+            {
+                "event_ref": "retro_event_001",
+                "seed_ids": ["seed_001"],
+                "event_type": "placeholder",
+                "summary": "The handler died.",
+                "chronology": "recent_past",
+                "participants": [
+                    {"entity_ref": "character:Mara", "entity_kind": "character"}
+                ],
+            },
+        ),
+        (
+            "mechanical_plan",
+            "object_ref",
+            {
+                "plan": "pair_tag",
+                "subject_ref": "Mara",
+                "subject_kind": "character",
+                "tag": "knows_location",
+                "object_ref": "place:Shutter Hall",
+                "object_kind": "place",
+            },
+        ),
+        (
+            "mechanical_plan",
+            "subject_ref",
+            {
+                "plan": "death",
+                "subject_ref": "Character: Vale",
+                "subject_kind": "character",
+            },
+        ),
+    ],
+)
+def test_wire_expansion_rejects_kind_prefixed_refs(
+    section: str,
+    field: str,
+    row: dict[str, Any],
+) -> None:
+    """Every wire ref, including empty-means-none ones, rejects a prefix."""
+
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        RetrogradeExpansionWireResponse.model_validate({section: [row]})
+
+    blank_row = copy.deepcopy(row)
+    if field == "location_ref":
+        blank_row[field] = ""
+        RetrogradeExpansionWireResponse.model_validate({section: [blank_row]})
+
+
 def test_seek_redemption_requires_target_to_actor_wrong_at_r6() -> None:
     """An impossible redemption project enters the structured repair boundary."""
 
@@ -1040,12 +1194,19 @@ def test_expansion_plan_enforces_new_entity_budget() -> None:
     with pytest.raises(
         RetrogradeExpansionValidationError,
         match="max_new_entity_stubs",
-    ):
+    ) as exc_info:
         validate_expansion_plan(
             payload=_valid_expansion(vocabulary),
             packet=packet,
             seed_candidate_response=_seed_response(vocabulary),
         )
+    # Repair text names overflow entities as "name (kind)", never the
+    # kind-prefixed form the bare-name rule forbids (#1007).
+    message = str(exc_info.value)
+    assert "vale (character)" in message
+    assert "shutter hall (place)" in message
+    assert "character:" not in message
+    assert "place:" not in message
 
 
 def test_expansion_plan_accepts_new_entities_within_budget() -> None:

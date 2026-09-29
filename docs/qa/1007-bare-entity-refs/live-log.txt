@@ -1,0 +1,76 @@
+
+tests/test_orrery/test_retrograde_live.py::test_live_retrograde_seed_and_expansion_round_trip 
+-------------------------------- live log call ---------------------------------
+INFO     nexus.metadata:api_openai.py:376 Using reasoning model: gpt-5.6-terra with effort: None
+INFO     httpx:_client.py:1025 HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-5.6-terra seat=retrograde_seed_candidates slot=- run=- attempt=1 outcome=accepted in=11249 out=1367 total=12616 cached=0 reasoning=758 tier=default effort=- max_output=8000
+INFO     nexus.usage:usage.py:558 token_estimate seat=retrograde_seed_candidates model=gpt-5.6-terra estimated=12327 reported=11249 ratio=1.10
+SEED_ENTITY_REF seed_ledger_scar.events.participating_entities "Mara"
+SEED_ENTITY_REF seed_ledger_scar.events.participating_entities "Ledger Court"
+SEED_ENTITY_REF seed_ledger_scar.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_ledger_scar.pair_tags.object_ref "Ledger Court"
+SEED_ENTITY_REF seed_ledger_scar.claimed_edges.open_endpoint_name "Ledger Court"
+SEED_ENTITY_REF seed_ledger_scar.claimed_edges.open_endpoint_name "Ledger Court"
+SEED_ENTITY_REF seed_voice_hunt.events.participating_entities "Mara"
+SEED_ENTITY_REF seed_voice_hunt.events.participating_entities "Vale"
+SEED_ENTITY_REF seed_voice_hunt.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_voice_hunt.pair_tags.object_ref "Vale"
+SEED_ENTITY_REF seed_voice_hunt.claimed_edges.open_endpoint_name "Vale"
+SEED_ENTITY_REF seed_voice_hunt.claimed_edges.open_endpoint_name "Vale"
+SEED_ENTITY_REF seed_voice_hunt.project_intent.target_ref "Vale"
+FAILED
+
+=================================== FAILURES ===================================
+______________ test_live_retrograde_seed_and_expansion_round_trip ______________
+
+    @pytest.mark.live
+    @pytest.mark.live_llm
+    def test_live_retrograde_seed_and_expansion_round_trip() -> None:
+        """Real Skald calls can generate seeds and weave a dry-run R6 plan."""
+    
+        packet = _compact_live_packet()
+        model_name = resolve_model_ref(
+            os.environ.get("NEXUS_RETROGRADE_LIVE_MODEL", registry_model("openai"))
+        )
+        max_tokens = int(os.environ.get("NEXUS_RETROGRADE_LIVE_MAX_TOKENS", "8000"))
+    
+        seed_generation = generate_seed_candidates_with_skald(
+            packet=packet,
+            model_name=model_name,
+            max_tokens=max_tokens,
+        )
+        seed_response = seed_generation["seed_candidate_response"]
+        # Evidence for #1007: every entity ref the validated seed response
+        # carries, visible under ``pytest -s`` (print, not logging, so a passing
+        # run still shows it).
+        for location, ref in _seed_entity_refs(seed_response):
+            print(f"SEED_ENTITY_REF {location} {json.dumps(ref)}")
+    
+        assert seed_response["candidates"]
+>       assert seed_response["selected_seed_ids"]
+E       assert []
+
+tests/test_orrery/test_retrograde_live.py:53: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     nexus.metadata:api_openai.py:376 Using reasoning model: gpt-5.6-terra with effort: None
+INFO     httpx:_client.py:1025 HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-5.6-terra seat=retrograde_seed_candidates slot=- run=- attempt=1 outcome=accepted in=11249 out=1367 total=12616 cached=0 reasoning=758 tier=default effort=- max_output=8000
+INFO     nexus.usage:usage.py:558 token_estimate seat=retrograde_seed_candidates model=gpt-5.6-terra estimated=12327 reported=11249 ratio=1.10
+=============================== warnings summary ===============================
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+<frozen abc>:106
+<frozen abc>:106
+  <frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+
+../../../.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201
+  /Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+    _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_orrery/test_retrograde_live.py::test_live_retrograde_seed_and_expansion_round_trip
+======================== 1 failed, 5 warnings in 22.87s ========================

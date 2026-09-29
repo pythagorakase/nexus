@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
-from typing import Iterable, Literal, Mapping, TypedDict
+from typing import Annotated, Iterable, Literal, Mapping, TypedDict
+
+from pydantic import AfterValidator, Field
 
 from nexus.agents.orrery.catalog import collect_template_vocabulary
 from nexus.agents.orrery.pair_tag_registry import (
@@ -30,6 +33,100 @@ stages a minimum-viable stub: ``characters.name`` and ``places.name`` are
 characters. A longer ref is a description rather than a name, so it fails
 loudly at the response validation boundary (with a ModelRetry repair shot)
 instead of mid-transaction at the database.
+"""
+
+
+GRAPH_CARD_KINDS: frozenset[str] = frozenset(
+    {*(kind.value for kind in EntityKind), "zone", "layer"}
+)
+"""Every ``kind`` a Retrograde core-entity card, and so a graph node, may carry.
+
+``retrograde_packet`` builds core-entity cards for the entity kinds plus the
+starting zone and layer. ``retrograde_graph`` turns each named card into a
+``kind:name`` node identifier, and dangling edges copy it into ``anchor_ref``.
+Both modules refuse a card kind outside this set, and
+:func:`validate_bare_entity_ref` rejects every kind in it as a ref prefix, so
+no graph identifier the model reads can pass as an entity ref (#1007).
+"""
+
+
+_ENTITY_REF_PREFIX_KINDS: frozenset[str] = (
+    frozenset(kind.value for kind in EntityKind) | GRAPH_CARD_KINDS
+)
+"""Kinds a ref may never open with: :class:`EntityKind` plus graph card kinds."""
+
+_ENTITY_KIND_PREFIX_PATTERN = re.compile(
+    r"^(?:"
+    + "|".join(re.escape(kind) for kind in sorted(_ENTITY_REF_PREFIX_KINDS))
+    + r")\s*[:|]",
+    re.IGNORECASE,
+)
+"""Matches a ref that opens with a known kind and a ``:`` or ``|`` separator.
+
+Built once at import from :data:`_ENTITY_REF_PREFIX_KINDS`, so a new entity
+kind or graph card kind is covered without editing the pattern.
+``Placeholder: X`` does not match: the kind word must be followed directly by
+optional spaces and the separator.
+"""
+
+_ENTITY_KIND_PREFIX_MESSAGE = (
+    "entity ref carries an entity-kind prefix (for example 'character:Vale'); "
+    "write the bare proper name ('Vale') and let the kind field or "
+    "project_type carry the kind"
+)
+
+
+def validate_bare_entity_ref(value: str) -> str:
+    """Reject a prompt-local entity ref that carries an entity-kind prefix.
+
+    An entity ref is the bare proper name of one entity (#1007). The kind
+    rides in its own field (``entity_kind``, ``subject_kind``,
+    ``open_endpoint_kind``, the ``kind|tag`` enum refs) or is fixed by
+    ``project_type``. Candidate-graph identifiers (``kind:name``, including
+    the ``zone`` and ``layer`` cards in :data:`GRAPH_CARD_KINDS`) are not
+    refs, so a ref shaped like one fails here, at the Pydantic response
+    boundary, where the structured-output loop grants a repair shot.
+
+    The error message is fixed and never interpolates the offending value
+    (privacy contract in ``nexus/api/native_structured_output.py``).
+    """
+
+    if _ENTITY_KIND_PREFIX_PATTERN.match(value):
+        raise ValueError(_ENTITY_KIND_PREFIX_MESSAGE)
+    return value
+
+
+def validate_optional_bare_entity_ref(value: str) -> str:
+    """Apply :func:`validate_bare_entity_ref` to a wire ref where ``""`` is none."""
+
+    if value == "":
+        return value
+    return validate_bare_entity_ref(value)
+
+
+EntityRef = Annotated[
+    str,
+    Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH),
+    AfterValidator(validate_bare_entity_ref),
+]
+"""Prompt-local entity ref: a bare proper name, never a description.
+
+Bounded because refs become canonical ``name`` values when persistence
+stages minimum-viable stubs (``characters.name``/``places.name`` are
+``varchar(50)``). Never kind-prefixed (#1007). The validator runs after
+``str_strip_whitespace``, so a padded prefix cannot slip through.
+"""
+
+OptionalWireEntityRef = Annotated[
+    str,
+    AfterValidator(validate_optional_bare_entity_ref),
+]
+"""Provider-facing entity ref where the empty string means none.
+
+Each field keeps its own ``Field(default="", ...)`` constraints; the
+validator adds nothing to the JSON schema. It runs in ``after`` mode, after
+``str_strip_whitespace``, and rejects a prefixed ref at the wire parse,
+before any ``coerce_*`` expansion.
 """
 
 

@@ -1,0 +1,1 @@
+	FAILED tests/test_orrery/test_config.py::test_orrery_settings_load_queue_and_resolution_defaults

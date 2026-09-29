@@ -23,7 +23,10 @@ from hashlib import sha256
 from math import ceil
 from typing import TYPE_CHECKING, Any, Mapping, Optional, TypedDict
 
-from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+from nexus.agents.orrery.retrograde_vocabulary import (
+    GRAPH_CARD_KINDS,
+    SeedEligibleVocabulary,
+)
 
 if TYPE_CHECKING:
     from nexus.config.settings_models import OrreryRetrogradeGraphSettings
@@ -76,10 +79,23 @@ def _weighted_choice(rng: random.Random, options: tuple[tuple[str, float], ...])
 
 
 def _node_ref(card: Mapping[str, Any]) -> Optional[str]:
+    """Return a card's ``kind:name`` node identifier, or None when unnamed.
+
+    Refuses a kind outside ``GRAPH_CARD_KINDS``: the bare entity-ref
+    validator rejects exactly those kinds as ref prefixes, so an identifier
+    with any other kind could pass as an entity ref (#1007).
+    """
+
     kind = card.get("kind")
     name = card.get("name")
     if not kind or not name:
         return None
+    if kind not in GRAPH_CARD_KINDS:
+        raise ValueError(
+            f"Retrograde graph node kind {kind!r} is not in GRAPH_CARD_KINDS "
+            "(retrograde_vocabulary); its kind:name identifier would pass the "
+            "bare entity-ref validator"
+        )
     return f"{kind}:{name}"
 
 
