@@ -177,6 +177,7 @@ $ env -u NEXUS_HOME -u NEXUS_RUNTIME_CONFIG /Users/pythagor/nexus/.venv/bin/nexu
 | https://github.com/pythagorakase/nexus/actions/runs/36644838541 | a7372e9e | `poetry install --only main`, cold cache | success | 2m13s |
 | https://github.com/pythagorakase/nexus/actions/runs/36645090955 | a3160bf3 | `poetry install --only main`, warm cache | success | 50s |
 | https://github.com/pythagorakase/nexus/actions/runs/36645262937 | d8c10f20 | `poetry install --only main`, warm cache (restore 44 s) | success | 1m23s |
+| https://github.com/pythagorakase/nexus/actions/runs/36646110349 | 4f232462 | `poetry install --only main`, warm cache (restore 41 s); failure-only step added | success | 1m04s |
 
 The first run is why the install uses the lock: the unlocked resolve took
 opentelemetry-api 1.45.0 (the lock pins 1.39.1), and pydantic-ai-slim 1.30.1
@@ -223,6 +224,21 @@ Set up Python                        44s   (cache hit 23:27:28, restored 23:28:1
 Install NEXUS                         1s
 Run the ci-runner readiness checks   12s
 ```
+
+Step timings, run 36646110349 (head 4f232462, after the review fixes):
+
+```
+Checkout                              3s
+Install Poetry                        7s
+Set up Python                        41s   (cache hit 23:36:46, restored 23:37:26)
+Install NEXUS                         1s
+Run the ci-runner readiness checks    8s   ("ok": true; "214 production modules reachable, no findings")
+Print the reachability findings       skipped (no earlier step failed)
+Save readiness evidence               0s   ("With the provided path, there will be 1 file uploaded" ... "Final size is 423 bytes")
+```
+
+On a green run the failure-only step is skipped and `reachability-report.json`
+does not exist, so the artifact holds only `readiness-report.json`.
 
 Cost of `cache: poetry`: the cache holds the whole locked `--only main`
 virtualenv, including torch, transformers, and sentence-transformers. One
