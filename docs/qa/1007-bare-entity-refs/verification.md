@@ -55,7 +55,51 @@ SEED_ENTITY_REF seed_voice_hunt.project_intent.target_ref "Vale"
 
 Repair attempts: none. `live.log` carries no `structured-output rejected` line and the only usage row is `attempt=1 outcome=accepted`. Every ref is a bare name, including `project_intent.target_ref "Vale"`, the field that carried `character:Sister Orla` in #1007.
 
-Outcome: the test **failed** after the seed stage, at its own pre-existing assertion `assert seed_response["selected_seed_ids"]` (the model returned an empty `selected_seed_ids`), so the expansion seat never ran. That assertion is about the model's selection, not about refs; the seed response passed wire and contract validation. Tokens spent: 12,616 of the 120,000 bound. Per the order, the second invocation runs only if the first passes, so it was not run.
+Outcome: the test **failed** after the seed stage, at `assert seed_response["selected_seed_ids"]`, so the expansion seat never ran. The first draft of this file blamed the model for the empty list. That diagnosis was wrong: the model did what its prompt told it to do. The test called generation-only `generate_seed_candidates_with_skald` (R4), and since #443 the R4 prompt says "Do NOT select in this pass: return selected_seed_ids and rejected_seed_ids as empty lists" (`prompts/retrograde/seed_generation.md:2`); selection is the separate R5 call that `run_seed_stage` makes. The assertion was structurally stale and failed on every run with every model, so a plain rerun would have reproduced the failure. The seed response itself passed wire and contract validation. Tokens spent: 12,616.
+
+### Invocation Two (Stale Test Fixed)
+
+The live test now calls `run_seed_stage(packet=..., model_name=..., max_tokens=...)` (R4 generation, then R5 selection, merged and revalidated) in place of `generate_seed_candidates_with_skald`, and keeps the `SEED_ENTITY_REF` prints on its `seed_candidate_response`. Command (same model as #1007; a separate `--basetemp` keeps invocation one's usage file intact):
+
+```
+NEXUS_RUN_LIVE_LLM=1 NEXUS_RETROGRADE_LIVE_MODEL=gpt-5.6-terra $PY -m pytest -q -s -o log_cli=true --log-cli-level=INFO --basetemp=temp/1007-live-2 tests/test_orrery/test_retrograde_live.py::test_live_retrograde_seed_and_expansion_round_trip 2>&1 | tee docs/qa/1007-bare-entity-refs/live-2.log
+```
+
+Result: `1 passed, 5 warnings in 50.77s`. Committed copy of the log: `live-2-log.txt`.
+
+Usage lines (verbatim):
+
+```
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-5.6-terra seat=retrograde_seed_candidates slot=- run=- attempt=1 outcome=accepted in=11249 out=1935 total=13184 cached=11246 reasoning=1426 tier=default effort=- max_output=8000
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-5.6-terra seat=retrograde_seed_selection slot=- run=- attempt=1 outcome=accepted in=2200 out=200 total=2400 cached=0 reasoning=65 tier=default effort=- max_output=8000
+INFO     nexus.usage:usage.py:279 USAGE provider=openai model=gpt-5.6-terra seat=retrograde_expansion slot=- run=- attempt=1 outcome=accepted in=5565 out=913 total=6478 cached=0 reasoning=476 tier=default effort=- max_output=8000
+```
+
+Cross-check, `temp/1007-live-2/test_live_retrograde_seed_and_0/usage/usage-2026-09-29.jsonl` (the only usage file under `temp/1007-live-2`):
+
+```
+{"ts":"2026-09-29T17:16:03.833717Z","quota_day":"2026-09-29","provider":"openai","model":"gpt-5.6-terra","seat":"retrograde_seed_candidates","slot":null,"run_id":null,"attempt":1,"outcome":"accepted","transport":"responses","request_id":"resp_0a1194673434f5f1006abbf23761a887d1b011d10b499417bf","input_tokens":11249,"output_tokens":1935,"total_tokens":13184,"cached_input_tokens":11246,"cache_creation_tokens":null,"reasoning_tokens":1426,"service_tier":"default","aggregate":false,"requests":null,"reasoning_effort":null,"max_output_tokens":8000}
+{"ts":"2026-09-29T17:16:08.673013Z","quota_day":"2026-09-29","provider":"openai","model":"gpt-5.6-terra","seat":"retrograde_seed_selection","slot":null,"run_id":null,"attempt":1,"outcome":"accepted","transport":"responses","request_id":"resp_0704b819c70ed5cf006abbf25458c087d193a943fa29be69aa","input_tokens":2200,"output_tokens":200,"total_tokens":2400,"cached_input_tokens":0,"cache_creation_tokens":null,"reasoning_tokens":65,"service_tier":"default","aggregate":false,"requests":null,"reasoning_effort":null,"max_output_tokens":8000}
+{"ts":"2026-09-29T17:16:23.272078Z","quota_day":"2026-09-29","provider":"openai","model":"gpt-5.6-terra","seat":"retrograde_expansion","slot":null,"run_id":null,"attempt":1,"outcome":"accepted","transport":"responses","request_id":"resp_01092b6044f275f0006abbf259160087d1bd8b1cb2dddcbb37","input_tokens":5565,"output_tokens":913,"total_tokens":6478,"cached_input_tokens":0,"cache_creation_tokens":null,"reasoning_tokens":476,"service_tier":"default","aggregate":false,"requests":null,"reasoning_effort":null,"max_output_tokens":8000}
+```
+
+Entity refs the validated live seed response carried (from the test's `print`):
+
+```
+SEED_ENTITY_REF seed_wren_exit.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_wren_exit.pair_tags.object_ref "Wren Station"
+SEED_ENTITY_REF seed_wren_exit.claimed_edges.open_endpoint_name "Wren Station"
+SEED_ENTITY_REF seed_pale_ledger_patch.events.participating_entities "Mara"
+SEED_ENTITY_REF seed_pale_ledger_patch.events.participating_entities "Pale Ledger"
+SEED_ENTITY_REF seed_pale_ledger_patch.pair_tags.subject_ref "Mara"
+SEED_ENTITY_REF seed_pale_ledger_patch.pair_tags.object_ref "Pale Ledger"
+SEED_ENTITY_REF seed_pale_ledger_patch.claimed_edges.open_endpoint_name "Pale Ledger"
+SEED_ENTITY_REF seed_pale_ledger_patch.claimed_edges.open_endpoint_name "Pale Ledger"
+```
+
+Repair attempts: none. `live-2.log` carries no `structured-output rejected` line, and every usage row is `attempt=1 outcome=accepted`. Every ref is a bare name. This run's seeds carried no `project_intent`, so the `target_ref` sample from live evidence is invocation one's `"Vale"`; the expansion seat accepted the woven plan on its first attempt.
+
+Token total across both invocations: 12,616 + 13,184 + 2,400 + 6,478 = 34,678 of the 120,000 bound. The optional default-model invocation was not run: the order allows at most two invocations, and both are spent.
 
 ## Offline Gate
 
@@ -83,7 +127,7 @@ Baseline, same command against a `git archive 9a67e864` export (`PYTHONPATH` poi
 177 failed, 1387 passed, 39 skipped, 7 warnings, 28 errors in 272.81s (0:04:32)
 ```
 
-The branch failure set (`pg_orrery_failures_branch.txt`, 204 ids) is identical to the baseline's except that the baseline also fails `tests/test_orrery/test_config.py::test_orrery_settings_load_queue_and_resolution_defaults` (`pg_orrery_failures_diff_vs_main.txt`). No failing test is in a file this branch changes. Root errors in the log: `IDF analyzer mismatch for corpus narrative: rebuild required` (140 lines), `need-clock anchor unavailable: no canonical world time or base_timestamp` (32), `cannot unpack non-iterable NoneType object` (19); `save_05` appears 24 times (#885). The +27 passed are the new tests in this branch.
+The branch failure set (`pg_orrery_failures_branch.txt`, 204 ids) is identical to the baseline's except that the baseline also fails `tests/test_orrery/test_config.py::test_orrery_settings_load_queue_and_resolution_defaults` (`pg_orrery_failures_diff_vs_main.txt`). No failing test is in a file this branch changes. Root errors in the log: `IDF analyzer mismatch for corpus narrative: rebuild required` (140 lines), `need-clock anchor unavailable: no canonical world time or base_timestamp` (32), `cannot unpack non-iterable NoneType object` (19); `save_05` appears 24 times (#885). Of the +27 passed, +26 are the new tests in this branch; +1 is `test_config.py::test_orrery_settings_load_queue_and_resolution_defaults`, which failed only on the baseline export (likely environmental; see `pg_orrery_failures_diff_vs_main.txt`).
 
 ## Lint and Type Checks
 

@@ -15,8 +15,8 @@ import pytest
 from nexus.agents.orrery.retrograde_expansion import generate_expansion_with_skald
 from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
 from nexus.agents.orrery.retrograde_seed_candidates import (
-    generate_seed_candidates_with_skald,
     render_seed_generation_prompt,
+    run_seed_stage,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
     SeedEligibleVocabulary,
@@ -37,7 +37,9 @@ def test_live_retrograde_seed_and_expansion_round_trip() -> None:
     )
     max_tokens = int(os.environ.get("NEXUS_RETROGRADE_LIVE_MAX_TOKENS", "8000"))
 
-    seed_generation = generate_seed_candidates_with_skald(
+    # R4 generation returns empty selections by prompt contract (#443);
+    # run_seed_stage adds the decoupled R5 selection call before R6.
+    seed_generation = run_seed_stage(
         packet=packet,
         model_name=model_name,
         max_tokens=max_tokens,
