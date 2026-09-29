@@ -34,16 +34,20 @@ then run `nexus models verify`.
 
 The production reranker is `[memnon.retrieval.cross_encoder_reranking]
 model_path`; its repository is the `remote_path` of the reranker candidate
-entry with the same `local_path`. `CrossEncoderReranker` loads exactly that
-folder with `local_files_only=True`: nothing is downloaded and no other folder
-of the same name is substituted, so the folder `nexus models verify` checks is
-the folder that loads. A missing folder, a path that is not a directory, or a
-failed load raises a `RuntimeError` naming the key and the path, followed by
+entry with the same `local_path`. `CrossEncoderReranker` (`api_type =
+"cross_encoder"`) and `Qwen3LMReranker` (`api_type = "qwen3_lm"`) both load
+exactly that folder with `local_files_only=True`: nothing is downloaded and no
+other folder of the same name is substituted, so the folder `nexus models
+verify` checks is the folder that loads. A missing folder, a path that is not
+a directory, or a failed load raises a `RuntimeError` naming the key and the
+path, followed by
 `hf download <repo> --local-dir <path>` (or, when no candidate names the
 repository, pointing `model_path` at the downloaded folder) and then
 `nexus models verify`. The reranker loads on the first reranked search, and
 MEMNON search still catches that error, logs it, and returns the results
-without reranking.
+without reranking. `use_8bit = true` is refused before loading: the locked
+sentence-transformers moves every `CrossEncoder` model with `.to(device)`, and
+transformers rejects `.to` on 8-bit bitsandbytes models.
 
 ### Locking and Verifying Artifacts
 
@@ -81,6 +85,21 @@ Only `.DS_Store` is ignored: the `._*` AppleDouble files that copying an
 artifact to an exFAT or network volume creates are unexpected files, so remove
 them first (on macOS, `dot_clean -m <path>`).
 Neither command downloads anything, and startup does not run `verify`.
+
+The lock is committed: `config/model_artifacts.lock.json` records the
+production embedder and reranker as they sit on the owner's host, and
+`tests/test_model_artifact_lock_committed.py` fails when `nexus.toml` names a
+different active embedder, reranker, repository, or embedder dimension than
+the lock does. `nexus models verify` then checks, read-only, that every locked
+file on this host has its locked size and sha256, that no unlisted file
+appears, and that `nexus.toml` still names the locked models. Every loader is
+local-only by construction, so an artifact that fails `verify` fails to load
+rather than being repaired from the Hub: the embedder loader
+(`get_or_load_sentence_transformer`, shared by `EmbeddingManager`, the
+embedding job, and the operator scripts `import_narratives.py`,
+`query_narratives_vector.py`, and `regenerate_embeddings.py`) and both
+rerankers pass `local_files_only=True` after checking that the configured
+folder exists.
 
 ## Database Storage Strategy
 

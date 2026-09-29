@@ -1,0 +1,167 @@
+{
+  "artifacts": [
+    {
+      "dimensions": 2560,
+      "files": [
+        {
+          "path": ".gitattributes",
+          "sha256": "34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930",
+          "size": 1570
+        },
+        {
+          "path": "1_Pooling/config.json",
+          "sha256": "310d1990874074fc9cccad48c1e37450259a122e6bfe94108eb65cf3853a6d56",
+          "size": 298
+        },
+        {
+          "path": "2_Normalize/config.json",
+          "sha256": "cb006ba324eb05a1114655ae18a6fdae50da3a27257e560cfeaa6bd9530b424a",
+          "size": 35
+        },
+        {
+          "path": "README.md",
+          "sha256": "2a6934f7b37206c5bf022bf3ab2765996ac7fedbc2dd8fb20ed042023915991e",
+          "size": 7263
+        },
+        {
+          "path": "README.md.backup",
+          "sha256": "179fc9f379975a7501586e57fe2bcc3f62515621e957dbfe3261690d942588da",
+          "size": 3450
+        },
+        {
+          "path": "added_tokens.json",
+          "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+          "size": 605
+        },
+        {
+          "path": "chat_template.jinja",
+          "sha256": "44d5f08f3f72b837eaad09f13a54c1f9f4eb58d75240334548b7fd52a5437fa5",
+          "size": 2427
+        },
+        {
+          "path": "config.json",
+          "sha256": "f2aa2a94872bfc292850e42fff33221655da32e9913bb420d0a193145e481724",
+          "size": 1530
+        },
+        {
+          "path": "config_sentence_transformers.json",
+          "sha256": "40a08abfc2fe63ec675681e4707b21e164289e67d8fbb442336ac6f54883a3b4",
+          "size": 217
+        },
+        {
+          "path": "merges.txt",
+          "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "size": 1671853
+        },
+        {
+          "path": "model-00001-of-00002.safetensors",
+          "sha256": "58690a74da74de7708553df78bdb3eaaeae12964d09608a623563a4f08ecc894",
+          "size": 4965826464
+        },
+        {
+          "path": "model-00002-of-00002.safetensors",
+          "sha256": "9ea8214c96df5b935012b694bd59d733632b534f0c553a456edd13bb59e3879d",
+          "size": 3077765624
+        },
+        {
+          "path": "model.safetensors.index.json",
+          "sha256": "c7d0c1febf35ade36e0692414f09a6455c8df14361fa1b7528ae571515621b1c",
+          "size": 30467
+        },
+        {
+          "path": "modules.json",
+          "sha256": "21ddb3037a55ebf4549eb5c1dc44c3f28f10b56ec7f1335c92fd90e5b30d88ac",
+          "size": 350
+        },
+        {
+          "path": "special_tokens_map.json",
+          "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+          "size": 613
+        },
+        {
+          "path": "tokenizer.json",
+          "sha256": "83cdf8c3a34f68862319cb1810ee7b1e2c0a44e0864ae930194ddb76bb7feb8d",
+          "size": 11422947
+        },
+        {
+          "path": "tokenizer_config.json",
+          "sha256": "0a04a9d7d4a62b28482bdfe726c122756de85714fb64166ace92ae75b8f57614",
+          "size": 4686
+        },
+        {
+          "path": "vocab.json",
+          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+          "size": 2776833
+        }
+      ],
+      "license": "apache-2.0",
+      "name": "Octen-Embedding-4B",
+      "repo_id": "Octen/Octen-Embedding-4B",
+      "revision": null,
+      "role": "embedder",
+      "total_size": 8059517232
+    },
+    {
+      "dimensions": null,
+      "files": [
+        {
+          "path": ".gitattributes",
+          "sha256": "db7c0371f46f0840b8f25794c1e3321c9b5820a8cb6ba9694a46fc64b8fae5a6",
+          "size": 1477
+        },
+        {
+          "path": "README.md",
+          "sha256": "03a7b0bdc95d3cb89706921ba752b23ad860800b434cb06731fe12e7428fae00",
+          "size": 96
+        },
+        {
+          "path": "added_tokens.json",
+          "sha256": "cd0141b19e809eb963a8f8244fad72530233f729e1f6960d281e1fbb3537b2fb",
+          "size": 18
+        },
+        {
+          "path": "config.json",
+          "sha256": "9037c5b6727289e4611a6d1b9b4407bf18361bbd61effeb079794fbd228d6a91",
+          "size": 962
+        },
+        {
+          "path": "model.safetensors",
+          "sha256": "62a9a7dcac87b4031190fed3c2c4e2cbec7ebedfdc9fd6a080d75e64404e4ace",
+          "size": 870178898
+        },
+        {
+          "path": "pytorch_model.bin",
+          "sha256": "0a07f9efa9801ee2ffd3ba774a3ce16f9309057be65a694ad6fdd5b3a3d9237f",
+          "size": 870218087
+        },
+        {
+          "path": "special_tokens_map.json",
+          "sha256": "fcfbeb4e25cd37fb5b8030406394253b245230fd3b552750092bab7d24d827da",
+          "size": 156
+        },
+        {
+          "path": "spm.model",
+          "sha256": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+          "size": 2464616
+        },
+        {
+          "path": "tokenizer_config.json",
+          "sha256": "c0fb3e8bc0447717c219ae6cda38274059da411069322fba0fce96373e91f504",
+          "size": 369
+        },
+        {
+          "path": "training_args.bin",
+          "sha256": "30d68bfdb5fe708da2b40f1cfc9cc9df259514532c38070987d66424a0df7045",
+          "size": 4399
+        }
+      ],
+      "license": "cc-by-nc-sa-4.0",
+      "name": "deberta-v3-trecdl22",
+      "repo_id": "naver/trecdl22-crossencoder-debertav3",
+      "revision": "24f6a61d11707432d5780a1d5cf4e3af25cfaddb",
+      "role": "reranker",
+      "total_size": 1742869078
+    }
+  ],
+  "schema_version": 1
+}
