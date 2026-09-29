@@ -17,8 +17,8 @@ from tests.pg_fixtures import (
     FIXTURE_TURN_CHOICES,
     connect,
     disposable_slot_database,
-    seed_played_story,
     seed_pending_turn,
+    seed_played_story,
 )
 from tests.scheduler_helpers import gateway_lane, route_slot, run_cli
 from tests.scheduler_helpers import test_provider_config as configure_test

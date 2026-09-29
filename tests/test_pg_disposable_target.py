@@ -155,6 +155,34 @@ def test_turn_factory_refuses_a_slot_label_routed_elsewhere(
         helper("qa640_unrouted", slot=4, **arguments)
 
 
+def test_turn_factory_refuses_an_ambient_slot_routed_elsewhere(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``slot=None`` is checked as the ambient ``NEXUS_SLOT`` the commit uses.
+
+    A declared entity's maturation job is labelled with ``get_active_slot()``
+    when the commit receives no slot, so an unrouted ambient slot 4 (the
+    owner's ``save_04``) is refused before a connection is opened.
+    """
+
+    monkeypatch.setattr(psycopg2, "connect", _refuse_connection)
+    monkeypatch.setenv("NEXUS_SLOT", "4")
+    with pytest.raises(RuntimeError, match="NEXUS_SLOT=4 routes to 'save_04'"):
+        pg_fixtures.seed_accepted_turn(
+            "qa640_unrouted",
+            user_text="Refused.",
+            storyteller_text="Refused Courier waits by the gate.",
+            slot=None,
+            new_entities=[
+                {
+                    "kind": "character",
+                    "name": "Refused Courier",
+                    "summary": "A courier who never reaches the clone.",
+                }
+            ],
+        )
+
+
 def _sessions(cur: Any, dbname: str) -> int:
     """Return how many sessions PostgreSQL has established to ``dbname``."""
 

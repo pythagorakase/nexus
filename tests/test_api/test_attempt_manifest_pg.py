@@ -25,9 +25,9 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     seed_accepted_turn,
+    seed_pending_turn,
     seed_played_story,
     seed_relationship,
-    seed_pending_turn,
 )
 from tests.scheduler_helpers import (
     gateway_lane,

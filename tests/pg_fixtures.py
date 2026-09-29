@@ -844,12 +844,28 @@ def _require_slot_routes_to(dbname: str, slot: int | None) -> None:
     the production commit, which may resolve story state through it. Tests
     pass a slot only while ``tests.scheduler_helpers.route_slot`` routes that
     slot to the clone; any other routing would reach an owner database.
+
+    ``slot=None`` is checked as the slot the commit resolves: a maturation job
+    for a declared entity is labelled with ``get_active_slot()``, the ambient
+    ``NEXUS_SLOT``, so a set ``NEXUS_SLOT`` must route to the clone too. With
+    ``NEXUS_SLOT`` unset, the commit's own label resolution raises before it
+    enqueues a routed job.
     """
 
-    if slot is None:
-        return
     from nexus.api import slot_utils
 
+    if slot is None:
+        if os.environ.get("NEXUS_SLOT") is None:
+            return
+        ambient = slot_utils.get_active_slot()
+        routed = slot_utils.slot_dbname(ambient)
+        if routed != dbname:
+            raise RuntimeError(
+                f"Ambient NEXUS_SLOT={ambient} routes to {routed!r}, not the "
+                f"disposable target {dbname!r}; pass a slot routed to the clone "
+                "or route the ambient slot before seeding turns"
+            )
+        return
     routed = slot_utils.slot_dbname(slot)
     if routed != dbname:
         raise RuntimeError(
@@ -952,7 +968,7 @@ def _resolve_turn_orrery_proposal(
     from nexus.api.lore_adapter import _serialize_orrery_staging
     from nexus.config.settings_models import OrreryBleedSettings
 
-    bleed = OrreryBleedSettings.model_validate(orrery_settings.get("bleed", {}))
+    bleed = OrreryBleedSettings.model_validate(orrery_settings["bleed"])
     ambient_pacing_allowed = shared_ambient_pacing_allows(
         anchor_chunk_id, bleed.density
     )
@@ -963,9 +979,7 @@ def _resolve_turn_orrery_proposal(
                 session,
                 BUILTIN_TEMPLATES,
                 anchor_chunk_id=anchor_chunk_id,
-                window_chunks=int(
-                    orrery_settings.get("binding", {}).get("window_chunks", 30)
-                ),
+                window_chunks=int(orrery_settings["binding"]["window_chunks"]),
                 sunhelm_settings=orrery_settings.get("sunhelm"),
                 selection_settings=orrery_settings.get("selection"),
                 habituation_settings=orrery_settings.get("habituation"),
@@ -1054,7 +1068,7 @@ def seed_pending_turn(
     settings = story_context_settings(
         load_settings_as_dict(), read_story_settings(dbname)
     )
-    orrery_settings = settings.get("orrery") or {}
+    orrery_settings = settings["orrery"]
     baseline = empty_pass2_baseline(settings)
     session_id = str(uuid.uuid4())
     with closing(_connect(dbname)) as conn:
@@ -1074,9 +1088,7 @@ def seed_pending_turn(
                 anchor_chunk_id=parent_chunk_id,
                 orrery_settings=orrery_settings,
             )
-            if resolve_orrery
-            and not is_bootstrap
-            and orrery_settings.get("enabled", False)
+            if resolve_orrery and not is_bootstrap and orrery_settings["enabled"]
             else None
         )
         conflict = acquire_generation_lease(

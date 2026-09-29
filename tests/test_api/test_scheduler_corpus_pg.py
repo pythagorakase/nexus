@@ -27,8 +27,8 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     seed_accepted_turn,
-    seed_played_story,
     seed_pending_turn,
+    seed_played_story,
 )
 from tests.scheduler_helpers import (
     route_slot,
@@ -96,7 +96,10 @@ def test_scheduler_drains_starved_corpus(monkeypatch, tmp_path, mock_openai_serv
             )
             maturation = cur.fetchall()
             print(f"Maturation before: {maturation}", flush=True)
-            assert all(state == "succeeded" for _, state in maturation)
+            # The seeded story declares no new entities, so no maturation job
+            # exists: the drain below owes no maturation work, as the
+            # owner-corpus version asserted with its settled (succeeded) jobs.
+            assert maturation == []
 
         if os.environ.get("NEXUS_800_PAID_PROOF") == "1":
             doc = tomlkit.parse(Path("nexus.toml").read_text())
