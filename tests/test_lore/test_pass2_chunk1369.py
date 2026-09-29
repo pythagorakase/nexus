@@ -92,7 +92,9 @@ def _run_pass1_phases(
     )
 
     monkeypatch.setattr(
-        lore.memnon, "get_recent_chunks", lambda limit=5: {"results": warm_slice}
+        lore.memnon,
+        "get_recent_chunks",
+        lambda limit=5, *, through_chunk_id=None: {"results": warm_slice},
     )
 
     async def _run() -> None:
