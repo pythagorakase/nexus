@@ -16,7 +16,7 @@ read-only session on `NEXUS_template` (migration head 134).
 | Kind | Catalog Predicate | Key | Comment Source |
 | --- | --- | --- | --- |
 | Table | `pg_class.relkind IN ('r','p','f')` | `table:<schema>.<name>` | `obj_description(oid, 'pg_class')` |
-| Column | `pg_attribute` of any inventoried table or view | `column:<schema>.<relation>.<name>` | `col_description` |
+| Column | `pg_attribute` of any inventoried table | `column:<schema>.<table>.<name>` | `col_description` |
 | Enum | `pg_type.typtype = 'e'` | `enum:<schema>.<name>` | `obj_description(oid, 'pg_type')` |
 | Function | `pg_proc.prokind IN ('f','w','p')` | `function:<schema>.<name>(<pg_get_function_identity_arguments>)` | `obj_description(oid, 'pg_proc')` |
 | View | `pg_class.relkind IN ('v','m')` | `view:<schema>.<name>` | `obj_description(oid, 'pg_class')` |
@@ -26,6 +26,14 @@ PostgreSQL prints their identity arguments (for example
 `function:assets.schema_docs_probe(IN n integer)`, exercised by the
 `new-procedure` test case). Aggregates (`prokind = 'a'`) stay outside the gate.
 
+Views and materialized views are documented at the view level only; their
+columns are not inventoried. `scripts/check_migration_comments.py` requires
+`COMMENT ON VIEW` and `COMMENT ON MATERIALIZED VIEW` for a new view but cannot
+require column comments, because view DDL declares no column list, so a ratchet
+that required them would fail a migration the lint had passed. This follows a
+coordinator amendment: the first push inventoried view columns as `column:` keys
+and baselined 115 of them.
+
 ## Counts
 
 Read-only inventory of `NEXUS_template`, produced by the test module's own
@@ -34,21 +42,22 @@ Read-only inventory of `NEXUS_template`, produced by the test module's own
 | Kind | Inventoried | Documented | Baselined |
 | --- | ---: | ---: | ---: |
 | table | 85 | 85 | 0 |
-| column (table) | 867 | 853 | 14 |
-| column (view) | 118 | 3 | 115 |
+| column | 867 | 853 | 14 |
 | enum | 41 | 0 | 41 |
 | function | 34 | 13 | 21 |
 | view | 16 | 11 | 5 |
-| total | 1161 | 965 | 196 |
+| total | 1043 | 962 | 81 |
 
 The enum, function, and view totals match the slice-A inventory in
 `docs/qa/819-schema-docs/verification.md` (41/41, 34/21, 16/5 undocumented):
 migrations 128–134 added comments with every object they created or replaced.
-The 14 table-column entries are unchanged from slice A.
+The 14 table-column entries are unchanged from slice A, and so is the column
+inventory: its 867 keys and comments equal those of slice A's query (6b9c3e17) on
+the same read-only session.
 
 ## Baseline Reasons
 
-`config/schema_docs_baseline.json` grows from 14 to 196 entries. Every reason was
+`config/schema_docs_baseline.json` grows from 14 to 81 entries. Every reason was
 checked against the catalog or `git grep` at this base:
 
 - **Enums (41).** 34 name the table and view columns they type (catalog join on
@@ -70,9 +79,8 @@ checked against the catalog or `git grep` at this base:
   `migrate_embeddings()` (it names `chunk_embeddings` and
   `chunk_embeddings_small`; `to_regclass` finds neither in the template), and the
   two `pad_vector_*` helpers.
-- **Views (5) and view columns (115).** Each reason names the Python files under
-  `nexus/` and `scripts/` that mention the view (`git grep -lw`), or says that none
-  does, and whether the view itself is documented.
+- **Views (5).** Each reason names the Python files under `nexus/` and
+  `scripts/` that mention the view (`git grep -lw`).
 
 No reason is a comment in disguise: purposes are stated only where a trigger
 binding, a single caller, or the function body itself shows them
@@ -82,6 +90,13 @@ slice. The seven unused enums defer to the decision ledger (#817), and the six
 uncalled functions state that no caller exists (the three `hybrid_search`
 overloads add that no evidence establishes their contract).
 
+The amendment deleted the 115 view-column entries of the first push and nothing
+else (115 deletions, no additions). Read-only on `NEXUS_template`, every deleted
+key resolves to a column of a relation with `relkind = 'v'`, and together they are
+exactly the template's undocumented view columns outside extensions (118 such
+columns, 3 documented). The 14 remaining `column:` entries resolve to
+`relkind = 'r'` and equal slice A's entries, keys and reasons alike.
+
 ## Ratchet Proof
 
 The suite exercises each failure mode with real catalog DDL on the module's
@@ -89,8 +104,8 @@ The suite exercises each failure mode with real catalog DDL on the module's
 
 - New undocumented object: `new-enum`, `new-trigger-function`, `new-overload`
   (a second `schema_docs_refresh_probe` signature gets its own key),
-  `new-procedure`, `new-view`, `new-materialized-view`, `new-view-column`, plus the
-  slice-A table and column cases.
+  `new-procedure`, `new-view`, `new-materialized-view`, plus the slice-A table
+  and column cases.
 - Comment removed or blanked: `blank-enum-comment` (a whitespace-only
   `COMMENT ON TYPE ... IS '   '`; PostgreSQL stores it, unlike `''`, which it
   treats as removing the comment), `removed-function-comment`
@@ -99,17 +114,24 @@ The suite exercises each failure mode with real catalog DDL on the module's
   over table, column, enum, function, and view, each documented and each dropped.
 - Baseline key naming no object: `test_baseline_rejects_nonexistent_keys` for
   table, column, enum, function, and view keys.
+- View level only: `test_views_are_documented_at_view_level` creates an
+  uncommented view and materialized view; the ratchet reports exactly their two
+  `view:` keys, passes once `COMMENT ON VIEW` and `COMMENT ON MATERIALIZED VIEW`
+  exist while their columns stay uncommented, and rejects a baseline `column:`
+  key that names a view column. With the column query's `relkind` filter removed
+  by hand, the module fixture fails listing exactly the 115 deleted view-column
+  keys as undocumented objects absent from the baseline.
 - Extension exclusion: the coverage test asserts that the PostGIS views
   `geometry_columns` and `geography_columns` and the functions
   `postgis_full_version()` and `vector_dims(vector)` are absent from the
   inventory, and that `pg_depend` really records them as extension members.
 
 Hand-built red/green run (`disposable_slot_database("qa640_ratchet_manual")`, then
-an undocumented enum, PL/pgSQL trigger function, and view committed by hand; the
-view's one column was commented so that the three new kinds are the only
-findings; then `COMMENT ON TYPE`, `COMMENT ON FUNCTION`, and `COMMENT ON VIEW`).
-The exact driver, run from the worktree root as
-`NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY ratchet_manual.py`:
+an undocumented enum, PL/pgSQL trigger function, and view committed by hand, the
+view's one column left uncommented; then `COMMENT ON TYPE`, `COMMENT ON FUNCTION`,
+and `COMMENT ON VIEW`), rerun after the view-column amendment. The exact driver,
+kept outside the repository and run from the worktree root as
+`NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY <scratchpad>/ratchet_manual.py`:
 
 ```python
 from contextlib import closing
@@ -123,7 +145,6 @@ CREATE FUNCTION public.manual_probe_touch() RETURNS trigger LANGUAGE plpgsql AS
 $$BEGIN NEW.updated_at := now(); RETURN NEW; END$$;
 CREATE VIEW public.manual_probe_view AS
 SELECT 'calm'::public.manual_probe_mood AS mood;
-COMMENT ON COLUMN public.manual_probe_view.mood IS 'Manual probe view column';
 """
 COMMENT_DDL = """
 COMMENT ON TYPE public.manual_probe_mood IS 'Manual probe enum';
@@ -161,6 +182,10 @@ with disposable_slot_database("qa640_ratchet_manual") as dbname:
                 "WHERE p.oid = 'public.manual_probe_touch()'::regprocedure"
             )
             print(f"manual_probe_touch language/result: {cur.fetchone()}")
+            cur.execute(
+                "SELECT col_description('public.manual_probe_view'::regclass, 1)"
+            )
+            print(f"manual_probe_view.mood comment: {cur.fetchone()}")
     check(dbname, "after undocumented enum/function/view")
     execute(dbname, COMMENT_DDL)
     check(dbname, "after COMMENT ON TYPE/FUNCTION/VIEW")
@@ -169,9 +194,10 @@ with disposable_slot_database("qa640_ratchet_manual") as dbname:
 Tail of its output (the fixture's restore log precedes it):
 
 ```text
-clone: qa640_ratchet_manual_46fddbb388a8
+clone: qa640_ratchet_manual_01c8d06fd94e
 [fresh clone] GREEN
 manual_probe_touch language/result: ('plpgsql', 'trigger')
+manual_probe_view.mood comment: (None,)
 [after undocumented enum/function/view] RED:
 Undocumented objects absent from baseline: ['enum:public.manual_probe_mood', 'function:public.manual_probe_touch()', 'view:public.manual_probe_view']
 Retire documented or removed baseline entries: []
@@ -197,14 +223,14 @@ after the rollback.
 
 The module fixture commits documented probes to its clone: enum
 `public.schema_docs_refresh_probe`, function
-`public.schema_docs_refresh_probe(integer)`, view
-`public.schema_docs_refresh_probe_v`, and that view's column. Every legacy enum
+`public.schema_docs_refresh_probe(integer)`, and view
+`public.schema_docs_refresh_probe_v`. Every legacy enum
 is still debt, so a probe is the only way to prove an enum comment survives.
 `test_schema_only_refresh_preserves_comments` (real `pg_dump -s` into a
 `qa640_schema_docs_*` database) and `test_story_setup_and_runner_preserve_comments`
 (`scripts/new_story_setup.py` schema copy, seed copy, and migration runner via
 `disposable_slot_database(source_db=...)`) both assert full inventory equality with
-the source and the four exact probe comments on the target.
+the source and the three exact probe comments on the target.
 
 ## Commands
 
@@ -219,7 +245,7 @@ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_schema_documentation_pg.py test
 ```
 
 ```text
-41 passed, 5 warnings in 13.16s (rerun after the second review fixes)
+41 passed, 5 warnings in 14.05s (rerun after the view-column amendment)
 ```
 
 Reachability, style, and types:
@@ -232,14 +258,16 @@ $PY -m mypy tests/test_schema_documentation_pg.py scripts/check_migration_commen
 ```
 
 ```text
-38 passed in 8.74s
+38 passed in 8.75s
 2 files would be left unchanged.
 (flake8: no output)
 Success: no issues found in 2 source files
 ```
 
 Offline suite, run on a551c20b plus the second review fixes (the skips are the
-PostgreSQL-gated tests):
+PostgreSQL-gated tests). It was not rerun for the view-column amendment, which
+changes only the PostgreSQL-gated module (skipped offline), the baseline that only
+that module reads, and docs:
 
 ```bash
 $PY -m pytest -q
@@ -258,8 +286,8 @@ them or record a waiver is the coordinator's call.
 
 ## Remaining on #819
 
-1. A backfill migration that comments enums, functions, views, and view columns
-   whose semantics a reader or writer site establishes, citing that evidence as
+1. A backfill migration that comments enums, functions, and views whose
+   semantics a reader or writer site establishes, citing that evidence as
    migration 127 does, and retiring the matching baseline entries.
 2. The 14 table-column entries and every object without such evidence (including
    the seven unused enums and the six uncalled functions) go to the decision

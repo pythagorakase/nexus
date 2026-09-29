@@ -123,15 +123,18 @@ python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 
 PostgreSQL comments are the schema reference (`\d+` in psql or
 `MEMNON.get_schema_summary`); add a non-empty `COMMENT ON` with each new table,
-column, enum, function, and view. The PostgreSQL-gated
+table column, enum, function, and view. The PostgreSQL-gated
 `tests/test_schema_documentation_pg.py` ratchet checks five object kinds that
-NEXUS owns in `public` and `assets`: tables (`table:<schema>.<name>`), columns of
-tables and views (`column:<schema>.<relation>.<name>`), enums
-(`enum:<schema>.<name>`), functions and procedures, trigger functions included
+NEXUS owns in `public` and `assets`: tables (`table:<schema>.<name>`), table
+columns (`column:<schema>.<table>.<name>`), enums (`enum:<schema>.<name>`),
+functions and procedures, trigger functions included
 (`function:<schema>.<name>(<identity arguments>)`, so each overload has its own
-key), and views and materialized views (`view:<schema>.<name>`). Extension
-members (PostGIS, pgvector) are excluded through `pg_depend` (`deptype = 'e'`) in
-each object's own catalog, not by name. Legacy debt is listed by that key and a
+key), and views and materialized views (`view:<schema>.<name>`). A view is
+documented at the view level: its `COMMENT ON VIEW` (or `MATERIALIZED VIEW`) is
+required, comments on its columns are not, because view DDL declares no column
+list for the offline lint below to check. Extension members (PostGIS, pgvector)
+are excluded through `pg_depend` (`deptype = 'e'`) in each object's own catalog,
+not by name. Legacy debt is listed by that key and a
 one-line reason in `config/schema_docs_baseline.json`. To retire an entry,
 establish its contract from reader/writer code, cite that evidence in the comment
 migration, add the comment, and remove the baseline entry in the same change; a

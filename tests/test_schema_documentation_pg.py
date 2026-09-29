@@ -2,8 +2,9 @@
 
 Requires NEXUS_template (public/assets tables and installed extensions), pg_dump,
 createdb, and dropdb. The template is read only; every write targets qa640_*.
-The gate covers tables, columns (of tables and views), enums, functions and
-procedures, and views and materialized views that NEXUS owns in public and assets.
+The gate covers tables and their columns, enums, functions and procedures, and
+views and materialized views that NEXUS owns in public and assets. Views are
+documented at the view level only; their columns are not inventoried.
 """
 
 from __future__ import annotations
@@ -30,6 +31,9 @@ BASELINE = ROOT / "config/schema_docs_baseline.json"
 
 # Match pg_depend by catalog as well as OID: OIDs are not globally unique.
 # Extension ownership of a relation also excludes all of that relation's columns.
+# Only table columns are inventoried: view DDL declares no column list, so
+# scripts/check_migration_comments.py requires COMMENT ON VIEW but cannot require
+# view column comments, and the ratchet must not be stricter than that lint.
 # Functions are keyed by identity arguments because overloads share a name;
 # prokind 'a' (aggregates) stays outside the gate. format_type renders those
 # arguments schema-qualified only for types off the search_path, so _inventory
@@ -56,7 +60,8 @@ SELECT 'column:' || quote_ident(t.nspname) || '.' || quote_ident(t.relname)
        || '.' || quote_ident(a.attname), col_description(t.oid, a.attnum)
 FROM owned_relations t
 JOIN pg_attribute a ON a.attrelid = t.oid
-WHERE a.attnum > 0 AND NOT a.attisdropped
+WHERE t.relkind IN ('r', 'p', 'f')
+  AND a.attnum > 0 AND NOT a.attisdropped
   AND NOT EXISTS (
       SELECT 1 FROM pg_depend d
       WHERE d.classid = 'pg_class'::regclass AND d.objid = t.oid
@@ -92,8 +97,8 @@ ORDER BY 1
 KINDS = ("table:", "column:", "enum:", "function:", "view:")
 
 # Documented probe objects committed to the shared clone so the refresh tests
-# prove an enum, a function, a view, and a view column comment survive the
-# schema copy even while every legacy enum is still baselined debt.
+# prove an enum, a function, and a view comment survive the schema copy even
+# while every legacy enum is still baselined debt.
 REFRESH_PROBE_DDL = """
 CREATE TYPE public.schema_docs_refresh_probe AS ENUM ('kept');
 COMMENT ON TYPE public.schema_docs_refresh_probe IS 'Refresh probe enum';
@@ -104,8 +109,6 @@ COMMENT ON FUNCTION public.schema_docs_refresh_probe(integer)
 CREATE VIEW public.schema_docs_refresh_probe_v AS
 SELECT 'kept'::public.schema_docs_refresh_probe AS state;
 COMMENT ON VIEW public.schema_docs_refresh_probe_v IS 'Refresh probe view';
-COMMENT ON COLUMN public.schema_docs_refresh_probe_v.state
-    IS 'Refresh probe view column';
 """
 REFRESH_PROBES = {
     "enum:public.schema_docs_refresh_probe": "Refresh probe enum",
@@ -113,7 +116,6 @@ REFRESH_PROBES = {
         "Refresh probe function"
     ),
     "view:public.schema_docs_refresh_probe_v": "Refresh probe view",
-    "column:public.schema_docs_refresh_probe_v.state": "Refresh probe view column",
 }
 
 
@@ -294,11 +296,6 @@ def test_schema_documentation_coverage(documented_clone: str) -> None:
             "view:assets.schema_docs_probe",
         ),
         (
-            "CREATE VIEW public.schema_docs_probe AS SELECT 1 AS id;"
-            "COMMENT ON VIEW public.schema_docs_probe IS 'Probe view'",
-            "column:public.schema_docs_probe.id",
-        ),
-        (
             "COMMENT ON VIEW public.narrative_view IS NULL",
             "view:public.narrative_view",
         ),
@@ -316,7 +313,6 @@ def test_schema_documentation_coverage(documented_clone: str) -> None:
         "removed-function-comment",
         "new-view",
         "new-materialized-view",
-        "new-view-column",
         "removed-view-comment",
     ],
 )
@@ -364,8 +360,7 @@ RETIREMENT_DEBT = {
         "DROP FUNCTION assets.schema_docs_debt(integer)",
     ),
     "view": (
-        "CREATE VIEW assets.schema_docs_debt AS SELECT 1 AS id;"
-        "COMMENT ON COLUMN assets.schema_docs_debt.id IS 'Probe ID'",
+        "CREATE VIEW assets.schema_docs_debt AS SELECT 1 AS id",
         "view:assets.schema_docs_debt",
         "COMMENT ON VIEW assets.schema_docs_debt IS 'Probe comment'",
         "DROP VIEW assets.schema_docs_debt",
@@ -412,6 +407,39 @@ def test_baseline_rejects_nonexistent_keys(documented_clone: str, key: str) -> N
         conn.set_session(readonly=True)
         with pytest.raises(AssertionError, match=re.escape(repr(key))):
             _assert_coverage(_inventory(conn), {**_baseline(), key: "Ghost"})
+
+
+def test_views_are_documented_at_view_level(documented_clone: str) -> None:
+    """Require the view comment, never view column comments, as the lint does."""
+    view_keys = ["view:assets.schema_docs_probe", "view:public.schema_docs_probe"]
+    view_column = "column:public.schema_docs_probe.id"
+    with closing(connect(documented_clone)) as conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "CREATE VIEW public.schema_docs_probe AS SELECT 1 AS id;"
+                    "CREATE MATERIALIZED VIEW assets.schema_docs_probe AS "
+                    "SELECT 1 AS id"
+                )
+            objects = _inventory(conn)
+            assert view_column not in objects
+            # The views alone are reported, never their uncommented columns.
+            with pytest.raises(AssertionError, match=re.escape(repr(view_keys))):
+                _assert_coverage(objects, _baseline())
+            with conn.cursor() as cur:
+                cur.execute(
+                    "COMMENT ON VIEW public.schema_docs_probe IS 'Probe view';"
+                    "COMMENT ON MATERIALIZED VIEW assets.schema_docs_probe "
+                    "IS 'Probe view'"
+                )
+            _assert_coverage(_inventory(conn), _baseline())
+            # A view column is not debt the baseline can carry.
+            with pytest.raises(AssertionError, match=re.escape(repr([view_column]))):
+                _assert_coverage(
+                    _inventory(conn), {**_baseline(), view_column: "View column"}
+                )
+        finally:
+            conn.rollback()
 
 
 def test_schema_only_refresh_preserves_comments(documented_clone: str) -> None:
