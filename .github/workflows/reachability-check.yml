@@ -1,5 +1,12 @@
 name: Python reachability check
 
+# Runs the ci-runner readiness contract (nexus/runtime/readiness.py, issue
+# #803): `config.valid` loads nexus.toml through the Pydantic settings models,
+# and `reachability.gate` starts `python -S scripts/check_reachability.py`, so
+# the static import gate still runs without site-packages. Run the same thing
+# from a checkout with `nexus doctor --target ci-runner --json`
+# (docs/runtime.md, Readiness Checks).
+
 on:
   push:
     branches: [main]
@@ -19,12 +26,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Check static import reachability
-        run: python -S scripts/check_reachability.py --report reachability-report.json
-      - name: Save graph evidence
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # Editable, so the doctor's checkout root is this workspace.
+      - name: Install NEXUS
+        run: pip install -e .
+      - name: Run the ci-runner readiness checks
+        shell: bash
+        run: nexus doctor --target ci-runner --json | tee readiness-report.json
+      - name: Save readiness evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: python-reachability
-          path: reachability-report.json
+          name: ci-runner-readiness
+          path: readiness-report.json
           if-no-files-found: ignore
