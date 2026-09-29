@@ -2235,8 +2235,7 @@ def find_latest_playable_chunk_id(cur: Any) -> Optional[int]:
         /* orrery:retrograde:latest_playable_recording_boundary */
         SELECT nc.id
         FROM narrative_chunks AS nc
-        WHERE nc.state::text = 'finalized'
-          AND btrim(COALESCE(nc.storyteller_text, nc.raw_text, '')) <> ''
+        WHERE btrim(COALESCE(nc.storyteller_text, nc.raw_text, '')) <> ''
           AND """
         + playable_narrative_predicate("nc")
         + """

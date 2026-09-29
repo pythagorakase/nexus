@@ -1212,3 +1212,107 @@ def _expansion_with_death(
 
 def _blocker_ids(plan: dict[str, Any]) -> set[str]:
     return {blocker["id"] for blocker in plan["execute_blockers"]}
+
+
+def _accept_boundary_turn(
+    dbname: str,
+    *,
+    character_id: int,
+    place_id: int,
+    parent_id: int,
+    text: str,
+) -> int:
+    """Stage one complete draft and accept it through the production commit."""
+    from contextlib import closing
+    from uuid import uuid4
+
+    from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
+    from tests.pg_fixtures import connect
+    from tests.test_commit_choice_presence_pg import _insert_staged_turn
+
+    session_id = str(uuid4())
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        _insert_staged_turn(
+            cur,
+            session_id=session_id,
+            parent_chunk_id=parent_id,
+            storyteller_text=text,
+            choice_object={"presented": ["Wait.", "Leave."], "selected": 1},
+            choice_text=None,
+            reference_updates={
+                "characters": [
+                    {"character_id": character_id, "reference_type": "present"}
+                ],
+                "places": [{"place_id": place_id, "reference_type": "setting"}],
+                "factions": [],
+            },
+            metadata_updates={
+                "chronology": {
+                    "episode_transition": (
+                        "new_episode" if parent_id == 0 else "continue"
+                    ),
+                    "time_delta_minutes": 0 if parent_id == 0 else 5,
+                    "time_delta_description": (
+                        "Story begins" if parent_id == 0 else "Later"
+                    ),
+                },
+                "world_layer": "primary",
+            },
+        )
+    with closing(connect(dbname)) as conn:
+        return commit_incubator_to_database_sync(conn, session_id)
+
+
+@pytest.mark.requires_postgres
+def test_latest_playable_chunk_is_the_last_accepted_chunk_not_the_prologue() -> None:
+    """Accepted chunks keep the column-default state; the prologue is no boundary."""
+    from contextlib import closing
+
+    from nexus.agents.orrery.retrograde_persistence import (
+        _ensure_prologue_metadata,
+        _insert_prologue_chunk,
+        find_latest_playable_chunk_id,
+    )
+    from nexus.api.slot_utils import VALID_DBNAMES
+    from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+
+    with disposable_slot_database("qa640_807_latest_playable") as dbname:
+        VALID_DBNAMES.add(dbname)
+        try:
+            character_id, _ = seed_protagonist(dbname)
+            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO places (name, type) "
+                    "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+                )
+                place_id = cur.fetchone()[0]
+                prologue_id = _insert_prologue_chunk(cur)
+                _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_id)
+                assert find_latest_playable_chunk_id(cur) is None
+
+            first_id = _accept_boundary_turn(
+                dbname,
+                character_id=character_id,
+                place_id=place_id,
+                parent_id=0,
+                text="Rain darkens the harbor office windows.",
+            )
+            second_id = _accept_boundary_turn(
+                dbname,
+                character_id=character_id,
+                place_id=place_id,
+                parent_id=first_id,
+                text="The harbor clock strikes the hour.",
+            )
+            assert prologue_id < first_id < second_id
+
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute("SELECT id, state::text FROM narrative_chunks ORDER BY id")
+                assert cur.fetchall() == [
+                    (prologue_id, "finalized"),
+                    (first_id, "draft"),
+                    (second_id, "draft"),
+                ]
+                assert find_latest_playable_chunk_id(cur) == second_id
+        finally:
+            VALID_DBNAMES.discard(dbname)
