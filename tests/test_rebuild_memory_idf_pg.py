@@ -84,6 +84,15 @@ def test_migration_133_changes_only_the_mismatch_text() -> None:
     assert normalized(replacement) == normalized(original)
 
 
+def test_differing_lexemes_counts_each_lexeme_once() -> None:
+    """A changed frequency, an addition, and a removal each count one lexeme."""
+    before = {"harbor": 2, "keeper": 1, "lantern": 1}
+    after = {"harbor": 2, "keeper": 2, "ship": 1}
+    assert rebuild.differing_lexemes(before, after) == 3
+    assert rebuild.differing_lexemes(before, dict(before)) == 0
+    assert rebuild.differing_lexemes({}, {"ship": 1}) == 1
+
+
 pg = pytest.mark.requires_postgres
 
 
@@ -296,6 +305,33 @@ def test_stale_key_blocks_writes_until_the_rebuild_recomputes(
 
 
 @pg
+def test_rebuild_counts_each_corrupted_lexeme_once(seeded_clone: str) -> None:
+    """A wrong frequency and a stray lexeme are each one differing row, then healed."""
+    dbname = seeded_clone
+    _set_keys(dbname, STALE_KEY)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE memory_idf_lexemes SET document_frequency = 2 "
+            "WHERE corpus_kind = 'narrative' AND lexeme = 'keeper' "
+            "AND document_frequency = 1"
+        )
+        assert cur.rowcount == 1
+        cur.execute(
+            "INSERT INTO memory_idf_lexemes (corpus_kind, lexeme, document_frequency) "
+            "VALUES ('retrograde_summary', 'qa1013bogus', 1)"
+        )
+    assert _idf_state(dbname)["lexemes"] != _ts_stat(dbname)
+
+    report = rebuild.rebuild_database(dbname)
+    assert (report.status, report.error) == ("rebuilt", None)
+    assert [(c.corpus_kind, c.lexeme_rows_differing) for c in report.corpora] == [
+        ("narrative", 1),
+        ("retrograde_summary", 1),
+    ]
+    assert _idf_state(dbname)["lexemes"] == _ts_stat(dbname)
+
+
+@pg
 def test_guard_rejects_document_count_drift_and_the_rollback_keeps_state(
     seeded_clone: str,
 ) -> None:
@@ -428,8 +464,20 @@ def test_locked_database_needs_the_write_locked_slot_override(
             [],
         )
 
+        # An explicitly named locked database fails loudly, as migrate.py does.
+        with pytest.raises(SystemExit) as refused:
+            rebuild.main(["--dbname", dbname, "--dry-run"])
+        assert refused.value.code == 2
+        with pytest.raises(SystemExit) as refused:
+            rebuild.main(["--dbname", dbname])
+        assert refused.value.code == 2
+        assert _idf_state(dbname) == before
+
         dry = rebuild.rebuild_database(dbname, dry_run=True, write_locked_slot=True)
         assert (dry.status, dry.locked) == ("dry_run", True)
+        assert (
+            rebuild.main(["--dbname", dbname, "--write-locked-slot", "--dry-run"]) == 0
+        )
         assert all(corpus.stale for corpus in dry.corpora)
         assert _idf_state(dbname) == before
         assert is_db_locked(dbname)
@@ -451,10 +499,13 @@ def test_locked_database_needs_the_write_locked_slot_override(
 
 @pg
 def test_absent_database_is_reported_and_untouched() -> None:
-    """A target that does not exist is skipped, as the migration runner does."""
+    """A missing target is skipped in a fleet run and refused when named."""
     dbname = f"qa640_1013_absent_{uuid.uuid4().hex[:12]}"
     report = rebuild.rebuild_database(dbname)
     assert (report.status, report.corpora, report.error) == ("absent", [], None)
+    # Named explicitly, a missing database fails loudly, as migrate.py does.
+    with pytest.raises(psycopg2.OperationalError, match=dbname):
+        rebuild.main(["--dbname", dbname, "--dry-run"])
     with closing(connect("postgres")) as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
         assert cur.fetchone() is None

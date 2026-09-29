@@ -17,9 +17,10 @@ live server's; otherwise it rolls back and the command exits non-zero.
 
 Targets mirror ``scripts/migrate.py``: a locked slot is skipped unless
 ``--write-locked-slot`` is given, and a database that does not exist is
-reported and skipped. ``--dry-run`` reads keys and counts in a read-only
-session and changes nothing; like the runner's, it skips a locked slot unless
-``--write-locked-slot`` is given.
+reported and skipped; an explicit ``--dbname`` that does not exist or is
+locked without the override fails instead. ``--dry-run`` reads keys and
+counts in a read-only session and changes nothing; like the runner's, it
+skips a locked slot unless ``--write-locked-slot`` is given.
 
 Usage:
     python scripts/rebuild_memory_idf.py --all --dry-run   # Report; change nothing
@@ -55,6 +56,7 @@ from scripts.migrate import (  # noqa: E402
     SLOT_DBS,
     TEMPLATE_DB,
     db_exists,
+    get_connection,
     is_db_locked,
 )
 
@@ -124,6 +126,7 @@ class CorpusReport:
     stale: bool
     key_after: Optional[str] = None
     documents_after: Optional[int] = None
+    # Lexemes added, dropped, or given a new document_frequency; each counts once.
     lexeme_rows_differing: Optional[int] = None
 
 
@@ -178,15 +181,24 @@ def corpus_states(cur: Any, *, lock: bool) -> dict[str, CorpusState]:
     return {row[0]: CorpusState(row[0], row[1], row[2], row[3]) for row in cur}
 
 
-def lexeme_rows(cur: Any) -> dict[str, set[tuple[str, int]]]:
-    """Return each corpus's ``(lexeme, document_frequency)`` rows."""
-    rows: dict[str, set[tuple[str, int]]] = {kind: set() for kind in CORPORA}
+def lexeme_rows(cur: Any) -> dict[str, dict[str, int]]:
+    """Return each corpus's ``lexeme -> document_frequency`` rows."""
+    rows: dict[str, dict[str, int]] = {kind: {} for kind in CORPORA}
     cur.execute(
         "SELECT corpus_kind, lexeme, document_frequency FROM memory_idf_lexemes"
     )
     for kind, lexeme, frequency in cur:
-        rows.setdefault(kind, set()).add((lexeme, frequency))
+        rows.setdefault(kind, {})[lexeme] = frequency
     return rows
+
+
+def differing_lexemes(before: Mapping[str, int], after: Mapping[str, int]) -> int:
+    """Count the lexemes added, dropped, or given a new document frequency."""
+    return sum(
+        1
+        for lexeme in before.keys() | after.keys()
+        if before.get(lexeme) != after.get(lexeme)
+    )
 
 
 def source_documents(cur: Any) -> dict[str, int]:
@@ -301,8 +313,8 @@ def _rebuild(dbname: str, report: DatabaseReport, write_locked_slot: bool) -> No
                 kind = corpus.corpus_kind
                 corpus.key_after = after[kind].analyzer_version
                 corpus.documents_after = after[kind].document_count
-                corpus.lexeme_rows_differing = len(
-                    lexemes_before[kind] ^ lexemes_after[kind]
+                corpus.lexeme_rows_differing = differing_lexemes(
+                    lexemes_before[kind], lexemes_after[kind]
                 )
             conn.commit()
         except BaseException:
@@ -431,6 +443,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     elif args.template:
         targets = [TEMPLATE_DB]
     else:
+        # As scripts/migrate.py does: an explicitly named database must exist
+        # (the connection raises otherwise) and a read-only one needs the
+        # override, so a typo or a locked name never exits 0 having done nothing.
+        with closing(get_connection(args.dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SHOW default_transaction_read_only")
+            if cur.fetchone()[0] == "on" and not args.write_locked_slot:
+                parser.error(f"Database {args.dbname} is read-only")
         targets = [args.dbname]
 
     reports = run_targets(
