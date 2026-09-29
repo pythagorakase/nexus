@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from nexus.agents.memnon.utils.embedding_tables import (
@@ -75,19 +74,15 @@ def drain_embedding(
         if embedded is not None:
             return {}
         models = active_embedding_models(settings["Agent Settings"]["MEMNON"])
-        from nexus.agents.memnon.utils.embedding_manager import (
-            get_or_load_sentence_transformer,
-        )
+        from nexus.agents.memnon.utils.embedding_manager import load_local_model
 
         def encode(chunk_text: str, name: str) -> list[float]:
             config = models[name]
             before_provider_call()
-            path = config.get("local_path")
-            if not path or not Path(path).is_dir():
-                raise ValueError(
-                    f"Configured embedding model {name} is not installed at {path}"
-                )
-            model = get_or_load_sentence_transformer(path)
+            # The shared local-only loader: a missing, misplaced or
+            # unloadable artifact fails with the pinned restore command,
+            # and the job records that error.
+            model = load_local_model(name, config)
             before_provider_call()
             vector = model.encode(chunk_text).tolist()
             if len(vector) != config["dimensions"]:

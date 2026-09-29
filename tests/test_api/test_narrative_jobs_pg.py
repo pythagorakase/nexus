@@ -9,16 +9,18 @@ from uuid import uuid4
 
 import pytest
 
+from nexus.agents.memnon.utils.artifact_manifest import lock_file_path, read_manifest
 from nexus.agents.orrery.job_queues import load_job_queues_sync
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.api.narrative_lease import claim_parent_embedding, finish_generation
 from nexus.api.summary_triggers import SummaryTask, schedule_summary_generation
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings, load_settings_as_dict
+from nexus.jobs.embeddings import enqueue_embedding
 from nexus.jobs.narrative_jobs import require_lease
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry import usage
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, seed_committed_chunk
 from tests.scheduler_helpers import test_provider_config as configure_test
 from tests.test_api.test_acceptance_staging_pg import (
     acceptance_slot,
@@ -198,6 +200,75 @@ def test_summary_queue_transaction_and_terminal_failure(offline_gate_db):
         assert cur.fetchone() == ("failed", 1, "RuntimeError")
         cur.execute("SELECT count(*) FROM seasons WHERE summary IS NOT NULL")
         assert cur.fetchone() == (0,)
+
+
+@pytest.mark.parametrize("artifact", ["missing", "incomplete"])
+def test_embedding_job_names_the_embedder_restore_command(
+    offline_gate_db, tmp_path, monkeypatch, artifact
+):
+    """The worker's embedding lane fails with the loader's pinned restore command.
+
+    The Orrery worker drains narrative embedding jobs through
+    SlotScheduler.run_pass. A missing embedder folder, or one that exists but
+    cannot load, fails the job with the exact hf download command at the
+    locked revision, and the job records that error.
+    """
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    settings = load_settings_as_dict()
+    settings["runtime"]["scheduler"]["embeddings"]["max_attempts"] = 1
+    models = settings["Agent Settings"]["MEMNON"]["models"]
+    (active,) = [name for name, config in models.items() if config["is_active"]]
+    folder = tmp_path / "embedder"
+    if artifact == "incomplete":
+        folder.mkdir()
+    models[active]["local_path"] = str(folder)
+    repo = models[active]["remote_path"]
+    (revision,) = [
+        entry["revision"]
+        for entry in read_manifest(lock_file_path(load_settings()))["artifacts"]
+        if entry["repo_id"] == repo
+    ]
+    remedy = (
+        f"Restore it with `hf download {repo} --revision {revision} "
+        f"--local-dir {folder}`, then run `nexus models verify`."
+    )
+    chunk_id = seed_committed_chunk(offline_gate_db, raw_text="the bell")
+    with closing(connect(offline_gate_db)) as conn, conn, conn.cursor() as cur:
+        enqueue_embedding(cur, chunk_id)
+
+    scheduler = SlotScheduler(4, dbname=offline_gate_db, settings=settings)
+    with pytest.raises(RuntimeError) as raised:
+        scheduler.run_pass(
+            narration_limit=0,
+            experience_limit=0,
+            maturation_limit=0,
+            experience_embedding_limit=0,
+        )
+
+    message = str(raised.value)
+    if artifact == "missing":
+        assert message == (
+            f"Embedding model '{active}' is not installed: local_path {folder} "
+            f"does not exist. {remedy}"
+        )
+    else:
+        assert message.startswith(
+            f"Embedding model '{active}' failed to load from local_path {folder}: "
+        )
+        assert message.endswith(remedy)
+        assert raised.value.__cause__ is not None
+    with closing(connect(offline_gate_db)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT state::text, attempts, error_class, last_error "
+            "FROM narrative_embedding_jobs WHERE chunk_id = %s",
+            (chunk_id,),
+        )
+        assert cur.fetchone() == ("failed", 1, "RuntimeError", message)
+        cur.execute(
+            "SELECT embedding_generated_at FROM narrative_chunks WHERE id = %s",
+            (chunk_id,),
+        )
+        assert cur.fetchone() == (None,)
 
 
 def test_summary_completion_rejects_stale_nonce(offline_gate_db):
