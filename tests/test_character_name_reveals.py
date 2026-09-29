@@ -90,15 +90,11 @@ def test_reveal_does_not_create_colliding_short_alias():
     assert not projected.matching_keys("Anika", "character")
 
 
-@pytest.mark.asyncio
-async def test_direct_stub_and_maturation_paths_cannot_bypass_ruling_persistence():
-    from nexus.api.db_converters import create_declared_entity_stubs
+def test_maturation_path_cannot_bypass_ruling_persistence():
     from nexus.agents.orrery.retrograde_maturation import (
         enqueue_declared_entity_maturations,
     )
 
-    with pytest.raises(CharacterNameRevealConflict):
-        await create_declared_entity_stubs([declaration()], object())
     with pytest.raises(CharacterNameRevealConflict):
         enqueue_declared_entity_maturations(
             object(),

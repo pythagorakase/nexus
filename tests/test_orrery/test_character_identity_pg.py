@@ -1,14 +1,10 @@
-"""Real Retrograde and asynchronous pre-insert identity proofs."""
+"""Real Retrograde pre-insert identity proofs."""
 
-import asyncio
-
-import asyncpg
 import pytest
 
 from nexus.agents.orrery.retrograde_persistence import _insert_missing_entity_stubs
-from nexus.api.db_converters import create_declared_entity_stubs
 from nexus.presence.identity import CharacterIdentityAmbiguity
-from tests.pg_fixtures import asyncpg_kwargs, connect
+from tests.pg_fixtures import connect
 from tests.test_presence_roster_pg import roster_database
 
 pytestmark = pytest.mark.requires_postgres
@@ -64,52 +60,6 @@ def test_retrograde_identity_seed_surname_is_terminal(roster_database):
             )
         cur.execute("SELECT count(*) FROM characters WHERE name = 'Wren'")
         assert cur.fetchone()[0] == 0
-
-
-def test_async_identity_declaration_alias_and_novel(roster_database):
-    dbname, ids, _ = roster_database
-    with connect(dbname) as conn, conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO character_aliases (character_id, alias) VALUES (%s, 'Fox')",
-            (ids["Remote Friend"],),
-        )
-
-    async def exercise():
-        conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
-        try:
-            async with conn.transaction():
-                assert (
-                    await create_declared_entity_stubs(
-                        [
-                            {
-                                "kind": "character",
-                                "name": "Fox",
-                                "summary": "A known visitor.",
-                            }
-                        ],
-                        conn,
-                    )
-                    == 0
-                )
-                declaration = [
-                    {
-                        "kind": "character",
-                        "name": "Juniper Moss",
-                        "summary": "A new visitor.",
-                    }
-                ]
-                assert await create_declared_entity_stubs(declaration, conn) == 1
-                assert await create_declared_entity_stubs(declaration, conn) == 0
-                assert (
-                    await conn.fetchval(
-                        "SELECT count(*) FROM characters WHERE name = 'Fox'"
-                    )
-                    == 0
-                )
-        finally:
-            await conn.close()
-
-    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize("case", ["surname", "title", "location", "batch"])

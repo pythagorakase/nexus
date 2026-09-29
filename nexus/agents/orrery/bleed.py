@@ -476,68 +476,6 @@ def record_bleed_uptake_sync(
     return used_count
 
 
-async def record_bleed_uptake_async(
-    conn: Any,
-    *,
-    resolution_ids: Iterable[int],
-    accepted_chunk_id: int,
-    accepted_text: str,
-) -> int:
-    """Async stamp of exact-name uptake for offers used by an accepted chunk."""
-
-    offered_resolution_ids = tuple(int(value) for value in resolution_ids)
-    if not offered_resolution_ids:
-        return 0
-    rows = await conn.fetch(
-        """
-        /* orrery:bleed_uptake_candidates */
-        SELECT r.id, actor.name AS actor_name,
-                   COALESCE(NULLIF(n.perceptual_descriptor->>'summary', ''),
-                            r.brief, n.perceptual_descriptor->>'brief', '') AS stub_text
-        FROM orrery_resolutions r
-        JOIN offscreen_narrations n ON n.id = r.narration_chunk_id
-        LEFT JOIN entity_names_v actor ON actor.id = r.actor_entity_id
-        WHERE r.id = ANY($1::bigint[])
-        ORDER BY r.id
-        """,
-        list(offered_resolution_ids),
-    )
-
-    used_count = 0
-    for row in rows:
-        resolution_id = int(_row_value(row, "id", 0))
-        actor_name = _row_value(row, "actor_name", 1)
-        stub_text = str(_row_value(row, "stub_text", 2) or "")
-        name_matched = _actor_name_matches(actor_name, accepted_text)
-        overlap_ratio = four_gram_overlap_ratio(stub_text, accepted_text)
-        logger.info(
-            "Measured Orrery Bleed uptake",
-            extra={
-                "event": "orrery_bleed_uptake",
-                "resolution_id": resolution_id,
-                "accepted_chunk_id": accepted_chunk_id,
-                "actor_name": actor_name,
-                "name_matched": name_matched,
-                "descriptor_four_gram_overlap_ratio": overlap_ratio,
-            },
-        )
-        if not name_matched:
-            continue
-        await conn.execute(
-            """
-            /* orrery:stamp_bleed_uptake */
-            UPDATE orrery_resolutions
-            SET used_chunk_id = $1,
-                use_count = use_count + 1
-            WHERE id = $2
-            """,
-            accepted_chunk_id,
-            resolution_id,
-        )
-        used_count += 1
-    return used_count
-
-
 def _actor_name_matches(actor_name: Any, accepted_text: str) -> bool:
     """Return whether prose contains the full case-sensitive actor name."""
 
