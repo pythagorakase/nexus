@@ -1,7 +1,8 @@
 """Live tests for the replay consumer (nexus/agents/orrery/replay.py).
 
-Real writers, real triggers, real ledgers against save_05 inside
-always-rolled-back transactions — the #428 test pattern. Each test
+Real writers, real triggers, real ledgers against a fixture-owned template
+clone seeded by ``seed_checkpointed_story``, inside always-rolled-back
+transactions — the #428 test pattern. Each test
 fabricates post-checkpoint history through the same code paths production
 uses, then proves the replayer inverts it:
 
@@ -21,10 +22,9 @@ uses, then proves the replayer inverts it:
 from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import pytest
 
@@ -54,17 +54,23 @@ from nexus.agents.orrery.retrograde_persistence import (
 from nexus.agents.orrery.substrate import ProjectPolicy
 from nexus.agents.orrery.tag_writer import _insert_entity_tag
 from nexus.api.commit_handler_sync import apply_state_updates_sync
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, disposable_slot_database
+from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
 
 pytestmark = pytest.mark.requires_postgres
 
-WRITE_SLOT = 5
+
+@pytest.fixture(scope="module")
+def replay_db() -> Iterator[str]:
+    """Own one seeded, checkpointed template clone for the whole module."""
+
+    with disposable_slot_database("qa640_replay") as dbname:
+        seed_checkpointed_story(dbname)
+        yield dbname
 
 
-def _connect() -> Any:
-    database = os.environ.get("NEXUS_REPLAY_TEST_DB", f"save_{WRITE_SLOT:02d}")
-    assert database == f"save_{WRITE_SLOT:02d}" or database.startswith("qa640_")
-    conn = connect(database)
+def _connect(dbname: str) -> Any:
+    conn = connect(dbname)
     with conn.cursor() as cur:
         _apply_migration_074(cur)
     return conn
@@ -72,7 +78,9 @@ def _connect() -> Any:
 
 def _head_chunk(cur: Any) -> int:
     cur.execute("SELECT max(id) FROM narrative_chunks")
-    return cur.fetchone()[0]
+    head = cur.fetchone()[0]
+    assert head is not None, "replay tests need the head chunk seed_story_clock seeds"
+    return int(head)
 
 
 def _fabricate_chunk(
@@ -87,10 +95,8 @@ def _fabricate_chunk(
     # the way separate production transactions would naturally.
     cur.execute(
         """
-        INSERT INTO narrative_chunks (id, raw_text, created_at)
-        SELECT max(id) + 1, 'replay probe chunk',
-               now() + make_interval(mins => %s)
-        FROM narrative_chunks
+        INSERT INTO narrative_chunks (raw_text, created_at)
+        VALUES ('replay probe chunk', now() + make_interval(mins => %s))
         RETURNING id
         """,
         (created_offset_minutes,),
@@ -137,7 +143,9 @@ def _probe_character(cur: Any) -> tuple[int, int, str, Optional[int]]:
         FROM characters WHERE entity_id IS NOT NULL ORDER BY id LIMIT 1
         """
     )
-    return cur.fetchone()
+    row = cur.fetchone()
+    assert row is not None, "replay tests need the protagonist seed_protagonist seeds"
+    return row
 
 
 def _project_probe_character(cur: Any) -> tuple[int, int, str, int]:
@@ -176,8 +184,8 @@ def _next_world_time(cur: Any) -> datetime:
 
     cur.execute("SELECT max(world_time) FROM chunk_metadata")
     latest = cur.fetchone()[0]
-    base = latest or datetime(2026, 1, 1, tzinfo=timezone.utc)
-    return base + timedelta(hours=6)
+    assert latest is not None, "replay tests need the clock seed_story_clock seeds"
+    return latest + timedelta(hours=6)
 
 
 PROJECT_POLICY = ProjectPolicy(
@@ -192,7 +200,7 @@ PROJECT_POLICY = ProjectPolicy(
 
 
 def _apply_migration_074(cur: Any) -> None:
-    """Create the pilot table only inside this rolled-back save_05 transaction."""
+    """Create the pilot table only inside this rolled-back test transaction."""
 
     cur.execute(Path("migrations/074_plan_relocation_projects.sql").read_text())
 
@@ -229,8 +237,8 @@ def _apply_transition(
     )
 
 
-def test_scalar_replay_round_trip_and_within_chunk_ordering() -> None:
-    conn = _connect()
+def test_scalar_replay_round_trip_and_within_chunk_ordering(replay_db: str) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -306,8 +314,8 @@ def test_scalar_replay_round_trip_and_within_chunk_ordering() -> None:
         conn.close()
 
 
-def test_tag_bestowal_and_clearance_replay_at_exact_chunks() -> None:
-    conn = _connect()
+def test_tag_bestowal_and_clearance_replay_at_exact_chunks(replay_db: str) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -384,10 +392,12 @@ def test_tag_bestowal_and_clearance_replay_at_exact_chunks() -> None:
         conn.close()
 
 
-def test_post_target_replace_reapplication_is_presence_remainder() -> None:
+def test_post_target_replace_reapplication_is_presence_remainder(
+    replay_db: str,
+) -> None:
     """A later replace must not turn destroyed provenance into false drift."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -508,13 +518,15 @@ def test_post_target_replace_reapplication_is_presence_remainder() -> None:
         conn.close()
 
 
-def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> None:
-    conn = _connect()
+def test_relationship_unwind_restores_updates_deletes_and_drops_inserts(
+    replay_db: str,
+) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             # Reconstruct at a fabricated pre-chunk, not the historical head:
             # anchoring at head would unwind any unattributed version rows
-            # accumulated on native slot 5, making the assertions hostage
+            # accumulated before the probe, making the assertions hostage
             # to unrelated history.
             head = _fabricate_chunk(cur, None)
             cur.execute(
@@ -523,7 +535,11 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
                 FROM character_relationships ORDER BY character1_id LIMIT 2
                 """
             )
-            (u1, u2, original_dynamic), (d1, d2, _) = cur.fetchall()
+            relationship_rows = cur.fetchall()
+            assert (
+                len(relationship_rows) == 2
+            ), "seed_checkpointed_story seeds two relationships"
+            (u1, u2, original_dynamic), (d1, d2, _) = relationship_rows
 
             probe_chunk = _fabricate_chunk(cur, None)
             set_commit_chunk_attribution_sync(cur, probe_chunk)
@@ -572,7 +588,11 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
                 ORDER BY a.id, b.id LIMIT 1
                 """
             )
-            n1, n2 = cur.fetchone()
+            free_pair = cur.fetchone()
+            assert (
+                free_pair is not None
+            ), "seed_checkpointed_story leaves one character pair unrelated"
+            n1, n2 = free_pair
             cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
                 """
@@ -607,8 +627,8 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
         conn.close()
 
 
-def test_need_fulfillment_replay_matches_production_applier() -> None:
-    conn = _connect()
+def test_need_fulfillment_replay_matches_production_applier(replay_db: str) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -658,10 +678,12 @@ def test_need_fulfillment_replay_matches_production_applier() -> None:
         conn.close()
 
 
-def test_window_born_character_fulfillment_preserves_applicability_marker() -> None:
+def test_window_born_character_fulfillment_preserves_applicability_marker(
+    replay_db: str,
+) -> None:
     """Replay mirrors the need rows created by the character INSERT trigger."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -735,10 +757,10 @@ def test_window_born_character_fulfillment_preserves_applicability_marker() -> N
         conn.close()
 
 
-def test_tag_applicability_before_fulfillment_preserves_marker() -> None:
+def test_tag_applicability_before_fulfillment_preserves_marker(replay_db: str) -> None:
     """A tag-triggered fresh need row exists before same-window fulfillment."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             _, char_entity, _, _ = _probe_character(cur)
@@ -843,8 +865,8 @@ def test_tag_applicability_before_fulfillment_preserves_marker() -> None:
         conn.close()
 
 
-def test_verify_catches_unledgered_scalar_drift() -> None:
-    conn = _connect()
+def test_verify_catches_unledgered_scalar_drift(replay_db: str) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -876,10 +898,10 @@ def test_verify_catches_unledgered_scalar_drift() -> None:
         conn.close()
 
 
-def test_verify_catches_unledgered_entity_deactivation() -> None:
+def test_verify_catches_unledgered_entity_deactivation(replay_db: str) -> None:
     """A missed activity replay produces an exact entity-section drift."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -922,10 +944,10 @@ def test_verify_catches_unledgered_entity_deactivation() -> None:
         conn.close()
 
 
-def test_runtime_maturation_death_replays_without_drift() -> None:
+def test_runtime_maturation_death_replays_without_drift(replay_db: str) -> None:
     """A ledgered maturation death is exact, not a false-positive drift."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -1050,10 +1072,10 @@ def test_runtime_maturation_death_replays_without_drift() -> None:
         conn.close()
 
 
-def test_verify_skips_legacy_checkpoint_without_entity_activity() -> None:
+def test_verify_skips_legacy_checkpoint_without_entity_activity(replay_db: str) -> None:
     """Pre-section checkpoint documents remain an explicit skip boundary."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -1131,8 +1153,8 @@ def test_verify_skips_legacy_checkpoint_without_entity_activity() -> None:
         conn.close()
 
 
-def test_reconstruction_refuses_pre_instrumentation_chunks() -> None:
-    conn = _connect()
+def test_reconstruction_refuses_pre_instrumentation_chunks(replay_db: str) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -1140,7 +1162,9 @@ def test_reconstruction_refuses_pre_instrumentation_chunks() -> None:
                 "WHERE chunk_id IS NOT NULL"
             )
             earliest = cur.fetchone()[0]
-            assert earliest is not None, "save_05 must carry a genesis checkpoint"
+            assert (
+                earliest is not None
+            ), "seed_checkpointed_story must seed a genesis checkpoint"
             cur.execute(
                 "SELECT max(id) FROM narrative_chunks WHERE id < %s", (earliest,)
             )
@@ -1165,13 +1189,13 @@ def test_reconstruction_refuses_pre_instrumentation_chunks() -> None:
         conn.close()
 
 
-def test_need_applicability_trigger_is_mirrored() -> None:
+def test_need_applicability_trigger_is_mirrored(replay_db: str) -> None:
     """Bestowing a need-immunity tag fires the REAL migration-057 trigger
     (deleting the character's need rows, un-logged); the replayer's mirror
     must reproduce that from the final tag set, or verify cries wolf on
     honest data."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -1241,12 +1265,12 @@ def test_need_applicability_trigger_is_mirrored() -> None:
         conn.close()
 
 
-def test_applicability_toggle_resets_need_row_to_fresh_shape() -> None:
+def test_applicability_toggle_resets_need_row_to_fresh_shape(replay_db: str) -> None:
     """Immunity applied at one chunk and cleared at the next: the REAL
     trigger deletes then re-inserts a FRESH need row. The mirror must reset
     the checkpoint-inherited row rather than let stale contents survive."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -1322,14 +1346,14 @@ def test_applicability_toggle_resets_need_row_to_fresh_shape() -> None:
         conn.close()
 
 
-def test_travel_replay_start_advance_arrive() -> None:
+def test_travel_replay_start_advance_arrive(replay_db: str) -> None:
     """Travel deltas replay production-faithfully for explicit payloads:
     travel.start anchors at the origin, travel.arrive moves the character
     (an Orrery location write with NO state_delta_log row) and resets the
     row; route-derived columns are flagged unreproducible so verify skips
     rather than lies."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -1476,13 +1500,13 @@ def test_travel_replay_start_advance_arrive() -> None:
         conn.close()
 
 
-def test_unresolved_arrival_marks_location_unreproducible() -> None:
+def test_unresolved_arrival_marks_location_unreproducible(replay_db: str) -> None:
     """travel.start via anchor/class (no explicit destination) followed by a
     bare travel.arrive: production moved the character somewhere replay
     cannot know — every column the arrival wrote must be flagged, not left
     to read as false drift."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -1520,14 +1544,34 @@ def test_unresolved_arrival_marks_location_unreproducible() -> None:
         conn.close()
 
 
-def test_post_fix_null_world_time_uses_primary_clock_exactly() -> None:
+def test_post_fix_null_world_time_uses_primary_clock_exactly(replay_db: str) -> None:
     """Post-100 NULL-layer clocks are exact; audited debt stays opaque."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
             _, char_entity, _, _ = _probe_character(cur)
+            # Audited debt: a story that predates migration 100 carries its
+            # immutable audit row for every need clock it restamped from a
+            # wall-clock pre-image onto the story clock. Model that row for
+            # the protagonist's thirst clock, restamped to its current value.
+            cur.execute(
+                """
+                INSERT INTO character_need_state_reconciliations (
+                    character_entity_id, need_type, field,
+                    prior_value, new_value, debt_score_pre_image
+                )
+                SELECT character_entity_id, need_type, 'last_evaluated_at',
+                       last_evaluated_at - interval '90 days',
+                       last_evaluated_at, debt_score
+                FROM character_need_states
+                WHERE character_entity_id = %s AND need_type = 'thirst'
+                RETURNING character_entity_id
+                """,
+                (char_entity,),
+            )
+            assert cur.fetchone() is not None, "the protagonist must carry thirst"
             base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
             probe_chunk = _fabricate_chunk(cur, None)  # world_time NULL
             cur.execute("SELECT max(world_time) FROM chunk_metadata")
@@ -1582,12 +1626,12 @@ def test_post_fix_null_world_time_uses_primary_clock_exactly() -> None:
         conn.close()
 
 
-def test_verify_catches_unlogged_tag_clear() -> None:
+def test_verify_catches_unlogged_tag_clear(replay_db: str) -> None:
     """The oracle must be sensitive beyond character scalars: a tag cleared
     without a tag_clearance_log row is exactly the class of un-ledgered
     write verify exists to catch."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -1638,10 +1682,12 @@ def test_verify_catches_unlogged_tag_clear() -> None:
         conn.close()
 
 
-def test_project_transition_window_replays_with_zero_checkpoint_drift() -> None:
+def test_project_transition_window_replays_with_zero_checkpoint_drift(
+    replay_db: str,
+) -> None:
     """Every project transition plus a crisis no-op survives checkpoint replay."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             _apply_migration_074(cur)
@@ -1854,10 +1900,12 @@ def test_project_transition_window_replays_with_zero_checkpoint_drift() -> None:
         conn.close()
 
 
-def test_project_complete_hands_off_and_real_travel_applier_relocates() -> None:
+def test_project_complete_hands_off_and_real_travel_applier_relocates(
+    replay_db: str,
+) -> None:
     """Completion starts travel at the project target; arrival moves the actor."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             _apply_migration_074(cur)
@@ -1937,12 +1985,14 @@ def test_project_complete_hands_off_and_real_travel_applier_relocates() -> None:
         conn.close()
 
 
-def test_project_applied_ledger_survives_replay_policy_retuning(monkeypatch) -> None:
+def test_project_applied_ledger_survives_replay_policy_retuning(
+    replay_db: str, monkeypatch
+) -> None:
     """Replay consumes committed cadence and milestone reset, not live tuning."""
 
     import nexus.agents.orrery.replay as replay_module
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             _char_id, actor_entity, _activity, _location = _project_probe_character(cur)
@@ -2030,8 +2080,10 @@ def test_project_applied_ledger_survives_replay_policy_retuning(monkeypatch) -> 
         conn.close()
 
 
-def test_project_replay_rejects_ledger_without_applied_projection() -> None:
-    conn = _connect()
+def test_project_replay_rejects_ledger_without_applied_projection(
+    replay_db: str,
+) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             _char_id, actor_entity, _activity, _location = _probe_character(cur)
@@ -2055,11 +2107,11 @@ def test_project_replay_rejects_ledger_without_applied_projection() -> None:
         conn.close()
 
 
-def test_relationship_multi_version_unwind_order() -> None:
+def test_relationship_multi_version_unwind_order(replay_db: str) -> None:
     """Two attributed updates across two chunks must unwind newest-first
     (relationship_versions.id DESC): the middle chunk sees the middle value."""
 
-    conn = _connect()
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             pre_chunk = _fabricate_chunk(cur, None)
@@ -2071,7 +2123,11 @@ def test_relationship_multi_version_unwind_order() -> None:
                 FROM character_relationships ORDER BY character1_id LIMIT 1
                 """
             )
-            c1, c2, original = cur.fetchone()
+            relationship = cur.fetchone()
+            assert (
+                relationship is not None
+            ), "seed_checkpointed_story seeds a relationship"
+            c1, c2, original = relationship
 
             set_commit_chunk_attribution_sync(cur, mid_chunk)
             cur.execute("SET LOCAL nexus.write_producer = 'manual'")
@@ -2108,8 +2164,8 @@ def test_relationship_multi_version_unwind_order() -> None:
         conn.close()
 
 
-def test_pair_tag_bestowal_and_clearance_replay() -> None:
-    conn = _connect()
+def test_pair_tag_bestowal_and_clearance_replay(replay_db: str) -> None:
+    conn = _connect(replay_db)
     try:
         with conn.cursor() as cur:
             head = _head_chunk(cur)
@@ -2135,7 +2191,11 @@ def test_pair_tag_bestowal_and_clearance_replay() -> None:
                 """,
                 (pair_tag_id,),
             )
-            subject, obj = cur.fetchone()
+            pair = cur.fetchone()
+            assert (
+                pair is not None
+            ), "seed_checkpointed_story seeds two characters without this pair tag"
+            subject, obj = pair
 
             capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
             bestow_chunk = _fabricate_chunk(cur, None)
