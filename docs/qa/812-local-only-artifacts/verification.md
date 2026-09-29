@@ -447,3 +447,241 @@ PYTHONPATH=$PWD $PY -m mypy tests/test_config/test_ir_eval_golden_overrides.py
 (flake8: no output, exit 0)
 Success: no issues found in 1 source file
 ```
+
+## Astra Review Fixes
+
+The independent review of `fbfa976a` returned three findings, fixed in
+`a8f5b81a` (P1), `e221ea54` (P2, lock revision) and `6179c610` (P2, embedding
+job); `361697ff` tidies one new test. Every command runs from the worktree
+root with `PY=/Users/pythagor/nexus/.venv/bin/python` and `PYTHONPATH=$PWD`,
+with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset.
+
+### P1: `--chunk` Deleted the Row Before Loading the Model
+
+`regenerate_specific_chunk()` now calls `ModelLoader.load_model()` before
+`delete_existing_chunk_embedding()` commits; the regenerator that embeds the
+chunk reuses the process-cached model (the second load logs `Reusing
+process-cached SentenceTransformer` and returns the same instance). Every other
+deleting path already loads first: `--truncate-table` and the full `--model`
+and `--all-models` regeneration delete only after `EmbeddingRegenerator`
+loads, `--resume-from` only upserts, and `--only-indexes` builds its
+regenerator without the table step, so it never reaches the truncate branch.
+
+`tests/test_regenerate_embeddings_truncate_pg.py::test_chunk_keeps_its_row_when_the_model_artifact_is_missing`
+runs `scripts/regenerate_embeddings.py --model bge-large --chunk <id> --db-url
+<disposable slot>` in its own interpreter with `HF_HUB_OFFLINE=1` and a
+registry whose `local_path` is missing. Against the unfixed script it failed
+on the data loss, and the script's log showed the order:
+
+```text
+nexus.embeddings - INFO - Deleted existing bge-large embedding for chunk 1
+nexus.embeddings - INFO - Loading model: bge-large
+nexus.embeddings - ERROR - Failed to load bge-large model: Embedding model 'bge-large' is not installed: ...
+E       assert [2] == [1, 2]
+1 failed, 5 warnings in 4.49s
+```
+
+With the fix the row survives, the script exits 1, and stdout carries:
+
+```text
+Error: Embedding model 'bge-large' is not installed: local_path <missing> does not exist. Restore it with `hf download BAAI/bge-large-en --local-dir <missing>`, then run `nexus models verify`.
+```
+
+### P2: The Lock Omitted the Checkout's Git Revision
+
+`git -C /Users/pythagor/nexus/models/Octen-Embedding-4B rev-parse HEAD`
+prints `fea468fae3f0caffbae8a12ba792d1c394b6277d`; the checkout tracks exactly
+the 18 locked files and its `origin` is `https://huggingface.co/Octen/Octen-Embedding-4B`.
+
+`artifact_revision()` in `nexus/agents/memnon/utils/artifact_manifest.py`
+reads two sources, and the lock names the one used in `revision_source`:
+`huggingface` (the existing Hub-cache snapshot and `hf download --local-dir`
+metadata) and `git` (HEAD of a `.git` directory or `.git` file in the artifact
+folder itself). Git runs as `git --git-dir=<root>/.git rev-parse --verify HEAD`
+without `GIT_*` variables. A scratch probe showed why: `git -C <folder>` with
+an invalid nested `.git` printed the enclosing repository's HEAD, and an
+exported `GIT_DIR` redirected `-C` to another repository, while `--git-dir`
+failed loudly (`fatal: not a git repository`) and read a `.git` file
+correctly. The two sources disagreeing is an error. `verify` now reports a
+folder whose recorded revision differs from the lock, and every `hf download`
+command (lock, verify, the embedder loader, both rerankers, and through them
+the scripts and the embedding job) pins `--revision` from the lock, else from
+the folder. The loaders build that command only after a load fails.
+
+`models verify --json` against the previous lock (`revision: null`), before
+relocking:
+
+```text
+{
+  "code": "domain_failure",
+  "error": "Model artifacts do not match /Users/pythagor/nexus/.claude/worktrees/812-local-only-artifacts/config/model_artifacts.lock.json:\n  - embedder 'Octen-Embedding-4B': git revision 'fea468fae3f0caffbae8a12ba792d1c394b6277d' differs from the locked None\nRemediation:\n  - Restore embedder 'Octen-Embedding-4B' from `hf download Octen/Octen-Embedding-4B --revision fea468fae3f0caffbae8a12ba792d1c394b6277d --local-dir /Users/pythagor/nexus/models/Octen-Embedding-4B`, then re-run `nexus models verify`.\n  - If a changed artifact is an intentional upgrade, re-run `nexus models lock` on the host that holds it and commit the lock.",
+  "ok": false,
+  "partial": {
+    "lock_file": "/Users/pythagor/nexus/.claude/worktrees/812-local-only-artifacts/config/model_artifacts.lock.json",
+    "problems": [
+      "embedder 'Octen-Embedding-4B': git revision 'fea468fae3f0caffbae8a12ba792d1c394b6277d' differs from the locked None"
+    ]
+  }
+}
+exit=1
+```
+
+```sh
+PYTHONPATH=$PWD $PY -m nexus.cli models lock --json
+PYTHONPATH=$PWD $PY -m nexus.cli models verify --json
+```
+
+```text
+{
+  "lock_file": "/Users/pythagor/nexus/.claude/worktrees/812-local-only-artifacts/config/model_artifacts.lock.json",
+  "message": "Locked 2 artifact(s) in /Users/pythagor/nexus/.claude/worktrees/812-local-only-artifacts/config/model_artifacts.lock.json:\n  embedder Octen-Embedding-4B: Octen/Octen-Embedding-4B @ fea468fae3f0caffbae8a12ba792d1c394b6277d (git), 2560d, 18 files, 7686.2 MiB\n  reranker deberta-v3-trecdl22: naver/trecdl22-crossencoder-debertav3 @ 24f6a61d11707432d5780a1d5cf4e3af25cfaddb (huggingface), 10 files, 1662.1 MiB",
+  "success": true
+}
+exit=0
+lock wall 4.26s
+{
+  "lock_file": "/Users/pythagor/nexus/.claude/worktrees/812-local-only-artifacts/config/model_artifacts.lock.json",
+  "message": "Model artifacts match /Users/pythagor/nexus/.claude/worktrees/812-local-only-artifacts/config/model_artifacts.lock.json: embedder Octen-Embedding-4B, reranker deberta-v3-trecdl22",
+  "success": true
+}
+exit=0
+verify wall 4.25s
+```
+
+Rerun at `361697ff`: the same `models verify --json` output, exit code 0.
+
+The regenerated lock differs from the previous one only in the revision
+fields; every file entry is unchanged:
+
+```text
+-      "revision": null,
++      "revision": "fea468fae3f0caffbae8a12ba792d1c394b6277d",
++      "revision_source": "git",
+...
+       "revision": "24f6a61d11707432d5780a1d5cf4e3af25cfaddb",
++      "revision_source": "huggingface",
+```
+
+`tests/test_embedding_artifacts.py` adds a real `git init` and commit in
+`tmp_path` for a `.git` directory and a `.git` file, the enclosing-repository
+guard, verify catching a moved checkout with the pinned restore, the `lock`
+command's missing-folder restore pinned to the lock it replaces, and the
+embedder and reranker loader remedies pinned from the lock and from a
+half-copied checkout. `tests/test_model_artifact_lock_committed.py` requires a
+revision and a known `revision_source` for every locked artifact that restores
+from a repository. The two LORE startup tests that named the production
+embedder's restore command now expect `--revision` from the committed lock.
+
+### P2: The Embedding Job Omitted the Restore Command
+
+`drain_embedding()` (`nexus/jobs/embeddings.py`), which the Orrery worker
+reaches through `SlotScheduler.run_pass()`, now loads through
+`load_local_model()` instead of its own folder check and
+`get_or_load_sentence_transformer()`. The job keeps the same process-cache
+entry, because the cache key is the resolved path.
+`tests/test_api/test_narrative_jobs_pg.py::test_embedding_job_names_the_embedder_restore_command`
+queues a job on a disposable slot, points the active embedder at a missing
+folder or an empty one, sets `HF_HUB_OFFLINE=1`, and runs `run_pass()`.
+Against the unfixed loader:
+
+```text
+E           ValueError: Configured embedding model Octen-Embedding-4B is not installed at /private/var/folders/.../test_embedding_job_names_the_e0/embedder
+E       ValueError: Unrecognized model in /private/var/folders/.../test_embedding_job_names_the_e1/embedder. Should have a `model_type` key in its config.json, ...
+2 failed, 7 warnings in 6.10s
+```
+
+With the fix, `run_pass()` raises the loader's error, which ends:
+
+```text
+Restore it with `hf download Octen/Octen-Embedding-4B --revision fea468fae3f0caffbae8a12ba792d1c394b6277d --local-dir <folder>`, then run `nexus models verify`.
+```
+
+The job is `failed` with that message as its `last_error`, and the chunk
+stays unembedded.
+
+### Gates
+
+At `361697ff`, the touched test modules and the named adjacent ones, with
+PostgreSQL:
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -rs \
+  tests/test_regenerate_embeddings_truncate_pg.py tests/test_embedding_artifacts.py \
+  tests/test_api/test_narrative_jobs_pg.py tests/test_model_artifact_lock_committed.py \
+  tests/test_memnon_embedding_contract.py tests/test_lore/test_runtime_config.py \
+  tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_script_model_loaders.py \
+  tests/test_memnon_embedding_cache.py tests/test_reachability.py tests/test_doc_front_matter.py
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+146 passed, 8 warnings in 103.61s (0:01:43)
+```
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -rs \
+  tests/test_regenerate_embeddings_truncate_pg.py tests/test_memnon
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+53 passed, 5 warnings in 35.09s
+```
+
+The full offline suite ran at `6179c610`; the later `361697ff` changes only
+`tests/test_embedding_artifacts.py`, which the first gate above runs.
+`PYTHONPATH=$PWD` makes the subprocesses import the worktree rather than the
+main checkout's editable install:
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider
+```
+
+```text
+FAILED tests/test_skald_wire.py::test_state_authoring_documents_share_core_invariants
+1 failed, 4065 passed, 1052 skipped, 8 warnings in 307.17s (0:05:07)
+```
+
+The one failure is the Gaia prompt assertion (`assert 'rather than invent'
+in "## Gaia You are Gaia. ..."`) recorded under Gates above as failing on an
+unmodified `origin/main` tree at this branch's base; `e124bd54` (#1011) fixed
+it on `main` after the branch was cut. The two `test_database_contract`
+worktree failures recorded there do not recur, because `PYTHONPATH=$PWD`
+reaches the subprocesses.
+
+Black, flake8 per file against `16f3b38f` (the head the review fixes start
+from), and mypy on the same 11 changed Python files, in `bash`:
+
+```sh
+FILES=$(git diff --name-only 16f3b38f..HEAD -- "*.py")
+$PY -m black --check $FILES
+for f in $FILES; do
+  n=$($PY -m flake8 "$f" | wc -l | tr -d " ")
+  m=$(git show 16f3b38f:"$f" | $PY -m flake8 --stdin-display-name="$f" - | wc -l | tr -d " ")
+  echo "$f branch=$n before=$m"
+done
+PYTHONPATH=$PWD $PY -m mypy --explicit-package-bases --ignore-missing-imports $FILES
+```
+
+```text
+All done! ✨ 🍰 ✨
+11 files would be left unchanged.
+nexus/agents/memnon/utils/artifact_manifest.py branch=0 before=0
+nexus/agents/memnon/utils/cross_encoder.py branch=1 before=1
+nexus/agents/memnon/utils/embedding_manager.py branch=0 before=0
+nexus/jobs/embeddings.py branch=2 before=2
+scripts/regenerate_embeddings.py branch=68 before=68
+tests/test_api/test_narrative_jobs_pg.py branch=12 before=12
+tests/test_embedding_artifacts.py branch=0 before=0
+tests/test_lore/test_runtime_config.py branch=0 before=0
+tests/test_memnon_embedding_contract.py branch=0 before=0
+tests/test_model_artifact_lock_committed.py branch=0 before=0
+tests/test_regenerate_embeddings_truncate_pg.py branch=0 before=0
+Found 20 errors in 3 files (checked 11 source files)
+```
+
+The same mypy run on an extracted `git archive 16f3b38f` tree also reports
+`Found 20 errors in 3 files (checked 11 source files)`, with identical
+per-file counts (12 in `scripts/regenerate_embeddings.py`, 7 in
+`tests/test_lore/test_runtime_config.py`, 1 in
+`tests/test_api/test_narrative_jobs_pg.py`); none is on a changed line.
