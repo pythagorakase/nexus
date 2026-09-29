@@ -10,6 +10,7 @@ from nexus.memory import ContextMemoryManager
 from nexus.memory.entity_detector import EntityMatch
 from nexus.memory.retrieval_coverage import audit_retrieval_coverage
 from scripts.report_retrieval_coverage import format_retrieval_coverage_report
+from tests.settings_helpers import settings_with
 
 
 class FakeMemnon:
@@ -25,12 +26,12 @@ def test_handle_user_input_skips_retrieval_coverage_without_database(
     caplog,
 ) -> None:
     manager = ContextMemoryManager(
-        {
-            "Agent Settings": {
-                "LORE": {"token_budget": {"apex_context_window": 75_000}}
-            },
-            "memory": {"skip_simple_choices": False},
-        },
+        settings_with(
+            {
+                "lore.token_budget.apex_context_window": 75_000,
+                "memory.skip_simple_choices": False,
+            }
+        ),
         memnon=FakeMemnon(),
         provider_wire_type="openai",
         provider_name="openai",

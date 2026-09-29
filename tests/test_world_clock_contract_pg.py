@@ -26,6 +26,7 @@ from tests.pg_fixtures import (
     seed_protagonist,
     sqlalchemy_url,
 )
+from tests.settings_helpers import settings_with
 
 pytestmark = pytest.mark.requires_postgres
 BASE = datetime(2189, 10, 17, 19, 12, tzinfo=timezone.utc)
@@ -114,7 +115,9 @@ def test_world_clock_identity_and_face(clock_db: tuple[str, int]) -> None:
                     session, anchor_chunk_id=first
                 )
                 assert intertitle["world_time"] == BASE.isoformat()
-                prompt = LogonUtility({})._format_context_prompt(
+                prompt = LogonUtility(
+                    settings_with({"apex.turn_pipeline": "single_pass"})
+                )._format_context_prompt(
                     {"user_input": "Continue.", "intertitle": intertitle}
                 )
                 assert "\n17 Oct 2189 · 19:12\n" in prompt

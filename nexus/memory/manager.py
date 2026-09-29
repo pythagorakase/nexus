@@ -7,11 +7,12 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
 from sqlalchemy import text
 
 from nexus.agents.orrery.player_identity import canonical_player_character_id
+from nexus.config.settings_models import Settings
 from nexus.config.story_model import StorySettings
 
 from .baseline_compat import (
@@ -35,7 +36,7 @@ from .context_state import (
     parse_pass2_baseline,
     restamp_pass2_baseline,
 )
-from .correspondence import correspondence_settings, load_accepted_correspondence
+from .correspondence import load_accepted_correspondence
 from .divergence import DivergenceResult
 from .entity_detector import EntityMatch, HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
@@ -67,7 +68,7 @@ _REFRESH_COMMAND = (
 )
 
 
-def empty_pass2_baseline(settings: Mapping[str, Any]) -> Pass2BaselineV2:
+def empty_pass2_baseline(settings: Settings) -> Pass2BaselineV2:
     """Build the explicit empty baseline staged by bootstrap/admin boundary tools."""
 
     return Pass2BaselineV2.for_settings(
@@ -79,7 +80,7 @@ def empty_pass2_baseline(settings: Mapping[str, Any]) -> Pass2BaselineV2:
 
 
 def incompatible_pass2_baseline_reason(
-    baseline: Pass2Baseline, settings: Mapping[str, Any]
+    baseline: Pass2Baseline, settings: Settings
 ) -> Optional[str]:
     """Explain why a baseline cannot continue under ``settings``.
 
@@ -120,8 +121,8 @@ def incompatible_pass2_baseline_reason(
 def plan_tail_window_rebase(
     baseline: Pass2Baseline,
     *,
-    previous_settings: Mapping[str, Any],
-    current_settings: Mapping[str, Any],
+    previous_settings: Settings,
+    current_settings: Settings,
 ) -> Optional[Pass2BaselineV2]:
     """Decide whether a player's window change rewrites the accepted tail.
 
@@ -150,8 +151,8 @@ def plan_tail_window_rebase(
 def rebase_tail_pass2_baseline(
     cur: Any,
     *,
-    previous_settings: Mapping[str, Any],
-    current_settings: Mapping[str, Any],
+    previous_settings: Settings,
+    current_settings: Settings,
     target: str,
 ) -> Optional[Pass2BaselineV2]:
     """Rewrite the accepted tail's baseline for a player's window change.
@@ -225,65 +226,18 @@ def rebase_tail_pass2_baseline(
     return rebased
 
 
-def _storyteller_token_budget(settings: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Return the validated LORE token-budget mapping."""
-    legacy_agent_settings = settings.get("Agent Settings")
-    legacy_lore_settings = (
-        legacy_agent_settings.get("LORE")
-        if isinstance(legacy_agent_settings, Mapping)
-        else None
-    )
-    lore_settings = (
-        legacy_lore_settings
-        if isinstance(legacy_lore_settings, Mapping)
-        else settings.get("lore")
-    )
-    if not isinstance(lore_settings, Mapping):
-        raise ValueError("LORE settings are required to resolve the context budget")
-
-    token_budget = lore_settings.get("token_budget")
-    if not isinstance(token_budget, Mapping):
-        raise ValueError(
-            "token_budget must be configured under the LORE settings section"
-        )
-    if "apex_context_window" not in token_budget:
-        raise ValueError(
-            "apex_context_window must be configured under LORE token_budget"
-        )
-    return token_budget
-
-
-def resolve_base_storyteller_context_window(settings: Mapping[str, Any]) -> int:
+def resolve_base_storyteller_context_window(settings: Settings) -> int:
     """Resolve the base context ceiling used when LOGON is explicitly disabled."""
-    token_budget = _storyteller_token_budget(settings)
-
-    apex_context_window = token_budget["apex_context_window"]
-    if not isinstance(apex_context_window, int):
-        raise TypeError("apex_context_window must be an integer")
-    return apex_context_window
+    return settings.lore.token_budget.apex_context_window
 
 
-def resolve_storyteller_prompt_overhead_tokens(
-    settings: Mapping[str, Any],
-) -> int:
+def resolve_storyteller_prompt_overhead_tokens(settings: Settings) -> int:
     """Resolve the post-assembly reserve for LOGON prompt formatting."""
-    token_budget = _storyteller_token_budget(settings)
-    if "prompt_overhead_tokens" not in token_budget:
-        raise ValueError(
-            "prompt_overhead_tokens must be configured under LORE token_budget"
-        )
-    prompt_overhead_tokens = token_budget["prompt_overhead_tokens"]
-    if isinstance(prompt_overhead_tokens, bool) or not isinstance(
-        prompt_overhead_tokens, int
-    ):
-        raise TypeError("prompt_overhead_tokens must be an integer")
-    if prompt_overhead_tokens < 0:
-        raise ValueError("prompt_overhead_tokens cannot be negative")
-    return prompt_overhead_tokens
+    return settings.lore.token_budget.prompt_overhead_tokens
 
 
 def resolve_storyteller_context_window(
-    settings: Mapping[str, Any],
+    settings: Settings,
     provider_wire_type: Optional[str],
     provider_name: Optional[str],
 ) -> int:
@@ -307,21 +261,10 @@ def resolve_storyteller_context_window(
             f"registry provider name; got {provider_name!r}"
         )
 
-    token_budget = _storyteller_token_budget(settings)
     apex_context_window = resolve_base_storyteller_context_window(settings)
-
-    provider_overrides = token_budget.get("provider_overrides", {})
-    if not isinstance(provider_overrides, Mapping):
-        raise TypeError("token_budget provider_overrides must be a mapping")
-
-    override = provider_overrides.get(provider_name)
+    override = settings.lore.token_budget.provider_overrides.get(provider_name)
     if override is None:
         return apex_context_window
-    if not isinstance(override, int):
-        raise TypeError(
-            f"token budget provider override for {provider_name!r} must be "
-            "an integer"
-        )
 
     logger.debug(
         "Storyteller payload budget override: provider=%s class=%s effective=%s "
@@ -436,7 +379,7 @@ class ContextMemoryManager:
 
     def __init__(
         self,
-        settings: Dict[str, Any],
+        settings: Settings,
         memnon: Optional[object] = None,
         token_manager: Optional[object] = None,
         provider_wire_type: Optional[str] = None,
@@ -449,18 +392,12 @@ class ContextMemoryManager:
         self.story_settings: StorySettings | None = None
         self._turn_model: Optional[str] = None
         self.memnon = memnon  # Store reference for entity detector
-        memory_settings = settings.get("memory", {})
+        memory_settings = settings.memory
 
         # Phase 2 configuration
-        self.phase2_fraction = float(
-            memory_settings.get("phase2_fraction", 0.1)
-        )  # 10% of apex window
-        self.raw_search_k = int(
-            memory_settings.get("raw_search_k", 30)
-        )  # Overretrieve before budget trimming
-        self.skip_simple_choices = bool(
-            memory_settings.get("skip_simple_choices", True)
-        )
+        self.phase2_fraction = memory_settings.phase2_fraction
+        self.raw_search_k = memory_settings.raw_search_k
+        self.skip_simple_choices = memory_settings.skip_simple_choices
 
         # The active storyteller class is resolved per turn because slots can
         # change models while a LORE instance remains alive.
@@ -476,9 +413,9 @@ class ContextMemoryManager:
             self.configure_storyteller_budget(provider_wire_type, provider_name)
 
         # Legacy settings (kept for compatibility but may be deprecated)
-        self.pass2_reserve = float(memory_settings.get("pass2_budget_reserve", 0.25))
-        self.warm_slice_default = bool(memory_settings.get("warm_slice_default", True))
-        self.max_sql_iterations = int(memory_settings.get("max_sql_iterations", 5))
+        self.pass2_reserve = memory_settings.pass2_budget_reserve
+        self.warm_slice_default = memory_settings.warm_slice_default
+        self.max_sql_iterations = memory_settings.max_sql_iterations
 
         self.context_state = ContextStateManager()
         self.query_memory = QueryMemory(max_iterations=self.max_sql_iterations)
@@ -626,11 +563,9 @@ class ContextMemoryManager:
     def assemble_correspondence_context(self, dbname: str) -> str:
         """Render private context from accepted DB state only."""
 
-        config = correspondence_settings(self.settings)
-        max_tokens = int(config["max_rendered_tokens"])
         return load_accepted_correspondence(
             dbname,
-            max_tokens=max_tokens,
+            max_tokens=self.settings.storyteller.correspondence.max_rendered_tokens,
             story=self._estimator_story(),
         )
 

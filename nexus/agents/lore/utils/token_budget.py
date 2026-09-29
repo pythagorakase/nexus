@@ -7,6 +7,7 @@ Handles dynamic token budget calculation and allocation.
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from nexus.config.settings_models import Settings
 from nexus.config.story_model import StorySettings, resolve_seat
 from nexus.telemetry.prompt_window import estimator_for
 
@@ -16,15 +17,11 @@ logger = logging.getLogger("nexus.lore.token_budget")
 class TokenBudgetManager:
     """Manages token budget allocation for context assembly"""
 
-    def __init__(self, settings: Dict[str, Any]):
-        """Initialize with LORE settings"""
+    def __init__(self, settings: Settings):
+        """Initialize with validated NEXUS settings"""
         self.settings = settings
-        lore_settings = settings.get("Agent Settings", {}).get("LORE", {})
-        self.token_budget_config = lore_settings.get("token_budget", {})
-        allocation = lore_settings.get("component_allocation")
-        if not allocation:
-            allocation = lore_settings.get("payload_percent_budget", {})
-        self.allocation_config = allocation or {}
+        self.token_budget_config = settings.lore.token_budget
+        self.percent_budget = settings.lore.payload_percent_budget
 
     def calculate_budget(
         self,
@@ -58,36 +55,28 @@ class TokenBudgetManager:
             )
         apex_window = apex_context_window
 
-        system_prompt = self.token_budget_config.get("system_prompt_tokens", 5000)
+        system_prompt = self.token_budget_config.system_prompt_tokens
 
         # Check if we're using a reasoning model
         if not apex_model:
-            apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-            configured_model = apex_settings.get("model")
-            if not isinstance(configured_model, str) or not configured_model.strip():
-                raise RuntimeError(
-                    "Storyteller model must be configured before calculating its "
-                    "token budget"
-                )
-            apex_model = configured_model
+            apex_model = self.settings.apex.model
 
         user_input_tokens = estimator_for(apex_model)(user_input)
 
         from nexus.config.seat_window import resolve_seat_window
 
         window = resolve_seat_window(
-            self.settings, apex_model, seat="skald_writer", window=apex_window
+            self.settings.model_dump(),
+            apex_model,
+            seat="skald_writer",
+            window=apex_window,
         )
         available_context = window.input_ceiling
 
         # Calculate component allocations using minimum percentages initially
-        warm_slice_min = self.allocation_config.get("warm_slice", {}).get("min", 40)
-        structured_min = self.allocation_config.get("structured_summaries", {}).get(
-            "min", 10
-        )
-        augmentation_min = self.allocation_config.get(
-            "contextual_augmentation", {}
-        ).get("min", 25)
+        warm_slice_min = self.percent_budget.warm_slice.min
+        structured_min = self.percent_budget.structured_summaries.min
+        augmentation_min = self.percent_budget.contextual_augmentation.min
 
         # Start with minimum allocations
         warm_slice_tokens = int(available_context * warm_slice_min / 100)
@@ -178,79 +167,6 @@ class TokenBudgetManager:
 
         return result
 
-    def validate_budget_constraints(
-        self,
-        allocations: Dict[str, int],
-        constraints: Optional[Dict[str, Dict[str, int]]] = None,
-    ) -> bool:
-        """
-        Validate that allocations meet min/max constraints.
-        NO LLM NEEDED - just comparison operators!
-
-        Args:
-            allocations: Proposed token allocations
-            constraints: Optional override constraints (defaults to config)
-
-        Returns:
-            True if allocations are valid, False otherwise
-        """
-        if not constraints:
-            constraints = self.allocation_config
-
-        total = sum(allocations.values())
-
-        # Check warm slice constraints
-        warm_tokens = allocations.get("warm_slice", 0)
-        warm_min = int(total * constraints.get("warm_slice", {}).get("min", 40) / 100)
-        warm_max = int(total * constraints.get("warm_slice", {}).get("max", 70) / 100)
-
-        if not (warm_min <= warm_tokens <= warm_max):
-            logger.warning(
-                "Warm slice allocation %s outside bounds [%s, %s]",
-                warm_tokens,
-                warm_min,
-                warm_max,
-            )
-            return False
-
-        # Check structured data constraints
-        structured_tokens = allocations.get("structured_data", 0)
-        structured_min = int(
-            total * constraints.get("structured_summaries", {}).get("min", 10) / 100
-        )
-        structured_max = int(
-            total * constraints.get("structured_summaries", {}).get("max", 25) / 100
-        )
-
-        if not (structured_min <= structured_tokens <= structured_max):
-            logger.warning(
-                "Structured data allocation %s outside bounds [%s, %s]",
-                structured_tokens,
-                structured_min,
-                structured_max,
-            )
-            return False
-
-        # Check augmentation constraints
-        augment_tokens = allocations.get("contextual_augmentation", 0)
-        augment_min = int(
-            total * constraints.get("contextual_augmentation", {}).get("min", 25) / 100
-        )
-        augment_max = int(
-            total * constraints.get("contextual_augmentation", {}).get("max", 40) / 100
-        )
-
-        if not (augment_min <= augment_tokens <= augment_max):
-            logger.warning(
-                "Augmentation allocation %s outside bounds [%s, %s]",
-                augment_tokens,
-                augment_min,
-                augment_max,
-            )
-            return False
-
-        return True
-
     def estimate_entity_tokens(self, entity: Dict[str, Any]) -> int:
         """
         Estimate token count for an entity dictionary.
@@ -286,10 +202,9 @@ class TokenBudgetManager:
             summary = entity.get("summary", "")
             text_candidates.append(f"{name}: {summary}")
 
-        model = self.settings.get("apex", {}).get("model") or self.settings.get(
-            "API Settings", {}
-        ).get("apex", {}).get("model")
-        model = resolve_seat("skald", story=StorySettings(skald_model=model)).model
+        model = resolve_seat(
+            "skald", story=StorySettings(skald_model=self.settings.apex.model)
+        ).model
         tokens = estimator_for(model)("\n".join(text_candidates))
         entity["token_count"] = tokens
         return tokens

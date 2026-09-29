@@ -3920,8 +3920,8 @@ def run_window_replay(args: argparse.Namespace) -> Dict[str, Any]:
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
     # load_settings validates the candidate TOML against the Pydantic models.
-    baseline = load_settings().model_dump()
-    settings = load_settings(args.config).model_dump() if args.config else baseline
+    baseline = load_settings()
+    settings = load_settings(args.config) if args.config else baseline
     try:
         rows = replay_run(
             args.run,

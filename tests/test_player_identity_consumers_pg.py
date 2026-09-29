@@ -39,6 +39,7 @@ from nexus.agents.orrery.retrograde_persistence import (
 )
 from nexus.api import db_pool, narrative, save_slots, slot_state, slot_utils
 from nexus.api.narrative_generation import generate_bootstrap_narrative
+from nexus.config import load_settings
 from nexus.config.settings_models import OrreryWeatherSettings
 from nexus.memory.manager import ContextMemoryManager
 from scripts import new_story_setup
@@ -824,7 +825,7 @@ def test_memory_manager_metadata_uses_canonical_identity_for_both_states(
 
     # Constructing the full MEMNON embedding stack is unrelated to this path;
     # ContextMemoryManager._initialize_entity_maps needs only its real engine.
-    manager = ContextMemoryManager({}, memnon=_DatabaseMemnon(engine))
+    manager = ContextMemoryManager(load_settings(), memnon=_DatabaseMemnon(engine))
 
     assert manager.user_character_name == player_name
     assert manager.alias_inverse["you"] == player_name.lower()
@@ -837,7 +838,7 @@ def test_memory_manager_metadata_uses_canonical_identity_for_both_states(
         PlayerIdentityNotEstablishedError,
         match="user_character is NULL",
     ):
-        ContextMemoryManager({}, memnon=_DatabaseMemnon(engine))
+        ContextMemoryManager(load_settings(), memnon=_DatabaseMemnon(engine))
 
 
 class _BootstrapProviderBoundaryReached(Exception):

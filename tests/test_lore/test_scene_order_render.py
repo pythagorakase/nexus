@@ -109,7 +109,7 @@ def test_render_recalled_missing_clock_is_undated_but_naive_clock_fails() -> Non
 def test_render_deduplicates_all_sources_before_historical_cap() -> None:
     """Both seats pick one identity in its most specific lane and refill caps."""
     utility = window_logon()
-    utility.settings["lore"]["render_limits"]["historical_passages"] = 2
+    utility.settings.lore.render_limits.historical_passages = 2
     payload = scene_payload()
     summary = payload["retrieved_passages"]["results"][1]
     payload["warm_slice"]["chunks"].append(deepcopy(summary))
@@ -152,7 +152,7 @@ def test_render_deduplicates_all_sources_before_historical_cap() -> None:
 def test_render_recalled_lane_wins_over_earlier_historical_candidate() -> None:
     """Lane priority precedes rank when a deep result is also a recalled hit."""
     utility = window_logon()
-    utility.settings["lore"]["render_limits"]["historical_passages"] = 1
+    utility.settings.lore.render_limits.historical_passages = 1
     payload = scene_payload()
     payload["retrieved_passages"]["results"] = [
         {"id": 2, "text": "Duplicate historical."},
@@ -318,7 +318,8 @@ def test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks() -> 
                     hydrated_ids.append(parameters["ids"])
 
             utility = window_logon()
-            utility.settings["orrery"]["enabled"] = False
+            assert utility.settings.orrery is not None
+            utility.settings.orrery.enabled = False
             cycle = TurnCycleManager(
                 SimpleNamespace(
                     settings=utility.settings,
@@ -327,7 +328,7 @@ def test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks() -> 
                 )
             )
             for limit in (1, 2):
-                utility.settings["lore"]["render_limits"]["historical_passages"] = limit
+                utility.settings.lore.render_limits.historical_passages = limit
                 context = TurnContext(
                     turn_id=f"null-clock-{limit}", user_input="Continue.", start_time=0
                 )
@@ -389,7 +390,7 @@ def test_recent_warm_window_ends_at_historical_parent() -> None:
         memnon = MEMNON(interface=None, db_url=database_url(dbname))
         try:
             utility = window_logon()
-            count = utility.settings["lore"]["chunk_parameters"]["warm_slice_initial"]
+            count = utility.settings.lore.chunk_parameters.warm_slice_initial
             with memnon.Session() as session:
                 ids = list(
                     session.execute(

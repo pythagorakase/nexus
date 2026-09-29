@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import text
 
 from nexus.agents.memnon.memnon import MEMNON
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.database import database_url
 from nexus.memory import ContextMemoryManager
 from nexus.memory.entity_detector import EntityMatch
@@ -21,7 +21,7 @@ def test_window_coverage_is_written_only_from_post_render_kept_chunks():
         )
         memnon = MEMNON(interface=None, db_url=database_url(dbname))
         try:
-            settings = load_settings_as_dict()
+            settings = load_settings()
             manager = ContextMemoryManager(settings, memnon=memnon)
             with memnon.db_manager.engine.begin() as conn:
                 conn.execute(
@@ -127,8 +127,8 @@ def test_historical_coverage_matches_rendered_prefix(limit: int, repeats: int) -
         )
         memnon = MEMNON(interface=None, db_url=database_url(dbname))
         try:
-            settings = load_settings_as_dict()
-            settings["lore"]["render_limits"]["historical_passages"] = limit
+            settings = load_settings()
+            settings.lore.render_limits.historical_passages = limit
             manager = ContextMemoryManager(settings, memnon=memnon)
             passages = [
                 {"chunk_id": i, "text": " Passage." * repeats} for i in range(1, 17)

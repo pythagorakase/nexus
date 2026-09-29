@@ -22,7 +22,7 @@ from nexus.api.narrative_lease import (
     acquire_generation_lease,
     read_generation_session,
 )
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.story_model import read_story_settings, story_context_settings
 from nexus.memory.manager import pass2_baseline_config_fingerprint
 from tests.pg_fixtures import (
@@ -152,9 +152,7 @@ def test_pending_turn_is_the_draft_continue_accepts() -> None:
             storyteller_text="The pending fixture turn.",
             choices=list(FIXTURE_TURN_CHOICES),
         )
-        settings = story_context_settings(
-            load_settings_as_dict(), read_story_settings(dbname)
-        )
+        settings = story_context_settings(load_settings(), read_story_settings(dbname))
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT i.session_id::text, i.parent_chunk_id, i.generation_model, "

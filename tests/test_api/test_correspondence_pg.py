@@ -12,6 +12,7 @@ from typing import Any, Iterator
 import pytest
 from psycopg2.extras import RealDictCursor
 
+from nexus.config import load_settings
 from nexus.agents.orrery.events import CommitOrreryTickResult
 from nexus.api import commit_handler_sync, narrative
 from nexus.api.narrative_generation import write_to_incubator
@@ -27,7 +28,7 @@ from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonis
 
 pytestmark = pytest.mark.requires_postgres
 
-TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline(load_settings()).model_dump(mode="json")
 
 
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:

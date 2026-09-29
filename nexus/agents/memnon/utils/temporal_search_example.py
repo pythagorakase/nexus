@@ -22,29 +22,17 @@ from nexus.agents.memnon.utils.temporal_search import (
 )
 
 
-# Load settings
-def load_settings():
-    """Load database settings from config"""
-    try:
-        from nexus.config import load_settings_as_dict
+def load_database_url() -> str:
+    """Return the MEMNON database URL configured in nexus.toml."""
+    from nexus.config import load_settings
 
-        data = load_settings_as_dict()
-        return data.get("Agent Settings", {}).get("MEMNON", {})
-    except Exception as e:
-        logger.error(f"Error loading settings: {e}")
-        return {}
+    return load_settings().memnon.database.url
 
 
 def main():
     """Run a simple example of time-aware search"""
-    # Load settings
-    settings = load_settings()
-    if not settings:
-        logger.error("Failed to load settings")
-        return
-
     # Get database URL
-    db_url = settings.get("database", {}).get("url")
+    db_url = load_database_url()
     if not db_url:
         logger.error("Database URL not found in settings")
         return

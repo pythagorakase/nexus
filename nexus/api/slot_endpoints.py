@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.story_model import (
     StorySettings,
     lock_story_settings,
@@ -363,7 +363,7 @@ def patch_slot_settings_endpoint(slot: int, patch: StorySettings) -> StorySettin
         if previous is not None:
             from nexus.memory.manager import rebase_tail_pass2_baseline
 
-            base = load_settings_as_dict()
+            base = load_settings()
             try:
                 rebase_tail_pass2_baseline(
                     cur,

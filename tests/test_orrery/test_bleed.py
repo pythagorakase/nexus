@@ -6,9 +6,10 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from tests.settings_helpers import settings_with
 from tests.test_lore.window_helpers import window_logon
 from nexus.memory import ContextMemoryManager
-from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import Settings
 
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
@@ -227,25 +228,16 @@ def _select(
     )
 
 
-def _settings():
-    return {
-        "lore": {"render_limits": load_settings_as_dict()["lore"]["render_limits"]},
-        "Agent Settings": {
-            "LORE": {
-                "token_budget": {
-                    "apex_context_window": 75_000,
-                    "prompt_overhead_tokens": 4_000,
-                }
-            }
-        },
-        "orrery": {
-            "enabled": True,
-            "bleed": {
-                "density": 1.0,
-                "max_candidates": 3,
-            },
-        },
-    }
+def _settings() -> Settings:
+    return settings_with(
+        {
+            "lore.token_budget.apex_context_window": 75_000,
+            "lore.token_budget.prompt_overhead_tokens": 4_000,
+            "orrery.enabled": True,
+            "orrery.bleed.density": 1.0,
+            "orrery.bleed.max_candidates": 3,
+        }
+    )
 
 
 def test_load_bleed_candidates_coerces_descriptor() -> None:

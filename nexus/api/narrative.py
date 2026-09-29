@@ -80,6 +80,7 @@ from nexus.api.config_utils import (
     get_generation_lease_timeout_seconds,
     get_max_choice_text_length,
 )
+from nexus.config.settings_models import Settings
 from nexus.api.asset_endpoints import router as asset_router
 from nexus.api.reader_endpoints import router as reader_router
 from nexus.api.local_models_endpoints import router as local_models_router
@@ -297,11 +298,11 @@ def get_db_connection(slot: Optional[int] = None):
     return psycopg2.connect(**connection_kwargs(dbname))
 
 
-def load_settings():
-    """Load settings using centralized config loader."""
-    from nexus.config import load_settings_as_dict
+def load_settings() -> Settings:
+    """Load the validated settings through the centralized config loader."""
+    from nexus.config import load_settings as _load_typed_settings
 
-    return load_settings_as_dict()
+    return _load_typed_settings()
 
 
 # Import schemas from narrative_schemas.py

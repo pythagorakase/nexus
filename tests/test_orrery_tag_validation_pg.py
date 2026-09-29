@@ -16,6 +16,7 @@ from psycopg2.extras import Json
 from pydantic import ValidationError
 from pydantic_ai import ModelRetry
 
+from nexus.config import load_settings
 from nexus.agents.logon.gaia_registry_schema import (
     coerce_gaia_registry_wire,
     load_gaia_registry_wire_spec,
@@ -509,7 +510,7 @@ def _stage_incubator_response(
         ),
         user_text="Continue.",
         session_id=session_id,
-        lore_pass_baseline=empty_pass2_baseline({}),
+        lore_pass_baseline=empty_pass2_baseline(load_settings()),
     )
     staged["llm_response_id"] = f"response-{session_id}"
     cur.execute(

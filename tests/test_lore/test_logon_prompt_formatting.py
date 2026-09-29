@@ -12,9 +12,9 @@ from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.seat_blocks import ContextSeat
 from nexus.agents.logon.skald_wire import CharacterRef, PlaceRef, PresenceBaseline
-from nexus.config.loader import load_settings_as_dict
-from nexus.memory.correspondence import correspondence_settings
+from nexus.config.settings_models import Settings
 from nexus.prompts.registry import PromptId, load
+from tests.settings_helpers import settings_with
 
 
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
@@ -86,19 +86,12 @@ def _setting_card() -> dict[str, Any]:
     }
 
 
-def _with_letter_budget(
-    settings: dict[str, Any],
-    *,
-    max_letter_tokens: int = 12345,
-) -> dict[str, Any]:
-    """Add the correspondence subset required by two-pass prompt rendering."""
+def _pipeline(
+    turn_pipeline: str = "single_pass", overrides: dict[str, Any] | None = None
+) -> Settings:
+    """Return real settings running one storyteller pipeline."""
 
-    return {
-        **settings,
-        "storyteller": {
-            "correspondence": {"max_letter_tokens": max_letter_tokens},
-        },
-    }
+    return settings_with({"apex.turn_pipeline": turn_pipeline, **(overrides or {})})
 
 
 def test_private_letter_prompts_keep_token_budget_as_a_placeholder() -> None:
@@ -143,9 +136,8 @@ def test_two_pass_prompts_and_validator_share_real_letter_budget(
 ) -> None:
     """Real settings bind the same letter budget to prompts and validator."""
 
-    settings = load_settings_as_dict(PROMPTS_DIR.parent / "nexus.toml")
-    configured = correspondence_settings(settings)
-    expected = int(configured["max_letter_tokens"])
+    settings = settings_with(path=PROMPTS_DIR.parent / "nexus.toml")
+    expected = settings.storyteller.correspondence.max_letter_tokens
     captured: dict[str, int] = {}
     validator = object()
 
@@ -186,7 +178,7 @@ def test_load_system_prompt_renders_setting_card_fields(
 
     fake_conn = _patch_setting_row(monkeypatch, (_setting_card(),))
 
-    prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
+    prompt = LogonUtility(_pipeline(), dbname="save_05")._load_system_prompt()
 
     assert fake_conn.closed is True
     assert "## Setting Context: Veyra" in prompt
@@ -204,8 +196,7 @@ def test_load_system_prompt_without_setting_row_returns_core_prompt(
     _patch_setting_row(monkeypatch, None)
     core_prompt = (PROMPTS_DIR / "storyteller_core.md").read_text()
 
-    two_pass = {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
-    prompt = LogonUtility(two_pass, dbname="save_05")._load_system_prompt()
+    prompt = LogonUtility(_pipeline("two_pass"), dbname="save_05")._load_system_prompt()
 
     assert prompt == core_prompt
     assert "Setting Context:" not in prompt
@@ -219,16 +210,16 @@ def test_load_system_prompt_state_supplement_follows_pipeline(
     _patch_setting_row(monkeypatch, None)
     supplement = (PROMPTS_DIR / "storyteller_single_pass.md").read_text()
 
-    single = LogonUtility({}, dbname="save_05")._load_system_prompt()
+    single = LogonUtility(_pipeline(), dbname="save_05")._load_system_prompt()
     assert supplement in single
 
-    two_pass = {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
+    two_pass = _pipeline("two_pass")
     writer_base = LogonUtility(two_pass, dbname="save_05")._load_system_prompt()
     assert "# Single Pass" not in writer_base
 
     # Bootstrap never carries the state supplement in either mode: the
     # bootstrap schema is prose and choices only.
-    for settings in ({}, two_pass):
+    for settings in (_pipeline(), two_pass):
         bootstrap = LogonUtility(
             settings, dbname="save_05", bootstrap_mode=True
         )._load_system_prompt()
@@ -242,8 +233,7 @@ def test_gaia_system_prompt_includes_setting_card(
 
     _patch_setting_row(monkeypatch, (_setting_card(),))
 
-    settings = _with_letter_budget({})
-    prompt = LogonUtility(settings, dbname="save_05")._gaia_system_prompt(
+    prompt = LogonUtility(_pipeline(), dbname="save_05")._gaia_system_prompt(
         wire_type="openai"
     )
 
@@ -276,10 +266,7 @@ def test_setting_snapshot_is_shared_across_seats(
         lambda **kwargs: closing(counting_connect(**kwargs)),
     )
 
-    two_pass = _with_letter_budget(
-        {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
-    )
-    utility = LogonUtility(two_pass, dbname="save_05")
+    utility = LogonUtility(_pipeline("two_pass"), dbname="save_05")
     writer = utility._load_system_prompt()
     gaia = utility._gaia_system_prompt(wire_type="openai")
 
@@ -295,9 +282,9 @@ def test_load_system_prompt_appends_bootstrap_supplement_only_for_bootstrap(
 
     _patch_setting_row(monkeypatch, None)
 
-    normal_prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
+    normal_prompt = LogonUtility(_pipeline(), dbname="save_05")._load_system_prompt()
     bootstrap_prompt = LogonUtility(
-        {}, dbname="save_05", bootstrap_mode=True
+        _pipeline(), dbname="save_05", bootstrap_mode=True
     )._load_system_prompt()
 
     assert "# Bootstrap Context (Chunk #1 Only)" not in normal_prompt
@@ -308,7 +295,7 @@ def test_load_system_prompt_appends_bootstrap_supplement_only_for_bootstrap(
 def test_context_prompt_renders_bootstrap_data() -> None:
     """Opening chunk prompt carries protagonist, place, seed, and secrets."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Begin the story.",
             "is_bootstrap": True,
@@ -360,7 +347,9 @@ def test_context_prompt_renders_bootstrap_data() -> None:
 def test_context_prompt_without_bootstrap_data_keeps_standard_shape() -> None:
     """The writer ends at its registered closer without legacy instructions."""
 
-    prompt = LogonUtility({})._format_context_prompt({"user_input": "Continue."})
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
+        {"user_input": "Continue."}
+    )
 
     assert "=== BOOTSTRAP CONTEXT ===" not in prompt
     assert "\n=== USER INPUT ===\nContinue." in prompt
@@ -371,10 +360,8 @@ def test_context_prompt_without_bootstrap_data_keeps_standard_shape() -> None:
 def test_context_prompt_rejects_nonpositive_recent_rulings_cap() -> None:
     """The recent-rulings cap is validated with its sibling prompt limits."""
 
-    utility = LogonUtility({"orrery": {"prompt": {"max_rendered_recent_rulings": 0}}})
-
     with pytest.raises(ValueError, match="max_rendered_recent_rulings"):
-        utility._format_context_prompt({"user_input": "Continue."})
+        _pipeline(overrides={"orrery.prompt.max_rendered_recent_rulings": 0})
 
 
 @pytest.mark.parametrize("invalid_section", ["", {}, ()])
@@ -384,7 +371,7 @@ def test_context_prompt_rejects_falsy_nonlist_recent_rulings_section(
     """Falsy non-list payloads cannot masquerade as an absent section."""
 
     with pytest.raises(TypeError, match=re.escape(repr(invalid_section))):
-        LogonUtility({})._format_context_prompt(
+        LogonUtility(_pipeline())._format_context_prompt(
             {
                 "user_input": "Continue.",
                 "orrery_recent_rulings_section": invalid_section,
@@ -398,7 +385,7 @@ def test_context_prompt_accepts_absent_or_empty_recent_rulings_section(
 ) -> None:
     """None and an empty list both omit the optional rulings section."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "orrery_recent_rulings_section": empty_section,
@@ -411,7 +398,7 @@ def test_context_prompt_accepts_absent_or_empty_recent_rulings_section(
 def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
     """Prompt-only Orrery pressures are framed as Storyteller-controlled."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "orrery_scene_pressures": [
@@ -438,7 +425,7 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
 def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
     """Current-tick proposals are framed as ratifiable but Skald-sovereign."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "orrery_imminent_activity": [
@@ -470,7 +457,7 @@ def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
 def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
     """Selected Bleed peripherals are framed as optional ambient texture."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "orrery_bleed_menu": [
@@ -506,7 +493,7 @@ def test_storyteller_core_has_no_model_side_bleed_density_target() -> None:
 def test_context_prompt_renders_anchor_scene_conditions() -> None:
     """Recognized scene conditions render as plain Storyteller context."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "scene_conditions": {"weather": "fog", "time_of_day": "evening"},
@@ -521,7 +508,7 @@ def test_context_prompt_renders_anchor_scene_conditions() -> None:
 def test_context_prompt_renders_mechanical_moods_without_unknown_weather() -> None:
     """Mood-only scene context renders names without fabricated ambience."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "scene_conditions": {
@@ -544,7 +531,7 @@ def test_context_prompt_renders_world_knowledge_without_answer_keys(
 ) -> None:
     """Possessed accounts render without labels and disclose truncation."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "world_knowledge": [
@@ -579,7 +566,7 @@ def test_context_prompt_renders_world_knowledge_without_answer_keys(
 def test_context_prompt_source_labels_character_experiences() -> None:
     """Subjective recollections carry their corpus identity into the block."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "world_knowledge": [
@@ -615,7 +602,7 @@ def test_system_prompt_excludes_runtime_tag_library(monkeypatch) -> None:
         lambda **_kwargs: closing(_Conn()),
     )
 
-    prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
+    prompt = LogonUtility(_pipeline(), dbname="save_05")._load_system_prompt()
 
     assert "TAG LIBRARY" not in prompt
     assert "## Test Setting" in prompt
@@ -644,7 +631,7 @@ def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
         setting=PlaceRef(kind="place", id=12, name="The Sluice"),
     )
 
-    prompt = LogonUtility({}, dbname="save_05")._format_context_prompt(
+    prompt = LogonUtility(_pipeline(), dbname="save_05")._format_context_prompt(
         {
             "user_input": "Continue.",
             "metadata": {"target_chunk_id": 44},
@@ -706,7 +693,7 @@ def test_bootstrap_context_keeps_full_tag_library(monkeypatch) -> None:
         ),
     )
 
-    prompt = LogonUtility({}, dbname="save_05")._format_context_prompt(
+    prompt = LogonUtility(_pipeline(), dbname="save_05")._format_context_prompt(
         {
             "user_input": "Begin.",
             "metadata": {"is_bootstrap": True},
@@ -731,7 +718,7 @@ def test_contextual_false_restores_full_library(monkeypatch) -> None:
     )
 
     prompt = LogonUtility(
-        {"apex": {"tag_library": {"contextual": False}}},
+        _pipeline(overrides={"apex.tag_library.contextual": False}),
         dbname="save_05",
     )._format_context_prompt({"user_input": "Continue."}, seat="gaia")
 
@@ -768,7 +755,7 @@ def test_context_prompt_renders_intertitle() -> None:
     reminder — position and form carry it.
     """
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "intertitle": {
@@ -798,7 +785,7 @@ def test_context_prompt_renders_intertitle() -> None:
 def test_context_prompt_announces_non_primary_layer() -> None:
     """Flashback/atemporal layers are called out in the intertitle."""
 
-    prompt = LogonUtility({})._format_context_prompt(
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
         {
             "user_input": "Continue.",
             "intertitle": {"season": 2, "episode": 1, "world_layer": "flashback"},
@@ -811,7 +798,9 @@ def test_context_prompt_announces_non_primary_layer() -> None:
 def test_context_prompt_omits_intertitle_when_unknown() -> None:
     """No intertitle section when anchor state is unavailable (bootstrap)."""
 
-    prompt = LogonUtility({})._format_context_prompt({"user_input": "Continue."})
+    prompt = LogonUtility(_pipeline())._format_context_prompt(
+        {"user_input": "Continue."}
+    )
 
     assert prompt.startswith("\n=== USER INPUT ===") or prompt.startswith("=== ")
 
@@ -823,7 +812,11 @@ def test_render_limits_and_signed_relationship_valence(
 ) -> None:
     """Each cap changes its own block, including limits beyond the old five."""
     names = ("relationships", "events", "threats", "bleed_menu")
-    settings = {"lore": {"render_limits": dict(zip(names, limits))}}
+    settings = _pipeline(
+        overrides={
+            f"lore.render_limits.{name}": limit for name, limit in zip(names, limits)
+        }
+    )
     context = {
         "entity_data": {
             "relationships": [
@@ -880,7 +873,7 @@ def _fetched_relationship(
 
 def _relationships_block(relationship: dict[str, Any], seat: str) -> str:
     """Render one relationship and return its block through the last line break."""
-    rendered = LogonUtility({})._format_context_prompt(
+    rendered = LogonUtility(_pipeline())._format_context_prompt(
         {"user_input": "Continue.", "entity_data": {"relationships": [relationship]}},
         seat=cast(ContextSeat, seat),
     )
@@ -968,7 +961,5 @@ def test_relationship_missing_prose_column_fails_loudly(column: str) -> None:
 @pytest.mark.parametrize("key", ["relationships", "events", "threats", "bleed_menu"])
 def test_render_limits_reject_nonpositive_caps(key: str) -> None:
     """Invalid limits fail validation instead of silently truncating blocks."""
-    settings = load_settings_as_dict()
-    settings["lore"]["render_limits"][key] = 0
     with pytest.raises(ValueError, match=key):
-        LogonUtility(settings)._format_context_prompt({})
+        _pipeline(overrides={f"lore.render_limits.{key}": 0})

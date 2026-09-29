@@ -1,7 +1,6 @@
 """Real continuation and CLI refresh against a disposable save_04 clone."""
 
 import asyncio
-from copy import deepcopy
 from contextlib import closing
 import subprocess
 import sys
@@ -11,8 +10,9 @@ import pytest
 
 from nexus.agents.lore.lore import LORE
 from nexus.api import slot_utils
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.story_model import read_story_settings, story_context_settings
+from nexus.memory.baseline_compat import config_hash, fingerprinted_config
 from nexus.memory.manager import pass2_baseline_config_fingerprint
 from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
 from tests.pg_fixtures import connect, disposable_slot_database
@@ -39,13 +39,12 @@ def test_divergence_fingerprint_refresh_preserves_save4_continuation(
             before = cur.fetchall()
             cur.execute("SELECT * FROM incubator ORDER BY id")
             incubator_before = cur.fetchall()
-        settings = story_context_settings(
-            load_settings_as_dict(), read_story_settings(dbname)
-        )
+        settings = story_context_settings(load_settings(), read_story_settings(dbname))
         expected = pass2_baseline_config_fingerprint(settings)
-        historical = deepcopy(settings)
+        # A retired [memory] key the typed settings can no longer carry.
+        historical = fingerprinted_config(settings)
         historical["memory"]["divergence_threshold"] = 0.7
-        old = pass2_baseline_config_fingerprint(historical)
+        old = config_hash(historical)
         assert old != expected
         # Seed the historical config shape only in the disposable clone. This
         # remains a regression after the coordinator refreshes the source save.
@@ -109,7 +108,7 @@ def test_divergence_fingerprint_refresh_preserves_save4_continuation(
                 "UPDATE global_variables SET apex_context_window = 100000 WHERE id"
             )
         pinned = pass2_baseline_config_fingerprint(
-            story_context_settings(load_settings_as_dict(), read_story_settings(dbname))
+            story_context_settings(load_settings(), read_story_settings(dbname))
         )
         assert pinned != expected
         assert refresh_tail_fingerprint(dbname=dbname) == (tail_id, expected, pinned)

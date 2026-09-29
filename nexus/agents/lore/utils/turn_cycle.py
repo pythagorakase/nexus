@@ -19,7 +19,6 @@ from nexus.agents.lore.utils.scene_order import (
 )
 from nexus.agents.orrery.cards import rendered_selection
 from nexus.agents.orrery.player_identity import canonical_player_character_id
-from nexus.config.settings_models import RenderLimits
 from nexus.memory.context_state import memory_identity
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 
@@ -56,15 +55,7 @@ try:
     )
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-    from nexus.config.settings_models import (
-        LORERetrievalSettings,
-        OrreryBleedSettings,
-        OrreryDisclosureSettings,
-        OrreryExperienceSettings,
-        OrreryKnowledgeSettings,
-        OrreryPromptSettings,
-        OrreryRecallSettings,
-    )
+    from nexus.config.settings_models import OrrerySettings, Settings
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext
@@ -97,15 +88,7 @@ except ImportError:
     )
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-    from nexus.config.settings_models import (
-        LORERetrievalSettings,
-        OrreryBleedSettings,
-        OrreryDisclosureSettings,
-        OrreryExperienceSettings,
-        OrreryKnowledgeSettings,
-        OrreryPromptSettings,
-        OrreryRecallSettings,
-    )
+    from nexus.config.settings_models import OrrerySettings, Settings
 
 STRUCTURED_RESPONSE_TYPES = (
     StorytellerResponseMinimal,
@@ -244,32 +227,29 @@ class TurnCycleManager:
             lore_agent: Reference to the parent LORE instance
         """
         self.lore = lore_agent
-        self.settings = lore_agent.settings
+        self.settings: Settings = lore_agent.settings
+
+    def _enabled_orrery(self) -> Optional[OrrerySettings]:
+        """Return the typed Orrery section, or None when it is absent or off.
+
+        An absent ``[orrery]`` section means Orrery is off, the same as
+        ``enabled = false``.
+        """
+
+        orrery = self.settings.orrery
+        if orrery is None or not orrery.enabled:
+            return None
+        return orrery
 
     def _max_deep_queries(self) -> int:
         """Resolve the configured deep-query budget for one turn."""
 
-        retrieval_settings = self.settings.get("lore", {}).get("retrieval") or (
-            self.settings.get("Agent Settings", {}).get("LORE", {}).get("retrieval", {})
-        )
-        default_budget = LORERetrievalSettings().max_deep_queries
-        budget = retrieval_settings.get("max_deep_queries", default_budget)
-        try:
-            return max(1, int(budget))
-        except (TypeError, ValueError) as exc:
-            raise RuntimeError(
-                f"Invalid LORE retrieval max_deep_queries setting: {budget!r}"
-            ) from exc
+        return self.settings.lore.retrieval.max_deep_queries
 
     def _presence_boost_enabled(self) -> bool:
         """Return the required MEMNON presence-boost feature flag."""
 
-        enabled = self.settings["Agent Settings"]["MEMNON"]["retrieval"][
-            "hybrid_search"
-        ]["presence_boost_enabled"]
-        if not isinstance(enabled, bool):
-            raise TypeError("presence_boost_enabled must be a boolean")
-        return enabled
+        return self.settings.memnon.retrieval.hybrid_search.presence_boost_enabled
 
     def _raw_chunk_retrieval_query(self, turn_context: TurnContext) -> Optional[str]:
         """Build one raw scene-and-input representation for retrieval."""
@@ -404,9 +384,7 @@ class TurnCycleManager:
         if self.lore.memnon:
             try:
                 # Get chunk parameters from settings
-                initial_chunks = self.settings["lore"]["chunk_parameters"][
-                    "warm_slice_initial"
-                ]
+                initial_chunks = self.settings.lore.chunk_parameters.warm_slice_initial
 
                 # Select the configured window ending at the requested parent.
                 recent_chunks = self.lore.memnon.get_recent_chunks(
@@ -705,6 +683,8 @@ class TurnCycleManager:
         all_results: List[Dict[str, Any]] = []
         query_type_counts: Dict[str, int] = {}
         max_deep_queries = self._max_deep_queries()
+        orrery = self._enabled_orrery()
+        collect_query_embeddings = orrery is not None and orrery.knowledge.enabled
 
         for query_obj in queries[:max_deep_queries]:
             if getattr(self.lore, "memory_manager", None):
@@ -718,10 +698,7 @@ class TurnCycleManager:
                     "use_hybrid": True,
                 }
                 query_embeddings: Dict[str, List[float]] | None = None
-                orrery_settings = self.settings.get("orrery", {})
-                if orrery_settings.get("enabled", False) and orrery_settings.get(
-                    "knowledge", {}
-                ).get("enabled", False):
+                if collect_query_embeddings:
                     query_embeddings = {}
                     search_kwargs["query_embeddings"] = query_embeddings
                 if (
@@ -781,8 +758,8 @@ class TurnCycleManager:
         The proposal is intentionally kept on TurnContext only. It is not injected
         into the storyteller payload until a later phase proves the no-write path.
         """
-        orrery_settings = self.settings.get("orrery", {})
-        if not orrery_settings.get("enabled", False):
+        orrery = self._enabled_orrery()
+        if orrery is None:
             turn_context.phase_states["orrery_resolve"] = {
                 "enabled": False,
                 "skipped": True,
@@ -792,11 +769,11 @@ class TurnCycleManager:
         if not self.lore.memnon:
             raise RuntimeError("Orrery resolve requires MEMNON database access")
 
-        binding_settings = orrery_settings.get("binding", {})
-        window_chunks = int(binding_settings.get("window_chunks", 30))
-        bleed_settings = OrreryBleedSettings.model_validate(
-            orrery_settings.get("bleed", {})
-        )
+        window_chunks = orrery.binding.window_chunks
+        bleed_settings = orrery.bleed
+        # The resolver's settings consumers take plain mappings; dump only the
+        # Orrery section, once for this phase.
+        orrery_settings = orrery.model_dump(by_alias=True)
         with self.lore.memnon.Session() as session:
             anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
             turn_context.ambient_pacing_allowed = (
@@ -812,18 +789,18 @@ class TurnCycleManager:
                 BUILTIN_TEMPLATES,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
-                sunhelm_settings=orrery_settings.get("sunhelm"),
-                selection_settings=orrery_settings.get("selection"),
-                habituation_settings=orrery_settings.get("habituation"),
-                package_selection_settings=orrery_settings.get("package_selection"),
-                project_settings=orrery_settings.get("projects"),
-                epistemics_settings=orrery_settings.get("epistemics"),
-                fanout_settings=orrery_settings.get("fanout"),
-                contagion_settings=orrery_settings.get("contagion"),
-                weather_settings=orrery_settings.get("weather"),
-                mood_settings=orrery_settings.get("mood"),
-                composition_settings=orrery_settings.get("composition"),
-                ambient_settings=orrery_settings.get("ambient"),
+                sunhelm_settings=orrery_settings["sunhelm"],
+                selection_settings=orrery_settings["selection"],
+                habituation_settings=orrery_settings["habituation"],
+                package_selection_settings=orrery_settings["package_selection"],
+                project_settings=orrery_settings["projects"],
+                epistemics_settings=orrery_settings["epistemics"],
+                fanout_settings=orrery_settings["fanout"],
+                contagion_settings=orrery_settings["contagion"],
+                weather_settings=orrery_settings["weather"],
+                mood_settings=orrery_settings["mood"],
+                composition_settings=orrery_settings["composition"],
+                ambient_settings=orrery_settings["ambient"],
                 ambient_pacing_allowed=turn_context.ambient_pacing_allowed,
             )
 
@@ -1034,12 +1011,13 @@ class TurnCycleManager:
 
         proposal: Any = turn_context.orrery_proposal
         if proposal is not None:
+            orrery_section = self.settings.orrery
             proposal = replace(
                 proposal,
                 rendered_cards=tuple(
                     rendered_selection(
                         proposal.to_dict(),
-                        self.settings.get("orrery", {}).get("prompt"),
+                        orrery_section.prompt if orrery_section else None,
                     )
                 ),
             )
@@ -1118,15 +1096,13 @@ class TurnCycleManager:
     ) -> list[str]:
         """Read and render recent rulings before payload-budget accounting."""
 
-        orrery_settings = self.settings.get("orrery", {})
-        if not orrery_settings.get("enabled", False):
+        orrery = self._enabled_orrery()
+        if orrery is None:
             return []
         if not self.lore.memnon:
             raise RuntimeError("Recent Orrery rulings require MEMNON database access")
 
-        prompt_settings = OrreryPromptSettings.model_validate(
-            orrery_settings.get("prompt", {})
-        )
+        prompt_settings = orrery.prompt
         with self.lore.memnon.Session() as session:
             proposal = turn_context.orrery_proposal
             anchor_chunk_id = (
@@ -1149,9 +1125,7 @@ class TurnCycleManager:
 
     def _select_scene_payload(self, payload: Dict[str, Any]) -> None:
         """Freeze the deduplicated, capped selection before hydration and trimming."""
-        limits = RenderLimits.model_validate(
-            self.lore.settings.get("lore", {}).get("render_limits", {})
-        )
+        limits = self.settings.lore.render_limits
         warm, retrieved = select_scene_memories(
             payload["warm_slice"]["chunks"],
             payload["retrieved_passages"]["results"],
@@ -1395,25 +1369,17 @@ class TurnCycleManager:
     def _build_world_knowledge(self, turn_context: TurnContext) -> list[dict[str, Any]]:
         """Load optional spoiler-limited knowledge for the current scene."""
 
-        orrery_settings = self.settings.get("orrery", {})
-        knowledge_settings = OrreryKnowledgeSettings.model_validate(
-            orrery_settings.get("knowledge", {})
-        )
-        recall_settings = OrreryRecallSettings.model_validate(
-            orrery_settings.get("recall", {})
-        )
-        disclosure_settings = OrreryDisclosureSettings.model_validate(
-            orrery_settings.get("disclosure", {})
-        )
-        if not orrery_settings.get("enabled", False) or not knowledge_settings.enabled:
+        orrery = self._enabled_orrery()
+        if orrery is None or not orrery.knowledge.enabled:
             turn_context.phase_states["world_knowledge"] = {
                 "enabled": False,
                 "skipped": True,
             }
             return []
-        experience_settings = OrreryExperienceSettings.model_validate(
-            orrery_settings.get("experiences", {})
-        )
+        knowledge_settings = orrery.knowledge
+        recall_settings = orrery.recall
+        disclosure_settings = orrery.disclosure
+        experience_settings = orrery.experiences
         if not self.lore.memnon:
             raise RuntimeError("World knowledge requires MEMNON database access")
 
@@ -1460,13 +1426,11 @@ class TurnCycleManager:
     async def select_orrery_bleed(self, turn_context: TurnContext) -> None:
         """Populate optional Orrery Bleed menu before payload assembly."""
 
-        orrery_settings = self.settings.get("orrery", {})
-        if not orrery_settings.get("enabled", False):
+        orrery = self._enabled_orrery()
+        if orrery is None:
             return
 
-        bleed_settings = OrreryBleedSettings.model_validate(
-            orrery_settings.get("bleed", {})
-        )
+        bleed_settings = orrery.bleed
         max_candidates = bleed_settings.max_candidates
         if max_candidates <= 0:
             turn_context.phase_states["orrery_bleed"] = {

@@ -228,7 +228,7 @@ def test_incubator_acceptance_stamps_inside_the_callers_transaction(
                 Json({"characters": [], "places": [], "factions": []}),
                 Json([]),
                 Json([]),
-                Json(empty_pass2_baseline({}).model_dump(mode="json")),
+                Json(empty_pass2_baseline(load_settings()).model_dump(mode="json")),
                 session_id,
                 "recap-fixture",
             ),

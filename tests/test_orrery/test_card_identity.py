@@ -30,8 +30,22 @@ from nexus.agents.orrery.resolver import (
 )
 from nexus.agents.orrery.substrate import HabituationPolicy, WorldState
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings, load_settings_as_dict
+from nexus.config.settings_models import Settings
 from tests.pg_fixtures import asyncpg_kwargs, disposable_slot_database, sqlalchemy_url
+from tests.settings_helpers import settings_with
+
+
+def _capped_prompt_settings() -> Settings:
+    """Real single-pass settings rendering one proposal and one pressure."""
+
+    return settings_with(
+        {
+            "apex.turn_pipeline": "single_pass",
+            "orrery.prompt.max_rendered_proposals": 1,
+            "orrery.prompt.max_rendered_pressures": 1,
+        }
+    )
 
 
 def test_rank_retains_distinct_templates_and_habituation() -> None:
@@ -161,7 +175,7 @@ async def test_card_exposure_rank_joint_and_backstage_parity(
             # Exercise the real shared formatter in both seat modes. The paid
             # before/after proof covers complete seat requests and adjudications.
             prompt_config = {"max_rendered_proposals": 1, "max_rendered_pressures": 1}
-            utility = LogonUtility({"orrery": {"prompt": prompt_config}})
+            utility = LogonUtility(_capped_prompt_settings())
             writer = utility._format_context_prompt(payload)
             gaia = utility._format_context_prompt(
                 payload, include_ambient_scene_seeds=False
@@ -368,7 +382,7 @@ def test_card_handles_lengthen_only_collisions_deterministically() -> None:
 
 def test_card_format_places_clock_and_both_seats() -> None:
     context = json.loads((RECEIPTS / "replay-context.json").read_text())
-    utility = LogonUtility(load_settings_as_dict())
+    utility = LogonUtility(load_settings())
     writer = utility._format_context_prompt(context)
     gaia = utility._format_context_prompt(context, include_ambient_scene_seeds=False)
     for prompt in (writer, gaia):
@@ -502,13 +516,7 @@ def test_rendered_card_selection_survives_changed_prompt_limits() -> None:
     ] == expected
     payload = json.loads((RECEIPTS / "replay-context.json").read_text())
     payload["orrery_rendered_cards"] = list(proposal.rendered_cards)
-    prompt = LogonUtility(
-        {
-            "orrery": {
-                "prompt": {"max_rendered_proposals": 1, "max_rendered_pressures": 1}
-            }
-        }
-    )._format_context_prompt(payload)
+    prompt = LogonUtility(_capped_prompt_settings())._format_context_prompt(payload)
     handles = proposal_handles(proposal.rendered_cards)
     assert [
         line.split()[2] for line in prompt.splitlines() if line.startswith("- [")

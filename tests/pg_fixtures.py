@@ -1100,7 +1100,7 @@ def seed_pending_turn(
         acquire_generation_lease,
         bind_generation_parent,
     )
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
     from nexus.config.story_model import read_story_settings, story_context_settings
     from nexus.memory.manager import empty_pass2_baseline
 
@@ -1113,10 +1113,9 @@ def seed_pending_turn(
         raise ValueError("seed_pending_turn needs a whole-minute time_delta")
     days, minutes_of_day = divmod(total_minutes, 24 * 60)
     hours, minutes = divmod(minutes_of_day, 60)
-    settings = story_context_settings(
-        load_settings_as_dict(), read_story_settings(dbname)
-    )
-    orrery_settings = settings["orrery"]
+    settings = story_context_settings(load_settings(), read_story_settings(dbname))
+    assert settings.orrery is not None, "seed_pending_turn needs an [orrery] section"
+    orrery_settings = settings.orrery.model_dump(by_alias=True)
     baseline = empty_pass2_baseline(settings)
     session_id = str(uuid.uuid4())
     with closing(_connect(dbname)) as conn:

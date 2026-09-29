@@ -19,11 +19,18 @@ from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
 from nexus.api.slot_utils import get_slot_db_url
-from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import (
+    OrreryBleedSettings,
+    OrreryDisclosureSettings,
+    OrreryExperienceSettings,
+    OrreryKnowledgeSettings,
+    OrreryRecallSettings,
+)
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
 from tests.model_registry_helpers import registry_model
+from tests.settings_helpers import settings_with, table
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -562,28 +569,26 @@ class _LiveLoreHarness:
     token_manager = None
 
     def __init__(self, session: Session, *, enabled: bool) -> None:
-        self.settings = {
-            "Agent Settings": {
-                "LORE": {
-                    "token_budget": {
-                        "apex_context_window": 75_000,
-                        "prompt_overhead_tokens": 4_000,
-                    }
-                }
-            },
-            # Turn assembly validates the real render caps; take them from
-            # nexus.toml rather than restating them here.
-            "lore": {"render_limits": load_settings_as_dict()["lore"]["render_limits"]},
-            "orrery": {
-                "enabled": True,
-                "bleed": {"max_candidates": 0},
-                "knowledge": _settings(enabled=enabled),
-                "experiences": {
-                    "include_player_character": True,
-                    "model": registry_model("openai"),
-                },
-            },
-        }
+        self.settings = settings_with(
+            {
+                "lore.token_budget.apex_context_window": 75_000,
+                "lore.token_budget.prompt_overhead_tokens": 4_000,
+                "orrery.enabled": True,
+                "orrery.bleed": table(OrreryBleedSettings, {"max_candidates": 0}),
+                "orrery.knowledge": table(
+                    OrreryKnowledgeSettings, _settings(enabled=enabled)
+                ),
+                "orrery.experiences": table(
+                    OrreryExperienceSettings,
+                    {
+                        "include_player_character": True,
+                        "model": registry_model("openai"),
+                    },
+                ),
+                "orrery.recall": table(OrreryRecallSettings),
+                "orrery.disclosure": table(OrreryDisclosureSettings),
+            }
+        )
         self.memnon = _LiveMemnonHarness(session)
 
 

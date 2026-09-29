@@ -170,9 +170,9 @@ async def test_continuation_threads_logon_model_into_incubator(
                 orrery_proposal=None,
                 bleed_menu=[SimpleNamespace(resolution_id=501)],
                 memory_state={
-                    "lore_pass_baseline": empty_pass2_baseline({}).model_dump(
-                        mode="json"
-                    )
+                    "lore_pass_baseline": empty_pass2_baseline(
+                        load_settings()
+                    ).model_dump(mode="json")
                 },
                 private_correspondence=GeneratedCorrespondence(
                     writer_letter=self.secret,
@@ -344,7 +344,7 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
         "bootstrap-session",
         "Begin.",
         slot=5,
-        load_settings=lambda: {},
+        load_settings=load_settings,
         story_settings=StorySettings(),
     )
 

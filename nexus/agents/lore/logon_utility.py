@@ -85,8 +85,9 @@ from nexus.config.loader import get_provider_for_model  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
     GaiaSeatPolicy,
+    OrreryPromptSettings,
     OrreryRetrogradeMaturationSettings,
-    RenderLimits,
+    Settings,
 )
 from nexus.config.story_model import StorySettings, read_story_settings
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
@@ -95,7 +96,6 @@ from nexus.memory.correspondence import (  # noqa: E402
     GeneratedCorrespondence,
     build_digest_length_validator,
     build_letter_length_validator,
-    correspondence_settings,
 )
 from nexus.memory.manager import (  # noqa: E402
     resolve_storyteller_context_window,
@@ -360,7 +360,7 @@ class LogonUtility:
 
     def __init__(
         self,
-        settings: Dict[str, Any],
+        settings: Settings,
         dbname: Optional[str] = None,
         model_override: Optional[str] = None,
         bootstrap_mode: bool = False,
@@ -372,7 +372,7 @@ class LogonUtility:
         Initialize LOGON utility with configured provider.
 
         Args:
-            settings: Application settings dictionary
+            settings: Validated NEXUS settings, with any story window applied
             dbname: Database name (save_01 through save_05).
                     If not provided, uses NEXUS_SLOT env var.
             model_override: Optional model to use instead of settings/slot config.
@@ -423,24 +423,39 @@ class LogonUtility:
     def _turn_pipeline(self) -> Literal["single_pass", "two_pass"]:
         """Return the validated non-bootstrap storyteller pipeline lever."""
 
-        apex_settings = self.settings.get("API Settings", {}).get("apex")
-        if not isinstance(apex_settings, Mapping):
-            apex_settings = self.settings.get("apex") or {}
-        turn_pipeline = apex_settings.get("turn_pipeline", "single_pass")
-        if turn_pipeline not in {"single_pass", "two_pass"}:
-            raise ValueError(
-                "API Settings.apex.turn_pipeline must be 'single_pass' or 'two_pass'"
-            )
-        return cast(Literal["single_pass", "two_pass"], turn_pipeline)
+        return self.settings.apex.turn_pipeline
 
     def _tag_library_settings(self) -> APEXTagLibrarySettings:
         """Return validated prompt and strict-schema vocabulary controls."""
 
-        apex_settings = self.settings.get("API Settings", {}).get("apex")
-        if not isinstance(apex_settings, Mapping):
-            apex_settings = self.settings.get("apex") or {}
-        raw_settings = apex_settings.get("tag_library") or {}
-        return APEXTagLibrarySettings.model_validate(raw_settings)
+        return self.settings.apex.tag_library
+
+    def _max_letter_tokens(self) -> int:
+        """Return the configured repairable private-letter limit."""
+
+        return self.settings.storyteller.correspondence.max_letter_tokens
+
+    def _retrograde_maturation(self) -> OrreryRetrogradeMaturationSettings:
+        """Return typed Retrograde maturation controls.
+
+        An absent ``[orrery]`` section takes the model defaults.
+        """
+
+        orrery = self.settings.orrery
+        if orrery is None:
+            return OrreryRetrogradeMaturationSettings()
+        return orrery.retrograde.maturation
+
+    def _orrery_prompt_settings(self) -> OrreryPromptSettings:
+        """Return typed Orrery prompt render caps.
+
+        An absent ``[orrery]`` section takes the model defaults.
+        """
+
+        orrery = self.settings.orrery
+        if orrery is None:
+            return OrreryPromptSettings()
+        return orrery.prompt
 
     def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
         """Load storyteller instructions in their original composition order."""
@@ -575,8 +590,6 @@ class LogonUtility:
 
     def _resolve_storyteller_route(self) -> StorytellerRoute:
         """Resolve the active model, endpoint, and storyteller wire class."""
-        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-
         from nexus.config import load_settings
         from nexus.config.story_model import StorySettings, resolve_seat
 
@@ -640,7 +653,7 @@ class LogonUtility:
         resolved_route: Optional[StorytellerRoute] = None,
     ) -> None:
         """Initialize the appropriate API provider based on settings and slot config."""
-        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        apex_settings = self.settings.apex
         provider_bootstrap_mode = (
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
@@ -665,30 +678,17 @@ class LogonUtility:
         )
         anthropic_transport: Literal["native", "prompted", "tool_envelope"] = "native"
         if provider_type == "anthropic":
-            configured_transport = apex_settings.get("anthropic_storyteller_transport")
-            if configured_transport not in {
-                "native",
-                "prompted",
-                "tool_envelope",
-            }:
-                raise ValueError(
-                    "API Settings.apex.anthropic_storyteller_transport must be "
-                    "'native', 'prompted', or 'tool_envelope'"
-                )
             anthropic_transport = (
                 "native"
                 if provider_bootstrap_mode
-                else cast(
-                    Literal["native", "prompted", "tool_envelope"],
-                    configured_transport,
-                )
+                else apex_settings.anthropic_storyteller_transport
             )
             if anthropic_transport == "prompted" and not use_two_pass:
                 system_prompt = f"{system_prompt}\n\n{skald_wire_prompt_guide()}"
         self._system_prompt = system_prompt
         self._provider_bootstrap_mode = provider_bootstrap_mode
 
-        structured_output_retries = apex_settings.get("structured_output_retries", 3)
+        structured_output_retries = apex_settings.structured_output_retries
 
         # Generation-time registry validation for Skald's durable fields:
         # invalid Orrery vocabulary and unresolved faction update identities
@@ -706,18 +706,10 @@ class LogonUtility:
             validation_dbname: Optional[str] = require_slot_dbname(dbname=self.dbname)
         except Exception:
             validation_dbname = None
-        tag_library_settings = apex_settings.get("tag_library") or {}
-        maturation_settings = OrreryRetrogradeMaturationSettings.model_validate(
-            (
-                ((self.settings.get("orrery") or {}).get("retrograde") or {}).get(
-                    "maturation"
-                )
-            )
-            or {}
-        )
+        maturation_settings = self._retrograde_maturation()
         tag_output_validator = build_storyteller_tag_validator(
             validation_dbname,
-            suggestion_limit=int(tag_library_settings.get("suggestion_limit", 3)),
+            suggestion_limit=apex_settings.tag_library.suggestion_limit,
             allow_same_turn_faction_declarations=maturation_settings.enabled,
             proposal_bindings_provider=(lambda: self._active_orrery_proposal_bindings),
             anchor_chunk_id_provider=lambda: self._active_anchor_chunk_id,
@@ -735,10 +727,8 @@ class LogonUtility:
         if provider_wire_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
-                max_tokens=apex_settings.get(
-                    "max_output_tokens", apex_settings.get("max_tokens", 4000)
-                ),
-                reasoning_effort=apex_settings.get("reasoning_effort"),
+                max_tokens=apex_settings.max_output_tokens,
+                reasoning_effort=apex_settings.reasoning_effort,
                 system_prompt=system_prompt,
                 structured_transport=anthropic_transport,
                 structured_output_retries=structured_output_retries,
@@ -751,9 +741,9 @@ class LogonUtility:
             # base_url in [global.model.api_models] (mock TEST, Ollama, vLLM).
             self.provider = OpenAIProvider(
                 model=model,
-                temperature=apex_settings.get("temperature", 0.7),
-                max_output_tokens=apex_settings.get("max_output_tokens", 25000),
-                reasoning_effort=apex_settings.get("reasoning_effort", "medium"),
+                temperature=apex_settings.temperature,
+                max_output_tokens=apex_settings.max_output_tokens,
+                reasoning_effort=apex_settings.reasoning_effort,
                 system_prompt=system_prompt,
                 base_url=base_url,
                 api_key=api_key,
@@ -1076,9 +1066,8 @@ class LogonUtility:
     ) -> Any:
         """Bind the configured repairable letter limit to one provider pass."""
 
-        config = correspondence_settings(self.settings)
         return build_letter_length_validator(
-            max_letter_tokens=int(config["max_letter_tokens"]),
+            max_letter_tokens=self._max_letter_tokens(),
             delegate=delegate,
             story=StorySettings(skald_model=model),
         )
@@ -1166,21 +1155,15 @@ class LogonUtility:
                     gaia.max_output_tokens
                 )
             else:
-                cast(OpenAIProvider, pass_provider).max_output_tokens = (
-                    gaia.max_output_tokens
-                )
+                openai_pass = cast(OpenAIProvider, pass_provider)
+                openai_pass.max_output_tokens = gaia.max_output_tokens
+                openai_pass.temperature = gaia.temperature
         return pass_provider
 
     def _gaia_seat_policy(self) -> GaiaSeatPolicy:
         """Return the validated [apex.gaia] generation profile."""
 
-        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-        if "gaia" not in apex_settings:
-            raise ValueError(
-                "The [apex.gaia] table is missing from the settings; Gaia has no "
-                "generation profile to send."
-            )
-        return GaiaSeatPolicy.model_validate(apex_settings["gaia"])
+        return self.settings.apex.gaia
 
     def _writer_system_prompt(self) -> str:
         """Return the storyteller system prompt scoped to the writer pass.
@@ -1200,10 +1183,7 @@ class LogonUtility:
             system_prompt = getattr(self.provider, "system_prompt", None)
         if system_prompt is not None and not isinstance(system_prompt, str):
             raise TypeError("Writer system prompt must be a string")
-        config = correspondence_settings(self.settings)
-        note = self._load_writer_pass_note(
-            max_letter_tokens=int(config["max_letter_tokens"])
-        )
+        note = self._load_writer_pass_note(max_letter_tokens=self._max_letter_tokens())
         if system_prompt is None:
             return note
         return f"{system_prompt}\n\n{note}"
@@ -1282,9 +1262,8 @@ class LogonUtility:
         sends the registry request_params effort, not the profile's.
         """
         gaia_model, provider_type, endpoint, gaia_wire = gaia_route
-        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         gaia = self._gaia_seat_policy()
-        structured_output_retries = apex_settings.get("structured_output_retries", 3)
+        structured_output_retries = self.settings.apex.structured_output_retries
         if gaia_wire == "anthropic":
             if anthropic_transport is None:
                 raise ValueError("Anthropic gaia seat requires an explicit transport")
@@ -1308,7 +1287,7 @@ class LogonUtility:
         request_timeout = endpoint["request_timeout_seconds"] if endpoint else None
         return OpenAIProvider(
             model=gaia_model,
-            temperature=apex_settings.get("temperature", 0.7),
+            temperature=gaia.temperature,
             max_output_tokens=gaia.max_output_tokens,
             reasoning_effort=gaia.reasoning_effort,
             system_prompt=system_prompt,
@@ -1360,8 +1339,7 @@ class LogonUtility:
         else:
             # Pinned Anthropic gaia under a non-Anthropic writer: the active
             # provider carries no Anthropic transport, so read the setting.
-            apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-            transport = apex_settings.get("anthropic_storyteller_transport", "prompted")
+            transport = self.settings.apex.anthropic_storyteller_transport
         if transport == "native":
             raise ValueError(
                 "Anthropic two-pass execution cannot use "
@@ -1387,9 +1365,8 @@ class LogonUtility:
         effective_wire = (
             wire_type if wire_type is not None else self._provider_wire_type
         )
-        config = correspondence_settings(self.settings)
         system_prompt = self._load_gaia_system_prompt(
-            max_letter_tokens=int(config["max_letter_tokens"])
+            max_letter_tokens=self._max_letter_tokens()
         )
         # Gaia authors canon-adjacent text (update notes, entity summaries)
         # and needs the same setting idiom the writer works in.
@@ -1461,12 +1438,7 @@ class LogonUtility:
             place_reference_sites(writer.presence)
         ):
             return delegate
-        maturation = OrreryRetrogradeMaturationSettings.model_validate(
-            ((self.settings.get("orrery") or {}).get("retrograde") or {}).get(
-                "maturation"
-            )
-            or {}
-        )
+        maturation = self._retrograde_maturation()
 
         async def validate(ctx: Any, output: Any) -> Any:
             with get_connection(self._validation_dbname) as conn:
@@ -1695,34 +1667,19 @@ class LogonUtility:
         self, provider: Any, **kwargs: Any
     ) -> tuple["LocalRequestCounter", "APIModelEntry"]:
         """Reuse one declared local tokenizer cache for all blocks in this turn."""
-        from nexus.config.settings_models import APIModelEntry
         from nexus.telemetry.prompt_window import (
             estimator_for,
             local_request_counter,
         )
 
-        entry = next(
-            APIModelEntry.model_validate(entry)
-            for provider_settings in self.settings["global"]["model"][
-                "api_models"
-            ].values()
-            for entry in provider_settings["models"]
-            if entry["id"] == provider.model
-        )
+        entry = self.settings.model_entry(provider.model)
         if not hasattr(self, "_window_text_counters"):
             self._window_text_counters = {}
         key = (entry.tokenizer_encoding, entry.tokenizer_repository)
         if key not in self._window_text_counters:
-            from nexus.config.settings_models import Settings
-
-            typed = Settings.model_validate(
-                {
-                    k: v
-                    for k, v in self.settings.items()
-                    if k not in {"Agent Settings", "API Settings"}
-                }
+            self._window_text_counters[key] = estimator_for(
+                entry.id, settings=self.settings
             )
-            self._window_text_counters[key] = estimator_for(entry.id, settings=typed)
         return (
             local_request_counter(
                 provider, entry, self._window_text_counters[key], **kwargs
@@ -1768,7 +1725,7 @@ class LogonUtility:
             anthropic_request=anthropic_request,
         )
         budget = resolve_seat_window(
-            self.settings, provider.model, seat=seat, window=window
+            self.settings.model_dump(), provider.model, seat=seat, window=window
         )
         return AssemblyRequest(
             budget, blocks, sources, count, entry.token_count_safety_margin
@@ -2016,7 +1973,10 @@ class LogonUtility:
             else:
                 resolved_window = window
             budget = resolve_seat_window(
-                self.settings, provider.model, seat=seat, window=resolved_window
+                self.settings.model_dump(),
+                provider.model,
+                seat=seat,
+                window=resolved_window,
             )
             from nexus.config import load_settings
 
@@ -2056,7 +2016,7 @@ class LogonUtility:
             if provider.usage_provider_name == "local":
                 from nexus.config.local_window import verify_local_context
 
-                verify_local_context(provider, self.settings)
+                verify_local_context(provider, self.settings.model_dump())
             local_count, _ = self._local_window_counter(
                 provider, text_format=text_format, anthropic_request=anthropic_request
             )
@@ -2103,7 +2063,7 @@ class LogonUtility:
                 ),
                 system_prompt=provider.system_prompt or "",
                 prompt=active_prompt,
-                settings=self.settings,
+                settings=self.settings.model_dump(),
                 wire_schema=wire_schema,
             )
             record_prompt_window(attempt_record)
@@ -2574,15 +2534,9 @@ class LogonUtility:
         seat: ContextSeat = "writer",
     ) -> str:
         """Format context payload into a prompt for the Apex AI"""
-        from nexus.config import load_settings
         from nexus.telemetry.prompt_window import RenderedSections
 
-        raw_limits = (self.settings.get("lore") or {}).get("render_limits")
-        render_limits = (
-            RenderLimits.model_validate(raw_limits)
-            if raw_limits is not None
-            else load_settings(self.settings_path).lore.render_limits
-        )
+        render_limits = self.settings.lore.render_limits
         manifest_seat: ContextSeat = (
             "bootstrap" if self._is_bootstrap_context(context) else seat
         )
@@ -2920,10 +2874,7 @@ class LogonUtility:
         # (orrery_prompt_exposures): both sides must slice identically or the
         # recorded "shown set" lies. Model defaults keep a single source when
         # the orrery section is absent.
-        from nexus.config.settings_models import OrreryPromptSettings
-
-        _prompt_cfg = (self.settings.get("orrery") or {}).get("prompt") or {}
-        prompt_settings = OrreryPromptSettings.model_validate(_prompt_cfg)
+        prompt_settings = self._orrery_prompt_settings()
 
         sections.kind = "recent orrery rulings"
         recent_rulings_section = context.get("orrery_recent_rulings_section")

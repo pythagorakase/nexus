@@ -37,6 +37,7 @@ from nexus.api.presence_reconciliation import (
     read_character_roster_async,
     reconcile_public_prose_mentions,
 )
+from nexus.config.settings_models import Settings
 from nexus.config.story_model import StorySettings
 from nexus.memory.context_state import validate_staged_pass2_baseline
 from nexus.memory.manager import empty_pass2_baseline
@@ -151,7 +152,7 @@ async def generate_narrative_async(
     slot: Optional[int] = None,
     *,
     get_db_connection: Callable[[Optional[int]], Any],
-    load_settings: Callable[[], Dict[str, Any]],
+    load_settings: Callable[[], Settings],
     manager: ProgressManager,
     note: Optional[str] = None,
     model_override: Optional[str] = None,
@@ -643,7 +644,7 @@ async def generate_bootstrap_narrative(
     user_text: str,
     slot: Optional[int] = None,
     *,
-    load_settings,
+    load_settings: Callable[[], Settings],
     story_settings: StorySettings | None = None,
     model_override: str | None = None,
 ) -> Dict[str, Any]:

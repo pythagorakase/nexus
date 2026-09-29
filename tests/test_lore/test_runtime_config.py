@@ -93,10 +93,10 @@ def test_lore_honors_runtime_config_for_both_storyteller_seats(
     lore = LORE(enable_logon=False, dbname=runtime_database)
     try:
         assert lore.memnon is not None
-        apex = lore.settings["API Settings"]["apex"]
+        apex = lore.settings.apex
         assert lore.settings_path == alternate.path.resolve()
-        assert apex["model"] == alternate.writer_model
-        assert apex["gaia_model"] == alternate.gaia_model
+        assert apex.model == alternate.writer_model
+        assert apex.gaia_model == alternate.gaia_model
 
         routing = LogonUtility(
             lore.settings,
@@ -104,10 +104,7 @@ def test_lore_honors_runtime_config_for_both_storyteller_seats(
             model_override=alternate.writer_value,
             settings_path=lore.settings_path,
         )
-        assert (
-            routing.settings["API Settings"]["apex"]["gaia_model"]
-            == alternate.gaia_model
-        )
+        assert routing.settings.apex.gaia_model == alternate.gaia_model
         assert routing.resolve_storyteller_route()[0] == alternate.writer_model
         assert any(
             f"effective config path {alternate.path.resolve()}" in message
@@ -132,10 +129,10 @@ def test_explicit_lore_settings_path_beats_runtime_environment(
     )
     try:
         assert lore.memnon is not None
-        apex = lore.settings["API Settings"]["apex"]
+        apex = lore.settings.apex
         assert lore.settings_path == alternate.path.resolve()
-        assert apex["model"] == alternate.writer_model
-        assert apex["gaia_model"] == alternate.gaia_model
+        assert apex.model == alternate.writer_model
+        assert apex.gaia_model == alternate.gaia_model
 
         lore.ensure_logon()
         assert lore.logon is not None
@@ -159,10 +156,10 @@ def test_lore_without_runtime_environment_falls_back_to_repo_root(
     lore = LORE(enable_logon=False, dbname=runtime_database)
     try:
         assert lore.memnon is not None
-        apex = lore.settings["API Settings"]["apex"]
+        apex = lore.settings.apex
         assert lore.settings_path == REPO_CONFIG.resolve()
-        assert apex["model"] == repository_settings.apex.model
-        assert apex["gaia_model"] == repository_settings.apex.gaia_model
+        assert apex.model == repository_settings.apex.model
+        assert apex.gaia_model == repository_settings.apex.gaia_model
     finally:
         lore.close()
 

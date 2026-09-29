@@ -21,7 +21,7 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.api import slot_utils
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.config.story_model import StorySettings
 from nexus.database import connection_kwargs
 from nexus.memory import ContextMemoryManager
@@ -140,8 +140,8 @@ def main() -> None:
         # Process-local admission, as in #909; production validation is unchanged.
         slot_utils.VALID_DBNAMES = {dbname}
         for cap in (5, 15):
-            settings = load_settings_as_dict()
-            settings["lore"]["render_limits"]["historical_passages"] = cap
+            settings = load_settings()
+            settings.lore.render_limits.historical_passages = cap
             utility = LogonUtility(
                 settings,
                 model_override="TEST",

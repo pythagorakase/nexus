@@ -15,6 +15,7 @@ from uuid import uuid4
 import pytest
 from pydantic_ai import ModelRetry
 
+from nexus.config import load_settings
 from nexus.agents.logon.orrery_tag_validation import build_storyteller_tag_validator
 from nexus.agents.logon.skald_wire import (
     PresenceBaseline,
@@ -71,7 +72,7 @@ def staged(
     )
     response.generation_model = "TEST"
     return response_to_incubator(
-        response, parent, "Return.", session, empty_pass2_baseline({})
+        response, parent, "Return.", session, empty_pass2_baseline(load_settings())
     )
 
 

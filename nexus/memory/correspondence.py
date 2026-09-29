@@ -218,18 +218,6 @@ class CorrespondenceCompactionPlan:
         return "\n".join(parts)
 
 
-def correspondence_settings(settings: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Return validated correspondence settings from a runtime settings mapping."""
-
-    storyteller = settings.get("storyteller")
-    if not isinstance(storyteller, Mapping):
-        raise ValueError("storyteller settings are required")
-    correspondence = storyteller.get("correspondence")
-    if not isinstance(correspondence, Mapping):
-        raise ValueError("storyteller.correspondence settings are required")
-    return correspondence
-
-
 def load_accepted_correspondence(
     dbname: str,
     *,

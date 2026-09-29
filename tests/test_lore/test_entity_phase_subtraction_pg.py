@@ -21,7 +21,7 @@ from sqlalchemy.orm import sessionmaker
 
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
 from nexus.memory import ContextMemoryManager
 from nexus.memory.divergence import DivergenceResult
 from tests.pg_fixtures import (
@@ -127,7 +127,7 @@ def test_entity_phase_uses_live_entities_without_dead_relation_queries(
         statements.append(statement)
 
     lore = SimpleNamespace(
-        settings=load_settings_as_dict(),
+        settings=load_settings(),
         memnon=SimpleNamespace(Session=entity_corpus["Session"]),
         enable_logon=False,
     )
@@ -181,7 +181,7 @@ def test_live_entity_divergence_retains_result_contract_and_alias_matching(
         db=entity_corpus["engine"],
         Session=entity_corpus["Session"],
     )
-    manager = ContextMemoryManager(load_settings_as_dict(), memnon=memnon)
+    manager = ContextMemoryManager(load_settings(), memnon=memnon)
     result = manager._detect_divergence(
         "Ember leaves the Glass Atrium to meet the Night Guild."
     )

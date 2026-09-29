@@ -74,7 +74,15 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import anthropic_output_config
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from scripts.api_openai import OpenAIProvider
+from nexus.config.settings_models import Settings
 from tests.pg_fixtures import connect
+from tests.settings_helpers import settings_with
+
+
+def _single_pass() -> Settings:
+    """Return real settings on the single-pass storyteller pipeline."""
+
+    return settings_with({"apex.turn_pipeline": "single_pass"})
 
 
 # Filled from the deterministic compact serializations, with modest drift room.
@@ -1692,7 +1700,7 @@ def test_wire_rejects_v1_and_unknown_keys_loudly(
 
 
 def test_logon_selects_transport_appropriate_wire_serialization() -> None:
-    utility = LogonUtility({}, dbname="save_05")
+    utility = LogonUtility(_single_pass(), dbname="save_05")
 
     utility._provider_wire_type = "openai"
     utility._provider_type_name = "openai"
@@ -1741,7 +1749,7 @@ def test_logon_selects_transport_appropriate_wire_serialization() -> None:
 
 
 def test_anthropic_wire_serialization_requires_transport_attribute() -> None:
-    utility = LogonUtility({})
+    utility = LogonUtility(_single_pass())
     utility._provider_wire_type = "anthropic"
     utility._provider_type_name = "anthropic"
     utility.provider = cast(Any, SimpleNamespace())
@@ -1751,7 +1759,7 @@ def test_anthropic_wire_serialization_requires_transport_attribute() -> None:
 
 
 def test_local_chat_response_format_carries_lenient_wire_schema() -> None:
-    utility = LogonUtility({})
+    utility = LogonUtility(_single_pass())
     utility._provider_wire_type = "local"
     utility._provider_type_name = "local"
     text_format = utility._schema_format_kwargs(SkaldTurnWire)["text_format"]
@@ -1769,7 +1777,7 @@ def test_local_chat_response_format_carries_lenient_wire_schema() -> None:
 
 
 def test_bootstrap_schema_selection_and_contract_are_unchanged() -> None:
-    utility = LogonUtility({})
+    utility = LogonUtility(_single_pass())
     assert utility._select_response_schema({"is_bootstrap": True}) is (
         StorytellerResponseBootstrap
     )
@@ -1797,7 +1805,7 @@ def test_bootstrap_schema_selection_and_contract_are_unchanged() -> None:
 
 
 def test_non_bootstrap_logon_requires_parent_chunk_id() -> None:
-    utility = LogonUtility({}, dbname="save_05")
+    utility = LogonUtility(_single_pass(), dbname="save_05")
     with pytest.raises(
         ValueError,
         match="requires metadata.target_chunk_id",
@@ -1807,7 +1815,7 @@ def test_non_bootstrap_logon_requires_parent_chunk_id() -> None:
 
 @pytest.mark.asyncio
 async def test_async_non_bootstrap_logon_requires_parent_chunk_id() -> None:
-    utility = LogonUtility({}, dbname="save_05")
+    utility = LogonUtility(_single_pass(), dbname="save_05")
     with pytest.raises(
         ValueError,
         match="requires metadata.target_chunk_id",
@@ -1905,7 +1913,7 @@ def test_sync_logon_reads_and_supplies_parent_baseline(
         lambda _dbname, *, context: "",
     )
     utility = LogonUtility(
-        {},
+        _single_pass(),
         dbname="save_05",
         model_override="wire-test-model",
     )
@@ -1988,7 +1996,7 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
         lambda _dbname, *, context: "",
     )
     utility = LogonUtility(
-        {},
+        _single_pass(),
         dbname="save_05",
         model_override="wire-test-model",
     )

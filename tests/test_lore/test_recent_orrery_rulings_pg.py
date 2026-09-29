@@ -27,7 +27,7 @@ from nexus.agents.orrery.resolver import (
     resolve_dry_run,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings, load_settings_as_dict
 from nexus.database import database_url
 from nexus.memory import ContextMemoryManager
 from tests.pg_fixtures import connect
@@ -294,11 +294,12 @@ def _assemble_prompt(
     anchor_chunk_id: int,
     cap: int,
 ) -> tuple[str, dict[str, Any]]:
-    settings = load_settings_as_dict()
-    settings["orrery"]["knowledge"]["enabled"] = False
-    settings["orrery"]["bleed"]["max_candidates"] = 0
-    settings["orrery"]["bleed"]["reserved_remote_slots"] = 0
-    settings["orrery"]["prompt"]["max_rendered_recent_rulings"] = cap
+    settings = load_settings()
+    assert settings.orrery is not None
+    settings.orrery.knowledge.enabled = False
+    settings.orrery.bleed.max_candidates = 0
+    settings.orrery.bleed.reserved_remote_slots = 0
+    settings.orrery.prompt.max_rendered_recent_rulings = cap
 
     lore = SimpleNamespace(
         settings=settings,

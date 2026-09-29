@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Literal, Mapping, Tuple, Type, get_args
 
 from pydantic import BaseModel, ConfigDict, JsonValue, model_validator
 
-from nexus.config.settings_models import MemorySettings, TokenBudgetConfig
+from nexus.config.settings_models import MemorySettings, Settings, TokenBudgetConfig
 
 CompatibilityClass = Literal["budget", "semantic"]
 COMPATIBILITY_CLASSES: Tuple[CompatibilityClass, ...] = ("budget", "semantic")
@@ -122,31 +122,16 @@ def require_complete_classification(
 require_complete_classification()
 
 
-def fingerprinted_config(settings: Mapping[str, Any]) -> Dict[str, Any]:
+def fingerprinted_config(settings: Settings) -> Dict[str, Any]:
     """Select the settings subtrees the Pass-2 config fingerprint hashes.
 
-    The selection, including the legacy ``Agent Settings`` branch, is frozen:
-    changing it would invalidate every stored baseline.
+    The selection and its payload keys are frozen: changing either would
+    invalidate every stored baseline.
     """
 
-    legacy_agent_settings = settings.get("Agent Settings")
-    legacy_lore_settings = (
-        legacy_agent_settings.get("LORE")
-        if isinstance(legacy_agent_settings, Mapping)
-        else None
-    )
-    lore_settings = (
-        legacy_lore_settings
-        if isinstance(legacy_lore_settings, Mapping)
-        else settings.get("lore", {})
-    )
     return {
-        "memory": settings.get("memory", {}),
-        "lore_token_budget": (
-            lore_settings.get("token_budget", {})
-            if isinstance(lore_settings, Mapping)
-            else {}
-        ),
+        "memory": settings.memory.model_dump(),
+        "lore_token_budget": settings.lore.token_budget.model_dump(),
     }
 
 
@@ -162,7 +147,7 @@ def config_hash(payload: Any) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def pass2_baseline_config_fingerprint(settings: Mapping[str, Any]) -> str:
+def pass2_baseline_config_fingerprint(settings: Settings) -> str:
     """Fingerprint configuration that determines two-pass memory behavior."""
 
     return config_hash(fingerprinted_config(settings))
@@ -231,19 +216,13 @@ class Pass2ConfigSnapshot(BaseModel):
         return payload
 
 
-def snapshot_config(settings: Mapping[str, Any]) -> Pass2ConfigSnapshot:
+def snapshot_config(settings: Settings) -> Pass2ConfigSnapshot:
     """Classify every fingerprinted setting value; unclassified keys fail."""
 
     payload = fingerprinted_config(settings)
     grouped: Dict[str, Dict[str, Any]] = {name: {} for name in COMPATIBILITY_CLASSES}
     for prefix, (key, _) in FINGERPRINTED_SECTIONS.items():
-        section = payload[key]
-        if not isinstance(section, Mapping):
-            raise TypeError(
-                f"[{prefix}] settings must be a table to snapshot a Pass-2 "
-                f"baseline, got {type(section).__name__}"
-            )
-        for name, value in section.items():
+        for name, value in payload[key].items():
             path = f"{prefix}.{name}"
             compatibility = FIELD_COMPATIBILITY.get(path)
             if compatibility is None:

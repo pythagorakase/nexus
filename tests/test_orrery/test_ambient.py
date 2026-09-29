@@ -19,7 +19,7 @@ from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.propagation import PropagationDrainResult
 from nexus.agents.orrery.resolver import OrreryTickProposal, resolve_dry_run
 from nexus.agents.orrery.reveal import RevealDrainResult
-from nexus.config.settings_models import OrreryAmbientSettings
+from nexus.config.settings_models import OrreryAmbientSettings, Settings
 from test_orrery.test_bleed import (
     FakeLore as BleedFakeLore,
     FakeSession as BleedFakeSession,
@@ -27,6 +27,13 @@ from test_orrery.test_bleed import (
     _settings as bleed_settings,
 )
 from test_orrery.test_resolver import FakeResult, FakeSession
+from tests.settings_helpers import settings_with
+
+
+def _single_pass() -> Settings:
+    """Return real settings on the single-pass storyteller pipeline."""
+
+    return settings_with({"apex.turn_pipeline": "single_pass"})
 
 
 AMBIENT_SETTINGS = {
@@ -320,7 +327,8 @@ async def _assemble_background_payload(
         pacing_allowed=pacing_allowed,
     )
     settings = bleed_settings()
-    settings["orrery"]["bleed"]["density"] = density
+    assert settings.orrery is not None
+    settings.orrery.bleed.density = density
     manager = TurnCycleManager(
         BleedFakeLore(
             settings,
@@ -371,7 +379,9 @@ async def test_both_eligible_renders_exactly_one_background_channel(
 
     has_ambient = "orrery_ambient_scene_seeds" in context.context_payload
     has_bleed = "orrery_bleed_menu" in context.context_payload
-    writer_prompt = LogonUtility({})._format_context_prompt(context.context_payload)
+    writer_prompt = LogonUtility(_single_pass())._format_context_prompt(
+        context.context_payload
+    )
     assert has_ambient ^ has_bleed
     assert context.phase_states["orrery_background_texture"]["selected_channel"] == (
         replay.phase_states["orrery_background_texture"]["selected_channel"]
@@ -435,7 +445,9 @@ async def test_failed_shared_density_draw_renders_neither_background_channel(
         density=0.0,
     )
 
-    writer_prompt = LogonUtility({})._format_context_prompt(context.context_payload)
+    writer_prompt = LogonUtility(_single_pass())._format_context_prompt(
+        context.context_payload
+    )
     assert "orrery_ambient_scene_seeds" not in context.context_payload
     assert "orrery_bleed_menu" not in context.context_payload
     assert "=== ORRERY AMBIENT SCENE SEEDS ===" not in writer_prompt
@@ -453,8 +465,8 @@ def test_writer_render_is_compact_optional_and_absent_from_gaia_context() -> Non
         "orrery_ambient_scene_seeds": [seed.model_dump(mode="json")],
     }
 
-    writer_prompt = LogonUtility({})._format_context_prompt(context)
-    gaia_prompt = LogonUtility({})._format_context_prompt(
+    writer_prompt = LogonUtility(_single_pass())._format_context_prompt(context)
+    gaia_prompt = LogonUtility(_single_pass())._format_context_prompt(
         context, include_ambient_scene_seeds=False
     )
 

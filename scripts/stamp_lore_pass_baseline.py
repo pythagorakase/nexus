@@ -28,7 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from nexus.api.slot_utils import get_slot_db_url  # noqa: E402
-from nexus.config import load_settings_as_dict  # noqa: E402
+from nexus.config import load_settings  # noqa: E402
 from nexus.database import maintenance_connection  # noqa: E402
 from nexus.memory.context_state import (
     Pass2BaselineV1,
@@ -67,7 +67,7 @@ def stamp_slot_tail(
     from nexus.config.story_model import read_story_settings, story_context_settings
 
     settings = story_context_settings(
-        load_settings_as_dict(), read_story_settings(dbname or slot_dbname(slot))
+        load_settings(), read_story_settings(dbname or slot_dbname(slot))
     )
     staged = empty_pass2_baseline(settings)
     connection = maintenance_connection(
@@ -143,9 +143,7 @@ def refresh_tail_fingerprint(
     from nexus.config.story_model import read_story_settings, story_context_settings
 
     target = dbname or slot_dbname(slot)
-    settings = story_context_settings(
-        load_settings_as_dict(), read_story_settings(target)
-    )
+    settings = story_context_settings(load_settings(), read_story_settings(target))
     new_fingerprint = pass2_baseline_config_fingerprint(settings)
     connection = maintenance_connection(
         dbname,

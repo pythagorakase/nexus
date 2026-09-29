@@ -392,7 +392,8 @@ def test_every_config_reader_uses_the_home_config(
     assert cli_settings.runtime.state_dir == "home-state"
     assert Supervisor.from_config().config_path == config.resolve()
     assert lore.settings_path == config.resolve()
-    assert lore_settings["runtime"]["state_dir"] == "home-state"
+    assert lore_settings.runtime is not None
+    assert lore_settings.runtime.state_dir == "home-state"
 
 
 def test_upload_layout_matches_the_upload_endpoints_and_mounts() -> None:

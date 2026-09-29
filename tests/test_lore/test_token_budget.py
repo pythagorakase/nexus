@@ -4,18 +4,17 @@ Unit tests for token_budget.py
 Tests token budget allocation and management with 20k limit for testing.
 """
 
-import copy
-
 import pytest
 
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
+from nexus.config.settings_models import PayloadPercentBudget, Settings
 
 
 @pytest.fixture
-def settings():
+def settings() -> Settings:
     """Use the real typed registry and seat policies."""
-    return load_settings_as_dict()
+    return load_settings()
 
 
 def _calculate_budget(
@@ -28,7 +27,7 @@ def _calculate_budget(
     return manager.calculate_budget(
         user_input,
         apex_model=apex_model if apex_model is not None else "TEST",
-        apex_context_window=manager.token_budget_config["apex_context_window"],
+        apex_context_window=manager.token_budget_config.apex_context_window,
     )
 
 
@@ -41,7 +40,7 @@ class TestTokenBudgetManager:
 
         assert manager.settings == settings
         assert manager.token_budget_config is not None
-        assert "apex_context_window" in manager.token_budget_config
+        assert manager.token_budget_config == settings.lore.token_budget
 
     def test_calculate_budget_basic(self, settings):
         """Test basic budget calculation."""
@@ -64,9 +63,7 @@ class TestTokenBudgetManager:
         user_input = "Test input"
 
         # Test with o1 model (reasoning)
-        budget = _calculate_budget(
-            manager, user_input, apex_model=settings["apex"]["model"]
-        )
+        budget = _calculate_budget(manager, user_input, apex_model=settings.apex.model)
 
         # Should have reasoning reserve
         assert "reasoning_reserve" in budget or budget["total_available"] < 200000
@@ -76,7 +73,7 @@ class TestTokenBudgetManager:
         manager = TokenBudgetManager(settings)
         budget = manager.calculate_budget(
             "Test input",
-            apex_model=settings["apex"]["model"],
+            apex_model=settings.apex.model,
             apex_context_window=24_000,
         )
         assert budget["total_available"] == 20_000
@@ -106,7 +103,7 @@ class TestTokenBudgetManager:
         budget = _calculate_budget(manager, user_input)
 
         # Total allocations shouldn't exceed apex window
-        apex_window = manager.token_budget_config.get("apex_context_window", 200000)
+        apex_window = manager.token_budget_config.apex_context_window
         total_allocated = sum(
             [
                 budget.get("warm_slice", 0),
@@ -150,7 +147,7 @@ class TestBudgetAllocation:
         budget = _calculate_budget(manager, user_input)
 
         # Get percentage constraints from settings
-        percent_config = settings["Agent Settings"]["LORE"]["payload_percent_budget"]
+        percent_config = settings.lore.payload_percent_budget.model_dump()
 
         # Calculate actual percentages
         total_context = budget["total_available"]
@@ -184,10 +181,8 @@ class TestBudgetAllocation:
     def test_allocation_with_test_limit(self, settings):
         """Test allocation with reduced context window."""
         # Modify settings to use smaller window for testing
-        test_settings = copy.deepcopy(settings)
-        test_settings["Agent Settings"]["LORE"]["token_budget"][
-            "apex_context_window"
-        ] = 20000
+        test_settings = settings.model_copy(deep=True)
+        test_settings.lore.token_budget.apex_context_window = 20000
 
         manager = TokenBudgetManager(test_settings)
         user_input = "Test"
@@ -223,21 +218,8 @@ class TestEdgeCases:
         assert budget["user_input"] == 0
 
     def test_missing_settings(self):
-        """Test with missing/minimal settings."""
-        minimal_settings = {
-            "Agent Settings": {
-                "LORE": {
-                    "token_budget": {},
-                    "payload_percent_budget": {
-                        "warm_slice": {"min": 40, "max": 70},
-                        "structured_summaries": {"min": 10, "max": 25},
-                        "contextual_augmentation": {"min": 25, "max": 40},
-                    },
-                }
-            }
-        }
-
-        manager = TokenBudgetManager(minimal_settings)
+        """An unresolved provider window fails instead of assuming one."""
+        manager = TokenBudgetManager(load_settings())
         with pytest.raises(
             RuntimeError,
             match="Effective storyteller apex_context_window must be resolved",
@@ -247,12 +229,16 @@ class TestEdgeCases:
     def test_extreme_percentages(self, settings):
         """Test with extreme percentage configurations."""
         # Modify settings to have extreme percentages
-        extreme_settings = copy.deepcopy(settings)
-        extreme_settings["Agent Settings"]["LORE"]["payload_percent_budget"] = {
-            "warm_slice": {"min": 80, "max": 90},  # Very high
-            "structured_summaries": {"min": 5, "max": 10},  # Very low
-            "contextual_augmentation": {"min": 5, "max": 10},  # Very low
-        }
+        extreme_settings = settings.model_copy(deep=True)
+        extreme_settings.lore.payload_percent_budget = (
+            PayloadPercentBudget.model_validate(
+                {
+                    "warm_slice": {"min": 80, "max": 90},  # Very high
+                    "structured_summaries": {"min": 5, "max": 10},  # Very low
+                    "contextual_augmentation": {"min": 5, "max": 10},  # Very low
+                }
+            )
+        )
 
         manager = TokenBudgetManager(extreme_settings)
         budget = _calculate_budget(manager, "Test")

@@ -17,7 +17,8 @@ from nexus.agents.lore.utils import turn_cycle as turn_cycle_module
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
+from tests.settings_helpers import settings_with
 from tests.test_lore.window_helpers import window_logon
 from nexus.memory import ContextMemoryManager
 from nexus.memory.context_state import ContextPackage, PassTransition
@@ -29,20 +30,14 @@ class DummyLore:
     enable_logon = False
 
     def __init__(self) -> None:
-        self.settings: Dict[str, Any] = {
-            "Agent Settings": {
-                "LORE": {
-                    "token_budget": {
-                        "apex_context_window": 75_000,
-                        "prompt_overhead_tokens": 0,
-                    }
-                },
-                "MEMNON": {
-                    "retrieval": {"hybrid_search": {"presence_boost_enabled": False}}
-                },
-            },
-            "memory": {},
-        }
+        self.settings = settings_with(
+            {
+                "lore.token_budget.apex_context_window": 75_000,
+                "lore.token_budget.prompt_overhead_tokens": 0,
+                "memnon.retrieval.hybrid_search.presence_boost_enabled": False,
+                "orrery.enabled": False,
+            }
+        )
         self.memnon = None
         self.memory_manager = ContextMemoryManager(self.settings)
         self.token_manager = None
@@ -98,11 +93,9 @@ def test_process_user_input_uses_provider_profile_budget(
 
     class BudgetLore:
         def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
+            self.settings = load_settings()
             self.apex_model = (
-                apex_model
-                if apex_model is not None
-                else self.settings["API Settings"]["apex"]["model"]
+                apex_model if apex_model is not None else self.settings.apex.model
             )
             self.memnon = None
             self.memory_manager = ContextMemoryManager(self.settings)
@@ -138,7 +131,7 @@ def test_process_user_input_uses_base_budget_when_logon_is_disabled() -> None:
 
     class DisabledLore:
         def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
+            self.settings = load_settings()
             self.memnon = None
             self.memory_manager = ContextMemoryManager(self.settings)
             self.token_manager = TokenBudgetManager(self.settings)
@@ -209,7 +202,7 @@ def test_query_entity_states_passes_resolved_limits_to_fetch_boundary(
 
     class EntityLore:
         def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
+            self.settings = load_settings()
             self.memnon = EntityMemnon()
             self.enable_logon = enable_logon
 
@@ -331,7 +324,7 @@ def test_query_entity_states_requires_wire_class_when_logon_is_active() -> None:
 
     class EntityLore:
         def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
+            self.settings = load_settings()
             self.memnon = object()
             self.enable_logon = True
 
@@ -354,7 +347,7 @@ def test_slot_model_change_mid_turn_aborts_before_provider_initialization(
 
     class RouteLore:
         def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
+            self.settings = load_settings()
             self.memnon = None
             self.memory_manager = ContextMemoryManager(self.settings)
             self.token_manager = TokenBudgetManager(self.settings)
@@ -376,7 +369,7 @@ def test_slot_model_change_mid_turn_aborts_before_provider_initialization(
     def resolve_route() -> tuple[str, str, None, str]:
         route_calls["count"] += 1
         if route_calls["count"] == 1:
-            return (lore.settings["apex"]["model"], "openai", None, "openai")
+            return (lore.settings.apex.model, "openai", None, "openai")
         return ("nousresearch/hermes-4-70b", "openai", None, "local")
 
     monkeypatch.setattr(lore.logon, "_resolve_storyteller_route", resolve_route)
@@ -394,7 +387,7 @@ def test_slot_model_change_mid_turn_aborts_before_provider_initialization(
 
 
 def _rendered_trim_case(warm, retrieved, extra_tokens):
-    settings = load_settings_as_dict()
+    settings = load_settings()
     logon = window_logon(settings)
     memory = ContextMemoryManager(settings)
     lore = SimpleNamespace(
@@ -477,10 +470,6 @@ def test_frontier_payload_below_ceiling_is_unchanged(
         "structured": 3_600,
         "augmentation": 1_800,
     }
-    turn_manager.settings["lore"] = {
-        "render_limits": load_settings_as_dict()["lore"]["render_limits"]
-    }
-
     with caplog.at_level(logging.INFO, logger="nexus.lore.turn_cycle"):
         asyncio.run(turn_manager.assemble_context_payload(ctx))
 
@@ -666,7 +655,6 @@ def test_warm_analysis_ignores_parent_authorial_directives(
             return {"results": []}
 
     turn_manager.lore.memnon = DummyMemnon()
-    turn_manager.settings["lore"] = load_settings_as_dict()["lore"]
     ctx = TurnContext(
         turn_id="turn_parent_no_directives",
         user_input="Continue.",
@@ -822,10 +810,10 @@ def test_turn_phases_gate_and_thread_produced_presence_roster(
 
     class PresenceLore:
         def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
-            self.settings["Agent Settings"]["MEMNON"]["retrieval"]["hybrid_search"][
-                "presence_boost_enabled"
-            ] = presence_boost_enabled
+            self.settings = load_settings()
+            self.settings.memnon.retrieval.hybrid_search.presence_boost_enabled = (
+                presence_boost_enabled
+            )
             self.memnon = DummyMemnon()
             self.memory_manager = None
             self.token_manager = None

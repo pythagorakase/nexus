@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from nexus.config import load_settings
 from nexus.agents.logon.apex_schema import (
     CharacterReference,
     FactionStateUpdate,
@@ -28,7 +29,7 @@ from nexus.memory.manager import empty_pass2_baseline
 import nexus.api.commit_handler_sync as commit_handler_sync
 
 
-TEST_BASELINE = empty_pass2_baseline({})
+TEST_BASELINE = empty_pass2_baseline(load_settings())
 TEST_BASELINE_PAYLOAD = TEST_BASELINE.model_dump(mode="json")
 
 

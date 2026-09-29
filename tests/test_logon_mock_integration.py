@@ -16,8 +16,16 @@ import requests  # type: ignore[import-untyped]
 from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.telemetry.usage import summarize_usage
+from nexus.config.settings_models import Settings
 from scripts.api_openai import OpenAIProvider
 from tests.pg_fixtures import connect, disposable_slot_database
+from tests.settings_helpers import settings_with
+
+
+def _single_pass() -> Settings:
+    """Return real settings on the single-pass storyteller pipeline."""
+
+    return settings_with({"apex.turn_pipeline": "single_pass"})
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -181,20 +189,9 @@ def test_logon_real_entrypoint_records_registry_provider_and_single_pass_seat(
     """The genuine LOGON path preserves registry billing identity at the SDK seam."""
 
     utility = LogonUtility(
-        {
-            "API Settings": {"apex": {"turn_pipeline": "single_pass"}},
-            "storyteller": {
-                "correspondence": {
-                    "max_letter_tokens": 300,
-                }
-            },
-        },
+        _single_pass(),
         model_override="TEST",
     )
-    from nexus.config import load_settings_as_dict
-
-    utility.settings.update(load_settings_as_dict())
-    utility.settings["apex"]["turn_pipeline"] = "single_pass"
     endpoint: dict[str, Any] = {
         "base_url": "http://127.0.0.1:5102/v1",
         "api_key": "test-dummy-key",

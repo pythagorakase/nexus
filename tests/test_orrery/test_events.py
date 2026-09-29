@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 import nexus.agents.orrery.events as orrery_events
+from nexus.config import load_settings
 from nexus.agents.orrery.events import coerce_adjudications, commit_orrery_tick_sync
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
@@ -670,7 +671,7 @@ def test_response_to_incubator_serializes_orrery_proposal() -> None:
         parent_chunk_id=99,
         user_text="Continue.",
         session_id="session-1",
-        lore_pass_baseline=empty_pass2_baseline({}),
+        lore_pass_baseline=empty_pass2_baseline(load_settings()),
         orrery_proposal=_proposal(),
     )
 
@@ -698,7 +699,7 @@ def test_response_to_incubator_serializes_orrery_adjudications() -> None:
         parent_chunk_id=99,
         user_text="Continue.",
         session_id="session-1",
-        lore_pass_baseline=empty_pass2_baseline({}),
+        lore_pass_baseline=empty_pass2_baseline(load_settings()),
         orrery_proposal=_proposal(),
     )
 

@@ -214,7 +214,8 @@ def test_unrepairable_writer_identity_fails_closed(monkeypatch, catalog, case):
         monkeypatch, [payload, gaia_payload(declared=True)]
     )
     if case == "disabled":
-        utility.settings["orrery"] = {"retrograde": {"maturation": {"enabled": False}}}
+        assert utility.settings.orrery is not None
+        utility.settings.orrery.retrograde.maturation.enabled = False
     with pytest.raises(WireContractViolation):
         utility.generate_narrative(_context(), effective_context_window=75_000)
     assert len(provider.calls) == 2

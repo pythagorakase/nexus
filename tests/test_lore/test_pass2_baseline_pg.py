@@ -24,7 +24,8 @@ from nexus.api import commit_handler_sync, slot_utils
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings
+from nexus.config.settings_models import Settings
 from nexus.database import database_url
 from nexus.memory.context_state import bind_pass2_baseline
 from nexus.memory.manager import (
@@ -35,6 +36,7 @@ from nexus.memory.manager import (
 from nexus.telemetry.usage import current_usage_context
 from scripts import stamp_lore_pass_baseline
 from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.settings_helpers import settings_with
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -79,25 +81,21 @@ def pass2_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         yield dbname
 
 
-def _settings() -> dict[str, Any]:
-    return {
-        "Agent Settings": {
-            "LORE": {
-                "token_budget": {
-                    "apex_context_window": 1_000,
-                    "provider_overrides": {},
-                }
-            }
-        },
-        "memory": {
-            "phase2_fraction": 0.1,
-            "raw_search_k": 30,
-            "skip_simple_choices": False,
-            "pass2_budget_reserve": 0.25,
-            "warm_slice_default": True,
-            "max_sql_iterations": 5,
-        },
-    }
+def _settings(*_args: Any) -> Settings:
+    return settings_with(
+        {
+            "lore.token_budget.apex_context_window": 1_000,
+            "lore.token_budget.provider_overrides": {},
+            "memory": {
+                "phase2_fraction": 0.1,
+                "raw_search_k": 30,
+                "skip_simple_choices": False,
+                "pass2_budget_reserve": 0.25,
+                "warm_slice_default": True,
+                "max_sql_iterations": 5,
+            },
+        }
+    )
 
 
 class _DatabaseMemnon:
@@ -343,12 +341,13 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
     """The production continuation route hydrates Pass 2 across fresh LOREs."""
 
     _patch_unrelated_commit_work(monkeypatch)
-    route_settings = load_settings_as_dict()
-    route_settings["orrery"]["enabled"] = False
-    route_settings["API Settings"]["apex"]["model"] = "TEST"
-    route_settings["apex"]["model"] = "TEST"
-    route_settings["API Settings"]["apex"]["turn_pipeline"] = "single_pass"
-    route_settings["apex"]["turn_pipeline"] = "single_pass"
+    route_settings = settings_with(
+        {
+            "orrery.enabled": False,
+            "apex.model": "TEST",
+            "apex.turn_pipeline": "single_pass",
+        }
+    )
 
     engine = create_engine(database_url(pass2_database), future=True)
     conn = _connect(pass2_database)
@@ -375,12 +374,10 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
 
     original_init = LORE.__init__
 
-    def load_route_settings(
-        lore: LORE, settings_path: str | None = None
-    ) -> dict[str, Any]:
+    def load_route_settings(lore: LORE, settings_path: str | None = None) -> Settings:
         del settings_path
         lore.settings_path = Path("nexus.toml").resolve()
-        return copy.deepcopy(route_settings)
+        return route_settings.model_copy(deep=True)
 
     def initialize_route_memnon(lore: LORE) -> None:
         nonlocal memnon_count
@@ -394,7 +391,7 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
             lore.settings,
             dbname=pass2_database,
             settings_path=lore.settings_path,
-            model_override=route_settings["API Settings"]["apex"]["model"],
+            model_override=route_settings.apex.model,
         )
         utility._setting_context_loaded = True
         utility._setting_context = None
@@ -455,7 +452,7 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
                 "Investigate Zyxonium.",
                 slot=5,
                 get_db_connection=lambda _slot: _connect(pass2_database),
-                load_settings=lambda: copy.deepcopy(route_settings),
+                load_settings=lambda: route_settings.model_copy(deep=True),
                 manager=first_progress,
                 manage_generation_lease=False,
             )
@@ -491,7 +488,7 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
                 "Investigate Zyxonium again.",
                 slot=5,
                 get_db_connection=lambda _slot: _connect(pass2_database),
-                load_settings=lambda: copy.deepcopy(route_settings),
+                load_settings=lambda: route_settings.model_copy(deep=True),
                 manager=second_progress,
                 manage_generation_lease=False,
             )
@@ -665,10 +662,11 @@ def test_component_regeneration_sparse_promotion_restore_and_cascade(
         engine.dispose()
 
 
-def _windowed_settings(window: int, **memory: Any) -> dict[str, Any]:
+def _windowed_settings(window: int, **memory: Any) -> Settings:
     settings = _settings()
-    settings["Agent Settings"]["LORE"]["token_budget"]["apex_context_window"] = window
-    settings["memory"].update(memory)
+    settings.lore.token_budget.apex_context_window = window
+    for key, value in memory.items():
+        setattr(settings.memory, key, value)
     return settings
 
 
@@ -979,7 +977,7 @@ def test_missing_tail_error_and_admin_stamp_boundary(
         )
         monkeypatch.setattr(
             stamp_lore_pass_baseline,
-            "load_settings_as_dict",
+            "load_settings",
             _settings,
         )
         stamped_chunk_id, tail_stamped, incubator_stamped = (
@@ -1036,7 +1034,7 @@ def test_story_settings_pinned_window_survives_accepted_turn(
             )
         conn.commit()
         scoped = story_context_settings(
-            load_settings_as_dict(), read_story_settings(pass2_database)
+            load_settings(), read_story_settings(pass2_database)
         )
         boundary = bind_pass2_baseline(empty_pass2_baseline(scoped), parent_id)
         with conn.cursor() as cur:
@@ -1106,7 +1104,7 @@ def test_evaluation_database_baseline_stamp_uses_story_settings() -> None:
             False,
         )
         expected = empty_pass2_baseline(
-            story_context_settings(load_settings_as_dict(), read_story_settings(dbname))
+            story_context_settings(load_settings(), read_story_settings(dbname))
         )
         with _connect(dbname) as conn, conn.cursor() as cur:
             cur.execute(

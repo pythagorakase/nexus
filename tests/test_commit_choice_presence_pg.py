@@ -11,6 +11,7 @@ import psycopg2
 from psycopg2 import sql
 import pytest
 
+from nexus.config import load_settings
 from nexus.agents.logon.apex_schema import StateUpdates
 from nexus.agents.logon.skald_wire import (
     CharacterRef,
@@ -38,7 +39,7 @@ ROSTER_CHARACTER = "Len Aster"
 ROSTER_ALIAS = "Lantern Fox"
 SHORT_CHARACTER = "Ann"
 LONG_CHARACTER = "Ann Lee"
-TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline(load_settings()).model_dump(mode="json")
 
 
 def _connect(dbname: str) -> Any:
@@ -320,7 +321,7 @@ def _stage_authored_exit_turn(
                 parent_chunk_id=parent_chunk_id,
                 user_text="Continue.",
                 session_id=session_id,
-                lore_pass_baseline=empty_pass2_baseline({}),
+                lore_pass_baseline=empty_pass2_baseline(load_settings()),
             )
             assert payload["reference_updates"]["characters"] == []
             choice_object = payload["choice_object"]
@@ -405,7 +406,7 @@ def _stage_scene_reset_choice_turn(dbname: str) -> tuple[str, int, int]:
                 parent_chunk_id=parent_chunk_id,
                 user_text="Continue.",
                 session_id=session_id,
-                lore_pass_baseline=empty_pass2_baseline({}),
+                lore_pass_baseline=empty_pass2_baseline(load_settings()),
             )
             assert payload["reference_updates"]["characters"] == []
             _insert_staged_turn(

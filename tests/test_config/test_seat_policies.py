@@ -137,18 +137,15 @@ def test_developer_judgment_without_story_uses_seat_default():
 def test_compaction_route_uses_persisted_model_without_resolving_story():
     """A changed or retired pin cannot affect a previously resolved job route."""
     from nexus.agents.lore.logon_utility import LogonUtility
-    from nexus.config import load_settings_as_dict
 
     utility = LogonUtility(
-        load_settings_as_dict(),
+        load_settings(),
         persisted_model="TEST",
         story_settings=StorySettings(skald_model="unregistered-after-enqueue"),
     )
     assert utility.resolve_storyteller_route() == ("TEST", "local", "test")
     with pytest.raises(ValueError, match="persisted model"):
-        LogonUtility(
-            load_settings_as_dict(), persisted_model="TEST", model_override="TEST"
-        )
+        LogonUtility(load_settings(), persisted_model="TEST", model_override="TEST")
 
 
 def _registry_entry(raw: dict[str, Any], model: str) -> dict[str, Any]:

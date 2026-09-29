@@ -385,7 +385,7 @@ def test_seat_prompt_live_tag_library_and_order() -> None:
     """The live library stays in Gaia's measured request and leaves the writer."""
     from nexus.agents.lore.logon_utility import LogonUtility
     from nexus.api import slot_utils
-    from nexus.config import load_settings_as_dict
+    from nexus.config import load_settings
     from nexus.config.story_model import read_story_settings
     from tests.pg_fixtures import connect, disposable_slot_database
 
@@ -399,7 +399,7 @@ def test_seat_prompt_live_tag_library_and_order() -> None:
                 cur.execute("SELECT max(id) FROM narrative_chunks")
                 parent = cur.fetchone()[0]
             utility = LogonUtility(
-                load_settings_as_dict(),
+                load_settings(),
                 dbname=dbname,
                 model_override="TEST",
                 story_settings=read_story_settings(dbname),

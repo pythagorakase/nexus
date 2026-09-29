@@ -1,10 +1,29 @@
 """Tests for percentage-based context payload validation."""
 
+import pytest
+
+from nexus.config.settings_models import Settings
 from nexus.agents.lore.utils.context_validation import (
     validate_context,
     validate_phase_completion,
     validate_token_allocation,
 )
+from tests.settings_helpers import settings_with
+
+
+@pytest.fixture
+def settings() -> Settings:
+    """Real settings with the 200K window and ranges these cases are sized for."""
+    return settings_with(
+        {
+            "lore.token_budget.apex_context_window": 200_000,
+            "lore.payload_percent_budget": {
+                "structured_summaries": {"min": 10, "max": 25},
+                "contextual_augmentation": {"min": 25, "max": 40},
+                "warm_slice": {"min": 40, "max": 70},
+            },
+        }
+    )
 
 
 class TestContextValidation:

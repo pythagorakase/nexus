@@ -3572,6 +3572,15 @@ class GaiaSeatPolicy(SeatWindowPolicy):
             "wire key, reasoning) in unsupported_params."
         ),
     )
+    temperature: float = Field(
+        ...,
+        ge=0.0,
+        le=2.0,
+        description=(
+            "Sampling temperature sent with Gaia requests on OpenAI-compatible "
+            "routes whose registry model accepts temperature."
+        ),
+    )
 
 
 class APEXSettings(SeatWindowPolicy):
@@ -3584,6 +3593,15 @@ class APEXSettings(SeatWindowPolicy):
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
     max_output_tokens: int = Field(..., ge=1)
+    temperature: float = Field(
+        ...,
+        ge=0.0,
+        le=2.0,
+        description=(
+            "Sampling temperature sent with writer requests on OpenAI-compatible "
+            "routes whose registry model accepts temperature."
+        ),
+    )
     anthropic_storyteller_transport: Literal["prompted", "native", "tool_envelope"] = (
         Field(
             default="prompted",

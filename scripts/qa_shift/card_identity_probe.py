@@ -228,6 +228,7 @@ def replay() -> None:
             "canonical_adjudications": canonical,
         },
     )
+    # The 67bf8527 baseline revision below still reads the legacy settings dict.
     settings = load_settings_as_dict()
     context = json.loads((OUT / "replay-context.json").read_text())
     context["orrery_rendered_cards"] = list(proposal.rendered_cards)
@@ -256,7 +257,7 @@ def replay() -> None:
         versions = {}
         for version, utility in (
             ("original", baseline.LogonUtility(settings)),
-            ("amended", LogonUtility(settings)),
+            ("amended", LogonUtility(load_settings())),
         ):
             blocks = []
             utility._format_context_prompt(

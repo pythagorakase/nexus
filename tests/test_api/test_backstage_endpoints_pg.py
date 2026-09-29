@@ -89,7 +89,7 @@ def _stage_incubator(
             gaia_letter,
             session_id,
             f"backstage-response-{chunk_id}",
-            json.dumps(empty_pass2_baseline({}).model_dump(mode="json")),
+            json.dumps(empty_pass2_baseline(load_settings()).model_dump(mode="json")),
         ),
     )
 

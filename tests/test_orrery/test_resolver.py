@@ -45,7 +45,8 @@ from nexus.agents.orrery.templates import (
     MAKE_ACQUAINTANCE,
     START_RECRUIT_ALLY,
 )
-from nexus.config.settings_models import OrreryWeatherSettings
+from nexus.config.settings_models import OrreryWeatherSettings, Settings
+from tests.settings_helpers import settings_with
 
 
 _DEFAULT_WORLD_TIME = object()
@@ -466,6 +467,18 @@ class FakeMemnon:
 
     def Session(self):
         return self.session
+
+
+def _lore_settings(*, enabled: bool) -> Settings:
+    """Real settings; the fake session answers resolver reads, not contagion."""
+
+    return settings_with(
+        {
+            "orrery.enabled": enabled,
+            "orrery.binding.window_chunks": 30,
+            "orrery.contagion.enabled": False,
+        }
+    )
 
 
 class FakeLore:
@@ -2176,7 +2189,7 @@ def test_resolve_dry_run_trust_predicates_use_hydrated_valence(
 async def test_resolve_orrery_skips_when_disabled() -> None:
     """The LORE phase is inert unless Orrery is explicitly enabled."""
 
-    manager = TurnCycleManager(FakeLore({"orrery": {"enabled": False}}))
+    manager = TurnCycleManager(FakeLore(_lore_settings(enabled=False)))
     context = TurnContext(turn_id="t1", user_input="continue", start_time=0)
 
     await manager.resolve_orrery(context)
@@ -2192,9 +2205,7 @@ async def test_resolve_orrery_skips_when_disabled() -> None:
 async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
     """Enabled dry-run integration stores the proposal on TurnContext only."""
 
-    manager = TurnCycleManager(
-        FakeLore({"orrery": {"enabled": True, "binding": {"window_chunks": 30}}})
-    )
+    manager = TurnCycleManager(FakeLore(_lore_settings(enabled=True)))
     context = TurnContext(
         turn_id="t1",
         user_input="continue",
@@ -2220,7 +2231,7 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
 async def test_intertitle_stamps_when_orrery_disabled() -> None:
     """Headline state reaches Skald even without the behavior engine."""
 
-    manager = TurnCycleManager(FakeLore({"orrery": {"enabled": False}}))
+    manager = TurnCycleManager(FakeLore(_lore_settings(enabled=False)))
     context = TurnContext(
         turn_id="t1",
         user_input="continue",
@@ -2242,12 +2253,7 @@ async def test_resolve_orrery_uses_same_session_for_anchor_fallback() -> None:
     """Anchor fallback reads occur inside the dry-run resolver session."""
 
     session = FakeSession(max_chunk_id=101)
-    manager = TurnCycleManager(
-        FakeLore(
-            {"orrery": {"enabled": True, "binding": {"window_chunks": 30}}},
-            session=session,
-        )
-    )
+    manager = TurnCycleManager(FakeLore(_lore_settings(enabled=True), session=session))
     context = TurnContext(turn_id="t1", user_input="continue", start_time=0)
 
     await manager.resolve_orrery(context)

@@ -21,9 +21,17 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.config import load_settings
+from nexus.config.settings_models import Settings
 from nexus.memory import ContextMemoryManager
 from nexus.api.slot_utils import VALID_DBNAMES
 from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.settings_helpers import settings_with
+
+
+def _single_pass() -> Settings:
+    """Return real settings on the single-pass storyteller pipeline."""
+
+    return settings_with({"apex.turn_pipeline": "single_pass"})
 
 
 class _DummyResponse:
@@ -207,29 +215,16 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
         "AnthropicProvider",
         RecordingAnthropicProvider,
     )
-    settings = {
-        "API Settings": {
-            "apex": {
-                "anthropic_storyteller_transport": configured_transport,
-                "turn_pipeline": turn_pipeline,
-                "max_output_tokens": 1234,
-                "reasoning_effort": "medium",
-                "structured_output_retries": 2,
-            }
-        },
-        "storyteller": {
-            "correspondence": {
-                "floor_turns": 5,
-                "ceiling_turns": 10,
-                "compaction_model": "claude-sonnet-4-5",
-                "max_letter_tokens": 300,
-                "max_digest_tokens": 2000,
-                "digest_hard_cap_multiplier": 1.1,
-                "max_rendered_tokens": 16000,
-            }
-        },
-        "orrery": {"retrograde": {"maturation": {"enabled": False}}},
-    }
+    settings = settings_with(
+        {
+            "apex.anthropic_storyteller_transport": configured_transport,
+            "apex.turn_pipeline": turn_pipeline,
+            "apex.reasoning_effort": "medium",
+            "apex.structured_output_retries": 2,
+            "storyteller.correspondence.max_letter_tokens": 300,
+            "orrery.retrograde.maturation.enabled": False,
+        }
+    )
     utility = LogonUtility(settings, model_override=load_settings().apex.model)
 
     utility._initialize_provider(is_bootstrap)
@@ -275,7 +270,7 @@ def test_storyteller_route_resolves_without_constructing_provider(
         lambda _model, _path=None: {"base_url": base_url} if base_url else None,
     )
     model = load_settings().apex.model
-    logon = LogonUtility({}, model_override=model)
+    logon = LogonUtility(_single_pass(), model_override=model)
 
     assert logon.resolve_storyteller_route() == (
         model,
@@ -289,7 +284,7 @@ def test_provider_initialization_reuses_the_compared_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A matching Phase 6 comparison must not perform a third route read."""
-    logon = LogonUtility({}, model_override="storyteller-model")
+    logon = LogonUtility(_single_pass(), model_override="storyteller-model")
     route = ("storyteller-model", "openai", None, "openai")
     route_calls = {"count": 0}
     initialized_routes: list[tuple[Any, ...] | None] = []
@@ -323,7 +318,7 @@ def test_sync_generation_rejects_mid_turn_route_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The synchronous generation path compares the authoritative turn route."""
-    logon = LogonUtility({}, model_override="phase-one-model")
+    logon = LogonUtility(_single_pass(), model_override="phase-one-model")
     monkeypatch.setattr(
         logon,
         "_resolve_storyteller_route",
@@ -375,10 +370,7 @@ def test_logon_initializes_provider_on_first_generation(
     # Provider laziness is independent of the production two-pass default.
     # Pin the simplest generation route so this regression test does not absorb
     # database, contextual-tag-library, or writer/Gaia fixture contracts.
-    logon = LogonUtility(
-        {"API Settings": {"apex": {"turn_pipeline": "single_pass"}}},
-        model_override="dummy-model",
-    )
+    logon = LogonUtility(_single_pass(), model_override="dummy-model")
     assert logon.provider is None
     assert patched_provider["count"] == 0
 
@@ -400,7 +392,7 @@ async def test_logon_async_generation_uses_structured_provider() -> None:
     """Async LOGON generation should use structured provider output directly."""
 
     provider = _DummyProvider()
-    logon = LogonUtility({}, model_override="dummy-model")
+    logon = LogonUtility(_single_pass(), model_override="dummy-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
     logon._provider_wire_type = "openai"
@@ -424,7 +416,7 @@ async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> N
     """Bootstrap LOGON generation should only request narrative and choices."""
 
     provider = _DummyProvider()
-    logon = LogonUtility({}, model_override="dummy-model")
+    logon = LogonUtility(_single_pass(), model_override="dummy-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = True
     logon._provider_wire_type = "openai"
@@ -461,7 +453,7 @@ async def test_logon_stamps_model_exposed_by_last_successful_attempt() -> None:
             )
 
     provider = RetrySwitchingProvider()
-    logon = LogonUtility({}, model_override="first-attempt-model")
+    logon = LogonUtility(_single_pass(), model_override="first-attempt-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
     logon._provider_wire_type = "openai"
@@ -480,7 +472,7 @@ async def test_logon_structured_failure_does_not_call_plain_text_fallback() -> N
     """Structured LOGON failures should fail fast without a second LLM call."""
 
     provider = _FailingProvider()
-    logon = LogonUtility({}, model_override="dummy-model")
+    logon = LogonUtility(_single_pass(), model_override="dummy-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
     logon._provider_wire_type = "openai"
@@ -514,7 +506,9 @@ def test_context_bootstrap_mode_does_not_mutate_logon_instance(
 
     monkeypatch.setattr(LogonUtility, "_initialize_provider", _fake_initialize)
 
-    logon = LogonUtility({}, model_override="dummy-model", bootstrap_mode=False)
+    logon = LogonUtility(
+        _single_pass(), model_override="dummy-model", bootstrap_mode=False
+    )
 
     logon.generate_narrative(
         _minimal_payload(is_bootstrap=True),

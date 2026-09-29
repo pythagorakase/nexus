@@ -80,7 +80,7 @@ def test_scene_reset_survives_internal_incubator_staging() -> None:
         parent_chunk_id=4,
         user_text="Go inside.",
         session_id="experience-boundary",
-        lore_pass_baseline=empty_pass2_baseline({}),
+        lore_pass_baseline=empty_pass2_baseline(load_settings()),
     )
 
     assert staged["metadata_updates"]["scene_boundary"] is True

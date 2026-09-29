@@ -10,9 +10,10 @@ from typing import Any, Dict, List, Tuple, Type
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from nexus.config import load_settings_as_dict
-from nexus.config.settings_models import MemorySettings, TokenBudgetConfig
+from nexus.config import load_settings
+from nexus.config.settings_models import MemorySettings, Settings, TokenBudgetConfig
 from nexus.config.story_model import StorySettings, story_context_settings
+from tests.settings_helpers import settings_with
 from nexus.memory import ContextMemoryManager
 from nexus.memory.baseline_compat import (
     FIELD_COMPATIBILITY,
@@ -36,22 +37,16 @@ from nexus.memory.manager import (
 
 
 @pytest.fixture
-def minimal_settings() -> Dict[str, object]:
-    return {
-        "Agent Settings": {
-            "LORE": {
-                "token_budget": {
-                    "apex_context_window": 75_000,
-                    "provider_overrides": {"local": 24_000},
-                }
-            }
-        },
-        "memory": {
-            "pass2_budget_reserve": 0.25,
-            "warm_slice_default": True,
-            "max_sql_iterations": 3,
-        },
-    }
+def minimal_settings() -> Settings:
+    return settings_with(
+        {
+            "lore.token_budget.apex_context_window": 75_000,
+            "lore.token_budget.provider_overrides": {"local": 24_000},
+            "memory.pass2_budget_reserve": 0.25,
+            "memory.warm_slice_default": True,
+            "memory.max_sql_iterations": 3,
+        }
+    )
 
 
 class DummyMemnon:
@@ -158,8 +153,8 @@ def test_empty_provider_override_table_uses_base_budget(
     minimal_settings, caplog: pytest.LogCaptureFixture
 ) -> None:
     """An empty override table preserves pure base-window behavior."""
-    settings = copy.deepcopy(minimal_settings)
-    settings["Agent Settings"]["LORE"]["token_budget"]["provider_overrides"] = {}
+    settings = minimal_settings.model_copy(deep=True)
+    settings.lore.token_budget.provider_overrides = {}
     manager = ContextMemoryManager(settings)
 
     with caplog.at_level(logging.DEBUG, logger="nexus.memory.manager"):
@@ -352,8 +347,7 @@ def test_pass2_divergence_triggers_incremental_retrieval(
     assert manager.context_state.context.gap_analysis == update.divergence.gaps
 
     reserve = int(
-        token_counts["total_available"]
-        * minimal_settings["memory"]["pass2_budget_reserve"]
+        token_counts["total_available"] * minimal_settings.memory.pass2_budget_reserve
     )
     assert manager.context_state.context.token_usage["reserved_for_pass2"] == reserve
     assert manager.context_state.context.token_usage["reserve_shortfall"] == max(
@@ -572,16 +566,16 @@ def test_get_memory_summary_reports_state(
 PARENT_CHUNK_ID = 41
 
 
-def _story_settings(window: int) -> Dict[str, Any]:
+def _story_settings(window: int) -> Settings:
     """Project the real nexus.toml through one story context-window pin."""
 
     return story_context_settings(
-        load_settings_as_dict(), StorySettings(apex_context_window=window)
+        load_settings(), StorySettings(apex_context_window=window)
     )
 
 
 def _accepted_baseline(
-    settings: Dict[str, Any], baseline_inputs: Dict[str, Any]
+    settings: Settings, baseline_inputs: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Run Pass 1 under ``settings`` and return the stored, bound payload."""
 
@@ -638,8 +632,8 @@ def test_unclassified_setting_fails_instead_of_becoming_budget() -> None:
             classification={**FIELD_COMPATIBILITY, "memory.retired_knob": "budget"}
         )
 
-    settings = load_settings_as_dict()
-    settings["memory"]["retrieval_temperature"] = 0.5
+    settings = load_settings()
+    settings.memory = GrownMemorySettings(**settings.memory.model_dump())
     with pytest.raises(ValueError, match="retrieval_temperature.*compatibility class"):
         snapshot_config(settings)
 
@@ -664,22 +658,12 @@ def test_config_fingerprint_hash_input_is_unchanged() -> None:
     frozen = "a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7"
     assert (
         pass2_baseline_config_fingerprint(
-            {"memory": memory, "lore": {"token_budget": token_budget}}
-        )
-        == frozen
-    )
-    assert (
-        pass2_baseline_config_fingerprint(
-            {
-                "memory": memory,
-                "Agent Settings": {"LORE": {"token_budget": token_budget}},
-                "lore": {"token_budget": {"apex_context_window": 1_000}},
-            }
+            settings_with({"memory": memory, "lore.token_budget": token_budget})
         )
         == frozen
     )
 
-    settings = load_settings_as_dict()
+    settings = load_settings()
     snapshot = snapshot_config(settings)
     assert config_hash(snapshot.legacy_payload()) == (
         pass2_baseline_config_fingerprint(settings)
@@ -701,7 +685,7 @@ def test_v2_baseline_round_trips_and_v1_rows_still_parse(baseline_inputs) -> Non
         75_000
     )
     assert baseline.config_snapshot.semantic["memory.raw_search_k"] == (
-        settings["memory"]["raw_search_k"]
+        settings.memory.raw_search_k
     )
     assert baseline.model_dump(mode="json") == payload
 
@@ -768,7 +752,7 @@ def test_window_change_rebases_v2_baseline_and_rederives_budget(
         "nexus.config.story_model.read_story_settings",
         lambda dbname: StorySettings(apex_context_window=100_000, dbname=dbname),
     )
-    manager = ContextMemoryManager(load_settings_as_dict(), dbname="save_05")
+    manager = ContextMemoryManager(load_settings(), dbname="save_05")
     assert manager.configure_storyteller_budget("openai", "openai") == 100_000
     assert manager.settings == _story_settings(100_000)
     assert payload["config_fingerprint"] != pass2_baseline_config_fingerprint(
@@ -791,7 +775,7 @@ def test_window_change_rebases_v2_baseline_and_rederives_budget(
     assert "lore.token_budget.apex_context_window: 75000 -> 100000" in record.message
     assert "kept 3 memory identities" in record.message
 
-    phase2_fraction = manager.settings["memory"]["phase2_fraction"]
+    phase2_fraction = manager.settings.memory.phase2_fraction
     assert manager.phase2_budget == int(100_000 * phase2_fraction)
     live_counts = {
         "total_available": 90_000,
@@ -809,8 +793,8 @@ def test_semantic_change_refuses_rebase_and_names_fields(baseline_inputs) -> Non
     old = _story_settings(75_000)
     payload = _accepted_baseline(old, baseline_inputs)
     changed = _story_settings(100_000)
-    before_k = changed["memory"]["raw_search_k"]
-    changed["memory"]["raw_search_k"] = before_k + 10
+    before_k = changed.memory.raw_search_k
+    changed.memory.raw_search_k = before_k + 10
     manager = ContextMemoryManager(changed)
 
     with pytest.raises(RuntimeError) as excinfo:
@@ -897,9 +881,7 @@ def test_player_window_change_restamps_only_a_matching_tail(
     assert (
         plan_tail_window_rebase(v1, previous_settings=old, current_settings=old) is None
     )
-    semantic = copy.deepcopy(new)
-    semantic["memory"]["skip_simple_choices"] = not semantic["memory"][
-        "skip_simple_choices"
-    ]
+    semantic = new.model_copy(deep=True)
+    semantic.memory.skip_simple_choices = not semantic.memory.skip_simple_choices
     with pytest.raises(RuntimeError, match="memory.skip_simple_choices"):
         plan_tail_window_rebase(v1, previous_settings=old, current_settings=semantic)

@@ -434,7 +434,6 @@ def test_memory_admission_uses_resolved_writer_token_estimate(override: bool) ->
     from nexus.agents.lore.utils.turn_context import TurnContext
     from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
     from nexus.agents.memnon.memnon import MEMNON
-    from nexus.config import load_settings_as_dict
     from nexus.config.story_model import read_story_settings
     from nexus.memory import ContextMemoryManager
     from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
@@ -459,7 +458,7 @@ def test_memory_admission_uses_resolved_writer_token_estimate(override: bool) ->
                 (text, text),
             )
             chunk_id = cur.fetchone()[0]
-        runtime = load_settings_as_dict()
+        runtime = load_settings()
         memory = ContextMemoryManager(runtime, dbname=dbname)
         logon = LogonUtility(
             runtime,
