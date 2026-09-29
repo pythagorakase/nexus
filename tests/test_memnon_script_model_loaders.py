@@ -70,6 +70,11 @@ try:
         module.ModelLoader.load_model("example-org/probe", registry)
     elif call == "load_unregistered":
         module.ModelLoader.load_model("example-org/unregistered", {})
+    elif call == "all_models_none_active":
+        # Every registered entry is inactive; --all-models has nothing to load.
+        inactive = entry("probe-embedder", "example-org/probe")
+        module.SETTINGS = {"models": {"probe-embedder": inactive}}
+        module.regenerate_all_models(dry_run=True)
     outcome = {"type": None, "message": "", "cause": None}
 except BaseException as exc:
     cause = exc.__cause__
@@ -188,4 +193,19 @@ def test_regenerate_embeddings_refuses_an_unregistered_model(tmp_path: Path) -> 
         "Embedding model 'example-org/unregistered' is not registered in "
         "[memnon.models]"
     )
+    assert outcome["cached"] == 0
+
+
+def test_regenerate_all_models_refuses_a_registry_with_no_active_model(
+    tmp_path: Path,
+) -> None:
+    """--all-models raises instead of defaulting to an unregistered Hub name."""
+
+    outcome = _probe(
+        "scripts/regenerate_embeddings.py", "all_models_none_active", tmp_path
+    )
+
+    assert outcome["type"] == "builtins.RuntimeError", outcome
+    assert outcome["message"] == "No active model in [memnon.models]"
+    assert outcome["cause"] is None
     assert outcome["cached"] == 0

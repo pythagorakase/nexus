@@ -1000,51 +1000,35 @@ def regenerate_all_models(
     # Print header
     print("\n========== Regenerating Embeddings for Active Models ==========")
 
-    try:
-        models_config = SETTINGS.get("models", {})
-        for model_key, config in models_config.items():
-            if config.get("is_active", False):
-                # Convert internal name format to proper model name
-                if "_" in model_key:
-                    model_name = model_key.replace("_", "/")
-                else:
-                    model_name = model_key
+    models_config = SETTINGS.get("models", {})
+    for model_key, config in models_config.items():
+        if config.get("is_active", False):
+            # Convert internal name format to proper model name
+            if "_" in model_key:
+                model_name = model_key.replace("_", "/")
+            else:
+                model_name = model_key
 
-                # Get local path if available
-                local_path = config.get("local_path")
-                remote_path = config.get("remote_path")
+            local_path = config.get("local_path")
+            remote_path = config.get("remote_path")
 
-                # Check if local path exists
-                local_path_exists = local_path and os.path.exists(local_path)
+            # If remote_path is provided, use that as the model name
+            if remote_path:
+                model_name = remote_path
 
-                # If remote_path is provided, use that as the model name
-                if remote_path:
-                    model_name = remote_path
+            active_models.append(model_name)
 
-                active_models.append(model_name)
-
-                if local_path:
-                    status = "✅ Found" if local_path_exists else "❌ Not found"
-                    logger.info(
-                        f"Found active model in settings: {model_name} (Local path: {status})"
-                    )
-                    print(f"- {model_name}: Active, Local path: {status}")
-                else:
-                    logger.info(
-                        f"Found active model in settings (remote only): {model_name}"
-                    )
-                    print(f"- {model_name}: Active, Using HuggingFace remote")
-    except Exception as e:
-        logger.error(f"Error processing models from settings: {e}")
-        print(f"Error loading models from settings: {e}")
+            # load_local_model rejects an entry without a local_path; there is
+            # no remote load to report here.
+            local_path_exists = bool(local_path) and os.path.exists(local_path)
+            status = "✅ Found" if local_path_exists else "❌ Not found"
+            logger.info(
+                f"Found active model in settings: {model_name} (Local path: {status})"
+            )
+            print(f"- {model_name}: Active, Local path: {status}")
 
     if not active_models:
-        logger.warning("No active models found in settings.json")
-        print(
-            "No active models found in settings.json, defaulting to infly/inf-retriever-v1"
-        )
-        # Default to infly/inf-retriever-v1 if no active models
-        active_models = ["infly/inf-retriever-v1"]
+        raise RuntimeError("No active model in [memnon.models]")
 
     total_results = {"total": 0, "success": 0, "failed": 0}
 
@@ -1365,7 +1349,8 @@ def main():
         description="Regenerate embeddings for narrative chunks"
     )
     parser.add_argument(
-        "--model", help="Embedding model to use (e.g., infly/inf-retriever-v1)"
+        "--model",
+        help="Registered [memnon.models] entry to use (e.g., Octen-Embedding-4B)",
     )
     parser.add_argument(
         "--all-models",
