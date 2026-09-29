@@ -329,6 +329,18 @@ class EmbeddingRegenerator:
                     ) from e
                 self.db_url = explicit_url
 
+        # Load the model before touching the database: with no Hub fallback a
+        # missing or broken artifact raises here, and --truncate-table below
+        # must never delete this model's rows for a model that cannot load.
+        self.model = None
+        if load_model:
+            try:
+                self.model = ModelLoader.load_model(model_name)
+                logger.info(f"Successfully loaded {model_name} model")
+            except Exception as e:
+                logger.error(f"Failed to load {model_name} model: {e}")
+                sys.exit(1)
+
         # Initialize database connection
         self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
@@ -407,15 +419,6 @@ class EmbeddingRegenerator:
                 )
             else:
                 logger.info(f"Connected without creating {self.get_table_name()}")
-
-        self.model = None
-        if load_model:
-            try:
-                self.model = ModelLoader.load_model(model_name)
-                logger.info(f"Successfully loaded {model_name} model")
-            except Exception as e:
-                logger.error(f"Failed to load {model_name} model: {e}")
-                sys.exit(1)
 
         logger.info("Connected to the configured database")
 
