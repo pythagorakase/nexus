@@ -1389,6 +1389,10 @@ inspect_timeout_seconds = 30.0  # per request of `nexus inspect`; no answer in t
 # slot administration). Generation, wizard chat and transition requests keep
 # their own budgets.
 request_timeout_seconds = 30.0
+# Delay between status reads while continue, retry, regenerate and the seed's
+# opening turn wait on a generation session; apex.generation_timeout_seconds
+# bounds the whole wait.
+poll_interval_seconds = 1.0
 
 [runtime.logs]
 # The supervisor is the single log-file and rotation owner: it captures each

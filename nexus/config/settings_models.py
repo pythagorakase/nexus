@@ -880,7 +880,7 @@ class RuntimeRemoteSettings(BaseModel):
 
 
 class RuntimeCliSettings(BaseModel):
-    """Request budgets of the CLI's HTTP commands."""
+    """Request budgets and the session-wait cadence of the CLI's HTTP commands."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -900,6 +900,15 @@ class RuntimeCliSettings(BaseModel):
             "requests (slot state reads, wizard setup and confirmation, undo, "
             "clear, lock, unlock, model changes); generation, wizard chat, and "
             "transition requests keep their own budgets"
+        ),
+    )
+    poll_interval_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        description=(
+            "Delay between status reads while continue, retry, regenerate, and "
+            "the seed's opening turn wait on a scheduled generation session; "
+            "the whole wait is bounded by apex.generation_timeout_seconds"
         ),
     )
 
