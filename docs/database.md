@@ -162,5 +162,6 @@ indexes, sequences, DDL inside a function body, even when the migration calls
 that function, and SQL a Python migration does not spell as a string literal in
 its own file (an imported constant such as `from nexus.x import DDL;
 cur.execute(DDL)`, names joined only at run time such as `cur.execute(A + B)`, a
-file it reads, or a bytes literal). For legacy enums, functions, and views, the
-inventory remains the only record.
+file it reads, or a bytes literal). Legacy enums, functions, and views are
+enforced by the PostgreSQL ratchet above through their entries in
+`config/schema_docs_baseline.json`.

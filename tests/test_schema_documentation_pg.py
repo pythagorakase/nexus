@@ -31,7 +31,9 @@ BASELINE = ROOT / "config/schema_docs_baseline.json"
 # Match pg_depend by catalog as well as OID: OIDs are not globally unique.
 # Extension ownership of a relation also excludes all of that relation's columns.
 # Functions are keyed by identity arguments because overloads share a name;
-# prokind 'a' (aggregates) stays outside the gate.
+# prokind 'a' (aggregates) stays outside the gate. format_type renders those
+# arguments schema-qualified only for types off the search_path, so _inventory
+# pins search_path to public (the path the baseline was rendered under).
 INVENTORY_SQL = """
 WITH owned_relations AS (
     SELECT c.oid, n.nspname, c.relname, c.relkind
@@ -121,6 +123,9 @@ def _assert_refresh_probes(objects: dict[str, str | None]) -> None:
 
 def _inventory(conn: connection) -> dict[str, str | None]:
     with conn.cursor() as cur:
+        # Transaction-local, so it also works on read-only sessions and leaves
+        # the caller's path intact after its rollback or commit.
+        cur.execute("SELECT set_config('search_path', 'public', true)")
         cur.execute(INVENTORY_SQL)
         return dict(cur.fetchall())
 

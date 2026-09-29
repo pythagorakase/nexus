@@ -64,7 +64,9 @@ checked against the catalog or `git grep` at this base:
   `refresh_world_time_from_chunk_trigger` calls `refresh_world_time_from_chunk`).
   Six have no caller in `nexus/`, `scripts/`, or another NEXUS function: the three
   `hybrid_search` overloads (MEMNON's `execute_hybrid_search` in
-  `nexus/agents/memnon/utils/db_access.py:401` builds its own query),
+  `nexus/agents/memnon/utils/db_access.py:401` delegates to
+  `execute_multi_model_hybrid_search`, which builds its own SQL at
+  `nexus/agents/memnon/utils/db_access.py:581`),
   `migrate_embeddings()` (it names `chunk_embeddings` and
   `chunk_embeddings_small`; `to_regclass` finds neither in the template), and the
   two `pad_vector_*` helpers.
@@ -99,11 +101,71 @@ The suite exercises each failure mode with real catalog DDL on the module's
 Hand-built red/green run (`disposable_slot_database("qa640_ratchet_manual")`, then
 an undocumented enum, PL/pgSQL trigger function, and view committed by hand; the
 view's one column was commented so that the three new kinds are the only
-findings; then `COMMENT ON TYPE`, `COMMENT ON FUNCTION`, and `COMMENT ON VIEW`):
+findings; then `COMMENT ON TYPE`, `COMMENT ON FUNCTION`, and `COMMENT ON VIEW`).
+The exact driver, run from the worktree root as
+`NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY ratchet_manual.py`:
+
+```python
+from contextlib import closing
+
+from tests.pg_fixtures import connect, disposable_slot_database
+from tests.test_schema_documentation_pg import _assert_coverage, _baseline, _inventory
+
+UNDOCUMENTED_DDL = """
+CREATE TYPE public.manual_probe_mood AS ENUM ('calm', 'tense');
+CREATE FUNCTION public.manual_probe_touch() RETURNS trigger LANGUAGE plpgsql AS
+$$BEGIN NEW.updated_at := now(); RETURN NEW; END$$;
+CREATE VIEW public.manual_probe_view AS
+SELECT 'calm'::public.manual_probe_mood AS mood;
+COMMENT ON COLUMN public.manual_probe_view.mood IS 'Manual probe view column';
+"""
+COMMENT_DDL = """
+COMMENT ON TYPE public.manual_probe_mood IS 'Manual probe enum';
+COMMENT ON FUNCTION public.manual_probe_touch() IS 'Manual probe trigger function';
+COMMENT ON VIEW public.manual_probe_view IS 'Manual probe view';
+"""
+
+
+def check(dbname: str, label: str) -> None:
+    with closing(connect(dbname)) as conn:
+        conn.set_session(readonly=True)
+        try:
+            _assert_coverage(_inventory(conn), _baseline())
+        except AssertionError as error:
+            print(f"[{label}] RED:\n{error}")
+        else:
+            print(f"[{label}] GREEN")
+
+
+def execute(dbname: str, sql: str) -> None:
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(sql)
+
+
+with disposable_slot_database("qa640_ratchet_manual") as dbname:
+    print(f"clone: {dbname}")
+    check(dbname, "fresh clone")
+    execute(dbname, UNDOCUMENTED_DDL)
+    with closing(connect(dbname)) as conn:
+        conn.set_session(readonly=True)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT l.lanname, pg_get_function_result(p.oid) FROM pg_proc p "
+                "JOIN pg_language l ON l.oid = p.prolang "
+                "WHERE p.oid = 'public.manual_probe_touch()'::regprocedure"
+            )
+            print(f"manual_probe_touch language/result: {cur.fetchone()}")
+    check(dbname, "after undocumented enum/function/view")
+    execute(dbname, COMMENT_DDL)
+    check(dbname, "after COMMENT ON TYPE/FUNCTION/VIEW")
+```
+
+Tail of its output (the fixture's restore log precedes it):
 
 ```text
-clone: qa640_ratchet_manual_99756455684e
+clone: qa640_ratchet_manual_46fddbb388a8
 [fresh clone] GREEN
+manual_probe_touch language/result: ('plpgsql', 'trigger')
 [after undocumented enum/function/view] RED:
 Undocumented objects absent from baseline: ['enum:public.manual_probe_mood', 'function:public.manual_probe_touch()', 'view:public.manual_probe_view']
 Retire documented or removed baseline entries: []
@@ -111,6 +173,19 @@ Retire documented or removed baseline entries: []
 ```
 
 The fixture dropped the clone on exit.
+
+Function keys spell argument types through `format_type`, which adds a schema
+only for types off the session `search_path`. `_inventory` therefore pins
+`search_path` to `public` for its transaction
+(`set_config('search_path', 'public', true)`), the path the baseline was rendered
+under. A read-only probe of `NEXUS_template` with the session path set to
+`assets` (`options='-c search_path=assets'`) showed the effect: the raw query
+produced 10 keys that differ from the pinned inventory (the three `hybrid_search`
+overloads, `orrery_need_applies_to_tags`, and the two `pad_vector_*` helpers,
+spelled `public.vector` / `public.character_need_type` instead of the baseline's
+unqualified names), while the pinned inventory matched the baseline with zero
+untracked and zero retired entries, and the session path read `assets` again
+after the rollback.
 
 ## Refresh Survival
 
@@ -138,7 +213,7 @@ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_schema_documentation_pg.py test
 ```
 
 ```text
-38 passed, 5 warnings in 14.14s
+38 passed, 5 warnings in 13.22s (rerun after the review fixes)
 ```
 
 Reachability, style, and types:
