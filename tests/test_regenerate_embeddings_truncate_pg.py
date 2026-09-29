@@ -14,7 +14,7 @@ from __future__ import annotations
 import importlib.util
 from contextlib import closing
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import pytest
 import tomlkit
@@ -65,7 +65,7 @@ def test_truncate_table_keeps_rows_when_the_model_artifact_is_missing(
 ) -> None:
     """A missing local_path exits before --truncate-table deletes anything."""
 
-    document = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    document: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
     missing = tmp_path / "not-installed"
     document["memnon"]["models"][MODEL]["local_path"] = str(missing)
     config = tmp_path / "regen-truncate.toml"

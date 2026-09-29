@@ -55,7 +55,6 @@
     "scripts/query_narratives.py",
     "scripts/query_narratives_simple.py",
     "scripts/query_narratives_vector.py",
-    "scripts/regenerate_embeddings.py",
     "scripts/remove_storyteller_contamination.py",
     "scripts/run_golden_queries.py",
     "scripts/seed_slot2_routine_anchors.py",
@@ -67,7 +66,6 @@
     "scripts/trim_oversized_contexts.py",
     "scripts/update_raw_text.py",
     "scripts/update_scene_numbers.py",
-    "scripts/utils/embedding_utils.py",
     "scripts/validate_embeddings.py",
     "scripts/vector_migration.py"
   ],
