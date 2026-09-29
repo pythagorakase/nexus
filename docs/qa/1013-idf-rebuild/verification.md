@@ -309,6 +309,7 @@ fail  slots.idf_analyzer_current     save_01: narrative pg_catalog.english/v1/17
 python scripts/migrate.py --all
 python scripts/migrate.py --slot 1 --write-locked-slot
 python scripts/rebuild_memory_idf.py --all --dry-run
+python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot --dry-run
 python scripts/rebuild_memory_idf.py --all
 python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 nexus doctor
@@ -322,8 +323,25 @@ All with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset.
 
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-60 passed, 5 warnings in 65.83s (0:01:05)
+62 passed, 5 warnings in 54.33s
 ```
+
+At 956f9295 this includes
+`test_rebuild_counts_each_corrupted_lexeme_once` (one bumped narrative
+frequency and one stray summary lexeme each report exactly 1 differing
+lexeme, and the rebuilt rows equal `ts_stat`), the offline
+`test_differing_lexemes_counts_each_lexeme_once`, and the explicit
+`--dbname` refusals (a locked name exits 2, a missing one raises), as
+`migrate.py --dbname` behaves.
+
+`test_readiness_pg.py::test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt`
+drives `slot_idf_outcome`, the registered `slots.idf_analyzer_current` body
+after the probed slots are named (existence lookup, lock probe, targets,
+outcome), on a clone standing in for slot 9: current passes; a stale key
+fails with the database in `observed` and `--slot 9` in `remediation`;
+locked and stale adds `--write-locked-slot`; after
+`rebuild_memory_idf.rebuild_database` it passes; an absent database is
+reported; a dropped `memory_idf_corpora` names `migrate.py --slot 9`.
 
 `test_readiness.py::test_slot_idf_targets_name_the_locked_override_and_absent_slots`
 proves a locked slot's remediation is
@@ -333,17 +351,23 @@ and stale during this run, so the assertion that the registered
 `slots.idf_analyzer_current` check fails naming it with
 `--slot 1 --write-locked-slot` ran against the live fleet.
 
-`NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery/`:
+`NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery/`, rerun on a
+working tree equal to 956f9295:
 
 ```
-57 failed, 1545 passed, 39 skipped, 7 warnings, 24 errors in 291.23s (0:04:51)
+57 failed, 1545 passed, 39 skipped, 7 warnings, 24 errors in 256.31s (0:04:16)
 ```
 
-The full `-rfE` short summary is committed as
-[`pg_orrery_failures_branch.txt`](pg_orrery_failures_branch.txt); the id
-comparison against the baseline is committed as
+The full log of that run is committed as
+[`pg_orrery_branch_log_956f9295.txt`](pg_orrery_branch_log_956f9295.txt)
+(`.txt` because `*.log` is gitignored), so the claim can be re-run:
+`grep -c 'analyzer mismatch' pg_orrery_branch_log_956f9295.txt` prints `0`.
+Its failing-id set is identical to the earlier run's short summary in
+[`pg_orrery_failures_branch.txt`](pg_orrery_failures_branch.txt) (pytest
+printed the `-rfE` lines without message suffixes at the redirected width;
+each failure's message is in the full log). The id comparison against the
+baseline is committed as
 [`pg_orrery_failures_diff_vs_main.txt`](pg_orrery_failures_diff_vs_main.txt).
-`grep -c 'analyzer mismatch'` on the branch log: `0`.
 
 Baseline `temp/gates/pg-orrery-main-e124bd54.log` (main at e124bd54, before
 the hand rebuild): 173 failed, 1393 passed, 28 errors, 140 `analyzer mismatch`

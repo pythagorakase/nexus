@@ -1,5 +1,6 @@
 # tests/test_orrery failures: branch run against baseline temp/gates/pg-orrery-main-e124bd54.log
-# Branch run: NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery/ (short summary in pg_orrery_failures_branch.txt)
+# Branch run: NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery/ (short summary in pg_orrery_failures_branch.txt;
+#   full log of the same-id rerun at 956f9295 in pg_orrery_branch_log_956f9295.txt, the <branch log> below)
 # ids(log) = grep -E '^(FAILED|ERROR) ' log | awk '{print $2}' | sort -u
 #
 # grep -c 'analyzer mismatch' <branch log>: 0

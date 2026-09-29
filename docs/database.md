@@ -84,6 +84,8 @@ seeds them with the live key.
 targets (`--slot N`, `--template`, `--all`, `--dbname qa640_*|ref_*`), skips a
 database that does not exist, and skips a locked slot unless
 `--write-locked-slot` is given (the override lasts one maintenance session).
+Like `migrate.py --dbname`, an explicit `--dbname` that does not exist raises,
+and one that is read-only without `--write-locked-slot` is refused (exit 2).
 For each database, one transaction locks `narrative_chunks`, `chunk_metadata`
 and `retrograde_summaries`, locks both corpus rows, clears
 `memory_idf_lexemes` and `memory_idf_documents`, stamps the live key, advances
@@ -91,10 +93,12 @@ each corpus epoch, and recomputes every chunk and summary through the trigger's
 own `sync_memory_idf_document`. It commits only if each corpus keeps its
 document count and carries the live key; otherwise it rolls back, reports the
 database as `failed`, and exits non-zero. The report gives each corpus's key
-and document count before and after, and the number of `(lexeme, frequency)`
-rows that differ from the pre-rebuild state, which is a diagnostic, not a
-failure. `--dry-run` reads keys and counts in a read-only session and changes nothing
-(a locked slot is skipped without `--write-locked-slot`, as in the runner); `--json` prints the report as JSON.
+and document count before and after, and the number of lexemes whose row
+differs from the pre-rebuild state (added, dropped, or given a new frequency;
+each counts once), which is a diagnostic, not a failure. `--dry-run` reads
+keys and counts in a read-only session and changes nothing (a locked slot is
+skipped without `--write-locked-slot`, as in the runner); `--json` prints the
+report as JSON.
 
 After a PostgreSQL update:
 
