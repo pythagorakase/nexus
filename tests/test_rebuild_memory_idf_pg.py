@@ -12,6 +12,7 @@ from __future__ import annotations
 from contextlib import closing
 from dataclasses import replace
 import json
+import logging
 from pathlib import Path
 import re
 from typing import Any, Iterator
@@ -29,7 +30,13 @@ from nexus.agents.memnon.utils.idf_dictionary import (
     analyzer_mismatch_message,
 )
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
-from nexus.database import database_url, maintenance_connection
+from nexus.database import (
+    AmbiguousCommit,
+    commit_transaction,
+    database_url,
+    is_connection_failure,
+    maintenance_connection,
+)
 from scripts import rebuild_memory_idf as rebuild
 from scripts.migrate import is_db_locked
 from tests.pg_fixtures import (
@@ -521,6 +528,93 @@ def test_failures_roll_back_and_exit_nonzero(
         cur.execute("ALTER TABLE qa1013_summaries RENAME TO retrograde_summaries")
     assert rebuild.main(["--dbname", dbname]) == 0
     assert f"{dbname}: rebuilt" in capsys.readouterr().out
+    assert [row[1] for row in _idf_state(dbname)["corpora"]] == [
+        _server_key(dbname)
+    ] * 2
+
+
+def _drop_connection_at_commit(dbname: str) -> None:
+    """Make every commit that wrote memory_idf_corpora lose its connection.
+
+    A deferred constraint trigger fires inside COMMIT and terminates its own
+    backend, so the driver itself raises a connection-loss OperationalError
+    from ``conn.commit()``. Nothing in the client is replaced.
+    """
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE FUNCTION qa1013_drop_connection() RETURNS trigger
+            LANGUAGE plpgsql AS $$
+            BEGIN
+                PERFORM pg_terminate_backend(pg_backend_pid());
+                RETURN NULL;
+            END $$;
+            CREATE CONSTRAINT TRIGGER qa1013_drop_connection
+            AFTER INSERT OR UPDATE ON memory_idf_corpora
+            DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+            EXECUTE FUNCTION qa1013_drop_connection();
+            """
+        )
+
+
+@pg
+def test_connection_lost_at_commit_is_commit_unknown_not_a_rollback(
+    seeded_clone: str,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A connection lost during COMMIT reports an unknown outcome, never a rollback."""
+    dbname = seeded_clone
+    _set_keys(dbname, STALE_KEY)
+    before = _idf_state(dbname)
+    _drop_connection_at_commit(dbname)
+
+    # The injected fault is a real driver connection loss during COMMIT, the
+    # shape commit_transaction turns into AmbiguousCommit.
+    probe = maintenance_connection(dbname, operation="idf_rebuild_fault_probe")
+    with closing(probe):
+        with probe.cursor() as cur:
+            cur.execute("UPDATE memory_idf_corpora SET corpus_epoch = corpus_epoch")
+        with pytest.raises(AmbiguousCommit, match=dbname) as caught:
+            commit_transaction(probe)
+    assert isinstance(caught.value.__cause__, psycopg2.OperationalError)
+    assert is_connection_failure(caught.value.__cause__)
+
+    report = rebuild.rebuild_database(dbname)
+    assert (report.status, report.corpora) == ("commit_unknown", [])
+    error = report.error or ""
+    assert error.startswith(
+        f"commit outcome unknown (Ambiguous commit for database {dbname}: "
+    )
+    assert "--dry-run shows the database's current keys and counts" in error
+    assert "Re-running the rebuild is safe: it recomputes" in error
+    assert "connection already closed" not in error
+    assert "rolled back" not in error
+
+    caplog.clear()
+    with caplog.at_level(logging.ERROR, logger="nexus.rebuild_memory_idf"):
+        assert rebuild.main(["--dbname", dbname, "--json"]) == 1
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["ok"] is False
+    (database,) = printed["databases"]
+    assert database["status"] == "commit_unknown"
+    assert database["error"].startswith("commit outcome unknown (Ambiguous commit")
+    logged = [record.getMessage() for record in caplog.records]
+    assert any("commit outcome unknown" in message for message in logged)
+    assert not any(
+        "rolled back" in message or "connection already closed" in message
+        for message in logged
+    )
+
+    # This fault ends the backend before the commit record, so --dry-run
+    # still shows the stale keys; re-running the rebuild is safe and heals it.
+    dry = rebuild.rebuild_database(dbname, dry_run=True)
+    assert [c.key_before for c in dry.corpora] == [STALE_KEY, STALE_KEY]
+    assert _idf_state(dbname) == before
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("DROP TRIGGER qa1013_drop_connection ON memory_idf_corpora")
+    healed = rebuild.rebuild_database(dbname)
+    assert (healed.status, healed.error) == ("rebuilt", None)
     assert [row[1] for row in _idf_state(dbname)["corpora"]] == [
         _server_key(dbname)
     ] * 2

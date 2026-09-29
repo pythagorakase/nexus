@@ -510,3 +510,92 @@ fix:
 pass  template.idf_analyzer_current  NEXUS_template at pg_catalog.english/v1/170011
 fail  slots.idf_analyzer_current     save_01: narrative pg_catalog.english/v1/170010, retrograde_summary pg_catalog.english/v1/170010 (server pg_catalog.english/v1/170011); save_02 at pg_catalog.english/v1/170011; save_03 at pg_catalog.english/v1/170011; save_04 at pg_catalog.english/v1/170011; save_05 at pg_catalog.english/v1/170011  -> python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 ```
+
+## Astra Review Fix
+
+Astra's P2 (`temp/orders_2026_09_29/review-1014.out.md`): the rebuild committed
+with a bare `conn.commit()` inside `except BaseException: conn.rollback();
+raise`. If the connection drops during COMMIT, the handler's `rollback()`
+raises `connection already closed`, masking the original error, and the tool
+reports "FAILED and rolled back" although the rebuilt state and advanced
+epochs may already be durable.
+
+- `scripts/rebuild_memory_idf.py`: the transaction now runs under
+  `nexus.database.transaction(conn)`, which commits through
+  `commit_transaction()`. A connection lost during COMMIT raises
+  `AmbiguousCommit`, and a failure before COMMIT rolls back without a failed
+  rollback masking it. `AmbiguousCommit` is its own status, `commit_unknown`,
+  never reported as a rollback. Its message says the outcome is unknown, that
+  `--dry-run` shows the database's current keys and counts, and that
+  re-running the rebuild is safe because it recomputes idempotently, the one
+  place a replay after an ambiguous commit is allowed (narrative commits are
+  never replayed). `main()` exits 1 on `commit_unknown` (`ok: false` in
+  `--json`) and logs it separately from failures.
+- Fault injection, no mocks: on a disposable clone, a deferred constraint
+  trigger on `memory_idf_corpora` calls `pg_terminate_backend(pg_backend_pid())`
+  inside COMMIT, so the backend ends mid-commit and the driver itself raises
+  the connection loss from `conn.commit()`. A standalone probe of the same
+  fault on a `qa640_1013_probe_*` database (dropped afterwards) shows the
+  exception's shape:
+
+  ```
+  cause: psycopg2.OperationalError
+  mro: ['OperationalError', 'DatabaseError', 'Error', 'Exception']
+  pgcode: None is_connection_failure: True
+  closed after commit_transaction: 1
+  rows committed: 0
+  ```
+
+  `test_connection_lost_at_commit_is_commit_unknown_not_a_rollback` asserts
+  that `commit_transaction` turns the fault into `AmbiguousCommit` whose cause
+  `is_connection_failure` recognizes. It also asserts that
+  `rebuild_database` reports `commit_unknown` with the unknown-outcome,
+  `--dry-run`, and re-run text and without `connection already closed` or
+  `rolled back`, and that `main(["--dbname", clone, "--json"])` returns 1 with
+  `ok: false` and no rollback claim in the log. Finally it asserts that
+  `--dry-run` still shows the stale keys (this fault ends the backend before
+  the commit record) and that re-running after the trigger is dropped
+  rebuilds.
+
+  The captured report text:
+
+  ```
+  commit outcome unknown (Ambiguous commit for database qa640_1013_idf_4508be34bad7: server closed the connection unexpectedly This probably means the server terminated abnormally before or while processing the request.); the rebuild may or may not be durable. --dry-run shows the database's current keys and counts. Re-running the rebuild is safe: it recomputes the IDF projection idempotently from the source tables, the one place a replay after an ambiguous commit is allowed (narrative commits are never replayed; docs/database.md).
+  ```
+
+- Readiness: a database stamped with migration 114 but without
+  `memory_idf_corpora` now gets the true remediation, `memory_idf_corpora is
+  absent from <db> although migration 114 is stamped, which only hand damage
+  produces: restore <db> from a backup or recreate it`. It no longer names the
+  rebuild or the runner, and the stale-key test's dropped-table expectation
+  asserts this text.
+- Docs: `CLAUDE.md` now says the rebuild rolls back unless each existing
+  corpus keeps its document count and each seeded corpus ends at its
+  source-document count. `docs/database.md` describes `commit_unknown` and
+  the one allowed replay. The `template.idf_analyzer_current` row of
+  `docs/runtime.md` gives the stamped-but-missing-table remediation.
+
+Run against the code at f515f29f (the two fixed modules swapped in and
+restored byte-identical), the fault reproduces the finding: the report is
+`('failed', [])` with the log line `IDF rebuild FAILED and rolled back:
+connection already closed`, and the damaged-table remediation is still
+`python scripts/rebuild_memory_idf.py --slot 9`:
+
+```
+FAILED tests/test_rebuild_memory_idf_pg.py::test_connection_lost_at_commit_is_commit_unknown_not_a_rollback
+FAILED tests/test_runtime/test_readiness_pg.py::test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt
+2 failed, 5 warnings in 3.02s
+```
+
+With the fix, `NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD python -m pytest -q tests/test_rebuild_memory_idf_pg.py tests/test_runtime/test_readiness.py tests/test_runtime/test_readiness_pg.py`
+(`NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset):
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 22.80s
+```
+
+Black (`4 files would be left unchanged`), flake8 (exit 0), and mypy
+(`Success: no issues found in 4 source files`) on `nexus/runtime/readiness.py`,
+`scripts/rebuild_memory_idf.py`, `tests/test_rebuild_memory_idf_pg.py`, and
+`tests/test_runtime/test_readiness_pg.py`.

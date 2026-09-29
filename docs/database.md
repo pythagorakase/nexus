@@ -96,7 +96,13 @@ summary through the trigger's own `sync_memory_idf_document`. It commits only
 if each corpus keeps its document count (a seeded corpus starts at 0 and must
 reach the documents the trigger admits) and carries the live key; otherwise it
 rolls back, reports the database as `failed`, and exits non-zero. A database
-without `memory_idf_corpora` is refused, naming the migration runner. The report gives each corpus's key
+without `memory_idf_corpora` is refused, naming the migration runner. A
+connection lost during COMMIT is `commit_unknown` (exit non-zero), never a
+rollback: the outcome is unknown, `--dry-run` shows the current keys and
+counts, and re-running the rebuild is safe because it recomputes the
+projection idempotently. It is the one mutation a replay after
+`AmbiguousCommit` is allowed for; narrative commits are never replayed
+(above). The report gives each corpus's key
 and document count before and after, and the number of lexemes whose row
 differs from the pre-rebuild state (added, dropped, or given a new frequency;
 each counts once), which is a diagnostic, not a failure. `--dry-run` reads

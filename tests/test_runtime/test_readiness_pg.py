@@ -207,7 +207,8 @@ def test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt() -> None:
             f"{dbname} at {server}; {absent} absent",
         )
 
-        # Past migration 114 a missing table is a missing corpus set.
+        # Past migration 114 only hand damage removes the table, and neither
+        # the rebuild nor the runner recreates it.
         with closing(pg_fixtures.connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("DROP TABLE memory_idf_corpora CASCADE")
         outcome = slot_idf_outcome(names)
@@ -216,7 +217,13 @@ def test_idf_analyzer_check_names_the_stale_corpus_until_rebuilt() -> None:
             f"{dbname}: no memory_idf_corpora table though migration 114 is "
             "applied (missing corpora narrative and retrograde_summary)"
         )
-        assert outcome.remediation == f"{REBUILD_COMMAND} --slot 9"
+        assert outcome.remediation == (
+            f"memory_idf_corpora is absent from {dbname} although migration 114 "
+            "is stamped, which only hand damage produces: restore "
+            f"{dbname} from a backup or recreate it"
+        )
+        assert REBUILD_COMMAND not in outcome.remediation
+        assert "migrate.py" not in outcome.remediation
 
         # Before migration 114 the runner installs the table.
         with closing(pg_fixtures.connect(dbname)) as conn, conn, conn.cursor() as cur:

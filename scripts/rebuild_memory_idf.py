@@ -17,7 +17,9 @@ each corpus's document count equals its count before the rebuild (for a
 seeded corpus, which starts at 0, the documents the trigger admits) and each
 key equals the live server's; otherwise it rolls back and the command exits
 non-zero. A database without ``memory_idf_corpora`` fails, naming the
-migration runner.
+migration runner. A connection lost during COMMIT is ``commit_unknown``, not a
+rollback: the outcome is unknown, ``--dry-run`` shows the current keys and
+counts, and re-running is safe because the rebuild recomputes idempotently.
 
 Targets mirror ``scripts/migrate.py``: a locked slot is skipped unless
 ``--write-locked-slot`` is given, and a database that does not exist is
@@ -54,7 +56,11 @@ from nexus.agents.memnon.utils.idf_dictionary import ANALYZER_KEY_SQL  # noqa: E
 from nexus.agents.orrery.reconstruction import (  # noqa: E402
     playable_narrative_predicate,
 )
-from nexus.database import maintenance_connection  # noqa: E402
+from nexus.database import (  # noqa: E402
+    AmbiguousCommit,
+    maintenance_connection,
+    transaction,
+)
 from scripts.database_targets import evaluation_dbname  # noqa: E402
 from scripts.migrate import (  # noqa: E402
     SLOT_DBS,
@@ -144,8 +150,9 @@ class DatabaseReport:
     """One target database's outcome.
 
     ``status`` is ``absent`` or ``skipped_locked`` (not touched), ``dry_run``
-    (read only), ``rebuilt`` (committed), or ``failed`` (rolled back;
-    ``error`` says why).
+    (read only), ``rebuilt`` (committed), ``failed`` (rolled back; ``error``
+    says why), or ``commit_unknown`` (the connection was lost during COMMIT,
+    so the rebuild may or may not be durable; ``error`` says how to check).
     """
 
     dbname: str
@@ -330,45 +337,51 @@ def _rebuild(dbname: str, report: DatabaseReport, write_locked_slot: bool) -> No
     conn = maintenance_connection(
         dbname, write_locked_slot=write_locked_slot, operation="idf_rebuild"
     )
-    with closing(conn):
-        try:
-            with conn.cursor() as cur:
-                require_schema(cur, dbname)
-                cur.execute(
-                    f"LOCK TABLE {', '.join(SOURCE_TABLES)} "
-                    "IN SHARE ROW EXCLUSIVE MODE"
-                )
-                report.server_key = live_key(cur)
-                before = corpus_states(cur, lock=True)
-                _require_known_corpora(before, dbname)
-                corpora = _observe(cur, before, report.server_key)
-                seeded = seed_missing_corpora(cur, before)
-                for corpus in corpora:
-                    corpus.seeded = corpus.corpus_kind in seeded
-                lexemes_before = lexeme_rows(cur)
-                cur.execute(RECOMPUTE_SQL)
-                after = verify_rebuild(
-                    cur,
-                    before,
-                    report.server_key,
-                    seeded={
-                        c.corpus_kind: c.source_documents for c in corpora if c.seeded
-                    },
-                )
-                lexemes_after = lexeme_rows(cur)
-            for corpus in corpora:
-                kind = corpus.corpus_kind
-                corpus.key_after = after[kind].analyzer_version
-                corpus.documents_after = after[kind].document_count
-                corpus.lexeme_rows_differing = differing_lexemes(
-                    lexemes_before[kind], lexemes_after[kind]
-                )
-            conn.commit()
-        except BaseException:
-            conn.rollback()
-            raise
+    # transaction() commits through commit_transaction(): a connection lost
+    # during COMMIT raises AmbiguousCommit, and a failure before COMMIT rolls
+    # back without a failed rollback masking the original error.
+    with closing(conn), transaction(conn), conn.cursor() as cur:
+        require_schema(cur, dbname)
+        cur.execute(
+            f"LOCK TABLE {', '.join(SOURCE_TABLES)} IN SHARE ROW EXCLUSIVE MODE"
+        )
+        report.server_key = live_key(cur)
+        before = corpus_states(cur, lock=True)
+        _require_known_corpora(before, dbname)
+        corpora = _observe(cur, before, report.server_key)
+        seeded = seed_missing_corpora(cur, before)
+        for corpus in corpora:
+            corpus.seeded = corpus.corpus_kind in seeded
+        lexemes_before = lexeme_rows(cur)
+        cur.execute(RECOMPUTE_SQL)
+        after = verify_rebuild(
+            cur,
+            before,
+            report.server_key,
+            seeded={c.corpus_kind: c.source_documents for c in corpora if c.seeded},
+        )
+        lexemes_after = lexeme_rows(cur)
+        for corpus in corpora:
+            kind = corpus.corpus_kind
+            corpus.key_after = after[kind].analyzer_version
+            corpus.documents_after = after[kind].document_count
+            corpus.lexeme_rows_differing = differing_lexemes(
+                lexemes_before[kind], lexemes_after[kind]
+            )
     report.corpora = corpora
     report.status = "rebuilt"
+
+
+def commit_unknown_message(exc: AmbiguousCommit) -> str:
+    """Explain an unknown commit outcome without calling it a rollback."""
+    return (
+        f"commit outcome unknown ({' '.join(str(exc).split())}); the rebuild "
+        "may or may not be durable. --dry-run shows the database's current "
+        "keys and counts. Re-running the rebuild is safe: it recomputes the "
+        "IDF projection idempotently from the source tables, the one place a "
+        "replay after an ambiguous commit is allowed (narrative commits are "
+        "never replayed; docs/database.md)."
+    )
 
 
 def rebuild_database(
@@ -379,7 +392,8 @@ def rebuild_database(
     A missing database is ``absent``; a locked one is ``skipped_locked``
     unless ``write_locked_slot`` is given, even under ``dry_run``. A rebuild
     or schema failure rolls back and is reported as ``failed`` with its error;
-    the database is left exactly as it was.
+    the database is left exactly as it was. A connection lost during COMMIT
+    is ``commit_unknown``, never reported as a rollback.
     """
     report = DatabaseReport(dbname=dbname, status="failed")
     if not db_exists(dbname):
@@ -400,6 +414,10 @@ def rebuild_database(
             _dry_run(dbname, report)
         else:
             _rebuild(dbname, report, write_locked_slot)
+    except AmbiguousCommit as exc:
+        report.status = "commit_unknown"
+        report.error = commit_unknown_message(exc)
+        LOG.error("%s: IDF rebuild %s", dbname, report.error)
     except (IDFRebuildError, psycopg2.Error) as exc:
         report.status = "failed"
         report.error = " ".join(str(exc).split())
@@ -511,12 +529,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         targets, dry_run=args.dry_run, write_locked_slot=args.write_locked_slot
     )
     failed = [report.dbname for report in reports if report.status == "failed"]
+    unknown = [r.dbname for r in reports if r.status == "commit_unknown"]
     if args.json:
         print(
             json.dumps(
                 {
                     "dry_run": args.dry_run,
-                    "ok": not failed,
+                    "ok": not failed and not unknown,
                     "databases": [asdict(report) for report in reports],
                 },
                 indent=2,
@@ -527,8 +546,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print("\n".join(render(report)))
     if failed:
         LOG.error("IDF rebuild failed for %s", ", ".join(failed))
-        return 1
-    return 0
+    if unknown:
+        LOG.error(
+            "IDF rebuild commit outcome unknown for %s; --dry-run shows their "
+            "current state",
+            ", ".join(unknown),
+        )
+    return 1 if failed or unknown else 0
 
 
 if __name__ == "__main__":

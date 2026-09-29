@@ -116,7 +116,7 @@ python scripts/rebuild_memory_idf.py --all                  # Template + unlocke
 python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot   # The locked golden master
 ```
 
-One transaction per database recomputes every document through the trigger's own `sync_memory_idf_document` and rolls back if a corpus's document count would change; see `docs/database.md`.
+One transaction per database recomputes every document through the trigger's own `sync_memory_idf_document` and rolls back unless each existing corpus keeps its document count and each seeded (previously missing) corpus ends at its source-document count; see `docs/database.md`.
 
 #### Refreshing the Template
 

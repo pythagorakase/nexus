@@ -589,6 +589,15 @@ class AnalyzerState:
             self.tracked and not self.missing and not self.unexpected and not self.stale
         )
 
+    @property
+    def damaged(self) -> bool:
+        """Whether ``memory_idf_corpora`` is gone although migration 114 is stamped.
+
+        Only hand damage produces this; neither the rebuild nor the migration
+        runner can recreate the table.
+        """
+        return not self.tracked and not self.migration_pending
+
     def describe(self) -> str:
         """Summarize the state in one clause."""
         if self.current:
@@ -631,7 +640,8 @@ def database_analyzer_state(dbname: str) -> AnalyzerState:
     """Read ``dbname``'s IDF corpus rows and the server's key, read-only.
 
     When ``memory_idf_corpora`` is absent it also reads whether migration 114
-    is stamped, which decides between the migration runner and the rebuild.
+    is stamped: pending, the migration runner installs the table; stamped,
+    only hand damage removed it.
     """
     from nexus.agents.memnon.utils.idf_dictionary import ANALYZER_KEY_SQL
 
@@ -655,6 +665,15 @@ def database_analyzer_state(dbname: str) -> AnalyzerState:
     return AnalyzerState(dbname, server_key, bool(tracked), corpora, migration_pending)
 
 
+def _damaged_idf_remediation(dbname: str) -> str:
+    """Say what a stamped database without ``memory_idf_corpora`` needs."""
+    return (
+        f"memory_idf_corpora is absent from {dbname} although migration "
+        f"{IDF_MIGRATION} is stamped, which only hand damage produces: restore "
+        f"{dbname} from a backup or recreate it"
+    )
+
+
 def idf_analyzer_outcome(
     targets: Sequence[tuple[str, str, str]], *, absent: Sequence[str] = ()
 ) -> Outcome:
@@ -662,8 +681,10 @@ def idf_analyzer_outcome(
 
     Each target is ``(dbname, rebuild_command, migrate_command)``: the command
     that rebuilds the corpora (seeding a missing row) and the one that applies
-    migration 114 where it is pending. Only exactly the two corpus rows, each
-    at the server's key, pass. ``absent`` databases are reported, not failed.
+    migration 114 where it is pending. A database stamped with 114 but without
+    ``memory_idf_corpora`` must be restored or recreated; no command repairs
+    it. Only exactly the two corpus rows, each at the server's key, pass.
+    ``absent`` databases are reported, not failed.
     """
     import psycopg2
 
@@ -675,6 +696,8 @@ def idf_analyzer_outcome(
             observations.append(state.describe())
             if state.migration_pending:
                 steps.append(migrate_command)
+            elif state.damaged:
+                steps.append(_damaged_idf_remediation(dbname))
             elif not state.current:
                 steps.append(rebuild_command)
     except psycopg2.Error as exc:
