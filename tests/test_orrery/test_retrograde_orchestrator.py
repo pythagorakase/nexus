@@ -398,10 +398,12 @@ def test_issue_907_expansion_charges_same_five_entities_in_r6_validation() -> No
         )
 
     message = str(exc_info.value)
+    # Repair text renders "name (kind)", never the kind-prefixed form (#1007).
     for kind, name in ISSUE_907_NEW_ENTITIES:
-        assert f"{kind}:{name.casefold()}" in message
-    for kind, name in ISSUE_907_STARTING_TRAIT_TARGETS:
+        assert f"{name.casefold()} ({kind})" in message
         assert f"{kind}:{name.casefold()}" not in message
+    for kind, name in ISSUE_907_STARTING_TRAIT_TARGETS:
+        assert f"{name.casefold()} ({kind})" not in message
 
 
 def _settings_with_stub_cap(cap: int) -> Settings:
