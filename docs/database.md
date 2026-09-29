@@ -122,39 +122,56 @@ python scripts/rebuild_memory_idf.py --slot 1 --write-locked-slot
 ## Schema Documentation
 
 PostgreSQL comments are the schema reference (`\d+` in psql or
-`MEMNON.get_schema_summary`); add a non-empty `COMMENT ON TABLE` and
-`COMMENT ON COLUMN` with each new table and column. The PostgreSQL-gated
-`tests/test_schema_documentation_pg.py` ratchet checks every table and column in
-`public` and `assets`, excluding extension ownership through `pg_depend`
-(`deptype = 'e'`). Legacy debt is listed by qualified object name and reason in
-`config/schema_docs_baseline.json`. To retire an entry, establish its contract
-from reader/writer code, cite that evidence in the comment migration, add the
-comment, and remove the baseline entry in the same change; documented or removed
-objects left in the baseline fail, as do new undocumented objects. Run with
-`NEXUS_RUN_POSTGRES=1`; the test migrates disposable template clones and proves
-that schema-only dumps and the actual new-story setup preserve comments. This
-ratchet enforces tables and columns; it only inventories enums, functions, and
-views, which the offline lint below enforces for new migrations.
+`MEMNON.get_schema_summary`); add a non-empty `COMMENT ON` with each new table,
+table column, enum, function, and view. The PostgreSQL-gated
+`tests/test_schema_documentation_pg.py` ratchet checks five object kinds that
+NEXUS owns in `public` and `assets`: tables (`table:<schema>.<name>`), table
+columns (`column:<schema>.<table>.<name>`), enums (`enum:<schema>.<name>`),
+functions and procedures, trigger functions included
+(`function:<schema>.<name>(<identity arguments>)`, so each overload has its own
+key), and views and materialized views (`view:<schema>.<name>`). A view is
+documented at the view level: its `COMMENT ON VIEW` (or `MATERIALIZED VIEW`) is
+required, comments on its columns are not, because view DDL declares no column
+list for the offline lint below to check. Extension members (PostGIS, pgvector)
+are excluded through `pg_depend` (`deptype = 'e'`) in each object's own catalog,
+not by name. Legacy debt is listed by that key and a
+one-line reason in `config/schema_docs_baseline.json`. To retire an entry,
+establish its contract from reader/writer code, cite that evidence in the comment
+migration, add the comment, and remove the baseline entry in the same change; a
+dropped object's entry is removed with the drop. The ratchet fails on a new
+undocumented object of any kind, on a baseline entry whose object is now
+documented, and on a baseline key that names no object, so the list only shrinks.
+Run with `NEXUS_RUN_POSTGRES=1`; the test migrates disposable template clones and
+proves that schema-only dumps and the actual new-story setup preserve table,
+column, enum, function, and view comments.
 
 New migrations are also checked offline, before any database exists.
 `scripts/check_migration_comments.py` (pre-commit hook `check-migration-comments`
 and the `migration-comment-check.yml` CI workflow) requires every table, column,
-enum, function, view, and materialized view that a migration numbered above its
-watermark (129) creates or replaces, including DDL in DO blocks, `EXECUTE`
+enum, function, procedure, view, and materialized view that a migration numbered
+above its watermark (129) creates or replaces, including DDL in DO blocks, `EXECUTE`
 commands, and Python migration strings, to have a non-blank `COMMENT ON` in the
 same file. `CREATE OR REPLACE` counts as a change, so the migration restates the
 comment even though PostgreSQL would keep the old one. Unqualified names mean
-`public`, or the schema a `CREATE SCHEMA` statement creates for its own elements;
-functions match by name and argument count. What cannot be read statically fails
-rather than passes: verbs, object kinds, names, and `ALTER TABLE` actions built at
+`public`, or the schema a `CREATE SCHEMA` statement creates for its own elements.
+Functions and procedures match by name and argument types, as PostgreSQL resolves
+a routine comment: parameter names, modes, `DEFAULT` clauses, type modifiers, and
+array bounds are ignored, `OUT` arguments may be omitted (a function comment omits
+them unless it marks them `OUT`), unquoted words fold to lower case, and built-in
+type aliases read as one type, so `int` matches `integer` and `varchar(20)` matches
+`character varying`. A comment without an argument list names the one overload of
+its kind that the migration creates; a comment that matches several overloads
+documents none. What cannot be read statically fails rather
+than passes: verbs, object kinds, names, and `ALTER TABLE` actions built at
 run time (f-strings, `+` or `||` with a non-literal operand, `{}` and `%I`
 placeholders), an `EXECUTE` of a variable or of anything not starting with literal
 text, and columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
-include `COMMENTS`). Not covered: procedures, domains, composite types, triggers,
-indexes, sequences, DDL inside a function body, even when the migration calls
+include `COMMENTS`). Not covered: domains, composite types, triggers, indexes,
+sequences, DDL inside a function body, even when the migration calls
 that function, and SQL a Python migration does not spell as a string literal in
 its own file (an imported constant such as `from nexus.x import DDL;
 cur.execute(DDL)`, names joined only at run time such as `cur.execute(A + B)`, a
-file it reads, or a bytes literal). For legacy enums, functions, and views, the
-inventory remains the only record.
+file it reads, or a bytes literal). Legacy enums, functions, and views are
+enforced by the PostgreSQL ratchet above through their entries in
+`config/schema_docs_baseline.json`.

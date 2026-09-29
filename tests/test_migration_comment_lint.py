@@ -140,7 +140,11 @@ def test_real_migration_as_next_number_passes_until_a_comment_is_removed(
         (
             "CREATE OR REPLACE FUNCTION touch_row() RETURNS trigger\n"
             "LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
-            "function public.touch_row (0 arguments) has no COMMENT ON FUNCTION",
+            "function public.touch_row() has no COMMENT ON FUNCTION",
+        ),
+        (
+            "CREATE PROCEDURE public.review_p() LANGUAGE sql AS 'SELECT 1';",
+            "procedure public.review_p() has no COMMENT ON PROCEDURE",
         ),
         (
             "CREATE OR REPLACE VIEW assets.mood_view AS SELECT 1 AS one;",
@@ -155,10 +159,10 @@ def test_real_migration_as_next_number_passes_until_a_comment_is_removed(
             "table public.ledger has no COMMENT ON TABLE",
         ),
     ],
-    ids=["enum", "function", "view", "materialized-view", "table"],
+    ids=["enum", "function", "procedure", "view", "materialized-view", "table"],
 )
 def test_missing_object_comment_fails(tmp_path: Path, ddl: str, expected: str) -> None:
-    """Enums, functions, views, and tables each need their own COMMENT ON."""
+    """Enums, functions, procedures, views, and tables each need a COMMENT ON."""
     _migration(tmp_path, f"{NEXT}_object.sql", f"-- {expected}\n{ddl}\n")
 
     assert _findings(tmp_path) == [f"{NEXT}_object.sql:2: {expected}"]
@@ -534,24 +538,162 @@ COMMENT ON COLUMN after_schema.id IS 'Row key.';
     assert _findings(tmp_path) == []
 
 
-def test_function_comments_match_argument_count(tmp_path: Path) -> None:
-    """An overload needs its own comment; a bare name documents any arity."""
+def test_each_function_overload_needs_its_own_comment(tmp_path: Path) -> None:
+    """A comment documents only the overload whose argument types it names."""
     _migration(
         tmp_path,
-        f"{NEXT}_weights.sql",
+        f"{NEXT}_overloads.sql",
         """
-CREATE FUNCTION weigh(p integer) RETURNS integer LANGUAGE sql AS 'SELECT p';
-CREATE FUNCTION weigh(p integer, q text) RETURNS integer
-    LANGUAGE sql AS $$SELECT p$$;
-COMMENT ON FUNCTION weigh(integer) IS 'One-argument weight.';
-CREATE FUNCTION tally(a int, b int) RETURNS int LANGUAGE sql AS 'SELECT a + b';
-COMMENT ON FUNCTION tally IS 'Unique name, so no argument list is needed.';
+CREATE FUNCTION review_f(p integer) RETURNS integer LANGUAGE sql AS 'SELECT p';
+CREATE FUNCTION review_f(p text) RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION review_f(integer) IS 'Only the integer overload.';
 """,
     )
 
     assert _findings(tmp_path) == [
-        f"{NEXT}_weights.sql:2: function public.weigh (2 arguments) has no "
+        f"{NEXT}_overloads.sql:2: function public.review_f(text) has no COMMENT ON "
+        "FUNCTION",
+    ]
+
+
+def test_function_signatures_ignore_names_modes_defaults_and_case(
+    tmp_path: Path,
+) -> None:
+    """Types name an overload; names, modes, defaults, OUT, and spacing do not."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_overloads.sql",
+        """
+CREATE FUNCTION review_f(p integer) RETURNS integer LANGUAGE sql AS 'SELECT p';
+CREATE OR REPLACE FUNCTION review_f(
+    IN p TEXT,
+    q double precision DEFAULT 0.5,
+    r VARIADIC numeric( 5, 2 )[] = ARRAY[1],
+    OUT total integer
+) LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION review_f(INTEGER) IS 'Integer overload.';
+COMMENT ON FUNCTION public.review_f(label text, double   PRECISION, numeric(5,2) [])
+    IS 'Text overload.';
+""",
+    )
+
+    assert _findings(tmp_path) == []
+
+
+def test_function_type_aliases_typmods_and_arrays_match(tmp_path: Path) -> None:
+    """A type alias, typmod, or array spelling names the same PostgreSQL type.
+
+    A different type is still a different overload.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_int_alias.sql",
+        """
+CREATE FUNCTION f(a int) RETURNS integer LANGUAGE sql AS 'SELECT a';
+COMMENT ON FUNCTION f(integer) IS 'int is integer.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_varchar_typmod.sql",
+        """
+CREATE FUNCTION f(a varchar(20)) RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION f(character varying) IS 'Signatures ignore typmods.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 3:03d}_arrays_and_aliases.sql",
+        """
+CREATE FUNCTION f(a integer ARRAY[3], b int4[][], c timestamptz, d float(24))
+    RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION f(int[], integer[], timestamp with time zone, real)
+    IS 'Array spellings and aliases name the same types.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 4:03d}_other_type.sql",
+        """
+CREATE FUNCTION f(a text) RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION f(integer) IS 'Wrong type: PostgreSQL finds no f(integer).';
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{WATERMARK + 4:03d}_other_type.sql:1: function public.f(text) has no "
         "COMMENT ON FUNCTION",
+    ]
+
+
+def test_bare_function_name_must_name_one_overload(tmp_path: Path) -> None:
+    """Without an argument list, a comment names the file's only overload.
+
+    With two overloads PostgreSQL rejects the comment as not unique, so it
+    documents neither.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_bare.sql",
+        """
+CREATE FUNCTION review_f(p integer) RETURNS integer LANGUAGE sql AS 'SELECT p';
+CREATE FUNCTION review_f(p text) RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION review_f IS 'Names no single overload.';
+CREATE FUNCTION tally(a int, b int) RETURNS int LANGUAGE sql AS 'SELECT a + b';
+COMMENT ON FUNCTION tally IS 'The only tally, so no argument list is needed.';
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_bare.sql:1: function public.review_f(integer) has no COMMENT ON "
+        "FUNCTION",
+        f"{NEXT}_bare.sql:2: function public.review_f(text) has no COMMENT ON "
+        "FUNCTION",
+        f"{NEXT}_bare.sql:3: COMMENT ON FUNCTION public.review_f matches 2 overloads "
+        "this migration creates (public.review_f(integer), public.review_f(text)); "
+        "PostgreSQL rejects it as not unique, so it documents none",
+    ]
+
+
+def test_procedure_comments_follow_postgresql_lookup(tmp_path: Path) -> None:
+    """A procedure needs COMMENT ON PROCEDURE or ROUTINE, matched as PostgreSQL does.
+
+    The comment may list the input types or, marking none OUT, every argument
+    type. COMMENT ON FUNCTION does not document a procedure, and a Python DDL
+    constant that creates one is scanned even when it starts with another verb.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_procedures.sql",
+        """
+CREATE OR REPLACE PROCEDURE settle(IN a integer, OUT b integer)
+    LANGUAGE plpgsql AS $$ BEGIN b := a; END $$;
+COMMENT ON PROCEDURE settle(integer) IS 'Input types name the procedure.';
+CREATE PROCEDURE audit(a integer, OUT b text)
+    LANGUAGE plpgsql AS $$ BEGIN b := ''; END $$;
+COMMENT ON PROCEDURE audit(integer, text) IS 'So do all of its argument types.';
+CREATE PROCEDURE sweep() LANGUAGE sql AS 'SELECT 1';
+COMMENT ON ROUTINE sweep IS 'ROUTINE documents a procedure.';
+CREATE PROCEDURE purge() LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION purge() IS 'PostgreSQL rejects this: purge() is not a function.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_tidy.py",
+        '''
+DDL = """
+DROP PROCEDURE IF EXISTS tidy();
+CREATE PROCEDURE tidy() LANGUAGE sql AS 'SELECT 1';
+"""
+''',
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_procedures.sql:9: procedure public.purge() has no COMMENT ON "
+        "PROCEDURE",
+        f"{WATERMARK + 2:03d}_tidy.py:3: procedure public.tidy() has no COMMENT ON "
+        "PROCEDURE",
     ]
 
 
