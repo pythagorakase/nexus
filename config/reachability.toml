@@ -29,6 +29,9 @@ reason = "CLAUDE.md schema migration workflow."
 target = "scripts/new_story_setup.py:main"
 reason = "CLAUDE.md slot initialization workflow."
 [[operators]]
+target = "scripts/rebuild_memory_idf.py:main"
+reason = "CLAUDE.md and docs/database.md IDF rebuild after a PostgreSQL update; named by the analyzer-mismatch error and nexus doctor (issue 1013)."
+[[operators]]
 target = "scripts/qa_shift/qa_shift.py:main"
 reason = "Authorized Night QA entry point; scripts/qa_shift/mission_prompt.md."
 [[operators]]
