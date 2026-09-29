@@ -1077,7 +1077,6 @@ text_weight_default = 0.4    # Default weighting for text search
 # Query-type-specific settings
 use_query_type_weights = true
 use_query_type_temporal_factors = true
-target_model = "inf-retriever-v1-1.5b"
 temporal_boost_factor = 0.6
 presence_boost_enabled = true  # Measured arm; enable only after live evaluation
 presence_boost_factor = 0.15
@@ -1143,7 +1142,6 @@ window_overlap = 256
 
 # Query-type-specific settings
 use_query_type_weights = false
-use_8bit = false
 
 [memnon.retrieval.cross_encoder_reranking.weights_by_query_type]
 character = 0.25

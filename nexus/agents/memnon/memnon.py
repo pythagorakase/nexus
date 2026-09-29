@@ -1866,9 +1866,6 @@ class MEMNON:
                 rerank_start_time = time.time()
 
                 # Apply reranking
-                # Get use_8bit parameter from settings
-                use_8bit = cross_encoder_config.get("use_8bit", False)
-                logger.info(f"Using 8-bit quantization for cross-encoder: {use_8bit}")
                 final_results = rerank_results(
                     query=query,
                     results=search_results_initial,
@@ -1878,7 +1875,6 @@ class MEMNON:
                     use_sliding_window=use_sliding_window,
                     model_path=model_path,
                     api_type=api_type,
-                    use_8bit=use_8bit,
                     repo_id=reranker_repo_id(
                         model_path, cross_encoder_config["candidates"]
                     ),

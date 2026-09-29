@@ -5,9 +5,12 @@ This module implements a sliding window approach for cross-encoder reranking
 of search results, handling long text chunks effectively by splitting them
 into overlapping windows when they exceed the model's context length.
 
-The cross-encoder loads only from the local folder it is given (the production
-``[memnon.retrieval.cross_encoder_reranking].model_path``); a missing or broken
-folder raises a RuntimeError naming the folder and the install command.
+Both rerankers (the SequenceClassification cross-encoder and the Qwen3 yes/no
+causal LM) load only from the local folder they are given (the production
+``[memnon.retrieval.cross_encoder_reranking].model_path``) with
+``local_files_only=True``; a missing or broken folder raises a RuntimeError
+naming the folder and the install command, pinned to the locked revision when
+one is known.
 """
 
 import logging
@@ -18,6 +21,8 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import numpy as np
 import torch
 from sentence_transformers import CrossEncoder
+
+from nexus.agents.memnon.utils.artifact_manifest import restore_command
 
 # Set up logging
 logger = logging.getLogger("nexus.memnon.cross_encoder")
@@ -55,12 +60,69 @@ def reranker_repo_id(
 
 
 def _reranker_remedy(path: Path, repo_id: Optional[str]) -> str:
-    """Name the command that installs a missing reranker, then the check."""
+    """Name the command that installs a missing reranker, then the check.
+
+    The ``hf download`` command carries ``--revision`` whenever the model
+    artifact lock or the folder itself records one. Building it reads the
+    lock and the folder, so loaders build it only once a load has failed.
+    """
     if repo_id:
-        install = f"Download it with `hf download {repo_id} --local-dir {path}`"
+        install = f"Download it with `{restore_command(repo_id, path)}`"
     else:
         install = f"Point {MODEL_PATH_SETTING} at the downloaded reranker folder"
     return f"{install}, then run `nexus models verify`."
+
+
+def _require_reranker_folder(kind: str, path: Path, repo_id: Optional[str]) -> None:
+    """Check that ``path`` is an existing local folder.
+
+    Every reranker loader runs this check before it touches the folder, so a
+    missing folder or a file in its place is never passed to ``from_pretrained``
+    (which would treat a non-directory as a Hub repository id).
+
+    Args:
+        kind: The reranker named in the error, such as "Cross-encoder reranker"
+        path: The local folder that will be loaded
+        repo_id: Hugging Face repository of the artifact, if known
+
+    Raises:
+        RuntimeError: When ``path`` does not exist or is not a directory.
+    """
+    if not path.exists():
+        raise RuntimeError(
+            f"{kind} is not installed: {MODEL_PATH_SETTING} "
+            f"{path} does not exist. {_reranker_remedy(path, repo_id)}"
+        )
+    if not path.is_dir():
+        raise RuntimeError(
+            f"{kind} {MODEL_PATH_SETTING} {path} is not a directory. "
+            f"{_reranker_remedy(path, repo_id)}"
+        )
+
+
+# There is no 8-bit reranker load: the locked sentence-transformers 3.4.1
+# CrossEncoder.__init__ always ends with ``if device is None: device =
+# get_device_name()`` and ``self.model.to(device)`` (CrossEncoder.py:123-126),
+# including after an ``automodel_args`` load with ``device_map="auto"``, and
+# transformers 4.51.3 raises for every ``.to`` on a model loaded in 8-bit
+# bitsandbytes (PreTrainedModel.to, modeling_utils.py:3682-3686). The former
+# ``use_8bit`` setting could therefore only ever be false and was removed.
+
+
+def cross_encoder_kwargs(device: Optional[str], max_length: int) -> Dict[str, Any]:
+    """Return the keyword arguments every CrossEncoder load passes.
+
+    ``local_files_only`` keeps the load off the Hugging Face Hub: an incomplete
+    local folder fails instead of being patched from the network.
+
+    Args:
+        device: Device to place the model on ('cuda', 'mps' or 'cpu')
+        max_length: Maximum sequence length for the model
+
+    Returns:
+        Keyword arguments for ``CrossEncoder(path, **kwargs)``
+    """
+    return {"device": device, "max_length": max_length, "local_files_only": True}
 
 
 class CrossEncoderReranker:
@@ -75,7 +137,6 @@ class CrossEncoderReranker:
         max_length: int = 512,
         sliding_window_overlap: int = 128,
         cache_dir: Optional[str] = None,
-        use_8bit: bool = False,
         repo_id: Optional[str] = None,
     ):
         """
@@ -92,7 +153,6 @@ class CrossEncoderReranker:
             max_length: Maximum sequence length for the model
             sliding_window_overlap: Overlap size for sliding windows
             cache_dir: Unused; the artifact is read from ``model_path``
-            use_8bit: Whether to use 8-bit quantization for model loading
             repo_id: Hugging Face repository of the artifact, named in the
                 install command when the folder is missing or fails to load
 
@@ -101,17 +161,7 @@ class CrossEncoderReranker:
                 directory, or fails to load.
         """
         path = Path(model_path)
-        remedy = _reranker_remedy(path, repo_id)
-        if not path.exists():
-            raise RuntimeError(
-                f"Cross-encoder reranker is not installed: {MODEL_PATH_SETTING} "
-                f"{path} does not exist. {remedy}"
-            )
-        if not path.is_dir():
-            raise RuntimeError(
-                f"Cross-encoder reranker {MODEL_PATH_SETTING} {path} is not a "
-                f"directory. {remedy}"
-            )
+        _require_reranker_folder("Cross-encoder reranker", path, repo_id)
 
         self.max_length = max_length
         self.sliding_window_overlap = sliding_window_overlap
@@ -129,57 +179,15 @@ class CrossEncoderReranker:
         logger.info(f"Using device: {self.device}")
 
         try:
-            self.model = self._load_local(str(path), device, max_length, use_8bit)
+            self.model = CrossEncoder(
+                str(path), **cross_encoder_kwargs(device, max_length)
+            )
         except Exception as exc:
             raise RuntimeError(
                 f"Cross-encoder reranker failed to load from {MODEL_PATH_SETTING} "
-                f"{path}: {str(exc).rstrip('.')}. {remedy}"
+                f"{path}: {str(exc).rstrip('.')}. {_reranker_remedy(path, repo_id)}"
             ) from exc
         logger.info(f"Cross-encoder model loaded from {path}")
-
-    @staticmethod
-    def _load_local(
-        path: str, device: str, max_length: int, use_8bit: bool
-    ) -> CrossEncoder:
-        """Load the CrossEncoder from a local folder, never from the Hub."""
-        if use_8bit and device == "cuda" and torch.cuda.is_available():
-            # Use 8-bit quantization when loading the model
-            from transformers import (
-                AutoModelForSequenceClassification,
-                AutoTokenizer,
-                BitsAndBytesConfig,
-            )
-
-            logger.info(f"Loading cross-encoder with 8-bit quantization: {path}")
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
-            model = AutoModelForSequenceClassification.from_pretrained(
-                path,
-                quantization_config=quantization_config,
-                device_map="auto",
-                local_files_only=True,
-            )
-            tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
-
-            # Create a custom CrossEncoder with the 8-bit model
-            return CrossEncoder(
-                path,
-                tokenizer=tokenizer,
-                model=model,
-                max_length=max_length,
-                device=None,  # device is handled by device_map in 8-bit mode
-                local_files_only=True,
-            )
-
-        # Use sentence-transformers CrossEncoder without quantization
-        if use_8bit:
-            logger.warning(
-                "8-bit quantization requested but requires CUDA. "
-                "Using full precision model."
-            )
-        return CrossEncoder(
-            path, device=device, max_length=max_length, local_files_only=True
-        )
 
     def score_pair(self, query: str, passage: str) -> float:
         """
@@ -511,7 +519,26 @@ class Qwen3LMReranker:
         model_name_or_path: str,
         device: Optional[str] = None,
         max_length: int = 2048,
+        repo_id: Optional[str] = None,
     ):
+        """Load the Qwen3 reranker from exactly ``model_name_or_path``, a folder.
+
+        Nothing is downloaded: both ``from_pretrained`` calls pass
+        ``local_files_only=True`` after the same folder check the cross-encoder
+        uses, so a missing or half-copied folder fails instead of being
+        patched from the Hugging Face Hub (issue #812).
+
+        Args:
+            model_name_or_path: Local directory holding the Qwen3 reranker
+            device: Device to use for inference ('cuda' or 'cpu')
+            max_length: Maximum sequence length, prefix and suffix included
+            repo_id: Hugging Face repository of the artifact, named in the
+                install command when the folder is missing or fails to load
+
+        Raises:
+            RuntimeError: When the folder does not exist, is not a directory,
+                or fails to load.
+        """
         # NOTE: max_length defaults to 2048 (vs the model card's 8192) and
         # device defaults to CPU on Apple Silicon, both for MPS-stability
         # reasons. On MPS, Qwen3 inference with batched long sequences hits
@@ -530,18 +557,28 @@ class Qwen3LMReranker:
         self.device = device
         self.max_length = max_length
 
-        logger.info(f"Loading Qwen3-Reranker from {model_name_or_path} on {device}")
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name_or_path, padding_side="left"
-        )
+        path = Path(model_name_or_path)
+        _require_reranker_folder("Qwen3 reranker", path, repo_id)
+        logger.info(f"Loading Qwen3-Reranker from {path} on {device}")
         # fp32 on CPU (no native bf16 acceleration on most CPUs); bf16 on CUDA
         # to match Qwen3's native dtype.
         dtype = torch.float32 if device == "cpu" else torch.bfloat16
-        self.model = (
-            AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=dtype)
-            .to(device)
-            .eval()
-        )
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                str(path), padding_side="left", local_files_only=True
+            )
+            self.model = (
+                AutoModelForCausalLM.from_pretrained(
+                    str(path), torch_dtype=dtype, local_files_only=True
+                )
+                .to(device)
+                .eval()
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Qwen3 reranker failed to load from {MODEL_PATH_SETTING} "
+                f"{path}: {str(exc).rstrip('.')}. {_reranker_remedy(path, repo_id)}"
+            ) from exc
 
         self._token_yes = self.tokenizer.convert_tokens_to_ids("yes")
         self._token_no = self.tokenizer.convert_tokens_to_ids("no")
@@ -625,22 +662,21 @@ class Qwen3LMReranker:
 # keep the instance alive across calls within the process.
 # Key includes `device` so a workflow that loads first on (say) MPS doesn't
 # silently return that instance to a later caller that requests CPU.
-_RERANKER_CACHE: Dict[Tuple[str, str, Optional[str], bool], Any] = {}
+_RERANKER_CACHE: Dict[Tuple[str, str, Optional[str]], Any] = {}
 
 
 def _get_or_create_reranker(
     model_path: str,
     api_type: str,
     device: Optional[str],
-    use_8bit: bool,
     repo_id: Optional[str] = None,
 ):
     """Return a cached reranker, constructing it on first request.
 
-    ``repo_id`` only names the install command when a cross-encoder folder is
+    ``repo_id`` only names the install command when a reranker folder is
     missing; it is not part of the cache key.
     """
-    key = (model_path, api_type, device, use_8bit)
+    key = (model_path, api_type, device)
     cached = _RERANKER_CACHE.get(key)
     if cached is not None:
         return cached
@@ -650,13 +686,13 @@ def _get_or_create_reranker(
         instance = CrossEncoderReranker(
             model_path=model_path,
             device=device,
-            use_8bit=use_8bit,
             repo_id=repo_id,
         )
     elif api_type == "qwen3_lm":
         instance = Qwen3LMReranker(
             model_name_or_path=model_path,
             device=device,
+            repo_id=repo_id,
         )
     else:
         raise ValueError(
@@ -678,7 +714,6 @@ def rerank_results(
     use_sliding_window: bool = True,
     api_type: str = "cross_encoder",
     device: Optional[str] = None,
-    use_8bit: bool = False,
     repo_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -697,8 +732,7 @@ def rerank_results(
         api_type: "cross_encoder" (SequenceClassification: DeBERTa-v3, mxbai)
                   or "qwen3_lm" (Qwen3-Reranker yes/no causal-LM)
         device: Device to use for inference
-        use_8bit: Whether to use 8-bit quantization (cross_encoder only)
-        repo_id: Hugging Face repository of the cross-encoder, named in the
+        repo_id: Hugging Face repository of the reranker, named in the
                 install command when its folder is missing
 
     Returns:
@@ -715,7 +749,6 @@ def rerank_results(
             model_path=model_path,
             api_type=api_type,
             device=device,
-            use_8bit=use_8bit,
             repo_id=repo_id,
         )
 

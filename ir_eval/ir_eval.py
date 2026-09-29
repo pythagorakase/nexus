@@ -1867,7 +1867,6 @@ class IREvalPGCLI:
                         f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}"
                     )
                     print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
-                    print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
                     print(
                         f"  Temporal boost factor: {hybrid.get('temporal_boost_factor', 'N/A')}"
                     )
@@ -1918,7 +1917,6 @@ class IREvalPGCLI:
                         f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}"
                     )
                     print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
-                    print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
                     print(
                         f"  Temporal boost factor: {hybrid.get('temporal_boost_factor', 'N/A')}"
                     )

@@ -28,22 +28,33 @@ corrective command, for example:
 ```text
 Embedding model 'Octen-Embedding-4B' is not installed: local_path
 /Users/pythagor/nexus/models/Octen-Embedding-4B does not exist. Restore it with
-`hf download Octen/Octen-Embedding-4B --local-dir /Users/pythagor/nexus/models/Octen-Embedding-4B`,
+`hf download Octen/Octen-Embedding-4B --revision fea468fae3f0caffbae8a12ba792d1c394b6277d --local-dir /Users/pythagor/nexus/models/Octen-Embedding-4B`,
 then run `nexus models verify`.
 ```
 
+Every such `hf download` command, from the loaders and from `nexus models
+verify`, carries `--revision` whenever the lock below records the repository's
+revision or, failing that, the folder itself records one, so a restore
+reproduces the locked files after the repository's default branch moves.
+
 The production reranker is `[memnon.retrieval.cross_encoder_reranking]
 model_path`; its repository is the `remote_path` of the reranker candidate
-entry with the same `local_path`. `CrossEncoderReranker` loads exactly that
-folder with `local_files_only=True`: nothing is downloaded and no other folder
-of the same name is substituted, so the folder `nexus models verify` checks is
-the folder that loads. A missing folder, a path that is not a directory, or a
-failed load raises a `RuntimeError` naming the key and the path, followed by
-`hf download <repo> --local-dir <path>` (or, when no candidate names the
-repository, pointing `model_path` at the downloaded folder) and then
-`nexus models verify`. The reranker loads on the first reranked search, and
-MEMNON search still catches that error, logs it, and returns the results
-without reranking.
+entry with the same `local_path`. `CrossEncoderReranker` (`api_type =
+"cross_encoder"`) and `Qwen3LMReranker` (`api_type = "qwen3_lm"`) both load
+exactly that folder with `local_files_only=True`: nothing is downloaded and no
+other folder of the same name is substituted, so the folder `nexus models
+verify` checks is the folder that loads. A missing folder, a path that is not
+a directory, or a failed load raises a `RuntimeError` naming the key and the
+path, followed by
+`hf download <repo> --revision <commit> --local-dir <path>` (or, when no
+candidate names the repository, pointing `model_path` at the downloaded
+folder) and then `nexus models verify`. The reranker loads on the first
+reranked search, and MEMNON search still catches that error, logs it, and
+returns the results without reranking. There is no 8-bit reranker setting:
+the locked sentence-transformers moves every `CrossEncoder` model with
+`.to(device)`, and transformers rejects `.to` on 8-bit bitsandbytes models, so
+a `use_8bit` key in `[memnon.retrieval.cross_encoder_reranking]` fails config
+validation.
 
 ### Locking and Verifying Artifacts
 
@@ -52,9 +63,13 @@ against the repository root) pins the active embedder and, while reranking is
 enabled, the production reranker. For each artifact the lock records:
 
 - the repository (`remote_path`);
-- the revision: the Hub commit, read from a Hub cache snapshot directory
-  (`.../snapshots/<commit>`) or from the `.cache/huggingface/download/*.metadata`
-  files that `hf download --local-dir` writes, and `null` when neither exists;
+- the revision and its `revision_source`: `huggingface` for the Hub commit
+  read from a Hub cache snapshot directory (`.../snapshots/<commit>`) or from
+  the `.cache/huggingface/download/*.metadata` files that
+  `hf download --local-dir` writes; `git` for the HEAD commit of a git
+  checkout of the model repository (a `.git` directory or `.git` file in the
+  artifact folder itself, never an enclosing repository); both `null` when the
+  folder records neither;
 - the license from the model card front matter;
 - the dimensions: the embedder's output dimension is read from its
   sentence-transformers `modules.json` (Pooling and Dense configs) and must
@@ -70,8 +85,9 @@ nexus models verify   # read-only; exits 1 listing each problem and its remedy
 ```
 
 `verify` fails when a locked file is missing or differs in size or sha256,
-when an unlisted file appears, or when the configured embedder, reranker,
-repository, or dimensions no longer match the lock. Its remediation names
+when an unlisted file appears, when the folder records a revision other than
+the locked one, or when the configured embedder, reranker, repository, or
+dimensions no longer match the lock. Its remediation names
 `hf download <repo> --revision <commit> --local-dir <path>` for a changed
 artifact and re-running `nexus models lock` after an intentional upgrade. A
 lock that is absent, truncated, holds merge-conflict markers, or lacks the
@@ -81,6 +97,24 @@ Only `.DS_Store` is ignored: the `._*` AppleDouble files that copying an
 artifact to an exFAT or network volume creates are unexpected files, so remove
 them first (on macOS, `dot_clean -m <path>`).
 Neither command downloads anything, and startup does not run `verify`.
+
+The lock is committed: `config/model_artifacts.lock.json` records the
+production embedder and reranker as they sit on the owner's host, and
+`tests/test_model_artifact_lock_committed.py` fails when `nexus.toml` names a
+different active embedder, reranker, repository, or embedder dimension than
+the lock does. `nexus models verify` then checks, read-only, that every locked
+file on this host has its locked size and sha256, that no unlisted file
+appears, and that `nexus.toml` still names the locked models. Every embedder
+and reranker loader passes `local_files_only=True` after checking that the
+configured folder exists: the embedder loader
+(`get_or_load_sentence_transformer`, shared by `EmbeddingManager`, the
+embedding job, and the operator scripts `import_narratives.py`,
+`query_narratives_vector.py`, and `regenerate_embeddings.py`) and both
+rerankers. An artifact with missing files therefore fails to load rather than
+being repaired from the Hub; a modified or extra file still loads, and only
+`nexus models verify` catches it. The prompt-window tokenizer in
+`nexus/telemetry/prompt_window.py` is not a retrieval artifact and is outside
+this rule.
 
 ## Database Storage Strategy
 

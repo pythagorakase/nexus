@@ -8,24 +8,30 @@ full GC never reclaimed mid-run -- ratcheting the server's footprint by one
 model copy per turn until Metal allocation stalled at ~turn 8 on a 128 GB
 machine.
 
-These tests use a real local model (bge-large-en, ~1.3 GB) so they exercise
-the genuine SentenceTransformer load path without the production model's
-cost. They skip when the local model directory is absent (e.g. bare CI).
+The manager and turn-loop tests use a real local model (bge-large-en,
+~1.3 GB) so they exercise the genuine SentenceTransformer load path without
+the production model's cost; they skip when that directory is absent (e.g.
+bare CI). The cache-key tests load a tiny randomly initialised model saved to
+disk, so they always run and never download anything.
 """
 
 from __future__ import annotations
 
+import ast
 import gc
+import inspect
 from pathlib import Path
 from typing import Any, Dict, Iterator
 
 import pytest
 import tomlkit
+from sentence_transformers import SentenceTransformer
 
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.config import load_settings_as_dict
 from nexus.api.slot_utils import VALID_DBNAMES
 from tests.pg_fixtures import disposable_slot_database, seed_protagonist, sqlalchemy_url
+from tests.tiny_models import write_tiny_sentence_transformer
 
 
 def _bge_large_path() -> Path:
@@ -41,7 +47,7 @@ def _bge_large_path() -> Path:
 
 MODEL_DIR = _bge_large_path()
 
-pytestmark = pytest.mark.skipif(
+requires_bge_large = pytest.mark.skipif(
     not MODEL_DIR.is_dir(),
     reason="bge-large local model from nexus.toml registry not present",
 )
@@ -91,6 +97,7 @@ def _settings() -> Dict[str, Any]:
     }
 
 
+@requires_bge_large
 def test_embedding_manager_shares_one_model_per_process() -> None:
     """Two EmbeddingManagers must hand out the SAME model object.
 
@@ -102,32 +109,88 @@ def test_embedding_manager_shares_one_model_per_process() -> None:
     assert first.models["bge-large"] is second.models["bge-large"]
 
 
-def test_model_cache_normalizes_local_path_aliases(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_model_cache_normalizes_local_path_aliases(tmp_path: Path) -> None:
     """Filesystem aliases for one model directory must share one cache key."""
 
-    target = tmp_path / "model"
-    target.mkdir()
+    target = write_tiny_sentence_transformer(tmp_path / "model")
     alias = tmp_path / "alias"
     alias.symlink_to(target, target_is_directory=True)
 
-    loads = []
-
-    class FakeSentenceTransformer:
-        def __init__(self, path: str, *, local_files_only: bool):
-            assert local_files_only, "embedders load only from local artifacts"
-            loads.append(path)
-
-    monkeypatch.setattr(em, "SentenceTransformer", FakeSentenceTransformer)
-
-    first = em._get_or_load_sentence_transformer(str(alias))
-    second = em._get_or_load_sentence_transformer(str(target))
+    first = em.get_or_load_sentence_transformer(str(alias))
+    second = em.get_or_load_sentence_transformer(str(target))
 
     assert first is second
-    assert loads == [str(alias)]
+    assert list(em._MODEL_CACHE) == [str(target.resolve())]
 
 
+def test_every_sentence_transformer_keyword_is_accepted_and_local_only() -> None:
+    """The one embedder load stays local-only and uses keywords the library takes.
+
+    A real check against the installed sentence-transformers, not a mock:
+    dropping ``local_files_only`` would let a half-copied folder be patched
+    from the Hugging Face Hub, and a keyword the library does not accept
+    would raise TypeError before anything loads.
+    """
+
+    accepted = inspect.signature(SentenceTransformer.__init__).parameters
+    passed = em.sentence_transformer_kwargs("cpu")
+
+    assert passed["local_files_only"] is True
+    assert set(passed) <= set(accepted), sorted(set(passed) - set(accepted))
+    assert all(
+        accepted[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+        for name in passed
+    )
+
+
+def test_the_one_loader_passes_only_the_local_only_keywords() -> None:
+    """The single SentenceTransformer call spreads exactly the helper's keywords.
+
+    Guards embedding_manager.py's one load against losing ``local_files_only``
+    by bypassing ``sentence_transformer_kwargs`` or adding keywords beside it.
+    """
+
+    source = Path(inspect.getsourcefile(em) or "").read_text()
+    calls = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "SentenceTransformer"
+    ]
+
+    assert len(calls) == 1
+    (call,) = calls
+    assert [keyword.arg for keyword in call.keywords] == [None]
+    spread = call.keywords[0].value
+    assert isinstance(spread, ast.Call)
+    assert isinstance(spread.func, ast.Name)
+    assert spread.func.id == "sentence_transformer_kwargs"
+
+
+def test_pinned_device_gets_its_own_cached_instance(tmp_path: Path) -> None:
+    """A device-pinned load (the INT8 CPU rule) never reuses an unpinned one.
+
+    ``regenerate_embeddings.py`` pins INT8 models to CPU; an unpinned instance
+    of the same folder, placed wherever sentence-transformers chose, must not
+    be handed back to that caller, and the pinned instance must stay cached.
+    """
+
+    target = write_tiny_sentence_transformer(tmp_path / "model")
+
+    unpinned = em.get_or_load_sentence_transformer(str(target))
+    pinned = em.get_or_load_sentence_transformer(str(target), device="cpu")
+
+    assert pinned is not unpinned
+    assert str(pinned.device) == "cpu"
+    assert em.get_or_load_sentence_transformer(str(target), device="cpu") is pinned
+    assert em.get_or_load_sentence_transformer(str(target)) is unpinned
+    assert sorted(em._MODEL_CACHE) == sorted(
+        [str(target.resolve()), f"{target.resolve()}|device=cpu"]
+    )
+
+
+@requires_bge_large
 def test_cached_model_survives_manager_teardown() -> None:
     """Dropping a manager must not evict (or duplicate) the cached model."""
     manager = em.EmbeddingManager(settings=_settings())
@@ -143,6 +206,7 @@ def test_cached_model_survives_manager_teardown() -> None:
     assert embedding is not None and len(embedding) > 0
 
 
+@requires_bge_large
 @pytest.mark.requires_postgres
 def test_memnon_close_disposes_engine(model_config: Path, model_database: str) -> None:
     """MEMNON.close() must return its pooled Postgres connections.
@@ -173,6 +237,7 @@ def test_memnon_close_disposes_engine(model_config: Path, model_database: str) -
         instance.db_manager.create_session()
 
 
+@requires_bge_large
 @pytest.mark.requires_postgres
 def test_per_turn_lore_stacks_share_embedder_and_close(
     model_config: Path,

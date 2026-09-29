@@ -5,7 +5,7 @@ Loads the configured sentence-transformer embedding models from their local
 artifact directories only. There is no download path and no default model:
 an active model whose ``local_path`` is missing, is not a directory, or fails
 to load raises a RuntimeError naming the model, the path and the corrective
-command (issue #812).
+command, pinned to the locked revision when one is known (issue #812).
 """
 
 import logging
@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 from sentence_transformers import SentenceTransformer
+
+from nexus.agents.memnon.utils.artifact_manifest import restore_command
 
 logger = logging.getLogger("nexus.memnon.embedding_manager")
 
@@ -40,67 +42,118 @@ def _cache_key_for_path(path: str) -> str:
     return path
 
 
-def _get_or_load_sentence_transformer(path: str) -> SentenceTransformer:
+def sentence_transformer_kwargs(device: Optional[str]) -> Dict[str, Any]:
+    """Return the keyword arguments the one SentenceTransformer load passes.
+
+    ``local_files_only`` keeps the load off the Hugging Face Hub: an incomplete
+    local folder fails instead of being patched from the network.
+
+    Args:
+        device: Device to place the model on; None lets sentence-transformers
+            choose.
+
+    Returns:
+        Keyword arguments for ``SentenceTransformer(path, **kwargs)``
+    """
+    return {"device": device, "local_files_only": True}
+
+
+def get_or_load_sentence_transformer(
+    path: str, device: Optional[str] = None
+) -> SentenceTransformer:
     """Return the process-wide SentenceTransformer for the local ``path``.
 
-    Loads on first request and reuses the same instance for every subsequent
-    EmbeddingManager in this process. The lock is held across the load so
+    This is the one sentence-transformers embedder loader: the runtime
+    EmbeddingManager, the embedding job and the operator scripts all load
+    through it. Loads on first request and reuses the same instance for every
+    subsequent caller in this process. The lock is held across the load so
     concurrent first requests cannot race two copies of a multi-gigabyte
     model into memory. ``local_files_only`` keeps the load off the network:
     a local artifact that is incomplete fails here instead of being patched
     from the Hugging Face Hub.
+
+    Args:
+        path: Local artifact directory
+        device: Device to place the model on; None lets sentence-transformers
+            choose. A pinned device gets its own cache entry.
+
+    Returns:
+        The cached SentenceTransformer
     """
     cache_key = _cache_key_for_path(path)
+    if device is not None:
+        cache_key = f"{cache_key}|device={device}"
     with _MODEL_CACHE_LOCK:
         model = _MODEL_CACHE.get(cache_key)
         if model is None:
-            model = SentenceTransformer(path, local_files_only=True)
+            model = SentenceTransformer(path, **sentence_transformer_kwargs(device))
             _MODEL_CACHE[cache_key] = model
         else:
             logger.info(f"Reusing process-cached SentenceTransformer: {cache_key}")
         return model
 
 
-def _artifact_remedy(local_path: str, remote_path: Optional[str]) -> str:
-    """Name the command that restores and checks a missing local artifact."""
+def artifact_remedy(local_path: str, remote_path: Optional[str]) -> str:
+    """Name the command that restores and checks a missing local artifact.
+
+    The ``hf download`` command carries ``--revision`` whenever the model
+    artifact lock or the folder itself records one. Building it reads the
+    lock and the folder, so callers build it only once a load has failed.
+    """
     if remote_path:
-        restore = (
-            f"Restore it with `hf download {remote_path} --local-dir {local_path}`"
-        )
+        restore = f"Restore it with `{restore_command(remote_path, local_path)}`"
     else:
         restore = f"Restore the artifact directory at {local_path}"
     return f"{restore}, then run `nexus models verify`."
 
 
-def _load_local_model(
-    model_name: str, model_config: Mapping[str, Any]
+def load_local_model(
+    model_name: str, model_config: Mapping[str, Any], device: Optional[str] = None
 ) -> SentenceTransformer:
-    """Load one active model from its local artifact directory or raise."""
+    """Load one registered model from its local artifact directory or raise.
+
+    Serves the active production embedder and, for operator scripts, any
+    other ``[memnon.models]`` entry by its ``local_path``. There is no
+    download path: a missing ``local_path``, a missing folder, a file in its
+    place, or a folder that fails to load raises with the restore command.
+
+    Args:
+        model_name: The ``[memnon.models]`` entry name
+        model_config: That entry (``local_path`` and optional ``remote_path``)
+        device: Device to place the model on; None lets sentence-transformers
+            choose
+
+    Returns:
+        The loaded SentenceTransformer
+
+    Raises:
+        RuntimeError: When the artifact is not declared, not installed, or
+            fails to load.
+    """
     local_path = model_config.get("local_path")
     remote_path = model_config.get("remote_path") or None
     if not local_path:
         raise RuntimeError(
-            f"Embedding model '{model_name}' is active but declares no local_path "
-            "in [memnon.models]; embedders load only from local artifacts."
+            f"Embedding model '{model_name}' declares no local_path in "
+            "[memnon.models]; embedders load only from local artifacts."
         )
-    remedy = _artifact_remedy(str(local_path), remote_path)
     path = Path(local_path)
     if not path.exists():
         raise RuntimeError(
             f"Embedding model '{model_name}' is not installed: local_path "
-            f"{path} does not exist. {remedy}"
+            f"{path} does not exist. {artifact_remedy(str(local_path), remote_path)}"
         )
     if not path.is_dir():
         raise RuntimeError(
             f"Embedding model '{model_name}' local_path {path} is not a "
-            f"directory. {remedy}"
+            f"directory. {artifact_remedy(str(local_path), remote_path)}"
         )
     try:
-        model = _get_or_load_sentence_transformer(str(path))
+        model = get_or_load_sentence_transformer(str(path), device=device)
     except Exception as exc:
         raise RuntimeError(
             f"Embedding model '{model_name}' failed to load from local_path "
-            f"{path}: {exc}. {remedy}"
+            f"{path}: {exc}. {artifact_remedy(str(local_path), remote_path)}"
         ) from exc
     logger.info(f"Loaded {model_name} from local path: {path}")
     return model
@@ -151,7 +204,7 @@ class EmbeddingManager:
                 continue
 
             logger.info(f"Initializing active model {model_name}...")
-            self.models[model_name] = _load_local_model(model_name, model_config)
+            self.models[model_name] = load_local_model(model_name, model_config)
 
         if not self.models:
             raise RuntimeError(

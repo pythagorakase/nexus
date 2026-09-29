@@ -4,11 +4,13 @@ The runtime loads exactly one embedder (the single ``is_active`` entry in
 ``[memnon.models]``) and, while reranking is enabled, the cross-encoder at
 ``[memnon.retrieval.cross_encoder_reranking].model_path``, both from local
 artifact directories. ``lock`` records what those directories hold (repository,
-revision, license, dimensions, and each file's sha256 and size) in the JSON lock
-named by ``[memnon.artifacts].lock_file``. ``verify`` is read-only: it re-hashes
-the configured directories and reports every missing, changed or unexpected
-file, and any drift between nexus.toml and the lock, with the command that
-repairs it.
+revision and where the revision was read, license, dimensions, and each file's
+sha256 and size) in the JSON lock named by ``[memnon.artifacts].lock_file``.
+``verify`` is read-only: it re-hashes the configured directories and reports
+every missing, changed or unexpected file, a folder revision that differs from
+the lock, and any drift between nexus.toml and the lock, with the command that
+repairs it. Every ``hf download`` restore command, here and in the loaders,
+pins ``--revision`` whenever the lock or the folder records one.
 
 Neither command downloads anything. ``lock`` runs on the host that already
 holds the artifacts (issue #812).
@@ -20,9 +22,10 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from nexus.config.loader import RUNTIME_CONFIG_ENV, load_settings
 from nexus.config.settings_models import Settings
@@ -33,10 +36,17 @@ MANIFEST_SCHEMA_VERSION = 1
 EMBEDDER_ROLE = "embedder"
 RERANKER_ROLE = "reranker"
 
+# Where a locked revision was read (the lock's ``revision_source``): Hugging
+# Face download metadata, or the HEAD commit of a git checkout of the model
+# repository.
+REVISION_SOURCE_HUGGINGFACE = "huggingface"
+REVISION_SOURCE_GIT = "git"
+
 # Local bookkeeping that is not part of a model artifact: Hugging Face
-# download metadata (.cache/huggingface), VCS state and Finder litter.
+# download metadata (.cache/huggingface), VCS state (a .git directory, or the
+# .git file a separate git directory leaves) and Finder litter.
 _IGNORED_DIRECTORIES = frozenset({".cache", ".git"})
-_IGNORED_FILES = frozenset({".DS_Store"})
+_IGNORED_FILES = frozenset({".DS_Store", ".git"})
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _HF_DOWNLOAD_METADATA = Path(".cache") / "huggingface" / "download"
@@ -231,6 +241,91 @@ def _snapshot_revision(root: Path, files: Sequence[str]) -> Optional[str]:
     return next(iter(commits), None)
 
 
+def _git_revision(root: Path) -> Optional[str]:
+    """Return the HEAD commit of the git checkout at ``root``, if it is one.
+
+    Only a ``.git`` directory or ``.git`` file in ``root`` itself counts, and
+    ``--git-dir`` names it: git's own discovery would walk up to an enclosing
+    repository (model folders sit inside this checkout, under ``models/``)
+    whenever ``root`` has no valid ``.git``. The ``GIT_*`` variables a git hook
+    exports are dropped so they cannot point the lookup elsewhere either.
+
+    Raises:
+        ArtifactLockError: When ``root`` has a ``.git`` but git cannot read a
+            HEAD commit from it, or git is not installed.
+    """
+
+    git_dir = root / ".git"
+    if not git_dir.exists():
+        return None
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    try:
+        result = subprocess.run(
+            ["git", f"--git-dir={git_dir}", "rev-parse", "--verify", "HEAD"],
+            capture_output=True,
+            text=True,
+            env=environment,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise ArtifactLockError(
+            f"{root} is a git checkout, but no git executable is on PATH to read "
+            "its HEAD commit"
+        ) from exc
+    if result.returncode != 0:
+        raise ArtifactLockError(
+            f"{root} has a .git, but `git rev-parse --verify HEAD` failed there: "
+            f"{result.stderr.strip()}"
+        )
+    return result.stdout.strip()
+
+
+def artifact_revision(
+    root: Path, files: Optional[Sequence[str]] = None
+) -> Tuple[Optional[str], Optional[str]]:
+    """Return the revision an artifact folder records and where it was read.
+
+    Two sources, reported as the lock's ``revision_source``:
+    ``huggingface``, the commit in Hugging Face download metadata (a Hub
+    cache snapshot directory, or the files ``hf download --local-dir``
+    writes); and ``git``, the HEAD commit of a git checkout of the model
+    repository. A Hub commit and a git commit of the same repository are the
+    same identifier, so either pins ``hf download --revision``.
+
+    Args:
+        root: The artifact directory
+        files: Its artifact files, when already listed
+
+    Returns:
+        ``(revision, source)``, or ``(None, None)`` when the folder records
+        neither.
+
+    Raises:
+        ArtifactLockError: When the two sources name different revisions, the
+            download metadata mixes revisions, or git cannot read the
+            checkout's HEAD.
+    """
+
+    listed = _artifact_files(root) if files is None else files
+    found = [
+        (revision, source)
+        for revision, source in (
+            (_snapshot_revision(root, listed), REVISION_SOURCE_HUGGINGFACE),
+            (_git_revision(root), REVISION_SOURCE_GIT),
+        )
+        if revision
+    ]
+    if len({revision for revision, _ in found}) > 1:
+        raise ArtifactLockError(
+            f"{root} records revision {found[0][0]} in its Hugging Face download "
+            f"metadata, but its git checkout is at {found[1][0]}; the folder must "
+            "hold one revision"
+        )
+    return found[0] if found else (None, None)
+
+
 def _declared_license(root: Path) -> Optional[str]:
     """Return the ``license`` from the model card front matter, if declared."""
 
@@ -246,25 +341,90 @@ def _declared_license(root: Path) -> Optional[str]:
     return license_line.group(1).strip() if license_line else None
 
 
+def hf_download_command(
+    repo_id: str, local_dir: Union[str, Path], revision: Optional[str]
+) -> str:
+    """Return the ``hf download`` command that restores ``repo_id``.
+
+    ``--revision`` pins the command whenever a revision is known, so the
+    restore reproduces the locked files after the repository's default branch
+    moves.
+    """
+
+    pinned = f" --revision {revision}" if revision else ""
+    return f"hf download {repo_id}{pinned} --local-dir {local_dir}"
+
+
+def restore_revision(
+    repo_id: str, local_path: Path, lock_path: Optional[Path]
+) -> Optional[str]:
+    """Return the revision a restore of ``repo_id`` into ``local_path`` pins.
+
+    The lock's revision for the repository wins; otherwise the folder's own
+    (:func:`artifact_revision`), when the folder exists. A lock file that does
+    not exist records nothing; one that exists must parse.
+
+    Raises:
+        ArtifactLockError: When the lock cannot be read, or the folder's
+            revision cannot be determined.
+    """
+
+    if lock_path is not None and lock_path.is_file():
+        for entry in read_manifest(lock_path)["artifacts"]:
+            if entry.get("repo_id") == repo_id and entry.get("revision"):
+                return str(entry["revision"])
+    if local_path.is_dir():
+        return artifact_revision(local_path)[0]
+    return None
+
+
+def restore_command(repo_id: str, local_path: Union[str, Path]) -> str:
+    """Return the pinned ``hf download`` command the model loaders name.
+
+    Reads the lock at ``[memnon.artifacts].lock_file`` of the active settings,
+    the lock ``nexus models verify`` checks, and the folder. Loaders call it
+    only once a load has failed.
+    """
+
+    folder = Path(local_path)
+    revision = restore_revision(repo_id, folder, lock_file_path(load_settings()))
+    return hf_download_command(repo_id, folder, revision)
+
+
 def _restore_hint(spec: ArtifactSpec, revision: Optional[str], then: str) -> str:
     """Name the command that restores an artifact, then the ``nexus models`` verb."""
 
     if spec.repo_id:
-        pinned = f" --revision {revision}" if revision else ""
-        restore = f"`hf download {spec.repo_id}{pinned} --local-dir {spec.local_path}`"
+        command = hf_download_command(spec.repo_id, spec.local_path, revision)
+        restore = f"`{command}`"
     else:
         restore = f"a backup of {spec.local_path}"
     return f"Restore {spec.label} from {restore}, then re-run `nexus models {then}`."
 
 
-def lock_artifact(spec: ArtifactSpec) -> Dict[str, Any]:
-    """Compute one artifact's lock entry from its local directory."""
+def lock_artifact(
+    spec: ArtifactSpec, lock_path: Optional[Path] = None
+) -> Dict[str, Any]:
+    """Compute one artifact's lock entry from its local directory.
+
+    Args:
+        spec: The artifact nexus.toml declares
+        lock_path: The lock being replaced; for a missing directory, its
+            revision for the repository pins the restore command
+
+    Raises:
+        ArtifactLockError: When the directory is missing, empty, declares a
+            different dimension, or records conflicting revisions.
+    """
 
     root = spec.local_path
     if not root.is_dir():
+        revision = (
+            restore_revision(spec.repo_id, root, lock_path) if spec.repo_id else None
+        )
         raise ArtifactLockError(
             f"{spec.label}: artifact directory {root} does not exist or is not a "
-            f"directory. {_restore_hint(spec, None, 'lock')}"
+            f"directory. {_restore_hint(spec, revision, 'lock')}"
         )
     files = _artifact_files(root)
     if not files:
@@ -285,11 +445,13 @@ def lock_artifact(spec: ArtifactSpec) -> Dict[str, Any]:
         }
         for relative in files
     ]
+    revision, revision_source = artifact_revision(root, files)
     return {
         "role": spec.role,
         "name": spec.name,
         "repo_id": spec.repo_id,
-        "revision": _snapshot_revision(root, files),
+        "revision": revision,
+        "revision_source": revision_source,
         "license": _declared_license(root),
         "dimensions": spec.dimensions,
         "total_size": sum(entry["size"] for entry in entries),
@@ -297,12 +459,18 @@ def lock_artifact(spec: ArtifactSpec) -> Dict[str, Any]:
     }
 
 
-def build_manifest(specs: Sequence[ArtifactSpec]) -> Dict[str, Any]:
-    """Compute the full lock for the production artifacts."""
+def build_manifest(
+    specs: Sequence[ArtifactSpec], lock_path: Optional[Path] = None
+) -> Dict[str, Any]:
+    """Compute the full lock for the production artifacts.
+
+    ``lock_path`` is the lock being replaced; it only pins the restore
+    command for a missing artifact directory.
+    """
 
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
-        "artifacts": [lock_artifact(spec) for spec in specs],
+        "artifacts": [lock_artifact(spec, lock_path) for spec in specs],
     }
 
 
@@ -442,9 +610,19 @@ def verify_manifest(
             # A different model is configured; its files cannot match.
             continue
         file_problems = _verify_files(spec, entry)
+        folder_revision: Optional[str] = None
+        if spec.local_path.is_dir():
+            folder_revision, source = artifact_revision(spec.local_path)
+            if folder_revision is not None and folder_revision != entry.get("revision"):
+                file_problems.append(
+                    f"{source} revision {folder_revision!r} differs from the "
+                    f"locked {entry.get('revision')!r}"
+                )
         if file_problems:
             problems.extend(f"{spec.label}: {problem}" for problem in file_problems)
-            remediation.append(_restore_hint(spec, entry.get("revision"), "verify"))
+            remediation.append(
+                _restore_hint(spec, entry.get("revision") or folder_revision, "verify")
+            )
             file_drift = True
     for role, entry in sorted(locked.items()):
         problems.append(
@@ -477,7 +655,10 @@ def _lock_summary(manifest: Dict[str, Any], path: Path) -> str:
 
     lines = [f"Locked {len(manifest['artifacts'])} artifact(s) in {path}:"]
     for entry in manifest["artifacts"]:
-        revision = entry["revision"] or "unknown (no Hugging Face snapshot metadata)"
+        if entry["revision"]:
+            revision = f"{entry['revision']} ({entry['revision_source']})"
+        else:
+            revision = "unknown (no Hugging Face download metadata or git checkout)"
         dimensions = f", {entry['dimensions']}d" if entry["dimensions"] else ""
         lines.append(
             f"  {entry['role']} {entry['name']}: {entry['repo_id'] or 'no repository'}"
@@ -514,7 +695,7 @@ def run_models_command(command: str, config_path: Optional[str]) -> Dict[str, An
     try:
         specs = production_artifact_specs(settings)
         if command == "lock":
-            manifest = build_manifest(specs)
+            manifest = build_manifest(specs, lock_path)
             write_manifest(manifest, lock_path)
             return {
                 "success": True,

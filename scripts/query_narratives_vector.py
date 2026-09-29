@@ -20,7 +20,7 @@ import sys
 import argparse
 import logging
 import json
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Mapping, Tuple, Optional
 
 # Add parent directory to sys.path to import from nexus package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -73,14 +73,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexus.query")
 
-# Try to import sentence-transformers
-try:
-    from sentence_transformers import SentenceTransformer
-except ImportError:
-    logger.error(
-        "sentence-transformers not found. Please install with: pip install sentence-transformers"
-    )
-    sys.exit(1)
+from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
+
+
+# The registered [memnon.models] entries this import-era script can query
+# with. A query loads only the one ``--model`` it names, from its local_path
+# (issue #812): no Hugging Face download, no hardcoded default path, and a
+# missing folder raises with the restore command instead of being skipped.
+SCRIPT_EMBEDDERS = ("bge-large", "e5-large", "bge-small-custom")
+
+
+def load_embedding_model(
+    models_config: Mapping[str, Mapping[str, Any]], model_key: str
+) -> Any:
+    """Load the one queried embedder from its ``[memnon.models]`` local_path.
+
+    Args:
+        models_config: The ``[memnon.models]`` registry, keyed by entry name
+        model_key: The entry the query embeds with
+
+    Returns:
+        The loaded SentenceTransformer
+
+    Raises:
+        RuntimeError: When the entry is not registered, or its local artifact
+            is missing or fails to load.
+    """
+    if model_key not in models_config:
+        raise RuntimeError(
+            f"Embedding model '{model_key}' is not registered in "
+            "[memnon.models]; register it with its local_path."
+        )
+    model = load_local_model(model_key, models_config[model_key])
+    logger.info(f"Loaded embedding model: {model_key}")
+    return model
+
 
 # Try to import SQLAlchemy
 try:
@@ -116,12 +143,15 @@ class NarrativeSearcher:
     Performs semantic search over narrative chunks using vector embeddings.
     """
 
-    def __init__(self, db_url: str = None):
+    def __init__(self, db_url: str = None, model_key: Optional[str] = None):
         """
         Initialize the searcher with database connection.
 
         Args:
             db_url: PostgreSQL database URL
+            model_key: The ``[memnon.models]`` entry semantic search embeds
+                with; the only embedder loaded. None loads no embedder (text
+                search only).
         """
         # Set default database URL if not provided
         default_db_url = SETTINGS.get("database", {}).get("url", None)
@@ -131,8 +161,12 @@ class NarrativeSearcher:
         self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
-        # Initialize embedding models
-        self.embedding_models = self._initialize_embedding_models()
+        # Load only the embedder this search uses.
+        self.embedding_models: Dict[str, Any] = {}
+        if model_key is not None:
+            self.embedding_models[model_key] = load_embedding_model(
+                SETTINGS.get("models", {}), model_key
+            )
 
         # Check pgvector extension
         self._check_pgvector()
@@ -158,102 +192,6 @@ class NarrativeSearcher:
         except Exception as e:
             logger.error(f"Error checking pgvector extension: {e}")
             sys.exit(1)
-
-    def _initialize_embedding_models(self) -> Dict[str, Any]:
-        """Initialize embedding models for semantic retrieval."""
-        embedding_models = {}
-
-        # Define model paths from settings, falling back to defaults if not available
-        settings_models = SETTINGS.get("models", {})
-
-        model_paths = {
-            "bge-large": [
-                settings_models.get("bge-large", {}).get(
-                    "local_path",
-                    os.path.expanduser("~/nexus/models/models--BAAI--bge-large-en"),
-                ),
-                settings_models.get("bge-large", {}).get(
-                    "remote_path", "BAAI/bge-large-en"
-                ),
-            ],
-            "e5-large": [
-                settings_models.get("e5-large", {}).get(
-                    "local_path",
-                    os.path.expanduser("~/nexus/models/models--intfloat--e5-large-v2"),
-                ),
-                settings_models.get("e5-large", {}).get(
-                    "remote_path", "intfloat/e5-large-v2"
-                ),
-            ],
-            "bge-small-custom": [
-                settings_models.get("bge-small-custom", {}).get(
-                    "local_path",
-                    os.path.expanduser(
-                        "~/nexus/models/bge_small_finetuned_20250320_153654"
-                    ),
-                ),
-                settings_models.get("bge-small-custom", {}).get(
-                    "remote_path"
-                ),  # May be None
-            ],
-            "bge-small": [
-                None,  # No local path for standard model
-                "BAAI/bge-small-en",
-            ],
-        }
-
-        try:
-            # Try to load each model
-            for model_key, paths in model_paths.items():
-                local_path, remote_path = paths
-
-                # Skip if this is the standard BGE-small and we already have the custom one
-                if model_key == "bge-small" and "bge-small-custom" in embedding_models:
-                    continue
-
-                # Try local path first if it exists
-                if local_path and os.path.exists(local_path):
-                    try:
-                        logger.info(
-                            f"Loading {model_key} from local path: {local_path}"
-                        )
-                        model = SentenceTransformer(local_path)
-                        embedding_models[model_key] = model
-                        logger.info(f"Successfully loaded {model_key} from local path")
-                        continue
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load {model_key} from local path: {e}"
-                        )
-
-                # Fall back to remote path if available
-                if remote_path:
-                    try:
-                        logger.info(
-                            f"Loading {model_key} from HuggingFace: {remote_path}"
-                        )
-                        model = SentenceTransformer(remote_path)
-                        embedding_models[model_key] = model
-                        logger.info(f"Successfully loaded {model_key} from HuggingFace")
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to load {model_key} from HuggingFace: {e}"
-                        )
-
-            # Log summary of loaded models
-            if embedding_models:
-                logger.info(
-                    f"Loaded {len(embedding_models)} embedding models: {', '.join(embedding_models.keys())}"
-                )
-            else:
-                logger.error("Failed to load any embedding models")
-
-            return embedding_models
-
-        except Exception as e:
-            logger.error(f"Error in embedding model initialization process: {e}")
-            # Return any successfully loaded models rather than failing completely
-            return embedding_models
 
     def generate_embedding(self, query: str, model_key: str) -> List[float]:
         """
@@ -489,7 +427,7 @@ def main():
 
     parser.add_argument(
         "--model",
-        choices=["bge-large", "e5-large", "bge-small-custom", "bge-small"],
+        choices=list(SCRIPT_EMBEDDERS),
         default=default_model,
         help="Embedding model to use for semantic search",
     )
@@ -508,7 +446,9 @@ def main():
     args = parser.parse_args()
 
     # Initialize searcher
-    searcher = NarrativeSearcher(db_url=args.db_url)
+    searcher = NarrativeSearcher(
+        db_url=args.db_url, model_key=None if args.text_only else args.model
+    )
 
     # Perform search
     if args.text_only:

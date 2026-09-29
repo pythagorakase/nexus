@@ -54,7 +54,7 @@ import json
 import logging
 import time
 import tempfile
-from typing import Dict, List, Tuple, Any, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import tqdm
 import argparse
 import numpy as np
@@ -139,6 +139,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexus.embeddings")
 
+from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402
+
 # Try to import SQLAlchemy
 try:
     import sqlalchemy as sa
@@ -163,102 +165,78 @@ class ModelLoader:
     """Handles loading different types of embedding models"""
 
     @staticmethod
-    def load_model(model_name: str) -> Any:
+    def resolve_registered_model(
+        model_name: str, models_config: Mapping[str, Mapping[str, Any]]
+    ) -> Tuple[str, Mapping[str, Any]]:
+        """Find the ``[memnon.models]`` entry that ``model_name`` names.
+
+        ``model_name`` may be the entry name (``Octen-Embedding-4B``), its
+        ``remote_path`` (``infly/inf-retriever-v1-1.5b``), or the legacy
+        slash-to-underscore form of the repository id.
+
+        Args:
+            model_name: The model named on the command line
+            models_config: The ``[memnon.models]`` registry
+
+        Returns:
+            The entry name and its configuration
+
+        Raises:
+            RuntimeError: When no entry matches.
         """
-        Load a model based on its name/type
+        if model_name in models_config:
+            return model_name, models_config[model_name]
+        legacy_key = model_name.replace("/", "_")
+        if legacy_key in models_config:
+            return legacy_key, models_config[legacy_key]
+        for key, config in models_config.items():
+            if config.get("remote_path") == model_name:
+                return key, config
+        raise RuntimeError(
+            f"Embedding model '{model_name}' is not registered in [memnon.models] "
+            f"(registered: {sorted(models_config)}); embeddings are generated "
+            "only from a registered local_path."
+        )
+
+    @staticmethod
+    def load_model(
+        model_name: str,
+        models_config: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    ) -> Any:
+        """
+        Load a registered model from its local artifact directory.
+
+        There is no Hugging Face download and no Hub-cache snapshot probe
+        (issue #812): the ``[memnon.models]`` entry's ``local_path`` loads
+        with ``local_files_only`` through the shared embedder loader, or the
+        load raises with the restore command.
 
         Args:
             model_name: Name of the model to load
+            models_config: The ``[memnon.models]`` registry; defaults to the
+                one in nexus.toml
 
         Returns:
             Loaded model
 
         Raises:
-            ImportError: If required libraries aren't installed
-            ValueError: If model can't be loaded
+            RuntimeError: If the model is not registered, or its local
+                artifact is missing or fails to load
         """
         logger.info(f"Loading model: {model_name}")
+        if models_config is None:
+            models_config = SETTINGS.get("models", {})
+        key, config = ModelLoader.resolve_registered_model(model_name, models_config)
 
-        # Check for settings that might provide local paths
-        model_local_path = None
-        try:
-            if SETTINGS.get("models") and SETTINGS["models"].get(
-                model_name.replace("/", "_")
-            ):
-                model_local_path = SETTINGS["models"][model_name.replace("/", "_")].get(
-                    "local_path"
-                )
-                if model_local_path:
-                    logger.info(
-                        f"Found local path for {model_name}: {model_local_path}"
-                    )
-        except Exception as e:
-            logger.warning(f"Error checking settings for local path: {e}")
-
-        # Default local path for infly/inf-retriever models
-        if "infly/inf-retriever" in model_name and not model_local_path:
-            # Extract model name to use as directory name
-            model_dir = model_name.split("/")[-1]  # Just get the part after the slash
-            model_local_path = os.path.abspath(
-                os.path.join(os.path.dirname(__file__), "..", "models", model_dir)
-            )
-            if os.path.exists(model_local_path):
-                logger.info(
-                    f"Using default local path for {model_name}: {model_local_path}"
-                )
-
-        # Load using sentence-transformers for all models
-        try:
-            from sentence_transformers import SentenceTransformer
-
-            # Special handling for inf-retriever models which may use a snapshot structure
-            if (
-                "infly/inf-retriever" in model_name
-                and model_local_path
-                and os.path.exists(model_local_path)
-            ):
-                snapshot_dir = os.path.join(model_local_path, "snapshots")
-                if os.path.exists(snapshot_dir):
-                    snapshot_candidates = os.listdir(snapshot_dir)
-                    if snapshot_candidates:
-                        # Get first snapshot directory
-                        snapshot_path = os.path.join(
-                            snapshot_dir, snapshot_candidates[0]
-                        )
-                        logger.info(
-                            f"Loading model from snapshot path: {snapshot_path}"
-                        )
-
-                        try:
-                            return SentenceTransformer(snapshot_path)
-                        except Exception as e:
-                            logger.warning(f"Failed to load from snapshot: {e}")
-
-            # INT8-quantized models use bitsandbytes, which has no working MPS
-            # backend on Apple Silicon — force CPU to avoid mixed-device matmul
-            # errors. Other models use SentenceTransformer's auto-detection.
-            device = "cpu" if "INT8" in model_name else None
-
-            # For other models or fallback
-            if model_local_path and os.path.exists(model_local_path):
-                logger.info(
-                    f"Loading model from local path: {model_local_path} (device={device or 'auto'})"
-                )
-                return SentenceTransformer(model_local_path, device=device)
-            else:
-                logger.info(
-                    f"Loading model from Hugging Face hub: {model_name} (device={device or 'auto'})"
-                )
-                return SentenceTransformer(model_name, device=device)
-
-        except ImportError:
-            logger.error(
-                "sentence-transformers not found. Install with: pip install sentence-transformers"
-            )
-            raise ImportError("sentence-transformers library required")
-        except Exception as e:
-            logger.error(f"Error loading model {model_name}: {e}")
-            raise ValueError(f"Failed to load model: {e}")
+        # INT8-quantized models use bitsandbytes, which has no working MPS
+        # backend on Apple Silicon — force CPU to avoid mixed-device matmul
+        # errors. Other models use SentenceTransformer's auto-detection.
+        device = "cpu" if "INT8" in model_name or "INT8" in key else None
+        logger.info(
+            f"Loading {key} from local path: {config.get('local_path')} "
+            f"(device={device or 'auto'})"
+        )
+        return load_local_model(key, config, device=device)
 
     @staticmethod
     def get_embedding(model: Any, text: str, model_name: str) -> np.ndarray:
@@ -351,6 +329,18 @@ class EmbeddingRegenerator:
                     ) from e
                 self.db_url = explicit_url
 
+        # Load the model before touching the database: with no Hub fallback a
+        # missing or broken artifact raises here, and --truncate-table below
+        # must never delete this model's rows for a model that cannot load.
+        self.model = None
+        if load_model:
+            try:
+                self.model = ModelLoader.load_model(model_name)
+                logger.info(f"Successfully loaded {model_name} model")
+            except Exception as e:
+                logger.error(f"Failed to load {model_name} model: {e}")
+                sys.exit(1)
+
         # Initialize database connection
         self.engine = create_slot_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
@@ -429,15 +419,6 @@ class EmbeddingRegenerator:
                 )
             else:
                 logger.info(f"Connected without creating {self.get_table_name()}")
-
-        self.model = None
-        if load_model:
-            try:
-                self.model = ModelLoader.load_model(model_name)
-                logger.info(f"Successfully loaded {model_name} model")
-            except Exception as e:
-                logger.error(f"Failed to load {model_name} model: {e}")
-                sys.exit(1)
 
         logger.info("Connected to the configured database")
 
@@ -1019,51 +1000,35 @@ def regenerate_all_models(
     # Print header
     print("\n========== Regenerating Embeddings for Active Models ==========")
 
-    try:
-        models_config = SETTINGS.get("models", {})
-        for model_key, config in models_config.items():
-            if config.get("is_active", False):
-                # Convert internal name format to proper model name
-                if "_" in model_key:
-                    model_name = model_key.replace("_", "/")
-                else:
-                    model_name = model_key
+    models_config = SETTINGS.get("models", {})
+    for model_key, config in models_config.items():
+        if config.get("is_active", False):
+            # Convert internal name format to proper model name
+            if "_" in model_key:
+                model_name = model_key.replace("_", "/")
+            else:
+                model_name = model_key
 
-                # Get local path if available
-                local_path = config.get("local_path")
-                remote_path = config.get("remote_path")
+            local_path = config.get("local_path")
+            remote_path = config.get("remote_path")
 
-                # Check if local path exists
-                local_path_exists = local_path and os.path.exists(local_path)
+            # If remote_path is provided, use that as the model name
+            if remote_path:
+                model_name = remote_path
 
-                # If remote_path is provided, use that as the model name
-                if remote_path:
-                    model_name = remote_path
+            active_models.append(model_name)
 
-                active_models.append(model_name)
-
-                if local_path:
-                    status = "✅ Found" if local_path_exists else "❌ Not found"
-                    logger.info(
-                        f"Found active model in settings: {model_name} (Local path: {status})"
-                    )
-                    print(f"- {model_name}: Active, Local path: {status}")
-                else:
-                    logger.info(
-                        f"Found active model in settings (remote only): {model_name}"
-                    )
-                    print(f"- {model_name}: Active, Using HuggingFace remote")
-    except Exception as e:
-        logger.error(f"Error processing models from settings: {e}")
-        print(f"Error loading models from settings: {e}")
+            # load_local_model rejects an entry without a local_path; there is
+            # no remote load to report here.
+            local_path_exists = bool(local_path) and os.path.exists(local_path)
+            status = "✅ Found" if local_path_exists else "❌ Not found"
+            logger.info(
+                f"Found active model in settings: {model_name} (Local path: {status})"
+            )
+            print(f"- {model_name}: Active, Local path: {status}")
 
     if not active_models:
-        logger.warning("No active models found in settings.json")
-        print(
-            "No active models found in settings.json, defaulting to infly/inf-retriever-v1"
-        )
-        # Default to infly/inf-retriever-v1 if no active models
-        active_models = ["infly/inf-retriever-v1"]
+        raise RuntimeError("No active model in [memnon.models]")
 
     total_results = {"total": 0, "success": 0, "failed": 0}
 
@@ -1329,6 +1294,10 @@ def regenerate_specific_chunk(
     """
     Generate or update embeddings for one narrative chunk.
 
+    The model loads before the chunk's stored embedding is deleted, so a
+    missing or broken artifact raises with its restore command and the stored
+    row survives.
+
     Args:
         model_name: Embedding model to use
         chunk_id: Narrative chunk ID to embed
@@ -1339,9 +1308,18 @@ def regenerate_specific_chunk(
 
     Returns:
         Dict with results
+
+    Raises:
+        RuntimeError: If the model is not registered, or its local artifact is
+            missing or fails to load; nothing has been deleted.
     """
     if chunk_id <= 0:
         raise ValueError(f"chunk_id must be positive, got {chunk_id}")
+
+    # With no Hub fallback, a missing or broken artifact raises here, before
+    # the DELETE below commits. The regenerator that embeds the chunk reuses
+    # this process-cached model.
+    ModelLoader.load_model(model_name)
 
     delete_existing_chunk_embedding(
         model_name=model_name,
@@ -1384,7 +1362,8 @@ def main():
         description="Regenerate embeddings for narrative chunks"
     )
     parser.add_argument(
-        "--model", help="Embedding model to use (e.g., infly/inf-retriever-v1)"
+        "--model",
+        help="Registered [memnon.models] entry to use (e.g., Octen-Embedding-4B)",
     )
     parser.add_argument(
         "--all-models",
