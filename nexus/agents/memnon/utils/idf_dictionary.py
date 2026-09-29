@@ -14,6 +14,25 @@ import psycopg2
 from psycopg2.extensions import parse_dsn
 
 
+# The analyzer contract key: the pg_catalog.english configuration plus the exact
+# server version. Migration 114 seeds it, the sync_memory_idf_document trigger
+# function (migration 133) and this reader compare it, and
+# scripts/rebuild_memory_idf.py recomputes the projection under it.
+ANALYZER_KEY_SQL = "'pg_catalog.english/v1/' || current_setting('server_version_num')"
+
+# The operator command that rebuilds a database's IDF state after the server's
+# analyzer key changes (a PostgreSQL patch release is enough).
+REBUILD_COMMAND = "python scripts/rebuild_memory_idf.py"
+
+
+def analyzer_mismatch_message(corpus_kind: str, expected: str, found: str) -> str:
+    """Return the analyzer-mismatch text the trigger function raises (migration 133)."""
+    return (
+        f"IDF analyzer mismatch for corpus {corpus_kind}: expected {expected}, "
+        f"found {found}; run {REBUILD_COMMAND} --slot N (or --template / --all)"
+    )
+
+
 class IDFStateError(RuntimeError):
     """The requested slot/corpus/analyzer state cannot safely supply weights."""
 
@@ -126,7 +145,7 @@ class IDFDictionary:
                 )
                 SELECT c.corpus_kind, c.analyzer_version, c.corpus_epoch,
                     c.document_count,
-                    'pg_catalog.english/v1/' || current_setting('server_version_num'),
+                    {ANALYZER_KEY_SQL},
                     COALESCE(({frequencies_query}), '{{}}'::jsonb),
                     COALESCE((SELECT jsonb_object_agg(term, lexemes)
                         FROM input_terms), '{{}}'::jsonb)
@@ -138,9 +157,13 @@ class IDFDictionary:
         if row is None:
             raise IDFStateError(f"Missing IDF corpus state: {self.corpus_kind}")
         kind, analyzer, epoch, total, expected_analyzer, frequencies, analyzed = row
-        if kind != self.corpus_kind or analyzer != expected_analyzer:
+        if kind != self.corpus_kind:
             raise IDFStateError(
-                f"IDF corpus/analyzer mismatch for {self.corpus_kind}; rebuild required"
+                f"IDF corpus mismatch: requested {self.corpus_kind!r}, read {kind!r}"
+            )
+        if analyzer != expected_analyzer:
+            raise IDFStateError(
+                analyzer_mismatch_message(kind, expected_analyzer, analyzer)
             )
         if (
             total < 0

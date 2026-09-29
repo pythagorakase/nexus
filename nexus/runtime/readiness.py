@@ -31,7 +31,16 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from typing import Any, Callable, Literal, Optional, Sequence, get_args
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    get_args,
+)
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -518,6 +527,272 @@ def _check_slot_migrations(ctx: ReadinessContext) -> Outcome:
     return _passed(observed)
 
 
+# The migration that creates memory_idf_corpora and seeds both corpus rows.
+IDF_MIGRATION = "114"
+
+
+def _idf_corpora() -> tuple[str, ...]:
+    """The corpus rows a database past migration 114 holds, in lock order."""
+    from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary
+
+    return tuple(sorted(IDFDictionary.CORPUS_KINDS))
+
+
+def _named_corpora(label: str, kinds: Sequence[str]) -> str:
+    """Name corpus kinds under a label: ``missing corpus narrative``."""
+    noun = "corpus" if len(kinds) == 1 else "corpora"
+    return f"{label} {noun} {' and '.join(kinds)}"
+
+
+@dataclass(frozen=True)
+class AnalyzerState:
+    """One database's IDF corpus rows against the live server's analyzer key.
+
+    ``tracked`` is false when ``memory_idf_corpora`` does not exist;
+    ``migration_pending`` then says whether migration 114, which creates it
+    and seeds both corpus rows, is still unapplied. ``corpora`` maps each
+    corpus row to its stored key. Only exactly the ``narrative`` and
+    ``retrograde_summary`` rows, each at the server's key, are current.
+    """
+
+    dbname: str
+    server_key: str
+    tracked: bool
+    corpora: dict[str, str]
+    migration_pending: bool = False
+
+    @property
+    def missing(self) -> list[str]:
+        """The expected corpora that have no row."""
+        return [kind for kind in _idf_corpora() if kind not in self.corpora]
+
+    @property
+    def unexpected(self) -> list[str]:
+        """The corpus rows no trigger or reader serves."""
+        expected = _idf_corpora()
+        return sorted(kind for kind in self.corpora if kind not in expected)
+
+    @property
+    def stale(self) -> dict[str, str]:
+        """The expected corpora whose key differs from the server's."""
+        expected = _idf_corpora()
+        return {
+            kind: key
+            for kind, key in self.corpora.items()
+            if kind in expected and key != self.server_key
+        }
+
+    @property
+    def current(self) -> bool:
+        """Whether exactly the expected corpus rows exist, each at the server's key."""
+        return (
+            self.tracked and not self.missing and not self.unexpected and not self.stale
+        )
+
+    @property
+    def damaged(self) -> bool:
+        """Whether ``memory_idf_corpora`` is gone although migration 114 is stamped.
+
+        Only hand damage produces this; neither the rebuild nor the migration
+        runner can recreate the table.
+        """
+        return not self.tracked and not self.migration_pending
+
+    def describe(self) -> str:
+        """Summarize the state in one clause."""
+        if self.current:
+            return f"{self.dbname} at {self.server_key}"
+        if not self.tracked:
+            if self.migration_pending:
+                return (
+                    f"{self.dbname}: no memory_idf_corpora table "
+                    f"(migration {IDF_MIGRATION} pending)"
+                )
+            missing = _named_corpora("missing", self.missing)
+            return (
+                f"{self.dbname}: no memory_idf_corpora table though migration "
+                f"{IDF_MIGRATION} is applied ({missing})"
+            )
+        parts = []
+        if self.missing:
+            parts.append(_named_corpora("missing", self.missing))
+        if self.unexpected:
+            parts.append(_named_corpora("unexpected", self.unexpected))
+        if self.stale:
+            listed = ", ".join(f"{kind} {key}" for kind, key in self.stale.items())
+            parts.append(f"{listed} (server {self.server_key})")
+        return f"{self.dbname}: " + ", ".join(parts)
+
+
+def _migration_stamped(cur: Any, version: str) -> bool:
+    """Whether ``schema_migrations`` records ``version``; false without the table."""
+    cur.execute(
+        "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+        "AND table_name = 'schema_migrations' AND column_name = 'version'"
+    )
+    if cur.fetchone() is None:
+        return False
+    cur.execute("SELECT 1 FROM schema_migrations WHERE version = %s", (version,))
+    return cur.fetchone() is not None
+
+
+def database_analyzer_state(dbname: str) -> AnalyzerState:
+    """Read ``dbname``'s IDF corpus rows and the server's key, read-only.
+
+    When ``memory_idf_corpora`` is absent it also reads whether migration 114
+    is stamped: pending, the migration runner installs the table; stamped,
+    only hand damage removed it.
+    """
+    from nexus.agents.memnon.utils.idf_dictionary import ANALYZER_KEY_SQL
+
+    with closing(read_only_connection(dbname)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT {ANALYZER_KEY_SQL}, "
+                "to_regclass('public.memory_idf_corpora') IS NOT NULL"
+            )
+            server_key, tracked = cur.fetchone()
+            corpora: dict[str, str] = {}
+            migration_pending = False
+            if tracked:
+                cur.execute(
+                    "SELECT corpus_kind, analyzer_version FROM memory_idf_corpora "
+                    "ORDER BY corpus_kind"
+                )
+                corpora = dict(cur.fetchall())
+            else:
+                migration_pending = not _migration_stamped(cur, IDF_MIGRATION)
+    return AnalyzerState(dbname, server_key, bool(tracked), corpora, migration_pending)
+
+
+def _damaged_idf_remediation(dbname: str) -> str:
+    """Say what a stamped database without ``memory_idf_corpora`` needs."""
+    return (
+        f"memory_idf_corpora is absent from {dbname} although migration "
+        f"{IDF_MIGRATION} is stamped, which only hand damage produces: restore "
+        f"{dbname} from a backup or recreate it"
+    )
+
+
+def idf_analyzer_outcome(
+    targets: Sequence[tuple[str, str, str]], *, absent: Sequence[str] = ()
+) -> Outcome:
+    """Compare each target's IDF corpus rows with the server's key and name the fix.
+
+    Each target is ``(dbname, rebuild_command, migrate_command)``: the command
+    that rebuilds the corpora (seeding a missing row) and the one that applies
+    migration 114 where it is pending. A database stamped with 114 but without
+    ``memory_idf_corpora`` must be restored or recreated; no command repairs
+    it. Only exactly the two corpus rows, each at the server's key, pass.
+    ``absent`` databases are reported, not failed.
+    """
+    import psycopg2
+
+    observations: list[str] = []
+    steps: list[str] = []
+    try:
+        for dbname, rebuild_command, migrate_command in targets:
+            state = database_analyzer_state(dbname)
+            observations.append(state.describe())
+            if state.migration_pending:
+                steps.append(migrate_command)
+            elif state.damaged:
+                steps.append(_damaged_idf_remediation(dbname))
+            elif not state.current:
+                steps.append(rebuild_command)
+    except psycopg2.Error as exc:
+        return _failed(one_line(exc), _POSTGRES_REMEDIATION)
+    observations.extend(f"{dbname} absent" for dbname in absent)
+    observed = "; ".join(observations)
+    if steps:
+        return _failed(observed, "; ".join(steps))
+    return _passed(observed)
+
+
+def _check_template_idf_analyzer(ctx: ReadinessContext) -> Outcome:
+    """NEXUS_template's IDF corpus keys match the live server's analyzer."""
+    from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
+    from scripts.migrate import TEMPLATE_DB
+
+    return idf_analyzer_outcome(
+        [
+            (
+                TEMPLATE_DB,
+                f"{REBUILD_COMMAND} --template",
+                "python scripts/migrate.py --template",
+            )
+        ]
+    )
+
+
+def slot_idf_targets(
+    names: Mapping[int, str], existing: Collection[str], locked: Collection[int]
+) -> tuple[list[tuple[str, str, str]], list[str]]:
+    """Build the slot IDF check's targets and absent databases.
+
+    ``names`` maps each probed slot to its database, ``existing`` holds the
+    databases the server has, and ``locked`` the slots whose database is
+    locked. Each target is ``(dbname, rebuild_command, migrate_command)`` as
+    :func:`idf_analyzer_outcome` takes it; a locked slot's commands carry
+    ``--write-locked-slot``.
+    """
+    from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
+
+    targets: list[tuple[str, str, str]] = []
+    absent: list[str] = []
+    for slot, dbname in names.items():
+        if dbname not in existing:
+            absent.append(dbname)
+            continue
+        override = " --write-locked-slot" if slot in locked else ""
+        targets.append(
+            (
+                dbname,
+                f"{REBUILD_COMMAND} --slot {slot}{override}",
+                f"python scripts/migrate.py --slot {slot}{override}",
+            )
+        )
+    return targets, absent
+
+
+def slot_idf_outcome(names: Mapping[int, str]) -> Outcome:
+    """Check each named slot database's IDF corpus keys against the server.
+
+    ``names`` maps each slot number to its database. A database the server
+    lacks is reported as absent; a locked one's remediation carries
+    ``--write-locked-slot``.
+    """
+    import psycopg2
+
+    from nexus.api.save_slots import is_slot_locked
+
+    try:
+        with closing(read_only_connection(MAINTENANCE_DATABASE)) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT datname FROM pg_database WHERE datname = ANY(%s)",
+                    (list(names.values()),),
+                )
+                existing = {row[0] for row in cur.fetchall()}
+        locked = {
+            slot
+            for slot, dbname in names.items()
+            if dbname in existing and is_slot_locked(slot, dbname)
+        }
+    except psycopg2.Error as exc:
+        return _failed(one_line(exc), _POSTGRES_REMEDIATION)
+    targets, absent = slot_idf_targets(names, existing, locked)
+    return idf_analyzer_outcome(targets, absent=absent)
+
+
+def _check_slot_idf_analyzer(ctx: ReadinessContext) -> Outcome:
+    """Each probed slot that exists has IDF corpus keys matching the server."""
+    from nexus.api.slot_utils import slot_dbname
+
+    slots = ctx.require_runtime().readiness.slots
+    return slot_idf_outcome({slot: slot_dbname(slot) for slot in slots})
+
+
 # ---------------------------------------------------------------------------
 # Host files and tools
 # ---------------------------------------------------------------------------
@@ -799,6 +1074,18 @@ REGISTRY: tuple[CheckSpec, ...] = (
         _HOST,
         ("template.present",),
         _check_slot_migrations,
+    ),
+    CheckSpec(
+        "template.idf_analyzer_current",
+        _HOST,
+        ("template.present",),
+        _check_template_idf_analyzer,
+    ),
+    CheckSpec(
+        "slots.idf_analyzer_current",
+        _HOST,
+        ("template.present",),
+        _check_slot_idf_analyzer,
     ),
     CheckSpec(
         "tools.pg_dump",

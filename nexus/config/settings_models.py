@@ -778,8 +778,9 @@ class RuntimeReadinessSettings(BaseModel):
         default_factory=lambda: [1, 2, 3, 4, 5],
         min_length=1,
         description=(
-            "Save slots whose databases slots.migrations_current reads; an "
-            "absent slot database is reported, not failed"
+            "Save slots whose databases slots.migrations_current and "
+            "slots.idf_analyzer_current read; an absent slot database is "
+            "reported, not failed"
         ),
     )
 

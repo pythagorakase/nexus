@@ -1409,7 +1409,7 @@ access_success_exclude_paths = ["/health", "/runtime/status"]
 # [api.database] contract, so connect_timeout_seconds there bounds them.
 gateway_timeout_seconds = 5.0         # owner-client GET /runtime/status
 reachability_timeout_seconds = 120.0  # ci-runner python -S scripts/check_reachability.py
-slots = [1, 2, 3, 4, 5]               # slot databases slots.migrations_current reads
+slots = [1, 2, 3, 4, 5]               # slot databases the slots.* checks read
 
 [runtime.services.gateway]
 # argv template — {python} is the current interpreter; no shell in the path
