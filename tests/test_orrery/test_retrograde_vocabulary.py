@@ -2,13 +2,27 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import pytest
+from pydantic import BaseModel, Field, ValidationError
 
 from nexus.agents.orrery import retrograde_vocabulary
+from nexus.agents.orrery.retrograde_seed_candidates import (
+    RetrogradeWireProjectIntent,
+)
 from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
+    EntityRef,
     category_seed_policy,
     enumerate_seed_eligible_vocabulary,
+    validate_bare_entity_ref,
+)
+from nexus.api.native_structured_output import (
+    anthropic_json_schema,
+    strict_json_schema,
+    structured_output_error_text,
 )
 from nexus.agents.orrery.status_family import STATUS_TAGS
 
@@ -278,3 +292,93 @@ def test_seed_eligible_pair_tags_are_sorted() -> None:
 
     for values in sorted_buckets:
         assert values == sorted(values)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Vale",
+        "Sister Orla",
+        "Placeholder: X",
+        "Vale: the Younger",
+        "N" * ENTITY_REF_MAX_LENGTH,
+    ],
+)
+def test_bare_entity_ref_accepts_proper_names(value: str) -> None:
+    """A bare name passes unchanged, even when it contains a colon (#1007)."""
+
+    assert validate_bare_entity_ref(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "character:Sentinel1007",
+        "Character: Sentinel1007",
+        "PLACE|Sentinel1007",
+        "faction : Sentinel1007",
+    ],
+)
+def test_bare_entity_ref_rejects_kind_prefix_without_echoing_value(
+    value: str,
+) -> None:
+    """A kind-prefixed ref fails with a fixed message that omits the input."""
+
+    with pytest.raises(ValueError, match="entity-kind prefix") as exc_info:
+        validate_bare_entity_ref(value)
+
+    assert "Sentinel1007" not in str(exc_info.value)
+
+
+def test_wire_target_ref_rejects_prefix_without_echoing_value() -> None:
+    """The wire boundary error text stays free of the offending value."""
+
+    with pytest.raises(ValidationError) as exc_info:
+        RetrogradeWireProjectIntent.model_validate(
+            {
+                "project_type": "court_patron",
+                "target_ref": "character:Sentinel1007",
+                "rationale": "The old debt can become patronage.",
+            }
+        )
+
+    rendered = structured_output_error_text(exc_info.value)
+    assert "entity-kind prefix" in rendered
+    assert "Sentinel1007" not in rendered
+    assert "Sentinel1007" not in str(exc_info.value.errors(include_input=False))
+
+
+def test_wire_target_ref_validates_after_whitespace_strip() -> None:
+    """A padded prefix is stripped first, then rejected (never mode="before")."""
+
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        RetrogradeWireProjectIntent.model_validate(
+            {
+                "project_type": "court_patron",
+                "target_ref": "  character:Vale",
+                "rationale": "The old debt can become patronage.",
+            }
+        )
+
+
+def test_entity_ref_validator_adds_nothing_to_json_schema() -> None:
+    """The AfterValidator leaves provider grammars byte-identical."""
+
+    class PlainRefs(BaseModel):
+        ref: Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
+        wire_ref: str = Field(default="", max_length=ENTITY_REF_MAX_LENGTH)
+
+    class ValidatedRefs(BaseModel):
+        ref: EntityRef
+        wire_ref: retrograde_vocabulary.OptionalWireEntityRef = Field(
+            default="", max_length=ENTITY_REF_MAX_LENGTH
+        )
+
+    for render in (strict_json_schema, anthropic_json_schema):
+        plain = render(PlainRefs)
+        validated = render(ValidatedRefs)
+        assert validated["properties"] == plain["properties"]
+        for field in ("ref", "wire_ref"):
+            assert set(validated["properties"][field]) == set(
+                plain["properties"][field]
+            )

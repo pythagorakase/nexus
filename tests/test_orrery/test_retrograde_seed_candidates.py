@@ -15,6 +15,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     RetrogradeSeedCandidateResponse,
     RetrogradeSeedCandidateValidationError,
     RetrogradeProjectIntent,
+    RetrogradeWireProjectIntent,
     coerce_seed_candidate_response_payload,
     render_seed_generation_prompt,
     render_seed_selection_prompt,
@@ -26,7 +27,10 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
-from nexus.api.native_structured_output import anthropic_json_schema
+from nexus.api.native_structured_output import (
+    anthropic_json_schema,
+    strict_json_schema,
+)
 
 
 def test_seed_candidate_response_accepts_registered_mechanics() -> None:
@@ -344,6 +348,158 @@ def test_seed_candidate_response_rejects_overlong_entity_ref() -> None:
         match=f"at most {ENTITY_REF_MAX_LENGTH} characters",
     ):
         RetrogradeSeedCandidateResponse.model_validate(payload)
+
+
+def test_project_intent_rejects_kind_prefixed_target_ref() -> None:
+    """The app model enforces the bare-name rule on target_ref (#1007)."""
+
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        RetrogradeProjectIntent.model_validate(
+            {
+                "project_type": "court_patron",
+                "target_ref": "character:Vale",
+                "rationale": "The old debt can become patronage.",
+            }
+        )
+
+
+def test_wire_project_intent_rejects_prefix_and_accepts_empty_target() -> None:
+    """The wire twin rejects a prefix at parse time; "" still means none."""
+
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        RetrogradeWireProjectIntent.model_validate(
+            {
+                "project_type": "court_patron",
+                "target_ref": "character:Vale",
+                "rationale": "The old debt can become patronage.",
+            }
+        )
+
+    targetless = RetrogradeWireProjectIntent.model_validate(
+        {
+            "project_type": "build_venture",
+            "target_ref": "",
+            "rationale": "A venture needs no target.",
+        }
+    )
+    assert targetless.target_ref == ""
+
+
+def test_seed_response_with_prefixed_intent_target_raises() -> None:
+    """Replay of #1007: a character:Vale intent target no longer validates."""
+
+    vocabulary = _seed_test_vocabulary()
+    payload = _valid_response_payload(vocabulary)
+    payload["candidates"][0]["project_intent"] = {
+        "project_type": "court_patron",
+        "target_ref": "character:Vale",
+        "rationale": "The old debt can become patronage.",
+    }
+
+    with pytest.raises(
+        (ValidationError, RetrogradeSeedCandidateValidationError),
+        match="write the bare proper name",
+    ):
+        validate_seed_candidate_response(
+            payload=payload,
+            seed_generation_request=_seed_request(vocabulary),
+            vocabulary=vocabulary,
+        )
+
+    payload["candidates"][0]["project_intent"]["target_ref"] = "Vale"
+    accepted = validate_seed_candidate_response(
+        payload=payload,
+        seed_generation_request=_seed_request(vocabulary),
+        vocabulary=vocabulary,
+    )
+    intent = accepted.candidates[0].project_intent
+    assert intent is not None
+    assert intent.target_ref == "Vale"
+
+
+def test_runtime_wire_model_rejects_prefixed_tag_hint_entity_ref() -> None:
+    """The runtime-built wire model keeps the validator on tag-hint refs."""
+
+    vocabulary = _seed_test_vocabulary()
+    seed_request = _seed_request(vocabulary)
+    schema_model = seed_candidate_wire_response_model(
+        seed_generation_request=seed_request,
+        vocabulary=vocabulary,
+    )
+    payload = _valid_wire_payload(vocabulary)
+    schema_model.model_validate(payload)
+
+    payload["candidates"][0]["mechanical_hints"]["single_entity_tags"][0][
+        "entity_ref"
+    ] = "character:Mara"
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        schema_model.model_validate(payload)
+
+
+def test_runtime_wire_model_rejects_prefixed_project_intent_target() -> None:
+    """The runtime-built wire model rejects a prefixed intent target."""
+
+    vocabulary = _seed_test_vocabulary()
+    schema_model = seed_candidate_wire_response_model(
+        seed_generation_request=_seed_request(vocabulary),
+        vocabulary=vocabulary,
+    )
+    payload = _valid_wire_payload(vocabulary)
+    payload["candidates"][0]["project_intent"]["target_ref"] = "character:Vale"
+
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        schema_model.model_validate(payload)
+
+
+def test_claimed_edge_rejects_prefixed_open_endpoint_name() -> None:
+    """Claimed-edge endpoint names are bare names at wire and app models."""
+
+    vocabulary = _seed_test_vocabulary()
+    schema_model = seed_candidate_wire_response_model(
+        seed_generation_request=_seed_request(vocabulary),
+        vocabulary=vocabulary,
+    )
+    wire_payload = _valid_wire_payload(vocabulary)
+    wire_payload["candidates"][0]["claimed_edges"][0][
+        "open_endpoint_name"
+    ] = "character:Vale"
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        schema_model.model_validate(wire_payload)
+
+    payload = _valid_response_payload(vocabulary)
+    payload["candidates"][0]["claimed_edges"][0][
+        "open_endpoint_name"
+    ] = "character:Vale"
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        RetrogradeSeedCandidateResponse.model_validate(payload)
+
+
+def test_runtime_wire_schema_ref_fields_carry_no_validator_keys() -> None:
+    """The bare-name validator leaves the provider grammar for refs unchanged."""
+
+    vocabulary = _seed_test_vocabulary()
+    schema_model = seed_candidate_wire_response_model(
+        seed_generation_request=_seed_request(vocabulary),
+        vocabulary=vocabulary,
+    )
+    for render in (strict_json_schema, anthropic_json_schema):
+        schema = render(schema_model)
+        definitions = schema.get("$defs", {})
+        intent = definitions["RetrogradeWireProjectIntent"]["properties"]
+        assert set(intent["target_ref"]) <= {
+            "default",
+            "description",
+            "maxLength",
+            "title",
+            "type",
+        }
+        edge = definitions["RetrogradeWireClaimedEdgeRuntime"]["properties"]
+        assert set(edge["open_endpoint_name"]) <= {
+            "maxLength",
+            "minLength",
+            "title",
+            "type",
+        }
 
 
 def test_seed_candidate_prompt_states_entity_ref_name_contract() -> None:
@@ -769,6 +925,71 @@ def _junction_case(
     payload["selected_seed_ids"] = ["seed_001", "seed_002"]
     payload["rejected_seed_ids"] = []
     return request, payload
+
+
+def _valid_wire_payload(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
+    """Return a provider-facing payload the runtime wire model accepts."""
+
+    event_type = vocabulary["event_types"][0]
+    relationship_type = vocabulary["relationship_types"][0]
+    return {
+        "schema_version": SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
+        "candidates": [
+            {
+                "seed_id": "seed_001",
+                "summary": "Mara inherited a debt from a dead handler.",
+                "origin_friction": "medium",
+                "present_leaf_anchor": "The debt returns in the opening hook.",
+                "coverage_functions": ["hidden_truth", "unresolved_ledger"],
+                "mechanical_hints": {
+                    "events": [
+                        {
+                            "event_ref": "event_001",
+                            "event_type": event_type,
+                            "summary": "The handler died before clearing the debt.",
+                            "participating_entities": ["Mara", "Vale"],
+                        }
+                    ],
+                    "single_entity_tags": [
+                        {
+                            "entity_ref": "Mara",
+                            "tag_ref": "character|grieving",
+                            "supporting_event_ref": "event_001",
+                            "rationale": "",
+                        }
+                    ],
+                    "pair_tags": [
+                        {
+                            "subject_ref": "Mara",
+                            "tag_ref": "character|place|knows_location",
+                            "object_ref": "Shutter Hall",
+                            "rationale": "",
+                        }
+                    ],
+                    "relationships": [
+                        {
+                            "subject_ref": "Mara",
+                            "relationship_ref": (
+                                f"character|character|{relationship_type}"
+                            ),
+                            "object_ref": "Vale",
+                            "rationale": "",
+                        }
+                    ],
+                },
+                "defer_or_reject_if": [],
+                "claimed_edges": _first_edge_claims(vocabulary),
+                "project_intent": {
+                    "project_type": "court_patron",
+                    "target_ref": "Vale",
+                    "rationale": "The old debt can become patronage.",
+                },
+            }
+        ],
+        "selected_seed_ids": ["seed_001"],
+        "rejected_seed_ids": [],
+        "selection_notes": "",
+    }
 
 
 def _valid_response_payload(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
