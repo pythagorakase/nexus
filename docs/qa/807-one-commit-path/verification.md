@@ -37,7 +37,7 @@ on its own, so nothing is listed under "Deleted with the async twin".
 | `tests/test_commit_handler.py::test_async_reconciled_mentions_flow_through_adapter_and_commit` | (a) | Existing twin `test_sync_reconciled_mentions_flow_through_adapter_and_commit` (identical assertions) | `commit_incubator_to_database_sync` |
 | `tests/test_commit_handler.py::test_async_commit_resolves_all_name_addressed_state_updates` | (a) | Existing twin `test_sync_commit_resolves_all_name_addressed_state_updates`; now records `apply_tag_bestowal` (the sync role of `apply_tag_bestowal_async`) instead of stubbing `_apply_state_tags`, and asserts the faction entity id and accepting world time as the async test did | `commit_incubator_to_database_sync`, `_apply_state_tags` |
 | `tests/test_commit_handler.py::test_async_commit_aborts_on_unresolvable_state_update_name` | (a) | Existing twin `test_sync_commit_aborts_on_unresolvable_state_update_name` (same assertions plus rollback) | `commit_incubator_to_database_sync` |
-| `tests/test_name_reveal_staged_bindings_pg.py::test_conflicting_reveal_id_is_rejected_before_any_acceptance_write[*-True]` | (a) | `commit_async` parameter removed; the `[*]` sync cases carry every assertion | `commit_incubator_to_database_sync` |
+| `tests/test_name_reveal_staged_bindings_pg.py::test_conflicting_reveal_id_is_rejected_before_any_acceptance_write[True-*]` | (a) | `commit_async` parameter removed; the `[False-*]` sync cases carry every assertion | `commit_incubator_to_database_sync` |
 | `tests/test_name_reveal_staged_bindings_pg.py::test_new_unique_alias_state_update_binds_before_draft_validation[True]` | (a) | `commit_async` parameter removed; sync case retained | `commit_incubator_to_database_sync` |
 | `tests/test_bootstrap_episode_pg.py::test_opening_and_real_transitions_schedule_only_populated_predecessors[async]` | (a) | `acceptance` parameter removed; sync case retained | `commit_incubator_to_database_sync` |
 | `tests/test_commit_choice_presence_pg.py::test_async_commit_reconciles_enacted_choice_roster_mentions[free-text,structured]` | (a) | Existing twin `test_sync_commit_reconciles_enacted_choice_roster_mentions` (also covers the alias case) | `commit_incubator_to_database_sync` |
@@ -72,7 +72,7 @@ Writers of `narrative_chunks` rows (`git grep -n "INSERT INTO narrative_chunks" 
 
 ```
 nexus/agents/memnon/utils/content_processor.py:328   MEMNON import-era content processor
-nexus/agents/orrery/retrograde_persistence.py:2516   Retrograde prologue insert (writes 'finalized')
+nexus/agents/orrery/retrograde_persistence.py:2525   Retrograde prologue insert (writes 'finalized')
 nexus/api/commit_handler_sync.py:512                 the accept path (column default 'draft')
 scripts/benchmark_experience_enqueue_fence.py:66,71  benchmark on a disposable clone
 scripts/qa_shift/card_identity_probe.py:323          QA probe on a disposable clone

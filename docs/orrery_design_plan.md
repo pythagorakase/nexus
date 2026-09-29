@@ -463,7 +463,7 @@ Storyteller-time Bleed chooses deterministically from these eligible promoted ev
 
 - **Tick = the accepted player-visible chunk's id**, not the latest `narrative_chunks` row. The id is generated at `commit_handler_sync.py:512` and stamped onto every Orrery write in the same transaction.
 - **Resolve runs in-cycle** during LORE Phase 4.5 (`TurnPhase.ORRERY_RESOLVE`), between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`. Pure Python; no writes.
-- **CommitOrreryTick** runs as Step 8.5 inside `commit_incubator_to_database{,_sync}`. All canonical writes happen here.
+- **CommitOrreryTick** runs as Step 8.5 inside `commit_incubator_to_database_sync`. All canonical writes happen here.
 - **Clear (event)** runs in the same commit transaction as the triggering event.
 - **Clear (time)** sweeps open `entity_tags` rows whose `expires_at_world_time` is at or before the accepted tick's world time, recording `tag_clearance_log` rows with mechanism `time`.
 - **Clear (semantic)** is currently a conservative no-op until a non-local clearance signal exists.
