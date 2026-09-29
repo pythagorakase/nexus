@@ -27,6 +27,7 @@ from nexus.agents.logon.skald_wire import (
     skald_writer_lenient_schema,
 )
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.orrery.retrograde_seed_candidates import RetrogradeWireProjectIntent
 from nexus.api.new_story_schemas import SettingCard, StorySeedSubmission, WizardResponse
 from nexus.api.native_structured_output import (
     ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS,
@@ -126,9 +127,9 @@ def _reject_first_structured_output(
             raise rejection
         return output
 
-    retry_error_text = (
-        rejection.message if isinstance(rejection, ModelRetry) else str(rejection)
-    )
+    # Retry prompts carry the sanitized text the rejection log carries, so a
+    # ValidationError reaches the model as ``loc: msg (type)`` (#1007 review).
+    retry_error_text = error_text
     return (
         validator,
         expected,
@@ -137,6 +138,33 @@ def _reject_first_structured_output(
         error_text,
         retry_error_text,
     )
+
+
+_WIRE_REF_SENTINEL = "Sentinel1007"
+
+
+def _prefixed_target_ref_exchange() -> tuple[dict[str, str], dict[str, str], str]:
+    """Return a rejected wire project intent, its repair, and the retry text.
+
+    The rejected payload carries a kind-prefixed target_ref whose name is a
+    sentinel. Pydantic's raw error text echoes it as ``input_value``; the
+    sanitized retry text names only the field, message, and error type.
+    """
+
+    rejected = {
+        "project_type": "court_patron",
+        "target_ref": f"character:{_WIRE_REF_SENTINEL}",
+        "rationale": "The old debt can become patronage.",
+    }
+    repaired = {**rejected, "target_ref": "Vale"}
+    with pytest.raises(ValidationError) as exc_info:
+        RetrogradeWireProjectIntent.model_validate(rejected)
+    assert _WIRE_REF_SENTINEL in str(exc_info.value)
+    retry_text = structured_output_error_text(exc_info.value)
+    assert retry_text.startswith(
+        "target_ref: Value error, entity ref carries an entity-kind prefix"
+    )
+    return rejected, repaired, retry_text
 
 
 _WIRE_PROSE_SENTINEL = "PROSE637"
@@ -1001,6 +1029,72 @@ async def test_openai_rejection_logs_cover_every_transport_branch_without_input_
     )
 
 
+@pytest.mark.parametrize("transport", ["responses", "chat_completions"])
+def test_openai_retry_prompt_omits_wire_ref_input_value(
+    transport: Literal["responses", "chat_completions"],
+) -> None:
+    """A wire ValidationError reaches the OpenAI retry prompt as loc: msg (type).
+
+    The prefixed target_ref fails the real wire parse on the first attempt.
+    The repair prompt names the field and the bare-name rule but never
+    echoes the rejected value (#1007 review).
+    """
+
+    rejected, repaired, retry_text = _prefixed_target_ref_exchange()
+    outputs = [json.dumps(rejected), json.dumps(repaired)]
+    prompt = "Weave the project intent."
+    prompts: list[str] = []
+
+    class FakeResponses:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["input"][-1]["content"])
+            return SimpleNamespace(
+                output_text=outputs[len(prompts) - 1],
+                usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+            )
+
+    class FakeChatCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=outputs[len(prompts) - 1])
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="TEST",
+        api_key="test-key",
+        base_url=(
+            "https://structured-output.invalid/v1"
+            if transport == "chat_completions"
+            else None
+        ),
+        structured_transport=transport,
+        structured_output_retries=1,
+        usage_seat="retrograde_seed_candidates",
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(
+            responses=FakeResponses(),
+            chat=SimpleNamespace(completions=FakeChatCompletions()),
+        ),
+    )
+
+    parsed, _llm_response = provider.get_structured_completion(
+        prompt, RetrogradeWireProjectIntent
+    )
+
+    assert parsed == RetrogradeWireProjectIntent.model_validate(repaired)
+    assert prompts == [prompt, retry_prompt(prompt, retry_text)]
+    assert _WIRE_REF_SENTINEL not in prompts[1]
+    assert "input_value" not in prompts[1]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("call_style", ["sync", "async"])
 async def test_logon_terminal_validation_propagation_logs_no_payload_prose(
@@ -1398,6 +1492,63 @@ async def test_anthropic_rejection_logs_cover_branches_without_input_leaks(
         record.getMessage().startswith("structured-output retries exhausted")
         for record in caplog.records
     )
+
+
+@pytest.mark.parametrize("transport", ["native", "prompted", "tool_envelope"])
+def test_anthropic_retry_prompt_omits_wire_ref_input_value(
+    transport: Literal["native", "prompted", "tool_envelope"],
+) -> None:
+    """A wire ValidationError reaches the Anthropic retry prompt as loc: msg (type).
+
+    The prefixed target_ref fails the real wire parse on the first attempt.
+    The repair prompt names the field and the bare-name rule but never
+    echoes the rejected value (#1007 review).
+    """
+
+    rejected, repaired, retry_text = _prefixed_target_ref_exchange()
+    outputs = [rejected, repaired]
+    prompt = "Weave the project intent."
+    prompts: list[str] = []
+
+    class FakeMessages:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            output = outputs[len(prompts) - 1]
+            if transport == "tool_envelope":
+                content = [
+                    SimpleNamespace(
+                        type="tool_use",
+                        name="submit_structured_response",
+                        input=output,
+                    )
+                ]
+            else:
+                content = [SimpleNamespace(type="text", text=json.dumps(output))]
+            return SimpleNamespace(
+                content=content,
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model=registry_model("anthropic"),
+        api_key="test-key",
+        structured_transport=transport,
+        structured_output_retries=1,
+        usage_seat="retrograde_seed_candidates",
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages())),
+    )
+
+    parsed, _llm_response = provider.get_structured_completion(
+        prompt, RetrogradeWireProjectIntent
+    )
+
+    assert parsed == RetrogradeWireProjectIntent.model_validate(repaired)
+    assert prompts == [prompt, retry_prompt(prompt, retry_text)]
+    assert _WIRE_REF_SENTINEL not in prompts[1]
+    assert "input_value" not in prompts[1]
 
 
 def test_anthropic_provider_rejects_unknown_structured_transport() -> None:

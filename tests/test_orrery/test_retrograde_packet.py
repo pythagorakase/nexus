@@ -12,7 +12,9 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
+    GRAPH_CARD_KINDS,
     enumerate_seed_eligible_vocabulary,
+    validate_bare_entity_ref,
 )
 from nexus.config import load_settings
 
@@ -392,6 +394,60 @@ def test_trait_compile_inputs_become_first_class_core_entities() -> None:
         not str(card.get("role", "")).startswith("trait_target:resources")
         for card in core
     )
+
+
+def test_every_packet_card_kind_is_a_rejected_ref_prefix() -> None:
+    """No graph identifier built from packet cards can pass as an entity ref.
+
+    The kinds come from the packet builder itself, with every core-entity
+    branch populated: protagonist, starting location, zone, and layer, plus
+    each trait-target role (a faction and a character obligation
+    counterparty, a domain, and a status scope). ``_compact_card`` refuses
+    any kind outside GRAPH_CARD_KINDS, so that set bounds what the builder
+    can emit (#1007 review).
+    """
+
+    trait_compile_inputs = {
+        "patron": {"name": "Magistra Odile"},
+        "dependents": {"targets": [{"name": "Pim Tideloft"}]},
+        "obligations": {
+            "targets": [
+                {"name": "Harrow Syndicate", "counterparty_kind": "faction"},
+                {"name": "Old Tamsin", "counterparty_kind": "character"},
+            ]
+        },
+        "allies": {"targets": [{"name": "Ruth Calder"}]},
+        "contacts": {"targets": [{"name": "Ivo Marsh"}]},
+        "enemies": {"targets": [{"name": "Dace Quill"}]},
+        "domain": {"name": "Lantern Row"},
+        "status": {"scope_faction_name": "Glass Council"},
+    }
+    packet = build_retrograde_dry_run_packet(
+        slot=5,
+        dbname="save_05",
+        cache=FakeRetrogradeCache(),
+        vocabulary=enumerate_seed_eligible_vocabulary(),
+        settings=load_settings(),
+        trait_compile_inputs=trait_compile_inputs,
+    )
+
+    cards = packet["candidate_scaffolds"]["core_entities"]
+    emitted_kinds = {card["kind"] for card in cards}
+    assert emitted_kinds <= GRAPH_CARD_KINDS
+    for kind in sorted(emitted_kinds):
+        for identifier in (f"{kind}:Vale", f"{kind.upper()} | Vale"):
+            with pytest.raises(ValueError, match="entity-kind prefix"):
+                validate_bare_entity_ref(identifier)
+
+    graph = packet["seed_generation_request"]["candidate_graph"]
+    assert {node["kind"] for node in graph["nodes"]} == emitted_kinds
+    for node in graph["nodes"]:
+        with pytest.raises(ValueError, match="entity-kind prefix"):
+            validate_bare_entity_ref(node["ref"])
+        assert validate_bare_entity_ref(node["name"]) == node["name"]
+    for edge in graph["dangling_edges"]:
+        with pytest.raises(ValueError, match="entity-kind prefix"):
+            validate_bare_entity_ref(edge["anchor_ref"])
 
 
 def test_packet_without_trait_inputs_keeps_legacy_core_entities() -> None:

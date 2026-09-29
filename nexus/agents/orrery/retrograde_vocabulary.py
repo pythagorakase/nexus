@@ -36,15 +36,37 @@ instead of mid-transaction at the database.
 """
 
 
+GRAPH_CARD_KINDS: frozenset[str] = frozenset(
+    {*(kind.value for kind in EntityKind), "zone", "layer"}
+)
+"""Every ``kind`` a Retrograde core-entity card, and so a graph node, may carry.
+
+``retrograde_packet`` builds core-entity cards for the entity kinds plus the
+starting zone and layer. ``retrograde_graph`` turns each named card into a
+``kind:name`` node identifier, and dangling edges copy it into ``anchor_ref``.
+Both modules refuse a card kind outside this set, and
+:func:`validate_bare_entity_ref` rejects every kind in it as a ref prefix, so
+no graph identifier the model reads can pass as an entity ref (#1007).
+"""
+
+
+_ENTITY_REF_PREFIX_KINDS: frozenset[str] = (
+    frozenset(kind.value for kind in EntityKind) | GRAPH_CARD_KINDS
+)
+"""Kinds a ref may never open with: :class:`EntityKind` plus graph card kinds."""
+
 _ENTITY_KIND_PREFIX_PATTERN = re.compile(
-    r"^(?:" + "|".join(re.escape(kind.value) for kind in EntityKind) + r")\s*[:|]",
+    r"^(?:"
+    + "|".join(re.escape(kind) for kind in sorted(_ENTITY_REF_PREFIX_KINDS))
+    + r")\s*[:|]",
     re.IGNORECASE,
 )
-"""Matches a ref that opens with an entity kind and a ``:`` or ``|`` separator.
+"""Matches a ref that opens with a known kind and a ``:`` or ``|`` separator.
 
-Built once from :class:`EntityKind` so a new kind is covered without editing
-this module. ``Placeholder: X`` does not match: the kind word must be followed
-directly by optional spaces and the separator.
+Built once at import from :data:`_ENTITY_REF_PREFIX_KINDS`, so a new entity
+kind or graph card kind is covered without editing the pattern.
+``Placeholder: X`` does not match: the kind word must be followed directly by
+optional spaces and the separator.
 """
 
 _ENTITY_KIND_PREFIX_MESSAGE = (
@@ -60,7 +82,8 @@ def validate_bare_entity_ref(value: str) -> str:
     An entity ref is the bare proper name of one entity (#1007). The kind
     rides in its own field (``entity_kind``, ``subject_kind``,
     ``open_endpoint_kind``, the ``kind|tag`` enum refs) or is fixed by
-    ``project_type``. Candidate-graph identifiers (``kind:name``) are not
+    ``project_type``. Candidate-graph identifiers (``kind:name``, including
+    the ``zone`` and ``layer`` cards in :data:`GRAPH_CARD_KINDS`) are not
     refs, so a ref shaped like one fails here, at the Pydantic response
     boundary, where the structured-output loop grants a repair shot.
 

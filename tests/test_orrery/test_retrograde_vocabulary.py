@@ -301,6 +301,8 @@ def test_seed_eligible_pair_tags_are_sorted() -> None:
         "Sister Orla",
         "Placeholder: X",
         "Vale: the Younger",
+        "Low Quarter",
+        "Upper Reach",
         "N" * ENTITY_REF_MAX_LENGTH,
     ],
 )
@@ -328,6 +330,31 @@ def test_bare_entity_ref_rejects_kind_prefix_without_echoing_value(
         validate_bare_entity_ref(value)
 
     assert "Sentinel1007" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("identifier", ["zone:Low Quarter", "layer:Upper Reach"])
+def test_graph_zone_and_layer_identifiers_are_rejected_as_refs(
+    identifier: str,
+) -> None:
+    """Zone and layer graph identifiers fail like entity-kind prefixes.
+
+    The packet puts the starting zone and layer into core_entities, so the
+    candidate graph shows the model ``zone:`` and ``layer:`` identifiers. A
+    seed target_ref shaped like one would freeze a target that the bare-name
+    expansion plan can never match (#1007 review).
+    """
+
+    with pytest.raises(ValueError, match="entity-kind prefix"):
+        validate_bare_entity_ref(identifier)
+
+    with pytest.raises(ValidationError, match="entity-kind prefix"):
+        RetrogradeWireProjectIntent.model_validate(
+            {
+                "project_type": "plan_relocation",
+                "target_ref": identifier,
+                "rationale": "The ledger trail leads somewhere quieter.",
+            }
+        )
 
 
 def test_wire_target_ref_rejects_prefix_without_echoing_value() -> None:

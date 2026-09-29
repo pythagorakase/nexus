@@ -11,7 +11,10 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     seed_candidate_response_schema,
 )
 from nexus.agents.orrery.retrograde_graph import build_candidate_graph
-from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+from nexus.agents.orrery.retrograde_vocabulary import (
+    GRAPH_CARD_KINDS,
+    SeedEligibleVocabulary,
+)
 from nexus.config.settings_models import Settings
 from nexus.prompts.registry import PromptId, load
 
@@ -776,6 +779,14 @@ def _compact_card(
     summary: Any,
     details: Mapping[str, Any],
 ) -> dict[str, Any]:
+    """Return one core-entity card; its kind must be in ``GRAPH_CARD_KINDS``."""
+
+    if kind not in GRAPH_CARD_KINDS:
+        raise ValueError(
+            f"Retrograde core-entity card kind {kind!r} is not in "
+            "GRAPH_CARD_KINDS (retrograde_vocabulary); add it there so the "
+            "bare entity-ref validator rejects its kind:name graph identifier"
+        )
     return {
         "kind": kind,
         "role": role,
