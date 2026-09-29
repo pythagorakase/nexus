@@ -15,8 +15,13 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from nexus.api.choice_handling import resolve_choice_response
 from nexus.api.config_utils import get_generation_lease_timeout_seconds
-from nexus.api.narrative_lease import acquire_generation_lease
+from nexus.api.narrative_lease import (
+    OWNER_EXPIRED_SQL,
+    acquire_generation_lease,
+    read_generation_session,
+)
 from nexus.config import load_settings_as_dict
 from nexus.config.story_model import read_story_settings, story_context_settings
 from nexus.memory.manager import pass2_baseline_config_fingerprint
@@ -202,25 +207,33 @@ def test_pending_turn_is_the_draft_continue_accepts() -> None:
 
 
 def test_turn_factory_records_free_text_and_refuses_a_foreign_lease() -> None:
-    """Free text is the player's wording; a live foreign lease is loud."""
+    """Free text is recorded as resolved; a live foreign lease is loud."""
 
     with disposable_slot_database("qa640_816_free_text") as dbname:
-        seed_played_story(dbname, turns=1)
-        free_text = "I climb the fire escape instead."
+        [frontier] = seed_played_story(dbname, turns=1)
+        typed = "  I climb the fire escape instead.  "
+        # The gateway's resolver trims free text, so the chunk records its
+        # result, not the typed argument.
+        free_text = resolve_choice_response(
+            {"presented": list(FIXTURE_TURN_CHOICES), "selected": None},
+            user_text=typed,
+        ).choice_text
+        assert free_text == "I climb the fire escape instead."
         chunk_id = seed_accepted_turn(
             dbname,
             user_text=FIXTURE_TURN_CHOICES[0],
             storyteller_text="The fixture turn the player answers in their words.",
             choices=list(FIXTURE_TURN_CHOICES),
-            choice_text=free_text,
+            choice_text=typed,
         )
         with closing(connect(dbname)) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT choice_text FROM narrative_chunks WHERE id = %s",
-                    (chunk_id,),
+                    "SELECT id, choice_text FROM narrative_chunks "
+                    "WHERE id > %s ORDER BY id",
+                    (frontier,),
                 )
-                assert cur.fetchone() == (free_text,)
+                assert cur.fetchall() == [(chunk_id, free_text)]
             conn.rollback()
             foreign = str(uuid.uuid4())
             assert (
@@ -246,6 +259,64 @@ def test_turn_factory_records_free_text_and_refuses_a_foreign_lease() -> None:
                 "WHERE terminal_outcome IS NULL)"
             )
             assert cur.fetchone() == (0, foreign, 1)
+
+
+def test_turn_factory_releases_its_lease_when_staging_fails() -> None:
+    """A draft refused after the lease is taken leaves no live owner behind."""
+
+    with disposable_slot_database("qa640_816_staging_failure") as dbname:
+        [frontier] = seed_played_story(dbname, turns=1)
+        # The staging validator resolves every reference against the save;
+        # this one names a character the save lacks, so the incubator write
+        # fails after the lease is acquired, the parent bound, and the
+        # Orrery proposal resolved.
+        with pytest.raises(
+            ValueError,
+            match="Unresolved character state update name 'Absent Stranger'",
+        ):
+            seed_pending_turn(
+                dbname,
+                user_text=FIXTURE_TURN_CHOICES[0],
+                storyteller_text="A draft naming a character the save lacks.",
+                reference_updates={
+                    "characters": [
+                        {
+                            "character_name": "Absent Stranger",
+                            "reference_type": "present",
+                        }
+                    ],
+                    "places": [],
+                    "factions": [],
+                },
+            )
+        with closing(connect(dbname)) as conn:
+            with conn.cursor() as cur:
+                # Live ownership as the lease writers judge it.
+                cur.execute(
+                    "SELECT session_id FROM narrative_generation_lease "
+                    f"WHERE id = TRUE AND NOT ({OWNER_EXPIRED_SQL})"
+                )
+                assert cur.fetchone() is None
+                # An active attempt as heartbeat_generation judges it.
+                cur.execute(
+                    "SELECT count(*) FROM narrative_generation_sessions "
+                    "WHERE status = 'initiated'"
+                )
+                assert cur.fetchone()[0] == 0
+                cur.execute("SELECT count(*) FROM incubator")
+                assert cur.fetchone()[0] == 0
+            conn.rollback()
+            failed = read_generation_session(conn)
+        assert failed is not None
+        assert failed["error"].startswith("seed_pending_turn staging failed")
+        assert (
+            failed["operation"],
+            failed["status"],
+            failed["terminal_outcome"],
+            failed["error_class"],
+            failed["parent_chunk_id"],
+            failed["expires_at"],
+        ) == ("continue", "error", "error", "ValueError", frontier, None)
 
 
 def test_turn_factory_refuses_a_save_missing_its_preconditions() -> None:

@@ -1057,10 +1057,13 @@ def seed_pending_turn(
     Orrery proposal LORE would stage, from the production resolver at the
     frontier (``resolve_orrery=False`` stages none, as with Orrery disabled);
     the bootstrap opening stages none, as ``generate_bootstrap_narrative``
-    does. Staging takes the
-    production route's steps in order: ``acquire_generation_lease`` records
-    the ``continue`` session and owns the slot, ``bind_generation_parent``
-    binds the frontier, and ``write_to_incubator`` validates the draft with
+    does. Staging takes the production route's steps in the gateway's order:
+    lease, bind parent, resolve, write incubator. ``acquire_generation_lease``
+    records the ``continue`` session and owns the slot;
+    ``bind_generation_parent`` binds the frontier (``continue_narrative``
+    takes both steps before it schedules generation); the Orrery proposal is
+    resolved under that lease, as the scheduled LORE turn resolves it; and
+    ``write_to_incubator`` validates the draft with
     ``validate_commit_draft_sync``, writes the incubator singleton, and
     completes the session while releasing the lease. The draft is the shape
     ``response_to_incubator`` (or ``generate_bootstrap_narrative``) builds:
@@ -1085,8 +1088,8 @@ def seed_pending_turn(
     Fails loudly, before taking the lease, when the save has no world clock
     (``base_timestamp``) or no canonical player, when another session holds a
     live lease, or when a draft is already pending. A failure after the lease
-    is taken abandons the staging session, releasing its lease, before it
-    propagates.
+    is taken (binding, resolution, or the incubator write) abandons the
+    staging session, releasing its lease, before it propagates.
     """
 
     require_disposable_target(dbname)
@@ -1128,15 +1131,6 @@ def seed_pending_turn(
             )
         conn.rollback()
         is_bootstrap = parent_chunk_id == 0
-        orrery_proposal = (
-            _resolve_turn_orrery_proposal(
-                dbname,
-                anchor_chunk_id=parent_chunk_id,
-                orrery_settings=orrery_settings,
-            )
-            if resolve_orrery and not is_bootstrap and orrery_settings["enabled"]
-            else None
-        )
         conflict = acquire_generation_lease(
             conn,
             session_id=session_id,
@@ -1147,6 +1141,15 @@ def seed_pending_turn(
         try:
             bind_generation_parent(
                 conn, session_id=session_id, parent_chunk_id=parent_chunk_id
+            )
+            orrery_proposal = (
+                _resolve_turn_orrery_proposal(
+                    dbname,
+                    anchor_chunk_id=parent_chunk_id,
+                    orrery_settings=orrery_settings,
+                )
+                if resolve_orrery and not is_bootstrap and orrery_settings["enabled"]
+                else None
             )
             data: dict[str, Any] = {
                 "chunk_id": None,
@@ -1235,8 +1238,11 @@ def seed_accepted_turn(
 
     ``choice_text`` is the player's response to this turn's ``choices``: a
     presented choice is selected by its number, other text is recorded as the
-    player's own wording. ``slot`` labels the jobs the commit enqueues and is
-    accepted only while it routes to ``dbname``.
+    player's own wording. The chunk records the response the gateway resolves
+    (``resolve_choice_response`` trims free text), so acceptance is checked
+    against that resolved text, never the raw argument. ``slot`` labels the
+    jobs the commit enqueues and is accepted only while it routes to
+    ``dbname``.
     """
 
     require_disposable_target(dbname)
@@ -1251,11 +1257,12 @@ def seed_accepted_turn(
         **staging,
     )
     with closing(_connect(dbname)) as conn:
+        resolved_choice_text: str | None = None
         if choice_text is not None:
             from nexus.api.narrative import _record_player_response_for_chunk
 
             presented = list(choices or [])
-            _record_player_response_for_chunk(
+            resolved_choice_text = _record_player_response_for_chunk(
                 slot=slot,
                 chunk_id=None,
                 user_text="" if choice_text in presented else choice_text,
@@ -1286,7 +1293,7 @@ def seed_accepted_turn(
             )
             accepted = cur.fetchone()
     assert accepted == (
-        choice_text,
+        resolved_choice_text,
         "accepted",
         chunk_id,
         1,
