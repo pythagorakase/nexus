@@ -155,12 +155,13 @@ same file. `CREATE OR REPLACE` counts as a change, so the migration restates the
 comment even though PostgreSQL would keep the old one. Unqualified names mean
 `public`, or the schema a `CREATE SCHEMA` statement creates for its own elements.
 Functions and procedures match by name and argument types, as PostgreSQL resolves
-a routine comment: parameter names, modes, and `DEFAULT` clauses are ignored, `OUT`
-arguments may be omitted (a function comment omits them unless it marks them
-`OUT`), and unquoted words fold to lower case, but type aliases are not resolved,
-so `int` does not match `integer`. A comment without an argument list names the
-one overload of its kind that the migration creates; a comment that matches
-several overloads documents none. What cannot be read statically fails rather
+a routine comment: parameter names, modes, `DEFAULT` clauses, type modifiers, and
+array bounds are ignored, `OUT` arguments may be omitted (a function comment omits
+them unless it marks them `OUT`), unquoted words fold to lower case, and built-in
+type aliases read as one type, so `int` matches `integer` and `varchar(20)` matches
+`character varying`. A comment without an argument list names the one overload of
+its kind that the migration creates; a comment that matches several overloads
+documents none. What cannot be read statically fails rather
 than passes: verbs, object kinds, names, and `ALTER TABLE` actions built at
 run time (f-strings, `+` or `||` with a non-literal operand, `{}` and `%I`
 placeholders), an `EXECUTE` of a variable or of anything not starting with literal

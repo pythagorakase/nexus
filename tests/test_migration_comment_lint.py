@@ -580,6 +580,52 @@ COMMENT ON FUNCTION public.review_f(label text, double   PRECISION, numeric(5,2)
     assert _findings(tmp_path) == []
 
 
+def test_function_type_aliases_typmods_and_arrays_match(tmp_path: Path) -> None:
+    """A type alias, typmod, or array spelling names the same PostgreSQL type.
+
+    A different type is still a different overload.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_int_alias.sql",
+        """
+CREATE FUNCTION f(a int) RETURNS integer LANGUAGE sql AS 'SELECT a';
+COMMENT ON FUNCTION f(integer) IS 'int is integer.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_varchar_typmod.sql",
+        """
+CREATE FUNCTION f(a varchar(20)) RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION f(character varying) IS 'Signatures ignore typmods.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 3:03d}_arrays_and_aliases.sql",
+        """
+CREATE FUNCTION f(a integer ARRAY[3], b int4[][], c timestamptz, d float(24))
+    RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION f(int[], integer[], timestamp with time zone, real)
+    IS 'Array spellings and aliases name the same types.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 4:03d}_other_type.sql",
+        """
+CREATE FUNCTION f(a text) RETURNS integer LANGUAGE sql AS 'SELECT 1';
+COMMENT ON FUNCTION f(integer) IS 'Wrong type: PostgreSQL finds no f(integer).';
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{WATERMARK + 4:03d}_other_type.sql:1: function public.f(text) has no "
+        "COMMENT ON FUNCTION",
+    ]
+
+
 def test_bare_function_name_must_name_one_overload(tmp_path: Path) -> None:
     """Without an argument list, a comment names the file's only overload.
 

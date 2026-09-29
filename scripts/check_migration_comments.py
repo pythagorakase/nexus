@@ -30,12 +30,15 @@ cur.execute(DDL)``, names joined only at run time such as
 
 A routine comment documents the overload PostgreSQL resolves it to. Argument
 types compare after parameter names, modes, and DEFAULT clauses are dropped,
-unquoted words fold to lower case, and whitespace collapses; type aliases are
-not resolved, so ``int`` does not match ``integer``. A function comment lists
-the function's non-OUT argument types; a procedure comment may instead list
-every argument type when it marks none OUT. A comment without an argument list
-names the one overload of its kind that the file creates, and a comment that
-names more than one documents none, because PostgreSQL rejects it as not unique.
+unquoted words fold to lower case, and whitespace collapses. Type modifiers,
+interval fields, and array bounds drop as well, because they do not identify a
+routine; every array spelling reads ``[]``; and a built-in alias reads as the
+name PostgreSQL prints (_TYPE_ALIASES), so ``int`` matches ``integer`` and
+``varchar(20)`` matches ``character varying``. A function comment lists the
+function's non-OUT argument types; a procedure comment may instead list every
+argument type when it marks none OUT. A comment without an argument list names
+the one overload of its kind that the file creates, and a comment that names
+more than one documents none, because PostgreSQL rejects it as not unique.
 
 DDL that cannot be verified statically fails rather than passing: verbs,
 object kinds, names, and ALTER TABLE actions built at run time (f-strings,
@@ -220,6 +223,33 @@ _TYPE_START_WORDS = frozenset(
     "bigint bit boolean char character dec decimal float int integer interval "
     "national nchar numeric real smallint time timestamp varchar".split()
 )
+# Built-in type spellings PostgreSQL treats as one type, mapped to the name its
+# format_type prints; any other spelling compares as written. Only unquoted
+# words match, so the quoted single-byte type "char" stays distinct from char.
+# serial and bigserial read as their integer types, although PostgreSQL rejects
+# them as argument types. float(p) is real for p up to 24 and double precision
+# above (_canonical_type).
+_TYPE_ALIASES = {
+    alias: canonical
+    for canonical, aliases in (
+        ("integer", ("int", "int4", "serial")),
+        ("bigint", ("int8", "bigserial")),
+        ("smallint", ("int2",)),
+        ("boolean", ("bool",)),
+        ("character varying", ("varchar",)),
+        ("character", ("char",)),
+        ("double precision", ("float", "float8")),
+        ("real", ("float4",)),
+        ("numeric", ("decimal",)),
+        ("bit varying", ("varbit",)),
+        ("timestamp with time zone", ("timestamptz",)),
+        ("timestamp without time zone", ("timestamp",)),
+        ("time with time zone", ("timetz",)),
+        ("time without time zone", ("time",)),
+    )
+    for alias in aliases
+}
+_FLOAT_PRECISION = re.compile(r"float\((\d+)\)")
 
 # One routine argument: its mode (None when unmarked) and its spelled type.
 _Argument = tuple[str | None, str]
@@ -620,6 +650,18 @@ def _is_keyword(token: str, words: set[str]) -> bool:
     return not token.startswith('"') and token.upper() in words
 
 
+def _quoted_end(text: str, index: int) -> int:
+    """Return the offset just past the quoted identifier opening at index."""
+    close = index + 1
+    while True:
+        close = text.find('"', close)
+        if close == -1:
+            return len(text)
+        if not text.startswith('""', close):
+            return close + 1
+        close += 2
+
+
 def _argument_words(text: str) -> list[str]:
     """Split one argument into words, stopping at its DEFAULT or ``=`` clause.
 
@@ -635,13 +677,7 @@ def _argument_words(text: str) -> list[str]:
     while index < len(text):
         char = text[index]
         if char == '"':
-            close = index + 1
-            while True:
-                close = text.find('"', close)
-                if close == -1 or not text.startswith('""', close):
-                    break
-                close += 2
-            end = len(text) if close == -1 else close + 1
+            end = _quoted_end(text, index)
             word += text[index:end]
             index = end
             continue
@@ -673,6 +709,44 @@ def _argument_words(text: str) -> list[str]:
     return words
 
 
+def _strip_modifiers(spelled: str) -> tuple[str, bool]:
+    """Drop parenthesized type modifiers and bracketed array bounds.
+
+    Return what remains and whether a bracket marked an array; quoted
+    identifiers are kept whole.
+    """
+    kept: list[str] = []
+    depth, is_array, index = 0, False, 0
+    while index < len(spelled):
+        char = spelled[index]
+        if char == '"' and depth == 0:
+            end = _quoted_end(spelled, index)
+            kept.append(spelled[index:end])
+            index = end
+            continue
+        if char in "([":
+            is_array = is_array or (char == "[" and depth == 0)
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        elif depth == 0:
+            kept.append(char)
+        index += 1
+    return "".join(kept).strip(), is_array
+
+
+def _canonical_type(spelled: str) -> str:
+    """Spell a type the way PostgreSQL identifies it in a routine signature."""
+    base, is_array = _strip_modifiers(spelled)
+    precision = _FLOAT_PRECISION.match(spelled)
+    if precision:
+        base = "real" if int(precision.group(1)) <= 24 else "double precision"
+    elif base.startswith("interval "):
+        base = "interval"  # interval fields are type modifiers
+    base = _TYPE_ALIASES.get(base, base)
+    return f"{base}[]" if is_array else base
+
+
 def _word_base(word: str) -> str:
     """Return a word without its type modifiers or array bounds."""
     return re.split(r"[(\[]", word, maxsplit=1)[0]
@@ -694,7 +768,7 @@ def _parse_argument(text: str) -> _Argument:
             names_parameter = first not in _TYPE_START_WORDS
         if names_parameter:
             words = words[1:]
-    return mode, " ".join(words)
+    return mode, _canonical_type(" ".join(words))
 
 
 def _routine_arguments(

@@ -296,8 +296,8 @@ else.
 - **Overloads (P2).** Routine comments now match by argument types instead of
   argument count. The `CREATE` and `COMMENT` lists both drop parameter names,
   modes, and `DEFAULT` clauses, fold unquoted words to lower case, and collapse
-  whitespace. Type aliases are not resolved, so `int` and `integer` are different
-  spellings, and such a pair fails rather than passes. A comment without an
+  whitespace; type aliases, type modifiers, and array spellings are canonicalized
+  as well (Type Alias Table, below). A comment without an
   argument list documents the one overload of its kind that the migration
   creates; with two or more, it is reported as ambiguous and documents none. The
   review's `review_f(integer)` and `review_f(text)`, with only the integer
@@ -346,8 +346,8 @@ returns the same 405 findings before and after; only function signatures print
 differently (`public.orrery_active_character_tag_names(bigint)` for
 `public.orrery_active_character_tag_names (1 argument)`).
 
-From the worktree root with `PY=/Users/pythagor/nexus/.venv/bin/python`; the import
-proof printed
+Tails at e16f6d28, from the worktree root with
+`PY=/Users/pythagor/nexus/.venv/bin/python`; the import proof printed
 `/Users/pythagor/nexus/.claude/worktrees/819-ratchet-extension/nexus/__init__.py`,
 and `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` were unset:
 
@@ -367,6 +367,97 @@ $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_schema_docume
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 33 passed, 5 warnings in 4.76s
+
+$ $PY -m black --check scripts/check_migration_comments.py tests/test_migration_comment_lint.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+
+$ $PY -m flake8 scripts/check_migration_comments.py tests/test_migration_comment_lint.py
+(no output)
+
+$ $PY -m mypy scripts/check_migration_comments.py tests/test_migration_comment_lint.py
+Success: no issues found in 2 source files
+```
+
+### Type Alias Table
+
+The coordinator accepted the three additions that follow PostgreSQL (ambiguous
+procedure argument lists, `COMMENT ON FUNCTION` not documenting a procedure, and
+both `docs/database.md` corrections) and asked for one more change. Signature
+normalization now canonicalizes the type spellings PostgreSQL treats as one type,
+through `_TYPE_ALIASES` in the lint:
+
+| Spelling | Reads As |
+| --- | --- |
+| `int`, `int4`, `serial` | `integer` |
+| `int8`, `bigserial` | `bigint` |
+| `int2` | `smallint` |
+| `bool` | `boolean` |
+| `varchar` | `character varying` |
+| `char` | `character` |
+| `float`, `float8` | `double precision` |
+| `float4` | `real` |
+| `decimal` | `numeric` |
+| `varbit` | `bit varying` |
+| `timestamptz` | `timestamp with time zone` |
+| `timestamp` | `timestamp without time zone` |
+| `timetz` | `time with time zone` |
+| `time` | `time without time zone` |
+
+Type modifiers, interval fields, and array bounds drop, and every array spelling
+(`integer ARRAY`, `integer[3]`, `int4[][]`) reads `integer[]`. `float(p)` is
+resolved rather than stripped, because its precision picks the type: `real` for p
+up to 24, `double precision` above. Only unquoted words map, so the single-byte
+type `"char"` stays distinct from `char`.
+
+PostgreSQL 17 on a disposable `qa640_aliasprobe_*` database (dropped) printed the
+canonical name for every entry: `pg_get_function_identity_arguments` of
+`al(timestamptz, timestamp(3), time, timetz, varbit(3), char(5), decimal(5,2),
+bool, int8, int2, float4, float8, varchar(20), int)` reads `timestamp with time
+zone, timestamp without time zone, time without time zone, time with time zone,
+bit varying, character, numeric, boolean, bigint, smallint, real, double
+precision, character varying, integer`, and a `COMMENT ON FUNCTION` naming those
+types applied. `integer ARRAY[3]`, `int4[][]`, and `text ARRAY` read `integer[]`,
+`integer[]`, and `text[]`; `interval day to second(3)` and `interval(2)` read
+`interval`. `float(24)` reads `real` while `float(25)` and `float` read `double
+precision`, so `COMMENT ON FUNCTION fl(float)` fails for `fl(float(24))`
+(`function fl(double precision) does not exist`), and `COMMENT ON FUNCTION
+qc(char)` fails for `qc("char")` (`function qc(character) does not exist`).
+PostgreSQL rejects `serial` and `bigserial` as argument types (`type serial does
+not exist`), so a migration that uses one fails when applied, whatever the lint
+reports.
+
+`test_function_type_aliases_typmods_and_arrays_match` covers the requested cases,
+one migration each: `f(a int)` with `COMMENT ON FUNCTION f(integer)` is clean;
+`f(a varchar(20))` with `COMMENT ON FUNCTION f(character varying)` is clean;
+array and alias spellings (`integer ARRAY[3]`, `int4[][]`, `timestamptz`, and
+`float(24)`, commented as `int[]`, `integer[]`, `timestamp with time zone`, and
+`real`) are clean; and `f(a text)` with `COMMENT ON FUNCTION f(integer)` is still
+a finding. Its SQL on a disposable `qa640_aliastest_*` database (dropped): the
+three clean migrations applied, and the last failed with `function f(integer)
+does not exist`. Against e16f6d28's lint the test fails, reporting the `int`,
+`varchar(20)`, and array migrations as undocumented. Over every migration
+(watermark 0) the lint still returns the same 405 findings, and the read-only
+inventory of `NEXUS_template` still gives the counts above.
+
+Tails at the alias-table commit, run the same way:
+
+```text
+$ $PY -m pytest -q tests/test_migration_comment_lint.py tests/test_reachability.py
+......................................................................   [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+70 passed in 8.20s
+
+$ PYTHONPATH=$PWD $PY scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+
+$ $PY -S scripts/check_migration_comments.py
+OK: every object created after migration 129 has a comment.
+
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_schema_documentation_pg.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+33 passed, 5 warnings in 5.01s
 
 $ $PY -m black --check scripts/check_migration_comments.py tests/test_migration_comment_lint.py
 All done! ✨ 🍰 ✨
