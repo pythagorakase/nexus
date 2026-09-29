@@ -1294,6 +1294,10 @@ def regenerate_specific_chunk(
     """
     Generate or update embeddings for one narrative chunk.
 
+    The model loads before the chunk's stored embedding is deleted, so a
+    missing or broken artifact raises with its restore command and the stored
+    row survives.
+
     Args:
         model_name: Embedding model to use
         chunk_id: Narrative chunk ID to embed
@@ -1304,9 +1308,18 @@ def regenerate_specific_chunk(
 
     Returns:
         Dict with results
+
+    Raises:
+        RuntimeError: If the model is not registered, or its local artifact is
+            missing or fails to load; nothing has been deleted.
     """
     if chunk_id <= 0:
         raise ValueError(f"chunk_id must be positive, got {chunk_id}")
+
+    # With no Hub fallback, a missing or broken artifact raises here, before
+    # the DELETE below commits. The regenerator that embeds the chunk reuses
+    # this process-cached model.
+    ModelLoader.load_model(model_name)
 
     delete_existing_chunk_embedding(
         model_name=model_name,
