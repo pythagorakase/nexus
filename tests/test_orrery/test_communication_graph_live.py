@@ -19,15 +19,54 @@ from nexus.agents.orrery.communication import (
     assemble_communication_graph,
 )
 from nexus.agents.orrery.resolver import resolve_dry_run
-from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings
 from nexus.config.settings_models import OrreryContagionSettings
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    seed_character,
+    seed_faction,
+    seed_relationship,
+    seed_story_clock,
+    sqlalchemy_url,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
 
-LIVE_SLOT = 5
 WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(scope="module")
+def communication_slot() -> Iterator[str]:
+    """Own a seeded template clone: a story clock, Tomi/Kosi, one faction.
+
+    The clock at ``WORLD_TIME`` is the need-clock anchor every character
+    insert requires. Tomi holds Kosi as a trusted ward; Kosi's reverse row is
+    a lone captor stance, which the shipped ``captor`` override never lets
+    talk forward. The faction carries no operational culture tags, so it is
+    the neutral institution the channel tests bind.
+    """
+
+    with disposable_slot_database("qa640_communication_graph") as dbname:
+        seed_story_clock(dbname, world_time=WORLD_TIME)
+        tomi, _ = seed_character(dbname, name="Tomi")
+        kosi, _ = seed_character(dbname, name="Kosi")
+        seed_relationship(
+            dbname,
+            subject_character_id=tomi,
+            object_character_id=kosi,
+            relationship_type="ward",
+            emotional_valence="+3|trusting",
+        )
+        seed_relationship(
+            dbname,
+            subject_character_id=kosi,
+            object_character_id=tomi,
+            relationship_type="captor",
+            emotional_valence="-3|resentful",
+        )
+        seed_faction(dbname, name="Communication Graph Institution")
+        yield dbname
 
 
 def _install_valence_shadow(cur: Any) -> None:
@@ -158,10 +197,10 @@ def _insert_culture_tag(session: Session, *, entity_id: int, tag: str) -> None:
 
 
 @pytest.fixture()
-def communication_db() -> Iterator[dict[str, Any]]:
-    """Build isolated character/channel fixtures in one slot-5 transaction."""
+def communication_db(communication_slot: str) -> Iterator[dict[str, Any]]:
+    """Build isolated character/channel fixtures in one rolled-back transaction."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
+    engine = create_engine(sqlalchemy_url(communication_slot), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -375,8 +414,7 @@ def test_conflicted_live_pair_licenses_only_each_tellers_own_direction(
             )
         ).mappings()
     }
-    if set(ids) != {"Tomi", "Kosi"}:
-        pytest.skip("save_05 does not contain the frozen Tomi/Kosi pair")
+    assert set(ids) == {"Tomi", "Kosi"}, "communication_slot seeds Tomi and Kosi"
     graph = assemble_communication_graph(
         session,
         settings=load_settings("nexus.toml").orrery.contagion,

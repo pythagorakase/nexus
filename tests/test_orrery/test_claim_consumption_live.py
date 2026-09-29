@@ -1,8 +1,8 @@
-"""Rollback-only slot-5 coverage for Stage 2d claim consumption."""
+"""Rollback-only coverage for Stage 2d claim consumption on a seeded clone."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from typing import Any, Iterator
 
@@ -30,13 +30,12 @@ from nexus.agents.orrery.substrate import (
     knows_claim_about,
     knows_recent_event,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
 from tests.test_orrery.test_claim_propagation_live import (
     EPISTEMICS,
-    LIVE_SLOT,
     _chain,
     _insert_character,
     _insert_chunk,
@@ -50,12 +49,23 @@ from tests.test_orrery.test_claim_propagation_live import (
 
 pytestmark = pytest.mark.requires_postgres
 
+WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(scope="module")
+def consumption_slot() -> Iterator[str]:
+    """Own a template clone whose story clock anchors character need clocks."""
+
+    with disposable_slot_database("qa640_claim_consumption") as dbname:
+        seed_story_clock(dbname, world_time=WORLD_TIME)
+        yield dbname
+
 
 @pytest.fixture()
-def live_connection() -> Iterator[Any]:
+def live_connection(consumption_slot: str) -> Iterator[Any]:
     """Expose SQLAlchemy and raw-cursor reads inside one rolled-back tx."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
+    engine = create_engine(sqlalchemy_url(consumption_slot))
     connection = engine.connect()
     transaction = connection.begin()
     try:
@@ -76,8 +86,9 @@ def live_connection() -> Iterator[Any]:
                 """
             )
             migration_state = cur.fetchone()
-            if not migration_state["registered"] or not migration_state["shaped"]:
-                pytest.skip("slot 5 requires migrations 080-083 for Stage 2d")
+            assert (
+                migration_state["registered"] and migration_state["shaped"]
+            ), "Stage 2d requires migrations 080-083 on the clone"
             install_claim_accounts_shadow_sync(cur)
             _install_valence_shadow(cur)
         yield connection
