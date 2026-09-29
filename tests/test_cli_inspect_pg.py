@@ -1,0 +1,156 @@
+"""The inspect family and the shared session waiter on a factory-played clone.
+
+A disposable clone holds a story played by ``seed_played_story`` with its next
+turn pending. The real gateway serves it on lane 8017 with every provider
+routed to TEST, and the
+public CLI runs in subprocesses: ``continue --choice 1`` accepts the pending
+turn and waits on the new session through ``wait_for_session``, then the
+inspect verbs read the result back through the player-plane routes.
+"""
+
+from __future__ import annotations
+
+from contextlib import closing
+from datetime import timedelta
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+from typing import Any
+
+import pytest
+
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
+    connect,
+    disposable_slot_database,
+    seed_faction,
+    seed_pending_turn,
+    seed_played_story,
+)
+from tests.scheduler_helpers import gateway_lane, route_slot
+from tests.scheduler_helpers import test_provider_config as configure_test
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
+
+pytestmark = pytest.mark.requires_postgres
+
+ROOT = Path(__file__).resolve().parents[1]
+LANE = "8017"
+PENDING_TEXT = "The pending fixture turn waits for the player's choice."
+CAST = ("Mara Quill", "Oren Vale")
+
+
+def _nexus(*argv: str) -> tuple[subprocess.CompletedProcess[str], Any]:
+    """Run the public CLI against the lane and parse its JSON stdout."""
+    completed = subprocess.run(
+        [sys.executable, "-m", "nexus.cli", *argv],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": str(ROOT)},
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    print(f"$ nexus {' '.join(argv)}\n{completed.stdout}{completed.stderr}", flush=True)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.stderr == ""
+    return completed, json.loads(completed.stdout)
+
+
+def _envelope(*argv: str) -> Any:
+    """Run one ``nexus inspect`` verb on slot 4 and return its envelope data."""
+    _completed, envelope = _nexus("inspect", *argv, "--slot", "4", "--json")
+    assert set(envelope) == {"ok", "data"}
+    assert envelope["ok"] is True
+    return envelope["data"]
+
+
+def test_continue_waits_then_inspect_reads_the_played_clone(
+    monkeypatch, tmp_path, mock_openai_server  # noqa: F811
+) -> None:
+    """``continue`` waits through the helper; inspect reads what it produced."""
+    configure_test(tmp_path, mock_openai_server, monkeypatch)
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", LANE)
+    monkeypatch.setenv("NEXUS_API_URL", f"http://127.0.0.1:{LANE}")
+    with disposable_slot_database("qa640_815_inspect") as dbname:
+        route_slot(monkeypatch, dbname)
+        from nexus.api import slot_endpoints
+
+        monkeypatch.setattr(slot_endpoints, "slot_dbname", lambda slot: dbname)
+        committed = seed_played_story(
+            dbname,
+            turns=3,
+            cast=CAST,
+            time_delta=timedelta(hours=2),
+            slot=4,
+        )
+        faction_id, _entity = seed_faction(dbname, name="The Lamplighters")
+        seed_pending_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text=PENDING_TEXT,
+            choices=list(FIXTURE_TURN_CHOICES),
+        )
+
+        with gateway_lane(monkeypatch) as scheduler:
+            scheduler.stop()
+            _completed, turn = _nexus(
+                "continue", "--slot", "4", "--choice", "1", "--json"
+            )
+            assert turn["success"] is True, turn
+            assert isinstance(turn["session_id"], str) and turn["session_id"]
+            assert turn["message"].strip()
+            assert turn["choices"]
+
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT nc.id, nc.storyteller_text FROM narrative_chunks nc "
+                    "JOIN chunk_metadata cm ON cm.chunk_id = nc.id "
+                    f"WHERE {playable_narrative_predicate()} ORDER BY nc.id"
+                )
+                playable = cur.fetchall()
+                cur.execute("SELECT session_id::text, storyteller_text FROM incubator")
+                incubator = cur.fetchone()
+                cur.execute("SELECT id, name FROM characters ORDER BY id")
+                characters = cur.fetchall()
+                cur.execute("SELECT id, name FROM places ORDER BY id")
+                places = cur.fetchall()
+                cur.execute("SELECT id, name FROM factions ORDER BY id")
+                factions = cur.fetchall()
+            # Continuing accepted the pending turn and staged the next one.
+            assert [row[0] for row in playable[:-1]] == committed
+            assert playable[-1][1] == PENDING_TEXT
+            assert incubator == (turn["session_id"], turn["message"])
+
+            last_two = _envelope("chunks", "--last", "2")
+            assert [chunk["id"] for chunk in last_two] == [
+                row[0] for row in playable[-2:]
+            ]
+            assert last_two[-1]["storytellerText"] == PENDING_TEXT
+            assert all(
+                chunk["metadata"]["chunkId"] == chunk["id"] for chunk in last_two
+            )
+
+            first, second = playable[0][0], playable[1][0]
+            ranged = _envelope("chunks", "--from", str(first), "--to", str(second))
+            assert [chunk["id"] for chunk in ranged] == [first, second]
+            assert _envelope("chunk", str(second)) == ranged[1]
+
+            draft = _envelope("incubator")
+            assert draft["session_id"] == turn["session_id"]
+            assert draft["storyteller_text"] == turn["message"]
+
+            cast = _envelope("characters")
+            assert [(row["id"], row["name"]) for row in cast] == characters
+            assert set(CAST) <= {row["name"] for row in cast}
+            mara = next(row for row in cast if row["name"] == "Mara Quill")
+            assert _envelope("characters", str(mara["id"])) == mara
+
+            listed_places = _envelope("places")
+            assert [(row["id"], row["name"]) for row in listed_places] == places
+            assert _envelope("places", str(places[-1][0])) == listed_places[-1]
+            listed_factions = _envelope("factions")
+            assert [(row["id"], row["name"]) for row in listed_factions] == factions
+            assert factions == [(faction_id, "The Lamplighters")]
+            assert _envelope("factions", str(faction_id)) == listed_factions[0]
