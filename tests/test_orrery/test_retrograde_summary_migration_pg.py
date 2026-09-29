@@ -29,7 +29,14 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture()
 def disposable_retrograde_db() -> Iterator[Any]:
-    """Yield a template clone whose name cannot collide with a save slot."""
+    """Yield a pre-078-shaped template clone that cannot collide with a save slot.
+
+    Migration 078 is historical: it ran while ``narrative_chunks`` still carried
+    the ChunkWorkflow lifecycle columns, which migration 134 later dropped.  The
+    clone restores those columns with their pre-134 definitions, so the legacy
+    seeds and the 078 guards run against the schema 078 actually met, whether
+    or not the template has applied 134 yet.
+    """
 
     dbname = f"qa640_retro078_{uuid.uuid4().hex[:12]}"
     admin = None
@@ -61,6 +68,7 @@ def disposable_retrograde_db() -> Iterator[Any]:
                 SET base_timestamp = EXCLUDED.base_timestamp
                 """
             )
+            _restore_pre_134_lifecycle_columns(cur)
         conn.commit()
         yield conn
     finally:
@@ -793,6 +801,19 @@ def test_migration_078_rejects_stamped_summary_without_vector_coverage(
             (seeded["summary_id"],),
         )
         assert cur.fetchone()[0] == 1
+
+
+def _restore_pre_134_lifecycle_columns(cur: Any) -> None:
+    """Re-add the lifecycle columns migration 134 dropped, as 078 met them."""
+
+    cur.execute(
+        """
+        ALTER TABLE narrative_chunks
+            ADD COLUMN IF NOT EXISTS state varchar(20) DEFAULT 'draft',
+            ADD COLUMN IF NOT EXISTS finalized_at timestamptz,
+            ADD COLUMN IF NOT EXISTS regeneration_count integer DEFAULT 0
+        """
+    )
 
 
 def _drop_migration_targets(conn: Any) -> None:

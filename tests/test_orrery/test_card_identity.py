@@ -186,8 +186,8 @@ async def test_card_exposure_rank_joint_and_backstage_parity(
                     assert _orrery_card_identity(parent) in prompt
             chunk = session.execute(
                 text(
-                    "INSERT INTO narrative_chunks (raw_text, storyteller_text, state) "
-                    "VALUES ('Card identity QA', 'Card identity QA', 'accepted') RETURNING id"
+                    "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+                    "VALUES ('Card identity QA', 'Card identity QA') RETURNING id"
                 )
             ).scalar_one()
             session.execute(
@@ -454,7 +454,7 @@ async def test_ren_rank_commit_replay(
             )
             chunk = session.execute(
                 text(
-                    "INSERT INTO narrative_chunks (raw_text, storyteller_text, state) VALUES ('Ren replay', 'Ren replay', 'accepted') RETURNING id"
+                    "INSERT INTO narrative_chunks (raw_text, storyteller_text) VALUES ('Ren replay', 'Ren replay') RETURNING id"
                 )
             ).scalar_one()
             session.commit()

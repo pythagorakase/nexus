@@ -44,9 +44,8 @@ def _insert_chunk(cursor: Any, raw_text: str, scene: int) -> int:
     cursor.execute(
         """
         INSERT INTO narrative_chunks (
-            raw_text, storyteller_text, authorial_directives,
-            state, finalized_at
-        ) VALUES (%s, %s, '[]'::jsonb, 'finalized', now())
+            raw_text, storyteller_text, authorial_directives
+        ) VALUES (%s, %s, '[]'::jsonb)
         RETURNING id
         """,
         (raw_text, raw_text),

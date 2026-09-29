@@ -732,8 +732,8 @@ def _reset_to_committed_parent(dbname: str) -> int:
             cur.execute(
                 """
                 INSERT INTO narrative_chunks (
-                    raw_text, storyteller_text, state
-                ) VALUES (%s, %s, 'finalized')
+                    raw_text, storyteller_text
+                ) VALUES (%s, %s)
                 RETURNING id
                 """,
                 ("The platform waits.", "The platform waits."),
@@ -1228,8 +1228,8 @@ def test_pending_choice_rolls_back_when_auto_approval_validation_fails(
             cur.execute(
                 """
                 INSERT INTO narrative_chunks (
-                    raw_text, storyteller_text, state
-                ) VALUES (%s, %s, 'finalized')
+                    raw_text, storyteller_text
+                ) VALUES (%s, %s)
                 RETURNING id
                 """,
                 ("The door waits.", "The door waits."),
@@ -1502,8 +1502,8 @@ def test_undo_restores_unresolved_parent_and_plain_continue_rejects(
             cur.execute(
                 """
                 INSERT INTO narrative_chunks (
-                    raw_text, storyteller_text, choice_object, choice_text, state
-                ) VALUES (%s, %s, %s, %s, 'finalized')
+                    raw_text, storyteller_text, choice_object, choice_text
+                ) VALUES (%s, %s, %s, %s)
                 RETURNING id
                 """,
                 (

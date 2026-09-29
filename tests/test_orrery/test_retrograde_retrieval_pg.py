@@ -230,9 +230,8 @@ def _insert_chunk(
     cur.execute(
         """
         INSERT INTO narrative_chunks (
-            raw_text, storyteller_text, authorial_directives,
-            state, finalized_at
-        ) VALUES (%s, %s, %s::jsonb, 'finalized', now())
+            raw_text, storyteller_text, authorial_directives
+        ) VALUES (%s, %s, %s::jsonb)
         RETURNING id
         """,
         (raw_text, storyteller_text, json.dumps(directives)),

@@ -47,8 +47,8 @@ async def _seed_commit(dbname: str, session_id: str) -> int:
             cur.execute("TRUNCATE incubator, narrative_chunks RESTART IDENTITY CASCADE")
             cur.execute(
                 """
-                INSERT INTO narrative_chunks (raw_text, storyteller_text, state)
-                VALUES ('Parent scene.', 'Parent scene.', 'finalized')
+                INSERT INTO narrative_chunks (raw_text, storyteller_text)
+                VALUES ('Parent scene.', 'Parent scene.')
                 RETURNING id
                 """
             )

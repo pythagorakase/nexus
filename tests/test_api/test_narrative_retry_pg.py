@@ -179,8 +179,8 @@ def test_retry_rejects_changed_durable_state_before_session_creation(
             )
         elif change == "newer_chunk":
             cur.execute(
-                "INSERT INTO narrative_chunks (raw_text, storyteller_text, state) "
-                "VALUES ('New scene', 'New scene', 'finalized')"
+                "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+                "VALUES ('New scene', 'New scene')"
             )
         elif change == "missing_action":
             cur.execute(
