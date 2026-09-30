@@ -2263,6 +2263,24 @@ def _assert_wizard_phase(conn: Any) -> None:
     assert row[0] is None, f"wizard-phase clone already binds player {row[0]}"
 
 
+def _assert_no_experience_jobs(conn: Any) -> None:
+    """Prove the clone holds no experience job, the idle-drain seed."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM character_experience_jobs")
+        (job_count,) = cur.fetchone()
+    conn.rollback()
+    assert job_count == 0, f"wizard-phase clone already holds {job_count} jobs"
+
+
+def _wizard_drain_settings() -> dict[str, Any]:
+    """Load settings and pin the experiences lane preconditions #1027 needs."""
+    settings = load_settings_as_dict()
+    experiences = settings["orrery"]["experiences"]
+    assert experiences["enabled"] is True
+    assert experiences["include_player_character"] is False
+    return settings
+
+
 def test_default_config_idle_drain_on_wizard_phase_slot_is_silent() -> None:
     """No due job on a slot with no player is idle work, not an error (#1027)."""
 
@@ -2270,10 +2288,8 @@ def test_default_config_idle_drain_on_wizard_phase_slot_is_silent() -> None:
         conn = _connect(dbname)
         try:
             _assert_wizard_phase(conn)
-            settings = load_settings_as_dict()
-            assert settings["orrery"]["experiences"]["include_player_character"] is (
-                False
-            )
+            _assert_no_experience_jobs(conn)
+            settings = _wizard_drain_settings()
             forbidden_provider = _ForbiddenSceneProvider()
             assert drain_experience_render_jobs_sync(
                 slot=1027,
@@ -2349,11 +2365,13 @@ def test_scheduler_pass_on_wizard_phase_slot_runs_every_lane_cleanly(
         conn = _connect(dbname)
         try:
             _assert_wizard_phase(conn)
+            _assert_no_experience_jobs(conn)
         finally:
             conn.close()
+        settings = _wizard_drain_settings()
         caplog.clear()
         with caplog.at_level(logging.INFO):
-            result = SlotScheduler(4, dbname=dbname).run_pass()
+            result = SlotScheduler(4, dbname=dbname, settings=settings).run_pass()
         assert result["owner"] is True and result["drained"] is True, result
         assert result["character_experience_jobs"] == [0, 0], result
         assert result["orrery_narration_jobs"] == [0, 0], result
