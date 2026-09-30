@@ -32,6 +32,7 @@ from nexus.telemetry.turn_observation import (
     observe_turn,
     read_turn_ledgers,
 )
+from nexus.telemetry import usage as usage_ledger
 from nexus.telemetry.usage import (
     UsageEvent,
     record_prompt_window,
@@ -40,8 +41,12 @@ from nexus.telemetry.usage import (
 )
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
-# Read once, so a run that straddles UTC midnight keeps one pair of days.
-TODAY = datetime.now(timezone.utc).date()
+# One instant stands for "now" in every test, read from the ledger writer's
+# own clock. The days below derive from it, and freeze_ledger_clock pins the
+# writer to it, so a run that straddles UTC midnight still writes each
+# prompt-window record into the day the observation reads.
+FROZEN_NOW = usage_ledger.datetime.now(timezone.utc)
+TODAY = FROZEN_NOW.date()
 YESTERDAY = TODAY - timedelta(days=1)
 READ_AT = datetime.combine(TODAY, time(12), tzinfo=timezone.utc)
 WRITER_BLOCKS = {
@@ -71,6 +76,22 @@ REPAIR_NOTES: list[dict[str, Any]] = [
 REJECTION_NOTES: list[dict[str, Any]] = [
     {"rejection": "wire-contract-violation", "error": "private generated prose"}
 ]
+
+
+class _FrozenLedgerClock(datetime):
+    """The writer's ``datetime`` with ``now()`` pinned to ``FROZEN_NOW``."""
+
+    @classmethod
+    def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
+        if tz is None:
+            return FROZEN_NOW.astimezone().replace(tzinfo=None)
+        return FROZEN_NOW.astimezone(tz)
+
+
+@pytest.fixture(autouse=True)
+def freeze_ledger_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the usage and prompt-window writers' clock to the tests' instant."""
+    monkeypatch.setattr(usage_ledger, "datetime", _FrozenLedgerClock)
 
 
 def _window(
@@ -1208,7 +1229,8 @@ def test_compaction_records_usage_under_its_job_id(
         usage_provider_name="test",
         structured_output_retries=0,
     )
-    days = {datetime.now(timezone.utc).date().isoformat()}
+    # Read the day from the writer's clock, which stamps the usage event.
+    days = {usage_ledger.datetime.now(timezone.utc).date().isoformat()}
     try:
         with compaction_usage(12, slot=4):
             digest, _ = provider.get_structured_completion(
@@ -1218,7 +1240,7 @@ def test_compaction_records_usage_under_its_job_id(
         provider.client.close()
     assert isinstance(digest, CorrespondenceDigestWire) and digest.digest
 
-    days.add(datetime.now(timezone.utc).date().isoformat())
+    days.add(usage_ledger.datetime.now(timezone.utc).date().isoformat())
     (event,) = [
         event for day in sorted(days) for event in summarize_usage(day=day)["events"]
     ]
