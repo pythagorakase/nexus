@@ -28,9 +28,10 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
 from typing import Any
@@ -333,6 +334,54 @@ def require_disposable_target(dbname: str) -> str:
             "only disposable clones from disposable_slot_database"
         )
     return dbname
+
+
+# The unrouted slot resolver, captured at import under a name the routing
+# sweep below never rebinds.
+_UNROUTED_SLOT_DBNAME = slot_dbname
+
+
+def route_slot_to_disposable(
+    patch: Callable[[Any, str, Any], None], *, slot: int, dbname: str
+) -> None:
+    """Route one slot number to a disposable clone in every loaded module.
+
+    Production code resolves a slot's database through
+    ``nexus.api.slot_utils.slot_dbname``, either through the module attribute
+    (``require_slot_dbname``, ``get_slot_db_url``, ``connection_kwargs`` and
+    every function-local import) or through a name bound at import
+    (``from nexus.api.slot_utils import slot_dbname``). ``patch`` rebinds the
+    module attribute and every loaded module's bound name to a resolver that
+    returns ``dbname`` for ``slot`` and raises for any other slot, and
+    narrows ``VALID_DBNAMES`` to the clone, so a path this sweep missed fails
+    loudly instead of reaching an owner database. Modules imported afterward
+    bind the routed resolver.
+
+    ``patch`` is ``monkeypatch.setattr`` inside a test (undone at teardown) or
+    the builtin ``setattr`` in a child process that serves the gateway for
+    the clone (``tests.slot_routed_gateway``). The caller sets ``NEXUS_SLOT``
+    when the code under test resolves the active slot.
+    """
+
+    from nexus.api import slot_utils
+
+    require_disposable_target(dbname)
+
+    def routed_slot_dbname(slot_number: int) -> str:
+        if slot_number != slot:
+            raise RuntimeError(
+                f"Slot {slot_number} is not routed: only slot {slot} reaches "
+                f"the disposable clone {dbname!r}"
+            )
+        return dbname
+
+    patch(slot_utils, "VALID_DBNAMES", {dbname})
+    patch(slot_utils, "slot_dbname", routed_slot_dbname)
+    for name, module in list(sys.modules.items()):
+        if module is None or not name.startswith(("nexus.", "scripts.", "tests.")):
+            continue
+        if vars(module).get("slot_dbname") is _UNROUTED_SLOT_DBNAME:
+            patch(module, "slot_dbname", routed_slot_dbname)
 
 
 def seed_protagonist(
