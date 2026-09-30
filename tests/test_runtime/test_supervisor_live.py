@@ -60,6 +60,9 @@ OVERRIDE_GATEWAY_PORT = 0
 # The routed slot number: it resolves to ROUTED_DATABASE, never to an owner
 # save, in every process these tests start.
 TEST_SLOT = 5
+# A slot the routed processes refuse: the restart steps set it as NEXUS_SLOT to
+# prove the running slot, not the environment or the default, is restarted.
+CONFLICTING_SLOT = 3
 # The disposable clone serving TEST_SLOT; routed_clone sets it before each test.
 ROUTED_DATABASE = ""
 ROUTED_LAUNCHER = "tests.slot_routed_uvicorn"
@@ -205,7 +208,13 @@ def _cli(
         timeout=timeout,
     )
     output = completed.stdout or completed.stderr
-    payload = json.loads(output)
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        raise AssertionError(
+            f"nexus {' '.join(args)} exited {completed.returncode} without JSON:\n"
+            f"{completed.stderr[-2000:]}"
+        ) from None
     payload["_returncode"] = completed.returncode
     return payload
 
@@ -266,18 +275,32 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert again["_returncode"] == 1
         assert "already running" in again["error"]
 
+        # runtime.default_slot is the routed slot here, so a restart that
+        # dropped the recorded running slot and fell back to the default would
+        # still pick TEST_SLOT. The restarts therefore run with a conflicting
+        # NEXUS_SLOT: a restart that resolves the slot from the environment or
+        # the default hands the routed CLI a slot it refuses, and the test
+        # fails before any database opens.
+        conflicting_slot = {"NEXUS_SLOT": str(CONFLICTING_SLOT)}
+
         # Restarting the gateway yields a new pid; mock_openai is untouched.
         mock_pid = up["services"]["mock_openai"]["pid"]
-        restart = _cli("restart", "gateway", config=config)
+        restart = _cli("restart", "gateway", config=config, env_extra=conflicting_slot)
+        assert restart["_returncode"] == 0, restart
+        assert restart["services"]["gateway"]["slot"] == TEST_SLOT
         new_pid = restart["services"]["gateway"]["pid"]
         assert new_pid != gateway_pid
         assert _pid_alive(new_pid)
         assert _pid_alive(mock_pid)
         assert requests.get(f"{base}/health", timeout=5).status_code == 200
+        status = _cli("status", config=config)
+        assert status["runtime"]["slot"] == TEST_SLOT
+        assert status["runtime"]["database"]["dbname"] == ROUTED_DATABASE
 
         # A full restart without --slot preserves the running slot instead of
-        # falling back to runtime.default_slot.
-        full_restart = _cli("restart", config=config)
+        # falling back to NEXUS_SLOT or runtime.default_slot.
+        full_restart = _cli("restart", config=config, env_extra=conflicting_slot)
+        assert full_restart["_returncode"] == 0, full_restart
         assert full_restart["slot"] == TEST_SLOT
         full_gateway_pid = full_restart["services"]["gateway"]["pid"]
         full_mock_pid = full_restart["services"]["mock_openai"]["pid"]

@@ -450,3 +450,69 @@ The nodes of `tests/test_runtime/test_supervisor_live.py` that reached an owner 
 - `test_gateway_port_override_coexists_with_default_instance`, `test_gateway_port_override_first_then_default_stack`, and `test_override_refuses_foreign_healthy_listener_on_sibling_port`: `up` without `--slot` resolved `runtime.default_slot = 1` and started gateways on `save_01`, held in observer mode only by its read-only lock.
 
 The other six nodes never started a gateway or opened a slot on main (`test_up_refuses_port_held_by_unmanaged_process` and the two override-error tests refuse before `recover_active_slot_choice`, `supervisor.py:651-669`; the external-down, auto-gating, and mock-port tests start nothing). They now run under the routed CLI too, so any future change that makes them reach a slot reaches the clone.
+
+## Review Round (Astra)
+
+Astra's review of `141daf44` returned one P2 and two P3 items.
+
+### P2: Restart Preservation Keeps a Distinct Slot
+
+On main, the lifecycle test ran slot 5 against `runtime.default_slot = 1`, so a restart that lost the recorded slot fell back to 1 and failed. The conversion set `default_slot = 5` and lost that distinction. `default_slot` stays 5 and routing stays clone-only; the two restart commands now run with `NEXUS_SLOT=3` (`CONFLICTING_SLOT`, `tests/test_runtime/test_supervisor_live.py:65` and `:284`) in the CLI process environment. The recorded-slot path ignores it. A restart that resolves the slot from `NEXUS_SLOT` or the default hands `recover_active_slot_choice` slot 3, which the routed CLI refuses (`Slot 3 is not routed`) before any connection opens. After each restart the test asserts `_returncode == 0` and slot 5: `restart gateway` asserts the new record's `slot`, and `restart` asserts the payload's `slot` and `/runtime/status` naming the clone. `_cli` now raises an `AssertionError` that carries the command's stderr tail when the CLI prints no JSON (`:215`), so a refusal names itself instead of surfacing as a bare `JSONDecodeError`.
+
+Coverage proof: two scratch mutations of `Supervisor.restart` (`nexus/runtime/supervisor.py`), each run with `env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_runtime/test_supervisor_live.py -k full_lifecycle`, then restored from a saved copy (`git diff --stat` afterward lists only the test file).
+
+Mutation A: both branches resolve `self._resolve_slot(None)`. The failure is at `restart gateway`:
+
+```
+>           restart = _cli("restart", "gateway", config=config, env_extra=conflicting_slot)
+E           AssertionError: nexus restart gateway exited 1 without JSON:
+E             File ".../nexus/runtime/supervisor.py", line 878, in restart
+E               record = self._start_service(
+E             File ".../nexus/runtime/supervisor.py", line 669, in _start_service
+E               recover_active_slot_choice(slot)
+E             File ".../tests/pg_fixtures.py", line 366, in _routed_slot_dbname
+E           RuntimeError: Slot 3 is not routed: only slot 5 reaches the disposable clone 'qa885_supervisor_ebb90a762582'
+1 failed, 11 deselected, 5 warnings in 7.52s
+```
+
+Mutation B: only the full-restart branch resolves `self._resolve_slot(None)` (the service branch keeps its recorded slot). `restart gateway` passes, and the failure is at the full restart:
+
+```
+-        resolved_slot = self._resolve_slot(
+-            slot if slot is not None else self._running_slot()
+-        )
++        resolved_slot = self._resolve_slot(None)
+
+>           full_restart = _cli("restart", config=config, env_extra=conflicting_slot)
+E           AssertionError: nexus restart exited 1 without JSON:
+E             File ".../nexus/runtime/supervisor.py", line 886, in restart
+E               return self.up(slot=resolved_slot, echo=False)
+E             File ".../nexus/runtime/supervisor.py", line 669, in _start_service
+E               recover_active_slot_choice(slot)
+E             File ".../tests/pg_fixtures.py", line 366, in _routed_slot_dbname
+E           RuntimeError: Slot 3 is not routed: only slot 5 reaches the disposable clone 'qa885_supervisor_d9a13f0e740e'
+1 failed, 11 deselected, 5 warnings in 9.98s
+```
+
+### P3: The Gateway-Only Restart Asserts the Clone
+
+After `restart gateway`, `nexus status` must report `runtime.slot == 5` and `runtime.database.dbname` equal to the clone (`:297` and the line after it), as the full restart already did.
+
+### P3: Evidence Counts
+
+The review found 119 samples per owner slot and 15 routed gateway pids in the raw artifacts, and one other pytest process live at the proof's start. This file (the "No Gateway Lease in the Owner Slots While Test Gateways Were Up" section) and the PR body already state 119 samples, 15 pids, and the other process (pid 97955, `tests/test_orrery` tag files, gone by the end). The 138-sample and ten-gateway counts came from the superseded 02:48Z run at `3c113df9` and were carried only into the review brief, not into this file or the PR body. The prose needed no change, and the artifacts were not regenerated.
+
+### Gates
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_runtime/test_supervisor_live.py tests/test_slot_routed_entrypoints.py tests/test_runtime/test_readiness_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+37 passed, 5 warnings in 68.52s (0:01:08)
+
+$ black --check tests/test_runtime/test_supervisor_live.py
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+
+$ flake8 tests/test_runtime/test_supervisor_live.py
+(no output)
+```
