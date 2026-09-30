@@ -1,6 +1,67 @@
 # Verification: De-Own the Corpus Clones and Guard the Tree (#885 B2-9b)
 
-The Astra review round's tails ran at `46aaabce` (the code head after the Astra round: `7dd8f1ec` plus a guard-probe spelling fix), under "Review Round (Astra)" directly below; the older sections keep their own heads. The same run rules hold: a clean tree before and after each run, `HEAD` unmoved, `-p tests.dbname_audit` on every PostgreSQL run, `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, the shared interpreter with `nexus` imported from this worktree, no paid call. Each fenced tail lists whole lines selected from its run log with the same `grep -E` as the older sections (the scratch summary run also keeps its `^SCRATCH` line); no line is edited or shortened. Round logs sit in the session scratchpad under `885-B2-9b-fix3/`. Not run this round: the whole-tree PostgreSQL gate, which the coordinator runs at the final commit.
+The final round's tails ran at `11d50c63`, under "Final Round" directly below. The Astra review round's tails ran at `46aaabce` (the code head after the Astra round: `7dd8f1ec` plus a guard-probe spelling fix), under "Review Round (Astra)"; the older sections keep their own heads. The same run rules hold: a clean tree before and after each run, `HEAD` unmoved, `-p tests.dbname_audit` on every PostgreSQL run, `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, the shared interpreter with `nexus` imported from this worktree, no paid call. Each fenced tail lists whole lines selected from its run log with the same `grep -E` as the older sections (the scratch summary run also keeps its `^SCRATCH` line); no line is edited or shortened. The Astra round's logs sit in the session scratchpad under `885-B2-9b-fix3/`. Not run this round: the whole-tree PostgreSQL gate, which the coordinator runs at the final commit.
+
+## Final Round at `11d50c63`
+
+Five items from the second-pass review and the two verifier verdicts. The run rules above hold (clean tree, `HEAD` at `11d50c63` unmoved, `-p tests.dbname_audit`, gateway variables and `NEXUS_SLOT` unset, `nexus` imported from this worktree, no paid call). Logs sit in the session scratchpad under `885-B2-9b-final/`. Not run: the whole-tree PostgreSQL gate, which the coordinator runs at the final commit.
+
+- P2, shell operators: a `shell=True` command literal (a string, a list's command string, or an f-string's constant parts) is checked word by word, split by `shlex` in punctuation mode at whitespace and at `;`, `&&`, `||`, `|`, `&`, `<`, `>`; text `shlex` cannot read (an unbalanced quote) is split at whitespace and those operators instead. New findings: `subprocess.run("pg_dump -d save_04>dump.sql", shell=True)`, `subprocess.run(args="pg_dump -d save_04; true", shell=True)`, and the glued and spaced variants of `;`, `&&`, `||`, `|`, `<`, `&`, a quoted name before `>`, a list command, an f-string command, and an unbalanced quote. New passing cases: a disposable `qa640_save_04_copy>dump.sql` under `shell=True`, and the same owner string without `shell=True` (no shell, no split).
+- Residual, f-string parts: the slot-number completion runs on every constant part of an f-string that a formatted value follows (the head also completes when it starts `save_`), so `connect(f"host={host} dbname='save_{slot:02d}'")` and its unquoted form are findings; `f"host={host} dbname='qa640_{slot:02d}'"` is not.
+- Residual, positional dict literals: a `dict(...)` call's positional dict literals and nested `dict(...)` calls expand into keywords, so `disposable_slot_database('qa', **dict({'include_data': True}))`, `**dict(dict({...}))`, and `connect(**dict({'dbname': 'save_02'}))` are findings; `**dict({'include_data': False})` is not.
+- P3, aliased resolvers: `route_slots_to_disposable` rebinds, in every swept module, every attribute whose value is the unrouted `slot_dbname` function, whatever its name, and restores each at teardown (the module's own `_UNROUTED_SLOT_DBNAME` capture is never rebound). `test_route_sweeps_an_aliased_resolver_binding` binds `from nexus.api.slot_utils import slot_dbname as sd` in a probe module and proves `sd` routed (slot 4 to the clone, slot 2 refused) and restored.
+- Documentation: the paid summary proof's scratch run (under "P2: The Paid Summary Proof on a Seeded Story" below, and the PR body) now names what it checked and what it did not.
+
+### Changed Files and the Named Neighbors, PostgreSQL
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_owner_target_guard.py tests/test_pg_disposable_target.py tests/test_scheduler_helpers_routing.py tests/test_inherited_slot_isolation_pg.py tests/test_lore/test_baseline_fingerprint_refresh_pg.py tests/test_orrery/test_card_identity.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 8 targets: postgres, qa640_885_ren_replay_* x4, qa640_908_fingerprint_*, qa640_lane_close_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [2] tests/test_orrery/test_card_identity.py:121: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+165 passed, 2 skipped, 9 warnings in 27.63s
+```
+
+### Offline Guard over the Tree
+
+```
+$PY -m pytest -q tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+80 passed, 5 warnings in 2.63s
+```
+
+```
+PYTHONPATH=$PWD $PY -c 'from tests.test_owner_target_guard import tree_findings, unexempted; ...'  # prints the counts
+guard over tests/: 7 findings, 0 unexempted
+```
+
+### Negative Controls (Scratch, Reverted)
+
+The five review probes through `scan_source` at `c43978f7` (`old`) and at `11d50c63` (`new`):
+
+```
+old=[]                                       new=['subprocess-owner-literal']             subprocess.run("pg_dump -d save_04>dump.sql", shell=True)
+old=[]                                       new=['subprocess-owner-literal']             subprocess.run(args="pg_dump -d save_04; true", shell=True)
+old=[]                                       new=['connection-owner-literal']             connect(f"host={host} dbname='save_{slot:02d}'")
+old=[]                                       new=['connection-owner-literal']             connect(f"host={host} dbname=save_{slot:02d}")
+old=[]                                       new=['include_data-without-requires_corpus'] disposable_slot_database('qa', **dict({'include_data': True}))
+```
+
+The alias probe with `c43978f7`'s `tests/pg_fixtures.py` (the file was restored before the commit):
+
+```
+>               assert probe.sd is not unrouted
+E               AssertionError: assert <function slot_dbname at 0x1085cd8a0> is not <function slot_dbname at 0x1085cd8a0>
+tests/test_pg_disposable_target.py:405: AssertionError
+1 failed, 59 deselected, 5 warnings in 0.27s
+```
+
+### Lint and Types
+
+Black: clean on `tests/test_owner_target_guard.py`, `tests/pg_fixtures.py` and `tests/test_pg_disposable_target.py`. flake8: zero on all three. mypy `--explicit-package-bases`: `Success: no issues found` on each.
 
 ## Review Round (Astra) at `46aaabce`
 
