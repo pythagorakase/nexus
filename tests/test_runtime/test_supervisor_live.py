@@ -534,12 +534,18 @@ def test_external_profile_attaches_and_never_spawns(tmp_path, external_gateway):
 
 def test_external_profile_fails_loud_when_target_is_down(tmp_path):
     """Attaching to a dead stack is an error, not a silent success."""
-    config = _write_config(
-        tmp_path,
-        profile="external",
-        external_gateway_url="http://127.0.0.1:39999",
-    )
-    up = _cli("up", config=config)
+    # An OS-assigned port held bound but never listening: connections to it
+    # are refused for as long as the socket stays open, so no other process
+    # on the host can answer /health there while `up` runs.
+    with socket.socket() as dead:
+        dead.bind(("127.0.0.1", 0))
+        dead_port = dead.getsockname()[1]
+        config = _write_config(
+            tmp_path,
+            profile="external",
+            external_gateway_url=f"http://127.0.0.1:{dead_port}",
+        )
+        up = _cli("up", config=config)
     assert up["_returncode"] == 1
     assert "unhealthy" in up["error"]
 
