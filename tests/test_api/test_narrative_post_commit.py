@@ -322,6 +322,7 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
     post_commit_finished = threading.Event()
     maturation_finished = threading.Event()
     commit_connections: list[Any] = []
+    bound_sessions: list[str | None] = []
     worker_errors: list[BaseException] = []
     acquired_sessions: list[str] = []
     abandoned_sessions: list[tuple[str, str]] = []
@@ -350,15 +351,28 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
         slot: int | None,
         *,
         warning_sink: list[dict[str, Any]] | None = None,
+        bind_session_id: str | None = None,
     ) -> int:
-        """Pause the real commit at entry without replacing its SQL or connection."""
+        """Pause the real commit at entry without replacing its SQL or connection.
+
+        The double takes the production signature, including
+        ``bind_session_id`` (the continuation session the auto-approved
+        chunk becomes the parent of), records it, and passes it through.
+        """
         commit_connections.append(conn)
+        bound_sessions.append(bind_session_id)
         commit_started.set()
         try:
             assert warning_sink == []
             assert release_commit.wait(timeout=5)
             assert not conn.closed
-            return original_commit(conn, session_id, slot, warning_sink=warning_sink)
+            return original_commit(
+                conn,
+                session_id,
+                slot,
+                warning_sink=warning_sink,
+                bind_session_id=bind_session_id,
+            )
         except BaseException as exc:
             worker_errors.append(exc)
             raise
@@ -409,6 +423,9 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
         with pytest.raises(asyncio.CancelledError):
             await continue_task
         assert acquired_sessions == [lease_session]
+        # The auto-approval binds the continuation's own session as the
+        # accepted chunk's child, in the commit's transaction.
+        assert bound_sessions == [lease_session]
         assert abandoned_sessions == [(acquired_sessions[0], "CancelledError")]
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM narrative_generation_lease")
