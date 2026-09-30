@@ -66,6 +66,7 @@ from nexus.agents.orrery.weather import (
     climate_for_seed,
     weather_at,
 )
+from nexus.config.settings_models import OrreryResolverSettings
 from nexus.presence.roster import read_roster, read_rosters
 from nexus.prompts.registry import PromptId, load
 
@@ -486,6 +487,31 @@ def _load_current_entity_tags(
     )
 
 
+def coerce_resolver_settings(raw: Any) -> OrreryResolverSettings:
+    """Return validated ``[orrery.resolver]`` settings.
+
+    ``None`` reads the section from the typed ``nexus.toml`` settings; a
+    mapping (the resolve phase's dumped Orrery section) is validated through
+    the same Pydantic model, so an unknown membership role fails here.
+    """
+
+    if raw is None:
+        from nexus.config import load_settings
+
+        orrery = load_settings().orrery
+        if orrery is None:
+            raise ValueError("settings.orrery is required to hydrate world state")
+        return orrery.resolver
+    if isinstance(raw, OrreryResolverSettings):
+        return raw
+    if isinstance(raw, Mapping):
+        return OrreryResolverSettings.model_validate(dict(raw))
+    raise TypeError(
+        "Orrery resolver settings must be OrreryResolverSettings, a mapping, "
+        f"or None; got {type(raw).__name__}"
+    )
+
+
 def hydrate_world_state(
     session: Any,
     *,
@@ -499,15 +525,21 @@ def hydrate_world_state(
     contagion_settings: Optional[Any] = None,
     weather_settings: Optional[Any] = None,
     mood_settings: Optional[Any] = None,
+    resolver_settings: Optional[Any] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables.
 
     ``win_history_window`` > 0 additionally hydrates committed win counts
     per (actor, template) over that many trailing ticks for habituation
     dampening; 0 skips the query (habituation off).
+
+    ``resolver_settings`` carries ``[orrery.resolver]``; faction memberships
+    include only rows whose role is in its ``membership_roles``. ``None``
+    reads the section from ``nexus.toml``.
     """
 
     need_tuning = coerce_need_tuning(need_tuning)
+    resolver = coerce_resolver_settings(resolver_settings)
     project_policy = coerce_project_policy(project_settings)
     epistemics_policy = coerce_epistemics_policy(epistemics_settings)
     world_time = world_time_override or load_anchor_world_time(
@@ -670,8 +702,10 @@ def hydrate_world_state(
             JOIN factions f ON f.id = fcr.faction_id
             WHERE c.entity_id IS NOT NULL
               AND f.entity_id IS NOT NULL
+              AND fcr.role::text = ANY(:membership_roles)
             """
-        )
+        ),
+        {"membership_roles": list(resolver.membership_roles)},
     ).mappings():
         faction_memberships.setdefault(row["member_entity_id"], set()).add(
             row["faction_entity_id"]
@@ -2374,6 +2408,7 @@ def resolve_dry_run(
     composition_settings: Optional[Any] = None,
     ambient_settings: Optional[Any] = None,
     ambient_pacing_allowed: Optional[bool] = None,
+    resolver_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
@@ -2402,6 +2437,7 @@ def resolve_dry_run(
         contagion_settings=contagion_settings,
         weather_settings=weather_settings,
         mood_settings=mood_settings,
+        resolver_settings=resolver_settings,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))

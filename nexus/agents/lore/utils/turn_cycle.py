@@ -802,6 +802,7 @@ class TurnCycleManager:
                 composition_settings=orrery_settings["composition"],
                 ambient_settings=orrery_settings["ambient"],
                 ambient_pacing_allowed=turn_context.ambient_pacing_allowed,
+                resolver_settings=orrery_settings["resolver"],
             )
 
         turn_context.orrery_proposal = proposal
