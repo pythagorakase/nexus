@@ -2,10 +2,10 @@
 
 import subprocess
 import tomllib
-from pathlib import Path
 from copy import deepcopy
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
