@@ -47,10 +47,14 @@ the summary names each refused class as unaudited
 extend, is one). A reference to the original psycopg2 connection class
 captured before the plugin configured outside a module's globals (a default
 argument, a class attribute, a closure cell, a container) is not swept; no
-such holder exists in the repository today (checked by a garbage-collector
+such holder exists in the modules the scan imports (psycopg2 with its extras
+and pool, the SQLAlchemy psycopg2 dialect, ``nexus.database``,
+``tests.conftest``, ``tests.pg_fixtures``), checked by a garbage-collector
 reference scan that also searches the untracked tuples and dicts
-``gc.get_referrers`` misses,
-``tests/test_dbname_audit.py::test_no_preconfigure_holder_escapes_the_sweep``).
+``gc.get_referrers`` misses
+(``tests/test_dbname_audit.py::test_no_preconfigure_holder_escapes_the_sweep``);
+a holder in a module outside that set is not caught (an annotation that
+merely names the class, such as a return annotation, cannot construct one).
 The AST owner-target guard planned for #885 slice B2-9b covers the owner
 literals those paths would need.
 """

@@ -79,9 +79,12 @@ more specific instructions.
   reference to the original psycopg2 connection class captured before the
   plugin configured outside a module's globals (a default argument, a class
   attribute, a closure cell, a container) is not swept; no such holder exists
-  in the repository today (checked by a garbage-collector reference scan,
+  in the modules the scan imports (psycopg2 with its extras and pool, the
+  SQLAlchemy psycopg2 dialect, `nexus.database`, `tests.conftest`,
+  `tests.pg_fixtures`), checked by a garbage-collector reference scan,
   `test_no_preconfigure_holder_escapes_the_sweep`, which also searches the
-  untracked tuples and dicts `gc.get_referrers` misses). The AST
+  untracked tuples and dicts `gc.get_referrers` misses; a holder in a module
+  outside that set is not caught. The AST
   owner-target guard planned for #885 slice B2-9b covers the owner literals
   those paths would need. asyncpg targets are read in asyncpg's own order:
   the `database` keyword, else the DSN, else `PGDATABASE`.

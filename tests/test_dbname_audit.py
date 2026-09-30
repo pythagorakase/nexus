@@ -727,8 +727,11 @@ def test_no_preconfigure_holder_escapes_the_sweep(tmp_path: Path) -> None:
 
     The audit sweeps module globals and rebinds subclasses; a default argument,
     class attribute, closure cell, or container that captured the class first
-    would reach libpq unaudited. None exists in the modules the PostgreSQL
-    tests load, and the scan finds one of each kind once they are planted.
+    would reach libpq unaudited. None exists in the modules this scan imports
+    (psycopg2 with its extras and pool, the SQLAlchemy psycopg2 dialect,
+    nexus.database, tests.conftest, tests.pg_fixtures), and the scan finds one
+    of each kind once they are planted; modules outside that set are not
+    scanned.
     """
 
     script = tmp_path / "referrer_scan.py"
