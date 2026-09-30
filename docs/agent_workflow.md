@@ -44,6 +44,22 @@ more specific instructions.
     `security` itself, and `ctypes` calls into the Security framework. The
     guard is not a protected-path write guard, and no launcher preflight runs
     outside pytest; those parts of #963 are not implemented yet.
+- The owner-connection audit is opt-in: run a gate with
+  `-p tests.dbname_audit`, or set `NEXUS_DBNAME_AUDIT=1` before pytest starts
+  (`tests/conftest.py` reads it once and loads the same plugin), whenever a
+  change must prove that no test reaches an owner database, as every #885
+  slice does. `tests/dbname_audit.py` records the database named by every
+  psycopg2 connection (`psycopg2.connect` however imported, SQLAlchemy and
+  pool connections, and direct `psycopg2.extensions.connection` construction)
+  and every asyncpg connection, from keyword arguments, DSN strings, and URLs
+  before the socket opens, and from the server once it does. The summary
+  lists the targets and ends `dbname audit: owner targets: none`; any
+  `save_NN` or `NEXUS_template` target turns the run into a failure (exit 1)
+  naming each owner target and the test that opened it, even when every test
+  passed. `postgres`, `template0`, and disposable clones are allowed. Child
+  processes are not audited: `pg_dump` and `psql` read `NEXUS_template` when
+  `disposable_slot_database` clones it, and a routed gateway or nested pytest
+  needs its own audit.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 
