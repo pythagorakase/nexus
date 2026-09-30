@@ -189,7 +189,7 @@ Nothing is written. Each request's timeout is `[runtime.cli].inspect_timeout_sec
 | --- | --- | --- |
 | `inspect slot` | `/api/slot/{slot}/state` | The slot state |
 | `inspect chunks --last N` | `/api/narrative/latest-chunk`, then `/api/narrative/chunks/{id}/adjacent` backwards | The newest N committed chunks, oldest first; `[]` for an unplayed story. One sequential request per chunk |
-| `inspect chunks --from A --to B` | `/api/narrative/chunks/{id}/adjacent` forwards from A | The committed chunks with ids A through B. `--from` may be left out (it starts at the first chunk); `--from` without `--to` is a usage error. One sequential request per chunk in the range |
+| `inspect chunks --from A --to B` | `/api/narrative/chunks/{id}/adjacent` forwards from A | The committed chunks with ids A through B. `--from` may be left out (it starts at the first chunk); `--from` without `--to` is a usage error. One sequential request per chunk in the range, and one more when no committed chunk has id B |
 | `inspect chunk ID` | `/api/narrative/chunks/{id}` | One committed chunk |
 | `inspect incubator` | `/api/narrative/incubator` | The pending draft, or `null` when none waits |
 | `inspect characters [ID]` | `/api/characters` (with `startId`/`endId` for one) | The list, or the one character |

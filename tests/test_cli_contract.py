@@ -813,7 +813,6 @@ INSPECT_CASES: dict[str, tuple[tuple[str, ...], Any, list[tuple[str, dict]]]] = 
         [
             ("/api/narrative/chunks/9/adjacent", SLOT_QUERY),
             ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
         ],
     ),
     "chunks-first-to": (
@@ -822,7 +821,16 @@ INSPECT_CASES: dict[str, tuple[tuple[str, ...], Any, list[tuple[str, dict]]]] = 
         [
             ("/api/narrative/chunks/0/adjacent", SLOT_QUERY),
             ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+        ],
+    ),
+    # No committed chunk has id 13: one more request finds the story's end.
+    "chunks-range-past-the-last": (
+        ("chunks", "--from", "11", "--to", "13"),
+        [_chunk(11), _chunk(12)],
+        [
+            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
             ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
+            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
         ],
     ),
     "chunk": (
@@ -987,6 +995,32 @@ def test_inspect_chunks_of_an_unplayed_story_is_an_empty_list() -> None:
 
     assert completed.returncode == ExitCode.OK, completed.stderr
     assert json.loads(completed.stdout) == {"ok": True, "data": []}
+
+
+def test_inspect_chunk_range_sends_no_request_past_its_last_chunk() -> None:
+    """``--from 10 --to 11`` costs exactly two requests, one per chunk.
+
+    The walk stops at the chunk with id ``--to``, so a failing read of chunk
+    11's neighbours, which could only find chunk 12 outside the range, cannot
+    discard the complete range.
+    """
+    routes = dict(INSPECT_ROUTES)
+    routes[("GET", "/api/narrative/chunks/11/adjacent")] = (
+        500,
+        {"detail": "Internal Server Error"},
+    )
+    gateway = Gateway(routes=routes)
+    completed = _inspect(gateway, "chunks", "--from", "10", "--to", "11")
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert json.loads(completed.stdout) == {
+        "ok": True,
+        "data": [_chunk(10), _chunk(11)],
+    }
+    assert [request[:2] for request in gateway.requests] == [
+        ("GET", "/api/narrative/chunks/9/adjacent"),
+        ("GET", "/api/narrative/chunks/10/adjacent"),
+    ]
 
 
 def test_inspect_list_prints_each_record_without_json() -> None:

@@ -1409,9 +1409,11 @@ def _inspect_chunks(args: argparse.Namespace) -> Any:
     GET /api/narrative/chunks/{id}/adjacent backwards. ``--from``/``--to``
     walk the same route forwards from the first committed chunk at or after
     ``--from`` (default: the first chunk) through ``--to``, which is required
-    whenever ``--from`` is given. Each chunk costs one sequential request, so
-    a wide range or a large N sends that many requests. Every chunk is the
-    route's own payload.
+    whenever ``--from`` is given, and stop at the chunk with id ``--to``.
+    Each chunk costs one sequential request, so a wide range or a large N
+    sends that many requests; a range sends one more when no committed chunk
+    has id ``--to``, to find where it ends. Every chunk is the route's own
+    payload.
     """
     slot = args.slot
     chunks: List[Dict[str, Any]] = []
@@ -1437,8 +1439,10 @@ def _inspect_chunks(args: argparse.Namespace) -> Any:
         return chunks
     first = 1 if args.from_id is None else args.from_id
     cursor = _adjacent_chunk(slot, first - 1, "next")
-    while cursor is not None and (args.to_id is None or cursor["id"] <= args.to_id):
+    while cursor is not None and cursor["id"] <= args.to_id:
         chunks.append(cursor)
+        if cursor["id"] == args.to_id:
+            break
         cursor = _adjacent_chunk(slot, cursor["id"], "next")
     return chunks
 
@@ -4910,7 +4914,8 @@ Examples:
         type=int,
         help=(
             "First chunk id of the range (default: the first chunk); needs --to."
-            " One request per chunk in the range"
+            " One request per chunk in the range, one more if chunk --to does"
+            " not exist"
         ),
     )
     inspect_chunks_parser.add_argument(
