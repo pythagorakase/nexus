@@ -9,7 +9,9 @@ import logging
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("temporal_search_example")
 
 # Add parent directory to path

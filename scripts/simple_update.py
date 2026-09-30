@@ -32,11 +32,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
-)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler()],
+    )
 logger = logging.getLogger("nexus.simple_update")
 
 # Import SQLAlchemy

@@ -52,25 +52,27 @@ except Exception as e:
     SETTINGS = {}
 
 # Configure logging from settings
-log_file = SETTINGS.get("logging", {}).get("file", "memnon.log")
-log_level_str = SETTINGS.get("logging", {}).get("level", "INFO")
-log_console = SETTINGS.get("logging", {}).get("console", True)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    log_file = SETTINGS.get("logging", {}).get("file", "memnon.log")
+    log_level_str = SETTINGS.get("logging", {}).get("level", "INFO")
+    log_console = SETTINGS.get("logging", {}).get("console", True)
 
-# Convert string log level to logging constant
-log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+    # Convert string log level to logging constant
+    log_level = getattr(logging, log_level_str.upper(), logging.INFO)
 
-# Set up handlers
-handlers = []
-if log_file:
-    handlers.append(logging.FileHandler(log_file))
-if log_console:
-    handlers.append(logging.StreamHandler())
+    # Set up handlers
+    handlers: list[logging.Handler] = []
+    if log_file:
+        handlers.append(logging.FileHandler(log_file))
+    if log_console:
+        handlers.append(logging.StreamHandler())
 
-logging.basicConfig(
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=handlers,
-)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+    )
 logger = logging.getLogger("nexus.query")
 
 from nexus.agents.memnon.utils.embedding_manager import load_local_model  # noqa: E402

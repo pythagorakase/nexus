@@ -118,14 +118,16 @@ from api_openai import (
 )
 
 # Configure logging
-log_file = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "character_expansion.log"
-)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
-)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    log_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "character_expansion.log"
+    )
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
+    )
 logger = logging.getLogger("nexus.character_expansion")
 
 

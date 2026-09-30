@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from nexus.database import connection_kwargs
 
+import logging
 import os
 from pathlib import Path
 from statistics import median
@@ -143,6 +144,7 @@ def _print_result(
 def main() -> None:
     """Run the fixed 5k/500/10 benchmark and print five-sample medians."""
 
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     dbname = f"qa_wt720_benchmark_{uuid4().hex[:8]}"
     admin: Any = None
     original_use_pool = new_story_setup.USE_POOL
