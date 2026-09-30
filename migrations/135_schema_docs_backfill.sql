@@ -76,10 +76,10 @@ COMMENT ON TYPE public.entity_kind IS
     'Subtype of a row in entities. orrery_ensure_subtype_entity_kind creates or checks the entities row for each characters, factions, or places insert, and the tag writer reads tag_category_registry by this kind to allow tag categories.';
 
 COMMENT ON TYPE public.entity_tag_clearance_kind IS
-    'How an ephemeral tag clears: event when a matching event type fires (events._clear_event_tags_sync), time when expires_at_world_time passes (events._sweep_expired_entity_tags_sync), semantic only by an explicit clear. authored appears only in tag_clearance_log.mechanism, for any explicit clear by a writer (bestowal tags_to_clear, exclusive and status ladder replacement, template state deltas, clear_entity_tag).';
+    'How an ephemeral tag clears: event when a matching event type fires (events._clear_event_tags_sync), time when expires_at_world_time passes, semantic by an explicit clear; events._sweep_expired_entity_tags_sync clears any overdue tag whatever its clearance kind, so a semantic tag given an explicit duration override also expires. authored appears only in tag_clearance_log.mechanism, for any explicit clear by a writer (bestowal tags_to_clear, exclusive and status ladder replacement, template state deltas, clear_entity_tag).';
 
 COMMENT ON TYPE public.entity_tag_reapplication_policy IS
-    'What the tag writer does when a tag is applied while it is still active: new_row (the default) keeps the active row, replace overwrites its timing and provenance, extend_expiry pushes its expiry out by the duration (semantic and event tags land without expiry).';
+    'What the tag writer does when a tag is applied while it is still active: new_row (the default) keeps the active row, replace overwrites its timing and provenance, extend_expiry pushes its expiry out by the duration (semantic and event tags without an explicit duration override land without expiry). A storyteller (skald_inline) reapplication of an active extend_expiry tag with no duration override leaves the tag unchanged.';
 
 COMMENT ON TYPE public.entity_tag_source_kind IS
     'Provenance of a tag row: skald_inline for runtime bestowals (storyteller, wizard, trait compiler), template for Orrery template effects, retrograde for Retrograde history, system for the entity tag and faction migration manifest applies, authored and llm_generated for offline or CLI backfills. The Orrery tag writer rejects auto_registered.';
@@ -121,7 +121,7 @@ COMMENT ON TYPE public.offscreen_embedding_status IS
     'Embedding state of an offscreen narration. The narration worker inserts rows at the pending default and no current writer moves them to embedded or failed; load_orrery_status_sync counts pending and failed rows.';
 
 COMMENT ON TYPE public.orrery_job_state IS
-    'Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed once the attempt cap is reached or on an error that cannot be retried (earlier retryable failures return to queued), or stale_rejected when the source the job was frozen against changed before completion.';
+    'Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed once the attempt cap is reached or on an error that cannot be retried (earlier retryable failures return to queued), or stale_rejected when the source the job was frozen against changed before completion. The experience worker also stale-rejects a queued job whose experiences are all player-owned when the current configuration excludes the player.';
 
 COMMENT ON TYPE public.orrery_narration_status IS
     'Offscreen narration progress of a resolution, set by the narration worker: none (the default) until promotion queues it, and it stays none when promotion skips it; queued when promoted or retried; succeeded with narration_chunk_id; failed on a final or stale-anchor failure. Bleed offers only succeeded rows; no current writer sets leased.';
@@ -145,7 +145,7 @@ COMMENT ON TYPE public.orrery_travel_route_method IS
     'Which route source events._select_route_sync used, in order of preference: osm_graph (imported route graph), authored_edge (orrery_travel_edges), estimated (coordinate distance fallback).';
 
 COMMENT ON TYPE public.orrery_travel_status IS
-    'Travel lifecycle of a character: travel start writes in_transit, arrival writes at_place, and only an explicit planned row supplies a destination to start travel.';
+    'Travel lifecycle of a character: travel start writes in_transit, arrival writes at_place, and of the existing travel-state rows only a planned row supplies a destination to start travel.';
 
 COMMENT ON TYPE public.place_reference_type IS
     'Place role in an accepted chunk, written by the presence roster (roster.write_roster). Readers rank setting over transit over mentioned when choosing featured places, and setting rows give the scene location for return recaps and experiences.';
