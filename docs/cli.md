@@ -96,7 +96,7 @@ Each command declares the most privileged resource its handler opens:
 | Transport | Opens | Commands |
 | --- | --- | --- |
 | `http` | The NEXUS API only | `load`, `continue`, `retry`, `undo`, `regenerate`, `clear`, `lock`, `unlock`, every `inspect` verb, `model --set`, `model --clear` |
-| `database` | A slot database directly | `model` (reading seat identities), `jobs`, `inspect-turn`, `prune-manifests`, `trait-audit`, `retrograde-packet`, `retrograde-seed-candidates --slot`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, and the faction, character, and place manifest and apply commands |
+| `database` | A slot database directly | `model` (reading seat identities), `jobs`, `inspect-turn`, `prune-manifests`, `trait-audit`, `retrograde-packet`, `retrograde-seed-candidates --slot`, `retrograde-apply-expansion`, `retrograde-embed-history`, `record-revelation`, `faction-audit`, `tags audit` (which also reads `NEXUS_template`), and the faction, character, and place manifest and apply commands |
 | `local_operator` | This machine's processes, logs, runtime home, usage ledger, model artifacts, local files, or provider credentials | `up`, `down`, `restart`, `status`, `logs`, `home`, `doctor`, `usage`, `window-replay`, `models lock`, `models verify`, `model --list`, `retrograde-seed-candidates --packet`, `retrograde-expand-seeds`, `backfill-review-packet` |
 
 The runtime is remote when the active `nexus.toml` sets `[runtime] profile =
@@ -142,7 +142,7 @@ One failure keeps its report instead: `trait-audit --fail-on-remainders`
 prints the full audit on stdout with `"failed_policy": true` and exits 1.
 
 Success output is unchanged for existing commands. JSON-first commands
-(every `inspect` verb) print `{"ok": true, "data": ...}` on stdout.
+(every `inspect` verb and `tags audit`) print `{"ok": true, "data": ...}` on stdout.
 
 ### Waiting on a Generation
 
@@ -215,6 +215,29 @@ list as one such block per record.
 
 Interactions, queues, settings, and secrets status have no inspect verb yet:
 they have no player-plane read route.
+
+### `tags audit` — Report Tags in Deprecated Categories
+
+`tag_category_registry` marks a category deprecated and names its
+`replacement_categories`, but rows bestowed before the deprecation stay
+active. `tags audit` reports, per database, the active `entity_tags` rows
+(`cleared_at IS NULL`) whose tag's category the registry deprecates, grouped
+by category and tag with the registry's replacements, the row count, and the
+canonical entity ids. `--slot N` reads one slot; `--all` reads
+`NEXUS_template` and every slot. Each database is read in one read-only
+transaction, so a locked slot is read like any other, and nothing is written
+or enforced.
+
+```bash
+poetry run nexus tags audit --slot 4
+poetry run nexus tags audit --all --json
+```
+
+Without `--json` it prints one row count per database, then one line per
+category and tag. A database without `tag_category_registry` (or its
+`deprecated` and `replacement_categories` columns) stops the audit with exit
+1, naming the migration that creates it; the envelope's `partial` keeps the
+databases already read.
 
 ### `usage` — View Exact API Token Usage
 

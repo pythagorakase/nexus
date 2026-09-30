@@ -26,6 +26,7 @@ Commands:
     nexus inspect slot --slot N  Read one slot's state as a JSON envelope
     nexus inspect chunks|chunk|incubator|characters|places|factions --slot N
                                  Read player-plane story records as JSON envelopes
+    nexus tags audit --slot N|--all  Report active tags in deprecated categories
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -4400,6 +4401,79 @@ def run_prune_manifests(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_tags_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    """Report active entity tags in deprecated registry categories, read-only.
+
+    ``--slot N`` reads one slot; ``--all`` reads ``NEXUS_template`` and every
+    slot, locked ones included. Each database is read in one read-only
+    transaction and nothing is written. A database that lacks the registry
+    schema, or cannot be reached, stops the audit as a domain failure that
+    keeps the databases already read.
+    """
+    import psycopg2
+
+    from nexus.api.deprecated_tag_audit import (
+        DeprecatedTagAuditError,
+        audit_database,
+        audit_database_names,
+    )
+
+    databases: List[Dict[str, Any]] = []
+    for dbname in audit_database_names(None if args.all else args.slot):
+        try:
+            databases.append(audit_database(dbname))
+        except DeprecatedTagAuditError as exc:
+            return {"success": False, "error": str(exc), "databases": databases}
+        except psycopg2.OperationalError as exc:
+            message = " ".join(str(exc).split())
+            return {
+                "success": False,
+                "error": f"Cannot read {dbname}: {message}",
+                "databases": databases,
+            }
+    return {
+        "success": True,
+        "data": {
+            "active_rows": sum(entry["active_rows"] for entry in databases),
+            "databases": databases,
+        },
+    }
+
+
+def _print_tags_audit(data: Mapping[str, Any]) -> None:
+    """Print each database's row count, then one line per category and tag."""
+    databases = data["databases"]
+    totals = [("DATABASE", "ROWS")] + [
+        (entry["database"], str(entry["active_rows"])) for entry in databases
+    ]
+    _print_table(totals)
+    groups = [
+        (
+            entry["database"],
+            group["category"],
+            group["tag"],
+            str(group["row_count"]),
+            ",".join(str(entity_id) for entity_id in group["entity_ids"]),
+            ",".join(group["replacement_categories"]) or "-",
+        )
+        for entry in databases
+        for group in entry["groups"]
+    ]
+    if groups:
+        print()
+        _print_table(
+            [("DATABASE", "CATEGORY", "TAG", "ROWS", "ENTITIES", "REPLACEMENTS")]
+            + groups
+        )
+
+
+def _print_table(rows: Sequence[Sequence[str]]) -> None:
+    """Print rows as left-aligned columns separated by two spaces."""
+    widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
+    for row in rows:
+        print("  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row)).rstrip())
+
+
 def _print_turn_inspection(turn: Dict[str, Any]) -> None:
     """Print compact metadata tables; --json retains complete blocks and hashes."""
     session = turn["session"]
@@ -4720,6 +4794,7 @@ Examples:
   nexus inspect incubator --slot 5  The pending draft, or null
   nexus inspect characters --slot 5  Characters (also places, factions)
   nexus inspect characters 3 --slot 5  One character by id
+  nexus tags audit --all --json   Active tags in deprecated categories
   nexus continue --slot 5       Advance the story
   nexus continue --slot 5 --choice 1   Select choice #1
   nexus continue --slot 5 --user-text "I approach carefully"
@@ -4966,6 +5041,25 @@ Examples:
         entity_parser.add_argument(
             "entity_id", type=int, nargs="?", help=f"One {family[:-1]}'s id"
         )
+
+    # tags family (issue #811): read-only audits of the tag vocabulary.
+    tags_family = subparsers.add_parser(
+        "tags", help="Read-only audits of the Orrery tag vocabulary"
+    )
+    tags_verbs = tags_family.add_subparsers(dest="tags_command", required=True)
+    tags_audit_parser = tags_verbs.add_parser(
+        "audit",
+        help="Report active entity tags in deprecated registry categories",
+    )
+    tags_audit_parser.allow_abbrev = False
+    tags_audit_scope = tags_audit_parser.add_mutually_exclusive_group(required=True)
+    tags_audit_scope.add_argument("--slot", type=int, help="Slot number (1-5)")
+    tags_audit_scope.add_argument(
+        "--all",
+        action="store_true",
+        help="NEXUS_template and every slot, locked slots included",
+    )
+    _add_global_output_args(tags_audit_parser)
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
@@ -5565,6 +5659,7 @@ _SLOT_COMMANDS = frozenset(
         "inspect characters",
         "inspect places",
         "inspect factions",
+        "tags audit",
         "model",
         "retrograde-seed-candidates",
         "up",
@@ -5697,6 +5792,8 @@ def _dispatch(args: argparse.Namespace) -> Dict[str, Any] | int:
             return 0
     elif args.command == "inspect":
         result = run_inspect(args)
+    elif args.command == "tags":
+        result = run_tags_audit(args)
     elif args.command == "prune-manifests":
         result = run_prune_manifests(args)
     elif args.command == "jobs":
@@ -5826,6 +5923,8 @@ def main() -> int:
         if args.json:
             envelope = success_envelope(result["data"])
             print(json.dumps(envelope, indent=2, sort_keys=True))
+        elif command == "tags audit":
+            _print_tags_audit(result["data"])
         else:
             _print_inspection(
                 result["data"], truncate=args.truncate, verb=args.inspect_command

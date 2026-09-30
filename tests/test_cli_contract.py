@@ -27,6 +27,7 @@ import pytest
 import tomlkit
 
 from nexus import cli
+from nexus.api.deprecated_tag_audit import audit_database_names
 from nexus.api.route_capabilities import ROUTE_CAPABILITIES
 from nexus.cli_contract import (
     COMMAND_TRANSPORTS,
@@ -601,6 +602,83 @@ def test_remote_profile_refuses_database_commands_without_connecting(
     assert envelope["partial"] == {}
     assert f"'nexus {argv[0]}' uses the database transport" in envelope["error"]
     assert "[runtime] profile is 'remote'" in envelope["error"]
+    assert accepted == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("tags", "audit", "--slot", "3"), ("tags", "audit", "--all")],
+    ids=["one-slot", "all"],
+)
+def test_remote_profile_refuses_the_tags_audit_without_connecting(
+    tmp_path: Path, argv: tuple[str, ...]
+) -> None:
+    """The deprecated-tag audit reads databases directly, so remote refuses it."""
+    config = _config(tmp_path, profile="remote")
+    with _postgres_sentinel() as (port, accepted):
+        completed = _run(
+            *argv,
+            "--json",
+            env={
+                "NEXUS_RUNTIME_CONFIG": str(config),
+                "PGHOST": "127.0.0.1",
+                "PGPORT": str(port),
+                "PGCONNECT_TIMEOUT": "2",
+            },
+        )
+
+    assert completed.returncode == ExitCode.TRANSPORT_REFUSED
+    envelope = _failure(completed)
+    assert envelope["code"] == "transport_refused"
+    assert "'nexus tags audit' uses the database transport" in envelope["error"]
+    assert accepted == []
+
+
+def test_tags_audit_is_a_slot_checked_database_envelope_command() -> None:
+    """``tags audit`` is JSON-first, reads databases directly, and checks --slot."""
+    registered = set(iter_command_paths(cli.build_parser()))
+    assert {path for path in registered if path.startswith("tags ")} == {"tags audit"}
+    assert COMMAND_TRANSPORTS["tags audit"] == "database"
+    assert "tags audit" in ENVELOPE_COMMANDS
+    assert "tags audit" in cli._SLOT_COMMANDS
+    # --all reads NEXUS_template first, then save_01 through save_05.
+    assert audit_database_names(None) == [
+        "NEXUS_template",
+        "save_01",
+        "save_02",
+        "save_03",
+        "save_04",
+        "save_05",
+    ]
+    assert audit_database_names(4) == ["save_04"]
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (("--slot", "9"), "Slot must be between 1 and 5"),
+        (("--slot", "3", "--all"), "not allowed with argument --slot"),
+        ((), "one of the arguments --slot --all is required"),
+    ],
+    ids=["slot-range", "slot-and-all", "no-scope"],
+)
+def test_tags_audit_rejects_an_unusable_scope_before_any_connection(
+    argv: tuple[str, ...], message: str
+) -> None:
+    """A bad --slot/--all scope is a usage error that opens no connection."""
+    with _postgres_sentinel() as (port, accepted):
+        completed = _run(
+            "tags",
+            "audit",
+            *argv,
+            "--json",
+            env={"PGHOST": "127.0.0.1", "PGPORT": str(port)},
+        )
+
+    assert completed.returncode == ExitCode.USAGE
+    envelope = _failure(completed)
+    assert envelope["code"] == "usage_error"
+    assert message in envelope["error"]
     assert accepted == []
 
 
