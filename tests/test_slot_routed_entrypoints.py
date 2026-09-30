@@ -66,9 +66,10 @@ ROUTING_IMPORTS = (
     "scripts.new_story_setup",
     "scripts.utils.embedding_utils",
 )
-# Command-line scripts that took their logging from importing the setup script
-# until issue #1037. Each now configures logging on its command-line path, so
-# importing one as a module must configure nothing.
+# Command-line scripts that took their logging from an import (the setup script,
+# the runner, or the routing fixtures) until issue #1037. Each now configures
+# logging on its command-line path, so importing one as a module must configure
+# nothing.
 COMMAND_LINE_SCRIPTS = (
     "scripts.benchmark_experience_enqueue_fence",
     "scripts.qa_shift.ann_gate",
