@@ -29,11 +29,13 @@ if "pytest" in sys.modules and not RUN_LIVE_LLM:
 from pydantic_ai.tools import DeferredToolRequests
 
 # Configure logging BEFORE imports that use it
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
 logger = logging.getLogger("live_seed_test")
 
 # Reduce noise from other loggers

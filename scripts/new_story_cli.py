@@ -18,6 +18,7 @@ Examples:
 
 import argparse
 import json
+import logging
 from pprint import pprint
 
 from nexus.api.new_story_flow import (
@@ -29,6 +30,7 @@ from nexus.api.new_story_flow import (
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="New story setup CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 

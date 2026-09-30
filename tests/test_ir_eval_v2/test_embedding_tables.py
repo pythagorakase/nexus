@@ -2,6 +2,7 @@
 
 import pytest
 
+from nexus.agents.memnon.utils import embedding_tables
 from nexus.agents.memnon.utils.embedding_tables import (
     parse_embedding_table_dimensions,
     resolve_dimension_table,
@@ -44,3 +45,9 @@ def test_pgvector_ann_index_dimension_limit() -> None:
     assert supports_pgvector_ann_index(2000)
     assert not supports_pgvector_ann_index(2001)
     assert not supports_pgvector_ann_index(2560)
+
+
+def test_legacy_dimension_constants_are_retired() -> None:
+    """The unread legacy-dimension constants no longer exist (#812)."""
+    assert not hasattr(embedding_tables, "LEGACY_EMBEDDING_DIMENSIONS")
+    assert not hasattr(embedding_tables, "DIMENSION_TABLES")

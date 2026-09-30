@@ -16,9 +16,12 @@ import logging
 from sqlalchemy import text
 
 # Set up logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 logger = logging.getLogger("nexus.embeddings")
 
 # Add parent directory to path

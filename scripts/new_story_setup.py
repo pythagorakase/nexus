@@ -30,7 +30,6 @@ import psycopg2
 from scripts.migrate import migrate_database
 
 LOG = logging.getLogger("nexus.new_story_setup")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 # Try to use connection pool if available (when running within NEXUS)
 try:
@@ -495,6 +494,12 @@ def _post_clone_cleanup(target_db: str) -> None:
 
 
 def main():
+    """Run slot setup from the command line.
+
+    Logging is configured here, not at import, so a library importer (the
+    new-story flow, the test fixtures) keeps its own root logger.
+    """
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Set up new-story infrastructure")
     parser.add_argument(
         "--create-assets",

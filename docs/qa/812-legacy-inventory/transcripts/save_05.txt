@@ -1,0 +1,19 @@
+-- First statement of the session: the session is read-only.
+SHOW default_transaction_read_only;
+ default_transaction_read_only 
+-------------------------------
+ on
+(1 row)
+
+SELECT current_database() AS database, now() AS snapshot_at;
+ database |         snapshot_at          
+----------+------------------------------
+ save_05  | 2026-09-30 12:40:05.39625-04
+(1 row)
+
+SELECT count(*) AS embedding_tables FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','p') AND c.relname ~ '^(chunk_embeddings|retrograde_summary_embeddings|character_experience_embeddings)_[0-9]+d$';
+ embedding_tables 
+------------------
+                0
+(1 row)
+

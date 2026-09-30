@@ -19,11 +19,13 @@ import sys
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("query_narratives.log"), logging.StreamHandler()],
-)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler("query_narratives.log"), logging.StreamHandler()],
+    )
 logger = logging.getLogger("nexus.query")
 
 # Add the project root to the path

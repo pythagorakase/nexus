@@ -24,6 +24,7 @@ import pytest
 import tomlkit
 from pydantic import ValidationError
 
+from nexus.api.mock_openai import direct_launch_config
 from nexus.config import load_settings
 from nexus.config.settings_models import RuntimeLogsSettings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
@@ -32,6 +33,7 @@ from nexus.runtime.logging_config import (
     SuccessfulAccessFilter,
     build_logging_config,
 )
+from tests.settings_helpers import settings_with
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
@@ -508,6 +510,207 @@ def test_importing_provider_clients_creates_no_log_file_or_handler(
     }
     created: List[str] = sorted(path.name for path in tmp_path.iterdir())
     assert created == []
+
+
+# ---------------------------------------------------------------------------
+# Direct launch of the mock provider
+# ---------------------------------------------------------------------------
+
+
+def test_mock_openai_direct_launch_uses_the_shared_log_config() -> None:
+    """`python -m nexus.api.mock_openai` gets [runtime.logs] and loopback."""
+    runtime = load_settings().runtime
+    assert runtime is not None
+
+    config = direct_launch_config()
+
+    assert set(config) == {"host", "port", "log_config"}
+    assert config["log_config"] == build_logging_config(runtime.logs)
+    assert config["host"] == "127.0.0.1"
+    assert config["port"] == runtime.services["mock_openai"].port
+
+
+def test_mock_openai_direct_launch_requires_the_runtime_section() -> None:
+    """Without [runtime] the direct launch raises instead of using defaults."""
+    # A configured local model reads its serving window from
+    # [runtime.services.llama_server], so a config without [runtime] has none.
+    settings = settings_with({"runtime": None, "local_models.model": None})
+    assert settings.runtime is None
+
+    with pytest.raises(RuntimeError, match=re.escape("[runtime]")):
+        direct_launch_config(settings)
+
+
+def test_mock_openai_direct_launch_requires_the_mock_service_entry() -> None:
+    """Without [runtime.services.mock_openai] there is no port to bind."""
+    runtime = load_settings().runtime
+    assert runtime is not None
+    services = {
+        name: service.model_dump()
+        for name, service in runtime.services.items()
+        if name != "mock_openai"
+    }
+    settings = settings_with({"runtime.services": services})
+
+    with pytest.raises(RuntimeError, match=re.escape("[runtime.services.mock_openai]")):
+        direct_launch_config(settings)
+
+
+MOCK_IMPORT_PROBE = """
+import json
+import logging
+import os
+import stat
+
+
+def socket_fds():
+    fds = set()
+    for name in os.listdir("/dev/fd"):
+        try:
+            if stat.S_ISSOCK(os.fstat(int(name)).st_mode):
+                fds.add(int(name))
+        except OSError:
+            pass
+    return fds
+
+
+before = socket_fds()
+
+import nexus.api.mock_openai
+
+print(json.dumps({
+    "new_sockets": sorted(socket_fds() - before),
+    "root": [type(handler).__name__ for handler in logging.getLogger().handlers],
+    "loggers": {
+        name: [type(handler).__name__ for handler in logging.getLogger(name).handlers]
+        for name in ("nexus.api.mock_openai", "uvicorn", "uvicorn.access")
+    },
+}))
+"""
+
+
+def test_importing_mock_openai_binds_no_port_and_configures_no_logging(
+    tmp_path: Path,
+) -> None:
+    """Only the __main__ block launches; importing the module has no effects."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO_ROOT)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
+    )
+    env[RUNTIME_CONFIG_ENV] = str(REPO_CONFIG)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", MOCK_IMPORT_PROBE],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+
+    observed: Dict[str, Any] = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert observed == {
+        "new_sockets": [],
+        "root": [],
+        "loggers": {
+            "nexus.api.mock_openai": [],
+            "uvicorn": [],
+            "uvicorn.access": [],
+        },
+    }
+
+
+MOCK_MAIN_PROBE = """
+import json
+import os
+import runpy
+import stat
+import sys
+
+import uvicorn
+
+CALL = "UVICORN_RUN_CALL "
+EXIT = "RUN_MODULE_EXIT "
+
+
+def socket_fds():
+    fds = set()
+    for name in os.listdir("/dev/fd"):
+        try:
+            if stat.S_ISSOCK(os.fstat(int(name)).st_mode):
+                fds.add(int(name))
+        except OSError:
+            pass
+    return fds
+
+
+def record_run(app, *args, **kwargs):
+    module = sys._getframe(1).f_globals
+    spec = module.get("__spec__")
+    print(CALL + json.dumps({
+        "caller": module.get("__name__"),
+        "module": spec.name if spec is not None else None,
+        "app_is_module_app": app is module.get("app"),
+        "app_type": type(app).__module__ + "." + type(app).__qualname__,
+        "args": list(args),
+        "kwargs": kwargs,
+    }), flush=True)
+    raise SystemExit("uvicorn.run recorded")
+
+
+uvicorn.run = record_run
+before = socket_fds()
+try:
+    runpy.run_module("nexus.api.mock_openai", run_name="__main__")
+except SystemExit as exc:
+    print(EXIT + json.dumps(str(exc)))
+print(EXIT + "sockets " + json.dumps(sorted(socket_fds() - before)))
+"""
+
+
+def test_mock_openai_main_block_launches_with_direct_launch_config(
+    tmp_path: Path,
+) -> None:
+    """`python -m nexus.api.mock_openai` hands uvicorn.run the helper's kwargs."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO_ROOT)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
+    )
+    env[RUNTIME_CONFIG_ENV] = str(REPO_CONFIG)
+    # NEXUS_HOME outranks NEXUS_RUNTIME_CONFIG; the child must read REPO_CONFIG.
+    env.pop("NEXUS_HOME", None)
+
+    completed = subprocess.run(
+        [sys.executable, "-c", MOCK_MAIN_PROBE],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+
+    lines = completed.stdout.strip().splitlines()
+    calls: List[Dict[str, Any]] = [
+        json.loads(line[len("UVICORN_RUN_CALL ") :])
+        for line in lines
+        if line.startswith("UVICORN_RUN_CALL ")
+    ]
+    exits = [line for line in lines if line.startswith("RUN_MODULE_EXIT ")]
+    assert len(calls) == 1, completed.stdout
+    assert exits == [
+        'RUN_MODULE_EXIT "uvicorn.run recorded"',
+        "RUN_MODULE_EXIT sockets []",
+    ]
+    call = calls[0]
+    assert call["caller"] == "__main__"
+    assert call["module"] == "nexus.api.mock_openai"
+    assert call["app_is_module_app"] is True
+    assert call["app_type"] == "fastapi.applications.FastAPI"
+    assert call["args"] == []
+    expected = direct_launch_config(load_settings(REPO_CONFIG))
+    assert call["kwargs"] == json.loads(json.dumps(expected))
 
 
 # ---------------------------------------------------------------------------
