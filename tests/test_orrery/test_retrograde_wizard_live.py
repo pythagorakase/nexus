@@ -79,11 +79,11 @@ def test_wizard_transition_cold_starts_retrograde_history(
     """A new story created through the transition gets retrievable history."""
 
     from nexus.agents.memnon.memnon import MEMNON
-    from nexus.database import database_url
     from nexus.api.new_story_flow import perform_transition_with_retrograde
     from nexus.api.new_story_schemas import CharacterCreationState
     from nexus.api.wizard_test_cache import load_cache
     from nexus.config import load_settings
+    from nexus.database import database_url
 
     settings = load_settings()
     assert settings.orrery is not None

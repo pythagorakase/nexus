@@ -47,10 +47,9 @@ operator's own NEXUS_SLOT is ignored. Staging the wizard cache and booting the
 routed gateway are proven without the live opt-in in
 ``tests/test_live_gate_clones_pg.py``.
 
-Known blocker (recorded in the deferred list of #885 slice B1, PR #1026): a
-gateway whose NEXUS_SLOT names a wizard-phase slot logs ``ERROR ...
-Cannot resolve canonical player identity: user_character is NULL`` with a
-traceback from ``drain_experience_outbox_sync``
+Known blocker (issue #1027): a gateway whose NEXUS_SLOT names a wizard-phase
+slot logs ``ERROR ... Cannot resolve canonical player identity: user_character
+is NULL`` with a traceback from ``drain_experience_outbox_sync``
 (``nexus/agents/orrery/experiences.py:1827``) on every scheduler pass until
 the transition binds the player. Stage 8's clean-log scan rejects those lines,
 so this gate cannot pass until that production defect is fixed.

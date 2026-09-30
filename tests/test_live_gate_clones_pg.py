@@ -13,6 +13,7 @@ clone for the routed slot and refuses any other slot. No provider is called.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from collections.abc import Iterator
 from contextlib import closing
@@ -21,7 +22,9 @@ from pathlib import Path
 import pytest
 import requests  # type: ignore[import-untyped]
 from psycopg2.extras import RealDictCursor
+from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.retrograde_maturation import (
@@ -62,17 +65,17 @@ from tests.test_orrery.test_live_cycle import (
     ROUTED_SLOT as LIVE_CYCLE_SLOT,
     seed_live_cycle_story,
 )
-from tests.test_orrery.test_retrograde_wizard_live import (
-    ROUTED_SLOT as RETROGRADE_WIZARD_SLOT,
-    THREAD_ID as RETROGRADE_WIZARD_THREAD_ID,
-    _live_run_model as retrograde_wizard_model,
-    stage_fixture_world,
-)
 from tests.test_orrery.test_retrograde_maturation_live import (
     ROUTED_SLOT as MATURATION_SLOT,
     SETTING_FIXTURE as MATURATION_SETTING_FIXTURE,
     archivist_declaration,
     seed_maturation_story,
+)
+from tests.test_orrery.test_retrograde_wizard_live import (
+    ROUTED_SLOT as RETROGRADE_WIZARD_SLOT,
+    THREAD_ID as RETROGRADE_WIZARD_THREAD_ID,
+    _live_run_model as retrograde_wizard_model,
+    stage_fixture_world,
 )
 from tests.test_wizard_live import (
     ISSUE_600_ROUTED_SLOT,
@@ -106,9 +109,6 @@ def test_live_cycle_seed_routes_and_queues_a_promotion_backlog(
     assert make_url(slot_utils.get_slot_db_url(slot=LIVE_CYCLE_SLOT)).database == clone
 
     orrery_settings = load_settings_as_dict()["orrery"]
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session
-
     engine = create_engine(slot_utils.get_slot_db_url(slot=LIVE_CYCLE_SLOT))
     try:
         with Session(engine) as session:
@@ -140,11 +140,9 @@ def test_maturation_enqueue_is_idempotent_on_the_routed_clone(
     The drain loads the job's context and the persisted story setting, then
     builds the maturation packet, before its first model call; a clone
     without ``global_variables.setting`` fails the job there. This runs
-    that pre-LLM path on the leased job's columns and asserts the packet
-    carries the seeded setting's genre band.
+    that pre-LLM path on the queued job's columns (without leasing it) and
+    asserts the packet carries the seeded setting's genre band.
     """
-
-    import json
 
     monkeypatch.setenv("NEXUS_SLOT", str(MATURATION_SLOT))
     story = seed_maturation_story(clone, monkeypatch.setattr)
@@ -318,8 +316,6 @@ def test_golden_path_staging_and_routed_gateway_serve_only_the_clone(
     clone: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The gate's staged clone is what its gateway subprocess serves."""
-
-    import json
 
     route_slot_to_disposable(monkeypatch.setattr, slot=GOLDEN_PATH_SLOT, dbname=clone)
     # No gateway scheduler: this proof covers the routed HTTP surface only.

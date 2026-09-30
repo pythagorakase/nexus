@@ -19,8 +19,8 @@ from typing import Any, NoReturn
 import psycopg2
 import pytest
 
-from tests import pg_fixtures
 from nexus.api import slot_utils
+from tests import pg_fixtures
 from tests.pg_fixtures import (
     connect,
     require_disposable_target,

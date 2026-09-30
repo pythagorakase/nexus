@@ -583,10 +583,10 @@ def test_deprecated_pair_tag_is_excluded_from_all_predicates(
                     == []
                 )
     finally:
-        # The test's finally runs BEFORE the fixture's teardown, so the
-        # entity_pair_tags row using this pair_tag is still alive and would
-        # cause an FK violation on pair_tags DELETE. Clear the referring
-        # rows first, then drop the registry row.
+        # The active entity_pair_tags row still references the deprecated
+        # pair_tag, so a pair_tags DELETE alone would violate the FK. Clear
+        # the referring rows first, then drop the registry row. The entities
+        # themselves live until pair_tag_slot drops the module clone.
         if deprecated_tag_id is not None:
             with slot_connection:
                 with slot_connection.cursor() as cur:

@@ -153,9 +153,13 @@ def seed_live_cycle_story(dbname: str) -> LiveCycleStory:
     backlog_ids = tuple(
         int(row["id"]) for row in seeded if row["promotion_status"] == "pending"
     )
-    assert salient_id in backlog_ids and len(backlog_ids) >= 2, (
-        "seed_live_cycle_story must seed the accepted turns' pending "
-        f"resolutions plus the salient backlog row; found {seeded!r}"
+    # The promotion drain asserts more than one non-empty batch: with the
+    # synthetic row added later, a backlog of PROMOTION_BATCH rows or more
+    # fills at least two batches before the idle drain.
+    assert salient_id in backlog_ids and len(backlog_ids) >= PROMOTION_BATCH, (
+        "seed_live_cycle_story must seed at least PROMOTION_BATCH pending "
+        "resolutions (the accepted turns' rows plus the salient backlog row); "
+        f"found {seeded!r}"
     )
     assert queued_jobs == 0, "no narration job exists before promotion"
     return LiveCycleStory(
