@@ -437,6 +437,9 @@ class TransactionMapper:
 
 
 GENESIS_SQL = "UPDATE global_variables SET genesis_weird = %s::jsonb WHERE id = TRUE"
+# The database label the transition boundaries hand the fake mapper; no
+# PostgreSQL connection is ever opened with it.
+FAKE_DBNAME = "fake_transition_slot"
 
 
 @pytest.fixture
@@ -452,7 +455,7 @@ def transition_boundaries(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(
         new_story_db_mapper, "NewStoryDatabaseMapper", TransactionMapper
     )
-    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda slot: "save_04")
+    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda slot: FAKE_DBNAME)
     monkeypatch.setattr(
         new_story_flow, "read_cache", lambda dbname: ready_cache(weird_level="high")
     )

@@ -556,8 +556,8 @@ def test_current_place_returns_all_committed_settings(
     from nexus.api import reader_endpoints
 
     dbname, _, chunk_id, hall, garden = historical_settings
-    # Redirect only slot routing; the endpoint and pool execute genuine SQL.
-    monkeypatch.setattr(reader_endpoints, "resolve_dbname", lambda slot: dbname)
+    # Route only slot 5 to the clone; the endpoint and pool execute genuine SQL.
+    route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
     with connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
             "INSERT INTO narrative_chunks (raw_text) VALUES ('Draft') RETURNING id"

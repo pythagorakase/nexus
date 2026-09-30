@@ -229,7 +229,7 @@ def mock_db_functions(monkeypatch):
     ]
     monkeypatch.setattr(wizard_module, "get_trait_menu", lambda _: dummy_traits)
     monkeypatch.setattr(wizard_module, "get_selected_trait_count", lambda _: 0)
-    monkeypatch.setattr(wizard_module, "slot_dbname", lambda slot: f"save_0{slot}")
+    monkeypatch.setattr(wizard_module, "slot_dbname", lambda slot: f"fake_wizard_slot_{slot}")
 
 
 @pytest.mark.live
@@ -519,7 +519,7 @@ def setup_db_mocks():
     ]
     wizard_module.get_trait_menu = lambda _: dummy_traits
     wizard_module.get_selected_trait_count = lambda _: 0
-    wizard_module.slot_dbname = lambda slot: f"save_0{slot}"
+    wizard_module.slot_dbname = lambda slot: f"fake_wizard_slot_{slot}"
 
 
 async def quick_test():

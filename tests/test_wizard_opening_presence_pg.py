@@ -28,7 +28,6 @@ from nexus.api import (
     db_pool,
     narrative,
     presence_audit,
-    slot_utils,
 )
 from nexus.api.narrative_generation import generate_narrative_async
 from nexus.config.settings_models import Settings
@@ -424,15 +423,6 @@ def _install_route_boundaries(
         lore.settings_path = Path("nexus.toml").resolve()
         return copy.deepcopy(route_settings)
 
-    def require_scratch_dbname(
-        dbname: str | None = None,
-        slot: int | None = None,
-    ) -> str:
-        """Resolve every route-style slot lookup to the disposable database."""
-
-        del slot
-        return dbname or scratch_dbname
-
     def record_genuine_audit(
         conn: Any,
         chunk_id: int,
@@ -456,16 +446,6 @@ def _install_route_boundaries(
     route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=scratch_dbname)
     monkeypatch.setattr(LogonUtility, "_initialize_provider", initialize_provider)
     monkeypatch.setattr(LORE, "_load_settings", load_route_settings)
-    monkeypatch.setattr(
-        slot_utils,
-        "require_slot_dbname",
-        require_scratch_dbname,
-    )
-    monkeypatch.setattr(
-        narrative,
-        "get_db_connection",
-        lambda _slot=None: _connect(scratch_dbname),
-    )
     monkeypatch.setattr(narrative, "wake_scheduler", lambda _slot: None)
     monkeypatch.setattr(
         commit_handler_sync,

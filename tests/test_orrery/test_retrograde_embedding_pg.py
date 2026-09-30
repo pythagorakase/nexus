@@ -10,7 +10,6 @@ import json
 from typing import Any, Iterator
 import uuid
 
-import psycopg2
 from psycopg2 import sql
 import pytest
 
@@ -29,8 +28,11 @@ from nexus.agents.orrery.retrograde_embedding import (
     active_memnon_embedding_model_dimensions,
     embed_retrograde_summaries,
 )
-from nexus.api import db_pool, slot_utils
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -43,38 +45,9 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture(scope="module")
 def disposable_db() -> Iterator[str]:
-    """Yield a unique template clone and drop it after all regressions."""
-    dbname = f"qa665_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    try:
-        try:
-            admin = _connect("postgres")
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
-        admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier("NEXUS_template"),
-                )
-            )
+    """Yield a template clone shared by every regression, dropped afterward."""
+    with disposable_slot_database("qa665") as dbname:
         yield dbname
-    finally:
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
 
 
 @pytest.fixture()
@@ -82,20 +55,13 @@ def route_disposable_db(
     disposable_db: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Route slot-only production entry points to the disposable clone."""
+    """Route slot 4, and only slot 4, to the disposable clone.
 
-    def require_disposable_db(
-        dbname: str | None = None,
-        slot: int | None = None,
-    ) -> str:
-        if dbname is not None and dbname != disposable_db:
-            raise AssertionError(f"unexpected database target: {dbname}")
-        if slot is not None and slot != 4:
-            raise AssertionError(f"unexpected slot target: {slot}")
-        return disposable_db
-
-    monkeypatch.setattr(db_pool, "require_slot_dbname", require_disposable_db)
-    monkeypatch.setattr(slot_utils, "slot_dbname", lambda slot: disposable_db)
+    The shared contract rebinds every loaded resolver and narrows
+    ``VALID_DBNAMES`` to the clone, so a slot-only entry point reaches the
+    clone and any other slot or database name raises.
+    """
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=disposable_db)
 
 
 def _insert_retrograde_summaries(

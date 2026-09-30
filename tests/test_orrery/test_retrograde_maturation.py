@@ -2,16 +2,16 @@
 
 Offline tests cover the declaration schema, commit-side signal gating, and
 event-ref namespacing with recording cursors. PostgreSQL-gated tests run
-against a migrated disposable save_02 copy inside rolled-back transactions;
-they are skipped
-unless ``NEXUS_RUN_POSTGRES=1`` is set.
+against a disposable template clone with a seeded story clock, inside
+rolled-back transactions; they are skipped unless ``NEXUS_RUN_POSTGRES=1`` is
+set.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Iterator, Mapping
 
-import psycopg2
 import pytest
 from psycopg2.extras import RealDictCursor
 from pydantic import ValidationError
@@ -35,7 +35,10 @@ from nexus.agents.orrery.retrograde_maturation import (
 from nexus.api.lore_adapter import extract_new_entities
 from nexus.config.settings_models import OrreryRetrogradeMaturationSettings, Settings
 
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import connect, disposable_slot_database, seed_story_clock
+
+# The database label the fake cursors report; no connection ever opens it.
+FAKE_SLOT_DBNAME = "fake_maturation_slot"
 
 
 # ============================================================================
@@ -468,7 +471,7 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
         def __exit__(self, *_args: Any) -> bool:
             return False
 
-        info = type("Info", (), {"dbname": "save_02"})()
+        info = type("Info", (), {"dbname": FAKE_SLOT_DBNAME})()
 
         def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
             return self.cursor_obj
@@ -495,7 +498,7 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
         lambda: (_ for _ in ()).throw(AssertionError("unexpected settings reload")),
     )
     monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname", lambda slot: "save_02"
+        "nexus.api.slot_utils.require_slot_dbname", lambda slot: FAKE_SLOT_DBNAME
     )
     monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
     monkeypatch.setattr(
@@ -616,7 +619,7 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
         def __exit__(self, *_args: Any) -> bool:
             return False
 
-        info = type("Info", (), {"dbname": "save_02"})()
+        info = type("Info", (), {"dbname": FAKE_SLOT_DBNAME})()
 
         def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
             return self.cursor_obj
@@ -633,7 +636,7 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
     applied_coordinates: list[Mapping[str, Any]] = []
 
     monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname", lambda slot: "save_02"
+        "nexus.api.slot_utils.require_slot_dbname", lambda slot: FAKE_SLOT_DBNAME
     )
     monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
     monkeypatch.setattr(
@@ -718,26 +721,34 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
 
 
 # ============================================================================
-# PostgreSQL-Gated Queue Tests (save_02, always rolled back)
+# PostgreSQL-Gated Queue Tests (seeded template clone, always rolled back)
 # ============================================================================
 
 
 pytestmark_pg = pytest.mark.requires_postgres
+MATURATION_WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(scope="module")
-def maturation_corpus() -> Iterator[str]:
-    """Apply branch migrations only to a disposable copy of the source corpus."""
-    with disposable_slot_database(
-        "qa640_maturation799", source_db="save_02", include_data=True
-    ) as dbname:
+def maturation_story() -> Iterator[str]:
+    """A template clone whose story clock anchors one committed chunk.
+
+    The enqueue path mints stub entities, whose need clocks anchor on the
+    story clock, and requests maturation from the latest chunk.
+    """
+    with disposable_slot_database("qa640_maturation799") as dbname:
+        seed_story_clock(
+            dbname,
+            world_time=MATURATION_WORLD_TIME,
+            raw_text="The archive stacks settle into their night silence.",
+        )
         yield dbname
 
 
 @pytest.fixture()
-def save_02_conn(maturation_corpus: str) -> Iterator[Any]:
-    """Roll back each proof on the migrated disposable save_02 copy."""
-    conn = connect(maturation_corpus)
+def maturation_conn(maturation_story: str) -> Iterator[Any]:
+    """Roll back each proof on the seeded clone."""
+    conn = connect(maturation_story)
     try:
         yield conn
     finally:
@@ -746,15 +757,15 @@ def save_02_conn(maturation_corpus: str) -> Iterator[Any]:
 
 
 @pytest.mark.requires_postgres
-def test_pg_enqueue_creates_stub_and_job(save_02_conn: Any) -> None:
+def test_pg_enqueue_creates_stub_and_job(maturation_conn: Any) -> None:
     declaration = {
         "kind": "character",
         "name": "M8 Test Entity (Rollback)",
         "summary": "A maturation-test stub that never commits.",
     }
-    chunk_id = _latest_chunk_id(save_02_conn)
+    chunk_id = _latest_chunk_id(maturation_conn)
     result = enqueue_declared_entity_maturations(
-        save_02_conn,
+        maturation_conn,
         declarations=[declaration],
         chunk_id=chunk_id,
         raw_text="The M8 Test Entity (Rollback) appears in this chunk.",
@@ -764,7 +775,7 @@ def test_pg_enqueue_creates_stub_and_job(save_02_conn: Any) -> None:
     assert result.stubs_created == 1
     assert result.jobs_enqueued == 1
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT j.entity_name, j.state::text AS state, c.summary
@@ -781,15 +792,15 @@ def test_pg_enqueue_creates_stub_and_job(save_02_conn: Any) -> None:
 
 
 @pytest.mark.requires_postgres
-def test_pg_enqueue_is_idempotent_per_entity(save_02_conn: Any) -> None:
+def test_pg_enqueue_is_idempotent_per_entity(maturation_conn: Any) -> None:
     declaration = {
         "kind": "character",
         "name": "M8 Idempotency Entity (Rollback)",
         "summary": "Declared twice, enqueued once.",
     }
-    chunk_id = _latest_chunk_id(save_02_conn)
+    chunk_id = _latest_chunk_id(maturation_conn)
     first = enqueue_declared_entity_maturations(
-        save_02_conn,
+        maturation_conn,
         declarations=[declaration],
         chunk_id=chunk_id,
         raw_text="M8 Idempotency Entity (Rollback) steps into frame.",
@@ -797,7 +808,7 @@ def test_pg_enqueue_is_idempotent_per_entity(save_02_conn: Any) -> None:
         settings=_ENABLED_SETTINGS,
     )
     second = enqueue_declared_entity_maturations(
-        save_02_conn,
+        maturation_conn,
         declarations=[declaration],
         chunk_id=chunk_id,
         raw_text="M8 Idempotency Entity (Rollback) returns.",
@@ -809,7 +820,7 @@ def test_pg_enqueue_is_idempotent_per_entity(save_02_conn: Any) -> None:
     assert second.jobs_already_present == 1
     assert second.stubs_created == 0
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             "SELECT count(*) AS n FROM orrery_maturation_jobs WHERE entity_name = %s",
             (declaration["name"],),
@@ -818,17 +829,17 @@ def test_pg_enqueue_is_idempotent_per_entity(save_02_conn: Any) -> None:
 
 
 @pytest.mark.requires_postgres
-def test_pg_unregistered_tag_hint_fails_loudly(save_02_conn: Any) -> None:
+def test_pg_unregistered_tag_hint_fails_loudly(maturation_conn: Any) -> None:
     declaration = {
         "kind": "character",
         "name": "M8 Bad Hint Entity (Rollback)",
         "summary": "Carries a hallucinated tag.",
         "tag_hints": ["definitely_not_a_registered_tag_xyz"],
     }
-    chunk_id = _latest_chunk_id(save_02_conn)
+    chunk_id = _latest_chunk_id(maturation_conn)
     with pytest.raises(ValueError):
         enqueue_declared_entity_maturations(
-            save_02_conn,
+            maturation_conn,
             declarations=[declaration],
             chunk_id=chunk_id,
             raw_text="M8 Bad Hint Entity (Rollback) appears.",
@@ -838,7 +849,7 @@ def test_pg_unregistered_tag_hint_fails_loudly(save_02_conn: Any) -> None:
 
 
 @pytest.mark.requires_postgres
-def test_pg_unregistered_pair_tag_hint_fails_loudly(save_02_conn: Any) -> None:
+def test_pg_unregistered_pair_tag_hint_fails_loudly(maturation_conn: Any) -> None:
     declaration = {
         "kind": "character",
         "name": "M8 Bad Pair Hint Entity (Rollback)",
@@ -851,10 +862,10 @@ def test_pg_unregistered_pair_tag_hint_fails_loudly(save_02_conn: Any) -> None:
             }
         ],
     }
-    chunk_id = _latest_chunk_id(save_02_conn)
+    chunk_id = _latest_chunk_id(maturation_conn)
     with pytest.raises(RetrogradeMaturationVocabularyError):
         enqueue_declared_entity_maturations(
-            save_02_conn,
+            maturation_conn,
             declarations=[declaration],
             chunk_id=chunk_id,
             raw_text="M8 Bad Pair Hint Entity (Rollback) appears.",

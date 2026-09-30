@@ -112,7 +112,7 @@ def setup_db_mocks():
     import nexus.api.wizard_agent as wizard_module
 
     wizard_module.record_drafts = lambda *args, **kwargs: None
-    wizard_module.slot_dbname = lambda slot: f"save_0{slot}"
+    wizard_module.slot_dbname = lambda slot: f"fake_wizard_slot_{slot}"
 
 
 async def test_model(model_name: str) -> Dict[str, Any]:

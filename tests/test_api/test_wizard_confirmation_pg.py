@@ -223,7 +223,6 @@ async def test_late_ordinary_tool_cannot_overwrite_accepted_or_revising_draft(
         sample_wildcard,
     )
 
-    monkeypatch.setattr(wizard_agent, "slot_dbname", lambda slot: saved_character)
     with closing(connect(saved_character)) as conn, conn, conn.cursor() as cur:
         if tool_phase == "setting":
             cur.execute("UPDATE assets.new_story_creator SET setting_confirmed = FALSE")
@@ -294,7 +293,7 @@ def test_tool_transaction_rolls_back_trait_mutation_on_error(
 async def test_successful_tool_captures_metadata_inside_its_commit(
     saved_character: str, monkeypatch
 ) -> None:
-    from nexus.api import wizard_agent, wizard_chat
+    from nexus.api import wizard_agent
     from nexus.api.wizard_agent import WizardContext
     from pydantic_ai import CallDeferred
     from fastapi import HTTPException
@@ -303,8 +302,6 @@ async def test_successful_tool_captures_metadata_inside_its_commit(
     from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
     from nexus.api.new_story_cache import _wizard_transaction
 
-    monkeypatch.setattr(wizard_agent, "slot_dbname", lambda slot: saved_character)
-    monkeypatch.setattr(wizard_chat, "slot_dbname", lambda slot: saved_character)
     with closing(connect(saved_character)) as conn, conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11"
@@ -360,7 +357,6 @@ async def test_stale_client_trait_submission_preserves_revised_concept(
     from pydantic_ai import CallDeferred
     from tests.test_wizard_agent import DummyRunContext, sample_trait_selection
 
-    monkeypatch.setattr(wizard_agent, "slot_dbname", lambda slot: saved_character)
     with closing(connect(saved_character)) as conn, conn, conn.cursor() as cur:
         cur.execute("UPDATE assets.new_story_creator SET traits_confirmed = FALSE")
         cur.execute(
