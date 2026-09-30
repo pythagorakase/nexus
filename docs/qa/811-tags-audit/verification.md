@@ -580,3 +580,66 @@ F401 lines in `orrery_tag_validation.py`, `logon_utility.py`, and
 `test_orrery_tag_validation_pg.py`; mypy: the same 12 errors in
 `orrery_tag_validation.py` and `logon_utility.py`, compared line-number
 blind). No gateway was started and no provider was called.
+
+### Follow-Up: Faction Reach and Kind-Scoped Scene Lines
+
+Astra's verification of 6d77aa5a found one overstated claim and one latent
+mismatch; the coordinator ruled not to invent a faction scope.
+
+1. **What the Gaia path reaches.** The character and place rows (the nine on
+   slots 3 and 4: `debt_pulse_active`, `worksite`, `black_market_operator`)
+   are clear-only entries in any scene whose present entities carry them. The
+   faction row `gray_legal` (save_04 entity 32) has no scene presence: a
+   turn's `PresenceBaseline` holds characters and the setting place, so
+   `present_entity_refs` (`nexus/agents/lore/logon_utility.py:285-310`) never
+   yields a faction and Gaia's strict grammar cannot clear it, while the
+   validator and the manifest tooling still accept the clear. Its disposition
+   is the owner's ruling. The PR body's "Clearance Stays Possible" section and
+   the remaining-on-#811 bullet now say this instead of "all ten remain
+   clearable by the writer".
+2. **The grammar test takes its scene from a real turn.**
+   `test_gaia_grammar_clears_a_deprecated_category_tag_only_in_its_scene` now
+   runs for the character and place rows only, and builds each grammar through
+   LOGON's `_gaia_schema_model` from a real `PresenceBaseline` (the carrier in
+   the cast or as the setting, against a player-only scene). The hand-made
+   faction scene is gone. The new
+   `test_turn_grammar_cannot_clear_an_active_faction_tag_the_validator_accepts`
+   asserts the limitation: while `gray_legal` is active, the validator's clear
+   set holds it and a `tags_clear` payload collects no issue, yet the turn
+   grammar (for a scene with two characters and the place, and for a
+   player-only scene) has no `FactionClearOnlyTagName` and rejects the clear.
+3. **Scene lines follow the carrier's kind.** `format_contextual_tag_library`
+   (`nexus/agents/orrery/tag_library.py`) groups `present_entity_refs` by kind,
+   reads the active names per kind, and selects a deprecated-category entry
+   only when its tag is active for `entry.entity_kind`, as
+   `_scene_clear_only_tags` does for the grammar.
+   `test_scene_clear_only_line_follows_the_carrying_entitys_kind` registers
+   `place_affordance` for characters too (still deprecated) on a clone, puts
+   `worksite` on a present character with a bare place also present, and
+   asserts the only ` (clear only)` line is the character-kind entry. Against
+   the previous code the same test fails with the extra line
+   `- place/place_affordance: `worksite`: ... (clear only)`.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rfs tests/test_orrery/test_tag_library.py tests/test_orrery_tag_validation_pg.py tests/test_orrery/test_gaia_registry_schema_pg.py tests/test_lore/test_two_pass_pipeline.py tests/test_skald_wire.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
+SKIPPED [1] tests/test_orrery/test_tag_library.py:781: save_05 has no character whose characters.id differs from characters.entity_id; cannot exercise namespace translation
+SKIPPED [1] tests/test_orrery/test_gaia_registry_schema_pg.py:348: Set NEXUS_638_ENUM_E2E=1 for the live Gaia enum-schema gate.
+SKIPPED [1] tests/test_skald_wire.py:2061: Slot has no parent chunk with presence junction rows
+SKIPPED [1] tests/test_skald_wire.py:2094: Set NEXUS_639_PRESENCE_E2E=1 for the live writer presence gate.
+1 failed, 189 passed, 4 skipped, 5 warnings in 16.26s
+$ $PY -m black --check nexus/agents/orrery/tag_library.py tests/test_orrery/test_tag_library.py tests/test_orrery_tag_validation_pg.py
+3 files would be left unchanged.
+$ $PY -m flake8 nexus/agents/orrery/tag_library.py tests/test_orrery/test_tag_library.py tests/test_orrery_tag_validation_pg.py
+tests/test_orrery_tag_validation_pg.py:229:89: E501 line too long (93 > 88 characters)
+tests/test_orrery_tag_validation_pg.py:230:89: E501 line too long (89 > 88 characters)
+tests/test_orrery_tag_validation_pg.py:306:89: E501 line too long (98 > 88 characters)
+$ $PY -m mypy nexus/agents/orrery/tag_library.py
+Success: no issues found in 1 source file
+```
+
+The one failure is the #885 `save_05` exemption ("save_05 must contain
+current entity tags"). The three E501 lines are in the `qa649_db` fixture and
+exist on the HEAD copy (lines 224, 225, and 301 there). Gateway variables were
+unset; no gateway was started and no provider was called.

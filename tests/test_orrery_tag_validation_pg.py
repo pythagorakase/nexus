@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from pydantic_ai import ModelRetry
 
 from nexus.config import load_settings
+from nexus.config.story_model import StorySettings
 from nexus.agents.logon.gaia_registry_schema import (
     coerce_gaia_registry_wire,
     load_gaia_registry_wire_spec,
@@ -30,14 +31,18 @@ from nexus.agents.logon.orrery_tag_validation import (
     read_storyteller_vocabulary,
 )
 from nexus.agents.logon.skald_wire import (
+    CharacterRef,
     CharacterUpdateDelta,
     FactionUpdateDelta,
     hydrate_skald_turn,
+    PlaceRef,
     PlaceUpdateDelta,
+    PresenceBaseline,
+    skald_gaia_strict_text_format,
     SkaldGaiaWire,
     SkaldTurnWire,
 )
-from nexus.agents.orrery.tag_library import EntityRowReference
+from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal
 from nexus.api.commit_handler_sync import (
@@ -1056,9 +1061,87 @@ async def test_worksite_stays_clearable_until_its_last_active_row_is_cleared(
     assert _unknown_tag_issue("tags_clear", "worksite", "place") in issue
 
 
+def _turn_gaia_model(
+    database: _Qa649Database, baseline: PresenceBaseline
+) -> type[SkaldGaiaWire]:
+    """Build the Gaia grammar exactly as a turn does, from its presence baseline.
+
+    LOGON's own schema selection reads the scene through ``present_entity_refs``
+    (the cast, the setting, the player), so no test builds its scene by hand.
+    """
+
+    settings = load_settings()
+    assert settings.apex.tag_library.schema_enums is True
+    utility = LogonUtility(
+        settings,
+        dbname=database.dbname,
+        model_override="TEST",
+        story_settings=StorySettings(),
+    )
+    utility._validation_dbname = database.dbname
+    utility._active_anchor_chunk_id = database.anchor_chunk_id
+    return utility._gaia_schema_model("openai", presence_baseline=baseline)
+
+
+def _clear_only_names(schema_model: type[SkaldGaiaWire], name: str) -> set[str]:
+    definitions = skald_gaia_strict_text_format(schema_model)["schema"]["$defs"]
+    if name not in definitions:
+        return set()
+    definition = definitions[name]
+    if "const" in definition:
+        return {str(definition["const"])}
+    return {str(value) for value in definition["enum"]}
+
+
+def _gaia_clear_payload(
+    array_name: str, entity: _EntityRef, field_name: str, tag: str
+) -> dict[str, Any]:
+    updates: dict[str, Any] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+        "relationships": [],
+    }
+    updates[array_name] = _deprecated_category_update(entity, field_name, tag)
+    return {
+        "letter": "Clear a tag an existing row still carries.",
+        "new_entities": [],
+        "orrery_adjudications": [],
+        "updates": updates,
+    }
+
+
+def _clear_directly(
+    database: _Qa649Database, entity: _EntityRef, entity_kind: str, tag: str
+) -> None:
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            apply_tag_bestowal(
+                cur,
+                entity_id=entity.entity_id,
+                entity_kind=entity_kind,
+                bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
+            )
+    assert _current_tag_row(database, entity_id=entity.entity_id, tag=tag) is None
+
+
+def _scene_carrying(entity_kind: str, entity: _EntityRef) -> PresenceBaseline:
+    """A real turn baseline whose cast or setting is ``entity``."""
+
+    if entity_kind == "character":
+        return PresenceBaseline(
+            present=[
+                CharacterRef(kind="character", name=entity.name, id=entity.wire_id)
+            ]
+        )
+    return PresenceBaseline(
+        setting=PlaceRef(kind="place", name=entity.name, id=entity.wire_id)
+    )
+
+
 @pytest.mark.parametrize(
     ("array_name", "entity_attribute", "entity_kind", "tag"),
-    _DEPRECATED_CATEGORY_TAGS,
+    _DEPRECATED_CATEGORY_TAGS[:2],
 )
 def test_gaia_grammar_clears_a_deprecated_category_tag_only_in_its_scene(
     qa649_db: _Qa649Database,
@@ -1067,59 +1150,89 @@ def test_gaia_grammar_clears_a_deprecated_category_tag_only_in_its_scene(
     entity_kind: str,
     tag: str,
 ) -> None:
-    """A present entity's active deprecated-category tag is clear-only.
+    """A present character's or place's active deprecated-category tag is clear-only.
 
-    With the carrying entity in the scene, ``tags_clear`` accepts the tag and
-    ``tags_add`` rejects it; without a scene the grammar rejects the clear.
+    With the carrying entity in the turn's presence baseline, ``tags_clear``
+    accepts the tag and ``tags_add`` rejects it. In a turn whose scene holds
+    only the player, the grammar rejects the clear.
     """
 
     entity = getattr(qa649_db, entity_attribute)
-
-    def payload(field_name: str) -> dict[str, Any]:
-        updates: dict[str, Any] = {
-            "characters": [],
-            "places": [],
-            "factions": [],
-            "relationships": [],
-        }
-        updates[array_name] = _deprecated_category_update(entity, field_name, tag)
-        return {
-            "letter": "Clear a tag an existing row still carries.",
-            "new_entities": [],
-            "orrery_adjudications": [],
-            "updates": updates,
-        }
+    enum_name = f"{entity_kind.title()}ClearOnlyTagName"
 
     _commit_activation(qa649_db, entity.entity_id, tag)
     try:
-        in_scene = load_gaia_registry_wire_spec(
-            qa649_db.dbname,
-            scene_entity_refs=[
-                EntityRowReference(kind=entity_kind, row_id=entity.wire_id)
-            ],
-            anchor_chunk_id=qa649_db.anchor_chunk_id,
-        ).model
-        without_scene = load_gaia_registry_wire_spec(qa649_db.dbname).model
+        in_scene = _turn_gaia_model(qa649_db, _scene_carrying(entity_kind, entity))
+        without_scene = _turn_gaia_model(qa649_db, PresenceBaseline())
+        assert _clear_only_names(in_scene, enum_name) == {tag}
+        assert tag not in _clear_only_names(without_scene, enum_name)
 
         cleared = coerce_gaia_registry_wire(
-            in_scene.model_validate(payload("tags_clear"))
+            in_scene.model_validate(
+                _gaia_clear_payload(array_name, entity, "tags_clear", tag)
+            )
         )
         assert cleared.updates is not None
         assert getattr(cleared.updates, array_name)[0].tags_clear == [tag]
         with pytest.raises(ValidationError):
-            in_scene.model_validate(payload("tags_add"))
+            in_scene.model_validate(
+                _gaia_clear_payload(array_name, entity, "tags_add", tag)
+            )
         with pytest.raises(ValidationError):
-            without_scene.model_validate(payload("tags_clear"))
+            without_scene.model_validate(
+                _gaia_clear_payload(array_name, entity, "tags_clear", tag)
+            )
     finally:
-        with _connect(qa649_db.dbname) as conn:
-            with conn.cursor() as cur:
-                apply_tag_bestowal(
-                    cur,
-                    entity_id=entity.entity_id,
-                    entity_kind=entity_kind,
-                    bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
+        _clear_directly(qa649_db, entity, entity_kind, tag)
+
+
+def test_turn_grammar_cannot_clear_an_active_faction_tag_the_validator_accepts(
+    qa649_db: _Qa649Database,
+) -> None:
+    """Documented limitation (#811): factions have no scene presence in a turn.
+
+    A presence baseline holds characters and the setting place, never a
+    faction, so the turn grammar carries no ``FactionClearOnlyTagName`` even
+    while a faction's deprecated-category tag is active and the validator
+    accepts its clear. The owner rules on ``gray_legal`` (save_04 entity 32).
+    """
+
+    array_name, entity_attribute, entity_kind, tag = _DEPRECATED_CATEGORY_TAGS[2]
+    assert entity_kind == "faction"
+    entity = getattr(qa649_db, entity_attribute)
+    fullest_scene = PresenceBaseline(
+        present=[
+            CharacterRef(kind="character", name=character.name, id=character.wire_id)
+            for character in (qa649_db.active_character, qa649_db.commit_character)
+        ],
+        setting=PlaceRef(
+            kind="place", name=qa649_db.place.name, id=qa649_db.place.wire_id
+        ),
+    )
+
+    _commit_activation(qa649_db, entity.entity_id, tag)
+    try:
+        assert tag in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags(
+            entity_kind
+        )
+        _normalized, issues = _normalize_and_collect(
+            _response(
+                **{array_name: _deprecated_category_update(entity, "tags_clear", tag)}
+            ),
+            qa649_db,
+        )
+        assert issues == []
+
+        for baseline in (fullest_scene, PresenceBaseline()):
+            turn_model = _turn_gaia_model(qa649_db, baseline)
+            definitions = skald_gaia_strict_text_format(turn_model)["schema"]["$defs"]
+            assert "FactionClearOnlyTagName" not in definitions
+            with pytest.raises(ValidationError):
+                turn_model.model_validate(
+                    _gaia_clear_payload(array_name, entity, "tags_clear", tag)
                 )
-    assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+    finally:
+        _clear_directly(qa649_db, entity, entity_kind, tag)
 
 
 def test_migration_109_seeds_only_time_cleared_defaults(

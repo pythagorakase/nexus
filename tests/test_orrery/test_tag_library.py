@@ -21,6 +21,7 @@ from tests.pg_fixtures import (
     disposable_slot_database,
     seed_entity_tag,
     seed_place,
+    seed_protagonist,
     seed_zone,
 )
 
@@ -601,6 +602,78 @@ def test_scene_shows_a_present_entitys_deprecated_tag_as_clear_only(
         assert "place_affordance" not in {
             entry.category for entry in tag_library.read_tag_categories(dbname)
         }
+
+
+@pytest.mark.requires_postgres
+def test_scene_clear_only_line_follows_the_carrying_entitys_kind(
+    monkeypatch,
+) -> None:
+    """A deprecated category registered for two kinds marks only the carrier's.
+
+    The clone registers ``place_affordance`` for characters as well, still
+    deprecated. A present character carries ``worksite``; a present place
+    does not. The scene lists the character-kind entry as clear only and no
+    place-kind entry, since the validator accepts the clear only where an
+    entity of that kind carries the tag.
+    """
+
+    with disposable_slot_database("qa640_811_scene_kind") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        seed_zone(
+            dbname,
+            name="Harbor Ward",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        bare_place, _ = seed_place(dbname, name="Lamplighter Row")
+        character, character_entity = seed_protagonist(dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO tag_category_registry (
+                    category, entity_kind, prompt_order, description, deprecated
+                )
+                SELECT category, 'character', prompt_order, description, TRUE
+                FROM tag_category_registry
+                WHERE category = 'place_affordance' AND entity_kind = 'place'
+                """
+            )
+            assert cur.rowcount == 1
+        seed_entity_tag(dbname, entity_id=character_entity, tag="worksite")
+
+        entries = {
+            entry.entity_kind: entry
+            for entry in tag_library.read_tag_library(
+                dbname, include_deprecated_categories=True
+            )
+            if entry.tag == "worksite"
+        }
+        assert set(entries) == {"character", "place"}
+        assert entries["character"].active_somewhere is True
+        assert entries["place"].active_somewhere is False
+
+        rendered = tag_library.format_contextual_tag_library(
+            dbname,
+            context=tag_library.TagLibraryContext(
+                present_entity_refs=[
+                    tag_library.EntityRowReference(kind="character", row_id=character),
+                    tag_library.EntityRowReference(kind="place", row_id=bare_place),
+                ],
+                proposal_tag_names=set(),
+                has_pending_proposals=False,
+            ),
+        )
+        scene = _section(rendered, "Scene-Relevant Tags").splitlines()
+        character_line = (
+            "- character/place_affordance: "
+            f"{tag_library._format_tag_entry(entries['character'])} (clear only)"
+        )
+        assert [line for line in scene if "(clear only)" in line] == [character_line]
+        assert not any(line.startswith("- place/place_affordance") for line in scene)
 
 
 @pytest.mark.skipif(

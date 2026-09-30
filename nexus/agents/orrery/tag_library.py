@@ -419,11 +419,18 @@ def format_contextual_tag_library(
     categories = read_tag_categories(dbname)
     pair_entries = read_pair_tag_entries(dbname)
     event_types = read_event_types(dbname)
-    active_tag_names = read_current_entity_tag_names(
-        dbname,
-        entity_refs=context.present_entity_refs,
-        anchor_chunk_id=context.anchor_chunk_id,
-    )
+    refs_by_kind: dict[str, list[EntityRowReference]] = defaultdict(list)
+    for reference in context.present_entity_refs:
+        refs_by_kind[reference.kind].append(reference)
+    active_names_by_kind: dict[str, set[str]] = {
+        entity_kind: read_current_entity_tag_names(
+            dbname,
+            entity_refs=references,
+            anchor_chunk_id=context.anchor_chunk_id,
+        )
+        for entity_kind, references in refs_by_kind.items()
+    }
+    active_tag_names: set[str] = set().union(*active_names_by_kind.values())
 
     by_kind: dict[str, dict[str, list[TagLibraryEntry]]] = defaultdict(
         lambda: defaultdict(list)
@@ -515,12 +522,14 @@ def format_contextual_tag_library(
         for tag_name in sorted(relevant_names)
         for entry in entries_by_name.get(tag_name, [])
     ]
-    # Only a present entity's active tag selects a deprecated-category entry;
-    # a proposal never does, and neither does the index.
+    # Only a present entity's active tag selects a deprecated-category entry,
+    # and only for that entity's own kind; a proposal never does, and neither
+    # does the index.
     relevant_entries.extend(
         entry
         for entry in library
-        if entry.category_deprecated and entry.tag in active_tag_names
+        if entry.category_deprecated
+        and entry.tag in active_names_by_kind.get(entry.entity_kind, set())
     )
     lines.extend(["### Scene-Relevant Tags", ""])
     if relevant_entries:
