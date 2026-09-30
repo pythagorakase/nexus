@@ -25,9 +25,7 @@ from pydantic_ai.tools import DeferredToolRequests
 from nexus.api.wizard_agent import (
     WizardContext,
     get_wizard_agent,
-    _character_subphase,
 )
-from nexus.api.new_story_schemas import WizardResponse
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.config import resolve_model_ref
 from tests.model_registry_helpers import registry_model
@@ -51,7 +49,9 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
         "phase": "setting",
         "context_data": None,
         "expected_tool": "submit_world_document",
-        "prompt": "Create a dark fantasy world with political intrigue and ancient magic.",
+        "prompt": (
+            "Create a dark fantasy world with political intrigue and ancient magic."
+        ),
     },
     "concept": {
         "phase": "character",
@@ -59,7 +59,9 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
             "setting": {"genre": "fantasy", "world_name": "Valdoria"},
         },
         "expected_tool": "submit_character_concept",
-        "prompt": "Create a reluctant hero - a former soldier haunted by past decisions.",
+        "prompt": (
+            "Create a reluctant hero - a former soldier haunted by past decisions."
+        ),
     },
     "traits": {
         "phase": "character",
@@ -94,8 +96,14 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
                 "concept": {
                     "name": "Kael Stormwind",
                     "archetype": "Reluctant Hero",
-                    "background": "A former soldier who deserted after witnessing atrocities committed by his own side.",
-                    "appearance": "Weathered face with a scar across the left cheek, grey-streaked dark hair.",
+                    "background": (
+                        "A former soldier who deserted after witnessing "
+                        "atrocities committed by his own side."
+                    ),
+                    "appearance": (
+                        "Weathered face with a scar across the left cheek, "
+                        "grey-streaked dark hair."
+                    ),
                     "suggested_traits": ["allies", "enemies", "reputation"],
                     "trait_rationales": {
                         "allies": "Fellow deserters who share his guilt",
@@ -258,7 +266,8 @@ async def test_accept_fate_forces_tool_call(
     # The output should be DeferredToolRequests (indicating a tool was called)
     # NOT WizardResponse (which would mean it presented choices)
     assert isinstance(result.output, DeferredToolRequests), (
-        f"Expected DeferredToolRequests (tool call), got {type(result.output).__name__}. "
+        "Expected DeferredToolRequests (tool call), got "
+        f"{type(result.output).__name__}. "
         f"Model {model_name} may have ignored accept_fate constraint."
     )
 
@@ -268,7 +277,8 @@ async def test_accept_fate_forces_tool_call(
     ), f"Expected tool {config['expected_tool']}, got {context.last_tool_name}"
 
     logger.info(
-        f"✓ {phase_name}/{model_name}: Tool '{context.last_tool_name}' called successfully"
+        f"✓ {phase_name}/{model_name}: Tool '{context.last_tool_name}' "
+        "called successfully"
     )
 
 
@@ -556,13 +566,15 @@ async def quick_test():
                     else:
                         status = "✗ WRONG TOOL"
                         print(
-                            f"  {phase_name}: {status} - Expected {expected}, got {tool_name}"
+                            f"  {phase_name}: {status} - Expected {expected}, "
+                            f"got {tool_name}"
                         )
                 else:
                     status = "✗ FAIL"
                     output_type = type(result.output).__name__
                     print(
-                        f"  {phase_name}: {status} - Got {output_type} instead of tool call"
+                        f"  {phase_name}: {status} - Got {output_type} "
+                        "instead of tool call"
                     )
 
                 results.append(

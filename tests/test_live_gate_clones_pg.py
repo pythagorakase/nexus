@@ -19,7 +19,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
 from sqlalchemy.engine import make_url
 
 from nexus.agents.orrery.resolver import resolve_dry_run

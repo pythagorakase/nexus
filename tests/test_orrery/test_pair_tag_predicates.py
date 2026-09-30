@@ -287,7 +287,7 @@ def test_lookup_subjects_returns_multiple_in_id_order(
     slot_connection: psycopg2.extensions.connection,
     test_entities: _TestEntities,
 ) -> None:
-    """Two distinct subjects both mentoring the same object appear in ascending ID order."""
+    """Two subjects mentoring the same object appear in ascending ID order."""
 
     with slot_connection:
         with slot_connection.cursor() as cur:
@@ -462,7 +462,7 @@ def test_lookup_objects_filters_by_tag(
     slot_connection: psycopg2.extensions.connection,
     test_entities: _TestEntities,
 ) -> None:
-    """Different relations from the same subject don't bleed into each other's results."""
+    """Different relations from one subject don't bleed into each other's results."""
 
     with slot_connection:
         with slot_connection.cursor() as cur:
