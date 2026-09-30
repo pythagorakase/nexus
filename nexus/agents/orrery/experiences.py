@@ -1821,11 +1821,33 @@ def drain_experience_render_jobs_sync(
     failed_count = 0
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            player_entity_id = (
-                None
-                if cfg.include_player_character
-                else canonical_player_entity_id(cur)
-            )
+            player_entity_id: Optional[int] = None
+            if not cfg.include_player_character:
+                # A wizard-phase slot has no player yet and no experience
+                # work. Resolve the identity only when a job is due, so an
+                # idle drain never demands a player; a due job on a slot
+                # without one is corrupt state and still raises below.
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM character_experience_jobs job
+                        WHERE (
+                            (job.state = 'queued'
+                             AND job.available_at <= clock_timestamp())
+                            OR
+                            (job.state = 'leased'
+                             AND job.lease_until < clock_timestamp())
+                        )
+                    ) AS has_due_job
+                    """
+                )
+                due_row = cur.fetchone()
+                if due_row is None:
+                    raise RuntimeError("Experience due-work probe returned no row")
+                if not due_row["has_due_job"]:
+                    return (0, 0)
+                player_entity_id = canonical_player_entity_id(cur)
             cur.execute(
                 """
                 SELECT job.id AS job_id, job.experience_ids, job.attempts,

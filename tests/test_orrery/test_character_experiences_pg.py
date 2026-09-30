@@ -49,6 +49,7 @@ from nexus.agents.orrery.experiences import (
     validate_render_batch,
 )
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
+from nexus.agents.orrery.player_identity import PlayerIdentityNotEstablishedError
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.tag_writer import apply_exclusive_tag_bestowal
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
@@ -56,9 +57,10 @@ from nexus.api import narrative as narrative_api
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings_as_dict
+from nexus.jobs.scheduler import SlotScheduler
 from nexus.memory.manager import empty_pass2_baseline
 from scripts import new_story_setup
-from tests.pg_fixtures import connect, sqlalchemy_url
+from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -2249,6 +2251,145 @@ def test_default_config_rejects_an_existing_player_render_job(
             assert "player-owned seed" in job["last_error"]
         finally:
             conn.close()
+
+
+def _assert_wizard_phase(conn: Any) -> None:
+    """Prove the clone has no bound player, as between setup and transition."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT user_character FROM global_variables WHERE id = true")
+        row = cur.fetchone()
+    conn.rollback()
+    assert row is not None, "wizard-phase clone has no global_variables row"
+    assert row[0] is None, f"wizard-phase clone already binds player {row[0]}"
+
+
+def _assert_no_experience_jobs(conn: Any) -> None:
+    """Prove the clone holds no experience job, the idle-drain seed."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM character_experience_jobs")
+        (job_count,) = cur.fetchone()
+    conn.rollback()
+    assert job_count == 0, f"wizard-phase clone already holds {job_count} jobs"
+
+
+def _wizard_drain_settings() -> dict[str, Any]:
+    """Load settings and pin the experiences lane preconditions #1027 needs."""
+    settings = load_settings_as_dict()
+    experiences = settings["orrery"]["experiences"]
+    assert experiences["enabled"] is True
+    assert experiences["include_player_character"] is False
+    return settings
+
+
+def test_default_config_idle_drain_on_wizard_phase_slot_is_silent() -> None:
+    """No due job on a slot with no player is idle work, not an error (#1027)."""
+
+    with disposable_slot_database("qa640_wizard_drain") as dbname:
+        conn = _connect(dbname)
+        try:
+            _assert_wizard_phase(conn)
+            _assert_no_experience_jobs(conn)
+            settings = _wizard_drain_settings()
+            forbidden_provider = _ForbiddenSceneProvider()
+            assert drain_experience_render_jobs_sync(
+                slot=1027,
+                settings=settings,
+                conn=conn,
+                provider=forbidden_provider,
+            ) == (0, 0)
+            assert forbidden_provider.calls == 0
+            assert conn.get_transaction_status() == TRANSACTION_STATUS_IDLE
+        finally:
+            conn.close()
+
+
+def test_default_config_due_job_on_wizard_phase_slot_still_raises() -> None:
+    """A due experience job with no bound player is corrupt state and stays loud."""
+
+    opt_in_settings = load_settings_as_dict()
+    opt_in_settings["orrery"]["experiences"]["include_player_character"] = True
+    with disposable_slot_database("qa640_wizard_drain") as dbname:
+        conn = _connect(dbname)
+        try:
+            _assert_wizard_phase(conn)
+            with conn:
+                with conn.cursor() as cur:
+                    # Characters need the story clock anchor (migration 100);
+                    # the clock is not the player binding.
+                    cur.execute(
+                        "UPDATE global_variables SET base_timestamp = %s "
+                        "WHERE id = true",
+                        (datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc),),
+                    )
+                    assert cur.rowcount == 1
+            seeded_ids = _enqueue_render_job(
+                conn, settings=opt_in_settings, label="Wizard Phase 1027"
+            )
+            assert (
+                len(seeded_ids) == 2
+            ), f"expected the two Wizard Phase 1027 actor seeds, got {seeded_ids}"
+            _assert_wizard_phase(conn)
+            forbidden_provider = _ForbiddenSceneProvider()
+            with pytest.raises(
+                PlayerIdentityNotEstablishedError, match="user_character is NULL"
+            ):
+                drain_experience_render_jobs_sync(
+                    slot=1027,
+                    settings=load_settings_as_dict(),
+                    conn=conn,
+                    provider=forbidden_provider,
+                )
+            assert forbidden_provider.calls == 0
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT state::text AS state, attempts, experience_ids
+                    FROM character_experience_jobs
+                    """
+                )
+                jobs = [dict(row) for row in cur.fetchall()]
+            conn.rollback()
+            assert jobs == [
+                {"state": "queued", "attempts": 0, "experience_ids": seeded_ids}
+            ], f"the Wizard Phase 1027 job must stay queued untouched, got {jobs}"
+        finally:
+            conn.close()
+
+
+def test_scheduler_pass_on_wizard_phase_slot_runs_every_lane_cleanly(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A fresh slot before its first scene drains every lane with no ERROR."""
+
+    with disposable_slot_database("qa640_wizard_drain") as dbname:
+        conn = _connect(dbname)
+        try:
+            _assert_wizard_phase(conn)
+            _assert_no_experience_jobs(conn)
+        finally:
+            conn.close()
+        settings = _wizard_drain_settings()
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            result = SlotScheduler(4, dbname=dbname, settings=settings).run_pass()
+        assert result["owner"] is True and result["drained"] is True, result
+        assert result["character_experience_jobs"] == [0, 0], result
+        assert result["orrery_narration_jobs"] == [0, 0], result
+        assert result["orrery_maturation_jobs"] == [0, 0], result
+        for lane in (
+            "promotion",
+            "relationship_milestone_queue",
+            "narrative_summary_jobs",
+            "narrative_embedding_jobs",
+            "character_experience_embeddings",
+        ):
+            assert lane in result, f"lane {lane} did not run: {result}"
+        errors = [
+            f"{record.name}: {record.getMessage()}"
+            for record in caplog.records
+            if record.levelno >= logging.ERROR
+        ]
+        assert errors == []
 
 
 def test_mixed_player_job_renders_npc_and_reenqueues_unrendered_player(
