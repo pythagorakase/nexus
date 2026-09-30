@@ -342,6 +342,13 @@ roster_source_enabled = true
 acquaintance_source_enabled = true
 roster_reach = 2
 
+[orrery.resolver]
+# faction_member_role labels that count as faction membership when the resolver
+# hydrates world state. Adversarial and former roles (target, informant,
+# defector, exile, insider_threat) stay out, so a character a faction hunts or
+# expelled never passes a faction_member gate.
+membership_roles = ["leader", "employee", "member", "sympathizer"]
+
 [orrery.contagion]
 enabled = true
 
