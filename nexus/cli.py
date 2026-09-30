@@ -4929,7 +4929,10 @@ Examples:
         "--to",
         dest="to_id",
         type=int,
-        help="Last chunk id of the range (default: the latest chunk)",
+        help=(
+            "Last chunk id of the range; required with --from (alone, the range"
+            " starts at the first chunk)"
+        ),
     )
     inspect_chunk_parser = _add_inspect_verb("chunk", "Read one committed chunk")
     inspect_chunk_parser.add_argument("chunk_id", type=int, help="Chunk id")
