@@ -11,13 +11,21 @@ opens a database connection.
 
 from __future__ import annotations
 
-import importlib
 import tomllib
 from pathlib import Path
 
 import pytest
 
-from nexus.api import slot_utils
+from nexus.api import (
+    narrative,
+    save_slots,
+    secrets_endpoints,
+    slot_endpoints,
+    slot_utils,
+    wizard_agent,
+    wizard_chat,
+)
+from scripts import new_story_setup
 from tests.pg_fixtures import (
     ROUTED_SLOT_DATABASE_ENV,
     ROUTED_SLOT_ENV,
@@ -39,13 +47,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # Modules that bind ``slot_dbname`` at import; the old six-module route_slot
 # missed all but ``narrative``.
 IMPORT_BOUND = (
-    "nexus.api.narrative",
-    "nexus.api.slot_endpoints",
-    "nexus.api.save_slots",
-    "nexus.api.wizard_chat",
-    "nexus.api.wizard_agent",
-    "nexus.api.secrets_endpoints",
-    "scripts.new_story_setup",
+    narrative,
+    slot_endpoints,
+    save_slots,
+    wizard_chat,
+    wizard_agent,
+    secrets_endpoints,
+    new_story_setup,
 )
 
 OWNER_DATABASES = (
@@ -59,7 +67,7 @@ def test_route_slot_reaches_import_bound_resolvers_and_restores_them(
 ) -> None:
     """Every import-bound resolver sees slot 4 routed and slot 5 refused."""
 
-    modules = [importlib.import_module(name) for name in IMPORT_BOUND]
+    modules = list(IMPORT_BOUND)
     originals = [module.slot_dbname for module in modules]
     monkeypatch.delenv("NEXUS_SLOT", raising=False)
     with pytest.MonkeyPatch.context() as patch:
