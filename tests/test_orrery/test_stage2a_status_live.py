@@ -1,4 +1,12 @@
-"""Rollback-only PostgreSQL coverage for Stage 2a status producers."""
+"""Rollback-only PostgreSQL coverage for Stage 2a status producers.
+
+Every test runs on one module-scoped disposable template clone, routed under
+``ROUTED_SLOT`` for the whole module because the seed vocabulary reader and
+the maturation seat resolver resolve the slot themselves. The clone is pinned
+to TEST, so resolving the maturation seat reaches no paid model. It carries a
+canonical player (the need-clock anchor), one active faction, and a head
+chunk clocked at ``WORLD_TIME``; each test's own writes roll back.
+"""
 
 from __future__ import annotations
 
@@ -31,20 +39,49 @@ from nexus.agents.orrery.retrograde_vocabulary import (
 )
 from nexus.agents.orrery.substrate import Slot, has_any_status_at_or_above
 from nexus.agents.orrery.tag_writer import apply_status_pair_tag_bestowal
-from nexus.api.slot_utils import get_slot_db_url, slot_dbname
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_faction,
+    seed_protagonist,
+    seed_story_clock,
+    sqlalchemy_url,
+)
 
 
 pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
 
-LIVE_SLOT = 5
+# The slot label the clone is routed under for the whole module.
+ROUTED_SLOT = 5
+WORLD_TIME = datetime(2073, 8, 1, tzinfo=timezone.utc)
 ENABLED_MATURATION = {"orrery": {"retrograde": {"maturation": {"enabled": True}}}}
 
 
-@pytest.fixture()
-def live_transaction() -> Iterator[tuple[Connection, Session, Any]]:
-    """One real slot transaction shared by SQLAlchemy and psycopg2 calls."""
+@pytest.fixture(scope="module")
+def stage2a_db() -> Iterator[str]:
+    """A routed clone with a player, an active faction, and a clocked head chunk.
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
+    Seeded in need-clock anchor order: the player sets ``base_timestamp``,
+    then the faction ``_active_faction`` reads, then the head chunk the tests
+    anchor on, whose ``world_time`` the declaration hints require.
+    """
+
+    with disposable_slot_database("qa885_stage2a_status") as dbname:
+        with pytest.MonkeyPatch.context() as mp:
+            route_slot_to_disposable(mp.setattr, slot=ROUTED_SLOT, dbname=dbname)
+            seed_protagonist(
+                dbname, name="Stage 2a Player", base_timestamp=WORLD_TIME.isoformat()
+            )
+            seed_faction(dbname, name="Stage 2a Fixture Assembly")
+            seed_story_clock(dbname, world_time=WORLD_TIME)
+            yield dbname
+
+
+@pytest.fixture()
+def live_transaction(stage2a_db: str) -> Iterator[tuple[Connection, Session, Any]]:
+    """One clone transaction shared by SQLAlchemy and psycopg2 calls."""
+
+    engine = create_engine(sqlalchemy_url(stage2a_db), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -105,14 +142,13 @@ def _insert_subject(session: Session, *, name: str) -> int:
 
 def _retrograde_inputs(
     *,
+    dbname: str,
     subject_name: str,
     faction_name: str,
     status_tag: str,
     token: str,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    vocabulary: SeedEligibleVocabulary = enumerate_seed_eligible_vocabulary(
-        slot_dbname(LIVE_SLOT)
-    )
+    vocabulary: SeedEligibleVocabulary = enumerate_seed_eligible_vocabulary(dbname)
     request = build_seed_generation_request(
         candidate_scaffolds={
             "core_entities": [
@@ -257,6 +293,7 @@ def _retrograde_inputs(
 
 def test_retrograde_institutional_standing_persists_status_edge(
     live_transaction: tuple[Connection, Session, Any],
+    stage2a_db: str,
 ) -> None:
     """The public Retrograde path writes status and complete provenance."""
 
@@ -269,6 +306,7 @@ def test_retrograde_institutional_standing_persists_status_edge(
         session.execute(text("SELECT max(id) FROM narrative_chunks")).scalar_one()
     )
     packet, seed_response, expansion = _retrograde_inputs(
+        dbname=stage2a_db,
         subject_name=subject_name,
         faction_name=str(faction["name"]),
         status_tag="status:pariah",
@@ -281,8 +319,8 @@ def test_retrograde_institutional_standing_persists_status_edge(
             packet=packet,
             seed_candidate_response=seed_response,
             expansion_plan_payload=expansion,
-            slot=LIVE_SLOT,
-            dbname=slot_dbname(LIVE_SLOT),
+            slot=ROUTED_SLOT,
+            dbname=stage2a_db,
             dry_run=True,
             summaries_enabled=False,
             recorded_at_chunk_id=chunk_id,
@@ -295,8 +333,8 @@ def test_retrograde_institutional_standing_persists_status_edge(
             packet=packet,
             seed_candidate_response=seed_response,
             expansion_plan_payload=expansion,
-            slot=LIVE_SLOT,
-            dbname=slot_dbname(LIVE_SLOT),
+            slot=ROUTED_SLOT,
+            dbname=stage2a_db,
             dry_run=False,
             summaries_enabled=False,
             recorded_at_chunk_id=chunk_id,
@@ -355,6 +393,7 @@ def test_retrograde_institutional_standing_persists_status_edge(
 
 def test_retrograde_status_skips_existing_live_standing_with_dry_run_parity(
     live_transaction: tuple[Connection, Session, Any],
+    stage2a_db: str,
 ) -> None:
     """Backstory never clears or replaces an active present-day status."""
 
@@ -367,6 +406,7 @@ def test_retrograde_status_skips_existing_live_standing_with_dry_run_parity(
         session.execute(text("SELECT max(id) FROM narrative_chunks")).scalar_one()
     )
     packet, seed_response, expansion = _retrograde_inputs(
+        dbname=stage2a_db,
         subject_name=subject_name,
         faction_name=str(faction["name"]),
         status_tag="status:pariah",
@@ -389,8 +429,8 @@ def test_retrograde_status_skips_existing_live_standing_with_dry_run_parity(
             packet=packet,
             seed_candidate_response=seed_response,
             expansion_plan_payload=expansion,
-            slot=LIVE_SLOT,
-            dbname=slot_dbname(LIVE_SLOT),
+            slot=ROUTED_SLOT,
+            dbname=stage2a_db,
             dry_run=True,
             summaries_enabled=False,
             recorded_at_chunk_id=chunk_id,
@@ -400,8 +440,8 @@ def test_retrograde_status_skips_existing_live_standing_with_dry_run_parity(
             packet=packet,
             seed_candidate_response=seed_response,
             expansion_plan_payload=expansion,
-            slot=LIVE_SLOT,
-            dbname=slot_dbname(LIVE_SLOT),
+            slot=ROUTED_SLOT,
+            dbname=stage2a_db,
             dry_run=False,
             summaries_enabled=False,
             recorded_at_chunk_id=chunk_id,
@@ -436,6 +476,7 @@ def test_retrograde_status_skips_existing_live_standing_with_dry_run_parity(
 
 def test_wizard_time_retrograde_status_keeps_source_chunk_null(
     live_transaction: tuple[Connection, Session, Any],
+    stage2a_db: str,
 ) -> None:
     """Pre-ledger wizard history does not borrow the prologue anchor as source."""
 
@@ -445,6 +486,7 @@ def test_wizard_time_retrograde_status_keeps_source_chunk_null(
     _insert_subject(session, name=subject_name)
     faction = _active_faction(session)
     packet, seed_response, expansion = _retrograde_inputs(
+        dbname=stage2a_db,
         subject_name=subject_name,
         faction_name=str(faction["name"]),
         status_tag="status:junior",
@@ -457,8 +499,8 @@ def test_wizard_time_retrograde_status_keeps_source_chunk_null(
             packet=packet,
             seed_candidate_response=seed_response,
             expansion_plan_payload=expansion,
-            slot=LIVE_SLOT,
-            dbname=slot_dbname(LIVE_SLOT),
+            slot=ROUTED_SLOT,
+            dbname=stage2a_db,
             dry_run=False,
             summaries_enabled=False,
             recorded_at_chunk_id=None,
@@ -503,7 +545,7 @@ def test_declaration_status_hint_applies_and_hydrates_for_predicate(
         ],
         chunk_id=chunk_id,
         raw_text=f"{name} presents their credentials.",
-        slot=LIVE_SLOT,
+        slot=ROUTED_SLOT,
         settings=ENABLED_MATURATION,
     )
     assert result.stubs_created == 1
@@ -595,7 +637,7 @@ def test_declaration_status_hint_resolves_same_batch_faction(
         ],
         chunk_id=chunk_id,
         raw_text=f"{character_name} swears the oath of the {faction_name}.",
-        slot=LIVE_SLOT,
+        slot=ROUTED_SLOT,
         settings=ENABLED_MATURATION,
     )
     assert result.stubs_created == 2
