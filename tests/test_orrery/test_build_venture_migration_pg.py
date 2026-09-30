@@ -9,17 +9,25 @@ from uuid import uuid4
 import psycopg2
 import pytest
 
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
+@pytest.fixture(scope="module")
+def migration_database() -> Iterator[str]:
+    """A template clone for the public enums; each test's shadow rolls back."""
+
+    with disposable_slot_database("qa640_mig084") as dbname:
+        yield dbname
+
+
 @pytest.fixture()
-def migration_083_schema() -> Iterator[Any]:
+def migration_083_schema(migration_database: str) -> Iterator[Any]:
     """Build the exact project/tag surface migration 084 must widen."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+    conn = connect(migration_database)
     schema = f"migration_084_{uuid4().hex[:12]}"
     try:
         with conn.cursor() as cur:

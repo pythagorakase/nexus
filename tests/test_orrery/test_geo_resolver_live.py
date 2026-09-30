@@ -5,21 +5,28 @@ from __future__ import annotations
 import uuid
 from typing import Any, Iterator
 
-import psycopg2
 import pytest
 
 from nexus.agents.orrery.geo import resolve_zone_for_point, story_active_zone
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
+@pytest.fixture(scope="module")
+def geo_database() -> Iterator[str]:
+    """A template clone that carries PostGIS; each test's shadow rolls back."""
+
+    with disposable_slot_database("qa640_geo_resolver") as dbname:
+        yield dbname
+
+
 @pytest.fixture()
-def geo_cur() -> Iterator[Any]:
+def geo_cur(geo_database: str) -> Iterator[Any]:
     """Create a rollback-only schema with only the GIS contract tables."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=5))
+    conn = connect(geo_database)
     schema = f"gis_resolver_{uuid.uuid4().hex}"
     try:
         with conn.cursor() as cur:

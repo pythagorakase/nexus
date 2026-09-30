@@ -8,18 +8,28 @@ import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_database
 
 
 pytestmark = pytest.mark.requires_postgres
-MIGRATION_SQL = Path("migrations/091_backstory_secrets.sql").read_text()
+MIGRATION_SQL = (
+    Path(__file__).parents[2] / "migrations" / "091_backstory_secrets.sql"
+).read_text()
+
+
+@pytest.fixture(scope="module")
+def migration_database() -> Iterator[str]:
+    """An empty disposable database; each test's shadow schema rolls back."""
+
+    with disposable_database("qa640_mig091") as dbname:
+        yield dbname
 
 
 @pytest.fixture()
-def migration_090_schema() -> Iterator[Any]:
+def migration_090_schema(migration_database: str) -> Iterator[Any]:
     """Build the exact migration dependencies in a rolled-back schema."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2), cursor_factory=RealDictCursor)
+    conn = connect(migration_database, cursor_factory=RealDictCursor)
     try:
         with conn.cursor() as cur:
             schema = f"migration_091_{uuid4().hex[:12]}"

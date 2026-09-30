@@ -14,12 +14,13 @@ from nexus.agents.orrery.epistemics import (
     mint_account_variant_sync,
     mint_claim_for_event,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
-MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
-DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
+MIGRATIONS = Path(__file__).parents[2] / "migrations"
+MIGRATION_SQL = (MIGRATIONS / "090_claim_accounts.sql").read_text()
+DISTORTION_MIGRATION_SQL = (MIGRATIONS / "092_claim_distortion_depth.sql").read_text()
 EPISTEMICS = {
     "enabled": True,
     "claim_event_types": ["threat_issued"],
@@ -27,11 +28,19 @@ EPISTEMICS = {
 }
 
 
+@pytest.fixture(scope="module")
+def migration_database() -> Iterator[str]:
+    """A template clone whose public chunk_metadata the claim mint reads."""
+
+    with disposable_slot_database("qa640_mig090") as dbname:
+        yield dbname
+
+
 @pytest.fixture()
-def migration_089_schema() -> Iterator[Any]:
+def migration_089_schema(migration_database: str) -> Iterator[Any]:
     """Build the exact pre-090 claim contract in a rolled-back schema."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2), cursor_factory=RealDictCursor)
+    conn = connect(migration_database, cursor_factory=RealDictCursor)
     try:
         with conn.cursor() as cur:
             schema = f"migration_090_{uuid4().hex[:12]}"
