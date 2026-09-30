@@ -5,13 +5,18 @@ These tests verify essential components are available and fail hard
 when missing (NO FALLBACKS principle).
 """
 
+import os
+from collections.abc import Iterator
+from contextlib import closing
+from pathlib import Path
+from typing import Dict
+
 import pytest
 import psycopg2
 import tiktoken
-from pathlib import Path
 
 from nexus.database import connection_kwargs
-from tests.pg_fixtures import assert_one_target
+from tests.pg_fixtures import assert_one_target, connect, disposable_slot_database
 
 pytestmark = [pytest.mark.requires_postgres]
 
@@ -23,6 +28,55 @@ REQUIRED_TABLES_SQL = """
          OR table_name LIKE 'chunk_embeddings_%')
     ORDER BY table_name
 """
+
+
+@pytest.fixture(scope="module")
+def lore_corpus_database() -> Iterator[str]:
+    """Yield a disposable data clone of the save_01 golden master.
+
+    Only ``requires_corpus`` tests may use it; the flag check stops an
+    unmarked test from cloning the owner's corpus under the plain gate.
+    """
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        pytest.fail(
+            "lore_corpus_database needs the requires_corpus marker and "
+            "NEXUS_RUN_CORPUS=1",
+            pytrace=False,
+        )
+    with disposable_slot_database(
+        "qa_lore_corpus", source_db="save_01", include_data=True
+    ) as dbname:
+        yield dbname
+
+
+@pytest.fixture
+def sample_chunks(lore_corpus_database: str, test_scenes) -> Dict[str, Dict]:
+    """Load the curated scenes from a disposable clone of the golden master."""
+    chunks = {}
+    with closing(connect(lore_corpus_database)) as conn, conn.cursor() as cursor:
+        for scene_name, chunk_id in test_scenes.items():
+            cursor.execute(
+                """
+                SELECT id, raw_text, season, episode, scene, world_layer, world_time
+                FROM narrative_view
+                WHERE id = %s
+                """,
+                (chunk_id,),
+            )
+
+            row = cursor.fetchone()
+            if row:
+                chunks[scene_name] = {
+                    "id": row[0],
+                    "raw_text": row[1],
+                    "season": row[2],
+                    "episode": row[3],
+                    "scene": row[4],
+                    "world_layer": row[5],
+                    "world_time": row[6],
+                }
+
+    return chunks
 
 
 class TestInfrastructure:

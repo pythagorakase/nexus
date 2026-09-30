@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from itertools import count
 from typing import Any, Iterator
@@ -13,7 +13,13 @@ import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_place,
+    seed_story_clock,
+    seed_zone,
+)
 from nexus.api.commit_handler_sync import apply_state_updates_sync
 from nexus.agents.logon.apex_schema import StateUpdates
 from nexus.agents.orrery.relationship_provenance import relationship_producer
@@ -24,6 +30,7 @@ from nexus.config.settings_models import OrreryDriftSettings
 pytestmark = pytest.mark.requires_postgres
 
 _SCENES = count(100)
+DRIFT_WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
 EPISTEMICS = {
     "enabled": True,
     "claim_event_types": ["relationship_drift_milestone"],
@@ -33,10 +40,24 @@ EPISTEMICS = {
 
 @pytest.fixture(scope="module")
 def drift_database() -> Iterator[str]:
-    """Migrate a disposable clone; never modify a save slot."""
-    with disposable_slot_database(
-        "qa640_drift", source_db="save_03", include_data=True
-    ) as dbname:
+    """A template clone with a story clock; never modify a save slot.
+
+    Every case inserts its own chunks, characters, edges, and events inside
+    a rolled-back transaction; the seeded clock is the need-clock anchor
+    their character inserts require, and the seeded place is where the
+    colocation case stands its pair.
+    """
+    with disposable_slot_database("qa640_drift") as dbname:
+        seed_story_clock(dbname, world_time=DRIFT_WORLD_TIME)
+        seed_zone(
+            dbname,
+            name="Drift Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        seed_place(dbname, name="Drift Plaza")
         yield dbname
 
 

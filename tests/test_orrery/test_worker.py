@@ -426,13 +426,16 @@ def test_clear_semantic_tags_is_conservative_noop_without_local_inference() -> N
 @pytest.mark.requires_postgres
 def test_operator_outbox_observes_existing_scheduler(monkeypatch) -> None:
     """The old entry cannot lease or drain while a gateway holds ownership."""
-    from nexus.api import slot_utils
     from nexus.jobs.scheduler import SlotScheduler
-    from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+    from tests.pg_fixtures import (
+        disposable_slot_database,
+        route_slot_to_disposable,
+        seed_protagonist,
+    )
 
     with disposable_slot_database("qa640_worker") as dbname:
         seed_protagonist(dbname)
-        monkeypatch.setattr(slot_utils, "slot_dbname", lambda slot: dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         owner = SlotScheduler(4, dbname=dbname)
         assert owner.acquire()
         try:

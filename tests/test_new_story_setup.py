@@ -13,8 +13,9 @@ initialization raise before the fresh-slot IDF corpora are seeded; a plain-dump
 restore stops at its first failing statement; and the runner propagates a
 connection error to an existing database instead of reporting nothing pending.
 
-Uses throwaway databases created and dropped by the test itself. Live slots
-(save_01 .. save_05) are never touched; NEXUS_template is only read.
+Uses throwaway databases created and dropped by the test itself, including a
+disposable stand-in for the template. Live slots (save_01 .. save_05) are
+never touched; NEXUS_template is only read, by the stand-in's pg_dump.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from __future__ import annotations
 from contextlib import closing
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from typing import Generator
@@ -225,7 +227,60 @@ def test_fresh_database_is_baseline_stamped(
         )
 
 
-_TEMPLATE = "NEXUS_template"
+# The migration the template stand-in lags on purpose. Migration 135 is
+# comment-only and idempotent (its header says so): undoing it is setting each
+# comment it writes back to NULL, and reapplying it on top of the later schema
+# restores them. A clone of the stand-in must apply it after copying the
+# stand-in's stamps, which is the path a real template takes whenever a branch
+# adds a migration the fleet template has not seen.
+_LAGGING_MIGRATION = "135"
+# One object migration 135 comments, read back to prove it was reapplied.
+_LAG_PROBE_SQL = "SELECT obj_description('public.orrery_job_state'::regtype, 'pg_type')"
+
+
+def _lagging_comment_targets() -> list[str]:
+    """Every ``COMMENT ON <target> IS`` target in the lagging migration."""
+    (path,) = [
+        path
+        for version, _, path in migrate.discover_migrations()
+        if version == _LAGGING_MIGRATION
+    ]
+    targets = re.findall(r"^COMMENT ON (.+) IS$", path.read_text(), flags=re.M)
+    assert targets, f"migration {_LAGGING_MIGRATION} writes no comment"
+    return targets
+
+
+def _lag_probe(dbname: str) -> object:
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(_LAG_PROBE_SQL)
+        return cur.fetchone()[0]
+
+
+@pytest.fixture(scope="module")
+def template_source() -> Generator[str, None, None]:
+    """A disposable stand-in for the canonical template, shared by the module.
+
+    ``disposable_slot_database`` builds it the way every fresh slot is built
+    from ``NEXUS_template`` (schema, seed rows, and the template's stamps with
+    their original applied_at, then any migration the template lags), so it
+    starts as a stamped, fully migrated template image. The fixture then rolls
+    back ``_LAGGING_MIGRATION`` (its comments and its stamp), so the stand-in
+    lags ``main`` by one migration the way the fleet template does whenever a
+    branch adds one. These tests read and clone it; the owner's
+    ``NEXUS_template`` is read only by that initial pg_dump.
+    """
+    with disposable_slot_database("qa640_810_template") as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            for target in _lagging_comment_targets():
+                cur.execute(f"COMMENT ON {target} IS NULL")
+            cur.execute(
+                "DELETE FROM public.schema_migrations WHERE version = %s",
+                (_LAGGING_MIGRATION,),
+            )
+            assert cur.rowcount == 1, "the stand-in carries no lagging stamp"
+        assert _lag_probe(dbname) is None
+        yield dbname
+
 
 # A pending migration that fails inside its transaction, in the repository's
 # migration header style.
@@ -258,17 +313,25 @@ def _failing_tree(tmp_path: Path) -> Path:
     return tree
 
 
-def test_template_clone_replays_no_migration() -> None:
-    """A NEXUS_template clone keeps the template's stamps and ends fully migrated.
+def test_template_clone_replays_no_migration(template_source: str) -> None:
+    """A template clone keeps the template's stamps and ends fully migrated.
 
     The template's stamps arrive with their original applied_at (copied, not
     re-applied); the only other stamps are migrations the template has not
     seen yet, which initialization applied; and a follow-up run is a no-op.
+    The stand-in lags ``_LAGGING_MIGRATION``, so the applied branch runs.
     """
-    template_stamps = _stamps(_TEMPLATE)
+    template_stamps = _stamps(template_source)
     discovered = {version for version, _, _ in migrate.discover_migrations()}
-    with disposable_slot_database("qa640_810_clone") as dbname:
+    # The lag branch is proven, not vacuous: the stand-in misses a migration.
+    assert discovered - set(template_stamps) == {_LAGGING_MIGRATION}
+    with disposable_slot_database(
+        "qa640_810_clone", source_db=template_source
+    ) as dbname:
         clone_stamps = _stamps(dbname)
+        # Initialization applied the lagging migration's effect, not only
+        # its stamp.
+        assert _lag_probe(dbname)
         # Idempotence check only: initialization already raises on any
         # unapplied migration. The applied_at and stamp-set assertions below
         # are the proof that nothing was replayed.
@@ -280,7 +343,7 @@ def test_template_clone_replays_no_migration() -> None:
 
 
 def test_template_clone_first_runner_pass_applies_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, template_source: str
 ) -> None:
     """A raw template clone's first runner pass finds nothing to replay.
 
@@ -290,7 +353,7 @@ def test_template_clone_first_runner_pass_applies_nothing(
     applied_at and adds none: nothing was replayed on the first pass.
     """
     monkeypatch.setattr(new_story_setup, "USE_POOL", False)
-    template_stamps = _stamps(_TEMPLATE)
+    template_stamps = _stamps(template_source)
     tree = tmp_path / "migrations"
     tree.mkdir()
     for version, _, path in migrate.discover_migrations():
@@ -299,13 +362,13 @@ def test_template_clone_first_runner_pass_applies_nothing(
 
     with disposable_database("qa640_810_firstpass") as dbname:
         new_story_setup.initialize_slot_database(
-            dbname, source_db=_TEMPLATE, force=True, migrations_dir=tree
+            dbname, source_db=template_source, force=True, migrations_dir=tree
         )
         assert _stamps(dbname) == template_stamps
 
 
 def test_failing_migration_is_unapplied_and_initialization_raises(
-    tmp_path: Path,
+    tmp_path: Path, template_source: str
 ) -> None:
     """A failing pending migration stays unstamped and aborts initialization."""
     tree = _failing_tree(tmp_path)
@@ -320,7 +383,7 @@ def test_failing_migration_is_unapplied_and_initialization_raises(
             match=rf"^Migrations failed on {dbname}: \d+ applied, 1 unapplied\.",
         ) as raised:
             new_story_setup.initialize_slot_database(
-                dbname, source_db=_TEMPLATE, force=True, migrations_dir=tree
+                dbname, source_db=template_source, force=True, migrations_dir=tree
             )
         assert "partial database was left in place" in str(raised.value)
         assert "recreate it with --force (force=True)" in str(raised.value)
@@ -360,14 +423,14 @@ def test_restore_plain_dump_stops_at_first_error(tmp_path: Path) -> None:
 
 
 def test_clone_with_data_restores_template_into_disposable_target(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, template_source: str
 ) -> None:
     """The data clone replays a real dump under ON_ERROR_STOP into ``target_db``."""
     monkeypatch.setattr(new_story_setup, "USE_POOL", False)
-    template_stamps = _stamps(_TEMPLATE)
+    template_stamps = _stamps(template_source)
     with disposable_database("qa640_810_dataclone") as dbname:
         new_story_setup.clone_slot_with_data(
-            5, source_db=_TEMPLATE, force=True, target_db=dbname
+            5, source_db=template_source, force=True, target_db=dbname
         )
         assert _stamps(dbname) == template_stamps
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:

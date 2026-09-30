@@ -24,14 +24,18 @@ from nexus.api import (
     narrative_generation,
     narrative_lease,
     save_slots,
-    slot_endpoints,
     slot_state,
 )
 from nexus.api.config_utils import get_max_choice_text_length
 from nexus.api.slot_state import NarrativeState, SlotState, WizardState
 from nexus.config import get_available_api_models
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 
 
 TEST_BASELINE_PAYLOAD = empty_pass2_baseline(load_settings()).model_dump(mode="json")
@@ -703,17 +707,19 @@ def _clone_connection(dbname: str, *, dict_cursor: bool = False) -> Iterator[Any
         conn.close()
 
 
+# The slot these PostgreSQL tests address; routed to each test's clone.
+CLONE_SLOT = 3
+
+
 def _route_clone_to_slot(monkeypatch: pytest.MonkeyPatch, dbname: str) -> None:
-    """Route production slot/database helpers to one disposable clone."""
-    monkeypatch.setattr(slot_state, "slot_dbname", lambda _slot: dbname)
-    monkeypatch.setattr(
-        slot_state,
-        "get_connection",
-        lambda _dbname, dict_cursor=False: _clone_connection(
-            dbname, dict_cursor=dict_cursor
-        ),
-    )
-    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: _connect(dbname))
+    """Route ``CLONE_SLOT``, and only it, to one disposable clone.
+
+    The shared contract (``route_slot_to_disposable``) rebinds every loaded
+    resolver, so ``slot_state``, ``slot_endpoints``, ``narrative`` and the
+    pool reach the clone through their production paths and any other slot
+    raises.
+    """
+    route_slot_to_disposable(monkeypatch.setattr, slot=CLONE_SLOT, dbname=dbname)
 
 
 def _reset_to_committed_parent(dbname: str) -> int:
@@ -1548,23 +1554,7 @@ def test_undo_restores_unresolved_parent_and_plain_continue_rejects(
                 ),
             )
 
-    monkeypatch.setattr(slot_state, "slot_dbname", lambda _slot: dbname)
-    monkeypatch.setattr(
-        slot_state,
-        "get_connection",
-        lambda _dbname, dict_cursor=False: _clone_connection(
-            dbname, dict_cursor=dict_cursor
-        ),
-    )
-    monkeypatch.setattr(slot_endpoints, "slot_dbname", lambda _slot: dbname)
-    monkeypatch.setattr(
-        slot_endpoints,
-        "get_connection",
-        lambda _dbname, dict_cursor=False: _clone_connection(
-            dbname, dict_cursor=dict_cursor
-        ),
-    )
-    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: _connect(dbname))
+    _route_clone_to_slot(monkeypatch, dbname)
     generation_calls: list[tuple[Any, ...]] = []
 
     async def capture_generation(*args: Any, **_kwargs: Any) -> None:

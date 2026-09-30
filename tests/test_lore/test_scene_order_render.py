@@ -371,26 +371,34 @@ def test_assembly_hydrates_only_selected_recalled_entries_with_null_clocks() -> 
 
 
 @pytest.mark.requires_postgres
-def test_recent_warm_window_ends_at_historical_parent() -> None:
-    """Read a parent ten scenes behind save_04's frontier on a disposable clone.
+def test_recent_warm_window_ends_at_historical_parent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read a parent ten scenes behind a played story's frontier.
 
-    Uses narrative_chunks and chunk_metadata through the real MEMNON query,
-    warm analysis, and both TEST seat renderers; the source save is read only.
+    The disposable clone holds ``10 + warm_slice_initial`` turns accepted
+    through the production commit (``seed_played_story``), read through the
+    real MEMNON query, warm analysis, and both TEST seat renderers.
     """
     from sqlalchemy import text
 
     from nexus.agents.memnon.memnon import MEMNON
     from nexus.agents.orrery.reconstruction import playable_narrative_predicate
     from nexus.database import database_url
-    from tests.pg_fixtures import disposable_slot_database
+    from tests.pg_fixtures import (
+        disposable_slot_database,
+        route_slot_to_disposable,
+        seed_played_story,
+    )
 
-    with disposable_slot_database(
-        "qa640_scene_parent", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_scene_parent") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        monkeypatch.setenv("NEXUS_SLOT", "4")
+        utility = window_logon()
+        count = utility.settings.lore.chunk_parameters.warm_slice_initial
+        seed_played_story(dbname, turns=10 + count, slot=4)
         memnon = MEMNON(interface=None, db_url=database_url(dbname))
         try:
-            utility = window_logon()
-            count = utility.settings.lore.chunk_parameters.warm_slice_initial
             with memnon.Session() as session:
                 ids = list(
                     session.execute(

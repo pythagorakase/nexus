@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, NamedTuple
 
 import asyncpg
 import pytest
@@ -32,7 +34,13 @@ from nexus.agents.orrery.substrate import HabituationPolicy, WorldState
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.config import load_settings, load_settings_as_dict
 from nexus.config.settings_models import Settings
-from tests.pg_fixtures import asyncpg_kwargs, disposable_slot_database, sqlalchemy_url
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_played_story,
+    sqlalchemy_url,
+)
 from tests.settings_helpers import settings_with
 
 
@@ -89,7 +97,21 @@ def test_rank_retains_distinct_templates_and_habituation() -> None:
 
 @pytest.fixture()
 def card_database() -> Iterator[str]:
-    """Migrate a disposable corpus; never mutate the source save or template."""
+    """Migrate a disposable corpus; never mutate the source save or template.
+
+    Only the ``requires_corpus`` exposure test uses it: it ranks the owner's
+    current save_04 frontier (its actors, relationships, joint beats, and
+    scene pressures) and checks the cards' parity across the prompt,
+    exposures, Backstage, and cognition traces. The saved Ren/Gaia replay
+    runs on ``ren_replay_story`` instead. The flag check stops an unmarked
+    test from cloning the owner's corpus under the plain gate, whatever
+    marker another test in this module carries.
+    """
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        pytest.fail(
+            "card_database needs the requires_corpus marker and NEXUS_RUN_CORPUS=1",
+            pytrace=False,
+        )
     with disposable_slot_database(
         "qa640_781_cards", source_db="save_04", include_data=True
     ) as dbname:
@@ -97,6 +119,7 @@ def card_database() -> Iterator[str]:
 
 
 @pytest.mark.requires_postgres
+@pytest.mark.requires_corpus
 @pytest.mark.asyncio
 @pytest.mark.parametrize("asynchronous", [False, True])
 async def test_card_exposure_rank_joint_and_backstage_parity(
@@ -420,19 +443,83 @@ def test_card_format_places_clock_and_both_seats() -> None:
     )
 
 
+def _saved_ren_cards() -> tuple[OrreryResolutionDraft, ...]:
+    """Ren Vale's three saved cards, in the saved rank order."""
+    proposal, _ = saved_turn()
+    return tuple(
+        card
+        for card in proposal.resolutions
+        if card.binding_names["actor"] == "Ren Vale"
+    )
+
+
+class RenReplayStory(NamedTuple):
+    """A seeded story holding the characters Ren's saved cards bind."""
+
+    dbname: str
+    # Saved entity id (the receipt's) -> seeded entity id (this clone's).
+    entity_ids: dict[int, int]
+
+
+@pytest.fixture()
+def ren_replay_story() -> Iterator[RenReplayStory]:
+    """Seed the characters Ren's saved cards bind, under their saved names.
+
+    The receipt's cards bind entity ids from the story they were recorded
+    in. This fixture seeds a played story whose cast is each bound
+    character, by the name the card recorded for it, and maps every saved id
+    to the seeded character's entity id, so the saved turn replays on a
+    template clone instead of a clone of the owner's save_04.
+    """
+    saved_names: dict[int, str] = {}
+    for card in _saved_ren_cards():
+        for role in ("actor", "target"):
+            if role in card.bindings:
+                saved_names[int(card.bindings[role])] = card.binding_names[role]
+    with disposable_slot_database("qa640_885_ren_replay") as dbname:
+        seed_played_story(dbname, turns=1, cast=tuple(sorted(saved_names.values())))
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT name, entity_id FROM characters WHERE name = ANY(%s)",
+                (list(saved_names.values()),),
+            )
+            seeded = dict(cur.fetchall())
+        assert set(seeded) == set(saved_names.values()), seeded
+        yield RenReplayStory(
+            dbname,
+            {saved: seeded[name] for saved, name in saved_names.items()},
+        )
+
+
+def _rebind(
+    card: OrreryResolutionDraft, entity_ids: dict[int, int]
+) -> OrreryResolutionDraft:
+    """Point a saved card's entity bindings at the seeded entities.
+
+    The binding hash, and so the proposal id Gaia's decisions name, is the
+    saved one: the replay commits the saved card, bound to this story.
+    """
+    return replace(
+        card,
+        bindings={
+            role: entity_ids[value] if role in ("actor", "target") else value
+            for role, value in card.bindings.items()
+        },
+    )
+
+
 @pytest.mark.requires_postgres
 @pytest.mark.asyncio
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("replacement", [False, True])
 async def test_ren_rank_commit_replay(
-    card_database: str, asynchronous: bool, replacement: bool
+    ren_replay_story: RenReplayStory, asynchronous: bool, replacement: bool
 ) -> None:
     """Ren's highest rank wins in both writers, including Gaia's replacement."""
+    card_database = ren_replay_story.dbname
     proposal, decisions = saved_turn()
     ren = tuple(
-        card
-        for card in proposal.resolutions
-        if card.binding_names["actor"] == "Ren Vale"
+        _rebind(card, ren_replay_story.entity_ids) for card in _saved_ren_cards()
     )
     assert [card.template_id for card in ren] == [
         "check_on_dependent",

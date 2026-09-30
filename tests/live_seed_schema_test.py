@@ -110,9 +110,15 @@ def make_test_context(model: str, accept_fate: bool = True) -> WizardContext:
 def setup_db_mocks():
     """Mock database functions so we don't need PostgreSQL."""
     import nexus.api.wizard_agent as wizard_module
+    from nexus.api.slot_utils import all_slots
+    from tests.pg_fixtures import route_slots_to_disposable
 
     wizard_module.record_drafts = lambda *args, **kwargs: None
-    wizard_module.slot_dbname = lambda slot: f"save_0{slot}"
+    # Every slot routes to a disposable label no database carries; the
+    # script's process ends with the routes in place.
+    route_slots_to_disposable(
+        setattr, {slot: f"qa640_fake_wizard_slot_{slot}" for slot in all_slots()}
+    )
 
 
 async def test_model(model_name: str) -> Dict[str, Any]:

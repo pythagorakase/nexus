@@ -1,8 +1,13 @@
 """Tests for the gateway's ported read and asset endpoints (issue #396).
 
 These exercise the real routers over HTTP through a TestClient against real
-slot databases - no mocks. Read coverage runs against save_02 (mature
-corpus, read-only). The asset upload round-trip runs against a disposable
+slot databases - no mocks. Read coverage runs against a disposable template
+clone (``read_slot``) routed under ``READ_SLOT``, seeded once per module with
+a played story through the accepted-turn factory (``seed_played_story``: a
+zone, two located places, the protagonist and an off-screen cast, and turns
+whose references name a setting place), a faction, a relationship on the
+first character, and the episode and season summary rows in the summary
+writer's shape. The asset upload round-trip runs against a second disposable
 template clone (``asset_slot``) routed under ``ROUTED_SLOT``: the character is
 inserted through the real pool after ``seed_story_clock`` anchors its need
 clock, image rows are written through HTTP, and uploaded files land in a
@@ -18,6 +23,7 @@ from __future__ import annotations
 
 import io
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 from typing import Iterator, Tuple
 
@@ -29,15 +35,21 @@ from nexus.api import asset_endpoints
 from nexus.api.asset_endpoints import router as asset_router
 from nexus.api.db_pool import get_connection
 from nexus.api.reader_endpoints import router as reader_router
+from psycopg2.extras import Json
+
 from tests.pg_fixtures import (
+    connect,
     disposable_slot_database,
     route_slot_to_disposable,
+    seed_faction,
+    seed_played_story,
+    seed_relationship,
     seed_story_clock,
 )
 
 pytestmark = pytest.mark.requires_postgres
 
-READ_SLOT = 2  # save_02: mature corpus, read-only verification
+READ_SLOT = 2  # routed to read_slot's seeded clone for read coverage
 ROUTED_SLOT = 4  # routed to asset_slot's disposable clone for writes
 WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -57,16 +69,73 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+# The seeded read story: turns played, and the off-screen cast they mention.
+READ_TURNS = 4
+READ_CAST = ("Mara Quill", "Oren Vale")
+READ_FACTION = "Fixture Harbor Guild"
+
+
+@pytest.fixture(scope="module")
+def read_slot() -> Iterator[str]:
+    """A template clone holding a small played story, owned by this module.
+
+    The story is played through ``seed_played_story`` (every turn accepted
+    by the production commit), so chunks, metadata, world time, and chunk
+    references take their production shapes. The episode and season summary
+    rows are written with the summary drain's own statements
+    (``nexus.jobs.summaries.drain_summary``), since this module reads them
+    rather than generating them.
+    """
+
+    with disposable_slot_database("qa640_reader_reads") as dbname:
+        seed_played_story(dbname, turns=READ_TURNS, cast=READ_CAST)
+        seed_faction(dbname, name=READ_FACTION)
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT id FROM characters ORDER BY id LIMIT 2")
+            (first,), (second,) = cur.fetchall()
+        seed_relationship(
+            dbname,
+            subject_character_id=first,
+            object_character_id=second,
+            relationship_type="ally",
+        )
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO seasons (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
+            )
+            cur.execute(
+                """INSERT INTO episodes (season, episode, summary, chunk_span)
+                SELECT 1, 1, %s, int8range(min(chunk_id), max(chunk_id)+1, '[)')
+                FROM chunk_metadata WHERE season=1 AND episode=1""",
+                (Json({"summary": "The plaza empties as evening falls."}),),
+            )
+            assert cur.rowcount == 1
+            cur.execute(
+                "UPDATE seasons SET summary=%s WHERE id=1 AND summary IS NULL",
+                (Json({"summary": "A first evening in Fixture Plaza."}),),
+            )
+            assert cur.rowcount == 1
+        yield dbname
+
+
+@pytest.fixture()
+def routed_read_slot(read_slot: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Route ``READ_SLOT``, and only it, to the module's seeded read clone."""
+
+    route_slot_to_disposable(monkeypatch.setattr, slot=READ_SLOT, dbname=read_slot)
+    return read_slot
+
+
 class TestNarrativeReads:
     def test_status(self, client: TestClient) -> None:
         assert client.get("/status").json() == {"status": "ok"}
 
-    def test_seasons_shape(self, client: TestClient) -> None:
+    def test_seasons_shape(self, client: TestClient, routed_read_slot: str) -> None:
         seasons = client.get(f"/api/narrative/seasons?slot={READ_SLOT}").json()
         assert isinstance(seasons, list) and seasons
         assert set(seasons[0].keys()) == {"id", "summary"}
 
-    def test_episodes_shape(self, client: TestClient) -> None:
+    def test_episodes_shape(self, client: TestClient, routed_read_slot: str) -> None:
         seasons = client.get(f"/api/narrative/seasons?slot={READ_SLOT}").json()
         episodes = client.get(
             f"/api/narrative/episodes/{seasons[0]['id']}?slot={READ_SLOT}"
@@ -74,7 +143,9 @@ class TestNarrativeReads:
         assert episodes
         assert set(episodes[0].keys()) == {"season", "episode", "chunkSpan", "summary"}
 
-    def test_latest_chunk_shape(self, client: TestClient) -> None:
+    def test_latest_chunk_shape(
+        self, client: TestClient, routed_read_slot: str
+    ) -> None:
         chunk = client.get(f"/api/narrative/latest-chunk?slot={READ_SLOT}").json()
         assert set(chunk.keys()) == {
             "id",
@@ -102,7 +173,9 @@ class TestNarrativeReads:
             "slug",
         }
 
-    def test_outline_and_chunk_by_id(self, client: TestClient) -> None:
+    def test_outline_and_chunk_by_id(
+        self, client: TestClient, routed_read_slot: str
+    ) -> None:
         outline = client.get(f"/api/narrative/outline?slot={READ_SLOT}").json()
         assert outline
         assert set(outline[0].keys()) == {"id", "season", "episode", "scene", "slug"}
@@ -111,11 +184,11 @@ class TestNarrativeReads:
         assert chunk["id"] == chunk_id
         assert chunk["metadata"]["chunkId"] == chunk_id
 
-    def test_chunk_404(self, client: TestClient) -> None:
+    def test_chunk_404(self, client: TestClient, routed_read_slot: str) -> None:
         response = client.get(f"/api/narrative/chunks/999999999?slot={READ_SLOT}")
         assert response.status_code == 404
 
-    def test_adjacent(self, client: TestClient) -> None:
+    def test_adjacent(self, client: TestClient, routed_read_slot: str) -> None:
         outline = client.get(f"/api/narrative/outline?slot={READ_SLOT}").json()
         middle = outline[len(outline) // 2]["id"]
         result = client.get(
@@ -125,7 +198,7 @@ class TestNarrativeReads:
         assert result["previous"]["id"] < middle
         assert result["next"]["id"] > middle
 
-    def test_context_shape(self, client: TestClient) -> None:
+    def test_context_shape(self, client: TestClient, routed_read_slot: str) -> None:
         outline = client.get(f"/api/narrative/outline?slot={READ_SLOT}").json()
         context = client.get(
             f"/api/narrative/chunks/{outline[-1]['id']}/context?slot={READ_SLOT}"
@@ -135,7 +208,7 @@ class TestNarrativeReads:
             assert set(entry.keys()) == {"id", "name", "reference"}
         for entry in context["places"]:
             assert set(entry.keys()) == {"id", "name", "referenceType"}
-        with get_connection(f"save_{READ_SLOT:02d}") as conn, conn.cursor() as cur:
+        with get_connection(routed_read_slot) as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT p.id, p.name FROM place_chunk_references r "
                 "JOIN places p ON p.id = r.place_id "
@@ -143,13 +216,16 @@ class TestNarrativeReads:
                 (outline[-1]["id"],),
             )
             expected_settings = cur.fetchall()
+        assert expected_settings, "the seeded turns reference a setting place"
         assert [
             (place["id"], place["name"])
             for place in context["places"]
             if place["referenceType"] == "setting"
         ] == expected_settings
 
-    def test_chunks_by_season_episode(self, client: TestClient) -> None:
+    def test_chunks_by_season_episode(
+        self, client: TestClient, routed_read_slot: str
+    ) -> None:
         outline = client.get(f"/api/narrative/outline?slot={READ_SLOT}").json()
         row = outline[0]
         result = client.get(
@@ -162,7 +238,7 @@ class TestNarrativeReads:
 
 
 class TestWorldReads:
-    def test_characters_shape(self, client: TestClient) -> None:
+    def test_characters_shape(self, client: TestClient, routed_read_slot: str) -> None:
         characters = client.get(f"/api/characters?slot={READ_SLOT}").json()
         assert characters
         entry = characters[0]
@@ -188,7 +264,7 @@ class TestWorldReads:
             location = character["currentLocation"]
             assert location is None or isinstance(location, str)
 
-    def test_places_shape(self, client: TestClient) -> None:
+    def test_places_shape(self, client: TestClient, routed_read_slot: str) -> None:
         places = client.get(f"/api/places?slot={READ_SLOT}").json()
         assert places
         entry = places[0]
@@ -210,14 +286,18 @@ class TestWorldReads:
         assert located, "expected at least one place with coordinates"
         assert located[0]["geometry"]["type"] == "Point"
 
-    def test_zones_shape(self, client: TestClient) -> None:
+    def test_zones_shape(self, client: TestClient, routed_read_slot: str) -> None:
         zones = client.get(f"/api/zones?slot={READ_SLOT}").json()
         assert zones
         assert set(zones[0].keys()) == {"id", "name", "summary", "boundary"}
 
-    def test_factions_live_schema(self, client: TestClient) -> None:
+    def test_factions_live_schema(
+        self, client: TestClient, routed_read_slot: str
+    ) -> None:
         factions = client.get(f"/api/factions?slot={READ_SLOT}").json()
         assert isinstance(factions, list)
+        # The seeded faction makes the shape check below non-vacuous.
+        assert [faction["name"] for faction in factions] == [READ_FACTION]
         if factions:
             assert set(factions[0].keys()) == {
                 "id",
@@ -229,7 +309,7 @@ class TestWorldReads:
                 "updatedAt",
             }
 
-    def test_current_place(self, client: TestClient) -> None:
+    def test_current_place(self, client: TestClient, routed_read_slot: str) -> None:
         response = client.get(f"/api/current-place?slot={READ_SLOT}")
         assert response.status_code == 200
         places = response.json()
@@ -239,13 +319,19 @@ class TestWorldReads:
             place["placeId"] for place in places
         )
 
-    def test_relationships_and_psychology(self, client: TestClient) -> None:
+    def test_relationships_and_psychology(
+        self, client: TestClient, routed_read_slot: str
+    ) -> None:
         characters = client.get(f"/api/characters?slot={READ_SLOT}").json()
         character_id = characters[0]["id"]
         relationships = client.get(
             f"/api/characters/{character_id}/relationships?slot={READ_SLOT}"
         ).json()
         assert isinstance(relationships, list)
+        # The seeded relationship makes the shape check below non-vacuous.
+        assert [
+            (row["character1Id"], row["relationshipType"]) for row in relationships
+        ] == [(character_id, "ally")]
         if relationships:
             assert {"character1Id", "character2Id", "relationshipType"} <= set(
                 relationships[0].keys()

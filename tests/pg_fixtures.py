@@ -35,6 +35,7 @@ import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, NamedTuple
 
 import psycopg2
@@ -341,6 +342,33 @@ def require_disposable_target(dbname: str) -> str:
 # sweep below never rebinds.
 _UNROUTED_SLOT_DBNAME = slot_dbname
 
+# The repository's ``tests/`` directory. Pytest imports a test module under a
+# name relative to its first directory without an ``__init__.py`` (a module in
+# ``tests/test_runtime/`` loads as ``test_runtime.<name>``), so the routing
+# sweep recognizes repository test modules by file as well as by name.
+_TESTS_DIR = Path(__file__).resolve().parent
+
+# The package prefixes the routing sweep rebinds by module name.
+_SWEPT_PACKAGES = ("nexus.", "scripts.", "tests.")
+
+
+def _is_swept_module(name: str, module: types.ModuleType) -> bool:
+    """Whether the routing sweep rebinds ``module``'s bound slot resolver.
+
+    Modules of this repository's ``nexus``, ``scripts``, and ``tests``
+    packages are swept by name; any other module is swept when its resolved
+    ``__file__`` lies under this repository's ``tests/`` directory, whatever
+    name pytest imported it under.
+    """
+
+    if name.startswith(_SWEPT_PACKAGES):
+        return True
+    module_file = getattr(module, "__file__", None)
+    if not isinstance(module_file, str):
+        return False
+    return Path(module_file).resolve().is_relative_to(_TESTS_DIR)
+
+
 # The active routes as a read-only ``{slot: dbname}`` mapping, or ``None``
 # when no slot is routed. ``route_slots_to_disposable`` sets it through its
 # ``patch`` callable, so a test's monkeypatch restores the previous routes
@@ -399,9 +427,13 @@ def route_slots_to_disposable(
     ``nexus.api.slot_utils.slot_dbname``, either through the module attribute
     (``require_slot_dbname``, ``get_slot_db_url``, ``connection_kwargs`` and
     every function-local import) or through a name bound at import
-    (``from nexus.api.slot_utils import slot_dbname``). ``patch`` sets the
-    active routes, then rebinds the module attribute and every loaded
-    module's bound name to ``_routed_slot_dbname``, which returns the mapped
+    (``from nexus.api.slot_utils import slot_dbname``, aliased or not).
+    ``patch`` sets the active routes, then rebinds the module attribute and
+    every module attribute whose value is the unrouted resolver, whatever its
+    name, in every loaded ``nexus``, ``scripts``, or ``tests`` module, and in every
+    module whose file lies under this repository's ``tests/`` directory
+    (pytest imports ``tests/test_runtime/test_x.py`` as
+    ``test_runtime.test_x``), to ``_routed_slot_dbname``, which returns the mapped
     clone for a routed slot and raises ``RuntimeError`` for any other slot,
     and narrows ``VALID_DBNAMES`` to the clones, so a path this sweep missed
     fails loudly instead of reaching an owner database. Modules imported
@@ -434,11 +466,24 @@ def route_slots_to_disposable(
     patch(sys.modules[__name__], "_ACTIVE_ROUTE", frozen)
     patch(slot_utils, "VALID_DBNAMES", set(frozen.values()))
     patch(slot_utils, "slot_dbname", _routed_slot_dbname)
+    this_module = sys.modules[__name__]
     for name, module in list(sys.modules.items()):
-        if module is None or not name.startswith(("nexus.", "scripts.", "tests.")):
+        if module is None:
             continue
-        if vars(module).get("slot_dbname") is _UNROUTED_SLOT_DBNAME:
-            patch(module, "slot_dbname", _routed_slot_dbname)
+        # Sweep by identity, whatever the binding is called: an aliased import
+        # (``from nexus.api.slot_utils import slot_dbname as sd``) holds the
+        # same unrouted function. The identity scan comes first: it is cheap,
+        # and only a module that bound the unrouted resolver needs its file
+        # resolved.
+        bound = [
+            attribute
+            for attribute, value in list(vars(module).items())
+            if value is _UNROUTED_SLOT_DBNAME
+            and not (module is this_module and attribute == "_UNROUTED_SLOT_DBNAME")
+        ]
+        if bound and _is_swept_module(name, module):
+            for attribute in bound:
+                patch(module, attribute, _routed_slot_dbname)
 
 
 def route_slot_to_disposable(
@@ -1890,6 +1935,68 @@ def _playable_frontier_chunk_id(cur: Any) -> int:
     return int(row[0]) if row is not None and row[0] is not None else 0
 
 
+def _remembered_chunks(cur: Any, parent_chunk_id: int) -> list[tuple[int, str]]:
+    """Return the committed playable chunks up to the parent, oldest first."""
+
+    from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+
+    cur.execute(
+        "SELECT nc.id, nc.storyteller_text FROM narrative_chunks nc WHERE "
+        + playable_narrative_predicate()
+        + " AND nc.id <= %s ORDER BY nc.id",
+        (parent_chunk_id,),
+    )
+    return [(int(chunk_id), str(text)) for chunk_id, text in cur.fetchall()]
+
+
+def _remembered_pass2_baseline(
+    settings: Any, *, storyteller_text: str, remembered: list[tuple[int, str]]
+) -> Any:
+    """Build a remembering Pass-2 baseline the way a played turn exports one.
+
+    Pass 1 of a continuation holds the committed chunks up to its parent in
+    its warm slice. The production ``ContextMemoryManager`` stores that
+    baseline from this turn's prose, the warm slice, and the turn's token
+    counts (``total_available`` is the story's storyteller window, the warm
+    slice is each remembered chunk's estimated tokens), and exports it with
+    ``export_pass2_baseline``: every remembered chunk ID as a memory
+    identity, the token accounting with the manager's derived entries, and a
+    positive remaining budget. Returns the unbound ``Pass2BaselineV2``.
+    """
+
+    from nexus.memory.manager import ContextMemoryManager
+
+    if not remembered:
+        raise ValueError("a remembering Pass-2 baseline needs a committed chunk")
+    window = settings.lore.token_budget.apex_context_window
+    if not isinstance(window, int) or window <= 0:
+        raise RuntimeError(
+            "a remembering Pass-2 baseline needs a resolved apex_context_window, "
+            f"got {window!r}"
+        )
+    manager = ContextMemoryManager(settings)
+    warm_tokens = sum(manager._estimate_tokens(text) for _, text in remembered)
+    manager.handle_storyteller_response(
+        storyteller_text,
+        warm_slice=[
+            {"chunk_id": chunk_id, "text": text} for chunk_id, text in remembered
+        ],
+        token_usage={
+            "total_available": window,
+            "warm_slice": warm_tokens,
+            "structured": 0,
+            "augmentation": 0,
+        },
+    )
+    baseline = manager.export_pass2_baseline()
+    assert baseline.memory_identities == [chunk_id for chunk_id, _ in remembered]
+    assert baseline.prior_token_accounting and baseline.remaining_budget > 0, (
+        "the remembering baseline has no token accounting or remaining budget: "
+        f"{baseline.prior_token_accounting!r}, {baseline.remaining_budget!r}"
+    )
+    return baseline
+
+
 def _require_story_preconditions(cur: Any, helper: str) -> None:
     """Fail by name unless the save has a world clock and a canonical player.
 
@@ -2052,6 +2159,7 @@ def seed_pending_turn(
     correspondence_gaia_letter: str | None = None,
     generation_model: str = FIXTURE_GENERATION_MODEL,
     resolve_orrery: bool = True,
+    remembered_baseline: bool = False,
 ) -> str:
     """Stage one pending turn exactly as the gateway does; return its session.
 
@@ -2076,6 +2184,12 @@ def seed_pending_turn(
     under the current settings and the clone's story pins, and
     ``authorial_directives`` keeps its empty default, so the committed chunk
     satisfies ``playable_narrative_predicate``.
+
+    ``remembered_baseline`` stages instead the baseline a played
+    continuation exports (``_remembered_pass2_baseline``): the committed
+    chunks up to the parent as memory identities, token accounting, and a
+    positive remaining budget. The bootstrap opening refuses it, since
+    ``generate_bootstrap_narrative`` stages the empty baseline.
 
     ``reference_updates`` defaults to the canonical player present at their
     current place. ``time_delta`` must fit the chronology fields (under one
@@ -2119,7 +2233,6 @@ def seed_pending_turn(
     settings = story_context_settings(load_settings(), read_story_settings(dbname))
     assert settings.orrery is not None, "seed_pending_turn needs an [orrery] section"
     orrery_settings = settings.orrery.model_dump(by_alias=True)
-    baseline = empty_pass2_baseline(settings)
     session_id = str(uuid.uuid4())
     with closing(_connect(dbname)) as conn:
         with conn.cursor() as cur:
@@ -2131,6 +2244,20 @@ def seed_pending_turn(
                 if reference_updates is not None
                 else _default_scene_references(cur)
             )
+            if remembered_baseline:
+                if parent_chunk_id == 0:
+                    raise ValueError(
+                        "seed_pending_turn stages the empty baseline for the "
+                        "bootstrap opening; remembered_baseline needs a "
+                        "committed parent"
+                    )
+                baseline = _remembered_pass2_baseline(
+                    settings,
+                    storyteller_text=storyteller_text,
+                    remembered=_remembered_chunks(cur, parent_chunk_id),
+                )
+            else:
+                baseline = empty_pass2_baseline(settings)
         conn.rollback()
         is_bootstrap = parent_chunk_id == 0
         conflict = acquire_generation_lease(
@@ -2321,6 +2448,7 @@ def seed_played_story(
     cast: tuple[str, ...] = (),
     correspondence: bool = False,
     slot: int | None = None,
+    remembered_baselines: bool = False,
 ) -> list[int]:
     """Seed a played story of ``turns`` accepted turns; return their chunk IDs.
 
@@ -2338,6 +2466,13 @@ def seed_played_story(
     them and acceptance writes their resolutions, events, and experience
     seeds. ``correspondence`` stages a writer and a Gaia letter with every
     turn, as the two-pass seats do.
+
+    ``remembered_baselines`` stages each continuation with the Pass-2
+    baseline a played turn exports (``seed_pending_turn``'s
+    ``remembered_baseline``): the committed chunks before it as memory
+    identities, token accounting, and a positive remaining budget, bound to
+    the accepted chunk at commit. The bootstrap opening keeps the empty
+    baseline, as in play. By default every turn stages the empty baseline.
 
     Refuses a save that already holds a player or narrative.
     """
@@ -2427,7 +2562,66 @@ def seed_played_story(
                     f"Gaia note for fixture turn {turn}." if correspondence else None
                 ),
                 slot=slot,
+                remembered_baseline=remembered_baselines and turn > 1,
             )
         )
         user_text = FIXTURE_TURN_CHOICES[0]
     return chunk_ids
+
+
+# The off-screen cast ``seed_starved_story`` mentions in every turn.
+STARVED_STORY_CAST = ("Mara Quill", "Oren Vale")
+
+
+def seed_starved_story(dbname: str, *, slot: int) -> list[int]:
+    """Play a story whose scene reset leaves experience renders queued.
+
+    Four accepted turns six story hours apart, with ``STARVED_STORY_CAST``
+    off-screen and writer and Gaia letters on every turn, then a
+    scene-boundary turn one hour later, all through ``seed_played_story``
+    and ``seed_accepted_turn``. The scene reset is the production path that
+    enqueues ``character_experience_jobs``: the accepting commit inserts the
+    cast's experience seeds and one render batch per scene. Returns the IDs
+    of the render jobs the reset enqueued, in order.
+
+    Every returned job is queued and resolved to the TEST model through the
+    clone's TEST story pin (``disposable_slot_database`` pins clones to TEST),
+    so a scheduler that renders it reaches only the TEST provider; the helper
+    asserts both. ``slot`` must route to ``dbname``.
+    """
+
+    require_disposable_target(dbname)
+    _require_slot_routes_to(dbname, slot)
+    seed_played_story(
+        dbname,
+        turns=4,
+        cast=STARVED_STORY_CAST,
+        time_delta=timedelta(hours=6),
+        correspondence=True,
+        slot=slot,
+    )
+    boundary = seed_accepted_turn(
+        dbname,
+        user_text=FIXTURE_TURN_CHOICES[0],
+        storyteller_text="The scene resets as the plaza empties for the night.",
+        choices=list(FIXTURE_TURN_CHOICES),
+        choice_text=FIXTURE_TURN_CHOICES[0],
+        scene_boundary=True,
+        time_delta=timedelta(hours=1),
+        correspondence_writer_letter="Writer note for the scene reset.",
+        correspondence_gaia_letter="Gaia note for the scene reset.",
+        slot=slot,
+    )
+    with closing(_connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, state::text, resolved_model FROM character_experience_jobs "
+            "WHERE boundary_chunk_id = %s ORDER BY id",
+            (boundary,),
+        )
+        jobs = cur.fetchall()
+    assert jobs, "The scene reset enqueued no experience render jobs"
+    assert all(
+        (state, model) == ("queued", FIXTURE_GENERATION_MODEL)
+        for _, state, model in jobs
+    ), f"seed_starved_story enqueued jobs that are not queued on TEST: {jobs!r}"
+    return [int(job_id) for job_id, _, _ in jobs]

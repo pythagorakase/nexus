@@ -1,4 +1,12 @@
-"""Real continuation and CLI refresh against a disposable save_04 clone."""
+"""Real continuation and CLI refresh against a seeded disposable clone.
+
+The clone holds accepted turns whose commits bound their Pass-2 baselines
+(``seed_played_story``) and a pending draft staged by ``seed_pending_turn``,
+whose incubator row the refresh must leave untouched. Each continuation
+stages the remembering baseline a played turn exports (memory identities,
+token accounting, and a positive remaining budget), so the refresh is shown
+to keep what the tail remembers, not merely an empty baseline.
+"""
 
 import asyncio
 from contextlib import closing
@@ -15,22 +23,35 @@ from nexus.memory.baseline_compat import config_hash, fingerprinted_config
 from nexus.memory.manager import pass2_baseline_config_fingerprint
 from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
 from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
     connect,
     disposable_slot_database,
     route_slot_to_disposable,
+    seed_pending_turn,
+    seed_played_story,
 )
 
 pytestmark = pytest.mark.requires_postgres
 
+# Accepted turns seeded ahead of the pending draft.
+STORY_TURNS = 3
 
-def test_divergence_fingerprint_refresh_preserves_save4_continuation(
+
+def test_divergence_fingerprint_refresh_preserves_continuation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Recreate the pre-removal stamp so this stays valid after fleet refresh."""
-    with disposable_slot_database(
-        "qa640_908_fingerprint", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_908_fingerprint") as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        chunk_ids = seed_played_story(
+            dbname, turns=STORY_TURNS, slot=4, remembered_baselines=True
+        )
+        seed_pending_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text="The plaza lamps flicker on as the square empties.",
+            choices=list(FIXTURE_TURN_CHOICES),
+        )
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SELECT max(id) FROM narrative_chunks")
             tail_id = cur.fetchone()[0]
@@ -40,6 +61,13 @@ def test_divergence_fingerprint_refresh_preserves_save4_continuation(
             before = cur.fetchall()
             cur.execute("SELECT * FROM incubator ORDER BY id")
             incubator_before = cur.fetchall()
+        assert len(before) == STORY_TURNS and before[-1][0] == tail_id
+        assert len(incubator_before) == 1
+        # The tail remembers every chunk before it; preserving it is not vacuous.
+        tail_payload = before[-1][2]
+        assert tail_payload["memory_identities"] == chunk_ids[:-1]
+        assert tail_payload["prior_token_accounting"]["warm_slice"] > 0
+        assert tail_payload["remaining_budget"] > 0
         settings = story_context_settings(load_settings(), read_story_settings(dbname))
         expected = pass2_baseline_config_fingerprint(settings)
         # A retired [memory] key the typed settings can no longer carry.
@@ -100,6 +128,11 @@ def test_divergence_fingerprint_refresh_preserves_save4_continuation(
             )
             assert result == "LOGON disabled", result
             assert second.turn_context.memory_state["pass2"]["baseline_available"]
+            assert second.memory_manager is not None
+            restored = second.memory_manager.context_state.context
+            assert restored is not None
+            # The continuation starts from what the tail remembered.
+            assert set(chunk_ids[:-1]) <= restored.baseline_chunks
             print(f"After refresh: {result}; baseline_available=True")
         finally:
             second.close()

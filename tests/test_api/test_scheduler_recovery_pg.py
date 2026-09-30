@@ -283,7 +283,7 @@ def test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt(
     from nexus.memory.correspondence import persist_staged_correspondence
     from nexus.jobs.compaction import enqueue_compaction
     from nexus.telemetry import usage
-    from tests.pg_fixtures import disposable_slot_database
+    from tests.pg_fixtures import disposable_slot_database, seed_starved_story
     from tests.scheduler_helpers import route_slot, test_provider_config
 
     path = test_provider_config(tmp_path, mock_openai_server, monkeypatch)
@@ -292,10 +292,9 @@ def test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt(
     doc["runtime"]["scheduler"]["compaction_lease_duration_seconds"] = 1
     doc["runtime"]["scheduler"]["generation_wait_seconds"] = 1
     path.write_text(tomlkit.dumps(doc))
-    with disposable_slot_database(
-        "qa640_800_renew", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_800_renew") as dbname:
         route_slot(monkeypatch, dbname)
+        job_id = seed_starved_story(dbname, slot=4)[0]
         with (
             closing(connect(dbname)) as conn,
             conn,
@@ -306,7 +305,8 @@ def test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt(
             )
             if queue == "character_experience_jobs":
                 cur.execute(
-                    "UPDATE character_experience_jobs SET available_at=clock_timestamp() WHERE id=3"
+                    "UPDATE character_experience_jobs SET available_at=clock_timestamp() WHERE id=%s",
+                    (job_id,),
                 )
             else:
                 cfg = load_settings().storyteller.correspondence
@@ -422,8 +422,12 @@ def test_scheduler_gateway_sigkill_resumes_inflight_experience(
         _complete_render,
         ExperienceLeaseLostError,
     )
-    from tests.pg_fixtures import disposable_slot_database, routed_slot_environment
-    from tests.scheduler_helpers import test_provider_config
+    from tests.pg_fixtures import (
+        disposable_slot_database,
+        routed_slot_environment,
+        seed_starved_story,
+    )
+    from tests.scheduler_helpers import route_slot, test_provider_config
 
     # Configure before spawning TEST so its process inherits the same file.
     path = test_provider_config(
@@ -440,15 +444,16 @@ def test_scheduler_gateway_sigkill_resumes_inflight_experience(
     doc["runtime"]["services"]["mock_openai"]["port"] = urlsplit(mock_url).port
     path.write_text(tomlkit.dumps(doc))
 
-    with disposable_slot_database(
-        "qa640_800_kill", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_800_kill") as dbname:
+        route_slot(monkeypatch, dbname)
+        job_id = seed_starved_story(dbname, slot=4)[0]
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
                 "UPDATE character_experience_jobs SET available_at=clock_timestamp()+interval '1 hour' WHERE state='queued'"
             )
             cur.execute(
-                "UPDATE character_experience_jobs SET available_at=clock_timestamp() WHERE id=3"
+                "UPDATE character_experience_jobs SET available_at=clock_timestamp() WHERE id=%s",
+                (job_id,),
             )
             cur.execute(
                 """CREATE TABLE scheduler_completion_proof (job_id bigint NOT NULL);
@@ -540,7 +545,8 @@ uvicorn.run(app, fd=int(sys.argv[1]), log_level="info")
                     conn.cursor(cursor_factory=RealDictCursor) as cur,
                 ):
                     cur.execute(
-                        "SELECT *, id AS job_id FROM character_experience_jobs WHERE id=3"
+                        "SELECT *, id AS job_id FROM character_experience_jobs WHERE id=%s",
+                        (job_id,),
                     )
                     dead = dict(cur.fetchone())
                     assert dead["state"] == "leased" and dead["attempts"] == 1
@@ -548,7 +554,7 @@ uvicorn.run(app, fd=int(sys.argv[1]), log_level="info")
                 first.wait(timeout=10)
                 assert first.returncode == -9
                 print(
-                    f'SIGKILL gateway pid={first.pid}; job=3; nonce={dead["lease_nonce"]}',
+                    f'SIGKILL gateway pid={first.pid}; job={job_id}; nonce={dead["lease_nonce"]}',
                     flush=True,
                 )
                 second = start("second")
@@ -556,7 +562,8 @@ uvicorn.run(app, fd=int(sys.argv[1]), log_level="info")
                 def completed():
                     with closing(connect(dbname)) as conn, conn.cursor() as cur:
                         cur.execute(
-                            "SELECT state::text, attempts FROM character_experience_jobs WHERE id=3"
+                            "SELECT state::text, attempts FROM character_experience_jobs WHERE id=%s",
+                            (job_id,),
                         )
                         return cur.fetchone() == ("succeeded", 2)
 
@@ -565,7 +572,7 @@ uvicorn.run(app, fd=int(sys.argv[1]), log_level="info")
                     cur.execute(
                         "SELECT job_id,count(*) FROM scheduler_completion_proof GROUP BY job_id"
                     )
-                    assert cur.fetchall() == [(3, 1)]
+                    assert cur.fetchall() == [(job_id, 1)]
                     cur.execute(
                         "SELECT count(DISTINCT render_generation_id) FROM character_experiences WHERE id=ANY(%s)",
                         (dead["experience_ids"],),

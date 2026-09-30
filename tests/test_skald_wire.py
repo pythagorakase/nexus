@@ -75,7 +75,12 @@ from nexus.api.native_structured_output import anthropic_output_config
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from scripts.api_openai import OpenAIProvider
 from nexus.config.settings_models import Settings
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_played_story,
+)
 from tests.settings_helpers import settings_with
 
 
@@ -2029,42 +2034,53 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
 
 
 @pytest.mark.requires_postgres
-def test_presence_baseline_reads_real_slot_parent_rows() -> None:
-    """Read a real parent chunk without mutating its slot database."""
+def test_presence_baseline_reads_real_slot_parent_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read a real parent chunk without mutating its slot database.
 
-    dbname = os.environ.get("NEXUS_BASELINE_TEST_DB", "save_05")
-    conn = connect(dbname)
-    try:
-        conn.set_session(readonly=True, autocommit=True)
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT max(chunk_id)
-                FROM (
-                    SELECT ccr.chunk_id
-                    FROM chunk_character_references AS ccr
-                    WHERE ccr.reference::text = 'present'
-                    UNION ALL
-                    SELECT pcr.chunk_id
-                    FROM place_chunk_references AS pcr
-                    WHERE pcr.reference_type::text = 'setting'
-                ) AS candidates
-                """
-            )
-            parent_row = cur.fetchone()
-    finally:
-        conn.close()
+    The slot is a disposable template clone routed as slot 5, holding a
+    played story whose accepted turns wrote present-character and setting
+    references through the production commit (``seed_played_story``).
+    """
 
-    assert parent_row is not None
-    parent_chunk_id = parent_row[0]
-    if parent_chunk_id is None:
-        pytest.skip("Slot has no parent chunk with presence junction rows")
-    baseline = read_presence_baseline(dbname, parent_chunk_id)
-    assert baseline.present or baseline.setting is not None
-    assert all(isinstance(reference, CharacterRef) for reference in baseline.present)
-    assert all(reference.kind == "character" for reference in baseline.present)
-    assert baseline.setting is None or isinstance(baseline.setting, PlaceRef)
-    assert baseline.setting is None or baseline.setting.kind == "place"
+    with disposable_slot_database("qa885_presence_baseline") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        frontier = seed_played_story(dbname, turns=2, cast=("Mara Quill",), slot=5)[-1]
+        conn = connect(dbname)
+        try:
+            conn.set_session(readonly=True, autocommit=True)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT max(chunk_id)
+                    FROM (
+                        SELECT ccr.chunk_id
+                        FROM chunk_character_references AS ccr
+                        WHERE ccr.reference::text = 'present'
+                        UNION ALL
+                        SELECT pcr.chunk_id
+                        FROM place_chunk_references AS pcr
+                        WHERE pcr.reference_type::text = 'setting'
+                    ) AS candidates
+                    """
+                )
+                parent_row = cur.fetchone()
+        finally:
+            conn.close()
+
+        assert parent_row is not None
+        parent_chunk_id = parent_row[0]
+        assert parent_chunk_id == frontier
+        baseline = read_presence_baseline(dbname, parent_chunk_id)
+        assert baseline.present and baseline.setting is not None
+        assert baseline.present or baseline.setting is not None
+        assert all(
+            isinstance(reference, CharacterRef) for reference in baseline.present
+        )
+        assert all(reference.kind == "character" for reference in baseline.present)
+        assert baseline.setting is None or isinstance(baseline.setting, PlaceRef)
+        assert baseline.setting is None or baseline.setting.kind == "place"
 
 
 def test_schema_token_measurement_uses_o200k() -> None:

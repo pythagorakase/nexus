@@ -19,6 +19,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal
 from functools import partial
+from pathlib import Path
 from typing import Any, NoReturn
 
 import psycopg2
@@ -147,6 +148,7 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
         {"user_text": "Refused.", "storyteller_text": "Refused."},
     ),
     "seed_played_story": (pg_fixtures.seed_played_story, {"turns": 1}),
+    "seed_starved_story": (pg_fixtures.seed_starved_story, {"slot": 4}),
     "seed_checkpointed_story": (seed_checkpointed_story, {}),
 }
 
@@ -204,7 +206,12 @@ def test_seed_helpers_refuse_owner_databases_before_connecting(
 
 
 @pytest.mark.parametrize(
-    "helper", [pg_fixtures.seed_accepted_turn, pg_fixtures.seed_played_story]
+    "helper",
+    [
+        pg_fixtures.seed_accepted_turn,
+        pg_fixtures.seed_played_story,
+        pg_fixtures.seed_starved_story,
+    ],
 )
 def test_turn_factory_refuses_a_slot_label_routed_elsewhere(
     helper: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
@@ -217,11 +224,10 @@ def test_turn_factory_refuses_a_slot_label_routed_elsewhere(
     """
 
     monkeypatch.setattr(psycopg2, "connect", _refuse_connection)
-    arguments: dict[str, Any] = (
-        {"turns": 1}
-        if helper is pg_fixtures.seed_played_story
-        else {"user_text": "Refused.", "storyteller_text": "Refused."}
-    )
+    arguments: dict[str, Any] = {
+        pg_fixtures.seed_played_story: {"turns": 1},
+        pg_fixtures.seed_starved_story: {},
+    }.get(helper, {"user_text": "Refused.", "storyteller_text": "Refused."})
     with pytest.raises(RuntimeError, match="Slot 4 routes to 'save_04'"):
         helper("qa640_unrouted", slot=4, **arguments)
 
@@ -346,6 +352,66 @@ def test_multi_slot_route_sweeps_bound_and_late_imported_resolvers() -> None:
     finally:
         sys.modules.pop(bound_name, None)
         sys.modules.pop(late_name, None)
+
+
+def test_route_sweeps_a_test_module_pytest_named_by_its_directory() -> None:
+    """A module under ``tests/`` is swept whatever name pytest gave it.
+
+    Pytest imports ``tests/test_runtime/<name>.py`` as ``test_runtime.<name>``
+    (``tests/`` has no ``__init__.py``). Its ``from nexus.api.slot_utils
+    import slot_dbname`` binding must reach the clone like a ``tests.*``
+    module's, and be restored at teardown.
+    """
+
+    name = "test_runtime._route_probe_review"
+    probe = types.ModuleType(name)
+    probe.__file__ = str(
+        Path(pg_fixtures.__file__).resolve().parent
+        / "test_runtime"
+        / "_route_probe_review.py"
+    )
+    exec("from nexus.api.slot_utils import slot_dbname", vars(probe))
+    unrouted = probe.slot_dbname
+    sys.modules[name] = probe
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            route_slot_to_disposable(patch.setattr, slot=4, dbname="qa640_by_file")
+            assert slot_utils.slot_dbname(4) == "qa640_by_file"
+            assert probe.slot_dbname(4) == "qa640_by_file"
+            with pytest.raises(RuntimeError, match="Slot 2 is not routed"):
+                probe.slot_dbname(2)
+        assert probe.slot_dbname is unrouted
+        assert probe.slot_dbname(4) == "save_04"
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_route_sweeps_an_aliased_resolver_binding() -> None:
+    """A resolver bound under another name is routed and restored by identity.
+
+    ``from nexus.api.slot_utils import slot_dbname as sd`` binds the unrouted
+    function as ``sd``; a sweep by the name ``slot_dbname`` alone left it
+    resolving owner names while a route was active.
+    """
+
+    name = "tests._route_probe_aliased"
+    probe = types.ModuleType(name)
+    exec("from nexus.api.slot_utils import slot_dbname as sd", vars(probe))
+    unrouted = probe.sd
+    sys.modules[name] = probe
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            route_slot_to_disposable(patch.setattr, slot=4, dbname="qa640_alias")
+            assert probe.sd is not unrouted
+            assert probe.sd(4) == "qa640_alias"
+            with pytest.raises(RuntimeError, match="Slot 2 is not routed"):
+                probe.sd(2)
+            # The capture the sweep resolves through is never rebound.
+            assert pg_fixtures._UNROUTED_SLOT_DBNAME is unrouted
+        assert probe.sd is unrouted
+        assert probe.sd(4) == "save_04"
+    finally:
+        sys.modules.pop(name, None)
 
 
 def test_multi_slot_route_keeps_its_own_copy_of_the_mapping() -> None:

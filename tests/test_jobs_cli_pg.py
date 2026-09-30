@@ -3,22 +3,23 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 import uuid
 
-import psycopg2
 from psycopg2 import sql
 import pytest
 
 from nexus import cli
-from nexus.api import slot_utils
 from scripts.qa_shift import qa_shift
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -30,42 +31,10 @@ def _connect(dbname: str) -> Any:
     return connect(dbname)
 
 
-@contextmanager
-def _disposable_jobs_db() -> Iterator[str]:
-    """Yield a unique NEXUS_template clone and always drop it afterward."""
+def _disposable_jobs_db() -> Any:
+    """Yield a migrated template clone, dropped afterward."""
 
-    dbname = f"qa653_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    try:
-        try:
-            admin = _connect("postgres")
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
-        admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier("NEXUS_template"),
-                )
-            )
-        from scripts.migrate import migrate_database
-
-        _, failed = migrate_database(dbname, skip_locked=False)
-        assert failed == 0
-        yield dbname
-    finally:
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
+    return disposable_slot_database("qa653")
 
 
 def test_jobs_cli_reports_counts_and_non_terminal_rows(
@@ -228,11 +197,7 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
         finally:
             conn.close()
 
-        monkeypatch.setattr(
-            slot_utils,
-            "require_slot_dbname",
-            lambda *, slot: dbname,
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         parsed = cli.build_parser().parse_args(["jobs", "--slot", "4", "--json"])
         payload = cli.run_jobs(argparse.Namespace(slot=parsed.slot))
 
@@ -472,11 +437,7 @@ def test_jobs_cli_reports_experiences_stamped_without_vectors(
         finally:
             conn.close()
 
-        monkeypatch.setattr(
-            slot_utils,
-            "require_slot_dbname",
-            lambda *, slot: dbname,
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         payload = cli.run_jobs(argparse.Namespace(slot=4))
 
         assert payload["stamped_without_vectors"] == {

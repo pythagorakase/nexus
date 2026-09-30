@@ -1,9 +1,9 @@
 """Run the deferred owner against a disposable, factory-played story.
 
 Each test plays a story on a template clone through the accepted-turn factory
-(``tests.pg_fixtures.seed_played_story``): off-screen cast, real Orrery
-resolutions, experience seeds, and a scene reset whose render jobs wait in the
-queue, all pinned to TEST by the clone default.
+(``tests.pg_fixtures.seed_starved_story`` over ``seed_played_story``):
+off-screen cast, real Orrery resolutions, experience seeds, and a scene reset
+whose render jobs wait in the queue, all pinned to TEST by the clone default.
 
 The default proof uses TEST. NEXUS_800_PAID_PROOF=1 explicitly enables one
 experience job with the configured real provider, before the TEST idle drain.
@@ -11,7 +11,6 @@ It disables structured repair retries and limits the paid pass to one job.
 """
 
 from contextlib import closing
-from datetime import timedelta
 import json
 import os
 from pathlib import Path
@@ -26,9 +25,8 @@ from tests.pg_fixtures import (
     FIXTURE_TURN_CHOICES,
     connect,
     disposable_slot_database,
-    seed_accepted_turn,
     seed_pending_turn,
-    seed_played_story,
+    seed_starved_story,
 )
 from tests.scheduler_helpers import (
     route_slot,
@@ -39,43 +37,6 @@ from tests.test_api.test_scheduler_pg import wait_until
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
-FIXTURE_CAST = ("Mara Quill", "Oren Vale")
-
-
-def _seed_starved_story(dbname):
-    """Play a story whose scene reset leaves experience renders queued.
-
-    Returns the IDs of the render jobs the reset enqueued, in order.
-    """
-    seed_played_story(
-        dbname,
-        turns=4,
-        cast=FIXTURE_CAST,
-        time_delta=timedelta(hours=6),
-        correspondence=True,
-        slot=4,
-    )
-    boundary = seed_accepted_turn(
-        dbname,
-        user_text=FIXTURE_TURN_CHOICES[0],
-        storyteller_text="The scene resets as the plaza empties for the night.",
-        choices=list(FIXTURE_TURN_CHOICES),
-        choice_text=FIXTURE_TURN_CHOICES[0],
-        scene_boundary=True,
-        time_delta=timedelta(hours=1),
-        correspondence_writer_letter="Writer note for the scene reset.",
-        correspondence_gaia_letter="Gaia note for the scene reset.",
-        slot=4,
-    )
-    with closing(connect(dbname)) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM character_experience_jobs "
-            "WHERE boundary_chunk_id=%s AND state='queued' ORDER BY id",
-            (boundary,),
-        )
-        job_ids = [row[0] for row in cur.fetchall()]
-    assert job_ids, "The scene reset enqueued no experience render jobs"
-    return job_ids
 
 
 def test_scheduler_drains_starved_corpus(monkeypatch, tmp_path, mock_openai_server):
@@ -83,7 +44,7 @@ def test_scheduler_drains_starved_corpus(monkeypatch, tmp_path, mock_openai_serv
     with disposable_slot_database("qa640_800_corpus") as dbname:
         route_slot(monkeypatch, dbname)
         print(f"Disposable corpus: {dbname}", flush=True)
-        enqueued_ids = _seed_starved_story(dbname)
+        enqueued_ids = seed_starved_story(dbname, slot=4)
         run_cli(monkeypatch, "jobs", "--slot", "4")
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
@@ -177,7 +138,7 @@ def test_scheduler_live_turn_starts_before_queued_render(
     configure_test(tmp_path, mock_openai_server, monkeypatch)
     with disposable_slot_database("qa640_800_turn") as dbname:
         route_slot(monkeypatch, dbname)
-        _seed_starved_story(dbname)
+        seed_starved_story(dbname, slot=4)
         seed_pending_turn(
             dbname,
             user_text=FIXTURE_TURN_CHOICES[0],
@@ -263,7 +224,7 @@ def test_scheduler_rechecks_generation_after_leasing_before_provider(
     configure_test(tmp_path, mock_openai_server, monkeypatch)
     with disposable_slot_database("qa640_800_call_gate") as dbname:
         route_slot(monkeypatch, dbname)
-        _seed_starved_story(dbname)
+        seed_starved_story(dbname, slot=4)
         session = str(uuid4())
         selected = Event()
         render_prompt = experiences._render_prompt

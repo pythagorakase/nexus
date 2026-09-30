@@ -1,13 +1,15 @@
 """PostgreSQL readiness checks (issue #803) against a real NEXUS server.
 
-Requires ``NEXUS_RUN_POSTGRES=1`` and a server holding ``NEXUS_template``.
-Stamp edits happen only on a disposable template clone that the fixture
-drops; the owner's template and slots are only read.
+Requires ``NEXUS_RUN_POSTGRES=1``. Every database the checks read is a
+disposable template clone the fixtures drop: the owner-host checks read a
+clone standing in for the template and one routed clone per readiness slot,
+so no owner database is opened.
 """
 
 from __future__ import annotations
 
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import ExitStack, closing
 
 import psycopg2
 from psycopg2 import sql
@@ -45,8 +47,62 @@ DATABASE_CHECKS = {
 }
 
 
-def test_owner_host_database_checks_run_against_the_contract_server() -> None:
-    """The server, its extensions and the template pass; migrations are read."""
+@pytest.fixture
+def owner_host_stand_ins(monkeypatch: pytest.MonkeyPatch) -> Iterator[int]:
+    """Stand disposable clones in for the template and every readiness slot.
+
+    The owner-host checks read the template named by
+    ``scripts.migrate.TEMPLATE_DB`` and each ``[runtime.readiness].slots``
+    database through the contract server. A template clone takes the
+    template's name there, and ``route_slots_to_disposable`` gives every
+    configured slot its own clone, so the checks run their real SQL on the
+    contract server without opening an owner database.
+
+    The first configured slot's clone is made locked (read-only, the way a
+    locked save slot is) and stale (its narrative IDF corpus carries an old
+    analyzer key), so the locked-slot remediation branch runs on every gate.
+    Yields that slot's number.
+    """
+    settings = load_settings()
+    assert settings.runtime is not None
+    slots = list(settings.runtime.readiness.slots)
+    with ExitStack() as stack:
+        template = stack.enter_context(
+            pg_fixtures.disposable_slot_database("readiness803_template")
+        )
+        routes = {
+            slot: stack.enter_context(
+                pg_fixtures.disposable_slot_database(f"readiness803_slot{slot}")
+            )
+            for slot in slots
+        }
+        monkeypatch.setattr(migrate, "TEMPLATE_DB", template)
+        pg_fixtures.route_slots_to_disposable(monkeypatch.setattr, routes)
+        locked_slot = slots[0]
+        locked = routes[locked_slot]
+        with closing(pg_fixtures.connect(locked)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE memory_idf_corpora SET analyzer_version = %s "
+                "WHERE corpus_kind = 'narrative'",
+                ("pg_catalog.english/v1/0",),
+            )
+            assert cur.rowcount == 1, "the stand-in has no narrative IDF corpus"
+        _set_read_only(locked, True)
+        # Unlock before the clone is dropped (the ExitStack drops it after).
+        stack.callback(_set_read_only, locked, False)
+        yield locked_slot
+
+
+def test_owner_host_database_checks_run_against_the_contract_server(
+    owner_host_stand_ins: int,
+) -> None:
+    """The server, its extensions and the template pass; migrations are read.
+
+    The locked, stale stand-in slot fails the slot IDF check with the
+    ``--write-locked-slot`` remediation.
+    """
+    from scripts.migrate import TEMPLATE_DB
+
     registry = [spec for spec in REGISTRY if spec.id in DATABASE_CHECKS]
     report = run_readiness("owner-host", ReadinessContext(), registry=registry)
     checks = {check.id: check for check in report.checks}
@@ -66,7 +122,7 @@ def test_owner_host_database_checks_run_against_the_contract_server() -> None:
 
     template = checks["template.migrations_current"]
     assert template.status in {"pass", "fail"}
-    assert template.observed.startswith("NEXUS_template")
+    assert template.observed.startswith(TEMPLATE_DB)
     if template.status == "fail":
         assert "python scripts/migrate.py --template" in (
             template.remediation or ""
@@ -81,7 +137,7 @@ def test_owner_host_database_checks_run_against_the_contract_server() -> None:
 
     template_idf = checks["template.idf_analyzer_current"]
     assert template_idf.status in {"pass", "fail"}
-    assert template_idf.observed.startswith("NEXUS_template")
+    assert template_idf.observed.startswith(TEMPLATE_DB)
     if template_idf.status == "fail":
         assert f"{REBUILD_COMMAND} --template" in (
             template_idf.remediation or ""
@@ -95,20 +151,17 @@ def test_owner_host_database_checks_run_against_the_contract_server() -> None:
         assert REBUILD_COMMAND in (slots_idf.remediation or "") or (
             "python scripts/migrate.py --slot" in (slots_idf.remediation or "")
         )
-    existing = _existing_databases(
-        [slot_dbname(slot) for slot in settings.runtime.readiness.slots]
+    locked_slot = owner_host_stand_ins
+    dbname = slot_dbname(locked_slot)
+    assert _existing_databases([dbname]) == {dbname}
+    assert is_slot_locked(locked_slot)
+    state = database_analyzer_state(dbname)
+    assert state.tracked and state.stale
+    assert slots_idf.status == "fail"
+    assert state.describe() in slots_idf.observed
+    assert f"{REBUILD_COMMAND} --slot {locked_slot} --write-locked-slot" in (
+        (slots_idf.remediation or "").split("; ")
     )
-    for slot in settings.runtime.readiness.slots:
-        dbname = slot_dbname(slot)
-        if dbname not in existing or not is_slot_locked(slot):
-            continue
-        state = database_analyzer_state(dbname)
-        if state.tracked and state.stale:
-            assert slots_idf.status == "fail"
-            assert state.describe() in slots_idf.observed
-            assert f"{REBUILD_COMMAND} --slot {slot} --write-locked-slot" in (
-                (slots_idf.remediation or "").split("; ")
-            )
 
 
 def _existing_databases(names: list[str]) -> set[str]:

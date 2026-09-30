@@ -5,15 +5,19 @@ pytest configuration and fixtures for LORE tests.
 import pytest
 import logging
 import json
-import os
 import psycopg2
-from contextlib import closing
 from pathlib import Path
 from typing import Dict, Any, Generator, Iterator
 from unittest.mock import MagicMock
 import sys
 
-from tests.pg_fixtures import connect, disposable_slot_database, seed_committed_chunk
+from nexus.api.slot_utils import all_slots
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slots_to_disposable,
+    seed_committed_chunk,
+)
 
 # Configure logging for tests
 logging.basicConfig(
@@ -34,17 +38,21 @@ def settings() -> Dict[str, Any]:
         return json.load(f)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def ensure_nexus_slot_env() -> None:
-    """Ensure NEXUS_SLOT is set for tests that rely on slot-based databases."""
-    if os.environ.get("NEXUS_SLOT") is not None:
-        yield
-        return
-    os.environ["NEXUS_SLOT"] = "1"
-    try:
-        yield
-    finally:
-        os.environ.pop("NEXUS_SLOT", None)
+@pytest.fixture
+def fake_routed_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make slot 1 active with every slot routed to a fake disposable label.
+
+    For offline modules whose code under test only renders the active slot's
+    database name (a prompt cache key). No database exists under these
+    labels, so a path that connects fails loudly, and no slot resolves to an
+    owner database. Opt in with ``pytest.mark.usefixtures``; there is no
+    directory-wide default slot.
+    """
+    monkeypatch.setenv("NEXUS_SLOT", "1")
+    route_slots_to_disposable(
+        monkeypatch.setattr,
+        {slot: f"qa640_fake_lore_slot_{slot}" for slot in all_slots()},
+    )
 
 
 @pytest.fixture(scope="session")
@@ -98,55 +106,6 @@ def db_connection(
     finally:
         conn.rollback()  # Rollback any test changes
         conn.close()
-
-
-@pytest.fixture(scope="module")
-def lore_corpus_database() -> Iterator[str]:
-    """Yield a disposable data clone of the save_01 golden master.
-
-    Only ``requires_corpus`` tests may use it; the flag check stops an
-    unmarked test from cloning the owner's corpus under the plain gate.
-    """
-    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
-        pytest.fail(
-            "lore_corpus_database needs the requires_corpus marker and "
-            "NEXUS_RUN_CORPUS=1",
-            pytrace=False,
-        )
-    with disposable_slot_database(
-        "qa_lore_corpus", source_db="save_01", include_data=True
-    ) as dbname:
-        yield dbname
-
-
-@pytest.fixture
-def sample_chunks(lore_corpus_database: str, test_scenes) -> Dict[str, Dict]:
-    """Load the curated scenes from a disposable clone of the golden master."""
-    chunks = {}
-    with closing(connect(lore_corpus_database)) as conn, conn.cursor() as cursor:
-        for scene_name, chunk_id in test_scenes.items():
-            cursor.execute(
-                """
-                SELECT id, raw_text, season, episode, scene, world_layer, world_time
-                FROM narrative_view
-                WHERE id = %s
-                """,
-                (chunk_id,),
-            )
-
-            row = cursor.fetchone()
-            if row:
-                chunks[scene_name] = {
-                    "id": row[0],
-                    "raw_text": row[1],
-                    "season": row[2],
-                    "episode": row[3],
-                    "scene": row[4],
-                    "world_layer": row[5],
-                    "world_time": row[6],
-                }
-
-    return chunks
 
 
 @pytest.fixture

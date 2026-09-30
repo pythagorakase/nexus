@@ -23,7 +23,9 @@ AUTHORIAL_DIRECTIVES = [
     "Pete and Alina collaboration highlights aboard The Ghost",
 ]
 
-pytestmark = [pytest.mark.requires_postgres]
+# The regression replays karaoke chunk 1369 and its deep cuts from the golden
+# master's played corpus (a save_01 data clone); no seed reproduces them.
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_corpus]
 
 
 def _strip_user_section(full_text: str) -> str:

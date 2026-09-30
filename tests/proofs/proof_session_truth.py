@@ -1,8 +1,10 @@
 """Explicit TEST-provider/browser proof for work order 775.
 
-The gateway lane is ``NEXUS_GATEWAY_PORT`` (default 8018). Evidence files are
-written to the test's temporary directory; set
-``NEXUS_PROOF_EXPORT_EVIDENCE=1`` to write them into the tracked
+The story is a disposable template clone seeded with a few accepted turns and
+a pending draft (``seed_played_story`` and ``seed_pending_turn``); every later
+turn comes from the TEST provider. The gateway lane is ``NEXUS_GATEWAY_PORT``
+(default 8018). Evidence files are written to the test's temporary directory;
+set ``NEXUS_PROOF_EXPORT_EVIDENCE=1`` to write them into the tracked
 ``docs/qa/775-session-truth`` instead.
 """
 
@@ -22,7 +24,13 @@ import uvicorn
 
 from nexus.api import narrative
 from nexus.telemetry import usage
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
+    connect,
+    disposable_slot_database,
+    seed_pending_turn,
+    seed_played_story,
+)
 from tests.scheduler_helpers import (
     route_slot,
     run_cli,
@@ -32,6 +40,8 @@ from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
 DEFAULT_LANE = 8018
+# Accepted turns seeded ahead of the pending draft the reader recovers.
+STORY_TURNS = 3
 LANE_ENV = "NEXUS_GATEWAY_PORT"
 EXPORT_ENV = "NEXUS_PROOF_EXPORT_EVIDENCE"
 TRACKED_EVIDENCE = Path(__file__).resolve().parents[2] / "docs/qa/775-session-truth"
@@ -86,24 +96,24 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
     doc["api"]["narrative_generation"]["wake_gap_threshold_seconds"] = 1
     doc["api"]["narrative_generation"]["request_timeout_seconds"] = 5
     config.write_text(tomlkit.dumps(doc))
-    with disposable_slot_database(
-        "qa640_775_browser", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_775_browser") as dbname:
         route_slot(monkeypatch, dbname)
         monkeypatch.setenv(LANE_ENV, str(lane))
         monkeypatch.setenv("NEXUS_API_URL", base)
+        # A small accepted story with a draft waiting, staged under the proof's
+        # own config so the draft's baseline fingerprint is current; the TEST
+        # workflow generates every later turn.
+        seed_played_story(dbname, turns=STORY_TURNS, slot=4)
+        seed_pending_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text="The plaza lamps flicker on as the square empties.",
+            choices=list(FIXTURE_TURN_CHOICES),
+        )
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
             cur.execute(
                 "UPDATE character_experience_jobs SET available_at=clock_timestamp()+INTERVAL '1 hour' WHERE state='queued'"
-            )
-        from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
-
-        _, _, fingerprint = refresh_tail_fingerprint(dbname=dbname)
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE incubator SET lore_pass_baseline=jsonb_set(lore_pass_baseline, '{config_fingerprint}', to_jsonb(%s::text), false) WHERE lore_pass_baseline IS NOT NULL",
-                (fingerprint,),
             )
         check = subprocess.run(
             ["lsof", "-nP", f"-iTCP:{lane}", "-sTCP:LISTEN"],

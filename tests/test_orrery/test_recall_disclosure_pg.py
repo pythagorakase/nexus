@@ -604,6 +604,9 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
 ) -> None:
     """The gateway returns field-specific 4xx errors for invalid trace ids."""
 
+    # The gateway lifespan starts its scheduler for the ambient NEXUS_SLOT;
+    # unset, it starts none, so an exported slot never reaches an owner save.
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
     base = datetime(2078, 1, 31, tzinfo=timezone.utc)
     anchor = _chunk(session, label="cognition boundary", world_time=base, scene=1)
     actor = _character(session, "cognition-boundary")

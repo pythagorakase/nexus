@@ -1,10 +1,13 @@
 """Durable recovery on real PostgreSQL, with no provider substitutions.
 
-The browser proof uses the repository TEST HTTP provider and a disposable copy
-of save_04. Nothing writes to a saved story or calls a paid provider.
+Every test runs on a disposable template clone; the bootstrap error cases seed
+the story the wizard leaves behind (clock, protagonist, location, setting)
+and call only the repository TEST HTTP provider. Nothing writes to a saved
+story or calls a paid provider.
 """
 
 import asyncio
+import json
 from contextlib import closing
 from pathlib import Path
 from uuid import uuid4
@@ -22,12 +25,45 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     route_slots_to_disposable,
+    seed_place,
+    seed_protagonist,
+    seed_story_setting,
+    seed_zone,
 )
 from tests.scheduler_helpers import route_slot
 
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
+
+# A wizard setting card persisted by a completed wizard (slot-3 QA cache).
+SETTING_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "slot3_midnight_qa_wizard_cache.json"
+)
+
+
+def _seed_unplayed_story(dbname: str) -> None:
+    """Seed what the wizard transition leaves before the bootstrap turn.
+
+    A bounded zone and a located place, the canonical protagonist standing
+    there with the story clock set, and the persisted setting card; no turn
+    is accepted, so the bootstrap generation starts from parent chunk 0.
+    """
+    seed_zone(
+        dbname,
+        name="Fixture Zone",
+        min_longitude=-74.1,
+        min_latitude=40.6,
+        max_longitude=-73.8,
+        max_latitude=40.9,
+    )
+    place_id, _ = seed_place(dbname, name="Fixture Plaza")
+    seed_protagonist(dbname, current_location=place_id)
+    seed_story_setting(
+        dbname, setting=json.loads(SETTING_FIXTURE.read_text())["setting"]
+    )
 
 
 def test_session_phase_heartbeat_expiry_and_slot_scope(monkeypatch):
@@ -150,10 +186,9 @@ def test_generation_session_preserves_bootstrap_error_class(
     doc["global"]["model"]["api_models"]["test"]["request_timeout_seconds"] = 0.1
     doc["apex"]["structured_output_retries"] = 0
     config.write_text(tomlkit.dumps(doc))
-    with disposable_slot_database(
-        "qa640_775_errors", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_775_errors") as dbname:
         route_slot(monkeypatch, dbname)
+        _seed_unplayed_story(dbname)
         session = str(uuid4())
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
