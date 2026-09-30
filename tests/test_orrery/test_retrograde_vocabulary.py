@@ -26,7 +26,13 @@ from nexus.api.native_structured_output import (
     strict_json_schema,
     structured_output_error_text,
 )
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_entity_tag,
+    seed_protagonist,
+)
 
 
 def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
@@ -53,10 +59,29 @@ def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_seed_eligible_vocabulary_can_include_live_tag_registry() -> None:
-    """Passing a slot database folds post-migration registry rows into seeds."""
+def test_seed_eligible_vocabulary_can_include_live_tag_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Passing a slot database folds post-migration registry rows into seeds.
 
-    vocabulary = enumerate_seed_eligible_vocabulary(dbname="save_02")
+    The slot is a template clone routed as slot 2, with one live registry
+    tag (``grieving``) bestowed on a seeded protagonist.
+    """
+
+    with disposable_slot_database("qa885_retrograde_vocab") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=2, dbname=dbname)
+        _, protagonist_entity = seed_protagonist(dbname)
+        seed_entity_tag(dbname, entity_id=protagonist_entity, tag="grieving")
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT entity_id, category, tag FROM entity_tags_current "
+                "WHERE entity_id = %s",
+                (protagonist_entity,),
+            )
+            assert cur.fetchall() == [
+                (protagonist_entity, "state", "grieving")
+            ], "the seeded grieving tag must be current on the protagonist"
+        vocabulary = enumerate_seed_eligible_vocabulary(dbname=dbname)
 
     assert "commerce" in vocabulary["single_entity_tag_anchors"]
     assert "grieving" in vocabulary["single_entity_tag_anchors"]
@@ -187,7 +212,7 @@ def test_seed_eligible_vocabulary_classifies_registered_categories(
         lambda _dbname: {"live_warning": "interpersonal"},
     )
 
-    vocabulary = enumerate_seed_eligible_vocabulary(dbname="save_05")
+    vocabulary = enumerate_seed_eligible_vocabulary(dbname="fake_retrograde_db")
     policies = {
         item["category"]: item["policy"]
         for item in vocabulary["registered_category_seed_policies"]
@@ -258,7 +283,7 @@ def test_category_seed_policy_settles_live_registry_split() -> None:
 def test_registry_deprecated_categories_are_never_seed_eligible() -> None:
     """No category the registry deprecates may be seeded by Retrograde.
 
-    The deprecated set is read from a fresh ``NEXUS_template`` clone, not a
+    The deprecated set is read from a fresh template clone, not a
     hand list, so a category a later migration deprecates fails here until
     the seed policy stops offering it. The same read pins ``mood`` as the one
     live category left to the prompt-visible default, so a new unclassified

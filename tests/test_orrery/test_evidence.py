@@ -19,6 +19,7 @@ every explain, so the whole explain test suite doubles as a drift tripwire.
 from __future__ import annotations
 
 import json
+from contextlib import closing
 from datetime import datetime
 
 import pytest
@@ -107,6 +108,16 @@ from nexus.agents.orrery.substrate import (
     weather_is,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_character,
+    seed_entity_tag,
+    seed_pair_tag,
+    seed_protagonist,
+    seed_routine_anchor,
+)
 
 LIVE_SLOT = 5
 
@@ -426,8 +437,18 @@ def test_explain_stack_traces_carry_evidence() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_slot_backed_explain_carries_evidence_end_to_end() -> None:
-    """Evidence must survive the full audit payload path on a real slot."""
+def test_slot_backed_explain_carries_evidence_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Evidence must survive the full audit payload path on a seeded slot.
+
+    With no anchor chunk, the resolver binds off-screen actors from three
+    anchor-less sources (``compose_actor_bindings``): a current ephemeral tag,
+    an inbound ``hunting`` pair tag, and a routine anchor whose mobility policy
+    is neither ``none`` nor ``nomadic``. The clone seeds one actor through each
+    source, plus a protagonist (the hunter) and a bystander who match none of
+    them, so the explain payload must hold exactly those three actor groups.
+    """
 
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
@@ -437,21 +458,74 @@ def test_slot_backed_explain_carries_evidence_end_to_end() -> None:
     from nexus.config import load_settings_as_dict
 
     orrery = load_settings_as_dict()["orrery"]
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
-    try:
-        with Session(engine) as session:
-            report = explain_dry_run(
-                session,
-                BUILTIN_TEMPLATES,
-                anchor_chunk_id=None,
-                window_chunks=int(orrery["binding"]["window_chunks"]),
-                sunhelm_settings=orrery.get("sunhelm"),
+    with disposable_slot_database("qa885_evidence") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=LIVE_SLOT, dbname=dbname)
+        monkeypatch.setenv("NEXUS_SLOT", str(LIVE_SLOT))
+        _, hunter_entity = seed_protagonist(dbname, name="Evidence Hunter")
+        _, grieving_entity = seed_character(dbname, name="Evidence Mourner")
+        _, hunted_entity = seed_character(dbname, name="Evidence Quarry")
+        _, anchored_entity = seed_character(dbname, name="Evidence Homebody")
+        _, bystander_entity = seed_character(dbname, name="Evidence Bystander")
+        seed_entity_tag(dbname, entity_id=grieving_entity, tag="grieving")
+        seed_pair_tag(
+            dbname,
+            subject_entity_id=hunter_entity,
+            object_entity_id=hunted_entity,
+            tag="hunting",
+        )
+        seed_routine_anchor(
+            dbname,
+            character_entity_id=anchored_entity,
+            place_id=None,
+            anchor_type="work",
+            mobility_policy="works_from_home",
+        )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT entity_id, tag, is_ephemeral FROM entity_tags_current "
+                "WHERE entity_id = %s",
+                (grieving_entity,),
             )
-    finally:
-        engine.dispose()
+            assert cur.fetchall() == [
+                (grieving_entity, "grieving", True)
+            ], "the seeded grieving tag must be current and ephemeral"
+            cur.execute(
+                "SELECT pt.is_ephemeral FROM entity_pair_tags ept "
+                "JOIN pair_tags pt ON pt.id = ept.pair_tag_id "
+                "WHERE ept.object_entity_id = %s AND pt.tag = 'hunting' "
+                "AND ept.cleared_at IS NULL",
+                (hunted_entity,),
+            )
+            assert cur.fetchall() == [
+                (True,)
+            ], "the seeded hunting pair tag must be active and ephemeral"
+
+        engine = create_engine(get_slot_db_url(dbname=dbname))
+        try:
+            with Session(engine) as session:
+                report = explain_dry_run(
+                    session,
+                    BUILTIN_TEMPLATES,
+                    anchor_chunk_id=None,
+                    window_chunks=int(orrery["binding"]["window_chunks"]),
+                    sunhelm_settings=orrery.get("sunhelm"),
+                )
+        finally:
+            engine.dispose()
 
     payload = json.loads(json.dumps(report.to_dict()))
-    assert payload["actors"], "save_05 is expected to bind off-screen actors"
+    assert payload["actors"], (
+        "the seeded ephemeral-tag, hunting, and routine-anchor characters are "
+        "expected to bind off-screen actors"
+    )
+    assert {group["actor_entity_id"] for group in payload["actors"]} == {
+        grieving_entity,
+        hunted_entity,
+        anchored_entity,
+    }, "each anchor-less binding path binds exactly its seeded actor"
+    assert bystander_entity not in {
+        group["actor_entity_id"] for group in payload["actors"]
+    }
 
     def _leaves(node: dict):
         if "children" in node:
