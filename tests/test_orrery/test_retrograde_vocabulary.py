@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from typing import Annotated
 
 import pytest
@@ -25,6 +26,7 @@ from nexus.api.native_structured_output import (
     strict_json_schema,
     structured_output_error_text,
 )
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
@@ -224,18 +226,18 @@ def test_category_seed_policy_returns_complete_struct() -> None:
 def test_category_seed_policy_settles_live_registry_split() -> None:
     """Issue #300 split: every live registry category classifies explicitly."""
 
-    # Stable identity/role categories promoted in M4.
+    # Stable identity/role/place/faction categories. The deprecated categories
+    # these replaced (migrations 043/055) are pinned out of seeding by
+    # test_registry_deprecated_categories_are_never_seed_eligible.
     for category, entity_kind in (
-        ("bodyform", "character"),
-        ("role", "character"),
-        ("profession_lite", "character"),
+        ("bodyform.lineage", "character"),
+        ("bodyform.condition", "character"),
+        ("role.function", "character"),
         ("place_function", "place"),
-        ("ideology_axis", "faction"),
-        ("resource_class", "faction"),
-        ("legitimacy_status", "faction"),
-        ("operational_secrecy", "faction"),
-        ("power_posture", "faction"),
-        ("history_class", "faction"),
+        ("ideology", "faction"),
+        ("resource_base", "faction"),
+        ("legitimacy", "faction"),
+        ("operational_mode", "faction"),
     ):
         assert (
             category_seed_policy(category, entity_kind)["policy"] == "stable_seed"
@@ -243,7 +245,8 @@ def test_category_seed_policy_settles_live_registry_split() -> None:
 
     # Pressure/relational categories that require a causing event.
     for category, entity_kind in (
-        ("hidden_agenda_class", "faction"),
+        ("agenda", "faction"),
+        ("power_status", "faction"),
         ("relationship_risk", "character"),
     ):
         assert (
@@ -251,11 +254,37 @@ def test_category_seed_policy_settles_live_registry_split() -> None:
         ), category
 
 
-def test_deprecated_place_affordance_is_not_seed_eligible() -> None:
-    """Migration 043 deprecated place_affordance; Retrograde must not seed it."""
+@pytest.mark.requires_postgres
+def test_registry_deprecated_categories_are_never_seed_eligible() -> None:
+    """No category the registry deprecates may be seeded by Retrograde.
 
-    policy = category_seed_policy("place_affordance", "place")
-    assert policy["policy"] == "prompt_visible_only"
+    The deprecated set is read from a fresh ``NEXUS_template`` clone, not a
+    hand list, so a category a later migration deprecates fails here until
+    the seed policy stops offering it.
+    """
+
+    with disposable_slot_database("qa640_811_seed_policy") as dbname:
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT category, entity_kind::text
+                FROM tag_category_registry
+                WHERE deprecated
+                ORDER BY category, entity_kind::text
+                """
+            )
+            deprecated = [(str(row[0]), str(row[1])) for row in cur.fetchall()]
+
+    assert ("place_affordance", "place") in deprecated
+    seedable = {
+        (category, entity_kind): category_seed_policy(category, entity_kind)["policy"]
+        for category, entity_kind in deprecated
+    }
+    assert {
+        key: policy
+        for key, policy in seedable.items()
+        if policy != "prompt_visible_only"
+    } == {}
 
 
 def test_category_seed_policy_pins_runtime_categories_prompt_only() -> None:
