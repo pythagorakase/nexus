@@ -72,10 +72,15 @@ RETIRED_LABELS = frozenset(
 
 STALE_MEMBERSHIP_SENTENCE = "counts every row as membership whatever its role"
 
-# Proper nouns the comments use that would otherwise read as a label once case
-# is folded: "Retrograde" (the subsystem) is not the world_layer_type label
-# ``retrograde``.
-PROPER_NOUNS = frozenset({"Retrograde"})
+# Exact phrases in the migration 136 comments where "Retrograde" names the
+# subsystem, not the world_layer_type label ``retrograde``. Only these phrases
+# are exempt; every other occurrence of the word, in any letter case, counts as
+# the label.
+SUBSYSTEM_PHRASES = (
+    "Retrograde prologue",
+    "Retrograde persistence",
+    "Retrograde maturation",
+)
 
 COLUMN_SQL = """
 SELECT format_type(a.atttypid, NULL) AS enum_type,
@@ -107,14 +112,13 @@ def _tokens(comment: str) -> set[str]:
     """Split a comment into case-folded identifier-like words.
 
     Folding case catches a stale label that comes back capitalized
-    ("Secondary"); only the words in ``PROPER_NOUNS`` keep their case, so
-    "Retrograde" (the subsystem) does not read as the ``world_layer_type``
-    label ``retrograde``.
+    ("Secondary"). The subsystem name is dropped only inside the exact phrases
+    in ``SUBSYSTEM_PHRASES``, so "Retrograde prologue" does not read as the
+    ``world_layer_type`` label ``retrograde`` while a bare "Retrograde" does.
     """
-    return {
-        word if word in PROPER_NOUNS else word.lower()
-        for word in re.findall(r"[A-Za-z0-9_]+", comment)
-    }
+    for phrase in SUBSYSTEM_PHRASES:
+        comment = comment.replace(phrase, phrase.split(" ", 1)[1])
+    return {word.lower() for word in re.findall(r"[A-Za-z0-9_]+", comment)}
 
 
 def _read_columns(dbname: str) -> dict[tuple[str, str], dict[str, object]]:
@@ -223,3 +227,15 @@ def test_faction_member_role_type_comment_follows_the_membership_rule(
     assert STALE_MEMBERSHIP_SENTENCE not in comment
     foreign = _foreign_labels(comment, frozenset(labels), _vocabulary(columns))
     assert not foreign, f"faction_member_role comment names {sorted(foreign)}"
+
+
+def test_bare_subsystem_word_counts_as_a_label(migrated_clone: str) -> None:
+    """Outside its exempt phrases, "Retrograde" is the label ``retrograde``."""
+    columns = _read_columns(migrated_clone)
+    row = columns[("places", "type")]
+    assert _foreign_labels(
+        "Type of place: Retrograde.",
+        row["labels"],  # type: ignore[arg-type]
+        _vocabulary(columns),
+    ) == {"retrograde"}
+
