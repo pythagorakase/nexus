@@ -8,7 +8,8 @@ calls the repository's TEST provider over HTTP.
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
 import json
 from typing import Any, Optional
 from uuid import uuid4
@@ -41,14 +42,6 @@ from nexus.telemetry.usage import (
 )
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
-# One instant stands for "now" in every test, read from the ledger writer's
-# own clock. The days below derive from it, and freeze_ledger_clock pins the
-# writer to it, so a run that straddles UTC midnight still writes each
-# prompt-window record into the day the observation reads.
-FROZEN_NOW = usage_ledger.datetime.now(timezone.utc)
-TODAY = FROZEN_NOW.date()
-YESTERDAY = TODAY - timedelta(days=1)
-READ_AT = datetime.combine(TODAY, time(12), tzinfo=timezone.utc)
 WRITER_BLOCKS = {
     "system": 4580,
     "recent narrative": 14031,
@@ -78,20 +71,49 @@ REJECTION_NOTES: list[dict[str, Any]] = [
 ]
 
 
-class _FrozenLedgerClock(datetime):
-    """The writer's ``datetime`` with ``now()`` pinned to ``FROZEN_NOW``."""
+@dataclass
+class _LedgerClock:
+    """The instant the ledger writers read as now; a test may move it."""
 
-    @classmethod
-    def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
-        if tz is None:
-            return FROZEN_NOW.astimezone().replace(tzinfo=None)
-        return FROZEN_NOW.astimezone(tz)
+    now: datetime
+
+    @property
+    def today(self) -> date:
+        return self.now.date()
+
+    @property
+    def yesterday(self) -> date:
+        return self.today - timedelta(days=1)
+
+    @property
+    def read_at(self) -> datetime:
+        return datetime.combine(self.today, time(12), tzinfo=timezone.utc)
+
+    @property
+    def enqueued(self) -> str:
+        """The accepting transaction's job enqueue time (timestamptz::text)."""
+        return f"{self.today} 00:00:20.4+00"
 
 
 @pytest.fixture(autouse=True)
-def freeze_ledger_clock(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin the usage and prompt-window writers' clock to the tests' instant."""
+def ledger_clock(monkeypatch: pytest.MonkeyPatch) -> _LedgerClock:
+    """Pin the usage and prompt-window writers' clock to one settable instant.
+
+    The instant is read from the writer's own clock when each test starts, and
+    every day a test writes or reads derives from it, so a run that straddles
+    UTC midnight still writes each record into the day the observation reads.
+    """
+    clock = _LedgerClock(usage_ledger.datetime.now(timezone.utc))
+
+    class _FrozenLedgerClock(datetime):
+        @classmethod
+        def now(cls, tz: Any = None) -> datetime:  # type: ignore[override]
+            if tz is None:
+                return clock.now.astimezone().replace(tzinfo=None)
+            return clock.now.astimezone(tz)
+
     monkeypatch.setattr(usage_ledger, "datetime", _FrozenLedgerClock)
+    return clock
 
 
 def _window(
@@ -211,11 +233,9 @@ def _job(
     }
 
 
-# The accepting transaction enqueues the turn's jobs (timestamptz::text).
-ENQUEUED = f"{TODAY} 00:00:20.4+00"
-
-
-def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
+def _two_pass_turn(
+    ledger_clock: _LedgerClock,
+) -> tuple[dict[str, Any], str, str]:
     """Record a writer pass before UTC midnight, Gaia after it, and its jobs."""
     session = str(uuid4())
     writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
@@ -235,7 +255,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{YESTERDAY}T23:59:59.500000Z",
+            f"{ledger_clock.yesterday}T23:59:59.500000Z",
             "skald_writer",
             1,
             "writer-model",
@@ -253,7 +273,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{TODAY}T00:00:05Z",
+            f"{ledger_clock.today}T00:00:05Z",
             "gaia",
             2,
             "gaia-model",
@@ -270,7 +290,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{TODAY}T00:00:10Z",
+            f"{ledger_clock.today}T00:00:10Z",
             "gaia",
             3,
             "gaia-model",
@@ -288,7 +308,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             "2",
-            f"{TODAY}T00:00:28Z",
+            f"{ledger_clock.today}T00:00:28Z",
             "correspondence_compaction",
             1,
             "compaction-model",
@@ -305,7 +325,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             "7",
-            f"{TODAY}T00:00:45Z",
+            f"{ledger_clock.today}T00:00:45Z",
             "experience_renderer",
             1,
             "experience-model",
@@ -328,7 +348,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
         record_usage_event(
             _event(
                 "7",
-                f"{TODAY}T{ts}Z",
+                f"{ledger_clock.today}T{ts}Z",
                 seat,
                 1,
                 "maturation-model",
@@ -345,7 +365,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             "1",
-            f"{TODAY}T00:02:40Z",
+            f"{ledger_clock.today}T00:02:40Z",
             "summaries",
             1,
             "summary-model",
@@ -369,7 +389,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
         record_usage_event(
             _event(
                 run_id,
-                f"{TODAY}T{ts}Z",
+                f"{ledger_clock.today}T{ts}Z",
                 seat,
                 1,
                 "noise-model",
@@ -384,7 +404,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             other,
-            f"{TODAY}T00:00:06Z",
+            f"{ledger_clock.today}T00:00:06Z",
             "gaia",
             1,
             "gaia-model",
@@ -397,7 +417,7 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
     record_usage_event(
         _event(
             session,
-            f"{YESTERDAY - timedelta(days=1)}T12:00:00Z",
+            f"{ledger_clock.yesterday - timedelta(days=1)}T12:00:00Z",
             "skald_writer",
             9,
             "writer-model",
@@ -421,12 +441,21 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
         # recorded_at::text as PostgreSQL renders it, including a session in
         # another time zone for the Gaia transition.
         "phases": [
-            {"phase": "retrieval", "recorded_at": f"{YESTERDAY} 23:59:30.25+00"},
-            {"phase": "assembly", "recorded_at": f"{YESTERDAY} 23:59:38.5+00"},
-            {"phase": "writer", "recorded_at": f"{YESTERDAY} 23:59:41+00"},
-            {"phase": "gaia", "recorded_at": f"{YESTERDAY} 19:00:11.125-05"},
-            {"phase": "staging", "recorded_at": f"{TODAY} 00:00:20+00"},
-            {"phase": "complete", "recorded_at": f"{TODAY} 00:00:20.5+00"},
+            {
+                "phase": "retrieval",
+                "recorded_at": f"{ledger_clock.yesterday} 23:59:30.25+00",
+            },
+            {
+                "phase": "assembly",
+                "recorded_at": f"{ledger_clock.yesterday} 23:59:38.5+00",
+            },
+            {"phase": "writer", "recorded_at": f"{ledger_clock.yesterday} 23:59:41+00"},
+            {
+                "phase": "gaia",
+                "recorded_at": f"{ledger_clock.yesterday} 19:00:11.125-05",
+            },
+            {"phase": "staging", "recorded_at": f"{ledger_clock.today} 00:00:20+00"},
+            {"phase": "complete", "recorded_at": f"{ledger_clock.today} 00:00:20.5+00"},
         ],
         "manifests": [
             _manifest(gaia[0], provider_outcome="error"),
@@ -441,49 +470,56 @@ def _two_pass_turn() -> tuple[dict[str, Any], str, str]:
                 "experience_render",
                 7,
                 "succeeded",
-                ENQUEUED,
-                f"{TODAY} 00:01:00+00",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 00:01:00+00",
             ),
-            _job(session, "experience_render", 8, "queued", ENQUEUED, ENQUEUED),
+            _job(
+                session,
+                "experience_render",
+                8,
+                "queued",
+                ledger_clock.enqueued,
+                ledger_clock.enqueued,
+            ),
             _job(
                 session,
                 "experience_render",
                 9,
                 "succeeded",
-                ENQUEUED,
-                f"{TODAY} 00:01:30+00",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 00:01:30+00",
             ),
             _job(
                 session,
                 "retrograde_maturation",
                 7,
                 "succeeded",
-                ENQUEUED,
-                f"{TODAY} 00:02:00+00",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 00:02:00+00",
             ),
             _job(
                 session,
                 "correspondence_compaction",
                 2,
                 "succeeded",
-                ENQUEUED,
-                f"{TODAY} 00:00:30+00",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 00:00:30+00",
             ),
             _job(
                 session,
                 "narration",
                 3,
                 "succeeded",
-                ENQUEUED,
-                f"{TODAY} 00:00:31+00",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 00:00:31+00",
             ),
             _job(
                 session,
                 "narrative_summary",
                 1,
                 "succeeded",
-                ENQUEUED,
-                f"{TODAY} 00:03:00+00",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 00:03:00+00",
             ),
             _job(session, "relationship_milestone", 88, "pending", None, None),
         ],
@@ -504,15 +540,20 @@ def _jobs(observation: dict[str, Any]) -> dict[tuple[str, int], dict[str, Any]]:
     }
 
 
-def test_observation_joins_each_attempt_with_its_provider_usage() -> None:
+def test_observation_joins_each_attempt_with_its_provider_usage(
+    ledger_clock: _LedgerClock,
+) -> None:
     """Manifest windows, validation codes and ledger tokens join per attempt."""
-    inspection, session, _ = _two_pass_turn()
-    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    inspection, session, _ = _two_pass_turn(ledger_clock)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
 
     assert observation["schema_version"] == SCHEMA_VERSION == 1
     assert observation["generation_session"] == session
-    assert observation["read_at"] == f"{TODAY}T12:00:00Z"
-    assert observation["ledger_days_read"] == [str(YESTERDAY), str(TODAY)]
+    assert observation["read_at"] == f"{ledger_clock.today}T12:00:00Z"
+    assert observation["ledger_days_read"] == [
+        str(ledger_clock.yesterday),
+        str(ledger_clock.today),
+    ]
     assert observation["terminal_outcome"] == "accepted"
     attempts = _by_key(observation)
     # Sorted, stable keys; the run on an unspanned day never joins, and no
@@ -595,10 +636,12 @@ def test_observation_joins_each_attempt_with_its_provider_usage() -> None:
     assert "private" not in json.dumps(observation)
 
 
-def test_background_jobs_carry_the_usage_recorded_under_their_job_ids() -> None:
+def test_background_jobs_carry_the_usage_recorded_under_their_job_ids(
+    ledger_clock: _LedgerClock,
+) -> None:
     """Summary, maturation, experience and compaction spend follow the job rows."""
-    inspection, session, _ = _two_pass_turn()
-    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    inspection, session, _ = _two_pass_turn(ledger_clock)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
     jobs = _jobs(observation)
 
     # Sorted by queue and id; every row keeps its identity and UTC times.
@@ -618,12 +661,12 @@ def test_background_jobs_carry_the_usage_recorded_under_their_job_ids() -> None:
         "id": 2,
         "state": "succeeded",
         "terminal": True,
-        "created_at": f"{TODAY}T00:00:20.400000Z",
-        "updated_at": f"{TODAY}T00:00:30Z",
+        "created_at": f"{ledger_clock.today}T00:00:20.400000Z",
+        "updated_at": f"{ledger_clock.today}T00:00:30Z",
     }
     assert compaction["usage"] == {
         "run_id": "2",
-        "ledger_days": [str(TODAY)],
+        "ledger_days": [str(ledger_clock.today)],
         "provenance": "provider_usage_ledger",
         "events": 1,
         "seats": ["correspondence_compaction"],
@@ -669,10 +712,12 @@ def test_background_jobs_carry_the_usage_recorded_under_their_job_ids() -> None:
     assert all(attempt["seat"] not in seats for attempt in observation["attempts"])
 
 
-def test_usage_totals_split_the_critical_path_from_background_work() -> None:
+def test_usage_totals_split_the_critical_path_from_background_work(
+    ledger_clock: _LedgerClock,
+) -> None:
     """Critical-path and background sums stay apart; overall adds the two."""
-    inspection, _, _ = _two_pass_turn()
-    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    inspection, _, _ = _two_pass_turn(ledger_clock)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
 
     totals = observation["usage_totals"]
     assert totals["critical_path"] == {
@@ -719,16 +764,18 @@ def test_usage_totals_split_the_critical_path_from_background_work() -> None:
     }
 
 
-def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing() -> None:
+def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing(
+    ledger_clock: _LedgerClock,
+) -> None:
     """A finished provider-backed job without usage is unknown, never zero."""
-    inspection, _, _ = _two_pass_turn()
-    jobs = _jobs(observe_turn(inspection, slot=4, read_at=READ_AT))
+    inspection, _, _ = _two_pass_turn(ledger_clock)
+    jobs = _jobs(observe_turn(inspection, slot=4, read_at=ledger_clock.read_at))
 
     finished = jobs[("experience_render", 9)]
     assert finished["terminal"] is True
     assert finished["usage"]["provenance"] == UNKNOWN
     assert finished["usage"]["events"] == 0
-    assert finished["usage"]["ledger_days"] == [str(TODAY)]
+    assert finished["usage"]["ledger_days"] == [str(ledger_clock.today)]
     assert all(
         finished["usage"][field] == UNKNOWN
         for field in ("seats", "model", "outcomes", "input_tokens", "output_tokens")
@@ -746,14 +793,30 @@ def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing() -
     session = str(uuid4())
     quiet = {
         "session": {"session_id": session, "terminal_outcome": "accepted"},
-        "phases": [{"phase": "retrieval", "recorded_at": f"{TODAY} 00:00:01+00"}],
+        "phases": [
+            {"phase": "retrieval", "recorded_at": f"{ledger_clock.today} 00:00:01+00"}
+        ],
         "manifests": [],
         "jobs": [
-            _job(session, "narration", 4, "succeeded", ENQUEUED, ENQUEUED),
-            _job(session, "narrative_embedding", 5, "queued", ENQUEUED, ENQUEUED),
+            _job(
+                session,
+                "narration",
+                4,
+                "succeeded",
+                ledger_clock.enqueued,
+                ledger_clock.enqueued,
+            ),
+            _job(
+                session,
+                "narrative_embedding",
+                5,
+                "queued",
+                ledger_clock.enqueued,
+                ledger_clock.enqueued,
+            ),
         ],
     }
-    observation = observe_turn(quiet, slot=4, read_at=READ_AT)
+    observation = observe_turn(quiet, slot=4, read_at=ledger_clock.read_at)
     background = observation["usage_totals"]["background"]
     assert background == {
         "provenance": None,
@@ -777,10 +840,10 @@ def test_unfound_provider_usage_reads_unknown_and_other_queues_spend_nothing() -
     assert format_turn_summary(observation).splitlines()[-2] == "Background none"
 
 
-def test_phase_spans_cross_utc_midnight_and_offsets() -> None:
+def test_phase_spans_cross_utc_midnight_and_offsets(ledger_clock: _LedgerClock) -> None:
     """Consecutive transitions become spans; the last one stays open."""
-    inspection, _, _ = _two_pass_turn()
-    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    inspection, _, _ = _two_pass_turn(ledger_clock)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
 
     assert [(span["phase"], span["seconds"]) for span in observation["phases"]] == [
         ("retrieval", 8.25),
@@ -790,41 +853,48 @@ def test_phase_spans_cross_utc_midnight_and_offsets() -> None:
         ("staging", 0.5),
         ("complete", UNKNOWN),
     ]
-    assert observation["phases"][3]["started_at"] == f"{TODAY}T00:00:11.125000Z"
+    assert (
+        observation["phases"][3]["started_at"]
+        == f"{ledger_clock.today}T00:00:11.125000Z"
+    )
     assert observation["phases"][-1]["ended_at"] is None
     assert observation["wall_time"] == {
-        "started_at": f"{YESTERDAY}T23:59:30.250000Z",
-        "ended_at": f"{TODAY}T00:00:20.500000Z",
+        "started_at": f"{ledger_clock.yesterday}T23:59:30.250000Z",
+        "ended_at": f"{ledger_clock.today}T00:00:20.500000Z",
         "seconds": 50.25,
     }
 
 
-def test_phases_recorded_out_of_order_refuse_the_join() -> None:
+def test_phases_recorded_out_of_order_refuse_the_join(
+    ledger_clock: _LedgerClock,
+) -> None:
     """A later phase recorded before its predecessor never yields negative time."""
-    inspection, session, _ = _two_pass_turn()
+    inspection, session, _ = _two_pass_turn(ledger_clock)
     phases = [dict(row) for row in inspection["phases"]]
     # Staging stamped a second before the Gaia transition it follows.
-    phases[4]["recorded_at"] = f"{TODAY} 00:00:10.125+00"
+    phases[4]["recorded_at"] = f"{ledger_clock.today} 00:00:10.125+00"
     reordered = {**inspection, "phases": phases}
 
     with pytest.raises(
         ValueError,
         match=(
             f"Phase staging of {session} was recorded at "
-            f"{TODAY}T00:00:10.125000Z, before the preceding phase gaia at "
-            f"{TODAY}T00:00:11.125000Z"
+            f"{ledger_clock.today}T00:00:10.125000Z, before the preceding "
+            f"phase gaia at {ledger_clock.today}T00:00:11.125000Z"
         ),
     ):
-        observe_turn(reordered, slot=4, read_at=READ_AT)
+        observe_turn(reordered, slot=4, read_at=ledger_clock.read_at)
     # Equal stamps are a zero-length span, not a disorder.
-    phases[4]["recorded_at"] = f"{YESTERDAY} 19:00:11.125-05"
-    spans = observe_turn({**inspection, "phases": phases}, slot=4, read_at=READ_AT)[
-        "phases"
-    ]
+    phases[4]["recorded_at"] = f"{ledger_clock.yesterday} 19:00:11.125-05"
+    spans = observe_turn(
+        {**inspection, "phases": phases}, slot=4, read_at=ledger_clock.read_at
+    )["phases"]
     assert spans[3]["seconds"] == 0.0
 
 
-def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
+def test_attempts_without_manifests_read_the_window_ledger_safely(
+    ledger_clock: _LedgerClock,
+) -> None:
     """A manifest-less run keeps its latest window snapshot and only safe codes."""
     session = str(uuid4())
     record = _window(session, "gaia", 1, "gaia-model", GAIA_BLOCKS)
@@ -833,15 +903,17 @@ def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
     record_prompt_window(record)
     inspection = {
         "session": {"session_id": session, "terminal_outcome": None},
-        "phases": [{"phase": "retrieval", "recorded_at": f"{TODAY} 00:00:01+00"}],
+        "phases": [
+            {"phase": "retrieval", "recorded_at": f"{ledger_clock.today} 00:00:01+00"}
+        ],
         "manifests": [],
         "jobs": [],
     }
 
-    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
 
     assert observation["terminal_outcome"] is None
-    assert observation["ledger_days_read"] == [str(TODAY)]
+    assert observation["ledger_days_read"] == [str(ledger_clock.today)]
     assert observation["wall_time"]["seconds"] == UNKNOWN
     (attempt,) = observation["attempts"]
     assert attempt["outcome"] == attempt["provider_outcome"] == UNKNOWN
@@ -863,16 +935,98 @@ def test_attempts_without_manifests_read_the_window_ledger_safely() -> None:
     assert observation["jobs"] == {"total": 0, "by_queue": {}, "entries": []}
 
 
-def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
+def test_a_turn_straddling_utc_midnight_writes_and_joins_both_days(
+    ledger_clock: _LedgerClock,
+) -> None:
+    """The writer records before UTC midnight, Gaia after; both join the turn."""
+    session = str(uuid4())
+    ledger_clock.now = datetime.combine(
+        ledger_clock.today, time(23, 59, 59, 900000), tzinfo=timezone.utc
+    )
+    first_day = ledger_clock.today
+    writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
+    record_prompt_window(writer)
+    # The event takes its timestamp from the writer's clock, as in production.
+    record_usage_event(
+        UsageEvent(
+            provider="openai",
+            model="writer-model",
+            seat="skald_writer",
+            slot=4,
+            run_id=session,
+            attempt=1,
+            outcome="accepted",
+            transport="responses",
+            input_tokens=20777,
+            output_tokens=2100,
+            total_tokens=22877,
+        )
+    )
+
+    ledger_clock.now += timedelta(milliseconds=200)
+    second_day = ledger_clock.today
+    assert second_day == first_day + timedelta(days=1)
+    gaia = _window(session, "gaia", 1, "gaia-model", GAIA_BLOCKS)
+    record_prompt_window(gaia)
+    record_usage_event(
+        UsageEvent(
+            provider="openai",
+            model="gaia-model",
+            seat="gaia",
+            slot=4,
+            run_id=session,
+            attempt=1,
+            outcome="accepted",
+            transport="responses",
+            input_tokens=16050,
+            output_tokens=900,
+            total_tokens=16950,
+        )
+    )
+
+    # Each record sits in the ledger of the day it was written.
+    for day, seat in ((first_day, "skald_writer"), (second_day, "gaia")):
+        windows = usage_ledger.read_prompt_windows(session, str(day))
+        assert [record.seat for record in windows] == [seat]
+        events = summarize_usage(day=str(day), run_id=session)["events"]
+        assert [event["seat"] for event in events] == [seat]
+        assert events[0]["quota_day"] == str(day)
+
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [
+            {"phase": "writer", "recorded_at": f"{first_day} 23:59:59.85+00"},
+            {"phase": "gaia", "recorded_at": f"{second_day} 00:00:00.05+00"},
+            {"phase": "complete", "recorded_at": f"{second_day} 00:00:00.2+00"},
+        ],
+        "manifests": [],
+        "jobs": [],
+    }
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.now)
+
+    assert observation["ledger_days_read"] == [str(first_day), str(second_day)]
+    attempts = _by_key(observation)
+    assert list(attempts) == [("gaia", 1), ("skald_writer", 1)]
+    for key, input_tokens in ((("gaia", 1), 16050), (("skald_writer", 1), 20777)):
+        attempt = attempts[key]
+        assert attempt["window"]["provenance"] == "prompt_window_ledger"
+        assert attempt["window"]["input_tokens"] == input_tokens
+        assert attempt["usage"]["events"] == 1
+        assert attempt["usage"]["input_tokens"] == input_tokens
+
+
+def test_jobs_read_their_own_ledger_days_without_turn_phases(
+    ledger_clock: _LedgerClock,
+) -> None:
     """Summary jobs that finish after UTC midnight are read from their own days."""
     session = str(uuid4())
     record = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
-    enqueued = f"{YESTERDAY} 23:59:58+00"
+    enqueued = f"{ledger_clock.yesterday} 23:59:58+00"
     # A new_season transition queues an episode and a season summary that the
     # worker runs after midnight; each records under its own job id.
     for job_id, ts, input_tokens, cap in (
-        (1, f"{TODAY}T00:00:31Z", 41000, 8000),
-        (2, f"{TODAY}T00:00:47Z", 9000, 12000),
+        (1, f"{ledger_clock.today}T00:00:31Z", 41000, 8000),
+        (2, f"{ledger_clock.today}T00:00:47Z", 9000, 12000),
     ):
         record_usage_event(
             _event(
@@ -900,7 +1054,7 @@ def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
                 1,
                 "succeeded",
                 enqueued,
-                f"{TODAY} 00:00:32+00",
+                f"{ledger_clock.today} 00:00:32+00",
             ),
             _job(
                 session,
@@ -908,15 +1062,18 @@ def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
                 2,
                 "succeeded",
                 enqueued,
-                f"{TODAY} 00:00:48+00",
+                f"{ledger_clock.today} 00:00:48+00",
             ),
         ],
     }
 
     assert ledger_days(inspection) == []
-    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
     # No phase names a day for the turn; the jobs' own days are still read.
-    assert observation["ledger_days_read"] == [str(YESTERDAY), str(TODAY)]
+    assert observation["ledger_days_read"] == [
+        str(ledger_clock.yesterday),
+        str(ledger_clock.today),
+    ]
     assert observation["phases"] == []
     assert observation["wall_time"] == {
         "started_at": UNKNOWN,
@@ -931,8 +1088,8 @@ def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
         episode["ledger_days"]
         == season["ledger_days"]
         == [
-            str(YESTERDAY),
-            str(TODAY),
+            str(ledger_clock.yesterday),
+            str(ledger_clock.today),
         ]
     )
     assert (episode["input_tokens"], episode["max_output_tokens"]) == (41000, 8000)
@@ -941,7 +1098,7 @@ def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
     assert observation["usage_totals"]["overall"]["input_tokens"] == UNKNOWN
     assert json.loads(json.dumps(observation)) == observation
     summary = format_turn_summary(observation).splitlines()
-    assert f"ledger {YESTERDAY} to {TODAY}" in summary[0]
+    assert f"ledger {ledger_clock.yesterday} to {ledger_clock.today}" in summary[0]
     assert summary[
         summary.index("narrative_summary #2 summary-model · succeeded") + 1
     ] == (
@@ -950,7 +1107,9 @@ def test_jobs_read_their_own_ledger_days_without_turn_phases() -> None:
     )
 
 
-def test_session_keyed_background_usage_joins_as_legacy() -> None:
+def test_session_keyed_background_usage_joins_as_legacy(
+    ledger_clock: _LedgerClock,
+) -> None:
     """Summary spend recorded under the session before #802 stays visible."""
     session = str(uuid4())
     writer = _window(session, "skald_writer", 1, "writer-model", WRITER_BLOCKS)
@@ -958,7 +1117,7 @@ def test_session_keyed_background_usage_joins_as_legacy() -> None:
     record_usage_event(
         _event(
             session,
-            f"{TODAY}T00:00:12Z",
+            f"{ledger_clock.today}T00:00:12Z",
             "skald_writer",
             1,
             "writer-model",
@@ -973,8 +1132,8 @@ def test_session_keyed_background_usage_joins_as_legacy() -> None:
     # The old convention: the episode and season summaries of a new_season
     # turn both recorded (summaries, 1) under the generation session.
     for ts, input_tokens, cap in (
-        (f"{TODAY}T00:00:31Z", 41000, 8000),
-        (f"{TODAY}T00:00:47Z", 9000, 12000),
+        (f"{ledger_clock.today}T00:00:31Z", 41000, 8000),
+        (f"{ledger_clock.today}T00:00:47Z", 9000, 12000),
     ):
         record_usage_event(
             _event(
@@ -996,8 +1155,8 @@ def test_session_keyed_background_usage_joins_as_legacy() -> None:
     inspection = {
         "session": {"session_id": session, "terminal_outcome": "accepted"},
         "phases": [
-            {"phase": "writer", "recorded_at": f"{TODAY} 00:00:01+00"},
-            {"phase": "complete", "recorded_at": f"{TODAY} 00:00:20+00"},
+            {"phase": "writer", "recorded_at": f"{ledger_clock.today} 00:00:01+00"},
+            {"phase": "complete", "recorded_at": f"{ledger_clock.today} 00:00:20+00"},
         ],
         "manifests": [_manifest(writer, provider_outcome="accepted")],
         "jobs": [
@@ -1006,14 +1165,14 @@ def test_session_keyed_background_usage_joins_as_legacy() -> None:
                 "narrative_summary",
                 job_id,
                 "succeeded",
-                ENQUEUED,
-                f"{TODAY} 00:00:48+00",
+                ledger_clock.enqueued,
+                f"{ledger_clock.today} 00:00:48+00",
             )
             for job_id in (1, 2)
         ],
     }
 
-    observation = observe_turn(inspection, slot=4, read_at=READ_AT)
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
 
     # Kept off the critical path, and never guessed onto a job.
     assert [(row["seat"], row["attempt"]) for row in observation["attempts"]] == [
@@ -1034,7 +1193,7 @@ def test_session_keyed_background_usage_joins_as_legacy() -> None:
         ),
         "events": 2,
         "seats": ["summaries"],
-        "ledger_days": [str(TODAY)],
+        "ledger_days": [str(ledger_clock.today)],
         "input_tokens": 50000,
         "output_tokens": 3000,
         "cached_input_tokens": 0,
@@ -1068,21 +1227,23 @@ def test_session_keyed_background_usage_joins_as_legacy() -> None:
         "unknown · events 2 · jobs 2 · open 0 · without usage 2"
     )
     # A turn without legacy events renders no legacy line.
-    fresh, _, _ = _two_pass_turn()
+    fresh, _, _ = _two_pass_turn(ledger_clock)
     assert "legacy" not in format_turn_summary(
-        observe_turn(fresh, slot=4, read_at=READ_AT)
+        observe_turn(fresh, slot=4, read_at=ledger_clock.read_at)
     )
 
 
-def test_join_refuses_rows_it_cannot_attribute() -> None:
+def test_join_refuses_rows_it_cannot_attribute(ledger_clock: _LedgerClock) -> None:
     """Foreign runs, unread days, naive clocks, drift and stray seats raise."""
     from nexus.telemetry.turn_observation import job_ledger_days, read_job_ledgers
 
-    inspection, session, other = _two_pass_turn()
+    inspection, session, other = _two_pass_turn(ledger_clock)
     days = ledger_days(inspection)
     events, windows = read_turn_ledgers(session, days)
     foreign, _ = read_turn_ledgers(other, days)
-    job_events = read_job_ledgers(job_ledger_days(inspection, read_at=READ_AT))
+    job_events = read_job_ledgers(
+        job_ledger_days(inspection, read_at=ledger_clock.read_at)
+    )
 
     def derive(usage: list[UsageEvent], background: list[UsageEvent]) -> None:
         derive_turn_observation(
@@ -1092,7 +1253,7 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
             ledger_days=days,
             job_events=background,
             slot=4,
-            read_at=READ_AT,
+            read_at=ledger_clock.read_at,
         )
 
     derive(events, job_events)
@@ -1128,7 +1289,7 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
     with pytest.raises(ValueError, match="not a provider-backed job"):
         derive(events, [*job_events, foreign[0]])
     unread = job_events[0].model_copy(
-        update={"ts": f"{YESTERDAY - timedelta(days=1)}T12:00:00Z"}
+        update={"ts": f"{ledger_clock.yesterday - timedelta(days=1)}T12:00:00Z"}
     )
     with pytest.raises(ValueError, match="outside the job ledger days read"):
         derive(events, [*job_events, UsageEvent.model_validate(unread.model_dump())])
@@ -1140,15 +1301,19 @@ def test_join_refuses_rows_it_cannot_attribute() -> None:
         ledger_days(naive)
 
 
-def test_summary_renders_one_concise_read_of_the_turn() -> None:
+def test_summary_renders_one_concise_read_of_the_turn(
+    ledger_clock: _LedgerClock,
+) -> None:
     """The --summary text states freshness, spans, attempts, jobs and totals."""
-    inspection, session, _ = _two_pass_turn()
-    summary = format_turn_summary(observe_turn(inspection, slot=4, read_at=READ_AT))
+    inspection, session, _ = _two_pass_turn(ledger_clock)
+    summary = format_turn_summary(
+        observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+    )
     lines = summary.splitlines()
 
     assert lines[0] == (
-        f"Turn {session} (accepted) · read {TODAY}T12:00:00Z · ledger "
-        f"{YESTERDAY} to {TODAY} · schema v1"
+        f"Turn {session} (accepted) · read {ledger_clock.today}T12:00:00Z · ledger "
+        f"{ledger_clock.yesterday} to {ledger_clock.today} · schema v1"
     )
     assert lines[1] == (
         "Wall 50.250s: retrieval 8.250s → assembly 2.500s → writer 30.125s → "
