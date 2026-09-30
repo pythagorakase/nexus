@@ -261,6 +261,89 @@ def test_database_keyword_outranks_pgdatabase():
     assert socket_block.DIALED == ["postgres"]
 """
 
+# Two private clusters, each holding a database named ``save_04``: only the
+# registered one admits it, over TCP and over its socket; the owner's server
+# and the unregistered cluster refuse it before libpq is entered, and the
+# owner's server cannot be registered in any spelling.
+CLUSTER_SESSION = """
+import asyncio
+
+import asyncpg
+import psycopg2
+import pytest
+
+import libpq_spy
+from nexus.database import connection_kwargs
+from tests import dbname_audit
+from tests.test_database_contract import start_private_clusters
+
+Refused = dbname_audit.OwnerDatabaseConnectionRefused
+RegistrationRefused = dbname_audit.OwnerEndpointRegistrationRefused
+ON_OWNER_SERVER = "'save_04' from .* on the owner's server"
+
+
+def params(cluster):
+    return {key: cluster[key] for key in ("host", "port", "user")}
+
+
+def test_owner_names_are_admitted_only_on_a_registered_cluster(tmp_path):
+    owner = connection_kwargs("postgres")
+    for host in (owner["host"], "127.0.0.1", "localhost", "/tmp"):
+        with pytest.raises(RegistrationRefused, match="the owner's server"):
+            dbname_audit.register_disposable_cluster(
+                host, owner["port"], label="owner"
+            )
+    with start_private_clusters(tmp_path, 2) as (registered, unregistered):
+        for cluster in (registered, unregistered):
+            admin = psycopg2.connect(dbname="postgres", **params(cluster))
+            admin.autocommit = True
+            with admin.cursor() as cur:
+                cur.execute("CREATE DATABASE save_04")
+            admin.close()
+        unregister = dbname_audit.register_disposable_cluster(
+            registered["host"], registered["port"], label="private"
+        )
+        try:
+            port = registered["port"]
+            for spelling in (
+                params(registered),
+                {"host": "/tmp", "port": port, "user": registered["user"]},
+            ):
+                conn = psycopg2.connect(dbname="save_04", **spelling)
+                with conn.cursor() as cur:
+                    cur.execute("SELECT current_database(), current_setting('port')")
+                    assert cur.fetchone() == ("save_04", str(port))
+                conn.close()
+
+            async def open_and_close():
+                conn = await asyncpg.connect(database="save_04", **params(registered))
+                await conn.close()
+
+            asyncio.run(open_and_close())
+            assert dbname_audit.cluster_targets() == {
+                f"save_04@local:{port}": frozenset({"psycopg2", "asyncpg"})
+            }
+
+            reached = len(libpq_spy.ENTRIES)
+            with pytest.raises(Refused, match=ON_OWNER_SERVER):
+                psycopg2.connect(**connection_kwargs("save_04"))
+            with pytest.raises(Refused, match=ON_OWNER_SERVER):
+                asyncio.run(asyncpg.connect(database="save_04", port=owner["port"]))
+            with pytest.raises(Refused, match="on an unregistered server"):
+                psycopg2.connect(dbname="save_04", **params(unregistered))
+            with pytest.raises(Refused, match="on an unregistered server"):
+                asyncio.run(
+                    asyncpg.connect(database="save_04", **params(unregistered))
+                )
+            # No refused call reached libpq or an asyncpg socket.
+            assert len(libpq_spy.ENTRIES) == reached
+        finally:
+            unregister()
+        with pytest.raises(Refused, match="on an unregistered server"):
+            psycopg2.connect(dbname="save_04", **params(registered))
+"""
+
+
 # Run as a plain script, before any audit configures: every object the
 # collector reaches (and every untracked tuple, dict, list, or set inside one,
 # which ``gc.get_referrers`` alone never sees) is searched for a direct
@@ -754,3 +837,51 @@ def test_no_preconfigure_holder_escapes_the_sweep(tmp_path: Path) -> None:
         "container",
         "default argument",
     ], report
+
+
+@pytest.mark.requires_postgres
+def test_owner_names_are_admitted_only_on_a_registered_disposable_cluster(
+    tmp_path: Path,
+) -> None:
+    """Endpoint-aware identity on two private clusters.
+
+    ``save_04`` on the registered private cluster is admitted over TCP, over
+    its socket, and through asyncpg, and recorded as ``save_04@local:<port>``;
+    the same name on the owner's server and on the unregistered second
+    cluster is refused before libpq or asyncpg dials, and so is the
+    registered cluster once its registration is removed. The session fails,
+    naming the refused ``save_04``, and its report lists the registration.
+    """
+
+    result = _nested_session(
+        tmp_path,
+        CLUSTER_SESSION,
+        activation=["-p", "libpq_spy", "-p", "tests.dbname_audit"],
+        environment={"NEXUS_RUN_POSTGRES": "1"},
+        modules={"libpq_spy": LIBPQ_SPY},
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == pytest.ExitCode.TESTS_FAILED, output
+    assert "1 passed" in output, output
+    failure_line = _owner_failure_line(output)
+    assert failure_line.startswith(
+        "dbname audit: FAILED: owner targets: save_04 ("
+    ), output
+    assert "dbname audit: owner server: local:" in output, output
+    registrations = [
+        line
+        for line in output.splitlines()
+        if line.startswith("dbname audit: registered disposable clusters: ")
+    ]
+    assert len(registrations) == 1, output
+    assert "private at local:" in registrations[0], output
+    admitted = [
+        line
+        for line in output.splitlines()
+        if line.startswith(
+            "dbname audit: owner names admitted on registered clusters: "
+        )
+    ]
+    assert len(admitted) == 1, output
+    assert "save_04@local:" in admitted[0], output
+    assert "(asyncpg, psycopg2)" in admitted[0], output

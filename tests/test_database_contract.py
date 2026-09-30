@@ -10,6 +10,7 @@ import socket
 import shutil
 import subprocess
 import sys
+from contextlib import ExitStack, contextmanager
 from typing import Iterator
 
 import asyncpg
@@ -32,6 +33,7 @@ from nexus.database import (
     url_connection_kwargs,
     verify_database_url,
 )
+from tests import dbname_audit
 from tests.pg_fixtures import route_slot_to_disposable
 
 
@@ -271,22 +273,29 @@ def test_ir_eval_default_database_contract(contract_config, monkeypatch):
     assert RunExecutor(store).db_url == database_url("save_04")
 
 
-@pytest.fixture
-def two_clusters(tmp_path: Path) -> Iterator[list[dict]]:
-    """Start two disposable servers; never use the owner's default server."""
+@contextmanager
+def start_private_clusters(root: Path, count: int) -> Iterator[list[dict]]:
+    """Start ``count`` disposable servers under ``root``; stop and remove them.
+
+    Each cluster is initialized with trust authentication for its own role
+    and listens on a fresh loopback port (and a socket in ``/tmp`` at that
+    port); it is never the owner's default server. The caller registers a
+    cluster with the connection audit when it will open owner-named
+    databases there (``two_clusters``).
+    """
     from scripts.new_story_setup import _postgres_tools
 
     binaries = _postgres_tools("initdb", "pg_ctl")
-    clusters = []
+    clusters: list[dict] = []
     try:
-        for index in range(2):
-            root = tmp_path / f"cluster{index}"
-            root.mkdir()
+        for index in range(count):
+            cluster_root = root / f"cluster{index}"
+            cluster_root.mkdir()
             with socket.socket() as sock:
                 sock.bind(("127.0.0.1", 0))
                 port = sock.getsockname()[1]
-            data = root / "data"
-            log = root / "server.log"
+            data = cluster_root / "data"
+            log = cluster_root / "server.log"
             subprocess.run(
                 [
                     binaries["initdb"],
@@ -348,6 +357,24 @@ def two_clusters(tmp_path: Path) -> Iterator[list[dict]]:
                 text=True,
             )
             shutil.rmtree(cluster["data"].parent)
+
+
+@pytest.fixture
+def two_clusters(tmp_path: Path) -> Iterator[list[dict]]:
+    """Start two disposable servers; never use the owner's default server.
+
+    Both are registered with the connection audit as disposable clusters, so
+    a test may open the owner-named databases production entry points
+    require (``save_04``) on them; the owner's server stays refused.
+    """
+    with start_private_clusters(tmp_path, 2) as clusters, ExitStack() as registered:
+        for index, cluster in enumerate(clusters):
+            registered.callback(
+                dbname_audit.register_disposable_cluster(
+                    cluster["host"], cluster["port"], label=f"two_clusters[{index}]"
+                )
+            )
+        yield clusters
 
 
 @pytest.mark.requires_postgres
