@@ -19,6 +19,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal
 from functools import partial
+from pathlib import Path
 from typing import Any, NoReturn
 
 import psycopg2
@@ -351,6 +352,38 @@ def test_multi_slot_route_sweeps_bound_and_late_imported_resolvers() -> None:
     finally:
         sys.modules.pop(bound_name, None)
         sys.modules.pop(late_name, None)
+
+
+def test_route_sweeps_a_test_module_pytest_named_by_its_directory() -> None:
+    """A module under ``tests/`` is swept whatever name pytest gave it.
+
+    Pytest imports ``tests/test_runtime/<name>.py`` as ``test_runtime.<name>``
+    (``tests/`` has no ``__init__.py``). Its ``from nexus.api.slot_utils
+    import slot_dbname`` binding must reach the clone like a ``tests.*``
+    module's, and be restored at teardown.
+    """
+
+    name = "test_runtime._route_probe_review"
+    probe = types.ModuleType(name)
+    probe.__file__ = str(
+        Path(pg_fixtures.__file__).resolve().parent
+        / "test_runtime"
+        / "_route_probe_review.py"
+    )
+    exec("from nexus.api.slot_utils import slot_dbname", vars(probe))
+    unrouted = probe.slot_dbname
+    sys.modules[name] = probe
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            route_slot_to_disposable(patch.setattr, slot=4, dbname="qa640_by_file")
+            assert slot_utils.slot_dbname(4) == "qa640_by_file"
+            assert probe.slot_dbname(4) == "qa640_by_file"
+            with pytest.raises(RuntimeError, match="Slot 2 is not routed"):
+                probe.slot_dbname(2)
+        assert probe.slot_dbname is unrouted
+        assert probe.slot_dbname(4) == "save_04"
+    finally:
+        sys.modules.pop(name, None)
 
 
 def test_multi_slot_route_keeps_its_own_copy_of_the_mapping() -> None:

@@ -10,16 +10,22 @@ that reach an owner database.
 - A connection call (``connect``, ``psycopg2.connect``, ``get_connection``,
   ``asyncpg_kwargs``, ``connection_kwargs``, ``database_url``,
   ``sqlalchemy_url``) whose argument, or a value of a ``**{...}`` dict
-  literal, is a string literal naming ``save_NN`` or ``NEXUS_template`` (a
-  whole name, a DSN or URL naming one, or an f-string that starts ``save_``).
+  literal or ``**dict(...)`` call, is a string literal naming ``save_NN`` or
+  ``NEXUS_template`` (a whole name, a DSN or URL naming one, or an f-string
+  that starts ``save_``). A name counts in any spelling libpq reads as that
+  name: single-quoted with backslash escapes (``dbname='save_04'``), spaced
+  around ``=``, and percent-encoded in a URL (``postgresql:///save%5F04``);
+  a double-quoted ``dbname="save_04"`` is refused as well.
 - An assignment of such a literal to a ``*DBNAME*`` name
   (``TEST_DBNAME = "save_04"``).
 - A child-process call (``subprocess.run``, ``Popen``, ``check_call``,
   ``check_output``, ``call``) whose argument list holds such a literal
-  (``pg_dump --dbname save_04``): a child connects outside the in-process
-  connection audit.
-- ``include_data=True`` (a data clone) in a module that never applies the
-  ``requires_corpus`` marker.
+  (``pg_dump --dbname save_04``, ``pg_dump --dbname "dbname='save_04'"``),
+  or whose ``shell=True`` command string does: a child connects outside the
+  in-process connection audit.
+- ``include_data=True`` (a data clone), passed as a keyword or through a
+  ``**{...}`` or ``**dict(...)`` expansion, in a module that never applies
+  the ``requires_corpus`` marker.
 - A clone or dump helper (a callee whose name ends ``_clone`` or ``_dump``)
   given an int-literal slot, positionally or as ``slot=`` (``slot_clone(1)``
   dumps ``save_01`` with its data), in a module that never applies the
@@ -41,6 +47,7 @@ from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
+from urllib.parse import unquote
 
 import pytest
 
@@ -49,6 +56,11 @@ TESTS_ROOT = Path(__file__).resolve().parent
 OWNER_NAME = re.compile(r"save_\d+|NEXUS_template")
 # An owner name inside a DSN or URL: after a path slash, ``=``, or whitespace.
 OWNER_IN_DSN = re.compile(r"(?:^|[/=\s])(?:save_\d+|NEXUS_template)(?:$|[?&\s])")
+# An f-string's leading text that a formatted slot number completes.
+SLOT_PREFIX_IN_DSN = re.compile(r"(?:^|[/=\s])save_$")
+# Quote characters around a DSN value: libpq's single quotes, and double
+# quotes, which a caller may mistake for them.
+DSN_QUOTES = re.compile(r"['\"]")
 CONNECTION_CALLS = frozenset(
     {
         "connect",
@@ -188,22 +200,96 @@ def _is_int_literal(node: ast.expr) -> bool:
     )
 
 
+def _spellings(text: str) -> set[str]:
+    """Return ``text`` as written and as libpq would read its names.
+
+    Percent-decoding reads a URL's encoded characters; dropping backslashes
+    reads libpq's escapes inside a quoted value; and each quote becomes a
+    space, so a quoted value is delimited the way an unquoted one is.
+    """
+
+    written = {text, unquote(text)}
+    return written | {DSN_QUOTES.sub(" ", item.replace("\\", "")) for item in written}
+
+
+def _text_names_owner(text: str) -> bool:
+    """Whether ``text`` names an owner database, as a whole or in a DSN or URL."""
+
+    return any(
+        OWNER_NAME.fullmatch(spelling.strip()) or OWNER_IN_DSN.search(spelling)
+        for spelling in _spellings(text)
+    )
+
+
 def _names_owner(node: ast.expr) -> bool:
     """Whether ``node`` is a string literal spelling an owner database."""
 
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return bool(OWNER_NAME.fullmatch(node.value) or OWNER_IN_DSN.search(node.value))
+        return _text_names_owner(node.value)
     if isinstance(node, ast.JoinedStr) and node.values:
         head = node.values[0]
-        return (
+        if (
             isinstance(head, ast.Constant)
             and isinstance(head.value, str)
-            and (
-                head.value.startswith("save_")
-                or bool(re.search(r"(?:^|[/=\s])save_$", head.value))
+            and any(
+                spelling.strip().startswith("save_")
+                or SLOT_PREFIX_IN_DSN.search(spelling)
+                for spelling in _spellings(head.value)
             )
+        ):
+            return True
+        return any(
+            isinstance(part, ast.Constant)
+            and isinstance(part.value, str)
+            and _text_names_owner(part.value)
+            for part in node.values
         )
     return False
+
+
+def _expanded_keywords(mapping: ast.expr) -> list[tuple[str | None, ast.expr]]:
+    """Return the ``(name, value)`` pairs a ``**`` expansion spells literally.
+
+    A dict literal's string keys and a ``dict(...)`` call's keywords are
+    keywords of the call they expand into, nested expansions included; any
+    other expansion is one ``(None, expression)`` pair.
+    """
+
+    pairs: list[tuple[str | None, ast.expr]] = []
+    if isinstance(mapping, ast.Dict):
+        for key, value in zip(mapping.keys, mapping.values):
+            if key is None:
+                pairs.extend(_expanded_keywords(value))
+            elif isinstance(key, ast.Constant) and isinstance(key.value, str):
+                pairs.append((key.value, value))
+            else:
+                pairs.append((None, value))
+    elif isinstance(mapping, ast.Call) and _called_name(mapping.func) == "dict":
+        pairs.extend((None, arg) for arg in mapping.args)
+        for keyword in mapping.keywords:
+            if keyword.arg is None:
+                pairs.extend(_expanded_keywords(keyword.value))
+            else:
+                pairs.append((keyword.arg, keyword.value))
+    else:
+        pairs.append((None, mapping))
+    return pairs
+
+
+def _call_keywords(node: ast.Call) -> list[tuple[str | None, ast.expr]]:
+    """Return a call's keywords, with literal ``**`` expansions spelled out."""
+
+    pairs: list[tuple[str | None, ast.expr]] = []
+    for keyword in node.keywords:
+        if keyword.arg is None:
+            pairs.extend(_expanded_keywords(keyword.value))
+        else:
+            pairs.append((keyword.arg, keyword.value))
+    return pairs
+
+
+def _is_true_literal(node: ast.expr) -> bool:
+    return isinstance(node, ast.Constant) and bool(node.value) and node.value != ""
 
 
 def _applies_requires_corpus(tree: ast.Module) -> bool:
@@ -235,35 +321,38 @@ def scan_source(source: str, path: str) -> list[Finding]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             name = _called_name(node.func)
-            values = [*node.args, *(keyword.value for keyword in node.keywords)]
             # ``connect(**{"dbname": "save_02"})`` spells its keywords as a
-            # dict literal; its values are arguments too.
-            values.extend(
-                value
-                for keyword in node.keywords
-                if keyword.arg is None and isinstance(keyword.value, ast.Dict)
-                for value in keyword.value.values
-            )
+            # dict literal; they are keywords of the call, and their values
+            # are arguments too.
+            keywords = _call_keywords(node)
+            values = [*node.args, *(value for _, value in keywords)]
             if name == "get_slot_db_url" and (
                 any(_is_int_literal(arg) for arg in node.args)
                 or any(
-                    keyword.arg == "slot" and _is_int_literal(keyword.value)
-                    for keyword in node.keywords
+                    keyword == "slot" and _is_int_literal(value)
+                    for keyword, value in keywords
                 )
             ):
                 add(node, RULE_SLOT_URL)
             if name == "slot_dbname" and (
                 (node.args and _is_int_literal(node.args[0]))
-                or any(_is_int_literal(keyword.value) for keyword in node.keywords)
+                or any(_is_int_literal(value) for _, value in keywords)
             ):
                 add(node, RULE_SLOT_DBNAME)
             if name in CONNECTION_CALLS and any(_names_owner(v) for v in values):
                 add(node, RULE_CONNECTION)
+            shell = any(
+                keyword == "shell" and _is_true_literal(value)
+                for keyword, value in keywords
+            )
             if name in SUBPROCESS_CALLS and any(
                 _names_owner(element)
                 for value in values
-                if isinstance(value, (ast.List, ast.Tuple))
-                for element in value.elts
+                for element in (
+                    value.elts
+                    if isinstance(value, (ast.List, ast.Tuple))
+                    else [value] if shell else []
+                )
             ):
                 add(node, RULE_SUBPROCESS)
             if (
@@ -273,17 +362,22 @@ def scan_source(source: str, path: str) -> list[Finding]:
                 and (
                     any(_is_int_literal(arg) for arg in node.args)
                     or any(
-                        keyword.arg == "slot" and _is_int_literal(keyword.value)
-                        for keyword in node.keywords
+                        keyword == "slot" and _is_int_literal(value)
+                        for keyword, value in keywords
                     )
                 )
             ):
                 add(node, RULE_SLOT_CLONE)
-            if not corpus_marked and any(
-                keyword.arg == "include_data"
-                and isinstance(keyword.value, ast.Constant)
-                and keyword.value.value is True
-                for keyword in node.keywords
+            # A ``dict(...)`` call is judged as the ``**`` expansion of the
+            # call it feeds, so ``clone(**dict(include_data=True))`` is one
+            # finding, not two.
+            if (
+                not corpus_marked
+                and name != "dict"
+                and any(
+                    keyword == "include_data" and _is_true_literal(value)
+                    for keyword, value in keywords
+                )
             ):
                 add(node, RULE_DATA_CLONE)
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
@@ -405,6 +499,44 @@ def test_an_exemption_admits_only_its_own_use() -> None:
         ("slot_clone(1)", RULE_SLOT_CLONE),
         ("ann_gate.slot_clone(slot=1)", RULE_SLOT_CLONE),
         ("corpus_dump(4, path)", RULE_SLOT_CLONE),
+        ("slot_clone(**{'slot': 1})", RULE_SLOT_CLONE),
+        ("slot_dbname(**{'slot_number': 3})", RULE_SLOT_DBNAME),
+        # Quoted libpq spellings of an owner name (review of PR #1045).
+        (
+            "subprocess.run(['pg_dump', '--dbname', \"dbname='save_04'\"], "
+            "check=True)",
+            RULE_SUBPROCESS,
+        ),
+        (
+            "subprocess.run(['pg_dump', '--dbname', 'dbname=\"save_04\"'])",
+            RULE_SUBPROCESS,
+        ),
+        ("subprocess.run(\"pg_dump -d 'save_04'\", shell=True)", RULE_SUBPROCESS),
+        ("check_output(['psql', 'postgresql:///save%5F04'])", RULE_SUBPROCESS),
+        ("psycopg2.connect(\"dbname='save_04' connect_timeout=1\")", RULE_CONNECTION),
+        ("psycopg2.connect('dbname = save_03')", RULE_CONNECTION),
+        ("psycopg2.connect(r\"dbname='save\\_05'\")", RULE_CONNECTION),
+        ("connect('postgresql:///save%5F04')", RULE_CONNECTION),
+        (
+            "connect(\"postgresql://u@audit.invalid/?dbname='save_02'\")",
+            RULE_CONNECTION,
+        ),
+        ("get_connection(f\"dbname='save_{slot:02d}'\")", RULE_CONNECTION),
+        ("connect(f\"dbname='NEXUS_template' host={host}\")", RULE_CONNECTION),
+        # Literal keyword expansion of include_data (review of PR #1045).
+        (
+            "disposable_slot_database('qa_probe', source_db='save_04', "
+            "**{'include_data': True})",
+            RULE_DATA_CLONE,
+        ),
+        (
+            "disposable_slot_database('qa_probe', **dict(include_data=True))",
+            RULE_DATA_CLONE,
+        ),
+        (
+            "disposable_slot_database('qa_probe', **{**{'include_data': True}})",
+            RULE_DATA_CLONE,
+        ),
     ],
 )
 def test_each_refused_spelling_is_found(source: str, rule: str) -> None:
@@ -432,6 +564,9 @@ def test_each_refused_spelling_is_found(source: str, rule: str) -> None:
         "slot_clone(slot)",
         "measure_clone('qa640_766_x', config)",
         "pytestmark = pytest.mark.requires_corpus\nslot_clone(1)",
+        "connect(\"dbname='qa640_save_04_copy'\")",
+        "disposable_slot_database('qa640_x', **{'include_data': False})",
+        "subprocess.run(['pg_dump', '--dbname', f\"dbname='{clone}'\"])",
     ],
 )
 def test_disposable_and_marked_spellings_pass(source: str) -> None:

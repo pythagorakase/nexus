@@ -1,6 +1,12 @@
-"""Explicitly authorized two-call summary proof on a disposable save_04 clone."""
+"""Explicitly authorized two-call summary proof on a seeded two-episode story.
+
+The proof needs only a story with a finished second episode in its first
+season: ``seed_two_episode_story`` seeds one on a template clone through the
+accepted-turn factory, so no owner save is cloned.
+"""
 
 from contextlib import closing
+from datetime import timedelta
 import json
 import os
 from pathlib import Path
@@ -14,19 +20,91 @@ from nexus.config import load_settings_as_dict
 from nexus.jobs.scheduler import SlotScheduler
 from nexus.telemetry import usage
 from scripts.summarize_narrative import SummaryGenerator
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_accepted_turn,
+    seed_played_story,
+)
 
-# The paid proof summarizes the owner's save_04 corpus (a data clone), so its
-# cost and quality readings compare against that frozen narrative.
 pytestmark = [
     pytest.mark.requires_postgres,
-    pytest.mark.requires_corpus,
     pytest.mark.live_llm,
     pytest.mark.skipif(
         os.environ.get("NEXUS_800B_PAID_PROOF") != "1",
         reason="Requires explicit two-call summary authorization",
     ),
 ]
+
+
+# The slot the scheduler serves; routed to the seeded clone.
+SUMMARY_SLOT = 4
+# Accepted turns per episode.
+EPISODE_TURNS = 2
+
+
+def seed_two_episode_story(dbname: str) -> None:
+    """Seed season 1 with two finished episodes and a third begun.
+
+    Episode 1 is the played story's opening turns; each later episode starts
+    with an accepted ``new_episode`` turn, as play records one. Episode 2
+    therefore holds ``EPISODE_TURNS`` accepted chunks and is closed by the
+    first turn of episode 3. The clone's slot must be routed first.
+    """
+    chunk_ids = seed_played_story(dbname, turns=EPISODE_TURNS, slot=SUMMARY_SLOT)
+    for episode in (2, 3):
+        turns = EPISODE_TURNS if episode == 2 else 1
+        for turn in range(1, turns + 1):
+            chunk_ids.append(
+                seed_accepted_turn(
+                    dbname,
+                    user_text=FIXTURE_TURN_CHOICES[0],
+                    storyteller_text=(
+                        f"Episode {episode}, turn {turn}: Fixture Player crosses "
+                        "Fixture Plaza once more as the lamps come on."
+                    ),
+                    choices=list(FIXTURE_TURN_CHOICES),
+                    choice_text=FIXTURE_TURN_CHOICES[0],
+                    time_delta=timedelta(minutes=5),
+                    episode_transition="new_episode" if turn == 1 else "continue",
+                    slot=SUMMARY_SLOT,
+                )
+            )
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT cm.season, cm.episode, count(*) FROM chunk_metadata cm "
+            "WHERE cm.chunk_id = ANY(%s) GROUP BY 1, 2 ORDER BY 1, 2",
+            (chunk_ids,),
+        )
+        assert cur.fetchall() == [
+            (1, 1, EPISODE_TURNS),
+            (1, 2, EPISODE_TURNS),
+            (1, 3, 1),
+        ]
+
+
+def queue_episode_and_season_summaries(dbname: str, session: str) -> None:
+    """Clear the story's own queued work and queue the two proof summaries."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        # Isolate already-caused summary work; touch only the disposable clone.
+        cur.execute("DELETE FROM correspondence_compaction_jobs")
+        cur.execute("DELETE FROM narrative_parent_embedding_claims")
+        cur.execute("DELETE FROM narrative_embedding_jobs")
+        cur.execute("DELETE FROM narrative_summary_jobs")
+        cur.execute("DELETE FROM relationship_milestone_queue")
+        cur.execute(
+            "UPDATE orrery_resolutions SET promotion_status='promoted' "
+            "WHERE promotion_status='pending'"
+        )
+        cur.execute("UPDATE episodes SET summary=NULL WHERE season=1 AND episode=2")
+        cur.execute("UPDATE seasons SET summary=NULL WHERE id=1")
+        schedule_summary_generation(
+            [SummaryTask("episode", 1, 2), SummaryTask("season", 1)],
+            cur=cur,
+            session_id=session,
+        )
 
 
 def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
@@ -69,28 +147,14 @@ def test_scheduler_paid_episode_and_season(monkeypatch, tmp_path):
         return provider
 
     monkeypatch.setattr(SummaryGenerator, "_initialize_provider", bounded_provider)
-    with disposable_slot_database(
-        "qa640_800b_paid", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_800b_paid") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=SUMMARY_SLOT, dbname=dbname)
+        seed_two_episode_story(dbname)
         session = str(uuid4())
-        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-            # Isolate already-caused summary work; touch only the disposable clone.
-            cur.execute("DELETE FROM correspondence_compaction_jobs")
-            cur.execute("DELETE FROM narrative_parent_embedding_claims")
-            cur.execute("DELETE FROM narrative_embedding_jobs")
-            cur.execute("DELETE FROM narrative_summary_jobs")
-            cur.execute("DELETE FROM relationship_milestone_queue")
-            cur.execute(
-                "UPDATE orrery_resolutions SET promotion_status='promoted' WHERE promotion_status='pending'"
-            )
-            cur.execute("UPDATE episodes SET summary=NULL WHERE season=1 AND episode=2")
-            cur.execute("UPDATE seasons SET summary=NULL WHERE id=1")
-            schedule_summary_generation(
-                [SummaryTask("episode", 1, 2), SummaryTask("season", 1)],
-                cur=cur,
-                session_id=session,
-            )
-        scheduler = SlotScheduler(4, dbname=dbname, settings=load_settings_as_dict())
+        queue_episode_and_season_summaries(dbname, session)
+        scheduler = SlotScheduler(
+            SUMMARY_SLOT, dbname=dbname, settings=load_settings_as_dict()
+        )
         error = None
         try:
             result = scheduler.run_pass(

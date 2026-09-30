@@ -32,6 +32,7 @@ from tests.pg_fixtures import (
     seed_accepted_turn,
     seed_pending_turn,
     seed_played_story,
+    seed_protagonist,
     seed_story_clock,
 )
 
@@ -139,6 +140,53 @@ def test_played_story_writes_every_accepted_turn_record() -> None:
                 (list(CAST),),
             )
             assert cur.fetchone()[0] > 0
+
+
+def test_played_story_can_bind_remembering_pass2_baselines() -> None:
+    """Each continuation's bound baseline remembers the chunks before it.
+
+    With ``remembered_baselines`` the bootstrap opening keeps the empty
+    baseline and every continuation binds the baseline a played turn
+    exports: the earlier chunks as memory identities, the warm slice's token
+    accounting, and a positive remaining budget, fingerprinted under the
+    clone's settings. A bootstrap opening refuses the option.
+    """
+
+    with disposable_slot_database("qa640_885_remembered") as dbname:
+        chunk_ids = seed_played_story(dbname, turns=3, remembered_baselines=True)
+        expected_fingerprint = pass2_baseline_config_fingerprint(
+            story_context_settings(load_settings(), read_story_settings(dbname))
+        )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT chunk_id, payload FROM lore_pass_baselines ORDER BY chunk_id"
+            )
+            rows = cur.fetchall()
+        assert [row[0] for row in rows] == chunk_ids
+        opening, *continuations = [row[1] for row in rows]
+        assert opening["memory_identities"] == []
+        assert opening["remaining_budget"] == 0
+        for index, payload in enumerate(continuations, start=1):
+            assert payload["parent_chunk_id"] == chunk_ids[index]
+            assert payload["memory_identities"] == chunk_ids[:index]
+            accounting = payload["prior_token_accounting"]
+            assert accounting["warm_slice"] > 0
+            assert accounting["baseline_tokens"] == accounting["warm_slice"]
+            assert payload["remaining_budget"] == (
+                accounting["total_available"] - accounting["baseline_tokens"]
+            )
+            assert payload["remaining_budget"] > 0
+            assert payload["config_fingerprint"] == expected_fingerprint
+
+    with disposable_slot_database("qa640_885_remembered_opening") as dbname:
+        seed_protagonist(dbname, base_timestamp=BASE_TIMESTAMP.isoformat())
+        with pytest.raises(ValueError, match="bootstrap opening"):
+            seed_pending_turn(
+                dbname,
+                user_text="Begin the story.",
+                storyteller_text="The story opens.",
+                remembered_baseline=True,
+            )
 
 
 def test_pending_turn_is_the_draft_continue_accepts() -> None:

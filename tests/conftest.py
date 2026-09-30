@@ -24,6 +24,16 @@ if os.environ.get("NEXUS_RUN_LIVE_LLM") != "1":
 if "NEXUS_HOME" in os.environ:
     del os.environ["NEXUS_HOME"]
 
+# An owner's exported NEXUS_SLOT names one of their save slots. Left in place,
+# a gateway lifespan recovers that slot and starts its scheduler, and any code
+# that resolves the active slot reaches the owner's database. It is removed
+# here, before collection, so module imports never see it; the fixtures below
+# remove it again for the session and for every test. A test or fixture that
+# needs an active slot sets NEXUS_SLOT itself, for its own scope, to a slot it
+# routes to a disposable clone.
+if "NEXUS_SLOT" in os.environ:
+    del os.environ["NEXUS_SLOT"]
+
 from nexus.telemetry import usage as usage_telemetry
 from nexus.util.secret_manager import InMemorySecretBackend, use_secret_backend
 from tests import dbname_audit, secret_store_guard
@@ -50,6 +60,23 @@ def _apply_marker_skip(items: Iterable[pytest.Item], marker: str, reason: str) -
     for item in items:
         if marker in item.keywords:
             item.add_marker(skip_marker)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _clear_inherited_slot_for_the_session() -> None:
+    """Remove an inherited ``NEXUS_SLOT`` before any session-scoped fixture."""
+    os.environ.pop("NEXUS_SLOT", None)
+
+
+@pytest.fixture(autouse=True)
+def _clear_inherited_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test with no active slot.
+
+    A slot left by a module- or session-scoped path (or set by a test outside
+    its monkeypatch) never reaches the next test; a routed test that needs an
+    active slot sets it after this runs.
+    """
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
 
 
 @pytest.fixture(autouse=True)

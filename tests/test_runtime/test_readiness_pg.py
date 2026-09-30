@@ -17,7 +17,7 @@ import pytest
 
 from nexus.agents.memnon.utils.idf_dictionary import REBUILD_COMMAND
 from nexus.api.save_slots import is_slot_locked
-from nexus.api import slot_utils
+from nexus.api.slot_utils import slot_dbname
 from nexus.config import load_settings
 from nexus.database import connection_kwargs, connection_target
 from nexus.runtime.readiness import (
@@ -133,7 +133,7 @@ def test_owner_host_database_checks_run_against_the_contract_server(
     settings = load_settings()
     assert settings.runtime is not None
     for slot in settings.runtime.readiness.slots:
-        assert slot_utils.slot_dbname(slot) in slots.observed
+        assert slot_dbname(slot) in slots.observed
 
     template_idf = checks["template.idf_analyzer_current"]
     assert template_idf.status in {"pass", "fail"}
@@ -146,13 +146,13 @@ def test_owner_host_database_checks_run_against_the_contract_server(
     slots_idf = checks["slots.idf_analyzer_current"]
     assert slots_idf.status in {"pass", "fail"}
     for slot in settings.runtime.readiness.slots:
-        assert slot_utils.slot_dbname(slot) in slots_idf.observed
+        assert slot_dbname(slot) in slots_idf.observed
     if slots_idf.status == "fail":
         assert REBUILD_COMMAND in (slots_idf.remediation or "") or (
             "python scripts/migrate.py --slot" in (slots_idf.remediation or "")
         )
     locked_slot = owner_host_stand_ins
-    dbname = slot_utils.slot_dbname(locked_slot)
+    dbname = slot_dbname(locked_slot)
     assert _existing_databases([dbname]) == {dbname}
     assert is_slot_locked(locked_slot)
     state = database_analyzer_state(dbname)
