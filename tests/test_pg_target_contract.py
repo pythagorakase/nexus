@@ -330,11 +330,19 @@ CONTRACT_HELPERS = {
     "nexus.api.slot_utils.get_slot_db_url": 2,
 }
 TARGET_OVERRIDES = frozenset({"host", "hostaddr", "port", "user", "password"})
-# Both files start two disposable clusters and dial each one by its explicit
-# host and port: the conflicting environment is the point of the proof that
-# the contract picks the configured cluster. Nothing else may spell a target.
+# Both test files start two disposable clusters and dial each one by its
+# explicit host and port: the conflicting environment is the point of the
+# proof that the contract picks the configured cluster. The connection audit
+# dials a cluster a fixture asks to register, by that cluster's host, port and
+# role, and the owner's server by the host, port and role it captured at
+# configure time, to compare their system identifiers; a fixture may have
+# changed the configured server by then. Nothing else may spell a target.
 DRIVER_TARGET_ALLOWLIST = frozenset(
-    {"tests/test_database_contract.py", "tests/test_connection_lifecycle.py"}
+    {
+        "tests/test_database_contract.py",
+        "tests/test_connection_lifecycle.py",
+        "tests/dbname_audit.py",
+    }
 )
 REPO_ROOT = TESTS_ROOT.parent
 _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)

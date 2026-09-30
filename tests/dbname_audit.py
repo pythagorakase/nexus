@@ -302,16 +302,28 @@ def _configured_owner_server() -> tuple[frozenset[Endpoint], dict[str, Any]]:
     return frozenset(endpoints), dict(params)
 
 
-def _system_identifier(params: dict[str, Any]) -> int:
+def _system_identifier(host: Any, port: Any, user: str | None) -> int:
     """Read a server's ``pg_control_system()`` system identifier.
 
-    The identifier is fixed when a cluster is initialized, so two spellings
-    that reach one server read the same value and two clusters differ.
+    Connects to the server's ``postgres`` database through the connection
+    contract with ``host``, ``port`` and ``user`` overriding the configured
+    ones. The identifier is fixed when a cluster is initialized, so two
+    spellings that reach one server read the same value and two clusters
+    differ.
     """
 
     import psycopg2
 
-    conn = psycopg2.connect(**params)
+    from nexus.database import connection_kwargs
+
+    conn = psycopg2.connect(
+        **connection_kwargs(
+            "postgres",
+            host=None if host is None else str(host),
+            port=port,
+            user=user,
+        )
+    )
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT system_identifier FROM pg_control_system()")
@@ -330,7 +342,11 @@ def _owner_identity() -> int:
     if _OWNER_PARAMS is None:
         raise RuntimeError("dbname audit: the owner's server is not captured yet")
     if _OWNER_IDENTITY is None:
-        _OWNER_IDENTITY = _system_identifier(_OWNER_PARAMS)
+        _OWNER_IDENTITY = _system_identifier(
+            _OWNER_PARAMS.get("host"),
+            _OWNER_PARAMS.get("port"),
+            _OWNER_PARAMS.get("user"),
+        )
     return _OWNER_IDENTITY
 
 
@@ -376,16 +392,8 @@ def register_disposable_cluster(
             f"as {_REGISTERED[endpoint]!r}"
         )
     if _OWNER_ENDPOINTS is not None:
-        candidate: dict[str, Any] = {
-            "dbname": "postgres",
-            "host": host,
-            "port": port,
-            "connect_timeout": 5,
-        }
-        if user is not None:
-            candidate["user"] = user
         try:
-            identity = _system_identifier(candidate)
+            identity = _system_identifier(host, port, user)
         except psycopg2.Error as error:
             raise OwnerEndpointRegistrationRefused(
                 f"dbname audit: refused to register {label!r} at "
