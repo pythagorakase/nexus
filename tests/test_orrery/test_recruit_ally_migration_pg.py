@@ -8,17 +8,25 @@ from typing import Any, Iterator
 import psycopg2  # type: ignore[import-untyped]
 import pytest
 
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_database
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
+@pytest.fixture(scope="module")
+def migration_database() -> Iterator[str]:
+    """An empty disposable database; each test's shadow schema rolls back."""
+
+    with disposable_database("qa640_mig077") as dbname:
+        yield dbname
+
+
 @pytest.fixture()
-def migration_074_schema() -> Iterator[Any]:
+def migration_074_schema(migration_database: str) -> Iterator[Any]:
     """Build the exact pre-077 project surface in a rollback-only schema."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+    conn = connect(migration_database)
     try:
         with conn.cursor() as cur:
             cur.execute("CREATE SCHEMA migration_077_test")

@@ -1,19 +1,27 @@
 """Rollback-only PostgreSQL contract for migration 095."""
 
+from collections.abc import Iterator
 from pathlib import Path
 import uuid
 
-import psycopg2
 import pytest
 
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
-def test_mood_vocabulary_contract() -> None:
-    conn = psycopg2.connect(get_slot_db_url(slot=5))
+@pytest.fixture(scope="module")
+def migration_database() -> Iterator[str]:
+    """A template clone for the public enums; the shadow schema rolls back."""
+
+    with disposable_slot_database("qa640_mig095") as dbname:
+        yield dbname
+
+
+def test_mood_vocabulary_contract(migration_database: str) -> None:
+    conn = connect(migration_database)
     schema = f"mood_migration_{uuid.uuid4().hex}"
     migration = (
         Path(__file__).parents[2] / "migrations" / "095_mood_vocabulary.sql"

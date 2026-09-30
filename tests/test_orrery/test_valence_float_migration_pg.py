@@ -12,7 +12,6 @@ import psycopg2
 import pytest
 
 from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait
-from nexus.api.slot_utils import get_slot_db_url
 from nexus.api.trait_compiler import (
     apply_character_trait_compilation,
     compile_character_traits,
@@ -22,6 +21,7 @@ from nexus.api.trait_compiler_schemas import (
     RelationshipTraitInput,
     TraitCompileInputs,
 )
+from tests.pg_fixtures import connect, disposable_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -168,11 +168,19 @@ def _schema_setup_sql() -> str:
     """
 
 
+@pytest.fixture(scope="module")
+def migration_database() -> Iterator[str]:
+    """An empty disposable database; each test's shadow schema rolls back."""
+
+    with disposable_database("qa640_mig088") as dbname:
+        yield dbname
+
+
 @contextmanager
-def _migration_087_schema(*, include_retired: bool) -> Iterator[Any]:
+def _migration_087_schema(dbname: str, *, include_retired: bool) -> Iterator[Any]:
     """Build a rollback-only migration-087-shaped schema."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+    conn = connect(dbname)
     try:
         with conn.cursor() as cur:
             schema = f"migration_088_{uuid4().hex[:12]}"
@@ -207,18 +215,18 @@ def _migration_087_schema(*, include_retired: bool) -> Iterator[Any]:
 
 
 @pytest.fixture()
-def migration_087_schema() -> Iterator[Any]:
+def migration_087_schema(migration_database: str) -> Iterator[Any]:
     """Include canonical and retired literals for migration/trigger tests."""
 
-    with _migration_087_schema(include_retired=True) as conn:
+    with _migration_087_schema(migration_database, include_retired=True) as conn:
         yield conn
 
 
 @pytest.fixture()
-def canonical_parity_schema() -> Iterator[Any]:
+def canonical_parity_schema(migration_database: str) -> Iterator[Any]:
     """Include exactly the eleven rows accepted by the pre-088 CASE view."""
 
-    with _migration_087_schema(include_retired=False) as conn:
+    with _migration_087_schema(migration_database, include_retired=False) as conn:
         yield conn
 
 

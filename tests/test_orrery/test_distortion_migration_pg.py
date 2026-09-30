@@ -11,18 +11,28 @@ import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 from nexus.agents.orrery.epistemics import mint_account_variant_sync
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_database
 
 
 pytestmark = pytest.mark.requires_postgres
-MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
+MIGRATION_SQL = (
+    Path(__file__).parents[2] / "migrations" / "092_claim_distortion_depth.sql"
+).read_text()
+
+
+@pytest.fixture(scope="module")
+def migration_database() -> Iterator[str]:
+    """An empty disposable database; each test's shadow schema rolls back."""
+
+    with disposable_database("qa640_mig092") as dbname:
+        yield dbname
 
 
 @pytest.fixture()
-def migration_091_schema() -> Iterator[Any]:
+def migration_091_schema(migration_database: str) -> Iterator[Any]:
     """Build a rolled-back schema with the exact claims shape before 092."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2), cursor_factory=RealDictCursor)
+    conn = connect(migration_database, cursor_factory=RealDictCursor)
     try:
         with conn.cursor() as cur:
             schema = f"migration_092_{uuid4().hex[:12]}"
