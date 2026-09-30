@@ -147,6 +147,7 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
         {"user_text": "Refused.", "storyteller_text": "Refused."},
     ),
     "seed_played_story": (pg_fixtures.seed_played_story, {"turns": 1}),
+    "seed_starved_story": (pg_fixtures.seed_starved_story, {"slot": 4}),
     "seed_checkpointed_story": (seed_checkpointed_story, {}),
 }
 
@@ -204,7 +205,12 @@ def test_seed_helpers_refuse_owner_databases_before_connecting(
 
 
 @pytest.mark.parametrize(
-    "helper", [pg_fixtures.seed_accepted_turn, pg_fixtures.seed_played_story]
+    "helper",
+    [
+        pg_fixtures.seed_accepted_turn,
+        pg_fixtures.seed_played_story,
+        pg_fixtures.seed_starved_story,
+    ],
 )
 def test_turn_factory_refuses_a_slot_label_routed_elsewhere(
     helper: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
@@ -217,11 +223,10 @@ def test_turn_factory_refuses_a_slot_label_routed_elsewhere(
     """
 
     monkeypatch.setattr(psycopg2, "connect", _refuse_connection)
-    arguments: dict[str, Any] = (
-        {"turns": 1}
-        if helper is pg_fixtures.seed_played_story
-        else {"user_text": "Refused.", "storyteller_text": "Refused."}
-    )
+    arguments: dict[str, Any] = {
+        pg_fixtures.seed_played_story: {"turns": 1},
+        pg_fixtures.seed_starved_story: {},
+    }.get(helper, {"user_text": "Refused.", "storyteller_text": "Refused."})
     with pytest.raises(RuntimeError, match="Slot 4 routes to 'save_04'"):
         helper("qa640_unrouted", slot=4, **arguments)
 

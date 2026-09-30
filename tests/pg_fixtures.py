@@ -2454,6 +2454,8 @@ def seed_starved_story(dbname: str, *, slot: int) -> list[int]:
     asserts both. ``slot`` must route to ``dbname``.
     """
 
+    require_disposable_target(dbname)
+    _require_slot_routes_to(dbname, slot)
     seed_played_story(
         dbname,
         turns=4,
