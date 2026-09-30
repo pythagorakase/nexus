@@ -238,4 +238,3 @@ def test_bare_subsystem_word_counts_as_a_label(migrated_clone: str) -> None:
         row["labels"],  # type: ignore[arg-type]
         _vocabulary(columns),
     ) == {"retrograde"}
-
