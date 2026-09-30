@@ -1104,6 +1104,40 @@ def seed_faction(
     return int(row[0]), int(row[1])
 
 
+def seed_faction_membership(
+    dbname: str,
+    *,
+    character_id: int,
+    faction_id: int,
+    role: str,
+) -> tuple[int, int]:
+    """Insert one faction-character row with ``role``; return its key.
+
+    ``faction_character_relationships`` is keyed by ``(faction_id,
+    character_id)``, so a character holds one role per faction. The
+    relationship-versioning trigger refuses any write without a
+    transaction-local ``nexus.write_producer``, so the insert is attributed to
+    ``manual``. ``role`` must be a ``faction_member_role`` label; the cast
+    fails loudly on any other value.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute("SET LOCAL nexus.write_producer = 'manual'")
+        cur.execute(
+            """
+            INSERT INTO faction_character_relationships (
+                faction_id, character_id, role
+            ) VALUES (%s, %s, %s::faction_member_role)
+            RETURNING faction_id, character_id
+            """,
+            (faction_id, character_id, role),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0]), int(row[1])
+
+
 def seed_relationship(
     dbname: str,
     *,
