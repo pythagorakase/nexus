@@ -180,7 +180,8 @@ def test_seat_policy_migration_backfills_legacy_active_jobs():
         ), jobs
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT model, gaia_model, apex_context_window FROM global_variables WHERE id=TRUE"
+                "SELECT model, gaia_model, apex_context_window "
+                "FROM global_variables WHERE id=TRUE"
             )
             row = cur.fetchone()
         story = StorySettings(
@@ -201,7 +202,8 @@ def test_seat_policy_migration_backfills_legacy_active_jobs():
                 ).model
                 cur.execute(
                     sql.SQL(
-                        "SELECT id, resolved_model, resolved_source FROM {} WHERE state IN ('queued','leased') ORDER BY id"
+                        "SELECT id, resolved_model, resolved_source FROM {} "
+                        "WHERE state IN ('queued','leased') ORDER BY id"
                     ).format(sql.Identifier(table))
                 )
                 rows = cur.fetchall()
@@ -210,13 +212,18 @@ def test_seat_policy_migration_backfills_legacy_active_jobs():
                 proof[table] = rows
                 cur.execute(
                     sql.SQL(
-                        "SELECT id FROM {} WHERE state NOT IN ('queued','leased') AND resolved_model IS NULL AND resolved_source IS NULL ORDER BY id"
+                        "SELECT id FROM {} WHERE state NOT IN ('queued','leased') "
+                        "AND resolved_model IS NULL AND resolved_source IS NULL "
+                        "ORDER BY id"
                     ).format(sql.Identifier(table))
                 )
                 assert [row[0] for row in cur.fetchall()] == jobs[table]["terminal"]
                 cur.execute(
                     sql.SQL(
-                        "SELECT count(*) FROM {} WHERE state NOT IN ('queued','leased') AND (resolved_model IS NOT NULL OR resolved_source IS NOT NULL)"
+                        "SELECT count(*) FROM {} "
+                        "WHERE state NOT IN ('queued','leased') "
+                        "AND (resolved_model IS NOT NULL "
+                        "OR resolved_source IS NOT NULL)"
                     ).format(sql.Identifier(table))
                 )
                 assert cur.fetchone() == (0,)
