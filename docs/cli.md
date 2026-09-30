@@ -162,8 +162,9 @@ helper, `nexus.cli.wait_for_session`:
   not bound that load.
 - A session the API reports as failed is a domain failure (exit 1) whose
   `error` is the API's own message.
-- A session still running when the budget ends, a read that times out, an
-  HTTP error answer or any other failed request, or an unusable payload is a
+- A session still running when the budget ends, a read that times out
+  (before its headers arrive or while its body stalls after them), an HTTP
+  error answer or any other failed request, or an unusable payload is a
   domain failure (exit 1).
 - A gateway that refuses or drops the connection mid-wait, a body cut off
   mid-answer included, is `api_unreachable` (exit 4). A failed read is never

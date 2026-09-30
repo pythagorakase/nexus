@@ -23,6 +23,7 @@ from typing import Any, Iterator
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+import requests  # type: ignore[import-untyped]
 import tomlkit
 
 from nexus import cli
@@ -43,12 +44,16 @@ class Session:
     # 1-based ordinal of the status read whose connection the gateway drops
     # without an answer, as a gateway process that dies mid-wait does.
     drop_read: int | None = None
+    # 1-based ordinal of the status read whose answer stops after its headers
+    # and part of its body, as a gateway that stalls mid-answer does.
+    stall_body_read: int | None = None
     # HTTP status of every status read, when the route answers with an error.
     status_code: int = 200
     # Every status read redirects to itself, so no read ever gets an answer.
     redirect_status: bool = False
     # What the state read after the session finished does instead of
-    # answering: "drop" closes the connection, "stall" holds it unanswered.
+    # answering: "drop" closes the connection, "stall" holds it unanswered,
+    # "stall_body" sends the headers and part of the body, then holds the rest.
     state_failure: str | None = None
     status_reads: int = 0
     read_times: list[float] = field(default_factory=list)
@@ -69,6 +74,17 @@ def _gateway(session: Session) -> Iterator[str]:
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _stall_body(self, payload: Any) -> None:
+            """Send the headers and half the body, then hold the rest back."""
+            body = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body[: len(body) // 2])
+            released.wait()
+            self.close_connection = True
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
             length = int(self.headers.get("Content-Length") or 0)
@@ -91,17 +107,19 @@ def _gateway(session: Session) -> Iterator[str]:
                 if has_run and session.state_failure == "stall":
                     released.wait()
                     return
-                self._respond(
-                    {
-                        "is_empty": False,
-                        "is_wizard_mode": False,
-                        "has_pending": True,
-                        "current_chunk_id": 40,
-                        "session_id": SESSION if has_run else "draft-before",
-                        "storyteller_text": NARRATIVE if has_run else "Before.",
-                        "choices": ["Follow the dark."],
-                    }
-                )
+                state = {
+                    "is_empty": False,
+                    "is_wizard_mode": False,
+                    "has_pending": True,
+                    "current_chunk_id": 40,
+                    "session_id": SESSION if has_run else "draft-before",
+                    "storyteller_text": NARRATIVE if has_run else "Before.",
+                    "choices": ["Follow the dark."],
+                }
+                if has_run and session.state_failure == "stall_body":
+                    self._stall_body(state)
+                    return
+                self._respond(state)
             elif url.path == f"/api/narrative/status/{SESSION}":
                 assert parse_qs(url.query) == {"slot": ["5"]}, url.query
                 session.status_reads += 1
@@ -121,14 +139,16 @@ def _gateway(session: Session) -> Iterator[str]:
                     return
                 index = min(session.status_reads, len(session.statuses)) - 1
                 status = session.statuses[index]
-                self._respond(
-                    {
-                        "session_id": SESSION,
-                        "status": status,
-                        "chunk_id": None,
-                        "error": session.error if status == "error" else None,
-                    }
-                )
+                payload = {
+                    "session_id": SESSION,
+                    "status": status,
+                    "chunk_id": None,
+                    "error": session.error if status == "error" else None,
+                }
+                if session.status_reads == session.stall_body_read:
+                    self._stall_body(payload)
+                    return
+                self._respond(payload)
             else:
                 self._respond({"detail": f"Unexpected GET {self.path}"}, 404)
 
@@ -224,6 +244,34 @@ def test_wait_times_out_while_the_session_still_runs(api_url) -> None:
     assert session.status_reads >= 3
 
 
+def test_wait_reports_a_status_answer_stalled_after_its_headers_as_a_timeout(
+    api_url,
+) -> None:
+    """A status answer whose body stalls past the budget is a timeout, not a loss.
+
+    Requests reports a body read that runs out of time as a ConnectionError
+    wrapping urllib3's ReadTimeoutError, not as a Timeout; the gateway did
+    answer, so the wait ends as the budget running out.
+    """
+    session = Session(statuses=["initiated"], stall_body_read=2)
+    with _gateway(session) as base_url:
+        api_url(base_url)
+        started = time.monotonic()
+        with pytest.raises(cli.SessionWaitFailure) as caught:
+            cli.wait_for_session(SESSION, slot=5, timeout=1.0, interval=0.05)
+        elapsed = time.monotonic() - started
+
+    assert (caught.value.status, caught.value.code) == ("timeout", "domain_failure")
+    assert caught.value.detail == "Generation timed out: no status answer within 1.0s"
+    assert ERROR_CODES[caught.value.code] == ExitCode.DOMAIN_FAILURE
+    # The shape this guards: the stall surfaced as a wrapped ConnectionError.
+    assert isinstance(caught.value.__cause__, requests.exceptions.ConnectionError)
+    assert not isinstance(caught.value.__cause__, requests.exceptions.Timeout)
+    # The stalled read is not retried.
+    assert session.status_reads == 2
+    assert 0.9 <= elapsed < 5
+
+
 def test_wait_surfaces_a_gateway_that_drops_the_connection(api_url) -> None:
     """A status read the gateway never answers ends the wait as unreachable."""
     session = Session(statuses=["initiated"], drop_read=2)
@@ -253,6 +301,27 @@ def test_wait_surfaces_a_gateway_that_is_gone(api_url) -> None:
         "api_unreachable",
     )
     assert ERROR_CODES[caught.value.code] == ExitCode.UNREACHABLE
+
+
+def test_wait_keeps_a_gone_gateway_unreachable_while_a_read_timeout_is_handled(
+    api_url,
+) -> None:
+    """A read timeout the caller is handling is not a cause of a later failure.
+
+    Python chains that handled exception onto the refused connection as its
+    ``__context__``, so the read-timeout check follows only causes.
+    """
+    api_url(f"http://127.0.0.1:{_closed_port()}")
+    try:
+        raise requests.exceptions.ReadTimeout("An earlier read ran out of time")
+    except requests.exceptions.ReadTimeout:
+        with pytest.raises(cli.SessionWaitFailure) as caught:
+            cli.wait_for_session(SESSION, slot=5, timeout=10, interval=0.05)
+
+    assert (caught.value.status, caught.value.code) == (
+        "unreachable",
+        "api_unreachable",
+    )
 
 
 def test_wait_reports_an_http_error_answer_with_its_body(api_url) -> None:
@@ -326,10 +395,16 @@ def _run(
     )
 
 
-def _cli_config(tmp_path: Path, **cli_settings: float) -> Path:
-    """Write a copy of the checkout config with ``[runtime.cli]`` overrides."""
+def _cli_config(
+    tmp_path: Path, *, apex: dict[str, Any] | None = None, **cli_settings: float
+) -> Path:
+    """Write a copy of the checkout config with ``[runtime.cli]`` overrides.
+
+    ``apex`` overrides ``[apex]`` keys too (the generation budget).
+    """
     document: Any = tomlkit.parse((ROOT / "nexus.toml").read_text(encoding="utf-8"))
     document["runtime"]["cli"].update(cli_settings)
+    document["apex"].update(apex or {})
     config = tmp_path / "nexus.toml"
     config.write_text(tomlkit.dumps(document), encoding="utf-8")
     return config
@@ -493,3 +568,44 @@ def test_continue_reports_a_stalled_state_read_as_a_domain_failure(
     assert envelope["partial"]["session_id"] == SESSION
     assert envelope["partial"]["generation_error"]["status"] == "timeout"
     assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
+
+
+@pytest.mark.parametrize("read", ["status", "state"])
+def test_continue_reports_an_answer_stalled_after_its_headers_as_a_domain_failure(
+    read: str, tmp_path: Path
+) -> None:
+    """A read whose body stalls past its timeout is exit 1, not a lost gateway.
+
+    The gateway sends the headers and part of the body, then holds the rest.
+    Requests reports that as a ConnectionError wrapping urllib3's
+    ReadTimeoutError; the status read and the slot-state read after it both
+    report it as their timeout and keep the scheduled session in ``partial``.
+    """
+    if read == "status":
+        config = _cli_config(tmp_path, apex={"generation_timeout_seconds": 1})
+        session = Session(statuses=["initiated"], stall_body_read=1)
+    else:
+        config = _cli_config(tmp_path, request_timeout_seconds=0.5)
+        session = Session(statuses=["complete"], state_failure="stall_body")
+    with _gateway(session) as base_url:
+        completed = _run(base_url, *COMMANDS["continue"][0], config=config)
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stderr
+    assert completed.stdout == ""
+    assert "Traceback" not in completed.stderr
+    envelope = json.loads(completed.stderr)
+    assert envelope["code"] == "domain_failure"
+    if read == "status":
+        assert envelope["error"] == "Generation timed out: no status answer within 1s"
+    else:
+        assert envelope["error"].startswith(
+            f"Timed out waiting for API server at {base_url}: "
+        )
+        assert "Read timed out" in envelope["error"]
+    assert envelope["partial"]["session_id"] == SESSION
+    assert envelope["partial"]["generation_error"] == {
+        "status": "timeout",
+        "detail": envelope["error"],
+    }
+    assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
+    assert session.status_reads == 1

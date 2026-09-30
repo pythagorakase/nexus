@@ -61,6 +61,7 @@ from typing import (
 import uuid
 
 import requests  # type: ignore[import-untyped]
+from urllib3.exceptions import ReadTimeoutError
 
 from nexus.cli_contract import (
     API_URL_ENV,
@@ -1764,6 +1765,59 @@ def _unreachable_failure(exc: BaseException) -> SessionWaitFailure:
     )
 
 
+def _is_read_timeout(exc: BaseException) -> bool:
+    """Whether a failed request ran out of time reading the gateway's answer.
+
+    Requests raises ``ReadTimeout`` when the headers do not arrive in time, but
+    wraps urllib3's ``ReadTimeoutError`` in a ``ConnectionError`` when the body
+    stalls after them. Either means the gateway answered too slowly, not that
+    it refused or dropped the connection. The walk follows the cause chain:
+    what each exception wraps (an exception argument) or was raised from
+    (``__cause__``). It never follows ``__context__``: an exception a caller
+    was handling when the request failed is not a cause of the failure.
+    """
+    seen: set[int] = set()
+    chain: List[BaseException] = [exc]
+    while chain:
+        link = chain.pop()
+        if id(link) in seen:
+            continue
+        seen.add(id(link))
+        if isinstance(link, (requests.exceptions.ReadTimeout, ReadTimeoutError)):
+            return True
+        chain.extend(arg for arg in link.args if isinstance(arg, BaseException))
+        if link.__cause__ is not None:
+            chain.append(link.__cause__)
+    return False
+
+
+def _failed_session_read(
+    exc: requests.exceptions.RequestException, url: str, timeout_detail: str
+) -> SessionWaitFailure:
+    """Classify one failed read of a session wait: a status read or the state load.
+
+    Both reads map their failures here, so they cannot drift. A read that ran
+    out of time, a body stalled after its headers included
+    (:func:`_is_read_timeout`), is ``timeout`` with ``timeout_detail``. A
+    refused or dropped connection, a body cut off mid-answer included, is
+    ``unreachable`` (``api_unreachable``). Any other failed request is
+    ``http_error``.
+    """
+    if _is_read_timeout(exc):
+        return SessionWaitFailure("timeout", timeout_detail)
+    if isinstance(
+        exc,
+        (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+        ),
+    ):
+        return _unreachable_failure(exc)
+    if isinstance(exc, requests.exceptions.Timeout):
+        return SessionWaitFailure("timeout", timeout_detail)
+    return SessionWaitFailure("http_error", f"Could not read {url}: {exc}")
+
+
 def _session_status(payload: Any) -> Dict[str, Any]:
     """Validate one generation status payload from the status route."""
     if (
@@ -1794,11 +1848,12 @@ def wait_for_session(
     a terminal status (:data:`TERMINAL_GENERATION_STATUSES`). Every other end
     raises :class:`SessionWaitFailure`: the API reporting the generation failed
     (``error``, with the API's own message), the budget spent while the
-    session still runs (``timeout``), a gateway that refuses or drops the
-    connection (``unreachable``, reported as ``api_unreachable``), an HTTP
-    error answer or any other failed request (``http_error``), an unusable
-    payload (``invalid_response``), or Ctrl+C (``interrupted``). A failed
-    read is never retried.
+    session still runs or a status read stalls, before or after its headers
+    (``timeout``), a gateway that refuses or drops the connection
+    (``unreachable``, reported as ``api_unreachable``), an HTTP error answer or
+    any other failed request (``http_error``), an unusable payload
+    (``invalid_response``), or Ctrl+C (``interrupted``). A failed read is
+    never retried.
     """
     url = f"{get_api_url()}/api/narrative/status/{session_id}"
     deadline = time.monotonic() + timeout
@@ -1806,19 +1861,11 @@ def wait_for_session(
         while (remaining := deadline - time.monotonic()) > 0:
             try:
                 response = _api_get(url, params={"slot": slot}, timeout=remaining)
-            except (
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ChunkedEncodingError,
-            ) as exc:
-                raise _unreachable_failure(exc) from exc
-            except requests.exceptions.Timeout as exc:
-                raise SessionWaitFailure(
-                    "timeout",
-                    f"Generation timed out: no status answer within {timeout}s",
-                ) from exc
             except requests.exceptions.RequestException as exc:
-                raise SessionWaitFailure(
-                    "http_error", f"Could not read {url}: {exc}"
+                raise _failed_session_read(
+                    exc,
+                    url,
+                    f"Generation timed out: no status answer within {timeout}s",
                 ) from exc
             if not 200 <= response.status_code < 300:
                 raise SessionWaitFailure(
@@ -1854,22 +1901,16 @@ def _load_session_result(
     Raises :class:`SessionWaitFailure` when the state cannot be read or no
     longer shows this session's result: ``unreachable`` (``api_unreachable``)
     when the gateway refuses or drops the connection, a domain failure for a
-    read that times out or fails otherwise.
+    read that times out (a body stalled after its headers included) or fails
+    otherwise. :func:`_failed_session_read` classifies the failed read.
     """
     url = f"{get_api_url()}/api/slot/{slot}/state"
     try:
         response = _api_get(url, timeout=_request_timeout_seconds())
-    except (
-        requests.exceptions.ConnectionError,
-        requests.exceptions.ChunkedEncodingError,
-    ) as exc:
-        raise _unreachable_failure(exc) from exc
-    except requests.exceptions.Timeout as exc:
-        raise SessionWaitFailure(
-            "timeout", f"Timed out waiting for API server at {get_api_url()}: {exc}"
-        ) from exc
     except requests.exceptions.RequestException as exc:
-        raise SessionWaitFailure("http_error", f"Could not read {url}: {exc}") from exc
+        raise _failed_session_read(
+            exc, url, f"Timed out waiting for API server at {get_api_url()}: {exc}"
+        ) from exc
     if not 200 <= response.status_code < 300:
         raise SessionWaitFailure(
             "http_error",
