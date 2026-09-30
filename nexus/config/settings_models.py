@@ -1328,6 +1328,41 @@ class OrreryCompositionSettings(BaseModel):
     roster_reach: int = Field(default=2, ge=1, le=4)
 
 
+def _default_membership_roles() -> List[str]:
+    return ["leader", "employee", "member", "sympathizer"]
+
+
+class OrreryResolverSettings(BaseModel):
+    """World-state hydration policy for ``[orrery.resolver]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # ``faction_member_role`` labels whose faction_character_relationships rows
+    # count as membership for the ``faction_member`` package condition.
+    membership_roles: List[str] = Field(default_factory=_default_membership_roles)
+
+    @field_validator("membership_roles")
+    @classmethod
+    def _validate_membership_roles(cls, roles: List[str]) -> List[str]:
+        from nexus.agents.logon.apex_enums import FactionMemberRole
+
+        if not roles:
+            raise ValueError("orrery.resolver.membership_roles must not be empty")
+        known = {role.value for role in FactionMemberRole}
+        unknown = sorted(set(roles) - known)
+        if unknown:
+            raise ValueError(
+                "orrery.resolver.membership_roles contains labels that are not "
+                f"faction_member_role values: {unknown}; known: {sorted(known)}"
+            )
+        duplicates = sorted({role for role in roles if roles.count(role) > 1})
+        if duplicates:
+            raise ValueError(
+                f"orrery.resolver.membership_roles repeats labels: {duplicates}"
+            )
+        return roles
+
+
 def _default_weather_climates() -> Dict[str, List[str]]:
     return {
         "lagoon_wet": [
@@ -3071,6 +3106,7 @@ class OrrerySettings(BaseModel):
     composition: OrreryCompositionSettings = Field(
         default_factory=OrreryCompositionSettings
     )
+    resolver: OrreryResolverSettings = Field(default_factory=OrreryResolverSettings)
     weather: OrreryWeatherSettings = Field(default_factory=OrreryWeatherSettings)
     mood: OrreryMoodSettings = Field(default_factory=OrreryMoodSettings)
     contagion: OrreryContagionSettings = Field(default_factory=OrreryContagionSettings)

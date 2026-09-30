@@ -470,6 +470,7 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
                 weather_settings=orrery.get("weather"),
                 mood_settings=orrery.get("mood"),
                 composition_settings=orrery.get("composition"),
+                resolver_settings=orrery.get("resolver"),
             )
         except OverrideValidationError as exc:
             # Override validation (unknown vocab, no-op toggles) is caller
@@ -592,6 +593,7 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
             weather_settings=orrery.get("weather"),
             mood_settings=orrery.get("mood"),
             composition_settings=orrery.get("composition"),
+            resolver_settings=orrery.get("resolver"),
         )
 
 
