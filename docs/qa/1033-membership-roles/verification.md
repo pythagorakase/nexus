@@ -65,20 +65,37 @@ enum) on a disposable clone, then:
   the settings validator checks against;
 - hydrates with the shipped settings and asserts `faction_member` is true for
   exactly the configured roles, and that no other role's character carries the
-  faction;
+  faction; then, with `nexus.config.load_settings` swapped for settings whose
+  list is `["leader", "exile"]` (a list no model default carries), hydrates
+  with `resolver_settings=None` and asserts exactly those two are members, so
+  the `None` branch provably reads the loaded settings;
 - narrows the list to `["leader"]` through `settings_with` and asserts only
   the leader is a member, both through the typed section and through the
   dumped mapping the resolve phase hands the resolver.
 
 `tests/test_orrery/test_config.py` asserts the shipped default, that an
 unknown label (`overlord`) in a copied `nexus.toml` fails `load_settings`, and
-that an empty or repeated list fails validation.
+that an empty or repeated list fails validation, and that
+`coerce_resolver_settings` rejects `["leader", "overlord"]` and `[]` in the
+dumped mapping the resolve phase passes
+(`test_resolver_settings_mapping_is_validated`).
 
 Bite check: planting `AND (fcr.role::text = ANY(:membership_roles) OR TRUE)`
 in the query fails both hydration tests
 (`test_faction_member_is_true_for_exactly_the_configured_roles`,
 `test_narrowed_membership_roles_change_hydrated_membership`; 2 failed,
 1 passed); the plant was reverted.
+
+Review-fix bite checks (commit `7c3cb46f`), each plant reverted with
+`git checkout -- nexus/agents/orrery/resolver.py`:
+
+- mapping branch planted as `OrreryResolverSettings.model_construct(**dict(raw))`
+  (no validation): `test_resolver_settings_mapping_is_validated` fails both
+  cases (2 failed, 44 deselected);
+- `None` branch planted to `return OrreryResolverSettings()` (model default,
+  ignoring `load_settings()`):
+  `test_faction_member_is_true_for_exactly_the_configured_roles` fails
+  (1 failed, 2 passed).
 
 ## Settings Parity and Fingerprint
 
@@ -159,8 +176,8 @@ in the traceback), whose `OrrerySettings` has no `resolver` field, while the
 copied config is this worktree's `nexus.toml`:
 `orrery.resolver Extra inputs are not permitted`. With `PYTHONPATH=$PWD` the
 file passes (24 passed, 2 skipped) and so does the whole run above. It is a
-worktree artifact, and the same mismatch is why the owner gateway must restart
-after the pull.
+worktree artifact, and the same mismatch is why every managed runtime service
+must restart after the pull (see the Coordinator Note).
 
 Black, flake8, mypy on the changed Python files:
 
@@ -180,9 +197,37 @@ identical after stripping line numbers to the same files' errors from a
 cannot check the test modules on their own ("Source file found twice under
 different module names"), a pre-existing configuration limit.
 
+### Review-Fix Reruns
+
+After the review fixes, at commit `7c3cb46f` (tests only; no runtime module
+changed), with `PYTHONPATH=$PWD` and the gateway variables unset:
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_orrery/test_faction_membership_roles_pg.py tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 3 targets: postgres, qa640_membership_roles_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+64 passed in 3.36s
+
+$ $PY -m pytest -q -p no:cacheprovider tests/test_config tests/config tests/test_orrery/test_config.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+281 passed, 5 warnings in 15.89s
+
+$ $PY -m black --check tests/test_orrery/test_config.py tests/test_orrery/test_faction_membership_roles_pg.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+```
+
+flake8 on the two changed test files reports nothing.
+
 ## Coordinator Note
 
-This PR adds a `nexus.toml` key under `extra="forbid"` models. The owner
-gateway imports the main checkout's code and reads the main checkout's
-`nexus.toml`; restart it immediately after the pull so the running process
-loads the model that knows `[orrery.resolver]`.
+This PR adds a `nexus.toml` key under `extra="forbid"` models. Every managed
+runtime service imports the main checkout's code and reads the main checkout's
+`nexus.toml`: the gateway, and `mock_openai`, which calls `load_settings()` on
+each request. Immediately after the pull, run `nexus restart` with no service
+argument, which restarts both, so each running process loads the model that
+knows `[orrery.resolver]`. If services are restarted one at a time, restart
+both `gateway` and `mock_openai`.
