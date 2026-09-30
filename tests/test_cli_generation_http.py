@@ -571,39 +571,41 @@ def test_seed_transition_stalled_after_headers_keeps_the_seed(
 
     Requests reports the stalled body as a ConnectionError wrapping urllib3's
     ReadTimeoutError. The transition classifies it with the waiter's helper as
-    its timeout and reports the saved seed with its retry command; a
-    transition POST the gateway drops is still a lost gateway (exit 4).
+    its timeout; a transition POST the gateway drops is a lost gateway (exit
+    4). Either way the saved seed and its retry command stay in ``partial``.
     """
+    exit_code, error_code, status = {
+        "transition_stall": (1, "domain_failure", "timeout"),
+        "transition_drop": (4, "api_unreachable", "unreachable"),
+    }[outcome]
     scenario = GenerationScenario(result=outcome)
     code, stdout, stderr = _run_cli(scenario, tmp_path)
+    assert code == exit_code, (stdout, stderr)
     assert stdout == ""
     assert "Traceback" not in stderr
     envelope = json.loads(stderr)
+    assert (envelope["ok"], envelope["code"]) == (False, error_code)
+    assert envelope["error"] == (
+        "Seed artifact was saved, but the narrative transition failed. "
+        "Retry with: nexus continue --slot 5"
+    )
+    payload = envelope["partial"]
+    assert payload["artifact_type"] == "story_seed"
+    assert payload["artifact_data"] == {"title": "The Glass Orchard"}
+    assert payload["retry_command"] == "nexus continue --slot 5"
+    failure = payload["transition_error"]
+    assert (failure["status"], failure["status_code"]) == (status, None)
+    if outcome == "transition_drop":
+        assert failure["detail"].startswith("Cannot connect to API server at ")
+    else:
+        assert failure["detail"].endswith("Read timed out.")
+    assert "retrograde" not in payload
     assert scenario.transition_posted
     # The failed transition schedules no opening turn.
     assert not any(
         request[:2] == ("POST", "/api/narrative/continue")
         for request in scenario.requests
     )
-    if outcome == "transition_drop":
-        assert code == 4, (stdout, stderr)
-        assert (envelope["ok"], envelope["code"]) == (False, "api_unreachable")
-        assert "Cannot connect to API server at " in envelope["error"]
-    else:
-        assert code == 1, (stdout, stderr)
-        assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
-        assert envelope["error"] == (
-            "Seed artifact was saved, but the narrative transition failed. "
-            "Retry with: nexus continue --slot 5"
-        )
-        payload = envelope["partial"]
-        assert payload["artifact_type"] == "story_seed"
-        assert payload["artifact_data"] == {"title": "The Glass Orchard"}
-        assert payload["retry_command"] == "nexus continue --slot 5"
-        failure = payload["transition_error"]
-        assert (failure["status"], failure["status_code"]) == ("timeout", None)
-        assert failure["detail"].endswith("Read timed out.")
-        assert "retrograde" not in payload
 
 
 @pytest.mark.parametrize("seed", [True, False], ids=["seed", "continuation"])

@@ -2080,12 +2080,19 @@ def _seed_transition_failure(
     detail: str,
     status_code: Optional[int],
     status: str,
+    code: str = "domain_failure",
 ) -> Dict[str, Any]:
-    """Report a persisted seed whose narrative transition did not complete."""
+    """Report a persisted seed whose narrative transition did not complete.
+
+    ``code`` is the CLI error code: ``api_unreachable`` (exit 4) when the
+    gateway refused or dropped the transition, a domain failure otherwise.
+    Either way the saved seed and its retry command stay in the result.
+    """
     retry_command = f"nexus continue --slot {slot}"
     result.update(
         {
             "success": False,
+            "code": code,
             "error": (
                 "Seed artifact was saved, but the narrative transition failed. "
                 f"Retry with: {retry_command}"
@@ -2682,24 +2689,23 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                             requests.exceptions.ChunkedEncodingError,
                             requests.exceptions.Timeout,
                         ) as exc:
-                            # Classified as the wait's reads are: an answer
-                            # that ran out of time, a body stalled after its
-                            # headers included, keeps the saved seed (exit 1);
-                            # a refused or dropped connection still reaches
-                            # main() as a lost gateway (exit 4).
+                            # Classified as the wait's reads are, the saved
+                            # seed kept either way: an answer that ran out of
+                            # time, a body stalled after its headers included,
+                            # is a domain failure (exit 1); a refused or
+                            # dropped connection is api_unreachable (exit 4).
                             failure = _failed_session_read(
                                 exc,
                                 transition_url,
                                 str(exc) or "Transition request timed out.",
                             )
-                            if failure.status != "timeout":
-                                raise
                             return _seed_transition_failure(
                                 result=result,
                                 slot=args.slot,
                                 detail=failure.detail,
                                 status_code=None,
-                                status="timeout",
+                                status=failure.status,
+                                code=failure.code,
                             )
                         if not 200 <= transition_response.status_code < 300:
                             detail = transition_response.text.strip() or (
