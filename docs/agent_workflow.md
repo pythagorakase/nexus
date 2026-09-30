@@ -51,8 +51,11 @@ more specific instructions.
   slice does. `tests/dbname_audit.py` records the database named by every
   psycopg2 connection (`psycopg2.connect` however imported, SQLAlchemy and
   pool connections, and direct `psycopg2.extensions.connection` construction)
-  and every asyncpg connection, from keyword arguments, DSN strings, and URLs
-  before the socket opens, and from the server once it does. The summary
+  and every asyncpg connection. psycopg2 targets are recorded from the DSN,
+  URL, or keywords before connecting and from libpq's resolved `dbname`
+  (`conn.info.dbname`) after connecting; asyncpg targets are recorded from the
+  keywords, the DSN, and asyncpg's resolved connection parameters before
+  connecting. The summary
   lists the targets and ends `dbname audit: owner targets: none`; any
   `save_NN` or `NEXUS_template` target turns the run into a failure (exit 1)
   naming each owner target and the test that opened it, even when every test

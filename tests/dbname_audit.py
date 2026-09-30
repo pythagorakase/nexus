@@ -9,12 +9,13 @@ connection this pytest process attempts:
   before the plugin loaded, SQLAlchemy engines, and ``psycopg2.pool``, through
   ``psycopg2._connect``, which ``connect`` resolves at call time; and direct
   construction of ``psycopg2.extensions.connection``, which bypasses
-  ``connect``. The ``dbname`` in the DSN string or URL is recorded before the
-  connection opens, and the name the server reports after it opens.
+  ``connect``. The ``dbname`` in the DSN string, URL, or keywords is recorded
+  before connecting, and libpq's resolved ``dbname`` (``conn.info.dbname``,
+  a client-side value, not one the server reports) after connecting.
 - asyncpg: every ``asyncpg.connect``, pool, and SQLAlchemy asyncpg connection,
-  through ``asyncpg.connect_utils._parse_connect_arguments``, which resolves
-  the ``database`` keyword, a DSN URL, and the defaults to one name before any
-  socket opens.
+  through ``asyncpg.connect_utils._parse_connect_arguments``. The ``database``
+  keyword, the DSN, and asyncpg's resolved connection parameters are recorded
+  before connecting; nothing is recorded after the socket opens.
 
 At session end the plugin lists every target and **fails the run** (exit
 status 1, whatever the tests did) when any target is ``NEXUS_template`` or a
@@ -82,13 +83,14 @@ def _record(dbname: str | None, driver: str) -> None:
 def _dsn_dbname(dsn: Any) -> str | None:
     """Return the database a libpq DSN string or URL names, if it names one."""
 
+    import psycopg2
     from psycopg2.extensions import parse_dsn
 
     if dsn is None:
         return None
     try:
         parsed = parse_dsn(str(dsn))
-    except Exception:
+    except psycopg2.ProgrammingError:
         # The driver rejects the same string itself; nothing is opened.
         return None
     name = parsed.get("dbname")
@@ -96,7 +98,7 @@ def _dsn_dbname(dsn: Any) -> str | None:
 
 
 def _connected_dbname(conn: Any) -> str | None:
-    """Return the database an open psycopg2 connection actually reached."""
+    """Return libpq's resolved ``dbname`` for an open psycopg2 connection."""
 
     info = getattr(conn, "info", None)
     return getattr(info, "dbname", None)
