@@ -460,7 +460,7 @@ def category_seed_policy(category: str, entity_kind: str) -> CategorySeedPolicy:
             "entity_kind": normalized_kind,
             "policy": "stable_seed",
             "reason": (
-                "Stable identity, role, faction, or place affordance tags may "
+                "Stable identity, role, faction, or place character tags may "
                 "be proposed as present-state seed outcomes."
             ),
         }

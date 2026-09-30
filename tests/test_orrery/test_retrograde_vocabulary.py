@@ -215,7 +215,7 @@ def test_category_seed_policy_returns_complete_struct() -> None:
         "entity_kind": "character",
         "policy": "stable_seed",
         "reason": (
-            "Stable identity, role, faction, or place affordance tags may "
+            "Stable identity, role, faction, or place character tags may "
             "be proposed as present-state seed outcomes."
         ),
     }
