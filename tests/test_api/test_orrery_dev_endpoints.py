@@ -14,12 +14,15 @@ members at Fixture Docks whose accepted ticks commit real resolutions and
 accrue sleep debt. On top of that story it seeds one relationship from a cast
 member to the protagonist (an on-screen target, so a template scene pressure
 fires), a friendship in both directions between two cast members (so their
-two-party winners compose a joint beat), a durable tag bestowed without a
-world time, a work routine anchor at the plaza (a routine winner whose gate
-passes through ``NOT(has_inbound_pair_tag(hunting))``), and a ``hunting``
-pair tag inbound to the third cast member. The module-wide non-vacuity
-checks fail loudly if any of those stops producing what the parity and
-what-if blocks iterate over.
+two-party winners compose a joint beat), a durable tag bestowed on the
+quarry without a world time (the rejection checks' carried tag and the
+data-quality pathology), a work routine anchor at the plaza (the routine
+winner, gated through ``NOT(has_inbound_pair_tag(hunting))``, that the
+what-if kill test targets), a ``hunting`` pair tag inbound to the quarry,
+and Skald rulings on the confidant's surveil of the worker (deferred twice,
+then voided) for the adjudication history. The module-wide non-vacuity
+checks fail loudly if any of those stops producing what the parity,
+what-if, and history blocks iterate over.
 
 Only the PostgreSQL tests route slot ``ROUTED_SLOT`` to the clone, each for
 its own duration; ``test_resolve_rejects_invalid_slot`` runs unrouted so an
@@ -60,6 +63,7 @@ from tests.pg_fixtures import (
     seed_entity_tag,
     seed_pair_tag,
     seed_played_story,
+    seed_adjudication_rulings,
     seed_relationship,
     seed_routine_anchor,
 )
@@ -82,6 +86,14 @@ SEED_TIME_DELTA = timedelta(hours=6)
 # A durable tag bestowed with no world time (seed_entity_tag leaves
 # applied_at_world_time NULL): the data-quality strip's pathology.
 NULL_WORLD_TIME_TAG = "kin_protector"
+# The routine winner the worker's anchor yields; its AND gate passes through
+# NOT(has_inbound_pair_tag(hunting)), so the what-if kill test targets it.
+ROUTINE_WINNER = "routine_commute"
+# Skald rulings on the confidant surveilling the worker, over the last three
+# accepted ticks: deferred twice, then voided. A void commits no resolution,
+# so the ledger rows leave the resolver's selection unchanged.
+RULED_TEMPLATE = "surveil"
+RULED_ACTIONS = ("defer", "defer", "void")
 
 MULTI_PARTY_TEMPLATE_IDS = {
     t.id for t in BUILTIN_TEMPLATES if len(t.required_slots) >= 2
@@ -103,6 +115,7 @@ class SeededAuditStory:
     chunk_ids: tuple[int, ...]
     protagonist_entity_id: int
     cast_entity_ids: dict[str, int]
+    ruled_proposal_id: str
 
 
 def _seed_audit_story(dbname: str) -> SeededAuditStory:
@@ -156,11 +169,18 @@ def _seed_audit_story(dbname: str) -> SeededAuditStory:
         object_entity_id=characters[QUARRY][1],
         tag="hunting",
     )
+    ruled_proposal_id = seed_adjudication_rulings(
+        dbname,
+        template_id=RULED_TEMPLATE,
+        bindings={"actor": characters[CONFIDANT][1], "target": characters[WORKER][1]},
+        rulings=tuple(zip(chunk_ids[-len(RULED_ACTIONS) :], RULED_ACTIONS)),
+    )
     return SeededAuditStory(
         dbname=dbname,
         chunk_ids=tuple(chunk_ids),
         protagonist_entity_id=characters[PROTAGONIST][1],
         cast_entity_ids={name: characters[name][1] for name in CAST},
+        ruled_proposal_id=ruled_proposal_id,
     )
 
 
@@ -614,19 +634,22 @@ def test_what_if_pair_tag_injection_kills_a_winner(
     top of its AND gate cannot survive the tag's injection, so the diff must
     record both the fired flip and the winner change."""
 
+    worker_id = routed_story.cast_entity_ids[WORKER]
     candidates: list[tuple[int, int, int, str]] = []
     for slot in AUDIT_SLOTS:
         payload = _resolve(client, slot)
         actor_ids = [group["actor_entity_id"] for group in payload["actors"]]
         for actor_id, winner in _not_hunted_winners(payload):
+            if actor_id != worker_id or winner["template_id"] != ROUTINE_WINNER:
+                continue
             subjects = [other for other in actor_ids if other != actor_id]
             if subjects:
                 candidates.append((slot, actor_id, subjects[0], winner["template_id"]))
                 break
     assert candidates, (
-        "the seeded story yields no actor-only winner gated on "
+        f"the worker yields no {ROUTINE_WINNER} winner gated on "
         "NOT(has_inbound_pair_tag(hunting)) — the what-if kill test is "
-        "vacuous; the worker's routine anchor should yield a routine winner"
+        "vacuous; the worker's routine anchor should yield that routine winner"
     )
 
     for slot, actor_id, subject_id, winner_id in candidates:
@@ -770,18 +793,21 @@ def test_what_if_validation_rejections(
             "entity_ids": [g["actor_entity_id"] for g in payload["actors"]],
         },
     ).json()
+    quarry_id = routed_story.cast_entity_ids[QUARRY]
     carried = next(
         (
             (entity["entity_id"], row["tag"])
             for entity in context["entities"]
+            if entity["entity_id"] == quarry_id
             for row in entity["tags"]["durable"]
+            if row["tag"] == NULL_WORLD_TIME_TAG
         ),
         None,
     )
     assert carried is not None, (
-        "no audited actor in the seeded story carries a durable tag — "
-        "layer-mismatch and no-op rejection checks are vacuous; the quarry's "
-        "seeded tag should be one"
+        f"the quarry does not carry its seeded durable {NULL_WORLD_TIME_TAG} "
+        "tag in the audit context — layer-mismatch and no-op rejection checks "
+        "are vacuous; seed_entity_tag should bestow it"
     )
     tagged_entity, durable_tag = carried
 
@@ -1090,11 +1116,33 @@ def test_adjudication_history_endpoint_over_http(
     assert response.status_code == 200
     payload = response.json()
     assert set(payload["totals"]["actions"]) == {"defer", "replace", "void"}
+    assert payload["totals"]["actions"] == {
+        "defer": 2,
+        "replace": 0,
+        "void": 1,
+    }, "the seeded rulings should log two defers and a void"
+    assert payload["epoch"]["log_rows_total"] == len(RULED_ACTIONS)
     assert (
         payload["epoch"]["log_rows_total"] >= payload["epoch"]["log_rows_with_subject"]
     )
+    assert payload["epoch"]["log_rows_with_subject"] == len(RULED_ACTIONS)
+    assert payload["defer_streaks"], (
+        "the seeded story yields no defer streak — the streak checks are "
+        "vacuous; seed_adjudication_rulings should log a deferred surveil"
+    )
     for streak in payload["defer_streaks"]:
         assert streak["outcome"] in {"ratified", "replace", "void", "open"}
+    (streak,) = payload["defer_streaks"]
+    assert streak["proposal_id"] == routed_story.ruled_proposal_id
+    assert streak["template_id"] == RULED_TEMPLATE
+    assert streak["actor_entity_id"] == routed_story.cast_entity_ids[CONFIDANT]
+    assert streak["actor_name"] == CONFIDANT
+    assert (streak["length"], streak["outcome"]) == (2, "void")
+    assert (streak["start_tick"], streak["end_tick"], streak["outcome_tick"]) == (
+        routed_story.chunk_ids[-3],
+        routed_story.chunk_ids[-2],
+        routed_story.chunk_ids[-1],
+    )
 
     filtered = client.get(
         "/api/dev/orrery/history/adjudications",
@@ -1103,6 +1151,18 @@ def test_adjudication_history_endpoint_over_http(
     assert filtered.status_code == 200
     filtered_payload = filtered.json()
     assert set(filtered_payload["templates"]) <= {"surveil"}
+    assert set(filtered_payload["templates"]) == {"surveil"}, (
+        "the surveil filter returned no template block — the filter check is "
+        "vacuous; the seeded surveil rulings should appear"
+    )
+    assert filtered_payload["templates"]["surveil"]["actions"] == {
+        "defer": {"explicit": 2},
+        "replace": {},
+        "void": {"explicit": 1},
+    }
+    assert [s["proposal_id"] for s in filtered_payload["defer_streaks"]] == [
+        routed_story.ruled_proposal_id
+    ]
 
 
 @pytest.mark.requires_postgres

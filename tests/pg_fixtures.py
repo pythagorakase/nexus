@@ -1658,6 +1658,100 @@ def seed_adjudication_ledger(
     )
 
 
+def seed_adjudication_rulings(
+    dbname: str,
+    *,
+    template_id: str,
+    bindings: Mapping[str, int],
+    rulings: tuple[tuple[int, str], ...] | list[tuple[int, str]],
+) -> str:
+    """Log Skald rulings on one uncommitted proposal; return its proposal ID.
+
+    Each ``(tick_chunk_id, action)`` in ``rulings`` goes through the
+    production log writer (``_insert_adjudication_log_sync``) with the
+    ``explicit`` source, so every row is what a tick commit logs for that
+    ruling, with ``actor_entity_id`` and ``bindings`` stamped. The binding
+    hash is the resolver's ``binding_hash(bindings)``. Only ``defer`` and
+    ``void`` are accepted: neither commits an ``orrery_resolutions`` row, so
+    the rulings leave habituation (which debits only committed wins) and the
+    resolver's selection unchanged. A replace commits a resolution through
+    the tick writer; ``seed_adjudication_ledger`` covers that outcome.
+
+    ``rulings`` must be in ascending tick order over committed chunks, and
+    ``bindings["actor"]`` must be a character.
+    """
+
+    require_disposable_target(dbname)
+    from nexus.agents.orrery.events import (
+        OrreryAdjudicationDecision,
+        _insert_adjudication_log_sync,
+    )
+    from nexus.agents.orrery.resolver import OrreryResolutionDraft
+    from nexus.agents.orrery.substrate import binding_hash
+
+    ticks = [int(tick) for tick, _action in rulings]
+    if not rulings or ticks != sorted(ticks):
+        raise ValueError(
+            "seed_adjudication_rulings needs one or more rulings in ascending "
+            f"tick order, got {rulings!r}"
+        )
+    refused = sorted({action for _tick, action in rulings} - {"defer", "void"})
+    if refused:
+        raise ValueError(
+            f"seed_adjudication_rulings logs only defer and void, got {refused!r}"
+        )
+    if "actor" not in bindings:
+        raise ValueError(
+            f"seed_adjudication_rulings needs an actor binding, got {bindings!r}"
+        )
+    draft = OrreryResolutionDraft(
+        template_id=template_id,
+        priority=0,
+        binding_hash=binding_hash(dict(bindings)),
+        bindings=dict(bindings),
+        branch_label="Seeded ruling",
+        narrative_stub="{actor} waits on a seeded ruling.",
+        magnitude=0.1,
+    )
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM narrative_chunks WHERE id = ANY(%s)",
+            (sorted(set(ticks)),),
+        )
+        assert cur.fetchone()[0] == len(
+            set(ticks)
+        ), f"seed_adjudication_rulings ticks {ticks!r} are not all chunks"
+        cur.execute(
+            "SELECT count(*) FROM characters WHERE entity_id = %s",
+            (int(bindings["actor"]),),
+        )
+        assert (
+            cur.fetchone()[0] == 1
+        ), f"actor entity {bindings['actor']} is not a character"
+        for tick, action in rulings:
+            _insert_adjudication_log_sync(
+                cur,
+                draft,
+                OrreryAdjudicationDecision(
+                    proposal_id=draft.proposal_id,
+                    action=action,
+                    note=f"Seeded {action} ruling.",
+                ),
+                tick_chunk_id=int(tick),
+                adjudication_source="explicit",
+            )
+        cur.execute(
+            "SELECT tick_chunk_id, action FROM orrery_adjudication_log "
+            "WHERE proposal_id = %s ORDER BY tick_chunk_id, id",
+            (draft.proposal_id,),
+        )
+        logged = [(int(tick), action) for tick, action in cur.fetchall()]
+    assert logged == [
+        (int(tick), action) for tick, action in rulings
+    ], f"seed_adjudication_rulings logged {logged!r}"
+    return draft.proposal_id
+
+
 # The TEST provider's registered model id; a fixture turn records it as the
 # model that generated the staged prose, as the TEST seats do.
 FIXTURE_GENERATION_MODEL = "TEST"
