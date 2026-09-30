@@ -157,6 +157,52 @@ Success: no issues found in 4 source files
 
 `flake8 nexus/cli.py` still reports the 9 E501 lines and `flake8 nexus/config/settings_models.py` the 6 it reported at `adb4843e`, none in a changed line; `mypy nexus/config/settings_models.py` reports the same 7 pre-existing errors.
 
+Two follow-ups the coordinator added to this round, in `b9cf6f0a` (the seed's scheduling POST) and `22f54d73` (the `--to` help):
+
+- **The seed's opening-turn POST had the same stall bug.** `_bootstrap_seed_narrative` split `ConnectionError` from `Timeout` itself, so a `POST /api/narrative/continue` answer that stalled after its headers exited 4 with `api_unreachable`, where the saved-work rule in `docs/cli.md` makes a late answer a domain failure. Its transport failures (`ConnectionError`, `ChunkedEncodingError`, `Timeout`) now go through `_failed_session_read`. A stall is `Timed out waiting for API server at ...` (exit 1) with the saved seed in `partial`. A refused or dropped connection stays `api_unreachable` (exit 4; the existing `schedule_drop` test is unchanged and green). An HTTP error answer or an unreadable body keeps its message. The POST's budget was a literal 120 s, so a subprocess test would wait two minutes. The function now takes it as `schedule_timeout`, defaulting to the same 120, so behavior is unchanged. The new in-process test passes 0.5 s against a real loopback gateway that sends the headers and half the body, then holds the rest. It asserts what `main()` reports from the result: `domain_failure` (exit 1), the exact error, and the exact `partial` (artifact, Retrograde outcome, `narrative_bootstrap: false`, `bootstrap_error`, `recovery_command`, no session).
+- **The `--to` help stated a default that no longer exists.** It said `(default: the latest chunk)`, stale since `--from` without `--to` became a usage error. It now states the rule. `docs/cli.md` already stated the rule and never repeated the default.
+
+Before the fix (test written first, run on the unfixed classification). The assertion that failed was `('api_unreach...REACHABLE: 4>) == ('domain_fail...N_FAILURE: 1>)`, `At index 0 diff: 'api_unreachable' != 'domain_failure'`:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_generation_http.py -k "schedule_stalled"
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_cli_generation_http.py::test_seed_bootstrap_schedule_stalled_after_headers_keeps_the_seed
+1 failed, 51 deselected in 1.27s
+```
+
+After both follow-ups:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q tests/test_cli_session_wait.py tests/test_cli_contract.py tests/test_cli.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+215 passed, 5 warnings in 106.76s (0:01:46)
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_new_story_cli.py tests/test_cli_generation_http.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed in 85.64s (0:01:25)
+$ PYTHONPATH=$PWD $PY -m nexus.cli inspect chunks --help | tail -5
+  --from FROM_ID  First chunk id of the range (default: the first chunk);
+                  needs --to. One request per chunk in the range, one more if
+                  chunk --to does not exist
+  --to TO_ID      Last chunk id of the range; required with --from (alone, the
+                  range starts at the first chunk)
+$ $PY -m black --check nexus/cli.py tests/test_cli_generation_http.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+$ $PY -m flake8 tests/test_cli_generation_http.py; echo $?
+0
+$ $PY -m mypy nexus/cli.py
+Success: no issues found in 1 source file
+$ NEXUS_GATEWAY_PORT=8017 NEXUS_API_URL=http://127.0.0.1:8017 PYTHONPATH=$PWD $PY -m nexus.cli down
+nothing running
+$ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
+1
+```
+
+`mypy tests/test_cli_generation_http.py` reports the same 5 errors as at `a833224b` (the `tomlkit` config indexing in `_run_cli` and the teardown's `str-bytes-safe` line), none in an added line; `flake8 nexus/cli.py` reports the same 9 E501 lines.
+
 ## CLI Transcript on the Played Clone
 
 `tests/test_cli_inspect_pg.py` at this branch's head, run with `-s`: `seed_played_story(turns=3, cast=("Mara Quill", "Oren Vale"))` and one seeded faction; the real gateway's empty incubator is read first, then a pending turn from `seed_pending_turn` is staged. The in-process gateway serves 127.0.0.1:8017 with every provider routed to TEST. Each command ran as a `python -m nexus.cli` subprocess. Verbatim stdout of that one run; only the in-process gateway's own output between commands (the fixture's schema load, model-load progress, retrieval logging, and tokenizer fork warnings) is removed:
