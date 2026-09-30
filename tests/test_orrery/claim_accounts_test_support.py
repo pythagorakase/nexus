@@ -14,10 +14,10 @@ fixture through ``tests.pg_fixtures`` (``seed_character`` and
 ``insert_transaction_*`` writers (characters, factions, relationships, chains)
 write public rows inside the caller's rolled-back transaction, for the rows a
 test must create mid-test; each first reads the cursor's database name and
-refuses an owner database exactly as the seed helpers do. The remaining row
-helpers (pair tags, chunks, minted claims, contagion settings) take an open
-cursor and name no database: each test module supplies a cursor on its own
-disposable clone.
+refuses an owner database exactly as the seed helpers do. The other
+in-transaction writers (``_insert_chunk``, ``_insert_pair_tag`` and
+``_insert_claim``) refuse an owner cursor the same way before any statement;
+each test module supplies a cursor on its own disposable clone.
 """
 
 from __future__ import annotations
@@ -273,8 +273,12 @@ def _insert_chunk(
     time_delta: timedelta = timedelta(0),
     world_layer: str = "primary",
 ) -> tuple[int, datetime]:
-    """Insert one sequence-keyed chunk; return its ID and stamped world_time."""
+    """Insert one sequence-keyed chunk; return its ID and stamped world_time.
 
+    Refuses an owner database before writing (``require_transaction_target``).
+    """
+
+    require_transaction_target(cur)
     token = uuid4().hex[:12]
     cur.execute(
         """
@@ -464,8 +468,12 @@ def seed_chain(dbname: str, label: str, length: int) -> list[int]:
 def _insert_pair_tag(
     cur: Any, subject_entity_id: int, object_entity_id: int, tag: str
 ) -> None:
-    """Attach one registered pair tag from subject to object entity."""
+    """Attach one registered pair tag from subject to object entity.
 
+    Refuses an owner database before writing (``require_transaction_target``).
+    """
+
+    require_transaction_target(cur)
     cur.execute(
         """
         INSERT INTO entity_pair_tags (
@@ -488,8 +496,12 @@ def _insert_claim(
     birth_world_time: datetime | None,
     scope: str = "bounded",
 ) -> int:
-    """Mint one claim for a fresh ``threat_issued`` event; return the claim ID."""
+    """Mint one claim for a fresh ``threat_issued`` event; return the claim ID.
 
+    Refuses an owner database before writing (``require_transaction_target``).
+    """
+
+    require_transaction_target(cur)
     cur.execute(
         """
         INSERT INTO world_events (

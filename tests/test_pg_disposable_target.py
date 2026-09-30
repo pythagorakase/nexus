@@ -18,6 +18,7 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal
+from functools import partial
 from typing import Any, NoReturn
 
 import psycopg2
@@ -36,7 +37,11 @@ from tests.pg_fixtures import (
     seed_story_clock,
 )
 from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
+from tests.test_orrery import claim_accounts_test_support
 from tests.test_orrery.claim_accounts_test_support import (
+    _insert_chunk,
+    _insert_claim,
+    _insert_pair_tag,
     _install_valence_shadow,
     insert_transaction_chain,
     insert_transaction_character,
@@ -343,7 +348,32 @@ TRANSACTION_WRITER_CALLS: dict[str, tuple[Callable[..., Any], tuple[Any, ...]]] 
     "insert_transaction_character": (insert_transaction_character, ("refused",)),
     "insert_transaction_faction": (insert_transaction_faction, ("refused",)),
     "insert_transaction_chain": (insert_transaction_chain, (2,)),
+    "_insert_chunk": (_insert_chunk, ()),
+    "_insert_pair_tag": (_insert_pair_tag, (1, 2, "ally")),
+    "_insert_claim": (
+        partial(_insert_claim, chunk_id=1, source_entity_id=1, birth_world_time=None),
+        (),
+    ),
 }
+
+
+def test_transaction_writer_calls_cover_every_writer() -> None:
+    """A new transaction-scoped writer must join ``TRANSACTION_WRITER_CALLS``.
+
+    Every function of the support module that writes rows through a caller's
+    cursor (``insert_transaction_*`` and the ``_insert_*`` row helpers) is
+    proven to refuse an owner cursor by the test below.
+    """
+
+    defined = {
+        name
+        for name, function in inspect.getmembers(
+            claim_accounts_test_support, inspect.isfunction
+        )
+        if name.startswith(("insert_transaction_", "_insert_"))
+        and function.__module__ == claim_accounts_test_support.__name__
+    }
+    assert defined == set(TRANSACTION_WRITER_CALLS)
 
 
 def _refuse_execute(*args: object, **kwargs: object) -> NoReturn:
