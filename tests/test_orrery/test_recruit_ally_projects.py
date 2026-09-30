@@ -44,8 +44,8 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     seed_character,
+    seed_character_pair,
     seed_place,
-    seed_story_clock,
     seed_zone,
     sqlalchemy_url,
 )
@@ -325,15 +325,18 @@ def recruit_ally_clone() -> Iterator[dict[str, Any]]:
             max_latitude=40.9,
         )
         place_id, _ = seed_place(dbname, name="Recruit Ally Hall")
-        chunk_id = seed_story_clock(dbname, world_time=NOW - timedelta(days=1))
-        _, actor = seed_character(dbname, name="Recruit Ally Actor")
-        _, target = seed_character(dbname, name="Recruit Ally Target")
+        pair = seed_character_pair(
+            dbname,
+            world_time=NOW - timedelta(days=1),
+            actor_name="Recruit Ally Actor",
+            target_name="Recruit Ally Target",
+        )
         _, other = seed_character(dbname, name="Recruit Ally Other")
         yield {
             "dbname": dbname,
-            "chunk_id": chunk_id,
-            "actor": actor,
-            "target": target,
+            "chunk_id": pair.chunk_id,
+            "actor": pair.actor_entity_id,
+            "target": pair.target_entity_id,
             "other": other,
             "place_id": place_id,
         }
