@@ -219,3 +219,94 @@ $ $PY -m pytest -q -p no:cacheprovider tests/test_reachability.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 38 passed, 5 warnings in 10.05s
 ```
+
+### At the Pushed Head (`b5f54abd`)
+
+The offline suites, Black, flake8, mypy, and both UI gates were rerun on
+2026-09-30 at `b5f54abd` (on `origin/main` at `c8dd8c85`). Its product, test,
+and client code is `13d0b3ec`'s; the two later commits, and the commit that
+adds this section, change only this file. Same environment as above; the
+import check printed the worktree path.
+
+```
+$ $PY -m pytest -q -p no:cacheprovider tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2608 passed, 406 skipped, 8 warnings in 409.32s (0:06:49)
+
+$ $PY -m pytest -q -p no:cacheprovider tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1816 passed, 742 skipped, 7 warnings in 42.17s
+```
+
+No failures. The 15 more skips than at `b1c87960` come from the rebase onto
+`c8dd8c85`: #1048 added `tests/test_enum_column_comment_labels_pg.py`, whose
+15 collected PostgreSQL tests skip offline.
+
+```
+$ $PY -m black --check nexus/api/settings_endpoints.py tests/test_api/test_settings_endpoints.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+$ $PY -m flake8 nexus/api/settings_endpoints.py tests/test_api/test_settings_endpoints.py
+(no output, exit 0)
+$ PYTHONPATH=$PWD $PY -m mypy nexus/api/settings_endpoints.py tests/test_api/test_settings_endpoints.py
+Success: no issues found in 2 source files
+
+$ npm --prefix ui run check
+> tsc && npm run check:design-sync
+> nexus-ui@1.0.0 check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+(exit 0)
+```
+
+The UI suite ran while the machine was under heavy load (load average 14 to
+35; another application held about six cores, and other builders' gates were
+running). Three default-worker runs of `npm --prefix ui test` each failed a
+different small set of tests in async wizard, resume, and pane tests on
+`Test timed out in 5000ms` or a `findBy` query that expired:
+
+```
+$ npm --prefix ui test          # run 1
+ Test Files  4 failed | 31 passed (35)
+      Tests  10 failed | 452 passed (462)
+   Duration  106.30s
+  (WizardShell.test.tsx x7, InteractiveWizard.transition.test.tsx x1,
+   NarrativePane.regenerate.test.tsx x1, ContinuePage.resume.test.tsx x1)
+
+$ npm --prefix ui test          # run 2
+ Test Files  3 failed | 32 passed (35)
+      Tests  5 failed | 457 passed (462)
+   Duration  88.74s
+  (WizardShell.test.tsx x2, ContinuePage.resume.test.tsx x2,
+   NarrativePane.regenerate.test.tsx x1)
+
+$ npm --prefix ui test          # run 3
+ Test Files  2 failed | 33 passed (35)
+      Tests  2 failed | 460 passed (462)
+   Duration  62.81s
+  (ContinuePage.resume.test.tsx x1, SettingsPane.test.tsx x1)
+```
+
+Each file that failed passes alone at the same head, and the whole suite
+passes with fewer parallel workers:
+
+```
+$ npm --prefix ui test -- src/pages/ContinuePage.resume.test.tsx
+      Tests  4 passed (4)
+$ npm --prefix ui test -- src/components/NewStoryWizard/WizardShell.test.tsx
+      Tests  24 passed (24)
+$ npm --prefix ui test -- src/components/nexus/NarrativePane.regenerate.test.tsx
+      Tests  10 passed (10)
+$ npm --prefix ui test -- src/components/NewStoryWizard/InteractiveWizard.transition.test.tsx
+      Tests  30 passed (30)
+$ npm --prefix ui test -- src/components/nexus/SettingsPane.test.tsx
+      Tests  16 passed (16)
+
+$ npm --prefix ui test -- --minWorkers=1 --maxWorkers=2
+ Test Files  35 passed (35)
+      Tests  462 passed (462)
+   Duration  69.13s (transform 3.75s, setup 5.49s, collect 24.70s, tests 52.56s, environment 39.80s, prepare 7.15s)
+```
+
+The client change removes one optional type field and a comment, which
+TypeScript erases, so it cannot change test timing. The same suite passed
+462 of 462 with default workers at `b1c87960` (above).
