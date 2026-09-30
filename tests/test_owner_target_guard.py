@@ -14,8 +14,9 @@ that reach an owner database.
   ``NEXUS_template`` (a whole name, a DSN or URL naming one, or an f-string
   that starts ``save_``). A name counts in any spelling libpq reads as that
   name: single-quoted with backslash escapes (``dbname='save_04'``), spaced
-  around ``=``, and percent-encoded in a URL (``postgresql:///save%5F04``);
-  a double-quoted ``dbname="save_04"`` is refused as well.
+  around ``=``, and percent-encoded in a URL
+  (``postgresql://u@audit.invalid/save%5F04``); a double-quoted
+  ``dbname="save_04"`` is refused as well.
 - An assignment of such a literal to a ``*DBNAME*`` name
   (``TEST_DBNAME = "save_04"``).
 - A child-process call (``subprocess.run``, ``Popen``, ``check_call``,
@@ -512,11 +513,14 @@ def test_an_exemption_admits_only_its_own_use() -> None:
             RULE_SUBPROCESS,
         ),
         ("subprocess.run(\"pg_dump -d 'save_04'\", shell=True)", RULE_SUBPROCESS),
-        ("check_output(['psql', 'postgresql:///save%5F04'])", RULE_SUBPROCESS),
+        (
+            "check_output(['psql', 'postgresql://u@audit.invalid/save%5F04'])",
+            RULE_SUBPROCESS,
+        ),
         ("psycopg2.connect(\"dbname='save_04' connect_timeout=1\")", RULE_CONNECTION),
         ("psycopg2.connect('dbname = save_03')", RULE_CONNECTION),
         ("psycopg2.connect(r\"dbname='save\\_05'\")", RULE_CONNECTION),
-        ("connect('postgresql:///save%5F04')", RULE_CONNECTION),
+        ("connect('postgresql://u@audit.invalid/save%5F04')", RULE_CONNECTION),
         (
             "connect(\"postgresql://u@audit.invalid/?dbname='save_02'\")",
             RULE_CONNECTION,
