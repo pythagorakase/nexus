@@ -208,6 +208,7 @@ def test_view_has_exact_parity_with_the_seeded_junctions(story: SeededStory) -> 
     assert status == 0, report
     assert report["parity"] is True and report["exit_status"] == 0
     assert report["read_only"] is True
+    assert report["snapshot"]["isolation"] == "repeatable read"
     assert report["database"] == story.dbname
     assert report["target"] == {
         "relation": "public.chunk_entity_references_v",
@@ -222,7 +223,6 @@ def test_view_has_exact_parity_with_the_seeded_junctions(story: SeededStory) -> 
         assert block["extra"] == {"count": 0, "examples": []}
         assert block["invariant_violations"]["count"] == 0
         assert block["parity"] is True
-    assert report["unattributed_target_rows"]["count"] == 0
     assert report["unattributed"] == {
         "expected": 0,
         "target": 0,
@@ -234,17 +234,25 @@ def test_view_has_exact_parity_with_the_seeded_junctions(story: SeededStory) -> 
     assert report["columns"]["kind"]["expected_non_null"] == sum(SEEDED_ROWS.values())
 
     invariants = report["invariants"]
-    assert invariants["chunk_character_references"]["primary_key"] == [
-        "chunk_id",
-        "character_id",
-    ]
-    assert invariants["chunk_faction_references"]["primary_key"] == [
+    assert invariants["chunk_character_references"]["primary_key"] == {
+        "name": "chunk_character_references_pkey",
+        "columns": ["chunk_id", "character_id"],
+        "definition": "PRIMARY KEY (chunk_id, character_id)",
+        "nulls_not_distinct": False,
+        "deferrable": False,
+        "initially_deferred": False,
+    }
+    assert invariants["chunk_faction_references"]["primary_key"]["columns"] == [
         "chunk_id",
         "faction_id",
     ]
     assert invariants["chunk_faction_references"]["role_column"] is None
     places = invariants["place_chunk_references"]
-    assert places["primary_key"] == ["place_id", "chunk_id", "reference_type"]
+    assert places["primary_key"]["columns"] == [
+        "place_id",
+        "chunk_id",
+        "reference_type",
+    ]
     assert places["role_column"] == {
         "name": "reference_type",
         "type": "place_reference_type",
@@ -336,6 +344,7 @@ def test_evidence_not_carried_counts_rows_with_evidence(story: SeededStory) -> N
             "character": 0,
             "place": with_evidence,
             "faction": 0,
+            "unattributed": 0,
         },
     }
     assert (
@@ -355,19 +364,25 @@ def _unified_rows(dbname: str) -> list[tuple[Any, ...]]:
         return list(cur.fetchall())
 
 
-def _create_unified_table(dbname: str) -> None:
-    """Create the unified-shape target table and fill it from the junctions."""
+def _create_unified_table(
+    dbname: str, table: str = UNIFIED_TABLE, key: str = ""
+) -> None:
+    """Create a unified-shape target table and fill it from the junctions.
+
+    ``key`` is an optional table-constraint clause, such as a unique key.
+    """
     with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
             f"""
-            CREATE TABLE {UNIFIED_TABLE} (
+            CREATE TABLE {table} (
                 chunk_id bigint NOT NULL,
                 entity_id bigint NOT NULL,
                 kind entity_kind NOT NULL,
                 reference_type text,
                 evidence text
+                {key}
             );
-            INSERT INTO {UNIFIED_TABLE}
+            INSERT INTO {table}
             SELECT r.chunk_id, c.entity_id, e.kind, r.reference::text, NULL
             FROM chunk_character_references r
             JOIN characters c ON c.id = r.character_id
@@ -542,6 +557,98 @@ def test_connection_helper_refuses_writes(story: SeededStory) -> None:
     assert _junction_counts(story.dbname) == SEEDED_ROWS
 
 
+def test_report_refuses_a_session_that_is_not_read_only_repeatable_read(
+    story: SeededStory,
+) -> None:
+    """The report reads its session state back instead of asserting it."""
+    with closing(connect(story.dbname)) as conn:
+        with pytest.raises(
+            RuntimeError,
+            match="transaction_read_only='off', "
+            "transaction_isolation='read committed'",
+        ):
+            parity.build_report(conn, parity.DEFAULT_TARGET, 1)
+        conn.rollback()
+        conn.set_session(readonly=True)
+        with pytest.raises(
+            RuntimeError,
+            match="transaction_read_only='on', "
+            "transaction_isolation='read committed'",
+        ):
+            parity.build_report(conn, parity.DEFAULT_TARGET, 1)
+        conn.rollback()
+
+
+def test_unique_constraints_report_their_null_semantics(story: SeededStory) -> None:
+    """A unified key reads differently with and without NULLS NOT DISTINCT.
+
+    Faction rows have no role, so ``(chunk_id, entity_id, reference_type)``
+    reproduces the faction junction's key only when its NULLs are not
+    distinct; the invariant block must tell the two keys apart.
+    """
+    key_columns = "(chunk_id, entity_id, reference_type)"
+    variants = {
+        "qa836_key_nulls_distinct": f"UNIQUE {key_columns}",
+        "qa836_key_nulls_not_distinct": f"UNIQUE NULLS NOT DISTINCT {key_columns}",
+        "qa836_key_deferrable": f"UNIQUE {key_columns} DEFERRABLE INITIALLY DEFERRED",
+    }
+    blocks: dict[str, dict[str, Any]] = {}
+    for table, clause in variants.items():
+        _create_unified_table(story.dbname, table, f", CONSTRAINT {table}_key {clause}")
+        report = parity.run(story.dbname, table)
+        assert report["parity"] is True, table
+        target = report["invariants"]["target"]
+        assert target["unique_indexes"] == []
+        (blocks[table],) = target["unique_constraints"]
+
+    assert blocks["qa836_key_nulls_distinct"] == {
+        "name": "qa836_key_nulls_distinct_key",
+        "columns": ["chunk_id", "entity_id", "reference_type"],
+        "definition": f"UNIQUE {key_columns}",
+        "nulls_not_distinct": False,
+        "deferrable": False,
+        "initially_deferred": False,
+    }
+    assert blocks["qa836_key_nulls_not_distinct"] == {
+        "name": "qa836_key_nulls_not_distinct_key",
+        "columns": ["chunk_id", "entity_id", "reference_type"],
+        "definition": f"UNIQUE NULLS NOT DISTINCT {key_columns}",
+        "nulls_not_distinct": True,
+        "deferrable": False,
+        "initially_deferred": False,
+    }
+    assert blocks["qa836_key_deferrable"] == {
+        "name": "qa836_key_deferrable_key",
+        "columns": ["chunk_id", "entity_id", "reference_type"],
+        "definition": f"UNIQUE {key_columns} DEFERRABLE INITIALLY DEFERRED",
+        "nulls_not_distinct": False,
+        "deferrable": True,
+        "initially_deferred": True,
+    }
+
+    # The difference is real: only the NULLS NOT DISTINCT key refuses a
+    # second copy of a role-less faction row.
+    with closing(connect(story.dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT chunk_id, entity_id FROM qa836_key_nulls_distinct "
+            "WHERE kind = 'faction' ORDER BY 1, 2 LIMIT 1"
+        )
+        faction_row = cur.fetchone()
+        cur.execute(
+            "INSERT INTO qa836_key_nulls_distinct "
+            "VALUES (%s, %s, 'faction', NULL, NULL)",
+            faction_row,
+        )
+    with closing(connect(story.dbname)) as conn:
+        with pytest.raises(psycopg2.errors.UniqueViolation):
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO qa836_key_nulls_not_distinct "
+                    "VALUES (%s, %s, 'faction', NULL, NULL)",
+                    faction_row,
+                )
+
+
 def test_kind_mismatch_and_unattributed_rows_fail_the_run() -> None:
     """Each invariant violation is reported once and fails the run.
 
@@ -586,7 +693,15 @@ def test_kind_mismatch_and_unattributed_rows_fail_the_run() -> None:
             assert block["missing"]["count"] == 0, kind
             assert block["extra"]["count"] == 0, kind
         assert report["unattributed"]["expected"] == 0
-        assert report["unattributed_target_rows"]["count"] == 0
+        assert report["unattributed"]["target"] == 0
+        # Not-carried counts use the same attribution: the Docks row counts
+        # under its entity's kind (faction), not under its junction (place).
+        assert report["columns"]["reference_type"]["expected_non_null_by_kind"] == {
+            "character": SEEDED_ROWS["character"],
+            "place": SEEDED_ROWS["place"] - docks_rows,
+            "faction": docks_rows,
+            "unattributed": 0,
+        }
 
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
@@ -608,8 +723,9 @@ def test_kind_mismatch_and_unattributed_rows_fail_the_run() -> None:
         status, report, _ = _run_cli(dbname, "--target", UNIFIED_TABLE)
         assert status == 0, report
         assert [
-            index["name"] for index in report["invariants"]["target"]["unique_indexes"]
-        ] == ["qa836_unified_key"]
+            (index["name"], index["nulls_not_distinct"])
+            for index in report["invariants"]["target"]["unique_indexes"]
+        ] == [("qa836_unified_key", False)]
 
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("SELECT max(id) + 1000 FROM entities")
@@ -624,7 +740,7 @@ def test_kind_mismatch_and_unattributed_rows_fail_the_run() -> None:
 
         assert status == parity.EXIT_MISMATCH
         assert report["parity"] is False
-        assert report["unattributed_target_rows"]["count"] == 1
+        assert report["unattributed"]["target"] == 1
         assert report["unattributed"]["extra"]["count"] == 1
         assert report["unattributed"]["missing"]["count"] == 0
         assert report["unattributed"]["parity"] is False

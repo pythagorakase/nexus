@@ -24,15 +24,23 @@ as an invariant violation, not also as a missing and an extra row. Rows whose
 ``entity_id`` names no entity of the three kinds fall into an ``unattributed``
 bucket on both sides, compared the same way. An expected column the target
 does not carry is reported with ``"carried": false`` and the number of
-expected rows whose value is not NULL; a column that is not carried does not
-by itself fail the run, because the unified table is expected to carry
-``kind`` and ``evidence`` and the view is not.
+expected rows whose value is not NULL, split by the same attribution as the
+parity buckets (``entities.kind``, or ``unattributed``); a column that is not
+carried does not by itself fail the run, because the unified table is
+expected to carry ``kind`` and ``evidence`` and the view is not.
+
+Primary-key and unique constraints are reported with their definitions and
+their NULL semantics (``nulls_not_distinct``) and deferrability, so the
+invariant block shows whether a unified key over a nullable
+``reference_type`` reproduces the junctions' uniqueness.
 
 The report is one JSON document on stdout. The session is read-only by
 construction: ``default_transaction_read_only=on`` in a repeatable-read
-snapshot, checked before the first query. Its ``search_path`` is pinned to
-``pg_catalog, public``, so every unqualified name (the target included)
-resolves to the same relations the invariant block reads.
+snapshot, checked before the first query and read back again by the report,
+whose ``read_only`` and ``snapshot.isolation`` fields state what was read.
+Its ``search_path`` is pinned to ``pg_catalog, public``, so every unqualified
+name (the target included) resolves to the same relations the invariant
+block reads.
 
 Exit status: 0 when every kind and the unattributed bucket have no missing
 row, no extra row, and no invariant violation; 3 otherwise. Errors
@@ -69,6 +77,8 @@ EXIT_PARITY = 0
 EXIT_MISMATCH = 3
 DEFAULT_TARGET = "chunk_entity_references_v"
 DEFAULT_LIMIT = 10
+# The bucket for rows whose entity_id names no entity of the three kinds.
+UNATTRIBUTED = "unattributed"
 
 # The unified row shape; the order is the comparison order.
 EXPECTED_COLUMNS = ("chunk_id", "entity_id", "kind", "reference_type", "evidence")
@@ -282,22 +292,53 @@ def _columns(cur: Any, oid: int) -> list[dict[str, Any]]:
     ]
 
 
-def _constraint_columns(cur: Any, oid: int, contype: str) -> list[dict[str, Any]]:
-    """Return constraints of one type with their columns in key order."""
+def _key_constraints(cur: Any, oid: int, contype: str) -> list[dict[str, Any]]:
+    """Return primary-key or unique constraints with their full semantics.
+
+    Each entry carries the key columns in key order, the constraint's
+    definition as ``pg_get_constraintdef`` prints it (``UNIQUE NULLS NOT
+    DISTINCT (...)``, ``DEFERRABLE``), and the same facts as fields:
+    ``nulls_not_distinct`` from the owning index, ``deferrable`` and
+    ``initially_deferred``. A unique key over a nullable column forbids
+    duplicate NULL-role rows only when ``nulls_not_distinct`` is true.
+    """
     cur.execute(
         """
         SELECT con.conname,
-               array_agg(a.attname::text ORDER BY k.ord)
+               ARRAY(SELECT a.attname::text
+                     FROM unnest(con.conkey) WITH ORDINALITY k(attnum, ord)
+                     JOIN pg_attribute a
+                       ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+                     ORDER BY k.ord),
+               pg_get_constraintdef(con.oid),
+               i.indnullsnotdistinct,
+               con.condeferrable,
+               con.condeferred
         FROM pg_constraint con
-        CROSS JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
-        JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+        JOIN pg_index i ON i.indexrelid = con.conindid
         WHERE con.conrelid = %s AND con.contype = %s
-        GROUP BY con.oid, con.conname
         ORDER BY con.conname
         """,
         (oid, contype),
     )
-    return [{"name": name, "columns": list(cols)} for name, cols in cur.fetchall()]
+    return [
+        {
+            "name": name,
+            "columns": list(columns),
+            "definition": definition,
+            "nulls_not_distinct": bool(nulls_not_distinct),
+            "deferrable": bool(deferrable),
+            "initially_deferred": bool(deferred),
+        }
+        for (
+            name,
+            columns,
+            definition,
+            nulls_not_distinct,
+            deferrable,
+            deferred,
+        ) in cur.fetchall()
+    ]
 
 
 def _foreign_keys(cur: Any, oid: int) -> list[dict[str, Any]]:
@@ -344,7 +385,7 @@ def _unique_indexes(cur: Any, oid: int) -> list[dict[str, Any]]:
     """
     cur.execute(
         """
-        SELECT ic.relname, pg_get_indexdef(i.indexrelid)
+        SELECT ic.relname, pg_get_indexdef(i.indexrelid), i.indnullsnotdistinct
         FROM pg_index i
         JOIN pg_class ic ON ic.oid = i.indexrelid
         WHERE i.indrelid = %s AND i.indisunique
@@ -358,7 +399,14 @@ def _unique_indexes(cur: Any, oid: int) -> list[dict[str, Any]]:
         """,
         (oid,),
     )
-    return [{"name": name, "definition": ddl} for name, ddl in cur.fetchall()]
+    return [
+        {
+            "name": name,
+            "definition": ddl,
+            "nulls_not_distinct": bool(nulls_not_distinct),
+        }
+        for name, ddl, nulls_not_distinct in cur.fetchall()
+    ]
 
 
 def _count(cur: Any, query: sql.Composable) -> int:
@@ -373,13 +421,13 @@ def relation_invariants(
     """Read one relation's key, uniqueness, foreign-key, and NULL invariants."""
     columns = _columns(cur, relation["oid"])
     by_name = {column["name"]: column for column in columns}
-    primary = _constraint_columns(cur, relation["oid"], "p")
+    primary = _key_constraints(cur, relation["oid"], "p")
     role = by_name.get(role_column) if role_column else None
     return {
         "relation": relation["qualified"],
         "relkind": relation["relkind"],
-        "primary_key": primary[0]["columns"] if primary else None,
-        "unique_constraints": _constraint_columns(cur, relation["oid"], "u"),
+        "primary_key": primary[0] if primary else None,
+        "unique_constraints": _key_constraints(cur, relation["oid"], "u"),
         "unique_indexes": _unique_indexes(cur, relation["oid"]),
         "foreign_keys": _foreign_keys(cur, relation["oid"]),
         "not_null_columns": [c["name"] for c in columns if c["not_null"]],
@@ -525,15 +573,29 @@ def _project(row: Row, indexes: Iterable[int]) -> Row:
 
 
 def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, Any]:
-    """Read one snapshot and build the parity and invariant report."""
+    """Read one snapshot and build the parity and invariant report.
+
+    The session state is read back in the first query, and the report states
+    what was read: a connection whose transaction is not read-only and
+    repeatable read raises before any report query runs.
+    """
     if limit < 0:
         raise ValueError("limit must not be negative")
     with conn.cursor() as cur:
         cur.execute(
             "SELECT current_database(), current_setting('server_version_num')::int, "
-            "(SELECT max(version) FROM schema_migrations)"
+            "current_setting('transaction_read_only'), "
+            "current_setting('transaction_isolation')"
         )
-        database, server_version, migration_level = _one(cur)
+        database, server_version, read_only, isolation = _one(cur)
+        if read_only != "on" or isolation != "repeatable read":
+            raise RuntimeError(
+                f"The report needs a read-only, repeatable-read transaction on "
+                f"{database}; transaction_read_only={read_only!r}, "
+                f"transaction_isolation={isolation!r}"
+            )
+        cur.execute("SELECT max(version) FROM schema_migrations")
+        (migration_level,) = _one(cur)
         target = _resolve_relation(cur, target_name)
         target_columns = [column["name"] for column in _columns(cur, target["oid"])]
         missing_required = [
@@ -581,12 +643,14 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
         junction_kind, subtype_id, entity_exists = row[5:]
         compared_row = _project(unified, compared_indexes)
         if entity_exists and unified[2] in expected_by_kind:
-            expected_by_kind[unified[2]][compared_row] += 1
+            attributed_to = unified[2]
+            expected_by_kind[attributed_to][compared_row] += 1
         else:
+            attributed_to = UNATTRIBUTED
             expected_unattributed[compared_row] += 1
         for index, name in enumerate(EXPECTED_COLUMNS):
             if unified[index] is not None:
-                non_null[name][junction_kind] += 1
+                non_null[name][attributed_to] += 1
         detail = (*unified, subtype_id)
         if not entity_exists:
             violations[junction_kind]["subtype_has_no_entity"][detail] += 1
@@ -637,7 +701,9 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
         name: {
             "carried": name in target_columns,
             "expected_non_null": sum(non_null[name].values()),
-            "expected_non_null_by_kind": {kind: non_null[name][kind] for kind in kinds},
+            "expected_non_null_by_kind": {
+                kind: non_null[name][kind] for kind in (*kinds, UNATTRIBUTED)
+            },
         }
         for name in EXPECTED_COLUMNS
     }
@@ -645,9 +711,9 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
     return {
         "schema_version": SCHEMA_VERSION,
         "database": database,
-        "read_only": True,
+        "read_only": read_only == "on",
         "snapshot": {
-            "isolation": "repeatable read",
+            "isolation": isolation,
             "server_version_num": server_version,
             "migration_level": migration_level,
         },
@@ -666,7 +732,6 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
             "extra": _row_block(unattributed_extra, compared, limit),
             "parity": unattributed_parity,
         },
-        "unattributed_target_rows": _row_block(unattributed, compared, limit),
         "invariants": invariants,
         "parity": parity,
         "exit_status": exit_status,
