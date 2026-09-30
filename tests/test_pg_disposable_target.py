@@ -102,6 +102,14 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
         pg_fixtures.seed_entity_tag,
         {"entity_id": 1, "tag": "kin_protector"},
     ),
+    "seed_routine_anchor": (
+        pg_fixtures.seed_routine_anchor,
+        {"character_entity_id": 1, "place_id": 1},
+    ),
+    "seed_pair_tag": (
+        pg_fixtures.seed_pair_tag,
+        {"subject_entity_id": 1, "object_entity_id": 2, "tag": "ally"},
+    ),
     "seed_pending_turn": (
         pg_fixtures.seed_pending_turn,
         {"user_text": "Refused.", "storyteller_text": "Refused."},

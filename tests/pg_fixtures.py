@@ -1078,6 +1078,99 @@ def seed_entity_tag(
     return int(row[0])
 
 
+def seed_routine_anchor(
+    dbname: str,
+    *,
+    character_entity_id: int,
+    place_id: int | None,
+    anchor_type: str = "home",
+    mobility_policy: str = "fixed_place",
+    source: str = "test",
+    schedule: Mapping[str, Any] | None = None,
+) -> int:
+    """Commit one routine anchor for a character entity; return the row ID.
+
+    ``character_routine_anchors`` holds at most one row per
+    ``(character_entity_id, anchor_type)``, so a second anchor of the same
+    type for the same character fails on that unique key. The table's check
+    constraints tie ``mobility_policy`` to its location: ``fixed_place`` needs
+    ``place_id``, and the placeless policies need it NULL. The resolver reads
+    these rows as actor sources and as ``at_routine_anchor`` evidence.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO character_routine_anchors (
+                character_entity_id, anchor_type, place_id,
+                mobility_policy, schedule, source
+            ) VALUES (
+                %s, %s::orrery_routine_anchor_type, %s,
+                %s::orrery_routine_mobility_policy, %s::jsonb, %s
+            )
+            RETURNING id
+            """,
+            (
+                character_entity_id,
+                anchor_type,
+                place_id,
+                mobility_policy,
+                json.dumps(dict(schedule or {})),
+                source,
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0])
+
+
+def seed_pair_tag(
+    dbname: str,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+    source_kind: str = "template",
+    template_id: str | None = None,
+    source_chunk_id: int | None = None,
+) -> int:
+    """Commit one active directed pair tag; return the ``entity_pair_tags`` ID.
+
+    ``tag`` must be a non-deprecated tag from the template's seeded
+    ``pair_tags`` vocabulary; an unknown or deprecated tag fails the row-count
+    assertion instead of inserting nothing. The row is active (``cleared_at``
+    NULL), so the resolver, checkpoints, and ``entity_pair_tags`` readers see
+    it from the next transaction on.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO entity_pair_tags (
+                subject_entity_id, object_entity_id, pair_tag_id,
+                source_kind, template_id, source_chunk_id
+            )
+            SELECT %s, %s, pt.id, %s, %s, %s
+            FROM pair_tags pt
+            WHERE pt.tag = %s AND NOT pt.deprecated
+            RETURNING id
+            """,
+            (
+                subject_entity_id,
+                object_entity_id,
+                source_kind,
+                template_id,
+                source_chunk_id,
+                tag,
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1, f"pair tag {tag!r} is not seeded"
+    return int(row[0])
+
+
 # The TEST provider's registered model id; a fixture turn records it as the
 # model that generated the staged prose, as the TEST seats do.
 FIXTURE_GENERATION_MODEL = "TEST"
