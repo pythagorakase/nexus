@@ -50,19 +50,34 @@ more specific instructions.
   change must prove that no test reaches an owner database, as every #885
   slice does. `tests/dbname_audit.py` records the database named by every
   psycopg2 connection (`psycopg2.connect` however imported, SQLAlchemy and
-  pool connections, and direct `psycopg2.extensions.connection` construction)
-  and every asyncpg connection. psycopg2 targets are recorded from the DSN,
-  URL, or keywords before connecting and from libpq's resolved `dbname`
-  (`conn.info.dbname`) after connecting; asyncpg targets are recorded from the
-  keywords, the DSN, and asyncpg's resolved connection parameters before
-  connecting. The summary lists the targets and ends
-  `dbname audit: owner targets: none`; any `save_NN` or `NEXUS_template`
-  target turns the run into a failure (exit 1) naming each owner target and
-  the test that opened it, even when every test passed. `postgres`,
-  `template0`, and disposable clones are allowed. Child processes are not
-  audited: `pg_dump` and `psql` read `NEXUS_template` when
-  `disposable_slot_database` clones it, and a routed gateway or nested pytest
-  needs its own audit.
+  pool connections, and direct `psycopg2.extensions.connection`
+  construction) and every asyncpg connection. At configure time it swaps
+  the recording subclass into every loaded module that holds the original
+  connection class and rebinds the `__bases__` of each Python-level
+  subclass whose direct base is that class (`psycopg2.extras`
+  `LoggingConnection`, `DictConnection`, `RealDictConnection`,
+  `NamedTupleConnection`, and any other it finds), so a constructor imported
+  before the plugin loaded is audited too. Targets are read from the DSN,
+  URL, or keywords (or `PGDATABASE` when they name neither a database nor a
+  service) before connecting; psycopg2 also records libpq's resolved
+  `dbname` (`conn.info.dbname`) after connecting. A `save_NN` or
+  `NEXUS_template` target is refused at connect time: the call raises
+  `OwnerDatabaseConnectionRefused`, naming the target and the test, before
+  libpq or asyncpg opens a connection (a `dbname` that only a libpq service
+  file supplies is refused just after connecting, with the connection
+  closed). The session summary lists the targets and ends
+  `dbname audit: owner targets: none`; any owner target, even one whose
+  refusal a test caught, also fails the run (exit 1) naming each owner
+  target and the test that named it. `postgres`, `template0`, and disposable
+  clones are allowed. Outside the audit: subprocesses that connect on their
+  own (`pg_dump` and `psql` read `NEXUS_template` when
+  `disposable_slot_database` clones it; a routed gateway or nested pytest
+  needs its own audit), other drivers (psycopg 3, pg8000), and any subclass
+  whose `__bases__` rebind Python refused, with the classes built on it; the
+  summary lists each refused class as `unaudited connection classes`
+  (`psycopg2.extensions.ReplicationConnection`, a C type, is one). The AST
+  owner-target guard planned for #885 slice B2-9b covers the owner literals
+  those paths would need.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 

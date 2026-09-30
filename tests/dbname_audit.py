@@ -1,4 +1,4 @@
-"""Opt-in pytest plugin that fails a session which connects to an owner database.
+"""Opt-in pytest plugin that refuses and fails owner-database connections.
 
 Load it with ``-p tests.dbname_audit``, or set ``NEXUS_DBNAME_AUDIT=1`` before
 pytest starts (``tests/conftest.py`` reads the variable once and loads this
@@ -9,25 +9,51 @@ connection this pytest process attempts:
   before the plugin loaded, SQLAlchemy engines, and ``psycopg2.pool``, through
   ``psycopg2._connect``, which ``connect`` resolves at call time; and direct
   construction of ``psycopg2.extensions.connection``, which bypasses
-  ``connect``. The ``dbname`` in the DSN string, URL, or keywords is recorded
-  before connecting, and libpq's resolved ``dbname`` (``conn.info.dbname``,
-  a client-side value, not one the server reports) after connecting.
+  ``connect``. At configure time the plugin replaces that class with a
+  recording subclass in every loaded module that holds it (a constructor
+  imported before the plugin loaded included) and rebinds ``__bases__`` of
+  each Python-level subclass whose direct base is the original class
+  (``psycopg2.extras.LoggingConnection``, ``DictConnection``,
+  ``RealDictConnection``, ``NamedTupleConnection``, and any other it finds)
+  to the recording subclass. The ``dbname`` in the DSN string, URL, or
+  keywords (or ``PGDATABASE`` when they name neither a database nor a
+  service) is recorded before
+  connecting, and libpq's resolved ``dbname`` (``conn.info.dbname``, a
+  client-side value, not one the server reports) after connecting.
 - asyncpg: every ``asyncpg.connect``, pool, and SQLAlchemy asyncpg connection,
   through ``asyncpg.connect_utils._parse_connect_arguments``. The ``database``
   keyword, the DSN, and asyncpg's resolved connection parameters are recorded
-  before connecting; nothing is recorded after the socket opens.
+  before any socket opens.
 
-At session end the plugin lists every target and **fails the run** (exit
-status 1, whatever the tests did) when any target is ``NEXUS_template`` or a
-save slot (``save_NN``). ``postgres``, ``template0``, and disposable databases
-are allowed. Child processes are not audited: ``pg_dump``, ``psql``, a routed
-gateway, and a nested pytest each need their own audit.
+An owner target is ``NEXUS_template`` or a save slot (``save_NN``);
+``postgres``, ``template0``, and disposable databases are allowed. The plugin
+refuses an owner target at connect time: it raises
+``OwnerDatabaseConnectionRefused``, naming the target and the test, before
+libpq or asyncpg opens a connection. A ``dbname`` that only a libpq service
+file supplies is known only after libpq connects; the plugin then closes that
+connection at once and raises the same refusal. At session end the plugin
+lists every target and **fails the run** (exit status 1, whatever the tests
+did) when any target is an owner database, so a refusal that a test caught
+and ignored still fails the session.
+
+Outside the audit: a subprocess that connects on its own (``pg_dump``,
+``psql``, a routed gateway, a nested pytest; each needs its own audit), any
+other driver (psycopg 3, pg8000, ``ctypes`` into libpq), and any subclass
+whose ``__bases__`` rebind Python refused, with every class built on it;
+the summary names each refused class as unaudited
+(``psycopg2.extensions.ReplicationConnection``, a C type that
+``LogicalReplicationConnection`` and ``PhysicalReplicationConnection``
+extend, is one).
+The AST owner-target guard planned for #885 slice B2-9b covers the owner
+literals those paths would need.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import sys
+import types
 from collections.abc import Callable
 from typing import Any
 
@@ -42,6 +68,21 @@ _OUTSIDE_TESTS = "<outside a test>"
 _TARGETS: dict[str, dict[str, set[str]]] = {}
 _current_node = _OUTSIDE_TESTS
 _restore: list[Callable[[], None]] = []
+# Qualified names of connection subclasses whose ``__bases__`` rebind failed.
+_UNAUDITED: list[str] = []
+
+
+class OwnerDatabaseConnectionRefused(RuntimeError):
+    """A connection named an owner database while the audit was active."""
+
+    def __init__(self, target: str, driver: str, node: str) -> None:
+        self.target = target
+        self.driver = driver
+        self.node = node
+        super().__init__(
+            f"dbname audit: refused a {driver} connection to owner database "
+            f"{target!r} from {node}; tests connect only to disposable databases"
+        )
 
 
 def is_owner_target(dbname: str) -> bool:
@@ -72,6 +113,12 @@ def owner_targets() -> dict[str, frozenset[str]]:
     }
 
 
+def unaudited() -> tuple[str, ...]:
+    """Return the connection subclasses whose ``__bases__`` rebind failed."""
+
+    return tuple(_UNAUDITED)
+
+
 def _record(dbname: str | None, driver: str) -> None:
     if not dbname:
         return
@@ -80,8 +127,33 @@ def _record(dbname: str | None, driver: str) -> None:
     entry["nodes"].add(_current_node)
 
 
+def _admit(names: list[str | None], driver: str) -> None:
+    """Record every name, then refuse the first owner target among them."""
+
+    for name in names:
+        _record(name, driver)
+    for name in names:
+        if name and is_owner_target(name):
+            raise OwnerDatabaseConnectionRefused(name, driver, _current_node)
+
+
+def _admit_open(conn: Any, driver: str) -> None:
+    """Record an open psycopg2 connection's database; close and refuse owners."""
+
+    name = _connected_dbname(conn)
+    _record(name, driver)
+    if name and is_owner_target(name):
+        conn.close()
+        raise OwnerDatabaseConnectionRefused(name, driver, _current_node)
+
+
 def _dsn_dbname(dsn: Any) -> str | None:
-    """Return the database a libpq DSN string or URL names, if it names one."""
+    """Return the database a libpq DSN string or URL names, if it names one.
+
+    A DSN that names no database and no service connects to ``PGDATABASE``
+    when it is set. A service file's ``dbname`` outranks ``PGDATABASE``, so a
+    service leaves the name to the check after connecting.
+    """
 
     import psycopg2
     from psycopg2.extensions import parse_dsn
@@ -94,6 +166,8 @@ def _dsn_dbname(dsn: Any) -> str | None:
         # The driver rejects the same string itself; nothing is opened.
         return None
     name = parsed.get("dbname")
+    if not name and not (parsed.get("service") or os.environ.get("PGSERVICE")):
+        name = os.environ.get("PGDATABASE")
     return str(name) if name else None
 
 
@@ -104,9 +178,73 @@ def _connected_dbname(conn: Any) -> str | None:
     return getattr(info, "dbname", None)
 
 
+def _constructor_label(cls: type, audited: type) -> str:
+    """Name the driver path for a direct construction of ``cls``."""
+
+    if cls is audited:
+        return "psycopg2.extensions.connection"
+    return f"psycopg2.extensions.connection ({cls.__module__}.{cls.__qualname__})"
+
+
+def _loaded_modules() -> list[types.ModuleType]:
+    return [
+        module
+        for module in list(sys.modules.values())
+        if isinstance(module, types.ModuleType)
+    ]
+
+
+def _sweep_constructors(original_class: type, audited_class: type) -> None:
+    """Route every loaded reference to ``original_class`` through the recorder.
+
+    Module attributes that are the original class are replaced; each direct
+    subclass (from ``__subclasses__`` and from loaded modules) has its
+    ``__bases__`` rebound. A refused rebind names the class in ``_UNAUDITED``.
+    """
+
+    replaced: list[tuple[types.ModuleType, str]] = []
+    subclasses: dict[int, type] = {
+        id(cls): cls for cls in original_class.__subclasses__()
+    }
+    for module in _loaded_modules():
+        for name, value in list(vars(module).items()):
+            if value is original_class:
+                setattr(module, name, audited_class)
+                replaced.append((module, name))
+            elif isinstance(value, type) and original_class in value.__bases__:
+                subclasses[id(value)] = value
+
+    rebound: list[tuple[type, tuple[type, ...]]] = []
+    for cls in subclasses.values():
+        if cls is audited_class:
+            continue
+        bases = cls.__bases__
+        try:
+            cls.__bases__ = tuple(
+                audited_class if base is original_class else base for base in bases
+            )
+        except TypeError:
+            pass
+        if audited_class in cls.__mro__:
+            rebound.append((cls, bases))
+        else:
+            _UNAUDITED.append(f"{cls.__module__}.{cls.__qualname__}")
+
+    def restore() -> None:
+        for cls, bases in rebound:
+            cls.__bases__ = bases
+        for module, name in replaced:
+            if vars(module).get(name) is audited_class:
+                setattr(module, name, original_class)
+        _UNAUDITED.clear()
+
+    _restore.append(restore)
+
+
 def _install_psycopg2() -> None:
     import psycopg2
     import psycopg2.extensions
+    import psycopg2.extras  # noqa: F401  (its subclasses join the sweep)
     from psycopg2 import _psycopg
 
     # Typed as Any: the hooks replace private attributes the stubs omit.
@@ -121,9 +259,9 @@ def _install_psycopg2() -> None:
         )
 
     def audited_connect(dsn: Any, *args: Any, **kwargs: Any) -> Any:
-        _record(_dsn_dbname(dsn), "psycopg2")
+        _admit([_dsn_dbname(dsn)], "psycopg2")
         conn = original_connect(dsn, *args, **kwargs)
-        _record(_connected_dbname(conn), "psycopg2")
+        _admit_open(conn, "psycopg2")
         return conn
 
     original_class: Any = extensions.connection
@@ -142,28 +280,31 @@ def _install_psycopg2() -> None:
             return type.__subclasscheck__(cls, subclass)
 
     class AuditedConnection(original_class, metaclass=_AuditedConnectionType):
-        """``psycopg2.extensions.connection`` that records its target."""
+        """``psycopg2.extensions.connection`` that records and refuses targets."""
+
+        # No instance dict: the layout matches the original class, so Python
+        # accepts this class as the rebound base of existing subclasses.
+        __slots__ = ()
 
         def __init__(self, dsn: Any, *args: Any, **kwargs: Any) -> None:
-            _record(_dsn_dbname(dsn), "psycopg2.extensions.connection")
+            label = _constructor_label(type(self), AuditedConnection)
+            _admit([_dsn_dbname(dsn)], label)
             super().__init__(dsn, *args, **kwargs)
-            _record(_connected_dbname(self), "psycopg2.extensions.connection")
+            _admit_open(self, label)
 
     AuditedConnection.__name__ = original_class.__name__
     AuditedConnection.__qualname__ = original_class.__qualname__
 
     package._connect = audited_connect
     c_module._connect = audited_connect
-    extensions.connection = AuditedConnection
-    c_module.connection = AuditedConnection
 
     def restore() -> None:
         package._connect = original_connect
         c_module._connect = original_connect
-        extensions.connection = original_class
-        c_module.connection = original_class
 
     _restore.append(restore)
+    # Replaces extensions.connection and _psycopg.connection with the rest.
+    _sweep_constructors(original_class, AuditedConnection)
 
 
 def _install_asyncpg() -> None:
@@ -177,12 +318,11 @@ def _install_asyncpg() -> None:
         )
 
     def audited_parse(*args: Any, **kwargs: Any) -> Any:
-        _record(kwargs.get("database"), "asyncpg")
         dsn = kwargs.get("dsn")
-        if dsn:
-            _record(_dsn_dbname(dsn), "asyncpg")
+        _admit([kwargs.get("database"), _dsn_dbname(dsn) if dsn else None], "asyncpg")
         result = original_parse(*args, **kwargs)
-        _record(getattr(result[1], "database", None), "asyncpg")
+        # Resolved parameters; asyncpg opens its socket only after this returns.
+        _admit([getattr(result[1], "database", None)], "asyncpg")
         return result
 
     connect_utils._parse_connect_arguments = audited_parse
@@ -238,7 +378,11 @@ def _collapsed_targets() -> list[str]:
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Fail the run when any recorded target is an owner database."""
+    """Fail the run when any recorded target is an owner database.
+
+    The connect-time refusal already failed the test that named it unless the
+    test caught the exception; this keeps the session failed either way.
+    """
 
     if owner_targets() and session.exitstatus == pytest.ExitCode.OK:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
@@ -251,6 +395,11 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
         f"dbname audit: {len(_TARGETS)} targets: "
         + (", ".join(_collapsed_targets()) or "none")
     )
+    if _UNAUDITED:
+        terminalreporter.write_line(
+            "dbname audit: unaudited connection classes: "
+            + ", ".join(sorted(_UNAUDITED))
+        )
     owners = owner_targets()
     if not owners:
         terminalreporter.write_line("dbname audit: owner targets: none")
