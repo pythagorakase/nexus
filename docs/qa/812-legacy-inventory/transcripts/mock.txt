@@ -1,0 +1,171 @@
+-- First statement of the session: the session is read-only.
+SHOW default_transaction_read_only;
+ default_transaction_read_only 
+-------------------------------
+ on
+(1 row)
+
+SELECT current_database() AS database, now() AS snapshot_at;
+ database |         snapshot_at         
+----------+-----------------------------
+ mock     | 2026-09-30 12:40:09.2883-04
+(1 row)
+
+-- Tables, row counts and total relation size.
+SELECT t.table_name, t.row_count,
+       pg_total_relation_size(('public.' || t.table_name)::regclass) AS total_bytes,
+       pg_size_pretty(pg_total_relation_size(('public.' || t.table_name)::regclass)) AS total_size
+FROM (
+    SELECT 'chunk_embeddings_0384d' AS table_name, (SELECT count(*) FROM public.chunk_embeddings_0384d) AS row_count
+    UNION ALL SELECT 'chunk_embeddings_1024d' AS table_name, (SELECT count(*) FROM public.chunk_embeddings_1024d) AS row_count
+    UNION ALL SELECT 'chunk_embeddings_1536d' AS table_name, (SELECT count(*) FROM public.chunk_embeddings_1536d) AS row_count
+) t
+ORDER BY 1;
+       table_name       | row_count | total_bytes | total_size 
+------------------------+-----------+-------------+------------
+ chunk_embeddings_0384d |         0 |       24576 | 24 kB
+ chunk_embeddings_1024d |         0 |       57344 | 56 kB
+ chunk_embeddings_1536d |         0 |       57344 | 56 kB
+(3 rows)
+
+-- Rows per model in chunk_embeddings_0384d (embedding type character varying).
+SELECT model, count(*) AS rows, count(DISTINCT chunk_id) AS distinct_chunk_ids, min(created_at) AS earliest_created_at, max(created_at) AS latest_created_at
+FROM public.chunk_embeddings_0384d GROUP BY model ORDER BY model;
+ model | rows | distinct_chunk_ids | earliest_created_at | latest_created_at 
+-------+------+--------------------+---------------------+-------------------
+(0 rows)
+
+-- Two generations in chunk_embeddings_0384d: rows grouped by registry family (entry key and remote_path are one model).
+WITH registry(alias, family) AS (VALUES
+        ('bge-large', 'bge-large'), ('BAAI/bge-large-en', 'bge-large'), ('e5-large', 'e5-large'), ('intfloat/e5-large-v2', 'e5-large'), ('bge-small-custom', 'bge-small-custom'), ('inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('infly/inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen/Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen/Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen/Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen/Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8'), ('Octen/Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8')
+),
+tagged AS (
+    SELECT e.chunk_id AS item_id, e.model,
+           coalesce(r.family, e.model) AS family,
+           e.embedding::text AS vec
+    FROM public.chunk_embeddings_0384d e LEFT JOIN registry r ON r.alias = e.model
+),
+per_item AS (
+    SELECT family, item_id, count(*) AS n,
+           count(DISTINCT vec) AS distinct_vectors
+    FROM tagged GROUP BY family, item_id
+)
+SELECT p.family,
+       (SELECT string_agg(DISTINCT t2.model, ', ') FROM tagged t2
+        WHERE t2.family = p.family) AS model_names,
+       count(*) AS chunk_ids,
+       count(*) FILTER (WHERE n > 1) AS chunk_ids_with_multiple_rows,
+       count(*) FILTER (WHERE distinct_vectors > 1) AS chunk_ids_whose_vectors_differ
+FROM per_item p GROUP BY p.family ORDER BY p.family;
+ family | model_names | chunk_ids | chunk_ids_with_multiple_rows | chunk_ids_whose_vectors_differ 
+--------+-------------+-----------+------------------------------+--------------------------------
+(0 rows)
+
+-- Rows per model in chunk_embeddings_1024d (embedding type vector(1024)).
+SELECT model, count(*) AS rows, count(DISTINCT chunk_id) AS distinct_chunk_ids, min(created_at) AS earliest_created_at, max(created_at) AS latest_created_at
+FROM public.chunk_embeddings_1024d GROUP BY model ORDER BY model;
+ model | rows | distinct_chunk_ids | earliest_created_at | latest_created_at 
+-------+------+--------------------+---------------------+-------------------
+(0 rows)
+
+-- Two generations in chunk_embeddings_1024d: rows grouped by registry family (entry key and remote_path are one model).
+WITH registry(alias, family) AS (VALUES
+        ('bge-large', 'bge-large'), ('BAAI/bge-large-en', 'bge-large'), ('e5-large', 'e5-large'), ('intfloat/e5-large-v2', 'e5-large'), ('bge-small-custom', 'bge-small-custom'), ('inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('infly/inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen/Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen/Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen/Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen/Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8'), ('Octen/Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8')
+),
+tagged AS (
+    SELECT e.chunk_id AS item_id, e.model,
+           coalesce(r.family, e.model) AS family,
+           e.embedding::text AS vec
+    FROM public.chunk_embeddings_1024d e LEFT JOIN registry r ON r.alias = e.model
+),
+per_item AS (
+    SELECT family, item_id, count(*) AS n,
+           count(DISTINCT vec) AS distinct_vectors
+    FROM tagged GROUP BY family, item_id
+)
+SELECT p.family,
+       (SELECT string_agg(DISTINCT t2.model, ', ') FROM tagged t2
+        WHERE t2.family = p.family) AS model_names,
+       count(*) AS chunk_ids,
+       count(*) FILTER (WHERE n > 1) AS chunk_ids_with_multiple_rows,
+       count(*) FILTER (WHERE distinct_vectors > 1) AS chunk_ids_whose_vectors_differ
+FROM per_item p GROUP BY p.family ORDER BY p.family;
+ family | model_names | chunk_ids | chunk_ids_with_multiple_rows | chunk_ids_whose_vectors_differ 
+--------+-------------+-----------+------------------------------+--------------------------------
+(0 rows)
+
+-- Cosine distance between the two generations in chunk_embeddings_1024d (pairs only; no rows means one generation).
+WITH registry(alias, family) AS (VALUES
+        ('bge-large', 'bge-large'), ('BAAI/bge-large-en', 'bge-large'), ('e5-large', 'e5-large'), ('intfloat/e5-large-v2', 'e5-large'), ('bge-small-custom', 'bge-small-custom'), ('inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('infly/inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen/Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen/Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen/Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen/Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8'), ('Octen/Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8')
+),
+tagged AS (
+    SELECT e.chunk_id AS item_id, e.model, e.embedding,
+           coalesce(r.family, e.model) AS family
+    FROM public.chunk_embeddings_1024d e LEFT JOIN registry r ON r.alias = e.model
+)
+SELECT a.family, a.model AS model_a, b.model AS model_b,
+       count(*) AS pairs,
+       round(min(a.embedding <=> b.embedding)::numeric, 6) AS min_cosine_distance,
+       round(avg(a.embedding <=> b.embedding)::numeric, 6) AS avg_cosine_distance,
+       round(max(a.embedding <=> b.embedding)::numeric, 6) AS max_cosine_distance
+FROM tagged a JOIN tagged b
+  ON a.item_id = b.item_id AND a.family = b.family AND a.model < b.model
+GROUP BY 1, 2, 3 ORDER BY 1, 2, 3;
+ family | model_a | model_b | pairs | min_cosine_distance | avg_cosine_distance | max_cosine_distance 
+--------+---------+---------+-------+---------------------+---------------------+---------------------
+(0 rows)
+
+-- Rows per model in chunk_embeddings_1536d (embedding type vector(1536)).
+SELECT model, count(*) AS rows, count(DISTINCT chunk_id) AS distinct_chunk_ids, min(created_at) AS earliest_created_at, max(created_at) AS latest_created_at
+FROM public.chunk_embeddings_1536d GROUP BY model ORDER BY model;
+ model | rows | distinct_chunk_ids | earliest_created_at | latest_created_at 
+-------+------+--------------------+---------------------+-------------------
+(0 rows)
+
+-- Two generations in chunk_embeddings_1536d: rows grouped by registry family (entry key and remote_path are one model).
+WITH registry(alias, family) AS (VALUES
+        ('bge-large', 'bge-large'), ('BAAI/bge-large-en', 'bge-large'), ('e5-large', 'e5-large'), ('intfloat/e5-large-v2', 'e5-large'), ('bge-small-custom', 'bge-small-custom'), ('inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('infly/inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen/Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen/Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen/Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen/Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8'), ('Octen/Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8')
+),
+tagged AS (
+    SELECT e.chunk_id AS item_id, e.model,
+           coalesce(r.family, e.model) AS family,
+           e.embedding::text AS vec
+    FROM public.chunk_embeddings_1536d e LEFT JOIN registry r ON r.alias = e.model
+),
+per_item AS (
+    SELECT family, item_id, count(*) AS n,
+           count(DISTINCT vec) AS distinct_vectors
+    FROM tagged GROUP BY family, item_id
+)
+SELECT p.family,
+       (SELECT string_agg(DISTINCT t2.model, ', ') FROM tagged t2
+        WHERE t2.family = p.family) AS model_names,
+       count(*) AS chunk_ids,
+       count(*) FILTER (WHERE n > 1) AS chunk_ids_with_multiple_rows,
+       count(*) FILTER (WHERE distinct_vectors > 1) AS chunk_ids_whose_vectors_differ
+FROM per_item p GROUP BY p.family ORDER BY p.family;
+ family | model_names | chunk_ids | chunk_ids_with_multiple_rows | chunk_ids_whose_vectors_differ 
+--------+-------------+-----------+------------------------------+--------------------------------
+(0 rows)
+
+-- Cosine distance between the two generations in chunk_embeddings_1536d (pairs only; no rows means one generation).
+WITH registry(alias, family) AS (VALUES
+        ('bge-large', 'bge-large'), ('BAAI/bge-large-en', 'bge-large'), ('e5-large', 'e5-large'), ('intfloat/e5-large-v2', 'e5-large'), ('bge-small-custom', 'bge-small-custom'), ('inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('infly/inf-retriever-v1-1.5b', 'inf-retriever-v1-1.5b'), ('Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen/Octen-Embedding-0.6B', 'Octen-Embedding-0.6B'), ('Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen/Octen-Embedding-4B', 'Octen-Embedding-4B'), ('Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen/Octen-Embedding-4B-INT8', 'Octen-Embedding-4B-INT8'), ('Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen/Octen-Embedding-8B', 'Octen-Embedding-8B'), ('Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8'), ('Octen/Octen-Embedding-8B-INT8', 'Octen-Embedding-8B-INT8')
+),
+tagged AS (
+    SELECT e.chunk_id AS item_id, e.model, e.embedding,
+           coalesce(r.family, e.model) AS family
+    FROM public.chunk_embeddings_1536d e LEFT JOIN registry r ON r.alias = e.model
+)
+SELECT a.family, a.model AS model_a, b.model AS model_b,
+       count(*) AS pairs,
+       round(min(a.embedding <=> b.embedding)::numeric, 6) AS min_cosine_distance,
+       round(avg(a.embedding <=> b.embedding)::numeric, 6) AS avg_cosine_distance,
+       round(max(a.embedding <=> b.embedding)::numeric, 6) AS max_cosine_distance
+FROM tagged a JOIN tagged b
+  ON a.item_id = b.item_id AND a.family = b.family AND a.model < b.model
+GROUP BY 1, 2, 3 ORDER BY 1, 2, 3;
+ family | model_a | model_b | pairs | min_cosine_distance | avg_cosine_distance | max_cosine_distance 
+--------+---------+---------+-------+---------------------+---------------------+---------------------
+(0 rows)
+
