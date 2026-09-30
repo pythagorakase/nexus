@@ -1,14 +1,21 @@
-"""Tests for faction table migration dry-run audit helpers."""
+"""Tests for faction table migration dry-run audit helpers.
+
+The PostgreSQL tests run on a module-scoped disposable template clone that
+carries one faction with legacy tags in two migration-043 deprecated
+categories, routed under ``ROUTED_SLOT`` while each of them runs (the CLI and
+``db_pool`` resolve the slot themselves); no owner slot is read or written.
+The remaining tests use fake cursors and never connect.
+"""
 
 from __future__ import annotations
 
 from argparse import Namespace
+from collections.abc import Iterator
 from dataclasses import asdict
 from decimal import Decimal
 import json
-from typing import Any
+from typing import Any, NamedTuple
 
-import psycopg2  # type: ignore[import-untyped]
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 import pytest
 
@@ -26,10 +33,63 @@ from nexus.api.faction_table_audit import (
     build_faction_migration_manifest,
     build_faction_table_audit,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_faction,
+    seed_legacy_faction_tag,
+)
 
 
-TEST_DBNAME = "save_02"
+# The slot the PostgreSQL tests route to the clone; the CLI resolves it.
+ROUTED_SLOT = 2
+# A manifest source label for fake-cursor tests, which never connect.
+FAKE_MANIFEST_DBNAME = "fixture_manifest_db"
+# The legacy tags the clone's faction carries, by migration-043 category.
+SEEDED_LEGACY_TAGS = {
+    "legitimacy_status": "gray_legal",
+    "operational_secrecy": "cellular_clandestine",
+}
+
+
+class FactionAuditDatabase(NamedTuple):
+    """The clone and the faction whose legacy tags it seeded."""
+
+    dbname: str
+    faction_id: int
+    faction_entity_id: int
+
+
+@pytest.fixture(scope="module")
+def faction_audit_db() -> Iterator[FactionAuditDatabase]:
+    """A clone with one faction carrying a legacy tag in two categories."""
+
+    with disposable_slot_database("qa885_faction_audit") as dbname:
+        faction_id, faction_entity_id = seed_faction(dbname, name="Faction Audit Guild")
+        for category, tag in SEEDED_LEGACY_TAGS.items():
+            seed_legacy_faction_tag(
+                dbname,
+                faction_entity_id=faction_entity_id,
+                category=category,
+                tag=tag,
+            )
+        yield FactionAuditDatabase(dbname, faction_id, faction_entity_id)
+
+
+@pytest.fixture()
+def routed_faction_db(
+    faction_audit_db: FactionAuditDatabase, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[FactionAuditDatabase]:
+    """Route ``ROUTED_SLOT`` to the clone for one test and close its pool."""
+
+    route_slot_to_disposable(
+        monkeypatch.setattr, slot=ROUTED_SLOT, dbname=faction_audit_db.dbname
+    )
+    try:
+        yield faction_audit_db
+    finally:
+        close_pool(faction_audit_db.dbname)
 
 
 class FactionApplyCursor:
@@ -264,7 +324,7 @@ def _apply_manifest(operations: list[dict[str, Any]]) -> dict[str, Any]:
         "schema_version": FACTION_MANIFEST_SCHEMA_VERSION,
         "dry_run": True,
         "operations": operations,
-        "source": {"slot": 2, "dbname": "save_02"},
+        "source": {"slot": 2, "dbname": FAKE_MANIFEST_DBNAME},
     }
 
 
@@ -292,16 +352,14 @@ def _ready_entity_tag_manifest(
     )
 
 
-def _slot2_faction_audit() -> dict[str, Any]:
+def _routed_faction_audit(dbname: str) -> dict[str, Any]:
     try:
-        with get_connection(TEST_DBNAME, dict_cursor=True) as conn:
+        with get_connection(dbname, dict_cursor=True) as conn:
             with conn.cursor() as cur:
                 cur.execute("SET TRANSACTION READ ONLY")
                 return build_faction_table_audit(cur)
-    except psycopg2.Error as exc:
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
     finally:
-        close_pool(TEST_DBNAME)
+        close_pool(dbname)
 
 
 def test_audit_faction_row_flags_network_resource_ambiguity() -> None:
@@ -434,10 +492,12 @@ def test_missing_unknown_faction_column_type_fails_loudly() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_build_faction_table_audit_reads_slot2_legacy_tag_categories() -> None:
-    """The audit should cover every legacy faction category present in slot 2."""
+def test_build_faction_table_audit_reads_legacy_tag_categories(
+    routed_faction_db: FactionAuditDatabase,
+) -> None:
+    """The audit should cover every legacy faction category the save holds."""
 
-    audit = _slot2_faction_audit()
+    audit = _routed_faction_audit(routed_faction_db.dbname)
     counters = audit["counters"]
     factions = audit["factions"]
     legacy_categories = {
@@ -457,6 +517,14 @@ def test_build_faction_table_audit_reads_slot2_legacy_tag_categories() -> None:
     assert "state" not in legacy_categories
     for category in legacy_categories:
         assert f"entity_tags_current.{category}" in candidate_sources
+    # The seeded legacy tags make every assertion above bite.
+    assert legacy_categories == set(SEEDED_LEGACY_TAGS)
+    assert counters["legacy_tag_rows"] == len(SEEDED_LEGACY_TAGS)
+    assert {
+        (tag["category"], tag["tag"])
+        for faction in factions
+        for tag in faction["legacy_tags"]
+    } == set(SEEDED_LEGACY_TAGS.items())
 
 
 def test_operational_secrecy_hidden_maps_to_operational_mode_covert() -> None:
@@ -619,19 +687,16 @@ def test_history_class_is_explicit_no_replacement() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_cli_faction_audit_returns_live_slot2_payload() -> None:
-    """The faction audit CLI should resolve slot 2 against the real database."""
+def test_cli_faction_audit_returns_routed_slot_payload(
+    routed_faction_db: FactionAuditDatabase,
+) -> None:
+    """The faction audit CLI should resolve its slot against the real database."""
 
-    try:
-        result = cli.run_faction_audit(Namespace(slot=2))
-    except psycopg2.Error as exc:
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
-    finally:
-        close_pool(TEST_DBNAME)
+    result = cli.run_faction_audit(Namespace(slot=ROUTED_SLOT))
 
     assert result["success"] is True
-    assert result["slot"] == 2
-    assert result["dbname"] == "save_02"
+    assert result["slot"] == ROUTED_SLOT
+    assert result["dbname"] == routed_faction_db.dbname
     assert result["faction_audit"]["dry_run"] is True
     assert result["faction_audit"]["counters"]["factions_scanned"] >= 1
 
@@ -736,7 +801,7 @@ def test_faction_migration_manifest_classifies_operations() -> None:
     manifest = build_faction_migration_manifest(
         audit,
         slot=2,
-        dbname="save_02",
+        dbname=FAKE_MANIFEST_DBNAME,
     )
     operation_types = {
         operation["operation_type"] for operation in manifest["operations"]
@@ -809,7 +874,7 @@ def test_manifest_requires_entity_id_for_ready_entity_tag_operations() -> None:
     manifest = build_faction_migration_manifest(
         audit,
         slot=2,
-        dbname="save_02",
+        dbname=FAKE_MANIFEST_DBNAME,
     )
 
     assert manifest["counters"]["ready_operations"] == 0
@@ -938,7 +1003,7 @@ def test_cli_faction_apply_rejects_manifest_slot_mismatch(tmp_path) -> None:
 
     manifest_path = tmp_path / "manifest.json"
     manifest = _ready_entity_tag_manifest()
-    manifest["source"] = {"slot": 5, "dbname": "save_05"}
+    manifest["source"] = {"slot": 5, "dbname": FAKE_MANIFEST_DBNAME}
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     result = cli.run_faction_apply(
@@ -959,14 +1024,13 @@ def test_cli_faction_apply_rejects_manifest_slot_mismatch(tmp_path) -> None:
 
 
 @pytest.mark.requires_postgres
-def test_live_faction_apply_execute_inserts_and_rolls_back() -> None:
+def test_live_faction_apply_execute_inserts_and_rolls_back(
+    routed_faction_db: FactionAuditDatabase,
+) -> None:
     """The execute path should hit real FK, enum, and ON CONFLICT behavior."""
 
-    conn = None
-    try:
-        conn = psycopg2.connect(get_slot_db_url(dbname=TEST_DBNAME))
-    except psycopg2.Error as exc:
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    dbname = routed_faction_db.dbname
+    conn = connect(dbname)
 
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -981,8 +1045,8 @@ def test_live_faction_apply_execute_inserts_and_rolls_back() -> None:
                 """
             )
             faction = cur.fetchone()
-            if faction is None:
-                pytest.skip(f"{TEST_DBNAME} has no faction entity to target")
+            assert faction is not None, f"{dbname} has no faction entity to target"
+            assert faction["entity_id"] == routed_faction_db.faction_entity_id
 
             entity_id = int(faction["entity_id"])
             cur.execute(
@@ -1021,8 +1085,7 @@ def test_live_faction_apply_execute_inserts_and_rolls_back() -> None:
                 """
             )
             tag_row = cur.fetchone()
-            if tag_row is None:
-                pytest.skip(f"{TEST_DBNAME} could not seed rollback-scoped test tag")
+            assert tag_row is not None, f"{dbname} could not seed the test tag"
             cur.execute(
                 """
                 DELETE FROM entity_tags
@@ -1037,7 +1100,7 @@ def test_live_faction_apply_execute_inserts_and_rolls_back() -> None:
                 category=str(tag_row["category"]),
                 tag=str(tag_row["tag"]),
             )
-            manifest["source"] = {"slot": 2, "dbname": TEST_DBNAME}
+            manifest["source"] = {"slot": ROUTED_SLOT, "dbname": dbname}
 
             result = apply_faction_migration_manifest(cur, manifest, dry_run=False)
 
@@ -1058,9 +1121,8 @@ def test_live_faction_apply_execute_inserts_and_rolls_back() -> None:
             assert inserted is not None
             assert inserted["source_kind"] == "system"
     finally:
-        if conn is not None:
-            conn.rollback()
-            conn.close()
+        conn.rollback()
+        conn.close()
 
 
 def test_cli_prints_faction_manifest_summary(capsys) -> None:
