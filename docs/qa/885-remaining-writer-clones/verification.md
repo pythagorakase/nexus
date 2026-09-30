@@ -74,7 +74,9 @@ UNION ALL SELECT 'orrery_resolutions', count(*) FROM orrery_resolutions
 UNION ALL SELECT 'orrery_adjudication_log', count(*) FROM orrery_adjudication_log;
 ```
 
-Taken directly before the slice's PostgreSQL gate (2026-09-30T04:25:42Z) and directly after its live-flag gate (2026-09-30T04:26:16Z); `diff` of the two outputs is empty. `NULL` is a sequence never called.
+The tables below are the final-HEAD pair. They were taken on the tree of the commit that records them (`b1329e21` plus the retrieval-coverage test rename, which changes a test id only): `snapshot.sh` at 2026-09-30T04:58:28Z, then `gate.sh pg`, then `gate.sh live`, then `snapshot.sh` at 2026-09-30T04:59:03Z. The `diff` of the two outputs is empty. The two gate tails are under Review Fixes. `NULL` is a sequence never called.
+
+An earlier pair bracketed the same two gates on the pre-review tree (`0b35fbb7`, recorded in `26719199`): 2026-09-30T04:25:42Z before and 04:26:16Z after, with an empty `diff`. Between the two pairs, some owner sequences advanced outside both brackets (for example `save_02` `orrery_resolutions_id_seq` 7353 to 7374 and `NEXUS_template` `entities_id_seq` 2568 to 2577), and no row count changed. This slice's own directory gates ran in that interval, and they include modules that other slices still own and that the audit shows targeting `save_02` and `save_05`. Other builders also ran PostgreSQL suites concurrently. So the pairs are compared only within each bracket, never across brackets.
 
 ### save_02
 
@@ -95,16 +97,16 @@ Taken directly before the slice's PostgreSQL gate (2026-09-30T04:25:42Z) and dir
 | `character_experience_jobs_id_seq` | NULL | NULL |
 | `character_experiences_id_seq` | NULL | NULL |
 | `character_identity_rulings_id_seq` | NULL | NULL |
-| `character_project_states_id_seq` | 3444 | 3444 |
+| `character_project_states_id_seq` | 3454 | 3454 |
 | `character_relationships_id_seq` | 7 | 7 |
 | `character_routine_anchors_id_seq` | NULL | NULL |
 | `characters_id_seq` | 101 | 101 |
-| `chunk_metadata_id_seq` | 8672 | 8672 |
+| `chunk_metadata_id_seq` | 8682 | 8682 |
 | `claim_awareness_id_seq` | 1044 | 1044 |
 | `claims_id_seq` | 475 | 475 |
 | `correspondence_compaction_jobs_id_seq` | NULL | NULL |
 | `entities_id_seq` | 561 | 561 |
-| `entity_pair_tags_id_seq` | 3525 | 3525 |
+| `entity_pair_tags_id_seq` | 3528 | 3528 |
 | `entity_tags_id_seq` | 1157 | 1157 |
 | `generation_session_phases_id_seq` | NULL | NULL |
 | `interaction_authorizations_id_seq` | NULL | NULL |
@@ -116,22 +118,22 @@ Taken directly before the slice's PostgreSQL gate (2026-09-30T04:25:42Z) and dir
 | `narrative_embedding_jobs_id_seq` | NULL | NULL |
 | `narrative_summary_jobs_id_seq` | NULL | NULL |
 | `offscreen_narrations_id_seq` | NULL | NULL |
-| `orrery_adjudication_log_id_seq` | 561 | 561 |
+| `orrery_adjudication_log_id_seq` | 564 | 564 |
 | `orrery_maturation_jobs_id_seq` | 504 | 504 |
 | `orrery_narration_jobs_id_seq` | NULL | NULL |
-| `orrery_prompt_exposures_id_seq` | 3230 | 3230 |
+| `orrery_prompt_exposures_id_seq` | 3237 | 3237 |
 | `orrery_recall_trace_id_seq` | NULL | NULL |
-| `orrery_resolutions_id_seq` | 7353 | 7353 |
+| `orrery_resolutions_id_seq` | 7374 | 7374 |
 | `orrery_route_graph_edges_id_seq` | NULL | NULL |
 | `orrery_route_graph_nodes_id_seq` | NULL | NULL |
-| `orrery_scene_pressures_id_seq` | 561 | 561 |
+| `orrery_scene_pressures_id_seq` | 564 | 564 |
 | `orrery_travel_edges_id_seq` | NULL | NULL |
 | `pair_tags_id_seq` | 29 | 29 |
 | `places_id_seq` | 4 | 4 |
-| `relationship_versions_id_seq` | 100138 | 100138 |
+| `relationship_versions_id_seq` | 100142 | 100142 |
 | `retrieval_coverage_log_id_seq` | 52 | 52 |
 | `retrograde_summaries_id_seq` | 1435 | 1435 |
-| `state_checkpoints_id_seq` | 2978 | 2978 |
+| `state_checkpoints_id_seq` | 2982 | 2982 |
 | `state_delta_log_id_seq` | 33 | 33 |
 | `storyteller_correspondence_letters_id_seq` | NULL | NULL |
 | `tag_clearance_log_id_seq` | 1070 | 1070 |
@@ -166,7 +168,7 @@ Taken directly before the slice's PostgreSQL gate (2026-09-30T04:25:42Z) and dir
 | `claim_awareness_id_seq` | NULL | NULL |
 | `claims_id_seq` | NULL | NULL |
 | `correspondence_compaction_jobs_id_seq` | NULL | NULL |
-| `entities_id_seq` | 5550 | 5550 |
+| `entities_id_seq` | 5553 | 5553 |
 | `entity_pair_tags_id_seq` | 780 | 780 |
 | `entity_tags_id_seq` | 41 | 41 |
 | `generation_session_phases_id_seq` | NULL | NULL |
@@ -225,11 +227,11 @@ Taken directly before the slice's PostgreSQL gate (2026-09-30T04:25:42Z) and dir
 | `character_relationships_id_seq` | NULL | NULL |
 | `character_routine_anchors_id_seq` | NULL | NULL |
 | `characters_id_seq` | NULL | NULL |
-| `chunk_metadata_id_seq` | 1399 | 1399 |
+| `chunk_metadata_id_seq` | 1402 | 1402 |
 | `claim_awareness_id_seq` | 672 | 672 |
 | `claims_id_seq` | 319 | 319 |
 | `correspondence_compaction_jobs_id_seq` | NULL | NULL |
-| `entities_id_seq` | 2568 | 2568 |
+| `entities_id_seq` | 2577 | 2577 |
 | `entity_pair_tags_id_seq` | NULL | NULL |
 | `entity_tags_id_seq` | NULL | NULL |
 | `generation_session_phases_id_seq` | NULL | NULL |
@@ -238,7 +240,7 @@ Taken directly before the slice's PostgreSQL gate (2026-09-30T04:25:42Z) and dir
 | `interaction_participants_id_seq` | NULL | NULL |
 | `items_id_seq` | NULL | NULL |
 | `layers_id_seq` | NULL | NULL |
-| `narrative_chunks_id_seq` | 1441 | 1441 |
+| `narrative_chunks_id_seq` | 1444 | 1444 |
 | `narrative_embedding_jobs_id_seq` | NULL | NULL |
 | `narrative_summary_jobs_id_seq` | NULL | NULL |
 | `offscreen_narrations_id_seq` | NULL | NULL |
@@ -262,7 +264,7 @@ Taken directly before the slice's PostgreSQL gate (2026-09-30T04:25:42Z) and dir
 | `storyteller_correspondence_letters_id_seq` | NULL | NULL |
 | `tag_clearance_log_id_seq` | NULL | NULL |
 | `tags_id_seq` | 532 | 532 |
-| `world_events_id_seq` | 1035 | 1035 |
+| `world_events_id_seq` | 1038 | 1038 |
 | `zones_id_seq` | NULL | NULL |
 
 ## Gates
@@ -330,7 +332,7 @@ FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_co
 
 ### Remaining Failures and Owner Targets in the Directory Gates
 
-`tests/test_lore` is clean, with no owner target. In `tests/test_orrery`, every failure, and every owner target the audit reported, is in a module this branch does not touch. All are listed on #885 for a later B2 slice and were already present on `main`. None is new.
+`tests/test_lore` is clean, with no owner target. In `tests/test_orrery`, every failure and every owner target the audit reported is in a module this branch does not touch. Every failure is in a mapped B2-4 or B2-7 module and was already present on `main`; none is new. Every owner target is in a mapped B2-4, B2-6, or B2-7 module, except the read-only `test_retrograde_vocabulary.py` target in the last row, which is not in the B2 map.
 
 | Node or module | Audit target | Class |
 | --- | --- | --- |
@@ -343,7 +345,7 @@ FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_co
 | `test_geo_resolver_live.py`, `test_mood_migration_pg.py`, `test_polymorphic_patron_migration_pg.py` (pass) | `save_05` | B2-6 |
 | `test_retrograde_vocabulary.py::test_seed_eligible_vocabulary_can_include_live_tag_registry` (pass) | `save_02` | Not in the B2 map: a read-only `enumerate_seed_eligible_vocabulary(dbname="save_02")` (:59); raised for the coordinator |
 
-The directory gates run modules other slices still own, so no owner snapshot was taken around them. The sequence proof above covers this slice's runs.
+The directory gates run modules other slices still own, so no owner snapshot was taken around them. The sequence proof above covers only the two slice gates (the final-HEAD pair, and an earlier pair on the pre-review tree).
 
 ## Offline Gates, Reachability, and Lint
 
@@ -388,5 +390,33 @@ $ NEXUS_RUN_POSTGRES=1 pytest -q -rs "tests/test_orrery/test_tag_library.py::tes
 SKIPPED [1] tests/test_orrery/test_tag_library.py:919: save_05 has no character whose characters.id differs from characters.entity_id; cannot exercise namespace translation
 1 skipped, 5 warnings in 0.54s
 $ black --check / flake8 / mypy -m tests.test_lore.test_retrieval_coverage_live
+1 file would be left unchanged. / exit 0 / Success: no issues found in 1 source file
+```
+
+### Second Review Round
+
+- The retrieval-coverage test id stated the pre-#903 contract that its body disproves. `test_handle_user_input_writes_exact_coverage_and_empty_detection` is now `test_rendered_turn_writes_exact_coverage_and_empty_detection`. The body is unchanged.
+- The classification summary above the failure table now matches its last row: that row is an unmapped owner target, not one listed for a later B2 slice.
+- The sequence proof now covers the code that ships. The final-HEAD pair in Sequence Proof brackets this rerun of both slice gates, with nothing between the snapshots except the two gates. Its `diff` is empty, and the audit reports no owner target:
+
+```
+$ snapshot.sh > owner_before.txt   # 2026-09-30T04:58:28Z
+$ gate.sh pg
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 13 targets: postgres, qa885_adjudication_history_*, qa885_faction_audit_*, qa885_intertitle_*, qa885_ledger_seed_* x3, qa885_legacy_tag_* x2, qa885_retrieval_coverage_*, qa885_stage2a_epistemics_*, qa885_trait_compiler_*, qa885_transaction_writer_*
+dbname audit: owner targets: none
+SKIPPED [5] tests/test_orrery/test_stage2a_status_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+76 passed, 5 skipped, 5 warnings in 15.79s
+$ gate.sh live
+secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
+dbname audit: 14 targets: postgres, qa885_adjudication_history_*, qa885_faction_audit_*, qa885_intertitle_*, qa885_ledger_seed_* x3, qa885_legacy_tag_* x2, qa885_retrieval_coverage_*, qa885_stage2a_epistemics_*, qa885_stage2a_status_*, qa885_trait_compiler_*, qa885_transaction_writer_*
+dbname audit: owner targets: none
+81 passed, 5 warnings in 17.40s
+$ snapshot.sh > owner_after.txt    # 2026-09-30T04:59:03Z
+$ diff owner_before.txt owner_after.txt; echo diff_exit=$?
+diff_exit=0
+$ pytest --collect-only -q tests/test_lore/test_retrieval_coverage_live.py
+tests/test_lore/test_retrieval_coverage_live.py::test_rendered_turn_writes_exact_coverage_and_empty_detection
+$ black --check / flake8 / mypy tests/test_lore/test_retrieval_coverage_live.py
 1 file would be left unchanged. / exit 0 / Success: no issues found in 1 source file
 ```

@@ -112,7 +112,7 @@ def _coverage_row_count(connection: Any, turn_id: str) -> int:
     )
 
 
-def test_handle_user_input_writes_exact_coverage_and_empty_detection(
+def test_rendered_turn_writes_exact_coverage_and_empty_detection(
     coverage_db: str,
 ) -> None:
     engine = create_engine(sqlalchemy_url(coverage_db))
