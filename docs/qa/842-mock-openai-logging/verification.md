@@ -133,6 +133,24 @@ Found 2 errors in 1 file (checked 2 source files)
 
 The flake8 and mypy findings are in code this change does not touch. flake8 on the `origin/main` copy of the file reports the same three lines. The mypy lines sit above the new function, which is appended at the end of the file. They are left for the coordinator.
 
+## Review Fix: Module Usage Docstring (Commit a7ff0870)
+
+The module docstring's Usage line named `poetry run uvicorn nexus.api.mock_openai:app --port 5102`, a launch without `--log-config` that ignores `[runtime.logs]`. It now names `python -m nexus.api.mock_openai` (loopback, port from `[runtime.services.mock_openai]`, dictConfig from `[runtime.logs]`) and `nexus up` for the supervised launch. Docstring only; no code path changed.
+
+Tails on a7ff0870:
+
+```
+$ python -m pytest -q tests/test_runtime/test_logging_config.py tests/test_mock_openai.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+68 passed, 2 skipped, 5 warnings in 3.98s
+
+$ python -m black --check nexus/api/mock_openai.py
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+```
+
+flake8 on the file reports the same three pre-existing E501 lines as `origin/main` (now at 1151, 1166 and 1176 after the five added docstring lines).
+
 ## Coordinator Note
 
 Only the direct launch changes, so no restart of the owner's mock provider or gateway is owed.
