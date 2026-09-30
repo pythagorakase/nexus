@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 import math
 from pathlib import Path
 import platform
@@ -323,6 +324,7 @@ def compact_table(evidence: dict[str, Any]) -> str:
 
 def main() -> None:
     """Clone, measure, write evidence, and clean up without promoting a save."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--slot", required=True, type=int, choices=range(1, 6))
     parser.add_argument("--output", type=Path, default=None)

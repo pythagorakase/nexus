@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from decimal import Decimal
 import json
+import logging
 from pathlib import Path
 import subprocess
 from types import SimpleNamespace
@@ -49,6 +50,7 @@ def read_rows(dbname: str, statement: str) -> list[Any]:
 
 def main() -> None:
     """Clone without migrations, verify source text, render both caps, and clean up."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     import nexus
 
     assert Path(nexus.__file__).is_relative_to(ROOT)

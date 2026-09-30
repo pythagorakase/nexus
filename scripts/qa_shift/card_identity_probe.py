@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import logging
 import os
 from pathlib import Path
 import subprocess
@@ -200,6 +201,9 @@ def replay() -> None:
         local_text_counter,
         measure_blocks,
     )
+
+    # The routing fixtures configured this at import until #1037.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     from tests.pg_fixtures import (
         asyncpg_kwargs,
         disposable_slot_database,
@@ -444,6 +448,9 @@ def main() -> None:
     if args.stage == "clone":
         dispose_database(DB)
         from nexus.database import connection_kwargs
+
+        # The setup script configured this at import until #1037.
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
         from scripts.new_story_setup import _postgres_tools
         from psycopg2.extensions import make_dsn
 
@@ -527,6 +534,8 @@ def main() -> None:
         install_capture()
         import uvicorn
 
+        # The app import configured this inside uvicorn.run until #1037.
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
         uvicorn.run("nexus.api.narrative:app", host="127.0.0.1", port=8015)
 
 
