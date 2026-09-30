@@ -260,20 +260,35 @@ def test_registry_deprecated_categories_are_never_seed_eligible() -> None:
 
     The deprecated set is read from a fresh ``NEXUS_template`` clone, not a
     hand list, so a category a later migration deprecates fails here until
-    the seed policy stops offering it.
+    the seed policy stops offering it. The same read pins ``mood`` as the one
+    live category left to the prompt-visible default, so a new unclassified
+    live category is visible here rather than silently locked.
     """
 
     with disposable_slot_database("qa640_811_seed_policy") as dbname:
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT category, entity_kind::text
+                SELECT category, entity_kind::text, deprecated
                 FROM tag_category_registry
-                WHERE deprecated
                 ORDER BY category, entity_kind::text
                 """
             )
-            deprecated = [(str(row[0]), str(row[1])) for row in cur.fetchall()]
+            registry = [
+                (str(row[0]), str(row[1]), bool(row[2])) for row in cur.fetchall()
+            ]
+    deprecated = [(category, kind) for category, kind, flag in registry if flag]
+    unclassified_live = {
+        category
+        for category, _kind, flag in registry
+        if not flag
+        and category not in retrograde_vocabulary.STABLE_SEED_TAG_CATEGORIES
+        and category not in retrograde_vocabulary.EVENT_ANCHORED_TAG_CATEGORIES
+        and not category.startswith(
+            retrograde_vocabulary.RUNTIME_ONLY_TAG_CATEGORY_PREFIX
+        )
+    }
+    assert unclassified_live == {"mood"}
 
     assert ("place_affordance", "place") in deprecated
     seedable = {

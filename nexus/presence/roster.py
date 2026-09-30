@@ -452,16 +452,6 @@ def write_roster(conn: Any, chunk_id: int, roster: PresenceRoster) -> None:
             cur.execute(re.sub(r"(?<![\w:]):(\w+)", r"%(\1)s", query), params)
 
 
-async def write_roster_async(conn: Any, chunk_id: int, roster: PresenceRoster) -> None:
-    """Upsert the same roster through the asyncpg commit route."""
-    for query, params in _write_statements(chunk_id, roster):
-        keys = list(params)
-        query = re.sub(
-            r"(?<![\w:]):(\w+)", lambda match: f"${keys.index(match[1]) + 1}", query
-        )
-        await conn.execute(query, *(params[key] for key in keys))
-
-
 def resolve_place_update(
     cur: Any,
     *,

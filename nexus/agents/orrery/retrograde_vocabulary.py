@@ -212,15 +212,17 @@ class SeedEligibleVocabulary(TypedDict):
 
 
 # Seed-eligible vs prompt-visible category split (issue #300, settled in M4).
-# Every live category in the tag registry is classified explicitly below;
-# categories absent from both seed-eligible sets are prompt-visible only,
-# which is the conservative direction (prose context, never mechanical
-# Retrograde writes). New categories therefore ship locked until a deliberate
-# edit promotes them. A category ``tag_category_registry`` marks deprecated
-# (migrations 043 and 055) is never listed here, so it falls through to
-# prompt_visible_only and Retrograde seeds its live replacement categories
-# instead; a PostgreSQL test reads the deprecated set from a fresh template
-# clone and fails if any of it is seed-eligible.
+# Every live category in the tag registry except ``mood`` is classified
+# explicitly below. ``mood`` (migration 095) is transient affect that is never
+# seeded, so it deliberately takes the default: categories absent from both
+# seed-eligible sets are prompt-visible only, which is the conservative
+# direction (prose context, never mechanical Retrograde writes). New categories
+# therefore ship locked until a deliberate edit promotes them. A category
+# ``tag_category_registry`` marks deprecated (migrations 043 and 055) is never
+# listed here, so it falls through to prompt_visible_only and Retrograde seeds
+# its live replacement categories instead. A PostgreSQL test reads the registry
+# from a fresh template clone and fails if any deprecated category is
+# seed-eligible or any live category other than ``mood`` is unclassified.
 STABLE_SEED_TAG_CATEGORIES: frozenset[str] = frozenset(
     {
         # Character identity, role, and capability (stable present-state).

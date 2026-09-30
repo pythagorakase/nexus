@@ -397,7 +397,7 @@ exist on the HEAD copies of `orrery_tag_validation.py` and
 `tests/test_orrery_tag_validation_pg.py` (three and three E501 long lines,
 and two mypy `index` errors). No gateway was started for these fixes.
 
-## Review Fixes: the Turn-Observation Clock
+## Review Fixes: The Turn-Observation Clock
 
 Review found that `tests/test_turn_observation.py` still read its instant and
 `TODAY` at import, and that no test advanced the clock. The module now has no
@@ -433,3 +433,49 @@ $ $PY -m pytest -q tests/test_reachability.py
 
 The one failure is the #885 `save_05` exemption. Black and flake8 are clean
 on `tests/test_turn_observation.py`, and mypy reports no issues in it.
+
+## Review Fixes: `mood` and `write_roster_async`
+
+Review found that the R1 spec and the comment above
+`STABLE_SEED_TAG_CATEGORIES` said every live registry category is classified
+explicitly, but the live `mood` category (migration 095) is in neither
+seed-eligible set and has no `orrery_` prefix. It reaches
+`prompt_visible_only` only through the unclassified default. Both texts now
+name `mood` as the one live category that deliberately takes that default
+(transient affect, never seeded). The template registry confirms it is the
+only one:
+
+```text
+$ psql -d NEXUS_template -Atc "select category, deprecated from tag_category_registry order by 1"
+```
+
+Of the 46 rows, the live categories outside `STABLE_SEED_TAG_CATEGORIES`,
+`EVENT_ANCHORED_TAG_CATEGORIES`, and the `orrery_` prefix are `{mood}`.
+`test_registry_deprecated_categories_are_never_seed_eligible` now reads the
+whole registry from its template clone and also asserts that set equals
+`{"mood"}`, so a new unclassified live category fails there.
+
+`write_roster_async` (`nexus/presence/roster.py`) had no caller in `nexus/`,
+`scripts/`, `ir_eval/`, or `tests/` (`grep -rn write_roster_async .` returns
+only its definition), the same dead asyncpg twin as `read_roster_async`, so
+it is deleted. `re` stays for the sync `write_roster`.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_retrograde_vocabulary.py tests/test_reachability.py
+66 passed, 5 warnings in 10.99s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_presence_roster.py tests/test_presence_roster_pg.py tests/test_commit_choice_presence_pg.py tests/test_presence_reconciliation.py
+81 passed, 5 warnings in 35.02s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery_tag_validation_pg.py tests/test_orrery/test_gaia_registry_schema_pg.py
+SKIPPED [1] tests/test_orrery/test_gaia_registry_schema_pg.py:250: Set NEXUS_638_ENUM_E2E=1 for the live Gaia enum-schema gate.
+39 passed, 1 skipped, 5 warnings in 6.39s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_tag_library.py tests/test_orrery/test_tag_writer.py tests/test_orrery/test_retrograde_vocabulary.py tests/test_orrery/test_retrograde_seed_candidates.py tests/test_orrery/test_retrograde_expansion.py tests/test_cli_contract.py tests/test_cli.py tests/test_turn_observation.py tests/test_tags_audit_pg.py
+FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
+1 failed, 387 passed, 1 skipped, 5 warnings in 97.50s (0:01:37)
+```
+
+The one failure is the #885 `save_05` exemption
+(`tests/test_orrery/test_tag_library.py:554`). Black is clean on the three
+changed Python files. flake8 and mypy report only findings that also exist on
+the HEAD copy of `nexus/presence/roster.py` (nine E501 SQL lines, and the
+mypy `arg-type` error at line 398); `retrograde_vocabulary.py` and the test
+file are clean. No gateway was started for these fixes.
