@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 from uuid import uuid4
 
 import asyncpg
@@ -16,11 +18,17 @@ from nexus.agents.orrery.events import (
 from nexus.agents.orrery.needs import NeedTuning
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import ProjectPolicy
-from nexus.database import asyncpg_kwargs
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    CharacterPairSeed,
+    asyncpg_kwargs,
+    disposable_slot_database,
+    seed_character_pair,
+    seed_relationship,
+)
 
 pytestmark = pytest.mark.requires_postgres
 POLICY = ProjectPolicy(enabled=True, advance_interval_hours=24.0)
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 
 
 async def _create_schema(conn: asyncpg.Connection) -> None:
@@ -100,49 +108,47 @@ async def _create_schema(conn: asyncpg.Connection) -> None:
     )
 
 
+@pytest.fixture(scope="module")
+def redemption_async_clone() -> Iterator[tuple[str, CharacterPairSeed]]:
+    """Seed a clone with an estranged pair: a committed ``enemy`` relationship.
+
+    Seeding is synchronous psycopg2, so it runs here, outside the event loop.
+    """
+
+    with disposable_slot_database("qa885_seek_redemption_async") as dbname:
+        pair = seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Estranged Penitent",
+            target_name="Estranged Enemy",
+        )
+        seed_relationship(
+            dbname,
+            subject_character_id=pair.actor_character_id,
+            object_character_id=pair.target_character_id,
+            relationship_type="enemy",
+            emotional_valence="-4|hostile",
+            dynamic="d",
+            recent_events="r",
+            history="h",
+        )
+        yield dbname, pair
+
+
 @pytest.mark.asyncio
-async def test_async_seek_redemption_three_write_completion() -> None:
-    conn = await asyncpg.connect(**asyncpg_kwargs("save_02"))
+async def test_async_seek_redemption_three_write_completion(
+    redemption_async_clone: tuple[str, CharacterPairSeed],
+) -> None:
+    dbname, pair = redemption_async_clone
+    actor = pair.actor_entity_id
+    target = pair.target_entity_id
+    chunk = pair.chunk_id
+    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
     transaction = conn.transaction()
     await transaction.start()
     await conn.execute("SET LOCAL nexus.write_producer = 'manual'")
     try:
         await _create_schema(conn)
-        entities = await conn.fetch(
-            "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
-            "ORDER BY id LIMIT 2"
-        )
-        actor, target = (int(row["entity_id"]) for row in entities)
-        chunk = int(
-            await conn.fetchval(
-                "SELECT chunk_id FROM chunk_metadata WHERE world_time IS NOT NULL "
-                "ORDER BY chunk_id DESC LIMIT 1"
-            )
-        )
-        await conn.execute(
-            "DELETE FROM character_relationships USING characters a,characters t "
-            "WHERE character_relationships.character1_id=a.id "
-            "AND character_relationships.character2_id=t.id "
-            "AND a.entity_id=$1 AND t.entity_id=$2",
-            actor,
-            target,
-        )
-        await conn.execute(
-            "INSERT INTO character_relationships "
-            "(character1_id,character2_id,relationship_type,emotional_valence,"
-            " dynamic,recent_events,history) "
-            "SELECT a.id,t.id,'enemy','-4|hostile','d','r','h' "
-            "FROM characters a,characters t "
-            "WHERE a.entity_id=$1 AND t.entity_id=$2",
-            actor,
-            target,
-        )
-        await conn.execute(
-            "UPDATE entity_tags et SET cleared_at=now() FROM tags t "
-            "WHERE et.tag_id=t.id AND et.entity_id=$1 "
-            "AND t.tag='grudge_active' AND et.cleared_at IS NULL",
-            target,
-        )
         await conn.execute(
             "INSERT INTO entity_tags (entity_id,tag_id,source_kind,template_id) "
             "SELECT $1,id,'template','test_seek_redemption_async' FROM tags "

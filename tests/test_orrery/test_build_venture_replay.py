@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-import psycopg2
 import psycopg2.extras
 import pytest
 
@@ -17,11 +16,17 @@ from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import reconstruct_state_at_sync
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import ProjectPolicy
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    CharacterPairSeed,
+    connect,
+    disposable_slot_database,
+    seed_character_pair,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
 POLICY = ProjectPolicy(enabled=True, advance_interval_hours=24.0)
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 
 
 def _create_schema(cur: Any, schema: str) -> None:
@@ -108,32 +113,51 @@ def _create_schema(cur: Any, schema: str) -> None:
     )
 
 
+@pytest.fixture(scope="module")
+def venture_replay_clone() -> Iterator[tuple[str, CharacterPairSeed]]:
+    """Seed a disposable clone with an actor, a bystander, and a story clock.
+
+    Not ``seed_checkpointed_story``: its genesis checkpoint is captured over
+    the public tables, not the ones this test replays over.
+    """
+
+    with disposable_slot_database("qa885_build_venture_replay") as dbname:
+        yield dbname, seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Venture Founder",
+            target_name="Venture Rival",
+        )
+
+
 @pytest.fixture()
-def replay_db() -> Iterator[dict[str, Any]]:
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+def replay_db(
+    venture_replay_clone: tuple[str, CharacterPairSeed],
+) -> Iterator[dict[str, Any]]:
+    dbname, pair = venture_replay_clone
+    conn = connect(dbname)
     try:
         with conn.cursor() as cur:
             _create_schema(cur, f"build_venture_replay_{uuid4().hex[:12]}")
-            cur.execute(
-                "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
-                "ORDER BY id LIMIT 1"
-            )
-            actor = int(cur.fetchone()[0])
             cur.execute("SELECT max(world_time) FROM chunk_metadata")
-            base_time = cur.fetchone()[0] or datetime(2026, 1, 1, tzinfo=timezone.utc)
-        yield {"conn": conn, "actor": actor, "base_time": base_time}
+            base_time = cur.fetchone()[0]
+        assert base_time == pair.world_time, (
+            f"the clone's head clock is {base_time}, not the seeded "
+            f"{pair.world_time}"
+        )
+        yield {"conn": conn, "actor": pair.actor_entity_id, "base_time": base_time}
     finally:
         conn.rollback()
         conn.close()
 
 
 def _chunk(cur: Any, world_time: datetime, offset: int) -> int:
+    # The sequence assigns the id, so a sparse clone cannot yield a NULL one.
     cur.execute(
         """
-        INSERT INTO narrative_chunks (id, raw_text, created_at)
-        SELECT max(id) + 1, 'BUILD_VENTURE replay probe',
-               now() + make_interval(mins => %s)
-        FROM narrative_chunks RETURNING id
+        INSERT INTO narrative_chunks (raw_text, created_at)
+        VALUES ('BUILD_VENTURE replay probe', now() + make_interval(mins => %s))
+        RETURNING id
         """,
         (offset,),
     )
