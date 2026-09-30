@@ -122,8 +122,8 @@ NODE = "test_nested_session.py::test_owner_targets_in_every_spelling"
 
 def test_owner_targets_in_every_spelling(monkeypatch):
     # The parent's allowlist let through no libpq variable but this one.
-    assert sorted(k for k in os.environ if k.startswith("PG")) == ["PGHOST"]
-    assert os.environ["PGHOST"] == MISSING
+    libpq_variables = {{k: v for k, v in os.environ.items() if k.startswith("PG")}}
+    assert libpq_variables == {{"PGHOST": MISSING}}
 
     with pytest.raises(Refused, match="'save_01' from " + NODE):
         psycopg2.connect("dbname=save_01 connect_timeout=1")
@@ -241,11 +241,12 @@ import socket_block
 from tests import dbname_audit
 
 Refused = dbname_audit.OwnerDatabaseConnectionRefused
-DSN = f"postgresql://{getpass.getuser()}@localhost:5432"
+DSN = f"postgresql://{getpass.getuser()}@audit.invalid"
 
 
 def test_database_keyword_outranks_pgdatabase():
-    assert os.environ["PGDATABASE"] == "save_01"
+    libpq_variables = {k: v for k, v in os.environ.items() if k.startswith("PG")}
+    assert libpq_variables.get("PGDATABASE") == "save_01"
 
     # The keyword wins: admitted, recorded as postgres, stopped at the dial.
     with pytest.raises(socket_block.SocketBlocked, match="postgres"):
@@ -700,14 +701,14 @@ def test_asyncpg_session_follows_asyncpg_precedence(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("database", "dsn", "expected"),
     [
-        ("postgres", "postgresql://u@localhost:5432", "postgres"),
-        ("qa640_x", "postgresql://u@localhost:5432/save_02", "qa640_x"),
-        (None, "postgresql://u@localhost:5432/save_02", "save_02"),
-        (None, "postgresql://u@localhost:5432?dbname=save_03", "save_03"),
-        (None, "postgresql://u@localhost:5432?database=save_04", "save_04"),
-        (None, "postgresql://u@localhost:5432", "save_01"),
+        ("postgres", "postgresql://u@audit.invalid", "postgres"),
+        ("qa640_x", "postgresql://u@audit.invalid/save_02", "qa640_x"),
+        (None, "postgresql://u@audit.invalid/save_02", "save_02"),
+        (None, "postgresql://u@audit.invalid?dbname=save_03", "save_03"),
+        (None, "postgresql://u@audit.invalid?database=save_04", "save_04"),
+        (None, "postgresql://u@audit.invalid", "save_01"),
         (None, None, "save_01"),
-        (None, "postgresql://u@localhost:5432/", None),
+        (None, "postgresql://u@audit.invalid/", None),
     ],
 )
 def test_asyncpg_target_is_read_in_asyncpg_order(
