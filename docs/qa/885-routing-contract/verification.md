@@ -332,3 +332,61 @@ The file set is `git diff --name-only origin/main...HEAD -- '*.py'` at `f65459e5
 - Black: `49 files would be left unchanged.`
 - flake8: 118 findings on the branch against 120 on `main`'s versions of the 48 existing files; the added file has none. Grouped by file and code, no group grows: the two fewer are one `E402` in `tests/scheduler_helpers.py` and one `E501` in `tests/test_api/test_acceptance_staging_pg.py`. The rest are pre-existing `E501` and pytest-fixture `F401`/`F811`.
 - mypy (`--explicit-package-bases`, errors reported in the changed files only): 154 on the branch and 154 on `main`'s versions, identical when grouped by file and error code; the added file has none.
+
+## Review Round (Astra)
+
+Astra's P2 (`tests/scheduler_helpers.py:96`): the private-runtime guard took `PYTEST_DEBUG_TEMPROOT`, else `tempfile.gettempdir()`, as the only place a private `state_dir` could lie, so a run with `--basetemp` elsewhere refused the config `private_runtime_config(tmp_path, ...)` wrote, and the gateway tests failed before startup.
+
+The fix: a session-scoped autouse fixture in `tests/conftest.py` (`_register_private_runtime_root`) records `tmp_path_factory.getbasetemp()` through `scheduler_helpers.register_pytest_basetemp`. The guard admits a `state_dir` under that registered base or under `tempfile.gettempdir()`, and nowhere else; outside a pytest session nothing is registered and only the system temp directory counts. `PYTEST_DEBUG_TEMPROOT` no longer counts on its own, because pytest's base temp already lies under it when it is set. The refusals of an unset variable, the checkout's `nexus.toml`, and every `git worktree list` tree's default `state_dir` run before this check, unchanged. This supersedes the temporary-root sentence in "The Private-Config Guard" above.
+
+The new `tests/test_scheduler_helpers_basetemp.py` runs `tests/test_scheduler_helpers_routing.py` in a child pytest with `TMPDIR` set to one directory and `--basetemp` set to a sibling, so every child `tmp_path` lies outside the child's `tempfile.gettempdir()`. It requires `test_private_runtime_config_is_required` (the private config admitted; the main checkout's `state_dir` and a directory under `$HOME` refused) and both gateway-lane tests (the close-time one serves a lane, so it is required when `NEXUS_RUN_POSTGRES=1`) to pass, and checks the child's `tmp_path` directories were made under the base temp.
+
+The review's failure, reproduced at `c92173e6` before the fix (`$S` is this fixer's scratch directory under `/private/tmp/claude-501/...`, outside `tempfile.gettempdir()`, which is `/var/folders/r5/.../T`):
+
+```text
+$ $PY -m pytest -q tests/test_scheduler_helpers_routing.py::test_private_runtime_config_is_required --basetemp=$S/repro-basetemp
+E           RuntimeError: NEXUS_RUNTIME_CONFIG='/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-9a-fix/repro-basetemp/test_private_runtime_config_is0/runtime.toml' puts state_dir at '/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-9a-fix/repro-basetemp/test_private_runtime_config_is0/runtime', outside the pytest temporary root '/private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T'; point it into the test's tmp_path
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_scheduler_helpers_routing.py::test_private_runtime_config_is_required
+1 failed, 7 warnings in 2.41s
+
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_scheduler_helpers_basetemp.py
+E         FAILED tests/test_scheduler_helpers_routing.py::test_private_runtime_config_is_required
+E         FAILED tests/test_scheduler_helpers_routing.py::test_gateway_lane_refuses_to_close_without_a_private_config
+E         =================== 2 failed, 12 passed, 7 warnings in 4.72s ===================
+FAILED tests/test_scheduler_helpers_basetemp.py::test_routing_contract_passes_under_a_basetemp_outside_the_system_temp
+1 failed in 5.10s
+```
+
+After the fix:
+
+```text
+$ $PY -m pytest -q tests/test_scheduler_helpers_routing.py::test_private_runtime_config_is_required --basetemp=$S/repro-basetemp
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 passed, 7 warnings in 2.36s
+
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_scheduler_helpers_basetemp.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 passed, 5 warnings in 6.10s
+```
+
+The gateway-lane modules and the new test, with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset:
+
+```text
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_scheduler_helpers_routing.py tests/test_cli_inspect_pg.py tests/test_api/test_narrative_jobs_pg.py tests/test_api/test_scheduler_corpus_pg.py tests/test_scheduler_helpers_basetemp.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 19 targets: postgres, qa640_800_call_gate_*, qa640_800_corpus_*, qa640_800_turn_*, qa640_815_inspect_*, qa640_acceptance_* x3, qa640_lane_close_*, qa640_offline_gate_* x10
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+32 passed, 9 warnings in 76.26s (0:01:16)
+```
+
+Static checks on the three changed files (`tests/scheduler_helpers.py`, `tests/conftest.py`, `tests/test_scheduler_helpers_basetemp.py`):
+
+```text
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+black=0
+flake8=0
+Success: no issues found in 3 source files
+```

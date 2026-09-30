@@ -87,14 +87,31 @@ def test_provider_config(
     return path
 
 
-def _pytest_temp_root() -> Path:
-    """Return the directory pytest creates every ``tmp_path`` under.
+# pytest's actual base temp directory, recorded by the root conftest.
+_pytest_basetemp: Path | None = None
 
-    Pytest roots its temporary directories at ``PYTEST_DEBUG_TEMPROOT`` when
-    set, else at ``tempfile.gettempdir()``; this mirrors that choice.
+
+def register_pytest_basetemp(basetemp: Path) -> None:
+    """Record pytest's base temp directory, which ``--basetemp`` can move.
+
+    The root conftest calls this once per session with
+    ``tmp_path_factory.getbasetemp()``, the directory every ``tmp_path`` in
+    the session lies under.
     """
-    raw = os.environ.get("PYTEST_DEBUG_TEMPROOT") or tempfile.gettempdir()
-    return Path(raw).resolve()
+    global _pytest_basetemp
+    _pytest_basetemp = basetemp.resolve()
+
+
+def _private_temp_roots() -> list[Path]:
+    """Return the directories a private state_dir may lie under.
+
+    They are the system temp directory and, inside a pytest session, the base
+    temp directory the root conftest registered.
+    """
+    roots = [Path(tempfile.gettempdir()).resolve()]
+    if _pytest_basetemp is not None:
+        roots.append(_pytest_basetemp)
+    return roots
 
 
 def _checkout_roots() -> list[Path]:
@@ -125,7 +142,8 @@ def require_private_runtime_config() -> Path:
 
     A config is private when ``NEXUS_RUNTIME_CONFIG`` names a file other than
     the checkout's ``nexus.toml`` whose ``[runtime].state_dir`` lies under the
-    pytest temporary root and is no working tree's own state_dir (the
+    system temp directory or pytest's registered base temp directory (see
+    ``register_pytest_basetemp``) and is no working tree's own state_dir (the
     checkout's default ``state_dir`` anchored at every ``git worktree list``
     root, the owner's main checkout included). Anything else could let
     ``nexus down`` stop the services the owner started.
@@ -160,12 +178,13 @@ def require_private_runtime_config() -> Path:
                 f"{str(root)!r} ({str(private_state)!r}); point it into the "
                 "test's tmp_path"
             )
-    temp_root = _pytest_temp_root()
-    if not private_state.is_relative_to(temp_root):
+    temp_roots = _private_temp_roots()
+    if not any(private_state.is_relative_to(root) for root in temp_roots):
         raise RuntimeError(
             f"{RUNTIME_CONFIG_ENV}={raw!r} puts state_dir at "
             f"{str(private_state)!r}, outside the pytest temporary root "
-            f"{str(temp_root)!r}; point it into the test's tmp_path"
+            f"{[str(root) for root in temp_roots]!r}; point it into the "
+            "test's tmp_path"
         )
     return path
 
