@@ -22,6 +22,7 @@ from nexus.api.deprecated_tag_audit import DeprecatedTagAuditError, audit_databa
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
+    route_slot_to_disposable,
     seed_entity_tag,
     seed_faction,
     seed_legacy_faction_tag,
@@ -101,14 +102,14 @@ def _run_main(monkeypatch: pytest.MonkeyPatch, *argv: str) -> tuple[int, str, st
 
 
 def _route_slot_three(monkeypatch: pytest.MonkeyPatch, dbname: str) -> None:
-    """Point the audit's slot 3 at the clone; every other slot is refused."""
+    """Point the audit's slot 3 at the clone; every other slot is refused.
 
-    def slot_database(slot: int) -> str:
-        if slot != 3:
-            raise AssertionError(f"The audit read slot {slot}, not the clone")
-        return dbname
+    ``route_slot_to_disposable`` routes slot 3 in every loaded module and
+    raises ``RuntimeError`` for any other slot; ``all_slots`` narrows the
+    ``--all`` sweep to the one routed slot.
+    """
 
-    monkeypatch.setattr(deprecated_tag_audit, "slot_dbname", slot_database)
+    route_slot_to_disposable(monkeypatch.setattr, slot=3, dbname=dbname)
     monkeypatch.setattr(deprecated_tag_audit, "all_slots", lambda: [3])
 
 

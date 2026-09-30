@@ -42,7 +42,7 @@ from nexus.config import load_settings
 from nexus.config.settings_models import OrreryWeatherSettings
 from nexus.memory.manager import ContextMemoryManager
 from scripts import new_story_setup
-from tests.pg_fixtures import connect, sqlalchemy_url
+from tests.pg_fixtures import connect, route_slot_to_disposable, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -505,14 +505,10 @@ def _route_soft_sites(monkeypatch: pytest.MonkeyPatch, scratch_dbname: str) -> N
     """Route only database selection to a disposable clone."""
 
     # Identity helpers and all consumer SQL stay production-real; these seams
-    # merely avoid touching save_01 through save_05.
-    monkeypatch.setattr(
-        narrative,
-        "require_slot_dbname",
-        lambda *, slot=None, dbname=None: scratch_dbname,
-    )
-    monkeypatch.setattr(slot_state, "slot_dbname", lambda _slot: scratch_dbname)
-    monkeypatch.setattr(save_slots, "slot_dbname", lambda _slot: scratch_dbname)
+    # merely avoid touching save_01 through save_05. The shared contract
+    # routes slot 1 in every loaded module and raises ``RuntimeError`` for any
+    # other slot; ``all_slots`` narrows the slot listing to the routed slot.
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=scratch_dbname)
     monkeypatch.setattr(slot_utils, "all_slots", lambda: (1,))
     monkeypatch.setattr(
         slot_state,

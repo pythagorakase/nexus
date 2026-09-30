@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import tomlkit
 
 from nexus.api import (
     narrative,
@@ -26,6 +27,7 @@ from nexus.api import (
     wizard_agent,
     wizard_chat,
 )
+from nexus.runtime.home import anchor_path
 from scripts import new_story_setup
 from tests import scheduler_helpers
 from tests.pg_fixtures import (
@@ -150,7 +152,13 @@ def test_routed_child_down_reads_the_private_state_dir(
 def test_private_runtime_config_is_required(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Unset, the checkout's file, or the checkout's state_dir all raise."""
+    """Unset, the checkout's file, any checkout's state_dir, or one outside tmp raise.
+
+    The absolute case names the main checkout's state_dir (the first tree
+    ``git worktree list`` prints): from a builder's worktree that is another
+    checkout's directory, which an inequality with this checkout alone let
+    through.
+    """
 
     monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
     with pytest.raises(RuntimeError, match="is unset"):
@@ -163,8 +171,29 @@ def test_private_runtime_config_is_required(
     copy = tmp_path / "copy.toml"
     copy.write_text((REPO_ROOT / "nexus.toml").read_text())
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(copy))
-    with pytest.raises(RuntimeError, match="keeps the checkout's state_dir"):
+    with pytest.raises(RuntimeError, match="keeps the state_dir of checkout"):
         require_private_runtime_config()
+
+    main_root = scheduler_helpers._checkout_roots()[0]
+    default_state = tomllib.loads((REPO_ROOT / "nexus.toml").read_text())["runtime"][
+        "state_dir"
+    ]
+    for label, state_dir in (
+        ("main", anchor_path(main_root, default_state)),
+        ("outside", Path.home() / ".nexus-guard-probe-never-created"),
+    ):
+        probe: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+        probe["runtime"]["state_dir"] = str(state_dir)
+        other = tmp_path / f"{label}.toml"
+        other.write_text(tomlkit.dumps(probe))
+        monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(other))
+        expected = (
+            "keeps the state_dir of checkout"
+            if label == "main"
+            else "outside the pytest temporary root"
+        )
+        with pytest.raises(RuntimeError, match=expected):
+            require_private_runtime_config()
 
     # tomlkit's item types do not index statically; the document is plain TOML.
     doc: Any

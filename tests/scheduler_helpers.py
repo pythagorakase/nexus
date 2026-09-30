@@ -8,6 +8,8 @@ unless ``NEXUS_RUNTIME_CONFIG`` names a private config.
 """
 
 import os
+import subprocess
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -85,13 +87,48 @@ def test_provider_config(
     return path
 
 
+def _pytest_temp_root() -> Path:
+    """Return the directory pytest creates every ``tmp_path`` under.
+
+    Pytest roots its temporary directories at ``PYTEST_DEBUG_TEMPROOT`` when
+    set, else at ``tempfile.gettempdir()``; this mirrors that choice.
+    """
+    raw = os.environ.get("PYTEST_DEBUG_TEMPROOT") or tempfile.gettempdir()
+    return Path(raw).resolve()
+
+
+def _checkout_roots() -> list[Path]:
+    """Return every working tree of this repository, the main checkout first.
+
+    ``git worktree list`` names the owner's main checkout as well as every
+    builder's worktree, so a guard that compares against all of them refuses
+    the owner's state_dir from whichever tree the gate runs in.
+    """
+    listed = subprocess.run(
+        ["git", "-C", str(_CHECKOUT), "worktree", "list", "--porcelain"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    roots = [
+        Path(line.removeprefix("worktree ")).resolve()
+        for line in listed.splitlines()
+        if line.startswith("worktree ")
+    ]
+    if not roots:
+        raise RuntimeError(f"`git worktree list` named no tree for {_CHECKOUT}")
+    return roots
+
+
 def require_private_runtime_config() -> Path:
     """Return the exported private runtime config, or raise.
 
     A config is private when ``NEXUS_RUNTIME_CONFIG`` names a file other than
-    the checkout's ``nexus.toml`` whose ``[runtime].state_dir`` is not the
-    checkout's. Anything else would let ``nexus down`` stop the services the
-    owner started from the checkout.
+    the checkout's ``nexus.toml`` whose ``[runtime].state_dir`` lies under the
+    pytest temporary root and is no working tree's own state_dir (the
+    checkout's default ``state_dir`` anchored at every ``git worktree list``
+    root, the owner's main checkout included). Anything else could let
+    ``nexus down`` stop the services the owner started.
     """
     from nexus.runtime.home import anchor_path
 
@@ -110,15 +147,25 @@ def require_private_runtime_config() -> Path:
             "private config"
         )
 
-    def state_dir(config: Path) -> Path:
+    def configured_state_dir(config: Path) -> str:
         doc: Any = tomlkit.parse(config.read_text())
-        return anchor_path(_CHECKOUT, str(doc["runtime"]["state_dir"])).resolve()
+        return str(doc["runtime"]["state_dir"])
 
-    private_state = state_dir(path)
-    if private_state == state_dir(checkout_config):
+    private_state = anchor_path(_CHECKOUT, configured_state_dir(path)).resolve()
+    default_state = configured_state_dir(checkout_config)
+    for root in _checkout_roots():
+        if private_state == anchor_path(root, default_state).resolve():
+            raise RuntimeError(
+                f"{RUNTIME_CONFIG_ENV}={raw!r} keeps the state_dir of checkout "
+                f"{str(root)!r} ({str(private_state)!r}); point it into the "
+                "test's tmp_path"
+            )
+    temp_root = _pytest_temp_root()
+    if not private_state.is_relative_to(temp_root):
         raise RuntimeError(
-            f"{RUNTIME_CONFIG_ENV}={raw!r} keeps the checkout's state_dir "
-            f"{str(private_state)!r}; point it into the test's tmp_path"
+            f"{RUNTIME_CONFIG_ENV}={raw!r} puts state_dir at "
+            f"{str(private_state)!r}, outside the pytest temporary root "
+            f"{str(temp_root)!r}; point it into the test's tmp_path"
         )
     return path
 

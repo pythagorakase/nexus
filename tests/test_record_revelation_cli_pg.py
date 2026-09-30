@@ -16,9 +16,9 @@ from psycopg2 import sql  # type: ignore[import-untyped]
 import pytest
 
 from nexus import cli
-from nexus.api import db_pool, slot_utils
+from nexus.api import db_pool
 from scripts import new_story_setup
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, route_slot_to_disposable
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -72,26 +72,14 @@ def route_disposable_db(
     disposable_db: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Route the slot-only production entry point to the disposable clone."""
+    """Route slot 4 to the disposable clone through the shared contract.
 
-    def require_disposable_db(
-        dbname: str | None = None,
-        slot: int | None = None,
-    ) -> str:
-        if dbname is not None and dbname != disposable_db:
-            raise AssertionError(f"unexpected database target: {dbname}")
-        if slot is not None and slot != 4:
-            raise AssertionError(f"unexpected slot target: {slot}")
-        return disposable_db
+    ``route_slot_to_disposable`` rebinds every loaded resolver to the clone,
+    narrows ``VALID_DBNAMES`` to it, and raises ``RuntimeError`` for any other
+    slot.
+    """
 
-    monkeypatch.setattr(db_pool, "require_slot_dbname", require_disposable_db)
-
-    def slot_disposable_db(slot: int) -> str:
-        if slot != 4:
-            raise AssertionError(f"unexpected slot target: {slot}")
-        return disposable_db
-
-    monkeypatch.setattr(slot_utils, "slot_dbname", slot_disposable_db)
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=disposable_db)
 
 
 @pytest.fixture()
