@@ -14,10 +14,12 @@ from nexus.agents.lore.seat_blocks import ContextSeat
 from nexus.agents.logon.skald_wire import CharacterRef, PlaceRef, PresenceBaseline
 from nexus.config.settings_models import Settings
 from nexus.prompts.registry import PromptId, load
+from tests.pg_fixtures import route_slot_to_disposable
 from tests.settings_helpers import settings_with
 
-# A database label for fakes; no PostgreSQL connection ever opens it.
-FAKE_DBNAME = "fake_logon_slot"
+# The disposable label slot 1 routes to through the shared contract; the fakes
+# receive it, and no PostgreSQL connection ever opens it.
+FAKE_DBNAME = "qa640_fake_logon_slot"
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
 
 
@@ -52,10 +54,7 @@ class _FakeConnection:
 
 def _patch_setting_row(monkeypatch: pytest.MonkeyPatch, row: Any) -> _FakeConnection:
     fake_conn = _FakeConnection(row)
-    monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname",
-        lambda **_kwargs: FAKE_DBNAME,
-    )
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=FAKE_DBNAME)
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
         lambda _dbname: "",
@@ -256,10 +255,7 @@ def test_setting_snapshot_is_shared_across_seats(
         connects += 1
         return _FakeConnection((_setting_card(),))
 
-    monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname",
-        lambda **_kwargs: FAKE_DBNAME,
-    )
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=FAKE_DBNAME)
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
         lambda _dbname: "",
@@ -596,10 +592,7 @@ def test_system_prompt_excludes_runtime_tag_library(monkeypatch) -> None:
         "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
         lambda _dbname: "TAG LIBRARY",
     )
-    monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname",
-        lambda dbname=None: dbname or FAKE_DBNAME,
-    )
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=FAKE_DBNAME)
     monkeypatch.setattr(
         "nexus.api.db_pool.get_connection",
         lambda **_kwargs: closing(_Conn()),

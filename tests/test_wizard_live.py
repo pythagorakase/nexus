@@ -29,7 +29,12 @@ from nexus.api.wizard_agent import (
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.config import resolve_model_ref
 from tests.model_registry_helpers import registry_model
-from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
+from nexus.api.slot_utils import all_slots
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    route_slots_to_disposable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -229,8 +234,10 @@ def mock_db_functions(monkeypatch):
     ]
     monkeypatch.setattr(wizard_module, "get_trait_menu", lambda _: dummy_traits)
     monkeypatch.setattr(wizard_module, "get_selected_trait_count", lambda _: 0)
-    monkeypatch.setattr(
-        wizard_module, "slot_dbname", lambda slot: f"fake_wizard_slot_{slot}"
+    # Every slot routes to a disposable label no database carries.
+    route_slots_to_disposable(
+        monkeypatch.setattr,
+        {slot: f"qa640_fake_wizard_slot_{slot}" for slot in all_slots()},
     )
 
 

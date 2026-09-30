@@ -35,10 +35,16 @@ from nexus.agents.orrery.retrograde_maturation import (
 from nexus.api.lore_adapter import extract_new_entities
 from nexus.config.settings_models import OrreryRetrogradeMaturationSettings, Settings
 
-from tests.pg_fixtures import connect, disposable_slot_database, seed_story_clock
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_story_clock,
+)
 
-# The database label the fake cursors report; no connection ever opens it.
-FAKE_SLOT_DBNAME = "fake_maturation_slot"
+# The disposable label slot 2 routes to through the shared contract; the fake
+# cursors report it, and no connection ever opens it.
+FAKE_SLOT_DBNAME = "qa640_fake_maturation_slot"
 
 
 # ============================================================================
@@ -497,9 +503,7 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
         "load_settings_as_dict",
         lambda: (_ for _ in ()).throw(AssertionError("unexpected settings reload")),
     )
-    monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname", lambda slot: FAKE_SLOT_DBNAME
-    )
+    route_slot_to_disposable(monkeypatch.setattr, slot=2, dbname=FAKE_SLOT_DBNAME)
     monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
     monkeypatch.setattr(
         retrograde_maturation,
@@ -635,9 +639,7 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
     expansion_calls: list[dict[str, Any]] = []
     applied_coordinates: list[Mapping[str, Any]] = []
 
-    monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname", lambda slot: FAKE_SLOT_DBNAME
-    )
+    route_slot_to_disposable(monkeypatch.setattr, slot=2, dbname=FAKE_SLOT_DBNAME)
     monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
     monkeypatch.setattr(
         retrograde_maturation,

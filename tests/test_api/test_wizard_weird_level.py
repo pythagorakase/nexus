@@ -38,6 +38,7 @@ from nexus.api.narrative_schemas import (
 from nexus.api.new_story_cache import SuggestedTrait, WizardCache, _row_to_cache
 from nexus.api.slot_state import SlotState, _get_wizard_state_from_row
 from nexus.api.wizard_confirmation import WizardStateConflict
+from tests.pg_fixtures import route_slot_to_disposable
 from tests.test_api.test_mock_wizard_responses import _fixture_rows
 
 LEVELS: tuple[WeirdLevel, ...] = ("low", "medium", "high")
@@ -437,9 +438,10 @@ class TransactionMapper:
 
 
 GENESIS_SQL = "UPDATE global_variables SET genesis_weird = %s::jsonb WHERE id = TRUE"
-# The database label the transition boundaries hand the fake mapper; no
-# PostgreSQL connection is ever opened with it.
-FAKE_DBNAME = "fake_transition_slot"
+# The disposable label slot 4 routes to through the shared contract; the
+# transition boundaries hand it to the fake mapper, and no PostgreSQL
+# connection is ever opened with it.
+FAKE_DBNAME = "qa640_fake_transition_slot"
 
 
 @pytest.fixture
@@ -455,7 +457,7 @@ def transition_boundaries(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(
         new_story_db_mapper, "NewStoryDatabaseMapper", TransactionMapper
     )
-    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda slot: FAKE_DBNAME)
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=FAKE_DBNAME)
     monkeypatch.setattr(
         new_story_flow, "read_cache", lambda dbname: ready_cache(weird_level="high")
     )

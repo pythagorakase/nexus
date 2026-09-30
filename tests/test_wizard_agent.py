@@ -38,6 +38,7 @@ from nexus.api.new_story_schemas import (
     ZoneDefinition,
 )
 from nexus.prompts.registry import PromptId, load
+from tests.pg_fixtures import route_slot_to_disposable
 from nexus.api.wizard_agent import (
     WizardContext,
     build_wizard_prompt,
@@ -48,8 +49,9 @@ from nexus.api.wizard_agent import (
     submit_world_document,
 )
 
-# A database label for fakes; no PostgreSQL connection ever opens it.
-FAKE_DBNAME = "fake_wizard_slot"
+# The disposable label a test's slot routes to through the shared contract;
+# the fakes receive it, and no PostgreSQL connection ever opens it.
+FAKE_DBNAME = "qa640_fake_wizard_slot"
 
 
 @pytest.fixture(autouse=True)
@@ -258,7 +260,7 @@ async def test_submit_character_concept_sets_trait_menu(monkeypatch, context_dat
         ],
     )
     monkeypatch.setattr(wizard_module, "get_selected_trait_count", lambda _dbname: 0)
-    monkeypatch.setattr(wizard_module, "slot_dbname", lambda _slot: FAKE_DBNAME)
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=FAKE_DBNAME)
 
     ctx = DummyRunContext(make_context(phase="character", context_data=context_data))
     with pytest.raises(CallDeferred):
@@ -277,7 +279,7 @@ async def test_submit_trait_selection_advances_state(monkeypatch):
     monkeypatch.setattr(
         wizard_module, "clear_suggested_traits", lambda *args, **kwargs: None
     )
-    monkeypatch.setattr(wizard_module, "slot_dbname", lambda _slot: FAKE_DBNAME)
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=FAKE_DBNAME)
 
     concept = sample_concept_submission().to_character_concept()
     state = CharacterCreationState(concept=concept)
@@ -300,7 +302,7 @@ async def test_submit_trait_selection_advances_state(monkeypatch):
 @pytest.mark.asyncio
 async def test_submit_wildcard_trait_completes_character(monkeypatch):
     monkeypatch.setattr(wizard_module, "record_drafts", lambda *args, **kwargs: None)
-    monkeypatch.setattr(wizard_module, "slot_dbname", lambda _slot: FAKE_DBNAME)
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=FAKE_DBNAME)
 
     concept = sample_concept_submission().to_character_concept()
     state = CharacterCreationState(
@@ -440,7 +442,7 @@ def test_seed_timestamp_round_trips_through_record_drafts(monkeypatch) -> None:
             }
         )
 
-    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda _slot: FAKE_DBNAME)
+    route_slot_to_disposable(monkeypatch.setattr, slot=1, dbname=FAKE_DBNAME)
     monkeypatch.setattr(new_story_flow, "read_cache", lambda _dbname: None)
     monkeypatch.setattr(new_story_flow, "write_cache", persist_cache)
 
@@ -542,7 +544,7 @@ async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> Non
             return {"name": "Stormwatch"}
 
     monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda _slot: FAKE_DBNAME)
-    monkeypatch.setattr(wizard_chat, "slot_dbname", lambda _slot: FAKE_DBNAME)
+    route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=FAKE_DBNAME)
     monkeypatch.setattr(
         wizard_chat,
         "read_cache",
