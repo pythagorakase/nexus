@@ -1,17 +1,23 @@
-"""Live end-to-end test for runtime Retrograde stub maturation on save_02.
+"""Live end-to-end test for runtime Retrograde stub maturation on a clone.
 
 Skipped unless ``NEXUS_RUN_LIVE_LLM=1`` is set. Makes real frontier calls
-(R4 seed generation + R6 expansion) and commits real rows to save_02 — the
-writable working slot. Each run declares a uniquely named entity so the
-per-entity idempotency boundary never blocks repeat runs.
+(R4 seed generation + R6 expansion) and commits real rows to a disposable
+template clone that ``maturation_story`` seeds with a clocked head chunk and
+routes under ``ROUTED_SLOT``; the clone is dropped afterward, so no owner slot
+is written. Each run declares a uniquely named entity. The enqueue and
+idempotency path this test drives before its first model call is proven
+without the live opt-in in ``tests/test_live_gate_clones_pg.py``.
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import Any, Iterator
+from collections.abc import Callable, Iterator
+from contextlib import closing
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
 
-import psycopg2
 import pytest
 from psycopg2.extras import RealDictCursor
 
@@ -20,25 +26,47 @@ from nexus.agents.orrery.retrograde_maturation import (
     enqueue_declared_entity_maturations,
 )
 from nexus.database import database_url
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_story_clock,
+)
 
 pytestmark = [pytest.mark.live, pytest.mark.live_llm, pytest.mark.requires_postgres]
 
-
-@pytest.fixture()
-def save_02_conn() -> Iterator[Any]:
-    conn = psycopg2.connect(database_url("save_02"))
-    try:
-        yield conn
-    finally:
-        conn.close()
+# The slot label the clone is routed under; maturation jobs record it and the
+# drain resolves its connection through it.
+ROUTED_SLOT = 4
+WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
 
 
-def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
-    """A declared entity matures into persisted, embedded Retrograde history."""
+@dataclass(frozen=True)
+class MaturationStory:
+    """The clone and the head chunk ``seed_maturation_story`` committed."""
 
-    suffix = uuid.uuid4().hex[:8]
-    name = f"Archivist Veil-{suffix}"
-    declaration = {
+    dbname: str
+    chunk_id: int
+
+
+def seed_maturation_story(
+    dbname: str, patch: Callable[[Any, str, Any], None]
+) -> MaturationStory:
+    """Clock the clone with one head chunk and route ``ROUTED_SLOT`` to it."""
+
+    route_slot_to_disposable(patch, slot=ROUTED_SLOT, dbname=dbname)
+    chunk_id = seed_story_clock(
+        dbname,
+        world_time=WORLD_TIME,
+        raw_text="The archive stacks settle into their night silence.",
+    )
+    return MaturationStory(dbname=dbname, chunk_id=chunk_id)
+
+
+def archivist_declaration(name: str) -> dict[str, str]:
+    """The Skald new-entity declaration this module matures."""
+
+    return {
         "kind": "character",
         "name": name,
         "summary": (
@@ -47,26 +75,48 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
         ),
     }
 
-    with save_02_conn.cursor() as cur:
-        cur.execute("SELECT max(id) FROM narrative_chunks")
-        chunk_id = int(cur.fetchone()[0])
+
+@pytest.fixture()
+def maturation_story(monkeypatch: pytest.MonkeyPatch) -> Iterator[MaturationStory]:
+    """A routed clone with the source story pins preserved for live models."""
+
+    with disposable_slot_database("qa640_maturation_live", story_pin=None) as dbname:
+        monkeypatch.setenv("NEXUS_SLOT", str(ROUTED_SLOT))
+        yield seed_maturation_story(dbname, monkeypatch.setattr)
+
+
+@pytest.fixture()
+def maturation_conn(maturation_story: MaturationStory) -> Iterator[Any]:
+    with closing(connect(maturation_story.dbname)) as conn:
+        yield conn
+
+
+def test_live_maturation_end_to_end(
+    maturation_story: MaturationStory, maturation_conn: Any
+) -> None:
+    """A declared entity matures into persisted, embedded Retrograde history."""
+
+    suffix = uuid.uuid4().hex[:8]
+    name = f"Archivist Veil-{suffix}"
+    declaration = archivist_declaration(name)
+    chunk_id = maturation_story.chunk_id
 
     result = enqueue_declared_entity_maturations(
-        save_02_conn,
+        maturation_conn,
         declarations=[declaration],
         chunk_id=chunk_id,
         raw_text=f"{name} surfaces from the archive stacks with a ledger.",
-        slot=2,
+        slot=ROUTED_SLOT,
     )
-    save_02_conn.commit()
+    maturation_conn.commit()
     assert result.stubs_created == 1
     assert result.jobs_enqueued == 1
 
-    matured, failed = drain_maturation_jobs_sync(slot=2, limit=10)
+    matured, failed = drain_maturation_jobs_sync(slot=ROUTED_SLOT, limit=10)
     assert failed == 0
     assert matured >= 1
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT state::text AS state, result_manifest
@@ -85,7 +135,7 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
 
     # The matured history is real world_events rows with retrograde source
     # and embedded dedicated summaries on MEMNON's retrieval surface.
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with maturation_conn.cursor(cursor_factory=RealDictCursor) as cur:
         event_ids = list(manifest["world_event_ids"].values())
         cur.execute(
             """
@@ -113,7 +163,7 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
     if pending:
         from nexus.agents.memnon.memnon import MEMNON
 
-        memnon = MEMNON(interface=None, db_url=database_url("save_02"))
+        memnon = MEMNON(interface=None, db_url=database_url(maturation_story.dbname))
         search = memnon.query_memory(query=name, k=15, use_hybrid=True)
         returned_ids = {
             int(item["summary_id"])
@@ -127,12 +177,12 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
 
     # Idempotency: a matured entity never re-matures.
     rerun = enqueue_declared_entity_maturations(
-        save_02_conn,
+        maturation_conn,
         declarations=[declaration],
         chunk_id=chunk_id,
         raw_text=f"{name} appears again.",
-        slot=2,
+        slot=ROUTED_SLOT,
     )
-    save_02_conn.commit()
+    maturation_conn.commit()
     assert rerun.jobs_enqueued == 0
     assert rerun.jobs_already_present == 1

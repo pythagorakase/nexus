@@ -1,27 +1,23 @@
-"""Rollback-only PostgreSQL contract for migration 094."""
+"""PostgreSQL contract for migration 094 on a disposable empty database."""
 
+from contextlib import closing
 from pathlib import Path
-import uuid
 
 import psycopg2
 import pytest
 
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_database
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
 def test_scene_weather_check_rejects_unknown_value() -> None:
-    conn = psycopg2.connect(get_slot_db_url(slot=5))
-    schema = f"weather_migration_{uuid.uuid4().hex}"
     migration = (
         Path(__file__).parents[2] / "migrations" / "094_scene_weather_override.sql"
     ).read_text()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(f'CREATE SCHEMA "{schema}"')
-            cur.execute(f'SET LOCAL search_path = "{schema}"')
+    with disposable_database("qa640_weather_migration") as dbname:
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
                 """
                 CREATE TABLE chunk_metadata (
@@ -41,6 +37,5 @@ def test_scene_weather_check_rejects_unknown_value() -> None:
                     "VALUES (2, 'hail')"
                 )
             cur.execute("ROLLBACK TO SAVEPOINT before_bad_weather")
-    finally:
-        conn.rollback()
-        conn.close()
+            cur.execute("SELECT chunk_id, scene_weather FROM chunk_metadata")
+            assert cur.fetchall() == [(1, "warm")]
