@@ -8,10 +8,13 @@ unless ``NEXUS_RUNTIME_CONFIG`` names a private config.
 """
 
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
+import pytest
 import tomlkit
 
 from tests.pg_fixtures import (
@@ -31,7 +34,9 @@ RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
 _CHECKOUT = Path(__file__).resolve().parents[1]
 
 
-def private_runtime_config(tmp_path, monkeypatch, name="runtime.toml"):
+def private_runtime_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str = "runtime.toml"
+) -> tuple[tomlkit.TOMLDocument, Path]:
     """Write a copy of nexus.toml whose state_dir is private; export it.
 
     ``nexus down`` stops every service whose pidfile sits in the configured
@@ -41,18 +46,23 @@ def private_runtime_config(tmp_path, monkeypatch, name="runtime.toml"):
     caller may edit the document and rewrite the file.
     """
     doc = tomlkit.parse((_CHECKOUT / "nexus.toml").read_text())
-    doc["runtime"]["state_dir"] = str(tmp_path / "runtime")
+    runtime: Any = doc["runtime"]
+    runtime["state_dir"] = str(tmp_path / "runtime")
     path = tmp_path / name
     path.write_text(tomlkit.dumps(doc))
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(path))
     return doc, path
 
 
-def test_provider_config(tmp_path, base_url, monkeypatch):
+def test_provider_config(
+    tmp_path: Path, base_url: str, monkeypatch: pytest.MonkeyPatch
+) -> Path:
     """Route every provider consumer to TEST in a private config file."""
+    # tomlkit's item types do not index statically; the document is plain TOML.
+    doc: Any
     doc, path = private_runtime_config(tmp_path, monkeypatch, "scheduler.toml")
     providers = doc["global"]["model"]["api_models"]
-    uses = []
+    uses: list[str] = []
     for provider in providers.values():
         for model in provider["models"]:
             model_uses = model.pop("uses", [])
@@ -75,7 +85,7 @@ def test_provider_config(tmp_path, base_url, monkeypatch):
     return path
 
 
-def require_private_runtime_config():
+def require_private_runtime_config() -> Path:
     """Return the exported private runtime config, or raise.
 
     A config is private when ``NEXUS_RUNTIME_CONFIG`` names a file other than
@@ -100,8 +110,8 @@ def require_private_runtime_config():
             "private config"
         )
 
-    def state_dir(config):
-        doc = tomlkit.parse(config.read_text())
+    def state_dir(config: Path) -> Path:
+        doc: Any = tomlkit.parse(config.read_text())
         return anchor_path(_CHECKOUT, str(doc["runtime"]["state_dir"])).resolve()
 
     private_state = state_dir(path)
@@ -113,7 +123,7 @@ def require_private_runtime_config():
     return path
 
 
-def route_slot(monkeypatch, dbname):
+def route_slot(monkeypatch: pytest.MonkeyPatch, dbname: str) -> None:
     """Route slot 4, and only slot 4, to a disposable clone for this test.
 
     The slot-4 case of ``tests.pg_fixtures.route_slot_to_disposable``: every
@@ -121,17 +131,17 @@ def route_slot(monkeypatch, dbname):
     first imported while routed) returns ``dbname`` for slot 4 and raises
     ``RuntimeError`` for any other slot, ``VALID_DBNAMES`` holds only the
     clone, and ``NEXUS_SLOT`` is 4. The ``monkeypatch`` restores all of it at
-    teardown. The ``qa640_`` prefix is this helper's naming convention; the
-    owner-name refusal is ``require_disposable_target``.
+    teardown. ``require_disposable_target`` refuses an owner name first; the
+    ``qa640_`` prefix check after it is this helper's naming convention.
     """
+    require_disposable_target(dbname)
     if not dbname.startswith("qa640_"):
         raise RuntimeError(f"route_slot routes only qa640_ clones, got {dbname!r}")
-    require_disposable_target(dbname)
     route_slot_to_disposable(monkeypatch.setattr, slot=ROUTED_SLOT, dbname=dbname)
     monkeypatch.setenv("NEXUS_SLOT", str(ROUTED_SLOT))
 
 
-def routed_child_environment():
+def routed_child_environment() -> dict[str, str]:
     """Return the variables that route a child process like this one.
 
     A child runs ``tests.slot_routed_cli`` (or another routed entry point)
@@ -152,7 +162,7 @@ def routed_child_environment():
     return routed_slot_environment(slot, dbname)
 
 
-def run_cli(monkeypatch, *args):
+def run_cli(monkeypatch: pytest.MonkeyPatch, *args: str) -> str:
     """Run the actual parser and command with fixture-owned database routing.
 
     ``continue``, ``status`` and ``down`` run in a child process through
@@ -193,7 +203,7 @@ def run_cli(monkeypatch, *args):
 
 
 @contextmanager
-def gateway_lane(monkeypatch):
+def gateway_lane(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     """Serve the real lifespan on the order's port and tear down only our server.
 
     The lane is ``NEXUS_GATEWAY_PORT``, else ``DEFAULT_GATEWAY_LANE``; ``0``

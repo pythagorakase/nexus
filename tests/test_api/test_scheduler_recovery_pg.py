@@ -608,7 +608,7 @@ uvicorn.run(app, fd=int(sys.argv[1]), log_level="info")
                             process.kill()
                             process.wait(timeout=10)
                 down = subprocess.run(
-                    [sys.executable, "-m", "nexus.cli", "down"],
+                    [sys.executable, "-m", "tests.slot_routed_cli", "down"],
                     env=env,
                     capture_output=True,
                     text=True,

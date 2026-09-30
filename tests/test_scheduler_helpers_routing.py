@@ -5,14 +5,15 @@
 bind ``slot_dbname`` at import, refuses owner names and every other slot,
 and restores all of it at teardown. ``run_cli`` hands its child the active
 route, and ``gateway_lane`` refuses to start or to close with ``nexus down``
-unless ``NEXUS_RUNTIME_CONFIG`` names a private config. None of these tests
-opens a database connection.
+unless ``NEXUS_RUNTIME_CONFIG`` names a private config. Only the close-time
+refusal opens a database: it serves a lane on a routed disposable clone.
 """
 
 from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -26,10 +27,12 @@ from nexus.api import (
     wizard_chat,
 )
 from scripts import new_story_setup
+from tests import scheduler_helpers
 from tests.pg_fixtures import (
     ROUTED_SLOT_DATABASE_ENV,
     ROUTED_SLOT_ENV,
     active_slot_routes,
+    disposable_slot_database,
     route_slots_to_disposable,
 )
 from tests.scheduler_helpers import (
@@ -87,7 +90,7 @@ def test_route_slot_reaches_import_bound_resolvers_and_restores_them(
 @pytest.mark.parametrize(
     ("dbname", "message"),
     [
-        *((owner, "routes only qa640_ clones") for owner in OWNER_DATABASES),
+        *((owner, "Refusing to seed owner database") for owner in OWNER_DATABASES),
         ("qa885_other_prefix", "routes only qa640_ clones"),
     ],
 )
@@ -163,6 +166,8 @@ def test_private_runtime_config_is_required(
     with pytest.raises(RuntimeError, match="keeps the checkout's state_dir"):
         require_private_runtime_config()
 
+    # tomlkit's item types do not index statically; the document is plain TOML.
+    doc: Any
     doc, path = private_runtime_config(tmp_path, monkeypatch)
     assert require_private_runtime_config() == path.resolve()
     assert doc["runtime"]["state_dir"] == str(tmp_path / "runtime")
@@ -180,3 +185,36 @@ def test_gateway_lane_refuses_to_start_without_a_private_config(
     with pytest.raises(RuntimeError, match="is unset"):
         with gateway_lane(monkeypatch):
             pytest.fail("gateway_lane started without a private runtime config")
+
+
+@pytest.mark.requires_postgres
+def test_gateway_lane_refuses_to_close_without_a_private_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A lane whose private config is gone at close raises and runs no ``down``.
+
+    The lane starts on an OS-assigned port for a routed clone. Inside the block
+    ``NEXUS_RUNTIME_CONFIG`` is removed, so the closing ``nexus down`` would
+    act on the checkout's state_dir; the lane raises before it starts that
+    child. The test then restores the private config and runs the ``down``
+    the lane skipped.
+    """
+
+    _, config = private_runtime_config(tmp_path, monkeypatch)
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
+    real_run_cli = scheduler_helpers.run_cli
+    cli_calls: list[tuple[str, ...]] = []
+
+    def recording_run_cli(patch: pytest.MonkeyPatch, *args: str) -> str:
+        cli_calls.append(args)
+        return real_run_cli(patch, *args)
+
+    monkeypatch.setattr(scheduler_helpers, "run_cli", recording_run_cli)
+    with disposable_slot_database("qa640_lane_close") as dbname:
+        route_slot(monkeypatch, dbname)
+        with pytest.raises(RuntimeError, match="is unset"):
+            with gateway_lane(monkeypatch):
+                monkeypatch.delenv(RUNTIME_CONFIG_ENV)
+        assert cli_calls == []
+        monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+        real_run_cli(monkeypatch, "down")
