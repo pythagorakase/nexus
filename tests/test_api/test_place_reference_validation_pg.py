@@ -14,6 +14,7 @@ from nexus.agents.logon.skald_wire import SkaldGaiaWire, SkaldWriterWire
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.narrative_generation import write_to_incubator
 from tests.pg_fixtures import connect
+from tests.settings_helpers import settings_with
 from tests.test_api import test_acceptance_staging_pg as acceptance_fixtures
 from tests.test_api.test_reentry_wire_pg import staged
 from tests.test_lore.test_place_reference_validation import gaia_payload, writer_payload
@@ -32,7 +33,7 @@ async def test_writer_reference_is_repaired_before_real_staging(
     writer = SkaldWriterWire.model_validate(writer_payload(site))
     utility = LogonUtility.__new__(LogonUtility)
     utility._validation_dbname = dbname
-    utility.settings = {"orrery": {"retrograde": {"maturation": {"enabled": True}}}}
+    utility.settings = settings_with({"orrery.retrograde.maturation.enabled": True})
     utility.provider = SimpleNamespace(
         output_validator=build_storyteller_tag_validator(
             dbname, allow_same_turn_faction_declarations=True

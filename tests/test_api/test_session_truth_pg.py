@@ -165,7 +165,7 @@ def test_generation_session_preserves_bootstrap_error_class(
                 "Begin the story.",
                 4,
                 get_db_connection=narrative.get_db_connection,
-                load_settings=lambda: load_settings().model_dump(),
+                load_settings=load_settings,
                 manager=narrative.manager,
             )
         )
