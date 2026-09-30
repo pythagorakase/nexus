@@ -124,9 +124,6 @@ class DatabaseManager:
             connection = engine.connect()
             connection.close()
 
-            # Create tables if they don't exist
-            Base.metadata.create_all(engine)
-
             # Check for vector extension
             from .db_access import check_vector_extension, setup_database_indexes
 

@@ -15,10 +15,6 @@ The architecture has been refactored to use modular utility classes:
 - ContentProcessor: Manages content chunking, processing, and storage
 """
 
-from nexus.database import create_slot_engine
-from nexus.database import verify_database_url
-
-
 import re
 import uuid
 import logging
@@ -38,10 +34,8 @@ from nexus.util.clock_face import clock_face
 
 # Import utility modules
 from .utils.db_access import (
-    check_vector_extension,
     execute_vector_search,
     execute_hybrid_search,
-    setup_database_indexes,
 )
 from .utils.continuous_temporal_search import (
     execute_time_aware_search,
@@ -536,91 +530,6 @@ class MEMNON:
                 self.block_manager.create_block(
                     block=block, agent_id=self.agent_state.id, actor=self.user
                 )
-
-    def _initialize_database_connection(self) -> sa.engine.Engine:
-        """Initialize connection to PostgreSQL database."""
-        try:
-            self.db_url = verify_database_url(self.db_url)
-            engine = create_slot_engine(self.db_url)
-
-            # Verify connection
-            connection = engine.connect()
-            connection.close()
-
-            # Create tables if they don't exist
-            Base.metadata.create_all(engine)
-
-            # Check for vector extension via utility function
-            if check_vector_extension(self.db_url):
-                logger.info("Vector extension available")
-
-                # Set up necessary database indexes for efficient search
-                if setup_database_indexes(self.db_url):
-                    logger.info("Database indexes setup complete")
-                else:
-                    logger.warning(
-                        "Database indexes setup failed - vector search may not work correctly"
-                    )
-
-                # Set up hybrid search if enabled in settings
-                hybrid_search_enabled = (
-                    self.settings.get("retrieval", {})
-                    .get("hybrid_search", {})
-                    .get("enabled", False)
-                )
-                if hybrid_search_enabled:
-                    logger.info("Setting up hybrid search capabilities")
-                    self._setup_hybrid_search(engine)
-            else:
-                logger.warning(
-                    "Vector extension not found - vector search will not work"
-                )
-                logger.warning("Please run scripts/install_pgvector_custom.sh first")
-
-            logger.info("Successfully connected to the configured database")
-            return engine
-
-        except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
-            raise ConnectionError(f"Database connection failed: {e}")
-
-    def _setup_hybrid_search(self, engine):
-        """
-        Set up the database for hybrid search capabilities.
-        Creates a GIN index for text search and a hybrid_search SQL function.
-
-        Args:
-            engine: SQLAlchemy engine
-        """
-        try:
-            # Use our database access utilities to set up necessary indexes and functions
-            logger.info("Setting up hybrid search capabilities using db_access utility")
-            if setup_database_indexes(self.db_url):
-                logger.info("Hybrid search database setup completed successfully")
-                return True
-            else:
-                logger.warning("Hybrid search setup failed")
-                # Update settings in memory to reflect disabled status
-                if (
-                    "retrieval" in self.settings
-                    and "hybrid_search" in self.settings["retrieval"]
-                ):
-                    self.settings["retrieval"]["hybrid_search"]["enabled"] = False
-                return False
-
-        except Exception as e:
-            logger.error(f"Error setting up hybrid search: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
-            logger.warning("Disabling hybrid search due to setup failure")
-            # Update settings to reflect disabled status
-            if (
-                "retrieval" in self.settings
-                and "hybrid_search" in self.settings["retrieval"]
-            ):
-                self.settings["retrieval"]["hybrid_search"]["enabled"] = False
-            return False
 
     def _load_aliases(self) -> Dict[str, List[str]]:
         """Load character aliases from the database."""

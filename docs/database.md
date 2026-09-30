@@ -66,6 +66,18 @@ giving the reason. Offline tests in `tests/test_orrery/test_migrate.py` pin the
 allowlist to the Python files on disk, keep versions unique and increasing, and
 fail on any numbering gap beyond the historical `KNOWN_GAPS` (013 and 119).
 
+Migration 138 owns the column `chunk_metadata.scene` and three indexes that no
+earlier migration created: `narrative_chunks_text_idx`,
+`idx_chunk_metadata_scene`, and `idx_chunk_metadata_season_episode_scene`. It
+refuses, by name, a same-named index with another definition and a `scene`
+column of another type. Constructing the MEMNON `DatabaseManager` creates no
+table: it no longer calls `Base.metadata.create_all`, and an offline test
+fails on any `create_all` call under `nexus/`. Its index setup
+(`setup_database_indexes`) still runs `CREATE INDEX IF NOT EXISTS`
+statements, and the legacy scripts `scripts/extract_scene_numbers.py`,
+`scripts/update_scene_numbers.py`, and `scripts/import_narratives.py` still
+carry their own DDL; moving those into migrations is later work on #810.
+
 ## IDF Rebuild After a PostgreSQL Update
 
 Migration 114 keys each IDF corpus row (`memory_idf_corpora.analyzer_version`)
