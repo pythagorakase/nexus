@@ -8,9 +8,19 @@ provider boundary.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from threading import Lock
-from typing import Annotated, Any, Literal, Mapping, Optional, Union, cast
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from pydantic import Field, create_model
 from typing_extensions import TypeAliasType
@@ -31,7 +41,11 @@ from nexus.agents.logon.skald_wire import (
     SkaldGaiaWire,
     UpdatesBlock,
 )
-from nexus.agents.orrery.tag_library import _registry_digest
+from nexus.agents.orrery.tag_library import (
+    EntityRowReference,
+    _registry_digest,
+    read_current_entity_tag_names,
+)
 
 
 class GaiaRegistrySchemaError(RuntimeError):
@@ -55,6 +69,9 @@ class GaiaRegistryVocabulary:
     faction_tags: tuple[str, ...]
     pair_tags: tuple[str, ...]
     event_types: tuple[str, ...]
+    character_clear_only_tags: tuple[str, ...] = ()
+    place_clear_only_tags: tuple[str, ...] = ()
+    faction_clear_only_tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -73,8 +90,19 @@ _MODEL_CACHE: dict[
 _MODEL_CACHE_LOCK = Lock()
 
 
-def load_gaia_registry_wire_spec(dbname: str) -> GaiaRegistryWireSpec:
-    """Read one slot registry and return its digest-keyed Gaia wire model."""
+def load_gaia_registry_wire_spec(
+    dbname: str,
+    *,
+    scene_entity_refs: Sequence[EntityRowReference] = (),
+    anchor_chunk_id: Optional[int] = None,
+) -> GaiaRegistryWireSpec:
+    """Read one slot registry and return its digest-keyed Gaia wire model.
+
+    ``scene_entity_refs`` are the turn's present entities. Their active tags
+    of deprecated registry categories, and only those, form the clear-only
+    enums, so the grammar lets Gaia clear what the scene shows and nothing
+    else. Without present entities the grammar has no clear-only enums.
+    """
 
     if not dbname:
         raise GaiaRegistryReadError(
@@ -82,12 +110,22 @@ def load_gaia_registry_wire_spec(dbname: str) -> GaiaRegistryWireSpec:
         )
     try:
         vocabulary = read_storyteller_vocabulary(dbname)
+        scene_clear_only = _scene_clear_only_tags(
+            dbname,
+            vocabulary,
+            entity_refs=scene_entity_refs,
+            anchor_chunk_id=anchor_chunk_id,
+        )
     except Exception as exc:
         raise GaiaRegistryReadError(
             f"Failed to read Gaia strict-schema vocabulary from {dbname!r}"
         ) from exc
 
-    normalized = _normalize_vocabulary(vocabulary.tag_names_by_kind, vocabulary)
+    normalized = _normalize_vocabulary(
+        vocabulary.tag_names_by_kind,
+        vocabulary,
+        scene_clear_only=scene_clear_only,
+    )
     digest = _registry_digest(
         tag_names=[
             *normalized.character_tags,
@@ -151,9 +189,44 @@ def coerce_gaia_registry_wire(wire: SkaldGaiaWire) -> SkaldGaiaWire:
     return SkaldGaiaWire.model_validate(wire.model_dump(mode="python"))
 
 
+def _scene_clear_only_tags(
+    dbname: str,
+    vocabulary: StorytellerVocabulary,
+    *,
+    entity_refs: Sequence[EntityRowReference],
+    anchor_chunk_id: Optional[int],
+) -> dict[str, frozenset[str]]:
+    """Return, per kind, the clear-only tags the present entities carry.
+
+    A clear-only tag belongs to a deprecated registry category, so no prompt
+    offers it for a new application. Only the ones active on a present
+    entity of the same kind reach the grammar: the scene's own view.
+    """
+
+    refs_by_kind: dict[str, list[EntityRowReference]] = defaultdict(list)
+    for reference in entity_refs:
+        refs_by_kind[reference.kind].append(reference)
+    scene_clear_only: dict[str, frozenset[str]] = {}
+    for entity_kind, references in refs_by_kind.items():
+        clear_only = vocabulary.clearable_tags(
+            entity_kind
+        ) - vocabulary.tag_names_by_kind.get(entity_kind, frozenset())
+        if not clear_only:
+            continue
+        active = read_current_entity_tag_names(
+            dbname,
+            entity_refs=references,
+            anchor_chunk_id=anchor_chunk_id,
+        )
+        scene_clear_only[entity_kind] = frozenset(active & clear_only)
+    return scene_clear_only
+
+
 def _normalize_vocabulary(
     tag_names_by_kind: Mapping[str, object],
     vocabulary: StorytellerVocabulary,
+    *,
+    scene_clear_only: Mapping[str, frozenset[str]],
 ) -> GaiaRegistryVocabulary:
     normalized = GaiaRegistryVocabulary(
         character_tags=_normalize_names(
@@ -163,6 +236,13 @@ def _normalize_vocabulary(
         faction_tags=_normalize_names("faction tag", tag_names_by_kind.get("faction")),
         pair_tags=_normalize_names("pair tag", vocabulary.pair_tag_names),
         event_types=_normalize_names("event type", vocabulary.event_types),
+        character_clear_only_tags=tuple(
+            sorted(scene_clear_only.get("character", frozenset()))
+        ),
+        place_clear_only_tags=tuple(sorted(scene_clear_only.get("place", frozenset()))),
+        faction_clear_only_tags=tuple(
+            sorted(scene_clear_only.get("faction", frozenset()))
+        ),
     )
     return normalized
 
@@ -212,6 +292,28 @@ def _literal_alias(
     return TypeAliasType(name, literal)
 
 
+def _clear_tag_type(
+    name: str,
+    tag_name_type: Any,
+    clear_only_tags: tuple[str, ...],
+) -> Any:
+    """Return the item type of ``tags_clear`` for one entity kind.
+
+    A clear names a promptable tag or a tag of a deprecated registry category
+    that a present entity still carries. The second set gets its own named
+    enum, so ``tags_add`` never offers it.
+    """
+
+    if not clear_only_tags:
+        return tag_name_type
+    clear_only_name = _literal_alias(
+        name,
+        clear_only_tags,
+        description="Tag of a deprecated category: clear only, never add.",
+    )
+    return _union_type(tag_name_type, clear_only_name)
+
+
 def _list_type(item_type: Any) -> Any:
     return list[item_type]
 
@@ -244,6 +346,21 @@ def _build_gaia_registry_wire_model(
         description="Registered pair-tag name (e.g., protects, obligation).",
     )
     event_type_name = _literal_alias("EventTypeName", vocabulary.event_types)
+    character_clear_tag_name = _clear_tag_type(
+        "CharacterClearOnlyTagName",
+        character_tag_name,
+        vocabulary.character_clear_only_tags,
+    )
+    place_clear_tag_name = _clear_tag_type(
+        "PlaceClearOnlyTagName",
+        place_tag_name,
+        vocabulary.place_clear_only_tags,
+    )
+    faction_clear_tag_name = _clear_tag_type(
+        "FactionClearOnlyTagName",
+        faction_tag_name,
+        vocabulary.faction_clear_only_tags,
+    )
 
     pair_hint_model = create_model(
         "NewEntityPairTagHintRegistry",
@@ -307,18 +424,18 @@ def _build_gaia_registry_wire_model(
             | type[FactionUpdateDelta]
         ),
         tag_name_type: Any,
+        clear_tag_name_type: Any,
     ) -> Any:
-        optional_tag_list = _optional_type(_list_type(tag_name_type))
         return create_model(
             name,
             __base__=base,
             __module__=__name__,
             tags_add=(
-                optional_tag_list,
+                _optional_type(_list_type(tag_name_type)),
                 Field(default=None, description="Registered tags to add."),
             ),
             tags_clear=(
-                optional_tag_list,
+                _optional_type(_list_type(clear_tag_name_type)),
                 Field(default=None, description="Registered tags to clear."),
             ),
         )
@@ -327,16 +444,19 @@ def _build_gaia_registry_wire_model(
         "CharacterUpdateDeltaRegistry",
         CharacterUpdateDelta,
         character_tag_name,
+        character_clear_tag_name,
     )
     place_update_model = update_model(
         "PlaceUpdateDeltaRegistry",
         PlaceUpdateDelta,
         place_tag_name,
+        place_clear_tag_name,
     )
     faction_update_model = update_model(
         "FactionUpdateDeltaRegistry",
         FactionUpdateDelta,
         faction_tag_name,
+        faction_clear_tag_name,
     )
     updates_model = create_model(
         "UpdatesBlockRegistry",

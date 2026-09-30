@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from pydantic_ai import ModelRetry
 
 from nexus.config import load_settings
+from nexus.config.story_model import StorySettings
 from nexus.agents.logon.gaia_registry_schema import (
     coerce_gaia_registry_wire,
     load_gaia_registry_wire_spec,
@@ -30,13 +31,20 @@ from nexus.agents.logon.orrery_tag_validation import (
     read_storyteller_vocabulary,
 )
 from nexus.agents.logon.skald_wire import (
+    CharacterRef,
     CharacterUpdateDelta,
     FactionUpdateDelta,
     hydrate_skald_turn,
+    PlaceRef,
     PlaceUpdateDelta,
+    PresenceBaseline,
+    skald_gaia_strict_text_format,
     SkaldGaiaWire,
     SkaldTurnWire,
 )
+from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+from nexus.agents.orrery.tag_writer import apply_tag_bestowal
 from nexus.api.commit_handler_sync import (
     apply_state_updates_sync,
     commit_incubator_to_database_sync,
@@ -53,7 +61,10 @@ pytestmark = pytest.mark.requires_postgres
 
 CHARACTER_TAG = "recently_protective"
 EVENT_TAG = "dying"
-FACTION_TAG = "schismatic_internal_threat"
+# A disposable extend_expiry faction tag under the live agenda category; the
+# template's only extend_expiry faction tag (schismatic_internal_threat) sits
+# under the deprecated hidden_agenda_class, which the tag library excludes.
+FACTION_TAG = "qa649_faction_schism"
 PLACE_TAG = "qa649_place_watch"
 TIME_TAG = "intoxicated:stimulant"
 CHARACTER_REJECTION = (
@@ -319,6 +330,26 @@ def qa649_db() -> Iterator[_Qa649Database]:
                     )
                     """,
                     (PLACE_TAG,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO tags (
+                        tag,
+                        category,
+                        is_ephemeral,
+                        clearance_kind,
+                        reapplication_policy,
+                        description
+                    ) VALUES (
+                        %s,
+                        'agenda',
+                        true,
+                        'semantic',
+                        'extend_expiry',
+                        'Issue 649 disposable faction tag.'
+                    )
+                    """,
+                    (FACTION_TAG,),
                 )
                 _activate_tag(cur, active_character.entity_id, CHARACTER_TAG)
                 _activate_tag(cur, place.entity_id, PLACE_TAG)
@@ -901,6 +932,307 @@ def test_active_place_and_faction_identity_only_reassert_arms_are_removed_by_id(
     assert response.updates is not None
     assert getattr(response.updates, array_name) == []
     assert issues == []
+
+
+# One live, non-deprecated tag per kind whose registry category is deprecated.
+# Existing rows on save_03 and save_04 still carry these (issue #811).
+_DEPRECATED_CATEGORY_TAGS = [
+    ("characters", "active_character", "character", "black_market_operator"),
+    ("places", "place", "place", "worksite"),
+    ("factions", "faction", "faction", "gray_legal"),
+]
+
+
+def _deprecated_category_update(
+    entity: _EntityRef, field_name: str, tag: str
+) -> List[dict[str, Any]]:
+    return [{"id": entity.wire_id, "name": entity.name, field_name: [tag]}]
+
+
+def _unknown_tag_issue(wire_field: str, tag: str, entity_kind: str) -> str:
+    """The unknown-tag issue, named by the bestowal field the wire field feeds."""
+
+    field_name = {"tags_add": "applied_tags", "tags_clear": "tags_to_clear"}[wire_field]
+    return (
+        f"{field_name}: Unknown or entity-kind-incompatible tag {tag!r} "
+        f"for {entity_kind!r}"
+    )
+
+
+def _commit_activation(database: _Qa649Database, entity_id: int, tag: str) -> None:
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            _activate_tag(cur, entity_id, tag)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("array_name", "entity_attribute", "entity_kind", "tag"),
+    _DEPRECATED_CATEGORY_TAGS,
+)
+async def test_deprecated_category_tag_is_clearable_only_while_a_row_is_active(
+    qa649_db: _Qa649Database,
+    array_name: str,
+    entity_attribute: str,
+    entity_kind: str,
+    tag: str,
+) -> None:
+    """The clear set follows the database's active rows, never the registry alone.
+
+    Active nowhere, the tag is unknown to both fields. While a row is active,
+    a clear validates and an application is still rejected. The real
+    validator and commit route clear the row; with no active row left, a
+    further clear is unknown again. Each case ends with no active row, as it
+    began, so the module clone stays as the other tests expect.
+    """
+
+    entity = getattr(qa649_db, entity_attribute)
+
+    def issues(field_name: str) -> List[str]:
+        arrays: dict[str, Any] = {
+            array_name: _deprecated_category_update(entity, field_name, tag)
+        }
+        _normalized, collected = _normalize_and_collect(_response(**arrays), qa649_db)
+        return collected
+
+    def assert_unknown(field_name: str) -> None:
+        (issue,) = issues(field_name)
+        assert _unknown_tag_issue(field_name, tag, entity_kind) in issue
+
+    assert tag not in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags(
+        entity_kind
+    )
+    assert_unknown("tags_clear")
+    assert_unknown("tags_add")
+
+    _commit_activation(qa649_db, entity.entity_id, tag)
+    vocabulary = read_storyteller_vocabulary(qa649_db.dbname)
+    assert tag in vocabulary.clearable_tags(entity_kind)
+    assert tag not in vocabulary.tag_names_by_kind[entity_kind]
+    assert issues("tags_clear") == []
+    assert_unknown("tags_add")
+
+    clear_arrays: dict[str, Any] = {
+        array_name: _deprecated_category_update(entity, "tags_clear", tag)
+    }
+    await _validate_and_apply(_response(**clear_arrays), qa649_db)
+    assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
+
+    assert tag not in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags(
+        entity_kind
+    )
+    assert_unknown("tags_clear")
+
+
+@pytest.mark.asyncio
+async def test_worksite_stays_clearable_until_its_last_active_row_is_cleared(
+    qa649_db: _Qa649Database,
+) -> None:
+    """Clearing one place's ``worksite`` leaves it clearable on the other."""
+
+    places = (qa649_db.place, qa649_db.no_default_place)
+    for place in places:
+        _commit_activation(qa649_db, place.entity_id, "worksite")
+
+    for index, place in enumerate(places):
+        response = _response(
+            places=_deprecated_category_update(place, "tags_clear", "worksite")
+        )
+        _normalized, issues = _normalize_and_collect(response, qa649_db)
+        assert issues == []
+        await _validate_and_apply(response, qa649_db)
+        assert (
+            _current_tag_row(qa649_db, entity_id=place.entity_id, tag="worksite")
+            is None
+        )
+        still_active = index < len(places) - 1
+        assert (
+            "worksite"
+            in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags("place")
+        ) is still_active
+
+    _normalized, issues = _normalize_and_collect(
+        _response(
+            places=_deprecated_category_update(places[0], "tags_clear", "worksite")
+        ),
+        qa649_db,
+    )
+    (issue,) = issues
+    assert _unknown_tag_issue("tags_clear", "worksite", "place") in issue
+
+
+def _turn_gaia_model(
+    database: _Qa649Database, baseline: PresenceBaseline
+) -> type[SkaldGaiaWire]:
+    """Build the Gaia grammar exactly as a turn does, from its presence baseline.
+
+    LOGON's own schema selection reads the scene through ``present_entity_refs``
+    (the cast, the setting, the player), so no test builds its scene by hand.
+    """
+
+    settings = load_settings()
+    assert settings.apex.tag_library.schema_enums is True
+    utility = LogonUtility(
+        settings,
+        dbname=database.dbname,
+        model_override="TEST",
+        story_settings=StorySettings(),
+    )
+    utility._validation_dbname = database.dbname
+    utility._active_anchor_chunk_id = database.anchor_chunk_id
+    return utility._gaia_schema_model("openai", presence_baseline=baseline)
+
+
+def _clear_only_names(schema_model: type[SkaldGaiaWire], name: str) -> set[str]:
+    definitions = skald_gaia_strict_text_format(schema_model)["schema"]["$defs"]
+    if name not in definitions:
+        return set()
+    definition = definitions[name]
+    if "const" in definition:
+        return {str(definition["const"])}
+    return {str(value) for value in definition["enum"]}
+
+
+def _gaia_clear_payload(
+    array_name: str, entity: _EntityRef, field_name: str, tag: str
+) -> dict[str, Any]:
+    updates: dict[str, Any] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+        "relationships": [],
+    }
+    updates[array_name] = _deprecated_category_update(entity, field_name, tag)
+    return {
+        "letter": "Clear a tag an existing row still carries.",
+        "new_entities": [],
+        "orrery_adjudications": [],
+        "updates": updates,
+    }
+
+
+def _clear_directly(
+    database: _Qa649Database, entity: _EntityRef, entity_kind: str, tag: str
+) -> None:
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            apply_tag_bestowal(
+                cur,
+                entity_id=entity.entity_id,
+                entity_kind=entity_kind,
+                bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
+            )
+    assert _current_tag_row(database, entity_id=entity.entity_id, tag=tag) is None
+
+
+def _scene_carrying(entity_kind: str, entity: _EntityRef) -> PresenceBaseline:
+    """A real turn baseline whose cast or setting is ``entity``."""
+
+    if entity_kind == "character":
+        return PresenceBaseline(
+            present=[
+                CharacterRef(kind="character", name=entity.name, id=entity.wire_id)
+            ]
+        )
+    return PresenceBaseline(
+        setting=PlaceRef(kind="place", name=entity.name, id=entity.wire_id)
+    )
+
+
+@pytest.mark.parametrize(
+    ("array_name", "entity_attribute", "entity_kind", "tag"),
+    _DEPRECATED_CATEGORY_TAGS[:2],
+)
+def test_gaia_grammar_clears_a_deprecated_category_tag_only_in_its_scene(
+    qa649_db: _Qa649Database,
+    array_name: str,
+    entity_attribute: str,
+    entity_kind: str,
+    tag: str,
+) -> None:
+    """A present character's or place's active deprecated-category tag is clear-only.
+
+    With the carrying entity in the turn's presence baseline, ``tags_clear``
+    accepts the tag and ``tags_add`` rejects it. In a turn whose scene holds
+    only the player, the grammar rejects the clear.
+    """
+
+    entity = getattr(qa649_db, entity_attribute)
+    enum_name = f"{entity_kind.title()}ClearOnlyTagName"
+
+    _commit_activation(qa649_db, entity.entity_id, tag)
+    try:
+        in_scene = _turn_gaia_model(qa649_db, _scene_carrying(entity_kind, entity))
+        without_scene = _turn_gaia_model(qa649_db, PresenceBaseline())
+        assert _clear_only_names(in_scene, enum_name) == {tag}
+        assert tag not in _clear_only_names(without_scene, enum_name)
+
+        cleared = coerce_gaia_registry_wire(
+            in_scene.model_validate(
+                _gaia_clear_payload(array_name, entity, "tags_clear", tag)
+            )
+        )
+        assert cleared.updates is not None
+        assert getattr(cleared.updates, array_name)[0].tags_clear == [tag]
+        with pytest.raises(ValidationError):
+            in_scene.model_validate(
+                _gaia_clear_payload(array_name, entity, "tags_add", tag)
+            )
+        with pytest.raises(ValidationError):
+            without_scene.model_validate(
+                _gaia_clear_payload(array_name, entity, "tags_clear", tag)
+            )
+    finally:
+        _clear_directly(qa649_db, entity, entity_kind, tag)
+
+
+def test_turn_grammar_cannot_clear_an_active_faction_tag_the_validator_accepts(
+    qa649_db: _Qa649Database,
+) -> None:
+    """Documented limitation (#811): factions have no scene presence in a turn.
+
+    A presence baseline holds characters and the setting place, never a
+    faction, so the turn grammar carries no ``FactionClearOnlyTagName`` even
+    while a faction's deprecated-category tag is active and the validator
+    accepts its clear. The owner rules on ``gray_legal`` (save_04 entity 32).
+    """
+
+    array_name, entity_attribute, entity_kind, tag = _DEPRECATED_CATEGORY_TAGS[2]
+    assert entity_kind == "faction"
+    entity = getattr(qa649_db, entity_attribute)
+    fullest_scene = PresenceBaseline(
+        present=[
+            CharacterRef(kind="character", name=character.name, id=character.wire_id)
+            for character in (qa649_db.active_character, qa649_db.commit_character)
+        ],
+        setting=PlaceRef(
+            kind="place", name=qa649_db.place.name, id=qa649_db.place.wire_id
+        ),
+    )
+
+    _commit_activation(qa649_db, entity.entity_id, tag)
+    try:
+        assert tag in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags(
+            entity_kind
+        )
+        _normalized, issues = _normalize_and_collect(
+            _response(
+                **{array_name: _deprecated_category_update(entity, "tags_clear", tag)}
+            ),
+            qa649_db,
+        )
+        assert issues == []
+
+        for baseline in (fullest_scene, PresenceBaseline()):
+            turn_model = _turn_gaia_model(qa649_db, baseline)
+            definitions = skald_gaia_strict_text_format(turn_model)["schema"]["$defs"]
+            assert "FactionClearOnlyTagName" not in definitions
+            with pytest.raises(ValidationError):
+                turn_model.model_validate(
+                    _gaia_clear_payload(array_name, entity, "tags_clear", tag)
+                )
+    finally:
+        _clear_directly(qa649_db, entity, entity_kind, tag)
 
 
 def test_migration_109_seeds_only_time_cleared_defaults(

@@ -70,6 +70,7 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
     EntityRowReference,
     TagLibraryContext,
     format_contextual_tag_library,
+    format_scene_clear_only_tags,
     format_tag_library_for_prompt,
 )
 from nexus.api.native_structured_output import (  # noqa: E402
@@ -280,6 +281,34 @@ def read_user_character_id(dbname: str) -> int:
             return canonical_player_character_id(cur)
     finally:
         conn.close()
+
+
+def present_entity_refs(
+    dbname: str,
+    baseline: PresenceBaseline,
+) -> list[EntityRowReference]:
+    """Return one turn's present entities: the cast, the setting, the player.
+
+    The contextual tag library and the Gaia grammar's clear-only enums both
+    read this scene, so the grammar offers exactly the tags the prompt shows.
+    """
+
+    entity_refs = [
+        EntityRowReference(kind=reference.kind, row_id=reference.id)
+        for reference in baseline.present
+        if reference.id is not None
+    ]
+    if baseline.setting is not None and baseline.setting.id is not None:
+        entity_refs.append(
+            EntityRowReference(
+                kind=baseline.setting.kind,
+                row_id=baseline.setting.id,
+            )
+        )
+    entity_refs.append(
+        EntityRowReference(kind="character", row_id=read_user_character_id(dbname))
+    )
+    return list(dict.fromkeys(entity_refs))
 
 
 async def read_presence_baseline_async(
@@ -1531,7 +1560,10 @@ class LogonUtility:
             window=gaia_window,
             narrative=writer.narrative,
         )
-        gaia_schema_model = self._gaia_schema_model(gaia_wire)
+        gaia_schema_model = self._gaia_schema_model(
+            gaia_wire,
+            presence_baseline=presence_baseline,
+        )
         gaia, _gaia_response = gaia_provider.get_structured_completion(
             gaia_prompt,
             gaia_schema_model,
@@ -1637,7 +1669,10 @@ class LogonUtility:
             window=gaia_window,
             narrative=writer.narrative,
         )
-        gaia_schema_model = self._gaia_schema_model(gaia_wire)
+        gaia_schema_model = self._gaia_schema_model(
+            gaia_wire,
+            presence_baseline=presence_baseline,
+        )
         gaia, _gaia_response = await gaia_provider.get_structured_completion_async(
             gaia_prompt,
             gaia_schema_model,
@@ -1811,7 +1846,7 @@ class LogonUtility:
         )
         suffix = self._format_gaia_user_prompt("", empty_writer)
         gaia_blocks.append(("finished writer framing", suffix))
-        gaia_schema = self._gaia_schema_model(gaia_wire)
+        gaia_schema = self._gaia_schema_model(gaia_wire, presence_baseline=presence)
         gaia = self._measure_assembly_request(
             gaia_provider,
             gaia_prompt + suffix,
@@ -2309,8 +2344,14 @@ class LogonUtility:
     def _gaia_schema_model(
         self,
         wire_type: Literal["openai", "anthropic", "local"],
+        *,
+        presence_baseline: Optional[PresenceBaseline],
     ) -> type[SkaldGaiaWire]:
-        """Return the static or registry-specialized model for one Gaia call."""
+        """Return the static or registry-specialized model for one Gaia call.
+
+        The registry grammar's clear-only enums come from the turn's present
+        entities, the same scene whose tags the contextual library shows.
+        """
 
         if wire_type != "openai" or not self._tag_library_settings().schema_enums:
             return SkaldGaiaWire
@@ -2319,7 +2360,18 @@ class LogonUtility:
                 "OpenAI Gaia registry enum schema requires an initialized "
                 "slot validation database"
             )
-        return load_gaia_registry_wire_spec(self._validation_dbname).model
+        if presence_baseline is None:
+            raise GaiaRegistryReadError(
+                "OpenAI Gaia registry enum schema requires the turn's presence "
+                "baseline to scope its clear-only tags"
+            )
+        return load_gaia_registry_wire_spec(
+            self._validation_dbname,
+            scene_entity_refs=present_entity_refs(
+                self._validation_dbname, presence_baseline
+            ),
+            anchor_chunk_id=self._active_anchor_chunk_id,
+        ).model
 
     def _two_pass_schema_format_kwargs(
         self,
@@ -3060,14 +3112,17 @@ class LogonUtility:
         *,
         presence_baseline: Optional[PresenceBaseline],
     ) -> str:
-        """Render the bootstrap or scene-contextual tag library for one turn."""
+        """Render the bootstrap or scene-contextual tag library for one turn.
+
+        With ``[apex.tag_library] contextual = false`` a turn still lists the
+        scene's clear-only tags after the full live-only library, so a present
+        entity's deprecated-category tag stays visible, and clearable, on a
+        provider whose grammar carries no registry enum.
+        """
 
         if self.dbname is None:
             return ""
         if self._is_bootstrap_context(context):
-            return format_tag_library_for_prompt(self.dbname)
-
-        if not self._tag_library_settings().contextual:
             return format_tag_library_for_prompt(self.dbname)
 
         baseline = presence_baseline
@@ -3081,31 +3136,22 @@ class LogonUtility:
                 "Contextual Orrery tag library requires a presence baseline"
             )
 
-        entity_refs = [
-            EntityRowReference(kind=reference.kind, row_id=reference.id)
-            for reference in baseline.present
-            if reference.id is not None
-        ]
-        if baseline.setting is not None and baseline.setting.id is not None:
-            entity_refs.append(
-                EntityRowReference(
-                    kind=baseline.setting.kind,
-                    row_id=baseline.setting.id,
-                )
+        if not self._tag_library_settings().contextual:
+            library = format_tag_library_for_prompt(self.dbname)
+            clear_only = format_scene_clear_only_tags(
+                self.dbname,
+                present_entity_refs=present_entity_refs(self.dbname, baseline),
+                anchor_chunk_id=self._parent_chunk_id(context),
             )
-        user_character_id = read_user_character_id(self.dbname)
-        entity_refs.append(
-            EntityRowReference(
-                kind="character",
-                row_id=user_character_id,
-            )
-        )
+            if not clear_only:
+                return library
+            return f"{library}\n\n### Clear-Only Tags in This Scene\n\n{clear_only}"
 
         imminent_activity = context.get("orrery_imminent_activity") or []
         return format_contextual_tag_library(
             self.dbname,
             context=TagLibraryContext(
-                present_entity_refs=list(dict.fromkeys(entity_refs)),
+                present_entity_refs=present_entity_refs(self.dbname, baseline),
                 proposal_tag_names=proposal_tag_names_from_payload(context),
                 has_pending_proposals=bool(imminent_activity),
                 anchor_chunk_id=self._parent_chunk_id(context),

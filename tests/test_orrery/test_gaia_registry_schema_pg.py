@@ -15,26 +15,44 @@ import uuid
 
 import pytest
 from psycopg2 import sql
+from pydantic import ValidationError
 
 from nexus.agents.logon.gaia_registry_schema import (
     coerce_gaia_registry_wire,
     load_gaia_registry_wire_spec,
 )
 from nexus.agents.logon.skald_wire import (
+    PlaceRef,
+    PresenceBaseline,
     SkaldGaiaWire,
     skald_gaia_strict_text_format,
 )
+from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.api import slot_utils
 from nexus.api.slot_utils import VALID_DBNAMES
+from nexus.config import load_settings
+from nexus.config.story_model import StorySettings
 from scripts.api_openai import OpenAIProvider
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_entity_tag,
+    seed_place,
+    seed_protagonist,
+    seed_zone,
+)
 
 
 # Measured against the shipped NEXUS_template registry on 2026-07-30:
 # 24,321 bytes / 5,982 o200k tokens. The byte and token ceilings retain
-# ~10% headroom. The post-#916 registry has 625 enum values.
+# ~10% headroom. The post-#916 registry has 625 enum values. #811 slice B
+# removes the 97 live tags under deprecated registry categories from the
+# add/hint enums; a scene's clear-only enums carry only the ones its present
+# entities still hold, and a fresh clone has none, so the count is 528
+# (23,846 bytes / 5,806 tokens on 2026-09-30).
 GAIA_REGISTRY_STRICT_MAX_BYTES = 26_800
 GAIA_REGISTRY_STRICT_MAX_TOKENS = 6_600
-GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 625
+GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 528
 
 # Current OpenAI Structured Outputs documentation:
 # https://developers.openai.com/api/docs/guides/structured-outputs
@@ -87,14 +105,15 @@ def _enum_values(definition: dict[str, Any]) -> set[str]:
     raise AssertionError(f"Definition is not an enum: {definition!r}")
 
 
-def _array_item_ref(property_schema: dict[str, Any]) -> str:
+def _array_item_refs(property_schema: dict[str, Any]) -> list[str]:
     candidates = property_schema.get("anyOf") or [property_schema]
     array_schema = next(
         candidate
         for candidate in candidates
         if isinstance(candidate, dict) and candidate.get("type") == "array"
     )
-    return str(array_schema["items"]["$ref"])
+    items = array_schema["items"]
+    return [str(item["$ref"]) for item in items.get("anyOf") or [items]]
 
 
 def _all_enum_nodes(value: Any) -> list[dict[str, Any]]:
@@ -131,17 +150,20 @@ def test_gaia_grammar_exactly_matches_clone_validator_partitions(
     }
     for definition_name, values in expected.items():
         assert _enum_values(definitions[definition_name]) == values
+    # No scene, so no clear-only enum: the fresh clone's deprecated-category
+    # tags are active nowhere, and the grammar offers only what a scene shows.
+    assert not [name for name in definitions if "ClearOnly" in name]
 
     for model_name, definition_name in (
         ("CharacterUpdateDeltaRegistry", "CharacterTagName"),
         ("PlaceUpdateDeltaRegistry", "PlaceTagName"),
         ("FactionUpdateDeltaRegistry", "FactionTagName"),
     ):
+        properties = definitions[model_name]["properties"]
         for field_name in ("tags_add", "tags_clear"):
-            assert (
-                _array_item_ref(definitions[model_name]["properties"][field_name])
-                == f"#/$defs/{definition_name}"
-            )
+            assert _array_item_refs(properties[field_name]) == [
+                f"#/$defs/{definition_name}"
+            ]
 
     for model_name, kind, definition_name in (
         (
@@ -226,6 +248,101 @@ def test_gaia_registry_strict_schema_stays_within_measured_budget_and_limits(
             assert sum(len(value) for value in values) <= (
                 OPENAI_LARGE_ENUM_STRING_LENGTH_LIMIT
             )
+
+
+def _clear_only_values(schema_model: type[SkaldGaiaWire], name: str) -> set[str]:
+    definitions = skald_gaia_strict_text_format(schema_model)["schema"]["$defs"]
+    if name not in definitions:
+        return set()
+    return _enum_values(definitions[name])
+
+
+@pytest.mark.requires_postgres
+def test_turn_grammar_offers_a_deprecated_tag_only_when_a_present_entity_has_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The turn's Gaia grammar clears ``worksite`` only while the scene shows it.
+
+    ``worksite`` sits under the deprecated ``place_affordance`` category. The
+    first place carries it; the second does not. LOGON's own schema selection
+    reads the turn's present entities (cast, setting, player) from the
+    presence baseline, so the clear-only enum follows the setting.
+    """
+
+    with disposable_slot_database("qa640_811_gaia_scene") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        seed_zone(
+            dbname,
+            name="Harbor Ward",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
+        bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
+        seed_protagonist(dbname)
+        seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+
+        settings = load_settings()
+        assert settings.apex.tag_library.schema_enums is True
+        utility = LogonUtility(
+            settings,
+            dbname=dbname,
+            model_override="TEST",
+            story_settings=StorySettings(),
+        )
+        utility._validation_dbname = dbname
+
+        def turn_model(place_id: int, name: str) -> type[SkaldGaiaWire]:
+            return utility._gaia_schema_model(
+                "openai",
+                presence_baseline=PresenceBaseline(
+                    setting=PlaceRef(kind="place", name=name, id=place_id)
+                ),
+            )
+
+        present = turn_model(carrying, "Dry Dock Nine")
+        absent = turn_model(bare, "Lamplighter Row")
+
+        assert _clear_only_values(present, "PlaceClearOnlyTagName") == {"worksite"}
+        assert _clear_only_values(absent, "PlaceClearOnlyTagName") == set()
+        for schema_model in (present, absent):
+            definitions = skald_gaia_strict_text_format(schema_model)["schema"]["$defs"]
+            assert "worksite" not in _enum_values(definitions["PlaceTagName"])
+            assert "CharacterClearOnlyTagName" not in definitions
+            assert "FactionClearOnlyTagName" not in definitions
+
+        def payload(place_id: int, field_name: str) -> dict[str, Any]:
+            return {
+                "letter": "Clear what the scene still shows.",
+                "new_entities": [],
+                "orrery_adjudications": [],
+                "updates": {
+                    "characters": [],
+                    "places": [
+                        {
+                            "id": place_id,
+                            "name": "Dry Dock Nine",
+                            field_name: ["worksite"],
+                        }
+                    ],
+                    "factions": [],
+                    "relationships": [],
+                },
+            }
+
+        cleared = coerce_gaia_registry_wire(
+            present.model_validate(payload(carrying, "tags_clear"))
+        )
+        assert cleared.updates is not None
+        assert cleared.updates.places[0].tags_clear == ["worksite"]
+        with pytest.raises(ValidationError):
+            present.model_validate(payload(carrying, "tags_add"))
+        with pytest.raises(ValidationError):
+            absent.model_validate(payload(carrying, "tags_clear"))
 
 
 @pytest.mark.live

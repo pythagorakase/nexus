@@ -1,7 +1,14 @@
-"""Explicit TEST-provider/browser proof for work order 775; lane 8014 only."""
+"""Explicit TEST-provider/browser proof for work order 775.
+
+The gateway lane is ``NEXUS_GATEWAY_PORT`` (default 8014). Evidence files are
+written to the test's temporary directory; set
+``NEXUS_PROOF_EXPORT_EVIDENCE=1`` to write them into the tracked
+``docs/qa/775-session-truth`` instead.
+"""
 
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 import subprocess
 import threading
@@ -24,16 +31,35 @@ from tests.scheduler_helpers import (
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
-BASE = "http://127.0.0.1:8014"
-EVIDENCE = Path("docs/qa/775-session-truth")
+DEFAULT_LANE = 8014
+LANE_ENV = "NEXUS_GATEWAY_PORT"
+EXPORT_ENV = "NEXUS_PROOF_EXPORT_EVIDENCE"
+TRACKED_EVIDENCE = Path(__file__).resolve().parents[2] / "docs/qa/775-session-truth"
 
 
-def wait_status(session: str, expected: str = "complete") -> dict:
+def proof_lane() -> int:
+    """The gateway port this proof serves on: NEXUS_GATEWAY_PORT, else 8014."""
+    return int(os.environ.get(LANE_ENV) or DEFAULT_LANE)
+
+
+def evidence_dir(tmp_path: Path) -> Path:
+    """Where evidence lands: a temporary directory unless export is requested."""
+    export = os.environ.get(EXPORT_ENV)
+    if export not in (None, "", "0", "1"):
+        raise ValueError(f"{EXPORT_ENV} must be 1 or 0, got {export!r}")
+    if export == "1":
+        return TRACKED_EVIDENCE
+    directory = tmp_path / "775-session-truth"
+    directory.mkdir()
+    return directory
+
+
+def wait_status(base: str, session: str, expected: str = "complete") -> dict:
     """Poll the actual gateway and fail on a durable error."""
     deadline = time.monotonic() + 180
     while time.monotonic() < deadline:
         response = requests.get(
-            f"{BASE}/api/narrative/status/{session}", params={"slot": 4}, timeout=60
+            f"{base}/api/narrative/status/{session}", params={"slot": 4}, timeout=60
         )
         response.raise_for_status()
         status = response.json()
@@ -46,6 +72,10 @@ def wait_status(session: str, expected: str = "complete") -> dict:
 
 def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
     """Close a reader mid-writer, remount the real UI, accept, and regenerate."""
+    lane = proof_lane()
+    base = f"http://127.0.0.1:{lane}"
+    evidence = evidence_dir(tmp_path)
+    print(f"Lane {lane}; evidence directory {evidence}", flush=True)
     config = configure_test(tmp_path, "http://127.0.0.1:1", monkeypatch)
     # Start the TEST subprocess with this private config already in its env.
     provider = request.getfixturevalue("mock_openai_server")
@@ -63,8 +93,8 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
         monkeypatch.setattr(
             slot_endpoints, "slot_dbname", lambda slot: dbname if slot == 4 else None
         )
-        monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8014")
-        monkeypatch.setenv("NEXUS_API_URL", BASE)
+        monkeypatch.setenv(LANE_ENV, str(lane))
+        monkeypatch.setenv("NEXUS_API_URL", base)
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute("UPDATE global_variables SET model='TEST', gaia_model='TEST'")
             cur.execute(
@@ -79,14 +109,14 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 (fingerprint,),
             )
         check = subprocess.run(
-            ["lsof", "-nP", "-iTCP:8014", "-sTCP:LISTEN"],
+            ["lsof", "-nP", f"-iTCP:{lane}", "-sTCP:LISTEN"],
             capture_output=True,
             text=True,
         )
         assert check.returncode == 1, check.stdout + check.stderr
         server = uvicorn.Server(
             uvicorn.Config(
-                narrative.app, host="127.0.0.1", port=8014, log_level="warning"
+                narrative.app, host="127.0.0.1", port=lane, log_level="warning"
             )
         )
         thread = threading.Thread(target=server.run)
@@ -129,7 +159,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 """
                 )
                 page = context.new_page()
-                page.goto(BASE + "/nexus")
+                page.goto(base + "/nexus")
                 page.get_by_test_id("input-freeform").wait_for()
                 # An explicit human submission; recovery itself must never POST.
                 held_submissions = []
@@ -160,7 +190,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 deadline = time.monotonic() + 180
                 while time.monotonic() < deadline:
                     active = requests.get(
-                        BASE + "/api/narrative/active", params={"slot": 4}, timeout=60
+                        base + "/api/narrative/active", params={"slot": 4}, timeout=60
                     ).json()
                     assert active["status"] != "error", active
                     if active["phase"] == "writer":
@@ -177,7 +207,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 snapshot("Writer Active Before Disconnect")
                 page.close()  # Closes the socket and all in-memory session refs.
                 time.sleep(3.2)
-                wait_status(first)
+                wait_status(base, first)
                 snapshot("Complete While Client Absent")
                 recovered = context.new_page()
                 posts = []
@@ -225,7 +255,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 recovered.route("**/api/slot/4/state", disrupt_first_reads)
                 recovered.route("**/api/narrative/active?*", disrupt_first_reads)
                 recovered.route("**/api/narrative/status/*", disrupt_first_reads)
-                recovered.goto(BASE + "/nexus")
+                recovered.goto(base + "/nexus")
                 deadline = time.monotonic() + 30
                 while not seen_statuses and time.monotonic() < deadline:
                     recovered.wait_for_timeout(100)
@@ -282,7 +312,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                     print(f"Recovery boundary preempted stalled discovery: {boundary}")
                 assert posts == [], posts
                 recovered.screenshot(
-                    path=str(EVIDENCE / "recovered-reader.png"), full_page=True
+                    path=str(evidence / "recovered-reader.png"), full_page=True
                 )
                 # The reader's next explicit choice accepts the recovered draft.
                 with recovered.expect_response(
@@ -296,7 +326,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                     recovered.get_by_test_id("input-freeform").press("Enter")
                 second = next_turn.value.json()["session_id"]
                 accepted = requests.get(
-                    f"{BASE}/api/narrative/status/{first}",
+                    f"{base}/api/narrative/status/{first}",
                     params={"slot": 4},
                     timeout=60,
                 ).json()
@@ -309,17 +339,17 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                     )
                     assert cur.fetchone() == (accepted["chunk_id"],)
                 snapshot("Recovered Draft Accepted With Inserted Chunk")
-                wait_status(second)
+                wait_status(base, second)
                 replacement = requests.post(
-                    BASE + "/api/narrative/regenerate",
+                    base + "/api/narrative/regenerate",
                     json={"slot": 4, "session_id": second},
                     timeout=30,
                 )
                 replacement.raise_for_status()
                 third = replacement.json()["session_id"]
-                wait_status(third)
+                wait_status(base, third)
                 superseded = requests.get(
-                    f"{BASE}/api/narrative/status/{second}",
+                    f"{base}/api/narrative/status/{second}",
                     params={"slot": 4},
                     timeout=60,
                 ).json()
@@ -347,13 +377,13 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 with racing.expect_response(
                     lambda response: f"/api/narrative/status/{third}?" in response.url
                 ) as raced_status:
-                    racing.goto(BASE + "/nexus")
+                    racing.goto(base + "/nexus")
                 assert raced_status.value.json()["terminal_outcome"] == "discarded"
                 racing.get_by_test_id("input-freeform").wait_for()
                 racing.wait_for_timeout(500)
                 assert racing.get_by_text("Generation Failed", exact=True).count() == 0
                 racing.close()
-                discarded = wait_status(third)
+                discarded = wait_status(base, third)
                 assert discarded["terminal_outcome"] == "discarded", discarded
                 assert discarded["error_class"] is None
                 assert discarded["error"] is None
@@ -377,7 +407,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                         else None
                     ),
                 )
-                fresh.goto(BASE + "/nexus")
+                fresh.goto(base + "/nexus")
                 fresh.get_by_test_id("input-freeform").wait_for()
                 deadline = time.monotonic() + 15
                 while len(discoveries_after_undo) < 3 and time.monotonic() < deadline:
@@ -390,7 +420,7 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 assert fresh.get_by_text("DraftDiscarded").count() == 0
                 assert fresh_posts == [], fresh_posts
                 fresh.screenshot(
-                    path=str(EVIDENCE / "discarded-reader.png"), full_page=True
+                    path=str(evidence / "discarded-reader.png"), full_page=True
                 )
                 print(
                     "Undo: discarded; fresh reader: no active attempt, no error, no inference"
@@ -410,10 +440,10 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
                 event["model"] == "TEST" for event in turn_events
             ), turn_events
             assert {event["seat"] for event in turn_events} >= {"skald_writer", "gaia"}
-            (EVIDENCE / "provider-usage.json").write_text(
+            (evidence / "provider-usage.json").write_text(
                 json.dumps(turn_events, indent=2) + "\n"
             )
-            (EVIDENCE / "session-rows.json").write_text(
+            (evidence / "session-rows.json").write_text(
                 json.dumps({"database": dbname, "snapshots": rows}, indent=2) + "\n"
             )
         finally:

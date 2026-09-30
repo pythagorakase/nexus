@@ -240,14 +240,6 @@ def read_identity_index(conn: Any) -> IdentityIndex:
     )
 
 
-async def read_identity_index_async(conn: Any) -> IdentityIndex:
-    """Read the same identity catalog through an async acceptance transaction."""
-    return identity_index(
-        list(await conn.fetch(_CHARACTER_SQL)) + list(await conn.fetch(_OTHER_SQL)),
-        await conn.fetch(_ALIAS_SQL),
-    )
-
-
 def require_character_identity(
     conn: Any,
     name: str,
@@ -263,34 +255,6 @@ def require_character_identity(
         {},
     )
     index = read_identity_index(conn)
-    result = resolve_character_declaration(
-        {"name": name, "scene_location": declared_location},
-        index,
-        descriptors=descriptors,
-        scene_location=scene_location,
-    )
-    if result.status == "ambiguous":
-        raise CharacterIdentityAmbiguity(name, result)
-    return (
-        index.by_id[("character", result.existing_id)]
-        if result.existing_id is not None
-        else None
-    )
-
-
-async def require_character_identity_async(
-    conn: Any,
-    name: str,
-    *,
-    descriptors: str | None = None,
-    scene_location: str | None = None,
-    declared_location: str | None = None,
-) -> RosterEntry | None:
-    """Apply the same resolver within an asyncpg acceptance transaction."""
-    await conn.execute(
-        "SELECT pg_advisory_xact_lock(hashtext(current_database()), hashtext('character-identity'))"
-    )
-    index = await read_identity_index_async(conn)
     result = resolve_character_declaration(
         {"name": name, "scene_location": declared_location},
         index,
@@ -341,19 +305,4 @@ def refresh_generated_aliases(conn: Any) -> None:
             conn,
             "INSERT INTO character_aliases (character_id, alias, provenance) VALUES (:id, :alias, 'generated') ON CONFLICT DO NOTHING RETURNING character_id",
             {"id": character_id, "alias": alias},
-        )
-
-
-async def refresh_generated_aliases_async(conn: Any) -> None:
-    """Recompute generated aliases through the async acceptance transaction."""
-    await conn.execute("DELETE FROM character_aliases WHERE provenance = 'generated'")
-    index = identity_index(
-        list(await conn.fetch(_CHARACTER_SQL)) + list(await conn.fetch(_OTHER_SQL)),
-        await conn.fetch(_ALIAS_SQL),
-    )
-    for character_id, alias in generated_aliases(index):
-        await conn.execute(
-            "INSERT INTO character_aliases (character_id, alias, provenance) VALUES ($1, $2, 'generated') ON CONFLICT DO NOTHING",
-            character_id,
-            alias,
         )

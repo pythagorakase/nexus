@@ -84,6 +84,23 @@ class StorytellerVocabulary:
     tag_default_durations_by_kind: Mapping[str, Mapping[str, timedelta]] = field(
         default_factory=dict
     )
+    clearable_tag_names_by_kind: Mapping[str, FrozenSet[str]] = field(
+        default_factory=dict
+    )
+
+    def clearable_tags(self, entity_kind: str) -> FrozenSet[str]:
+        """Return the tags a clear may name for ``entity_kind``.
+
+        A clear may name every promptable tag and also each tag of a
+        deprecated registry category that an entity of this kind still
+        carries (``cleared_at IS NULL``). No prompt offers those tags for a
+        new application, and once the last such row is cleared the tag is
+        unknown to both fields (issue #811).
+        """
+
+        return self.tag_names_by_kind.get(
+            entity_kind, frozenset()
+        ) | self.clearable_tag_names_by_kind.get(entity_kind, frozenset())
 
 
 def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
@@ -109,24 +126,33 @@ def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
         "place": {},
         "faction": {},
     }
-    for entry in read_tag_library(dbname):
-        if entry.entity_kind in tags_by_kind:
-            tags_by_kind[entry.entity_kind].add(entry.tag)
-            if entry.reapplication_policy is not None:
-                policies_by_kind[entry.entity_kind][
-                    entry.tag
-                ] = entry.reapplication_policy
-            if entry.clearance_kind is not None:
-                clearance_kinds_by_kind[entry.entity_kind][
-                    entry.tag
-                ] = entry.clearance_kind
-            if entry.default_duration is not None:
-                default_durations_by_kind[entry.entity_kind][
-                    entry.tag
-                ] = entry.default_duration
+    clearable_by_kind: dict[str, set[str]] = {kind: set() for kind in tags_by_kind}
+    # One statement serves both sets, so the active rows come from the same
+    # snapshot as the library: a tag of a deprecated registry category is
+    # clearable only while an entity of its kind still carries it, and it is
+    # never promptable.
+    for entry in read_tag_library(dbname, include_deprecated_categories=True):
+        if entry.entity_kind not in tags_by_kind:
+            continue
+        if entry.category_deprecated:
+            if entry.active_somewhere:
+                clearable_by_kind[entry.entity_kind].add(entry.tag)
+            continue
+        tags_by_kind[entry.entity_kind].add(entry.tag)
+        if entry.reapplication_policy is not None:
+            policies_by_kind[entry.entity_kind][entry.tag] = entry.reapplication_policy
+        if entry.clearance_kind is not None:
+            clearance_kinds_by_kind[entry.entity_kind][entry.tag] = entry.clearance_kind
+        if entry.default_duration is not None:
+            default_durations_by_kind[entry.entity_kind][
+                entry.tag
+            ] = entry.default_duration
     return StorytellerVocabulary(
         tag_names_by_kind={
             kind: frozenset(tag_names) for kind, tag_names in tags_by_kind.items()
+        },
+        clearable_tag_names_by_kind={
+            kind: frozenset(tag_names) for kind, tag_names in clearable_by_kind.items()
         },
         pair_tag_names=frozenset(read_pair_tag_library(dbname)),
         event_types=frozenset(read_event_types(dbname)),
@@ -515,9 +541,12 @@ def _validate_bestowal_against_vocabulary(
 ) -> List[str]:
     """Return field-qualified issues from the cached per-kind tag catalog."""
 
-    allowed_tags = vocabulary.tag_names_by_kind.get(entity_kind, frozenset())
+    allowed_by_field = {
+        "applied_tags": vocabulary.tag_names_by_kind.get(entity_kind, frozenset()),
+        "tags_to_clear": vocabulary.clearable_tags(entity_kind),
+    }
     issues: List[str] = []
-    for field_name in ("applied_tags", "tags_to_clear"):
+    for field_name, allowed_tags in allowed_by_field.items():
         for tag_index, tag_name in enumerate(getattr(bestowal, field_name)):
             if tag_name not in allowed_tags:
                 issue = (

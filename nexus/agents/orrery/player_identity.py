@@ -80,20 +80,6 @@ def canonical_player_character_id(session_or_cur: Any) -> int:
     return character_id
 
 
-async def canonical_player_character_id_async(conn: Any) -> int:
-    """Return the canonical player ``characters.id`` through asyncpg.
-
-    The asynchronous commit route uses asyncpg rather than the SQLAlchemy and
-    psycopg surfaces accepted by :func:`canonical_player_character_id`. An
-    incomplete identity has the same loud corruption contract on every
-    database surface.
-    """
-
-    row = await conn.fetchrow(_PLAYER_IDENTITY_SQL)
-    character_id, _entity_id = _coerce_player_identity(row)
-    return character_id
-
-
 def canonical_player_entity_id(session_or_cur: Any) -> int:
     """Return the player entity id from the canonical global character row.
 

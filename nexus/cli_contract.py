@@ -127,6 +127,8 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "character-apply": "database",
         "place-manifest": "database",
         "place-apply": "database",
+        # Read-only; --all also reads NEXUS_template.
+        "tags audit": "database",
         # Local packet and manifest files, and provider calls made with this
         # machine's secrets; --slot also opens the slot database.
         "retrograde-seed-candidates": "local_operator",
@@ -163,6 +165,7 @@ ENVELOPE_COMMANDS: FrozenSet[str] = frozenset(
         "inspect characters",
         "inspect places",
         "inspect factions",
+        "tags audit",
     }
 )
 

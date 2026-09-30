@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
 import os
 import re
@@ -12,9 +12,24 @@ from typing import Any, cast, Optional
 import pytest
 import tiktoken
 
+from nexus.agents.logon.skald_wire import PlaceRef, PresenceBaseline
 import nexus.agents.orrery.tag_library as tag_library
-from nexus.agents.lore.logon_utility import proposal_tag_names_from_payload
+from nexus.agents.lore.logon_utility import (
+    LogonUtility,
+    proposal_tag_names_from_payload,
+)
+from nexus.api import slot_utils
+from nexus.config.story_model import StorySettings
 from nexus.prompts.registry import PromptId, load
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_entity_tag,
+    seed_place,
+    seed_protagonist,
+    seed_zone,
+)
+from tests.settings_helpers import settings_with
 
 
 def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None:
@@ -26,6 +41,8 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
             "category": "state",
             "category_description": "Character state.",
             "prompt_order": 10,
+            "category_deprecated": False,
+            "active_somewhere": False,
             "tag": "wounded",
             "is_ephemeral": True,
             "description": "Character has an acute wound.",
@@ -35,6 +52,8 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
             "category": "place_function",
             "category_description": "Functional role a place serves.",
             "prompt_order": 10,
+            "category_deprecated": False,
+            "active_somewhere": False,
             "tag": "haven",
             "is_ephemeral": False,
             "description": "Place can shelter or hide someone safely.",
@@ -74,6 +93,8 @@ def test_read_tag_library_captures_reapplication_policy(monkeypatch) -> None:
             "category": "disposition",
             "category_description": "Recent conduct.",
             "prompt_order": 10,
+            "category_deprecated": False,
+            "active_somewhere": False,
             "tag": "recently_protective",
             "is_ephemeral": True,
             "description": "Recently acted to protect someone.",
@@ -161,7 +182,7 @@ def _patch_contextual_registry(
     monkeypatch.setattr(
         tag_library,
         "read_tag_library",
-        lambda _dbname: registry_entries,
+        lambda _dbname, **_options: registry_entries,
     )
     monkeypatch.setattr(
         tag_library,
@@ -436,6 +457,361 @@ def test_contextual_library_digest_is_stable_and_registry_sensitive(
 
     assert _registry_digest(first) == _registry_digest(second)
     assert _registry_digest(first) != _registry_digest(expanded)
+
+
+@pytest.mark.requires_postgres
+def test_deprecated_registry_category_leaves_the_library(monkeypatch) -> None:
+    """A live tag under a deprecated category never reaches the prompts.
+
+    On a fresh template clone, ``worksite`` is itself live but sits under
+    ``place_affordance``, which migration 043 deprecated; ``haven`` sits
+    under the live ``place_function``. Reviving the category on the clone
+    brings ``worksite`` back, so the registry flag alone decides.
+    """
+
+    with disposable_slot_database("qa640_811_tag_library") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.tag, t.category, t.deprecated, r.deprecated
+                FROM tags t
+                JOIN tag_category_registry r ON r.category = t.category
+                WHERE t.tag IN ('worksite', 'haven')
+                ORDER BY t.tag
+                """
+            )
+            assert cur.fetchall() == [
+                ("haven", "place_function", False, False),
+                ("worksite", "place_affordance", False, True),
+            ]
+
+        library = {entry.tag for entry in tag_library.read_tag_library(dbname)}
+        categories = {
+            entry.category for entry in tag_library.read_tag_categories(dbname)
+        }
+        rendered = tag_library.format_tag_library_for_prompt(dbname)
+
+        assert "haven" in library
+        assert "worksite" not in library
+        assert "place_function" in categories
+        assert "place_affordance" not in categories
+        assert "`haven`" in rendered
+        assert "worksite" not in rendered
+        assert "place_affordance" not in rendered
+
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tag_category_registry SET deprecated = FALSE "
+                "WHERE category = 'place_affordance'"
+            )
+        assert "worksite" in {
+            entry.tag for entry in tag_library.read_tag_library(dbname)
+        }
+        assert "place_affordance" in {
+            entry.category for entry in tag_library.read_tag_categories(dbname)
+        }
+
+
+def _scene_library(dbname: str, place_id: int) -> str:
+    """Render the contextual library with one place present.
+
+    The proposal names ``worksite`` too: a proposal never selects a
+    deprecated-category entry, only a present entity's active tag does.
+    """
+
+    return tag_library.format_contextual_tag_library(
+        dbname,
+        context=tag_library.TagLibraryContext(
+            present_entity_refs=[
+                tag_library.EntityRowReference(kind="place", row_id=place_id)
+            ],
+            proposal_tag_names={"worksite", "haven"},
+            has_pending_proposals=False,
+        ),
+    )
+
+
+def _section(rendered: str, heading: str) -> str:
+    """Return one ``###`` section of a rendered library, heading excluded."""
+
+    body = rendered.split(f"### {heading}\n", 1)[1]
+    return body.split("\n### ", 1)[0]
+
+
+@pytest.mark.requires_postgres
+def test_scene_shows_a_present_entitys_deprecated_tag_as_clear_only(
+    monkeypatch,
+) -> None:
+    """Scene-Relevant Tags list an active deprecated-category tag, marked.
+
+    ``worksite`` sits under ``place_affordance``, which the registry
+    deprecates. The first place carries it and the second does not. With the
+    first present the scene lists the tag's real entry with ``(clear only)``;
+    with only the second present it appears nowhere. The name index, the full
+    library, and the taxonomy never list it.
+    """
+
+    with disposable_slot_database("qa640_811_scene_clear_only") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        seed_zone(
+            dbname,
+            name="Harbor Ward",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
+        bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
+        seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+        (worksite,) = [
+            entry
+            for entry in tag_library.read_tag_library(
+                dbname, include_deprecated_categories=True
+            )
+            if entry.tag == "worksite"
+        ]
+        assert (worksite.category, worksite.category_deprecated) == (
+            "place_affordance",
+            True,
+        )
+        assert worksite.active_somewhere is True
+
+        present = _scene_library(dbname, carrying)
+        scene = _section(present, "Scene-Relevant Tags")
+        entry_line = (
+            f"- place/place_affordance: {tag_library._format_tag_entry(worksite)}"
+            " (clear only)"
+        )
+        assert entry_line in scene.splitlines()
+        assert [line for line in scene.splitlines() if "worksite" in line] == [
+            entry_line
+        ]
+        assert "(clear only)" not in scene.replace(entry_line, "")
+        assert "`haven`" in scene
+        assert "worksite" not in _section(present, "Complete Tag-Name Index")
+        assert "place_affordance" not in _section(present, "Category Taxonomy")
+
+        absent = _scene_library(dbname, bare)
+        assert "worksite" not in absent
+        assert "(clear only)" not in absent
+        assert "`haven`" in _section(absent, "Scene-Relevant Tags")
+
+        assert "worksite" not in {
+            entry.tag for entry in tag_library.read_tag_library(dbname)
+        }
+        assert "place_affordance" not in {
+            entry.category for entry in tag_library.read_tag_categories(dbname)
+        }
+
+
+@pytest.mark.requires_postgres
+def test_scene_clear_only_line_follows_the_carrying_entitys_kind(
+    monkeypatch,
+) -> None:
+    """A deprecated category registered for two kinds marks only the carrier's.
+
+    The clone registers ``place_affordance`` for characters as well, still
+    deprecated. A present character carries ``worksite``; a present place
+    does not. The scene lists the character-kind entry as clear only and no
+    place-kind entry, since the validator accepts the clear only where an
+    entity of that kind carries the tag.
+    """
+
+    with disposable_slot_database("qa640_811_scene_kind") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        seed_zone(
+            dbname,
+            name="Harbor Ward",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        bare_place, _ = seed_place(dbname, name="Lamplighter Row")
+        character, character_entity = seed_protagonist(dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO tag_category_registry (
+                    category, entity_kind, prompt_order, description, deprecated
+                )
+                SELECT category, 'character', prompt_order, description, TRUE
+                FROM tag_category_registry
+                WHERE category = 'place_affordance' AND entity_kind = 'place'
+                """
+            )
+            assert cur.rowcount == 1
+        seed_entity_tag(dbname, entity_id=character_entity, tag="worksite")
+
+        entries = {
+            entry.entity_kind: entry
+            for entry in tag_library.read_tag_library(
+                dbname, include_deprecated_categories=True
+            )
+            if entry.tag == "worksite"
+        }
+        assert set(entries) == {"character", "place"}
+        assert entries["character"].active_somewhere is True
+        assert entries["place"].active_somewhere is False
+
+        rendered = tag_library.format_contextual_tag_library(
+            dbname,
+            context=tag_library.TagLibraryContext(
+                present_entity_refs=[
+                    tag_library.EntityRowReference(kind="character", row_id=character),
+                    tag_library.EntityRowReference(kind="place", row_id=bare_place),
+                ],
+                proposal_tag_names=set(),
+                has_pending_proposals=False,
+            ),
+        )
+        scene = _section(rendered, "Scene-Relevant Tags").splitlines()
+        character_line = (
+            "- character/place_affordance: "
+            f"{tag_library._format_tag_entry(entries['character'])} (clear only)"
+        )
+        assert [line for line in scene if "(clear only)" in line] == [character_line]
+        assert not any(line.startswith("- place/place_affordance") for line in scene)
+
+
+def _seed_worksite_scene(dbname: str) -> tuple[int, int]:
+    """Seed a player, a place carrying ``worksite``, and a bare place.
+
+    Returns the carrying and bare place row IDs.
+    """
+
+    seed_zone(
+        dbname,
+        name="Harbor Ward",
+        min_longitude=-74.1,
+        min_latitude=40.6,
+        max_longitude=-73.8,
+        max_latitude=40.9,
+    )
+    carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
+    bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
+    seed_protagonist(dbname)
+    seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+    return carrying, bare
+
+
+@pytest.mark.requires_postgres
+def test_full_turn_library_still_lists_scene_clear_only_tags(monkeypatch) -> None:
+    """``contextual = false`` keeps the scene's clear-only tags visible.
+
+    A turn with the switch off renders the full live-only library. With the
+    place carrying ``worksite`` as its setting, the ``worksite`` clear-only
+    line follows under Clear-Only Tags in This Scene; with the bare place as
+    the setting, the full library stands alone.
+    """
+
+    with disposable_slot_database("qa640_811_full_clear_only") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        carrying, bare = _seed_worksite_scene(dbname)
+        utility = LogonUtility(
+            settings_with({"apex.tag_library.contextual": False}),
+            dbname=dbname,
+            model_override="TEST",
+            story_settings=StorySettings(),
+        )
+        (worksite,) = [
+            entry
+            for entry in tag_library.read_tag_library(
+                dbname, include_deprecated_categories=True
+            )
+            if entry.tag == "worksite"
+        ]
+        full_library = tag_library.format_tag_library_for_prompt(dbname)
+        assert "worksite" not in full_library
+        assert "### Place Tags" in full_library
+
+        def _turn_library(place_id: int, name: str) -> str:
+            return utility._format_turn_tag_library(
+                {"user_input": "Continue."},
+                presence_baseline=PresenceBaseline(
+                    setting=PlaceRef(kind="place", id=place_id, name=name)
+                ),
+            )
+
+        present = _turn_library(carrying, "Dry Dock Nine")
+        assert present == (
+            f"{full_library}\n\n### Clear-Only Tags in This Scene\n\n"
+            f"- place/place_affordance: {tag_library._format_tag_entry(worksite)}"
+            " (clear only)"
+        )
+
+        absent = _turn_library(bare, "Lamplighter Row")
+        assert absent == full_library
+        assert "Clear-Only Tags in This Scene" not in absent
+        assert "worksite" not in absent
+
+
+@pytest.mark.requires_postgres
+def test_contextual_scene_rendering_is_pinned(monkeypatch) -> None:
+    """``contextual = true`` renders the scene exactly as before the refactor.
+
+    The contextual library and the full-library turn share one clear-only
+    selection and line renderer. The Scene-Relevant Tags section, the only
+    one that selection touches, is pinned byte for byte for a scene with and
+    without ``worksite``; the clear-only line sorts before the live
+    ``haven`` entry by category order, so it stays interleaved, not appended.
+    """
+
+    with disposable_slot_database("qa640_811_scene_pin") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        carrying, bare = _seed_worksite_scene(dbname)
+        haven = (
+            "- place/place_function: `haven`: "
+            "Place can shelter or hide someone safely."
+        )
+        worksite = (
+            "- place/place_affordance: `worksite`: Place supports physical, "
+            "field, maintenance, construction, or repair work. (clear only)"
+        )
+
+        present = _scene_library(dbname, carrying)
+        absent = _scene_library(dbname, bare)
+
+        assert present.split("### Scene-Relevant Tags\n", 1)[1] == (
+            f"\n{worksite}\n{haven}"
+        )
+        assert absent.split("### Scene-Relevant Tags\n", 1)[1] == f"\n{haven}"
+        assert (
+            present.split("### Scene-Relevant Tags\n", 1)[0]
+            == absent.split("### Scene-Relevant Tags\n", 1)[0]
+        )
+        assert (
+            tag_library.format_scene_clear_only_tags(
+                dbname,
+                present_entity_refs=[
+                    tag_library.EntityRowReference(kind="place", row_id=carrying)
+                ],
+                anchor_chunk_id=None,
+            )
+            == worksite
+        )
+        assert (
+            tag_library.format_scene_clear_only_tags(
+                dbname,
+                present_entity_refs=[
+                    tag_library.EntityRowReference(kind="place", row_id=bare)
+                ],
+                anchor_chunk_id=None,
+            )
+            == ""
+        )
 
 
 @pytest.mark.skipif(

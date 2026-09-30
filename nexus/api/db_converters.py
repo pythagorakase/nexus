@@ -3,21 +3,14 @@ Database Conversion Utilities
 ==============================
 
 Converts between Pydantic models (LLM-friendly) and PostgreSQL types.
-Handles time conversion, episode/season calculation, and entity resolution.
+Handles time conversion and episode/season calculation.
 """
 
 import logging
 from datetime import timedelta
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
-import asyncpg  # type: ignore[import-untyped]
-from nexus.agents.logon.apex_schema import (
-    CharacterReference,
-    ChronologyUpdate,
-    FactionReference,
-    PlaceReference,
-)
-from nexus.presence.roster import resolve_reference_async
+from nexus.agents.logon.apex_schema import ChronologyUpdate
 
 
 logger = logging.getLogger("nexus.api.db_converters")
@@ -125,98 +118,3 @@ def chronology_to_db_values(
     )
 
     return {"season": new_season, "episode": new_episode, "time_delta": time_delta}
-
-
-async def resolve_place_references(
-    place_references: List[PlaceReference], conn: asyncpg.Connection
-) -> List[dict]:
-    """
-    Resolve existing place references to IDs.
-
-    Args:
-        place_references: List of PlaceReference objects from LLM
-        conn: Database connection
-
-    Returns:
-        List of dicts ready for junction table insertion
-    """
-    resolved_refs = []
-    for ref in place_references:
-        entry = await resolve_reference_async(
-            conn, kind="place", id=ref.place_id, name=ref.place_name
-        )
-        resolved_refs.append(
-            {
-                "place_id": entry.id,
-                "name": entry.name,
-                "reference_type": ref.reference_type.value,
-                "evidence": ref.evidence,
-            }
-        )
-    return resolved_refs
-
-
-async def lookup_place_by_name(conn: asyncpg.Connection, name: str) -> Optional[int]:
-    """Look up place ID by name"""
-    result = await conn.fetchval("SELECT id FROM places WHERE name = $1", name)
-    return result
-
-
-# ============================================================================
-# Character Reference Resolution
-# ============================================================================
-
-
-async def resolve_character_references(
-    character_references: List[CharacterReference], conn: asyncpg.Connection
-) -> List[dict]:
-    """
-    Resolve existing character references to IDs.
-    """
-    resolved_refs = []
-    for ref in character_references:
-        entry = await resolve_reference_async(
-            conn, kind="character", id=ref.character_id, name=ref.character_name
-        )
-        resolved_refs.append(
-            {
-                "character_id": entry.id,
-                "name": entry.name,
-                "reference": ref.reference_type.value,
-            }
-        )
-    return resolved_refs
-
-
-async def lookup_character_by_name(
-    conn: asyncpg.Connection, name: str
-) -> Optional[int]:
-    """Look up character ID by name"""
-    result = await conn.fetchval("SELECT id FROM characters WHERE name = $1", name)
-    return result
-
-
-# ============================================================================
-# Faction Reference Resolution
-# ============================================================================
-
-
-async def resolve_faction_references(
-    faction_references: List[FactionReference], conn: asyncpg.Connection
-) -> List[dict]:
-    """
-    Resolve existing faction references to IDs.
-    """
-    resolved_refs = []
-    for ref in faction_references:
-        entry = await resolve_reference_async(
-            conn, kind="faction", id=ref.faction_id, name=ref.faction_name
-        )
-        resolved_refs.append({"faction_id": entry.id, "name": entry.name})
-    return resolved_refs
-
-
-async def lookup_faction_by_name(conn: asyncpg.Connection, name: str) -> Optional[int]:
-    """Look up faction ID by name"""
-    result = await conn.fetchval("SELECT id FROM factions WHERE name = $1", name)
-    return result

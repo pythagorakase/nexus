@@ -1,16 +1,13 @@
-"""Actual sync/async acceptance keeps name revelations on the original row."""
+"""Actual acceptance keeps name revelations on the original row."""
 
-import asyncio
 import json
-
-import asyncpg
 
 import pytest
 
 from nexus.agents.logon.apex_schema import NewEntityDeclaration
 from nexus.agents.logon.skald_wire import CharacterRef, PresenceDelta
 from nexus.presence.roster import read_roster, resolve_reference
-from tests.pg_fixtures import asyncpg_kwargs, connect
+from tests.pg_fixtures import connect
 from tests.test_presence_roster_pg import commit_wire, wire
 from tests.test_presence_roster_pg import roster_database as _roster_database
 
@@ -164,45 +161,3 @@ def test_reveal_and_alias_rollback_with_acceptance_failure(
         assert cur.fetchone()[0] == 0
         cur.execute("SELECT max(id) FROM narrative_chunks")
         assert cur.fetchone()[0] == parent
-
-
-@pytest.mark.parametrize("custom_json_codec", [False, True])
-def test_async_name_delta_has_identical_json_with_either_codec(
-    name_reveal_database, custom_json_codec
-):
-    """The ledger must record the name value, not a JSON document in a string."""
-    from nexus.agents.orrery.reconstruction import log_state_delta_async
-
-    dbname, ids, _ = name_reveal_database
-    _, entity_id, _, parent = prepare_witness(dbname, ids)
-
-    async def record():
-        conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
-        try:
-            if custom_json_codec:
-                await conn.set_type_codec(
-                    "jsonb",
-                    schema="pg_catalog",
-                    encoder=json.dumps,
-                    decoder=json.loads,
-                    format="text",
-                )
-            await log_state_delta_async(
-                conn,
-                source_chunk_id=parent,
-                writer="skald_state_update",
-                entity_id=entity_id,
-                field="characters.name",
-                old_value=OLD,
-                new_value=NEW,
-            )
-        finally:
-            await conn.close()
-
-    asyncio.run(record())
-    with connect(dbname) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT old_value, new_value, jsonb_typeof(new_value) "
-            "FROM state_delta_log WHERE field = 'characters.name'",
-        )
-        assert cur.fetchall() == [(OLD, NEW, "string")]

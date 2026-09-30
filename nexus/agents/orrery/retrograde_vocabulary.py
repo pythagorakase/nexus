@@ -212,41 +212,37 @@ class SeedEligibleVocabulary(TypedDict):
 
 
 # Seed-eligible vs prompt-visible category split (issue #300, settled in M4).
-# Every category registered in the live tag registry is classified explicitly
-# below; categories absent from both seed-eligible sets are prompt-visible
-# only, which is the conservative direction (prose context, never mechanical
-# Retrograde writes). New categories therefore ship locked until a deliberate
-# edit promotes them.
+# Every live category in the tag registry except ``mood`` is classified
+# explicitly below. ``mood`` (migration 095) is transient affect that is never
+# seeded, so it deliberately takes the default: categories absent from both
+# seed-eligible sets are prompt-visible only, which is the conservative
+# direction (prose context, never mechanical Retrograde writes). New categories
+# therefore ship locked until a deliberate edit promotes them. A category
+# ``tag_category_registry`` marks deprecated (migrations 043 and 055) is never
+# listed here, so it falls through to prompt_visible_only and Retrograde seeds
+# its live replacement categories instead. A PostgreSQL test reads the registry
+# from a fresh template clone and fails if any deprecated category is
+# seed-eligible or any live category other than ``mood`` is unclassified.
 STABLE_SEED_TAG_CATEGORIES: frozenset[str] = frozenset(
     {
         # Character identity, role, and capability (stable present-state).
-        "bodyform",
         "bodyform.lineage",
         "bodyform.condition",
         "disposition",
         "capacity",
-        "profession_lite",
-        "role",
         "role.function",
         "role.resources",
         "role.fame",
-        # Stable place character. The deprecated place_affordance category is
-        # no longer seed-eligible and falls through to prompt_visible_only.
+        # Stable place character.
         "place_function",
         "place_visibility",
         "place_access",
         "place_environment",
-        # Faction identity, economy, posture, and standing.
+        # Faction identity, economy, operations, and standing.
         "ideology",
-        "ideology_axis",
         "resource_base",
-        "resource_class",
         "legitimacy",
-        "legitimacy_status",
         "operational_mode",
-        "operational_secrecy",
-        "power_posture",
-        "history_class",
     }
 )
 EVENT_ANCHORED_TAG_CATEGORIES: frozenset[str] = frozenset(
@@ -255,7 +251,6 @@ EVENT_ANCHORED_TAG_CATEGORIES: frozenset[str] = frozenset(
         "place_threat",
         "power_status",
         "agenda",
-        "hidden_agenda_class",
         "relationship_risk",
     }
 )

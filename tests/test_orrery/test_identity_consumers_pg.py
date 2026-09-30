@@ -1,9 +1,7 @@
 """Disposable PostgreSQL proofs for trait reuse and shared identity normalization."""
 
-import asyncio
 from pathlib import Path
 
-import asyncpg
 import pytest
 
 from nexus.agents.orrery.retrograde_maturation import _resolve_pair_hint_entity
@@ -25,12 +23,8 @@ from nexus.presence.identity import (
     read_identity_index,
     require_character_identity,
 )
-from nexus.presence.roster import (
-    RosterEntry,
-    resolve_reference,
-    resolve_reference_async,
-)
-from tests.pg_fixtures import asyncpg_kwargs, connect
+from nexus.presence.roster import RosterEntry, resolve_reference
+from tests.pg_fixtures import connect
 from tests.test_presence_roster_pg import roster_database
 from tests.test_trait_compiler_integration import _character_sheet
 
@@ -182,19 +176,6 @@ def test_identity_policy_reference_and_pair_hint(
                     index.resolve(RosterEntry(kind="character", name=label)).id
                     == expected_id
                 )
-
-        async def exercise():
-            conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
-            try:
-                for label, expected_id in expected:
-                    entry = await resolve_reference_async(
-                        conn, kind="character", id=None, name=label
-                    )
-                    assert entry.id == expected_id
-            finally:
-                await conn.close()
-
-        asyncio.run(exercise())
 
 
 def test_identity_consumers_alias_collision_is_loud(roster_database):

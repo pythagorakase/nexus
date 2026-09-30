@@ -41,6 +41,7 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.orrery.tag_library import EntityRowReference
 from nexus.api.native_structured_output import (
     anthropic_output_config,
     openai_response_text_format,
@@ -816,11 +817,14 @@ def test_openai_two_pass_injects_registry_model_and_coerces_at_boundary(
             event_types=("slept", "woke"),
         ),
     )
-    monkeypatch.setattr(
-        logon_utility,
-        "load_gaia_registry_wire_spec",
-        lambda _dbname: SimpleNamespace(model=schema_model),
-    )
+    spec_reads: list[tuple[str, dict[str, Any]]] = []
+
+    def load_spec(dbname: str, **scene: Any) -> SimpleNamespace:
+        spec_reads.append((dbname, scene))
+        return SimpleNamespace(model=schema_model)
+
+    monkeypatch.setattr(logon_utility, "load_gaia_registry_wire_spec", load_spec)
+    monkeypatch.setattr(logon_utility, "read_user_character_id", lambda _dbname: 1)
     monkeypatch.setattr(
         utility,
         "_read_presence_baseline_for_context",
@@ -833,6 +837,21 @@ def test_openai_two_pass_injects_registry_model_and_coerces_at_boundary(
     )
 
     assert provider.calls[1]["schema_model"] is schema_model
+    # The grammar's clear-only enums are scoped to the turn's present
+    # entities: the cast, the setting, and the player.
+    assert spec_reads == [
+        (
+            "qa638_fixture",
+            {
+                "scene_entity_refs": [
+                    EntityRowReference(kind="character", row_id=4),
+                    EntityRowReference(kind="place", row_id=9),
+                    EntityRowReference(kind="character", row_id=1),
+                ],
+                "anchor_chunk_id": None,
+            },
+        )
+    ]
     assert provider.calls[1]["kwargs"] == {
         "text_format": skald_gaia_strict_text_format(schema_model),
         "prompt_cache_key": f"nexus:{require_slot_dbname()}:gaia",
@@ -1367,7 +1386,7 @@ def test_gaia_schema_enum_gate_off_is_byte_identical_to_static_schema() -> None:
     """The rollback lever preserves the pre-#638 OpenAI request exactly."""
 
     utility, _provider = _utility("openai", [])
-    schema_model = utility._gaia_schema_model("openai")
+    schema_model = utility._gaia_schema_model("openai", presence_baseline=None)
     actual = utility._two_pass_schema_format_kwargs(schema_model)["text_format"]
     expected = skald_gaia_strict_text_format()
 

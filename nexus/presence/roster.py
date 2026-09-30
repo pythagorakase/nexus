@@ -261,12 +261,6 @@ def read_roster(conn: Any, chunk_id: int) -> PresenceRoster:
     return read_rosters(conn, [chunk_id])[chunk_id]
 
 
-async def read_roster_async(conn: Any, chunk_id: int) -> PresenceRoster:
-    """Read the same roster through an existing asyncpg transaction."""
-    rows = await conn.fetch(_REFERENCE_SQL.replace(":chunk_ids", "$1"), [chunk_id])
-    return _rosters(rows, [chunk_id])[chunk_id]
-
-
 def render_roster(
     roster: PresenceRoster, *, player_character_id: int | None = None
 ) -> str:
@@ -387,18 +381,6 @@ def resolve_reference(
     )
 
 
-async def resolve_reference_async(
-    conn: Any, *, kind: Kind, id: int | None, name: str | None
-) -> RosterEntry:
-    """Resolve a reference through an existing asyncpg transaction."""
-    if id is None:
-        from nexus.presence.identity import read_identity_index_async
-
-        return _reference_index_entry(await read_identity_index_async(conn), kind, name)
-    rows = await conn.fetch(_reference_id_query(kind).replace(":id", "$1"), id)
-    return _resolved_entry(list(rows), kind, id, name)
-
-
 def roster_from_resolved_references(
     character_refs: Iterable[Mapping[str, Any]],
     place_refs: Iterable[Mapping[str, Any]],
@@ -468,16 +450,6 @@ def write_roster(conn: Any, chunk_id: int, roster: PresenceRoster) -> None:
     with conn.cursor() as cur:
         for query, params in _write_statements(chunk_id, roster):
             cur.execute(re.sub(r"(?<![\w:]):(\w+)", r"%(\1)s", query), params)
-
-
-async def write_roster_async(conn: Any, chunk_id: int, roster: PresenceRoster) -> None:
-    """Upsert the same roster through the asyncpg commit route."""
-    for query, params in _write_statements(chunk_id, roster):
-        keys = list(params)
-        query = re.sub(
-            r"(?<![\w:]):(\w+)", lambda match: f"${keys.index(match[1]) + 1}", query
-        )
-        await conn.execute(query, *(params[key] for key in keys))
 
 
 def resolve_place_update(
