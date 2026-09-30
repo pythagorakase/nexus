@@ -396,3 +396,40 @@ clean on the changed files. flake8 and mypy report only findings that also
 exist on the HEAD copies of `orrery_tag_validation.py` and
 `tests/test_orrery_tag_validation_pg.py` (three and three E501 long lines,
 and two mypy `index` errors). No gateway was started for these fixes.
+
+## Review Fixes: the Turn-Observation Clock
+
+Review found that `tests/test_turn_observation.py` still read its instant and
+`TODAY` at import, and that no test advanced the clock. The module now has no
+import-time clock values. The autouse `ledger_clock` fixture reads the
+writer's own clock when each test starts, pins `usage_ledger.datetime` to
+that instant, and yields a settable `_LedgerClock`; each test derives
+`today`, `yesterday`, `read_at` and the job enqueue time from it.
+
+`test_a_turn_straddling_utc_midnight_writes_and_joins_both_days` sets the
+clock to 23:59:59.9 UTC, records the writer's prompt window and usage event,
+advances 200 ms past midnight, records Gaia's, and calls `observe_turn` with
+`read_at` on the new day. Each record is in its own day's `windows-*.jsonl`
+and `usage-*.jsonl`, `ledger_days_read` is `[yesterday, today]`, and both
+attempts join their window and usage. Changing `record_prompt_window` to read
+the real `datetime` makes the test fail
+(`assert ['skald_writer', 'gaia'] == ['skald_writer']`); the file was
+restored afterwards.
+
+The docstring of `tests/test_character_name_reveals_pg.py` no longer says
+"sync/async": its only async test went with the async cluster.
+
+```text
+$ $PY -m pytest -q tests/test_turn_observation.py
+14 passed, 5 warnings in 1.23s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_tag_library.py tests/test_orrery/test_tag_writer.py tests/test_orrery/test_retrograde_vocabulary.py tests/test_orrery/test_retrograde_seed_candidates.py tests/test_orrery/test_retrograde_expansion.py tests/test_cli_contract.py tests/test_cli.py tests/test_turn_observation.py tests/test_tags_audit_pg.py
+FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
+1 failed, 387 passed, 1 skipped, 5 warnings in 97.97s (0:01:37)
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery_tag_validation_pg.py tests/test_orrery_tag_validation.py tests/test_orrery/test_gaia_registry_schema_pg.py tests/test_character_name_reveals_pg.py
+93 passed, 1 skipped, 5 warnings in 10.38s
+$ $PY -m pytest -q tests/test_reachability.py
+38 passed in 8.99s
+```
+
+The one failure is the #885 `save_05` exemption. Black and flake8 are clean
+on `tests/test_turn_observation.py`, and mypy reports no issues in it.
