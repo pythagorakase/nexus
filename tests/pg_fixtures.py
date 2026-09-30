@@ -408,6 +408,67 @@ def route_slot_to_disposable(
             patch(module, "slot_dbname", _routed_slot_dbname)
 
 
+# The two variables that route a child process's slot to a clone. The routed
+# entry points (``tests.slot_routed_gateway``, ``tests.slot_routed_uvicorn``
+# and ``tests.slot_routed_cli``) read them through
+# ``route_slot_from_environment`` before any gateway or CLI module loads.
+ROUTED_SLOT_ENV = "NEXUS_ROUTED_SLOT"
+ROUTED_SLOT_DATABASE_ENV = "NEXUS_ROUTED_SLOT_DATABASE"
+
+
+def routed_slot_environment(slot: int, dbname: str) -> dict[str, str]:
+    """Return the child-process variables that route ``slot`` to ``dbname``.
+
+    Refuses an owner database here as well, so a caller never builds an
+    environment that the child would refuse only after it started.
+    """
+
+    require_disposable_target(dbname)
+    return {ROUTED_SLOT_ENV: str(slot), ROUTED_SLOT_DATABASE_ENV: dbname}
+
+
+def route_slot_from_environment(
+    environ: Mapping[str, str] | None = None,
+) -> tuple[int, str]:
+    """Route this process's slot from ``NEXUS_ROUTED_SLOT*`` and return it.
+
+    A routed child-process entry point calls this first. Both variables are
+    required, the slot must be one ``nexus.api.slot_utils`` defines, and the
+    database must not be an owner database; each failure raises
+    ``RuntimeError`` before anything is patched or any connection opens, so
+    an unrouted child never falls back to the slot's owner database. The
+    route is applied with the builtin ``setattr`` and lasts for the life of
+    the process.
+    """
+
+    env = os.environ if environ is None else environ
+    missing = [
+        name
+        for name in (ROUTED_SLOT_ENV, ROUTED_SLOT_DATABASE_ENV)
+        if not env.get(name)
+    ]
+    if missing:
+        raise RuntimeError(
+            "A routed entry point needs "
+            + " and ".join(missing)
+            + ": it serves only a disposable clone and never an owner slot"
+        )
+    raw_slot = env[ROUTED_SLOT_ENV]
+    try:
+        slot = int(raw_slot)
+    except ValueError:
+        raise RuntimeError(
+            f"{ROUTED_SLOT_ENV} must be a slot number, got {raw_slot!r}"
+        ) from None
+    if slot not in all_slots():
+        raise RuntimeError(
+            f"{ROUTED_SLOT_ENV}={slot} is not a slot; slots are {all_slots()}"
+        )
+    dbname = env[ROUTED_SLOT_DATABASE_ENV]
+    route_slot_to_disposable(setattr, slot=slot, dbname=dbname)
+    return slot, dbname
+
+
 def seed_protagonist(
     dbname: str,
     *,
