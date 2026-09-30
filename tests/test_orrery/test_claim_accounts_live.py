@@ -34,12 +34,12 @@ from nexus.agents.orrery.substrate import (
 )
 from nexus.database import asyncpg_kwargs
 from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
-from tests.test_orrery.test_claim_propagation_live import (
-    _insert_character,
+from tests.test_orrery.claim_accounts_test_support import (
     _insert_chunk,
-    _insert_relationship,
     _install_valence_shadow,
     _settings,
+    insert_transaction_character,
+    insert_transaction_relationship,
 )
 
 
@@ -154,8 +154,8 @@ def _mint_sibling_incident(
 ) -> tuple[int, int, int, int, int, int]:
     """Mint one real event with canonical and variant account rows."""
 
-    actor, _actor_character = _insert_character(cur, f"{label}-actor")
-    target, _target_character = _insert_character(cur, f"{label}-target")
+    actor, _actor_character = insert_transaction_character(cur, f"{label}-actor")
+    target, _target_character = insert_transaction_character(cur, f"{label}-target")
     anchor, _world_time = _insert_chunk(cur)
     cur.execute(
         """
@@ -397,22 +397,30 @@ def test_sibling_accounts_hydrate_predicates_and_propagate_independently(
 
     raw_connection = account_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        canonical_knower, canonical_character = _insert_character(
+        canonical_knower, canonical_character = insert_transaction_character(
             cur, "account-canonical-knower"
         )
-        variant_knower, variant_character = _insert_character(
+        variant_knower, variant_character = insert_transaction_character(
             cur, "account-variant-knower"
         )
-        canonical_listener, canonical_listener_character = _insert_character(
+        canonical_listener, canonical_listener_character = insert_transaction_character(
             cur, "account-canonical-listener"
         )
-        variant_listener, variant_listener_character = _insert_character(
+        variant_listener, variant_listener_character = insert_transaction_character(
             cur, "account-variant-listener"
         )
-        subject, _subject_character = _insert_character(cur, "account-subject")
-        outsider, _outsider_character = _insert_character(cur, "account-outsider")
-        _insert_relationship(cur, canonical_character, canonical_listener_character)
-        _insert_relationship(cur, variant_character, variant_listener_character)
+        subject, _subject_character = insert_transaction_character(
+            cur, "account-subject"
+        )
+        outsider, _outsider_character = insert_transaction_character(
+            cur, "account-outsider"
+        )
+        insert_transaction_relationship(
+            cur, canonical_character, canonical_listener_character
+        )
+        insert_transaction_relationship(
+            cur, variant_character, variant_listener_character
+        )
         birth_chunk, birth_world_time = _insert_chunk(cur)
         cur.execute(
             """

@@ -3,6 +3,9 @@
 ``tests.pg_fixtures.require_disposable_target`` refuses ``NEXUS_template`` and
 every save slot by name, and each seed helper calls it before it opens a
 connection. An owner-slot seed is always a test bug, so there is no override.
+The transaction-scoped writers in ``claim_accounts_test_support`` take an open
+cursor instead of a name; each reads the cursor's database name client side and
+refuses an owner database the same way before it runs a statement.
 """
 
 from __future__ import annotations
@@ -14,20 +17,32 @@ import types
 from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, NoReturn
 
 import psycopg2
 import pytest
+from psycopg2.extras import RealDictCursor
 
 from nexus.api import slot_utils
 from tests import pg_fixtures
 from tests.pg_fixtures import (
     connect,
+    disposable_slot_database,
     require_disposable_target,
     route_slot_to_disposable,
+    seed_character,
     seed_entity_tag,
+    seed_story_clock,
 )
 from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
+from tests.test_orrery.claim_accounts_test_support import (
+    _install_valence_shadow,
+    insert_transaction_chain,
+    insert_transaction_character,
+    insert_transaction_faction,
+    insert_transaction_relationship,
+)
 
 OWNER_DATABASES = (
     "save_01",
@@ -291,3 +306,149 @@ def test_seed_helper_refuses_save_05_before_connecting() -> None:
         f"PostgreSQL recorded {after - before} new save_05 session(s) during a "
         "refused seed"
     )
+
+
+# Every transaction-scoped writer with valid arguments after its cursor. The
+# guard runs first, so none of these values reaches a database.
+TRANSACTION_WRITER_CALLS: dict[str, tuple[Callable[..., Any], tuple[Any, ...]]] = {
+    "insert_transaction_relationship": (insert_transaction_relationship, (1, 2)),
+    "insert_transaction_character": (insert_transaction_character, ("refused",)),
+    "insert_transaction_faction": (insert_transaction_faction, ("refused",)),
+    "insert_transaction_chain": (insert_transaction_chain, (2,)),
+}
+
+
+def _refuse_execute(*args: object, **kwargs: object) -> NoReturn:
+    """Fail the test the moment a transaction-scoped writer runs a statement."""
+
+    pytest.fail(
+        "A transaction-scoped writer ran a statement before refusing its target.",
+        pytrace=False,
+    )
+
+
+def _owner_cursor(dbname: str) -> Any:
+    """Return a cursor stand-in whose connection names ``dbname``.
+
+    The writers read their target client side (``cur.connection.info.dbname``,
+    libpq's ``PQdb``), so this stand-in reaches the refusal without any
+    connection to the owner database, and its ``execute`` fails the test if a
+    writer lost its guard.
+    """
+
+    return types.SimpleNamespace(
+        connection=types.SimpleNamespace(info=types.SimpleNamespace(dbname=dbname)),
+        execute=_refuse_execute,
+    )
+
+
+def _owner_sessions(cur: Any) -> dict[str, int]:
+    """Return ``pg_stat_database.sessions`` for every owner database present."""
+
+    cur.execute(
+        "SELECT datname, sessions FROM pg_stat_database WHERE datname = ANY(%s)",
+        (list(OWNER_DATABASES),),
+    )
+    return {str(row[0]): int(row[1]) for row in cur.fetchall()}
+
+
+@pytest.mark.requires_postgres
+def test_transaction_writers_refuse_owner_cursors_before_connecting() -> None:
+    """Each writer raises on every owner name, and no owner session opens.
+
+    The stand-in cursor never executes, and ``psycopg2.connect`` is a tripwire
+    while the writers run. ``pg_stat_database.sessions`` counts a session
+    before ``connect`` returns, so an unchanged count for every owner database
+    proves no writer dialed one; the control connection proves the counter
+    moves.
+    """
+
+    with closing(connect("postgres")) as admin:
+        admin.autocommit = True
+        with admin.cursor() as cur:
+            control_before = _sessions(cur, "postgres")
+            connect("postgres").close()
+            assert _sessions(cur, "postgres") > control_before, (
+                "pg_stat_database.sessions did not count a new connection, so "
+                "unchanged owner counts would prove nothing"
+            )
+            before = _owner_sessions(cur)
+            assert "save_05" in before, "pg_stat_database has no row for save_05"
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(psycopg2, "connect", _refuse_connection)
+                for name, (writer, arguments) in TRANSACTION_WRITER_CALLS.items():
+                    for dbname in OWNER_DATABASES:
+                        with pytest.raises(RuntimeError, match=re.escape(repr(dbname))):
+                            writer(_owner_cursor(dbname), *arguments)
+            after = _owner_sessions(cur)
+    assert after == before, (
+        f"PostgreSQL recorded new owner sessions during refused writes: "
+        f"{before} -> {after}"
+    )
+
+
+@pytest.mark.requires_postgres
+def test_transaction_relationship_writer_writes_on_a_clone() -> None:
+    """On a clone, the writer attributes the public row and fills the shadow.
+
+    The public row carries migration 115's ``manual`` producer in
+    ``relationship_versions``, the ``pg_temp`` twin carries the derived
+    ``valence_current``, and the caller's rollback removes both.
+    """
+
+    with disposable_slot_database("qa885_transaction_writer") as dbname:
+        seed_story_clock(dbname, world_time=datetime(2100, 1, 1, tzinfo=timezone.utc))
+        teller, _ = seed_character(dbname, name="Transaction Writer Teller")
+        listener, _ = seed_character(dbname, name="Transaction Writer Listener")
+        with closing(connect(dbname, cursor_factory=RealDictCursor)) as conn:
+            try:
+                with conn.cursor() as cur:
+                    _install_valence_shadow(cur)
+                    insert_transaction_relationship(cur, teller, listener)
+                    cur.execute(
+                        """
+                        SELECT relationship_type::text AS relationship_type,
+                               emotional_valence
+                        FROM public.character_relationships
+                        WHERE character1_id = %s AND character2_id = %s
+                        """,
+                        (teller, listener),
+                    )
+                    assert cur.fetchall() == [
+                        {
+                            "relationship_type": "associate",
+                            "emotional_valence": "+3|trusting",
+                        }
+                    ]
+                    cur.execute(
+                        """
+                        SELECT producer
+                        FROM relationship_versions
+                        WHERE relationship_table = 'character_relationships'
+                          AND operation = 'insert'
+                          AND (old_row ->> 'character1_id')::bigint = %s
+                          AND (old_row ->> 'character2_id')::bigint = %s
+                        """,
+                        (teller, listener),
+                    )
+                    assert cur.fetchall() == [{"producer": "manual"}]
+                    cur.execute(
+                        """
+                        SELECT valence_current
+                        FROM pg_temp.character_relationships
+                        WHERE character1_id = %s AND character2_id = %s
+                        """,
+                        (teller, listener),
+                    )
+                    assert cur.fetchall() == [
+                        {"valence_current": Decimal(3) / Decimal("5.5")}
+                    ]
+            finally:
+                conn.rollback()
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM character_relationships "
+                "WHERE character1_id = %s AND character2_id = %s",
+                (teller, listener),
+            )
+            assert cur.fetchone()[0] == 0, "the caller's rollback removes the row"

@@ -1,4 +1,11 @@
-"""Rollback-only live coverage for Storyteller knowledge surfacing."""
+"""Rollback-only live coverage for Storyteller knowledge surfacing.
+
+The module-scoped disposable template clone seeds its story clock first, then
+the three characters every test reads (alpha, beta, and the told source)
+through ``seed_character``, so no owner save slot is opened. The per-test
+fixture builds the rest of the story (chunks, claims, awareness, reveals)
+inside one rolled-back transaction.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +14,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 import logging
-from typing import Any, Iterator
+from typing import Any, Iterator, NamedTuple
 from uuid import uuid4
 
 import pytest
@@ -18,7 +25,6 @@ from sqlalchemy.orm import Session
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
-from nexus.api.slot_utils import get_slot_db_url
 from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryDisclosureSettings,
@@ -30,11 +36,17 @@ from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
 from tests.model_registry_helpers import registry_model
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    seed_character,
+    seed_story_clock,
+    sqlalchemy_url,
+)
 from tests.settings_helpers import settings_with, table
 
 
 pytestmark = pytest.mark.requires_postgres
-LIVE_SLOT = 5
+STORY_CLOCK = datetime(2073, 8, 1, tzinfo=timezone.utc)
 
 
 def _insert_chunk(session: Session, *, world_time: datetime, token: str) -> int:
@@ -72,34 +84,6 @@ def _insert_chunk(session: Session, *, world_time: datetime, token: str) -> int:
         {"chunk_id": chunk_id, "world_time": world_time},
     )
     return chunk_id
-
-
-def _insert_character(session: Session, *, label: str, token: str) -> tuple[int, int]:
-    entity_id = int(
-        session.execute(
-            text(
-                """
-                INSERT INTO entities (kind, is_active)
-                VALUES ('character', true)
-                RETURNING id
-                """
-            )
-        ).scalar_one()
-    )
-    name = f"knowledge-{label}-{token}"
-    character_id = int(
-        session.execute(
-            text(
-                """
-                INSERT INTO characters (name, entity_id)
-                VALUES (:name, :entity_id)
-                RETURNING id
-                """
-            ),
-            {"name": name, "entity_id": entity_id},
-        ).scalar_one()
-    )
-    return entity_id, character_id
 
 
 def _insert_claim(
@@ -222,11 +206,42 @@ def _insert_reveal(
     )
 
 
-@pytest.fixture()
-def knowledge_db() -> Iterator[dict[str, Any]]:
-    """Build an isolated Stage A-D fixture in one slot-5 transaction."""
+class KnowledgeClone(NamedTuple):
+    """The module's seeded clone and the characters every test reads."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
+    dbname: str
+    alpha: int
+    alpha_character: int
+    beta: int
+    beta_character: int
+    source: int
+
+
+@pytest.fixture(scope="module")
+def knowledge_clone() -> Iterator[KnowledgeClone]:
+    """Seed the need-clock anchor, then the three characters every test reads."""
+
+    with disposable_slot_database("qa885_knowledge_surfacing") as dbname:
+        seed_story_clock(dbname, world_time=STORY_CLOCK)
+        token = uuid4().hex[:10]
+        alpha_character, alpha = seed_character(dbname, name=f"knowledge-alpha-{token}")
+        beta_character, beta = seed_character(dbname, name=f"knowledge-beta-{token}")
+        _, source = seed_character(dbname, name=f"knowledge-source-{token}")
+        yield KnowledgeClone(
+            dbname=dbname,
+            alpha=alpha,
+            alpha_character=alpha_character,
+            beta=beta,
+            beta_character=beta_character,
+            source=source,
+        )
+
+
+@pytest.fixture()
+def knowledge_db(knowledge_clone: KnowledgeClone) -> Iterator[dict[str, Any]]:
+    """Build an isolated Stage A-D fixture in one rolled-back clone transaction."""
+
+    engine = create_engine(sqlalchemy_url(knowledge_clone.dbname), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     raw_connection = connection.connection.driver_connection
@@ -239,7 +254,8 @@ def knowledge_db() -> Iterator[dict[str, Any]]:
         latest = session.execute(
             text("SELECT max(world_time) FROM chunk_metadata")
         ).scalar_one()
-        base_time = latest or datetime(2073, 8, 1, tzinfo=timezone.utc)
+        assert latest == STORY_CLOCK, "the seeded story clock is the head clock"
+        base_time = latest
         chunks = [
             _insert_chunk(
                 session,
@@ -248,11 +264,11 @@ def knowledge_db() -> Iterator[dict[str, Any]]:
             )
             for index in range(7)
         ]
-        alpha, alpha_character = _insert_character(session, label="alpha", token=token)
-        beta, beta_character = _insert_character(session, label="beta", token=token)
-        source, _source_character = _insert_character(
-            session, label="source", token=token
-        )
+        alpha = knowledge_clone.alpha
+        alpha_character = knowledge_clone.alpha_character
+        beta = knowledge_clone.beta
+        beta_character = knowledge_clone.beta_character
+        source = knowledge_clone.source
         session.execute(
             text(
                 """

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from contextlib import closing
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal, NamedTuple
 import uuid
 
-import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 from sqlalchemy import create_engine, text
@@ -47,9 +47,18 @@ from nexus.agents.orrery.substrate import (
     recent_event,
 )
 from nexus.agents.orrery.templates import SURVEIL
-from nexus.api.slot_utils import get_slot_db_url
 from nexus.config.settings_models import OrreryEpistemicsSettings
-from tests.pg_fixtures import asyncpg_kwargs
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_character,
+    seed_faction,
+    seed_protagonist,
+    seed_story_clock,
+    sqlalchemy_url,
+)
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_async,
     install_claim_accounts_shadow_sync,
@@ -62,20 +71,76 @@ EPISTEMICS = {
     "aware_roles": ["actor", "target", "observer", "witness"],
 }
 DISABLED = {**EPISTEMICS, "enabled": False}
+PAIR_ROLES: tuple[Literal["actor", "target"], ...] = ("actor", "target")
+
+
+BASE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
+STORY_CLOCK = BASE_TIMESTAMP + timedelta(hours=12)
+# Seeded in character-id order: the protagonist first, then three characters.
+CAST = (
+    "Epistemics Protagonist",
+    "Epistemics Knower",
+    "Epistemics Target",
+    "Epistemics Witness",
+)
+FACTION_NAME = "Epistemics Cell"
+# The CLI test routes this slot number to the clone; no owner slot is opened.
+ROUTED_SLOT = 2
+
+
+class EpistemicsClone(NamedTuple):
+    """The module's seeded clone and the rows every test names."""
+
+    dbname: str
+    anchor_chunk_id: int
+    characters: tuple[dict[str, Any], ...]
+    faction: dict[str, Any]
+
+
+@pytest.fixture(scope="module")
+def epistemics_clone() -> Iterator[EpistemicsClone]:
+    """Seed the need-clock anchor, four characters, one faction, then the clock.
+
+    The protagonist's ``base_timestamp`` anchors every need clock before any
+    character insert; the story-clock chunk seeded last is the head chunk, so
+    it carries ``chunk_metadata.world_time`` and anchors every tick.
+    """
+
+    with disposable_slot_database("qa885_epistemics") as dbname:
+        protagonist = seed_protagonist(
+            dbname, name=CAST[0], base_timestamp=BASE_TIMESTAMP.isoformat()
+        )
+        seeded = [protagonist] + [
+            seed_character(dbname, name=name) for name in CAST[1:]
+        ]
+        faction_id, faction_entity_id = seed_faction(dbname, name=FACTION_NAME)
+        anchor_chunk_id = seed_story_clock(dbname, world_time=STORY_CLOCK)
+        yield EpistemicsClone(
+            dbname=dbname,
+            anchor_chunk_id=anchor_chunk_id,
+            characters=tuple(
+                {"character_id": character_id, "entity_id": entity_id, "name": name}
+                for (character_id, entity_id), name in zip(seeded, CAST)
+            ),
+            faction={
+                "faction_id": faction_id,
+                "entity_id": faction_entity_id,
+                "name": FACTION_NAME,
+            },
+        )
 
 
 @pytest.fixture
-def save_02_conn() -> Iterator[Any]:
-    """Real slot-2 transaction; every test rolls back all fixture writes."""
+def epistemics_conn(epistemics_clone: EpistemicsClone) -> Iterator[Any]:
+    """Clone transaction; every test rolls back all fixture writes."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
-    try:
-        with conn.cursor() as cur:
-            install_claim_accounts_shadow_sync(cur)
-        yield conn
-    finally:
-        conn.rollback()
-        conn.close()
+    with closing(connect(epistemics_clone.dbname)) as conn:
+        try:
+            with conn.cursor() as cur:
+                install_claim_accounts_shadow_sync(cur)
+            yield conn
+        finally:
+            conn.rollback()
 
 
 def _anchor_and_characters(
@@ -83,6 +148,8 @@ def _anchor_and_characters(
 ) -> tuple[int, list[dict[str, Any]]]:
     cur.execute("SELECT max(id) AS id FROM narrative_chunks")
     anchor = int(cur.fetchone()["id"])
+    cur.execute("SELECT world_time FROM chunk_metadata WHERE chunk_id = %s", (anchor,))
+    assert cur.fetchone()["world_time"] == STORY_CLOCK, "anchor is the seeded clock"
     cur.execute(
         """
         SELECT c.id AS character_id, c.entity_id, env.name
@@ -95,7 +162,9 @@ def _anchor_and_characters(
         (count,),
     )
     characters = [dict(row) for row in cur.fetchall()]
-    assert len(characters) == count, f"save_02 requires {count} character entities"
+    assert [character["name"] for character in characters] == list(
+        CAST[:count]
+    ), f"the clone seeds {count} named character entities"
     return anchor, characters
 
 
@@ -143,10 +212,12 @@ def test_runtime_epistemics_guard_rejects_claim_propagated_policy() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_two_similar_actors_are_separated_only_by_awareness(save_02_conn: Any) -> None:
+def test_two_similar_actors_are_separated_only_by_awareness(
+    epistemics_conn: Any,
+) -> None:
     """A bounded threat opens SURVEIL only for the actor who knows it."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 3)
         aware_actor, unaware_actor, target = [
             int(character["entity_id"]) for character in characters
@@ -208,10 +279,10 @@ def test_two_similar_actors_are_separated_only_by_awareness(save_02_conn: Any) -
 
 
 @pytest.mark.requires_postgres
-def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> None:
+def test_retrograde_producer_mints_role_correct_awareness(epistemics_conn: Any) -> None:
     """PR #697 birth policy mints only actor/target but keeps the full roster."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 4)
         records = [
             _EntityRecord(
@@ -310,11 +381,12 @@ def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> 
 
 @pytest.mark.requires_postgres
 def test_retrograde_faction_actor_mints_faction_awareness(
-    save_02_conn: Any,
+    epistemics_clone: EpistemicsClone,
+    epistemics_conn: Any,
 ) -> None:
     """PR #697 birth roles apply equally when the actor entity is a faction."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 2)
         cur.execute(
             """
@@ -327,7 +399,12 @@ def test_retrograde_faction_actor_mints_faction_awareness(
             """
         )
         faction = cur.fetchone()
-        assert faction is not None, "save_02 requires one faction entity"
+        assert faction is not None, "the clone seeds one faction entity"
+        assert faction["name"] == FACTION_NAME
+        assert (int(faction["faction_id"]), int(faction["entity_id"])) == (
+            epistemics_clone.faction["faction_id"],
+            epistemics_clone.faction["entity_id"],
+        ), "the faction row is the one the clone seeded"
         records = [
             _EntityRecord(
                 entity_id=int(faction["entity_id"]),
@@ -421,11 +498,11 @@ def test_retrograde_faction_actor_mints_faction_awareness(
 
 @pytest.mark.requires_postgres
 def test_retrograde_claim_mint_skips_events_without_resolved_participants(
-    save_02_conn: Any,
+    epistemics_conn: Any,
 ) -> None:
     """An otherwise configured event with no subject is a legitimate no-op."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT count(*) AS count FROM claims")
         before = int(cur.fetchone()["count"])
         assert (
@@ -445,11 +522,11 @@ def test_retrograde_claim_mint_skips_events_without_resolved_participants(
 
 @pytest.mark.requires_postgres
 def test_retrograde_already_present_event_backfills_claim(
-    save_02_conn: Any,
+    epistemics_conn: Any,
 ) -> None:
     """Execute-time idempotency backfills a missing claim on an existing event."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 2)
         records = [
             _EntityRecord(
@@ -478,7 +555,7 @@ def test_retrograde_already_present_event_backfills_claim(
                     entity_kind="character",
                     role=role,
                 )
-                for record, role in zip(records, ("actor", "target"))
+                for record, role in zip(records, PAIR_ROLES)
             ],
         )
 
@@ -519,10 +596,10 @@ def test_retrograde_already_present_event_backfills_claim(
 
 
 @pytest.mark.requires_postgres
-def test_live_applier_mints_and_ledgers_epistemics_ids(save_02_conn: Any) -> None:
+def test_live_applier_mints_and_ledgers_epistemics_ids(epistemics_conn: Any) -> None:
     """The sync live applier records claim and awareness ids in state_delta."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 2)
         actor, target = [int(character["entity_id"]) for character in characters]
     binding_hash = f"epistemics-live-{uuid.uuid4().hex}"
@@ -544,13 +621,12 @@ def test_live_applier_mints_and_ledgers_epistemics_ids(save_02_conn: Any) -> Non
         ),
     )
     result = commit_orrery_tick_sync(
-        save_02_conn,
+        epistemics_conn,
         proposal,
         tick_chunk_id=anchor,
-        slot=2,
     )
     assert result.resolution_count == 1
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT id, state_delta FROM orrery_resolutions
@@ -581,7 +657,7 @@ def test_live_applier_mints_and_ledgers_epistemics_ids(save_02_conn: Any) -> Non
 
 @pytest.mark.requires_postgres
 def test_pydantic_epistemics_settings_coerce_and_drive_live_producer(
-    save_02_conn: Any,
+    epistemics_conn: Any,
 ) -> None:
     """The config model and runtime policy drive the same producer behavior."""
 
@@ -595,12 +671,12 @@ def test_pydantic_epistemics_settings_coerce_and_drive_live_producer(
     assert policy.claim_event_types == frozenset({"threat_issued"})
     assert policy.aware_roles == frozenset({"actor", "target", "observer", "witness"})
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 2)
         actor, target = [int(character["entity_id"]) for character in characters]
     binding_hash = f"epistemics-pydantic-{uuid.uuid4().hex}"
     result = commit_orrery_tick_sync(
-        save_02_conn,
+        epistemics_conn,
         OrreryTickProposal(
             anchor_chunk_id=anchor,
             actor_count=1,
@@ -618,11 +694,10 @@ def test_pydantic_epistemics_settings_coerce_and_drive_live_producer(
             ),
         ),
         tick_chunk_id=anchor,
-        slot=2,
         epistemics_settings=settings,
     )
     assert result.resolution_count == 1
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT c.id
@@ -637,7 +712,9 @@ def test_pydantic_epistemics_settings_coerce_and_drive_live_producer(
 
 
 @pytest.mark.requires_postgres
-def test_async_live_applier_has_epistemics_parity() -> None:
+def test_async_live_applier_has_epistemics_parity(
+    epistemics_clone: EpistemicsClone,
+) -> None:
     """The asyncpg applier mints and ledgers the same Epistemics rows."""
 
     import asyncio
@@ -645,12 +722,13 @@ def test_async_live_applier_has_epistemics_parity() -> None:
     import asyncpg  # type: ignore[import-untyped]
 
     async def run() -> None:
-        conn = await asyncpg.connect(**asyncpg_kwargs("save_02"))
+        conn = await asyncpg.connect(**asyncpg_kwargs(epistemics_clone.dbname))
         transaction = conn.transaction()
         await transaction.start()
         try:
             await install_claim_accounts_shadow_async(conn)
             anchor = int(await conn.fetchval("SELECT max(id) FROM narrative_chunks"))
+            assert anchor == epistemics_clone.anchor_chunk_id
             rows = await conn.fetch(
                 """
                 SELECT entity_id FROM characters
@@ -658,6 +736,9 @@ def test_async_live_applier_has_epistemics_parity() -> None:
                 """
             )
             actor, target = (int(row["entity_id"]) for row in rows)
+            assert [actor, target] == [
+                character["entity_id"] for character in epistemics_clone.characters[:2]
+            ]
             binding_hash = f"epistemics-async-{uuid.uuid4().hex}"
             result = await commit_orrery_tick_async(
                 conn,
@@ -678,7 +759,6 @@ def test_async_live_applier_has_epistemics_parity() -> None:
                     ),
                 ),
                 tick_chunk_id=anchor,
-                slot=2,
                 epistemics_settings=EPISTEMICS,
             )
             assert result.resolution_count == 1
@@ -747,20 +827,24 @@ def test_async_live_applier_has_epistemics_parity() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_resolver_hydrates_scopes_and_awareness_in_recent_window() -> None:
+def test_resolver_hydrates_scopes_and_awareness_in_recent_window(
+    epistemics_clone: EpistemicsClone,
+) -> None:
     """Resolver hydration exposes both Epistemics read-side indexes."""
 
-    engine = create_engine(get_slot_db_url(slot=2))
+    engine = create_engine(sqlalchemy_url(epistemics_clone.dbname))
     connection = engine.connect()
     transaction = connection.begin()
-    with connection.connection.driver_connection.cursor() as cur:
+    raw_connection = connection.connection.driver_connection
+    assert raw_connection is not None
+    with raw_connection.cursor() as cur:
         install_claim_accounts_shadow_sync(cur)
     session = Session(bind=connection)
     try:
         anchor_value = session.execute(
             text("SELECT max(id) FROM narrative_chunks")
         ).scalar_one()
-        assert anchor_value is not None
+        assert anchor_value == epistemics_clone.anchor_chunk_id
         anchor = int(anchor_value)
         rows = list(
             session.execute(
@@ -773,6 +857,9 @@ def test_resolver_hydrates_scopes_and_awareness_in_recent_window() -> None:
             ).scalars()
         )
         actor, target = (int(value) for value in rows)
+        assert [actor, target] == [
+            character["entity_id"] for character in epistemics_clone.characters[:2]
+        ]
         event_id = int(
             session.execute(
                 text(
@@ -832,20 +919,24 @@ def test_resolver_hydrates_scopes_and_awareness_in_recent_window() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_unclaimed_event_is_implicitly_common_with_epistemics_enabled() -> None:
+def test_unclaimed_event_is_implicitly_common_with_epistemics_enabled(
+    epistemics_clone: EpistemicsClone,
+) -> None:
     """Unclaimed recent events remain visible to every actor under Epistemics."""
 
-    engine = create_engine(get_slot_db_url(slot=2))
+    engine = create_engine(sqlalchemy_url(epistemics_clone.dbname))
     connection = engine.connect()
     transaction = connection.begin()
-    with connection.connection.driver_connection.cursor() as cur:
+    raw_connection = connection.connection.driver_connection
+    assert raw_connection is not None
+    with raw_connection.cursor() as cur:
         install_claim_accounts_shadow_sync(cur)
     session = Session(bind=connection)
     try:
         anchor_value = session.execute(
             text("SELECT max(id) FROM narrative_chunks")
         ).scalar_one()
-        assert anchor_value is not None
+        assert anchor_value == epistemics_clone.anchor_chunk_id
         anchor = int(anchor_value)
         actor_ids = [
             int(value)
@@ -858,7 +949,9 @@ def test_unclaimed_event_is_implicitly_common_with_epistemics_enabled() -> None:
                 )
             ).scalars()
         ]
-        assert len(actor_ids) == 4
+        assert actor_ids == [
+            character["entity_id"] for character in epistemics_clone.characters
+        ]
         event_id = int(
             session.execute(
                 text(
@@ -901,10 +994,10 @@ def test_unclaimed_event_is_implicitly_common_with_epistemics_enabled() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_revelation_scope_and_common_semantics(save_02_conn: Any) -> None:
+def test_revelation_scope_and_common_semantics(epistemics_conn: Any) -> None:
     """Revelations thread provenance and reject tellers without awareness."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 4)
         source, knower, target, unpossessed = [
             int(character["entity_id"]) for character in characters
@@ -1010,11 +1103,11 @@ def test_revelation_scope_and_common_semantics(save_02_conn: Any) -> None:
 
 @pytest.mark.requires_postgres
 def test_kill_switch_disables_real_retrograde_and_live_producers(
-    save_02_conn: Any,
+    epistemics_conn: Any,
 ) -> None:
     """Disabled Epistemics writes nothing and preserves recent_event behavior."""
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT count(*) AS count FROM claims")
         claims_before = int(cur.fetchone()["count"])
         cur.execute("SELECT count(*) AS count FROM claim_awareness")
@@ -1046,7 +1139,7 @@ def test_kill_switch_disables_real_retrograde_and_live_producers(
                         entity_kind="character",
                         role=role,
                     )
-                    for record, role in zip(records, ("actor", "target"))
+                    for record, role in zip(records, PAIR_ROLES)
                 ],
             ),
             dry_run=False,
@@ -1065,7 +1158,7 @@ def test_kill_switch_disables_real_retrograde_and_live_producers(
 
     binding_hash = f"epistemics-disabled-live-{uuid.uuid4().hex}"
     committed = commit_orrery_tick_sync(
-        save_02_conn,
+        epistemics_conn,
         OrreryTickProposal(
             anchor_chunk_id=anchor,
             actor_count=1,
@@ -1084,11 +1177,10 @@ def test_kill_switch_disables_real_retrograde_and_live_producers(
             ),
         ),
         tick_chunk_id=anchor,
-        slot=2,
     )
     assert committed.resolution_count == 1
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT we.id
@@ -1129,13 +1221,19 @@ def test_kill_switch_disables_real_retrograde_and_live_producers(
 
 @pytest.mark.requires_postgres
 def test_record_revelation_cli_handler_reports_insert_and_dedupe(
-    save_02_conn: Any,
+    epistemics_clone: EpistemicsClone,
+    epistemics_conn: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The real CLI handler reports grants and unchanged dedupes honestly."""
 
     from nexus.cli import build_parser, run_record_revelation
 
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    route_slot_to_disposable(
+        monkeypatch.setattr, slot=ROUTED_SLOT, dbname=epistemics_clone.dbname
+    )
+
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 3)
         source, knower, target = [
             int(character["entity_id"]) for character in characters
@@ -1158,14 +1256,14 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
         claim_id = int(cur.fetchone()["id"])
         cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
         expected_world_time = cur.fetchone()["world_time"]
-        assert expected_world_time is not None
+        assert expected_world_time == STORY_CLOCK
 
     parser = build_parser()
     first_args = parser.parse_args(
         [
             "record-revelation",
             "--slot",
-            "2",
+            str(ROUTED_SLOT),
             "--claim-id",
             str(claim_id),
             "--knower",
@@ -1174,7 +1272,8 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
             str(anchor),
         ]
     )
-    first = run_record_revelation(first_args, connection=save_02_conn)
+    first = run_record_revelation(first_args, connection=epistemics_conn)
+    assert first["dbname"] == epistemics_clone.dbname
     assert first["inserted"] is True
     assert first["source_tier"] == "granted"
     assert first["message"] == (
@@ -1185,21 +1284,22 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
         [
             "record-revelation",
             "--slot",
-            "2",
+            str(ROUTED_SLOT),
             "--claim-id",
             str(claim_id),
             "--knower",
             str(knower),
         ]
     )
-    duplicate = run_record_revelation(duplicate_args, connection=save_02_conn)
+    duplicate = run_record_revelation(duplicate_args, connection=epistemics_conn)
+    assert duplicate["dbname"] == epistemics_clone.dbname
     assert duplicate["inserted"] is False
     assert duplicate["claim_awareness_id"] == first["claim_awareness_id"]
     assert duplicate["source_tier"] == "granted"
     assert duplicate["message"] == (
         f"Claim {claim_id} is already known by entity {knower}; unchanged."
     )
-    with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with epistemics_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
             SELECT source_tier, immediate_source_entity_id, root_source_entity_id,

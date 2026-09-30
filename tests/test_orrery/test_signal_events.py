@@ -5,11 +5,15 @@ gate-consumed but never emitted: package chaining was aspirational. A branch
 signal is a second, additive world-event emission (the deed keeps its own
 event_type and cooldowns; the signal is what the act gives off). The live
 test drives the real commit path and then proves the chain input: the
-consuming gate's predicate sees the signal on real slot state.
+consuming gate's predicate sees the signal on real state: a seeded disposable
+template clone, never an owner save slot.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from datetime import datetime, timezone
+from typing import NamedTuple
 import uuid
 
 import pytest
@@ -30,9 +34,41 @@ from nexus.agents.orrery.substrate import (
     recent_event,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-from tests.pg_fixtures import asyncpg_kwargs, connect
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_story_clock,
+)
 
-WRITE_SLOT = 2
+STORY_CLOCK = datetime(2100, 1, 1, tzinfo=timezone.utc)
+
+
+class SignalClone(NamedTuple):
+    """The module's seeded clone: the clock chunk, the avenger, the target."""
+
+    dbname: str
+    anchor_chunk_id: int
+    avenger_entity_id: int
+    target_entity_id: int
+
+
+@pytest.fixture(scope="module")
+def signal_clone() -> Iterator[SignalClone]:
+    """Seed the story clock first, then the two characters the chain binds."""
+
+    with disposable_slot_database("qa885_signal_events") as dbname:
+        anchor_chunk_id = seed_story_clock(dbname, world_time=STORY_CLOCK)
+        _, avenger_entity_id = seed_character(dbname, name="Signal Avenger")
+        _, target_entity_id = seed_character(dbname, name="Signal Target")
+        yield SignalClone(
+            dbname=dbname,
+            anchor_chunk_id=anchor_chunk_id,
+            avenger_entity_id=avenger_entity_id,
+            target_entity_id=target_entity_id,
+        )
+
 
 SIGNALLED = Template(
     id="extract_vengeance",  # real id keeps prose/catalog lookups valid
@@ -102,15 +138,18 @@ def test_draft_serialization_round_trips_signal() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_committed_signal_feeds_consumer_gates_live() -> None:
+def test_committed_signal_feeds_consumer_gates_live(
+    signal_clone: SignalClone,
+) -> None:
     """The full chain, on real state: commit emits deed + signal rows, and
     the hunted target's gate predicate hears the threat next resolve."""
 
-    conn = connect(f"save_{WRITE_SLOT:02d}")
+    conn = connect(signal_clone.dbname)
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT max(id) FROM narrative_chunks")
             anchor_chunk_id = cur.fetchone()[0]
+            assert anchor_chunk_id == signal_clone.anchor_chunk_id
             cur.execute(
                 """
                 SELECT entity_id FROM characters
@@ -118,6 +157,10 @@ def test_committed_signal_feeds_consumer_gates_live() -> None:
                 """
             )
             (avenger,), (target,) = cur.fetchall()
+            assert (avenger, target) == (
+                signal_clone.avenger_entity_id,
+                signal_clone.target_entity_id,
+            )
 
         draft = OrreryResolutionDraft(
             template_id="extract_vengeance",
@@ -138,7 +181,6 @@ def test_committed_signal_feeds_consumer_gates_live() -> None:
                 resolutions=(draft,),
             ),
             tick_chunk_id=anchor_chunk_id,
-            slot=WRITE_SLOT,
         )
         assert result.resolution_count == 1
 
@@ -199,28 +241,34 @@ def test_committed_signal_feeds_consumer_gates_live() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_async_commit_emits_signal_rows_live() -> None:
+def test_async_commit_emits_signal_rows_live(signal_clone: SignalClone) -> None:
     """The asyncpg twin needs explicit ::world_layer_type / ::text[] casts
     (review finding on #429) — and had no live coverage anywhere before
     this test. Real commit_orrery_tick_async, rolled-back transaction."""
 
     import asyncio
 
-    import asyncpg
+    import asyncpg  # type: ignore[import-untyped]
 
     async def _run() -> None:
-        conn = await asyncpg.connect(**asyncpg_kwargs(f"save_{WRITE_SLOT:02d}"))
+        conn = await asyncpg.connect(**asyncpg_kwargs(signal_clone.dbname))
         tx = conn.transaction()
         await tx.start()
         try:
             anchor = await conn.fetchval("SELECT max(id) FROM narrative_chunks")
+            assert anchor == signal_clone.anchor_chunk_id
             rows = await conn.fetch(
                 """
                 SELECT entity_id FROM characters
                 WHERE entity_id IS NOT NULL ORDER BY entity_id LIMIT 2
                 """
             )
+            assert len(rows) == 2
             avenger, target = rows[0][0], rows[1][0]
+            assert (avenger, target) == (
+                signal_clone.avenger_entity_id,
+                signal_clone.target_entity_id,
+            )
             draft = OrreryResolutionDraft(
                 template_id="extract_vengeance",
                 priority=60,
@@ -240,7 +288,6 @@ def test_async_commit_emits_signal_rows_live() -> None:
                     anchor_chunk_id=anchor, actor_count=1, resolutions=(draft,)
                 ),
                 tick_chunk_id=anchor,
-                slot=WRITE_SLOT,
             )
             assert result.resolution_count == 1
             kinds = {

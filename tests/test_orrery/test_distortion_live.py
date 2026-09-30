@@ -1,14 +1,21 @@
-"""Rollback-only PostgreSQL coverage for Stage C hop distortion."""
+"""Rollback-only PostgreSQL coverage for Stage C hop distortion.
+
+Every test runs on one module-scoped disposable template clone. Its
+synchronous fixture seeds the protagonist (the need-clock anchor) first, then
+each test's starting graph: characters through ``seed_character`` and
+conduits through ``seed_relationship`` (attributed to ``manual`` under
+migration 115). Each test's own writes stay inside one transaction that
+always rolls back, and each test reads only the graph seeded under its key.
+"""
 
 from __future__ import annotations
 
 from contextlib import closing
 from datetime import timedelta
 import json
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping, NamedTuple
 
 import asyncpg  # type: ignore[import-untyped]
-import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
@@ -20,23 +27,23 @@ from nexus.agents.orrery.epistemics import (
 from nexus.agents.orrery.propagation import drain_claim_propagation_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import reconstruct_state_at_sync
-from nexus.database import asyncpg_kwargs
-from nexus.api.slot_utils import get_slot_db_url
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
-from tests.test_orrery.claim_accounts_test_support import (
-    install_claim_accounts_shadow_async,
-    install_claim_accounts_shadow_sync,
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_protagonist,
 )
-from tests.test_orrery.test_claim_propagation_live import (
-    LIVE_SLOT,
+from tests.test_orrery.claim_accounts_test_support import (
     _canonical_rows,
-    _chain,
-    _insert_character,
     _insert_chunk,
     _insert_claim,
-    _insert_relationship,
     _install_valence_shadow,
     _settings,
+    install_claim_accounts_shadow_async,
+    install_claim_accounts_shadow_sync,
+    seed_chain,
+    seed_conduit,
 )
 
 
@@ -44,20 +51,74 @@ pytestmark = pytest.mark.requires_postgres
 DISTORTION_ENABLED = {"enabled": True}
 DISTORTION_DISABLED = {"enabled": False}
 
+# Each chain test's starting graph: that many characters linked in hop order
+# by trusting conduits, committed once under the test's key.
+CHAIN_LENGTHS = {
+    "depth_selection": 6,
+    "disabled_propagated": 3,
+    "replay": 4,
+    "pre_092": 3,
+}
+# The hand-built graphs: characters by role, then their conduits.
+CAST = (
+    "suppression-source",
+    "suppression-listener",
+    "disabled-suppress-source",
+    "disabled-suppress-listener",
+    "partial-payload-source",
+)
+CONDUITS = (
+    ("suppression-source", "suppression-listener"),
+    ("disabled-suppress-source", "disabled-suppress-listener"),
+)
+
+
+class DistortionClone(NamedTuple):
+    """The module's seeded clone and the committed rows each test names."""
+
+    dbname: str
+    chains: Mapping[str, list[int]]
+    cast: Mapping[str, int]
+
+
+@pytest.fixture(scope="module")
+def distortion_clone() -> Iterator[DistortionClone]:
+    """Seed the need-clock anchor, then every test's starting graph.
+
+    Every character goes through ``seed_character`` and every conduit through
+    ``seed_relationship`` from this synchronous fixture, never inside a test's
+    transaction or event loop.
+    """
+
+    with disposable_slot_database("qa885_distortion") as dbname:
+        seed_protagonist(dbname)
+        chains = {
+            key: seed_chain(dbname, f"distortion-{key}", length)
+            for key, length in CHAIN_LENGTHS.items()
+        }
+        cast: dict[str, int] = {}
+        cast_characters: dict[str, int] = {}
+        for role in CAST:
+            cast_characters[role], cast[role] = seed_character(
+                dbname, name=f"distortion-{role}"
+            )
+        for teller, listener in CONDUITS:
+            seed_conduit(dbname, cast_characters[teller], cast_characters[listener])
+        yield DistortionClone(dbname=dbname, chains=chains, cast=cast)
+
 
 @pytest.fixture()
-def live_conn() -> Iterator[Any]:
-    """Use a seeded disposable slot so the need clock never depends on save 5."""
-    with disposable_slot_database("qa640_distortion") as dbname:
-        seed_protagonist(dbname)
-        with closing(connect(dbname)) as conn:
-            try:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    install_claim_accounts_shadow_sync(cur)
-                    _install_valence_shadow(cur)
-                yield conn
-            finally:
-                conn.rollback()
+def live_conn(distortion_clone: DistortionClone) -> Iterator[Any]:
+    """Open one clone transaction and roll back every test write."""
+
+    with closing(connect(distortion_clone.dbname)) as conn:
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                install_claim_accounts_shadow_sync(cur)
+                _install_valence_shadow(cur)
+            yield conn
+        finally:
+            conn.rollback()
 
 
 def _mint_variant(
@@ -152,12 +213,12 @@ def _assert_event_projection_pairs(
 
 
 def test_depth_selection_tie_break_and_transitive_total_depth(
-    live_conn: Any,
+    live_conn: Any, distortion_clone: DistortionClone
 ) -> None:
     """Each onward hop re-selects from one authored incident snapshot."""
 
+    entities = distortion_clone.chains["depth_selection"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 6)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         canonical = _insert_claim(
             cur,
@@ -239,14 +300,13 @@ def test_depth_selection_tie_break_and_transitive_total_depth(
 
 
 def test_incident_possession_suppresses_every_sibling_schedule(
-    live_conn: Any,
+    live_conn: Any, distortion_clone: DistortionClone
 ) -> None:
     """A direct variant grant blocks canonical and variant propagation alike."""
 
+    source = distortion_clone.cast["suppression-source"]
+    listener = distortion_clone.cast["suppression-listener"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "suppression-source")
-        listener, listener_character = _insert_character(cur, "suppression-listener")
-        _insert_relationship(cur, source_character, listener_character)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         canonical = _insert_claim(
             cur,
@@ -306,12 +366,12 @@ def test_incident_possession_suppresses_every_sibling_schedule(
 
 
 def test_disabled_distortion_preserves_stage_b_delivery_but_not_rescheduling(
-    live_conn: Any,
+    live_conn: Any, distortion_clone: DistortionClone
 ) -> None:
     """Feature-off delivery stays claim-identical; incident suppression remains."""
 
+    entities = distortion_clone.chains["disabled_propagated"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 3)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         canonical = _insert_claim(
             cur,
@@ -328,17 +388,8 @@ def test_disabled_distortion_preserves_stage_b_delivery_but_not_rescheduling(
         )
         propagated_incident = _incident_id(cur, canonical)
 
-        suppress_source, suppress_source_character = _insert_character(
-            cur, "disabled-suppress-source"
-        )
-        suppress_listener, suppress_listener_character = _insert_character(
-            cur, "disabled-suppress-listener"
-        )
-        _insert_relationship(
-            cur,
-            suppress_source_character,
-            suppress_listener_character,
-        )
+        suppress_source = distortion_clone.cast["disabled-suppress-source"]
+        suppress_listener = distortion_clone.cast["disabled-suppress-listener"]
         suppressed_canonical = _insert_claim(
             cur,
             chunk_id=birth_chunk,
@@ -394,12 +445,12 @@ def test_disabled_distortion_preserves_stage_b_delivery_but_not_rescheduling(
 
 
 def test_distorted_drain_replays_identical_delivered_awareness(
-    live_conn: Any,
+    live_conn: Any, distortion_clone: DistortionClone
 ) -> None:
     """Replay treats delivered claim ids as the passive projection authority."""
 
+    entities = distortion_clone.chains["replay"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 4)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         canonical = _insert_claim(
             cur,
@@ -447,12 +498,12 @@ def test_distorted_drain_replays_identical_delivered_awareness(
 
 
 def test_pre_092_payload_fallback_drives_frontier_and_replay(
-    live_conn: Any,
+    live_conn: Any, distortion_clone: DistortionClone
 ) -> None:
     """Historical claim_id-only events recover depth and replay unchanged."""
 
+    entities = distortion_clone.chains["pre_092"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 3)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         canonical = _insert_claim(
             cur,
@@ -547,12 +598,12 @@ def test_pre_092_payload_fallback_drives_frontier_and_replay(
 
 
 def test_partial_stage_c_payload_fails_frontier_reconciliation(
-    live_conn: Any,
+    live_conn: Any, distortion_clone: DistortionClone
 ) -> None:
     """Any Stage C identity key makes all three mandatory on new events."""
 
+    source = distortion_clone.cast["partial-payload-source"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, _ = _insert_character(cur, "partial-payload-source")
         birth_chunk, birth_world_time = _insert_chunk(cur)
         canonical = _insert_claim(
             cur,
@@ -594,10 +645,12 @@ def test_partial_stage_c_payload_fails_frontier_reconciliation(
 
 
 @pytest.mark.asyncio
-async def test_async_variant_mint_persists_validated_depth() -> None:
+async def test_async_variant_mint_persists_validated_depth(
+    distortion_clone: DistortionClone,
+) -> None:
     """The async authoring twin stores the same nullable-positive contract."""
 
-    conn = await asyncpg.connect(**asyncpg_kwargs(f"save_{LIVE_SLOT:02d}"))
+    conn = await asyncpg.connect(**asyncpg_kwargs(distortion_clone.dbname))
     transaction = conn.transaction()
     await transaction.start()
     try:
