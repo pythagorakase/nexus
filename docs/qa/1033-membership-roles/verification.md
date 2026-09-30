@@ -222,12 +222,46 @@ All done! ✨ 🍰 ✨
 
 flake8 on the two changed test files reports nothing.
 
+### Second Review-Fix Reruns
+
+`test_dry_run_entry_points_forward_resolver_settings` calls `resolve_dry_run`
+and `explain_dry_run` with every section the resolve phase dumps
+(`turn_cycle.py:776-805`), narrowed to `["leader"]`, while
+`nexus.config.load_settings` raises. With the `resolver_settings=` forward
+removed from both entry points by hand (not committed), both parametrizations
+failed with `AssertionError: an Orrery entry point fell back to
+load_settings()` (`2 failed, 3 passed`); restored, they pass. At commit
+`202583c2` (tests only), with `PYTHONPATH=$PWD` and the gateway variables
+unset:
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_orrery/test_faction_membership_roles_pg.py tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 3 targets: postgres, qa640_membership_roles_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+66 passed in 3.56s
+
+$ $PY -m black --check tests/test_orrery/test_faction_membership_roles_pg.py
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+```
+
+flake8 on the changed test file reports nothing; mypy on it reports
+`Success: no issues found in 1 source file`.
+
 ## Coordinator Note
 
 This PR adds a `nexus.toml` key under `extra="forbid"` models. Every managed
 runtime service imports the main checkout's code and reads the main checkout's
 `nexus.toml`: the gateway, and `mock_openai`, which calls `load_settings()` on
-each request. Immediately after the pull, run `nexus restart` with no service
-argument, which restarts both, so each running process loads the model that
-knows `[orrery.resolver]`. If services are restarted one at a time, restart
-both `gateway` and `mock_openai`.
+each request. Immediately after the pull, restart each one by name so each
+running process loads the model that knows `[orrery.resolver]`:
+`nexus restart gateway`, plus `nexus restart mock_openai` when it is enabled.
+A per-service restart touches only the named pidfile
+(`nexus/runtime/supervisor.py:868-883`); a bare `nexus restart` runs `down()`
+then `up()`, which also stops an app-managed local model and never restarts it.
+For any gateway lane served from the main checkout (check with
+`lsof -nP -iTCP:<port> -sTCP:LISTEN`, for example 8012), also run
+`NEXUS_GATEWAY_PORT=<port> NEXUS_API_URL=http://127.0.0.1:<port> nexus restart gateway`.
