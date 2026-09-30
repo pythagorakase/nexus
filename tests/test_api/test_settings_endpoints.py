@@ -1,7 +1,6 @@
 """Settings HTTP tests using real configuration and temporary TOML writes."""
 
 import shutil
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -10,13 +9,31 @@ from fastapi.testclient import TestClient
 
 from nexus.api.settings_endpoints import (
     _build_payload,
+    _build_settings_meta,
     _read_raw_settings,
     router,
 )
 from nexus.config.loader import load_settings
+from nexus.config.settings_models import materialize_model_selections
 from nexus.runtime.contract import HOME_ENV, RUNTIME_CONFIG_ENV
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# The retired dict-façade aliases (issue #809); GET must not serve them.
+LEGACY_ALIAS_KEYS = ("Agent Settings", "API Settings")
+
+# Sections SettingsPayload in ui/client/src/types/settings.ts reads, plus the
+# top-level global block the payload still serves raw.
+CLIENT_SECTIONS = (
+    "global",
+    "apex",
+    "local_models",
+    "wizard",
+    "lore",
+    "memnon",
+    "orrery",
+    "ui",
+)
 
 
 @pytest.fixture
@@ -46,8 +63,20 @@ def test_head_and_get_serve_concrete_selections(client: TestClient) -> None:
     assert payload["apex"]["model"] == load_settings().apex.model
     assert payload["apex"].get("gaia_model") == load_settings().apex.gaia_model
     assert not payload["apex"]["model"].startswith("@")
-    assert payload["API Settings"]["apex"] == payload["apex"]
-    assert payload["Agent Settings"]["global"] == payload["global"]
+    raw = materialize_model_selections(_read_raw_settings())
+    assert payload["apex"] == raw["apex"]
+    assert payload["global"] == raw["global"]
+
+
+def test_get_serves_no_legacy_alias_blocks(client: TestClient) -> None:
+    payload = client.get("/api/settings").json()
+    for key in LEGACY_ALIAS_KEYS:
+        assert key not in payload
+    raw = materialize_model_selections(_read_raw_settings())
+    assert set(payload) == (set(raw) - {"secrets"}) | {"settings_meta"}
+    for section in CLIENT_SECTIONS:
+        assert payload[section] == raw[section], section
+    assert payload["settings_meta"] == _build_settings_meta(raw)
 
 
 def test_picker_lists_every_visible_model() -> None:
@@ -71,4 +100,15 @@ def test_repository_settings_are_read_only(
 ) -> None:
     before = config_path.read_bytes()
     assert client.patch("/api/settings", json={"theme": "vector"}).status_code == 405
+    assert config_path.read_bytes() == before
+
+
+@pytest.mark.parametrize("method", ["patch", "put"])
+@pytest.mark.parametrize("alias", LEGACY_ALIAS_KEYS)
+def test_alias_bodies_meet_the_same_read_only_refusal(
+    client: TestClient, config_path: Path, method: str, alias: str
+) -> None:
+    before = config_path.read_bytes()
+    body = {alias: {"apex": {"model": "rejected"}}}
+    assert getattr(client, method)("/api/settings", json=body).status_code == 405
     assert config_path.read_bytes() == before
