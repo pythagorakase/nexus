@@ -1,14 +1,16 @@
 """Real-DB integration tests for pair-tag WorldState hydration and predicates.
 
-Exercises the Orrery Condition layer against a live ``save_05`` database.
-Activated by ``NEXUS_RUN_POSTGRES=1``. Tests create fresh bare entity rows and
-delete them on teardown; ``entity_pair_tags`` uses ON DELETE CASCADE for those
-endpoints, so no user narrative data is touched.
+Exercises the Orrery Condition layer against a disposable template clone that
+``pair_tag_slot`` owns for the module. Activated by ``NEXUS_RUN_POSTGRES=1``.
+``test_entities`` creates fresh bare entity rows per test; the clone carries
+the template's seeded ``pair_tags`` vocabulary and is dropped after the
+module, so no owner slot is touched.
 """
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import closing
 
 import psycopg2
 import pytest
@@ -25,13 +27,13 @@ from nexus.agents.orrery.tag_writer import (
     apply_pair_tag_bestowal,
     clear_pair_tag,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
 
-
-TEST_DBNAME = "save_05"
+# Pair-tag names the suite bestows; migration 042 seeds them in the template.
+REQUIRED_TAGS = ("mentors", "protects")
 
 
 class _TestEntities:
@@ -43,18 +45,25 @@ class _TestEntities:
         self.all_ids = all_ids
 
 
+@pytest.fixture(scope="module")
+def pair_tag_slot() -> Iterator[str]:
+    """Own one template clone for the module; it is dropped afterward."""
+
+    with disposable_slot_database("qa640_pair_tag_substrate") as dbname:
+        yield dbname
+
+
 @pytest.fixture
-def slot_connection() -> Generator[psycopg2.extensions.connection, None, None]:
-    conn = psycopg2.connect(get_slot_db_url(dbname=TEST_DBNAME))
-    try:
+def slot_connection(
+    pair_tag_slot: str,
+) -> Generator[psycopg2.extensions.connection, None, None]:
+    with closing(connect(pair_tag_slot)) as conn:
         yield conn
-    finally:
-        conn.close()
 
 
 @pytest.fixture
-def sqlalchemy_session() -> Generator[Session, None, None]:
-    engine = create_engine(get_slot_db_url(dbname=TEST_DBNAME), future=True)
+def sqlalchemy_session(pair_tag_slot: str) -> Generator[Session, None, None]:
+    engine = create_engine(sqlalchemy_url(pair_tag_slot), future=True)
     SessionFactory = sessionmaker(bind=engine, future=True)
     try:
         with SessionFactory() as session:
@@ -66,27 +75,24 @@ def sqlalchemy_session() -> Generator[Session, None, None]:
 @pytest.fixture
 def test_entities(
     slot_connection: psycopg2.extensions.connection,
-) -> Generator[_TestEntities, None, None]:
-    """Create fresh bare character entities for isolated pair-tag tests."""
+) -> _TestEntities:
+    """Create fresh bare character entities for isolated pair-tag tests.
 
-    required_tags = ("mentors", "protects")
-    try:
-        with slot_connection.cursor() as cur:
-            cur.execute(
-                "SELECT tag FROM pair_tags WHERE NOT deprecated AND tag = ANY(%s)",
-                (list(required_tags),),
-            )
-            registered = {row[0] for row in cur.fetchall()}
-    except psycopg2.errors.UndefinedTable:
-        slot_connection.rollback()
-        pytest.skip(f"{TEST_DBNAME}.pair_tags is missing; run migration 042 first.")
+    The clone's template vocabulary must carry the pair tags the suite
+    bestows (migration 042's seed); a clone without them fails here by name.
+    """
 
-    missing_tags = set(required_tags) - registered
-    if missing_tags:
-        pytest.skip(
-            f"{TEST_DBNAME}.pair_tags is missing {sorted(missing_tags)}; "
-            "substrate tests require migration 042's seed vocabulary."
+    with slot_connection.cursor() as cur:
+        cur.execute(
+            "SELECT tag FROM pair_tags WHERE NOT deprecated AND tag = ANY(%s)",
+            (list(REQUIRED_TAGS),),
         )
+        registered = {row[0] for row in cur.fetchall()}
+    slot_connection.rollback()
+    assert registered == set(REQUIRED_TAGS), (
+        f"pair_tag_slot's template vocabulary lacks "
+        f"{sorted(set(REQUIRED_TAGS) - registered)} (migration 042's seed)"
+    )
 
     created_ids: list[int] = []
     with slot_connection:
@@ -98,32 +104,11 @@ def test_entities(
                 )
                 created_ids.append(cur.fetchone()[0])
 
-    entities = _TestEntities(
+    return _TestEntities(
         char_a=created_ids[0],
         char_b=created_ids[1],
         all_ids=created_ids,
     )
-    try:
-        yield entities
-    finally:
-        with slot_connection:
-            with slot_connection.cursor() as cur:
-                # tag_clearance_log references entity_pair_tags without
-                # ON DELETE CASCADE (migration 064), so purge log rows for
-                # the test entities' pair rows first; the entities DELETE
-                # then cascades to entity_pair_tags as before.
-                cur.execute(
-                    """
-                    DELETE FROM tag_clearance_log
-                    WHERE entity_pair_tag_id IN (
-                        SELECT id FROM entity_pair_tags
-                        WHERE subject_entity_id = ANY(%s)
-                           OR object_entity_id = ANY(%s)
-                    )
-                    """,
-                    (created_ids, created_ids),
-                )
-                cur.execute("DELETE FROM entities WHERE id = ANY(%s)", (created_ids,))
 
 
 def _bestow(

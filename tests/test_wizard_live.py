@@ -12,6 +12,7 @@ Or quick validation:
 """
 
 import asyncio
+from collections.abc import Iterator
 from contextlib import nullcontext
 import logging
 import os
@@ -24,19 +25,17 @@ from pydantic_ai.tools import DeferredToolRequests
 from nexus.api.wizard_agent import (
     WizardContext,
     get_wizard_agent,
-    _character_subphase,
 )
-from nexus.api.new_story_schemas import WizardResponse
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.config import resolve_model_ref
 from tests.model_registry_helpers import registry_model
+from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
 
 logger = logging.getLogger(__name__)
 
-ISSUE_600_SLOT = int(os.environ.get("NEXUS_ISSUE_600_TEST_SLOT", "0"))
-ISSUE_600_DBNAME = (
-    f"save_{ISSUE_600_SLOT:02d}" if ISSUE_600_SLOT in {1, 2, 3, 4} else ""
-)
+# The seed-repair proof runs on a disposable clone routed under this slot.
+ISSUE_600_ROUTED_SLOT = 4
+ISSUE_600_THREAD_ID = "issue_600_live_seed_repair"
 
 # =============================================================================
 # Test Configuration
@@ -50,7 +49,9 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
         "phase": "setting",
         "context_data": None,
         "expected_tool": "submit_world_document",
-        "prompt": "Create a dark fantasy world with political intrigue and ancient magic.",
+        "prompt": (
+            "Create a dark fantasy world with political intrigue and ancient magic."
+        ),
     },
     "concept": {
         "phase": "character",
@@ -58,7 +59,9 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
             "setting": {"genre": "fantasy", "world_name": "Valdoria"},
         },
         "expected_tool": "submit_character_concept",
-        "prompt": "Create a reluctant hero - a former soldier haunted by past decisions.",
+        "prompt": (
+            "Create a reluctant hero - a former soldier haunted by past decisions."
+        ),
     },
     "traits": {
         "phase": "character",
@@ -93,8 +96,14 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
                 "concept": {
                     "name": "Kael Stormwind",
                     "archetype": "Reluctant Hero",
-                    "background": "A former soldier who deserted after witnessing atrocities committed by his own side.",
-                    "appearance": "Weathered face with a scar across the left cheek, grey-streaked dark hair.",
+                    "background": (
+                        "A former soldier who deserted after witnessing "
+                        "atrocities committed by his own side."
+                    ),
+                    "appearance": (
+                        "Weathered face with a scar across the left cheek, "
+                        "grey-streaked dark hair."
+                    ),
                     "suggested_traits": ["allies", "enemies", "reputation"],
                     "trait_rationales": {
                         "allies": "Fellow deserters who share his guilt",
@@ -257,7 +266,8 @@ async def test_accept_fate_forces_tool_call(
     # The output should be DeferredToolRequests (indicating a tool was called)
     # NOT WizardResponse (which would mean it presented choices)
     assert isinstance(result.output, DeferredToolRequests), (
-        f"Expected DeferredToolRequests (tool call), got {type(result.output).__name__}. "
+        "Expected DeferredToolRequests (tool call), got "
+        f"{type(result.output).__name__}. "
         f"Model {model_name} may have ignored accept_fate constraint."
     )
 
@@ -267,7 +277,8 @@ async def test_accept_fate_forces_tool_call(
     ), f"Expected tool {config['expected_tool']}, got {context.last_tool_name}"
 
     logger.info(
-        f"✓ {phase_name}/{model_name}: Tool '{context.last_tool_name}' called successfully"
+        f"✓ {phase_name}/{model_name}: Tool '{context.last_tool_name}' "
+        "called successfully"
     )
 
 
@@ -313,29 +324,10 @@ async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_funct
     logger.info(f"✓ {phase_name}/accept_fate=False: Got {output_type}")
 
 
-@pytest.mark.live
-@pytest.mark.live_llm
-@pytest.mark.requires_postgres
-@pytest.mark.skipif(
-    os.environ.get("NEXUS_ISSUE_600_LIVE") != "1"
-    or not ISSUE_600_DBNAME
-    or os.environ.get("NEXUS_CONFIRM_DISPOSABLE_DB") != ISSUE_600_DBNAME,
-    reason=(
-        "Set NEXUS_ISSUE_600_LIVE=1, choose disposable slot 1-4 with "
-        "NEXUS_ISSUE_600_TEST_SLOT, and confirm its database name with "
-        "NEXUS_CONFIRM_DISPOSABLE_DB."
-    ),
-)
-@pytest.mark.asyncio
-async def test_seed_date_conflict_uses_bounded_live_repair(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """The real cache-backed wizard path repairs before database persistence."""
-    from nexus.api.db_pool import close_pool
-    from nexus.api.new_story_cache import read_cache, write_cache
-    from scripts.new_story_setup import create_slot_schema_only
+def issue_600_seed_repair_setting() -> Dict[str, Any]:
+    """The accepted contemporary setting whose artifact dates the hearing."""
 
-    setting = {
+    return {
         **PHASE_CONFIGS["seed"]["context_data"]["setting"],
         "genre": "contemporary",
         "world_name": "Cook County",
@@ -353,110 +345,142 @@ async def test_seed_date_conflict_uses_bounded_live_repair(
             "10:48 a.m. in civil hearing room 2B."
         ),
     }
-    model_name = resolve_model_ref(registry_model("openai"))
-    context_data = {
-        "setting": setting,
-        "character": {"name": "Morgan Hale", "archetype": "Civil litigant"},
-    }
 
-    close_pool(ISSUE_600_DBNAME)
-    create_slot_schema_only(
-        ISSUE_600_SLOT,
-        source_db="NEXUS_template",
-        force=True,
+
+def stage_issue_600_seed_context(dbname: str, model_name: str) -> WizardContext:
+    """Confirm setting and character in a routed clone; build the seed context.
+
+    Writes the accepted setting and a complete character draft through the
+    cache writer, confirms both artifacts through ``confirm_artifact``, and
+    builds the seed-phase ``WizardContext`` from the persisted cache, the
+    state the wizard holds when it asks for the starting scenario.
+    """
+
+    from nexus.api.new_story_cache import read_cache, write_cache
+    from nexus.api.wizard_confirmation import confirm_artifact
+    from tests.test_wizard_agent import (
+        sample_concept_submission,
+        sample_trait_selection,
+        sample_wildcard,
     )
-    try:
-        from nexus.api.wizard_confirmation import confirm_artifact
-        from tests.test_wizard_agent import (
-            sample_concept_submission,
-            sample_trait_selection,
-            sample_wildcard,
-        )
 
-        character_draft = {
-            "concept": sample_concept_submission()
-            .to_character_concept()
-            .model_copy(
-                update={
-                    "name": "Morgan Hale",
-                    "archetype": "Civil litigant preparing for a hearing",
-                }
-            )
-            .model_dump(),
-            "trait_selection": sample_trait_selection().model_dump(),
-            "wildcard": sample_wildcard().model_dump(),
-        }
-        write_cache(
-            thread_id="issue_600_live_seed_repair",
-            setting_draft=setting,
-            character_draft=character_draft,
-            target_slot=ISSUE_600_SLOT,
-            dbname=ISSUE_600_DBNAME,
+    setting = issue_600_seed_repair_setting()
+    character_draft = {
+        "concept": sample_concept_submission()
+        .to_character_concept()
+        .model_copy(
+            update={
+                "name": "Morgan Hale",
+                "archetype": "Civil litigant preparing for a hearing",
+            }
         )
-        for phase in ("setting", "character"):
-            draft = read_cache(ISSUE_600_DBNAME)
-            confirm_artifact(
-                ISSUE_600_DBNAME,
-                thread_id=draft.thread_id,
-                phase=phase,
-                artifact_token=draft.artifact_token(phase),
-            )
-        context = WizardContext.from_request(
-            slot=ISSUE_600_SLOT,
-            phase="seed",
-            thread_id="issue_600_live_seed_repair",
-            model=model_name,
-            context_data=context_data,
-            accept_fate=True,
-            dev_mode=False,
-            history_len=1,
-            user_turns=1,
-            assistant_turns=0,
+        .model_dump(),
+        "trait_selection": sample_trait_selection().model_dump(),
+        "wildcard": sample_wildcard().model_dump(),
+    }
+    write_cache(
+        thread_id=ISSUE_600_THREAD_ID,
+        setting_draft=setting,
+        character_draft=character_draft,
+        target_slot=ISSUE_600_ROUTED_SLOT,
+        dbname=dbname,
+    )
+    for phase in ("setting", "character"):
+        draft = read_cache(dbname)
+        confirm_artifact(
+            dbname,
+            thread_id=draft.thread_id,
+            phase=phase,
+            artifact_token=draft.artifact_token(phase),
         )
-        assert context.cache is not None
-        accepted_setting = context.cache.get_setting_dict()
-        assert accepted_setting is not None
-        assert accepted_setting["time_period"] == "October 2026"
-        assert accepted_setting["diegetic_artifact"] == setting["diegetic_artifact"]
-        caplog.set_level(logging.WARNING, logger="nexus.api.wizard_agent")
+    return WizardContext.from_request(
+        slot=ISSUE_600_ROUTED_SLOT,
+        phase="seed",
+        thread_id=ISSUE_600_THREAD_ID,
+        model=model_name,
+        context_data={
+            "setting": setting,
+            "character": {"name": "Morgan Hale", "archetype": "Civil litigant"},
+        },
+        accept_fate=True,
+        dev_mode=False,
+        history_len=1,
+        user_turns=1,
+        assistant_turns=0,
+    )
 
-        agent: Any = get_wizard_agent(context)
-        result = await agent.run(
-            (
-                "Commit the starting scenario now. This is a validator exercise: "
-                "on your first submit_starting_scenario call, deliberately use "
-                "May 14, 2026 at 10:48 for base_timestamp. After the tool rejects "
-                "that conflict, follow its repair message and resubmit with the "
-                "accepted setting date."
-            ),
-            deps=context,
-            model=build_pydantic_ai_model(model_name),
-        )
 
-        assert isinstance(result.output, DeferredToolRequests)
-        # The deliberate-May instruction is bait: a model may comply (exercising
-        # the live repair loop) or submit the correct date outright. Both are
-        # valid model behavior; the deterministic rejection is pinned in
-        # test_wizard_agent.py. The invariant HERE is the persisted outcome.
-        repair_fired = any(
-            record.message == "ModelRetry triggered" for record in caplog.records
-        )
-        logger.info("Live repair loop engaged: %s", repair_fired)
+@pytest.fixture()
+def issue_600_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """A fresh migrated clone routed under the seed-repair slot, pins kept."""
 
-        persisted = read_cache(ISSUE_600_DBNAME)
-        assert persisted is not None
-        assert persisted.base_timestamp is not None
-        assert (
-            persisted.base_timestamp.astimezone(timezone.utc).isoformat()
-            == "2026-10-14T10:48:00+00:00"
+    with disposable_slot_database("qa640_issue_600", story_pin=None) as dbname:
+        route_slot_to_disposable(
+            monkeypatch.setattr, slot=ISSUE_600_ROUTED_SLOT, dbname=dbname
         )
-        # get_seed_dict() is None by design at this stage: seed_complete()
-        # requires Phase 2 set-designer fields (layer/zone/location). The
-        # stage-level proof is that the seed draft was recorded alongside the
-        # already-asserted canonical UTC instant.
-        assert bool(persisted.seed.seed_type)
-    finally:
-        close_pool(ISSUE_600_DBNAME)
+        yield dbname
+
+
+@pytest.mark.live
+@pytest.mark.live_llm
+@pytest.mark.requires_postgres
+@pytest.mark.skipif(
+    os.environ.get("NEXUS_ISSUE_600_LIVE") != "1",
+    reason="Set NEXUS_ISSUE_600_LIVE=1 to run the live seed-repair proof.",
+)
+@pytest.mark.asyncio
+async def test_seed_date_conflict_uses_bounded_live_repair(
+    caplog: pytest.LogCaptureFixture, issue_600_slot: str
+) -> None:
+    """The real cache-backed wizard path repairs before database persistence."""
+    from nexus.api.new_story_cache import read_cache
+
+    dbname = issue_600_slot
+    model_name = resolve_model_ref(registry_model("openai"))
+    context = stage_issue_600_seed_context(dbname, model_name)
+    setting = issue_600_seed_repair_setting()
+    assert context.cache is not None
+    accepted_setting = context.cache.get_setting_dict()
+    assert accepted_setting is not None
+    assert accepted_setting["time_period"] == "October 2026"
+    assert accepted_setting["diegetic_artifact"] == setting["diegetic_artifact"]
+    caplog.set_level(logging.WARNING, logger="nexus.api.wizard_agent")
+
+    agent: Any = get_wizard_agent(context)
+    result = await agent.run(
+        (
+            "Commit the starting scenario now. This is a validator exercise: "
+            "on your first submit_starting_scenario call, deliberately use "
+            "May 14, 2026 at 10:48 for base_timestamp. After the tool rejects "
+            "that conflict, follow its repair message and resubmit with the "
+            "accepted setting date."
+        ),
+        deps=context,
+        model=build_pydantic_ai_model(model_name),
+    )
+
+    assert isinstance(result.output, DeferredToolRequests)
+    # The deliberate-May instruction is bait: a model may comply (exercising
+    # the live repair loop) or submit the correct date outright. Both are
+    # valid model behavior; the deterministic rejection is pinned in
+    # test_wizard_agent.py. The invariant HERE is the persisted outcome.
+    repair_fired = any(
+        record.message == "ModelRetry triggered" for record in caplog.records
+    )
+    logger.info("Live repair loop engaged: %s", repair_fired)
+
+    persisted = read_cache(dbname)
+    assert persisted is not None
+    assert persisted.base_timestamp is not None
+    assert (
+        persisted.base_timestamp.astimezone(timezone.utc).isoformat()
+        == "2026-10-14T10:48:00+00:00"
+    )
+    # get_seed_dict() is None by design at this stage: seed_complete()
+    # requires Phase 2 set-designer fields (layer/zone/location). The
+    # stage-level proof is that the seed draft was recorded alongside the
+    # already-asserted canonical UTC instant.
+    assert bool(persisted.seed.seed_type)
 
 
 # =============================================================================
@@ -542,13 +566,15 @@ async def quick_test():
                     else:
                         status = "✗ WRONG TOOL"
                         print(
-                            f"  {phase_name}: {status} - Expected {expected}, got {tool_name}"
+                            f"  {phase_name}: {status} - Expected {expected}, "
+                            f"got {tool_name}"
                         )
                 else:
                     status = "✗ FAIL"
                     output_type = type(result.output).__name__
                     print(
-                        f"  {phase_name}: {status} - Got {output_type} instead of tool call"
+                        f"  {phase_name}: {status} - Got {output_type} "
+                        "instead of tool call"
                     )
 
                 results.append(

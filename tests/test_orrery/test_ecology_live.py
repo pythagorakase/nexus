@@ -1,15 +1,20 @@
 """Ecology-bundle machinery: signal detection policy + outbound pair tags.
 
 The detection policy is a pure function and is tested directly. The
-pair-tag ADD op and the detection gate ride the real commit writer
-against live ``save_02`` rows (skipped unless ``NEXUS_RUN_POSTGRES=1``),
-mirroring test_live_cycle's synthetic-draft-plus-cleanup harness — no
-LLM involvement, so the test costs nothing but a transaction.
+pair-tag ADD op and the detection gate ride the real commit writer against
+a seeded disposable template clone (skipped unless ``NEXUS_RUN_POSTGRES=1``):
+``ecology_story`` commits a clocked head chunk and three characters through
+the shared ``tests.pg_fixtures`` seeds, and the clone is dropped afterward,
+so the committed resolutions, events, edges, and activity changes never
+reach an owner slot. No LLM involvement.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -21,9 +26,14 @@ from nexus.agents.orrery.events import (
     commit_orrery_tick_sync,
 )
 from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_story_clock,
+)
 
-LIVE_SLOT = 2
+WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -74,14 +84,53 @@ def test_coerce_signal_detection_shapes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Live commit path (real save_02 rows, cleaned up)
+# Live commit path (seeded disposable clone)
 # ---------------------------------------------------------------------------
 
-pytestmark_live = pytest.mark.requires_postgres
+
+@dataclass(frozen=True)
+class EcologyStory:
+    """The clone and the rows ``ecology_story`` seeded into it."""
+
+    dbname: str
+    anchor_chunk_id: int
+    actor_entity_id: int
+    target_entity_id: int
+    rival_entity_id: int
 
 
-def _connect() -> Any:
-    return connect(f"save_{LIVE_SLOT:02d}")
+@pytest.fixture()
+def ecology_story() -> Iterator[EcologyStory]:
+    """Seed a clocked head chunk plus a hunter, a quarry, and a rival hunter."""
+
+    with disposable_slot_database("qa640_ecology") as dbname:
+        anchor = seed_story_clock(
+            dbname, world_time=WORLD_TIME, raw_text="The quarry goes to ground."
+        )
+        _, actor = seed_character(
+            dbname, name="Ecology Hunter", current_activity="keeping watch"
+        )
+        _, target = seed_character(dbname, name="Ecology Quarry")
+        _, rival = seed_character(dbname, name="Ecology Rival")
+        yield EcologyStory(
+            dbname=dbname,
+            anchor_chunk_id=anchor,
+            actor_entity_id=actor,
+            target_entity_id=target,
+            rival_entity_id=rival,
+        )
+
+
+def _current_activity(conn: Any, entity_id: int) -> str:
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT current_activity FROM characters WHERE entity_id = %s",
+                (entity_id,),
+            )
+            row = cur.fetchone()
+    assert row is not None, f"ecology_story seeded no character {entity_id}"
+    return str(row[0])
 
 
 def _hunt_draft(actor_entity_id: int, target_entity_id: int) -> OrreryResolutionDraft:
@@ -104,29 +153,19 @@ def _hunt_draft(actor_entity_id: int, target_entity_id: int) -> OrreryResolution
 
 
 @pytest.mark.requires_postgres
-def test_outbound_pair_tag_and_detection_gate_live() -> None:
+def test_outbound_pair_tag_and_detection_gate_live(
+    ecology_story: EcologyStory,
+) -> None:
     """Committing the hunt draft writes the edge; detection gates the signal."""
 
-    conn: Any = None
     resolution_ids: list[int] = []
     pair_tag_ids: list[int] = []
+    actor_id = ecology_story.actor_entity_id
+    target_id = ecology_story.target_entity_id
+    anchor = ecology_story.anchor_chunk_id
+    conn = connect(ecology_story.dbname)
     try:
-        conn = _connect()
-        with conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """
-                    SELECT c.entity_id
-                    FROM characters c
-                    ORDER BY c.entity_id
-                    LIMIT 2
-                    """
-                )
-                rows = cur.fetchall()
-                assert len(rows) == 2
-                actor_id, target_id = (int(r["entity_id"]) for r in rows)
-                cur.execute("SELECT max(id) AS max_id FROM narrative_chunks")
-                anchor = int(cur.fetchone()["max_id"])
+        assert _current_activity(conn, actor_id) == "keeping watch"
 
         def commit_hunt(detect_pct: int) -> int:
             proposal = OrreryTickProposal(
@@ -139,7 +178,6 @@ def test_outbound_pair_tag_and_detection_gate_live() -> None:
                     conn,
                     proposal,
                     tick_chunk_id=anchor,
-                    slot=LIVE_SLOT,
                     ecology_settings={
                         "signal_detection_default": 100,
                         "signal_detection": {"threat_issued": detect_pct},
@@ -163,6 +201,7 @@ def test_outbound_pair_tag_and_detection_gate_live() -> None:
         # Phase 1: guaranteed-undetected signal. The hunting edge lands;
         # the threat_issued row does not; the primary event records why.
         rid = commit_hunt(detect_pct=0)
+        assert _current_activity(conn, actor_id) == "hunting a grudge target"
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
@@ -222,17 +261,9 @@ def test_outbound_pair_tag_and_detection_gate_live() -> None:
         # Phase 3: the off-ramp's subject-scoped clear releases only the
         # actor's own edge — a rival hunter's edge into the same target
         # survives.
+        rival_id = ecology_story.rival_entity_id
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """
-                    SELECT c.entity_id FROM characters c
-                    WHERE c.entity_id NOT IN (%s, %s)
-                    ORDER BY c.entity_id LIMIT 1
-                    """,
-                    (actor_id, target_id),
-                )
-                rival_id = int(cur.fetchone()["entity_id"])
                 cur.execute(
                     """
                     INSERT INTO entity_pair_tags (
@@ -272,7 +303,6 @@ def test_outbound_pair_tag_and_detection_gate_live() -> None:
                     resolutions=(cold_draft,),
                 ),
                 tick_chunk_id=anchor,
-                slot=LIVE_SLOT,
             )
         assert result.resolution_count == 1
         with conn:
@@ -299,27 +329,7 @@ def test_outbound_pair_tag_and_detection_gate_live() -> None:
                 edges = {r["subject_entity_id"]: r["live"] for r in cur.fetchall()}
                 assert edges[actor_id] is False, "actor's own hunt must clear"
                 assert edges[rival_id] is True, "rival's hunt must survive"
+        assert _current_activity(conn, actor_id) == "letting a hunt go cold"
+        assert len(set(resolution_ids)) == 3, "each commit writes its own resolution"
     finally:
-        if conn is not None:
-            with conn:
-                with conn.cursor() as cur:
-                    if resolution_ids:
-                        cur.execute(
-                            "DELETE FROM world_events WHERE resolution_id = ANY(%s)",
-                            (resolution_ids,),
-                        )
-                        cur.execute(
-                            "DELETE FROM orrery_resolutions WHERE id = ANY(%s)",
-                            (resolution_ids,),
-                        )
-                    if pair_tag_ids:
-                        cur.execute(
-                            "DELETE FROM tag_clearance_log "
-                            "WHERE entity_pair_tag_id = ANY(%s)",
-                            (pair_tag_ids,),
-                        )
-                        cur.execute(
-                            "DELETE FROM entity_pair_tags WHERE id = ANY(%s)",
-                            (pair_tag_ids,),
-                        )
-            conn.close()
+        conn.close()

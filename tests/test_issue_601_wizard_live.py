@@ -1,10 +1,19 @@
-"""Live structured-call and hydrated-packet proof for issue #601."""
+"""Live structured-call and hydrated-packet proof for issue #601.
+
+The wizard runs against a disposable template clone created and migrated by
+``disposable_slot_database`` (``initialize_slot_database``, the production
+slot initializer) and routed under ``ROUTED_SLOT``; the clone is dropped
+afterward, so no numbered owner slot is reset. Staging the captured QA cache
+before the model call is proven without the live opt-in in
+``tests/test_live_gate_clones_pg.py``.
+"""
 
 from __future__ import annotations
 
 
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -20,52 +29,47 @@ from nexus.agents.orrery.retrograde_vocabulary import (
 )
 from nexus.api.new_story_cache import read_cache, write_cache, write_suggested_traits
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
-from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_agent import WizardContext, get_wizard_agent
 from nexus.config import load_settings, resolve_model_ref
 from tests.model_registry_helpers import registry_model
+from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
 
-SLOT = int(os.environ.get("NEXUS_ISSUE_601_TEST_SLOT", "0"))
-DBNAME = slot_dbname(SLOT) if SLOT in {1, 2, 3, 4} else ""
+# The slot label the clone is routed under for the wizard's slot resolvers.
+ROUTED_SLOT = 4
+THREAD_ID = "issue_601_live_trait_confirmation"
+FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "slot3_midnight_qa_wizard_cache.json"
+)
 
 pytestmark = [
     pytest.mark.live,
     pytest.mark.live_llm,
     pytest.mark.requires_postgres,
     pytest.mark.skipif(
-        os.environ.get("NEXUS_ISSUE_601_LIVE") != "1"
-        or not DBNAME
-        or os.environ.get("NEXUS_CONFIRM_DISPOSABLE_DB") != DBNAME,
-        reason=(
-            "Set NEXUS_ISSUE_601_LIVE=1, choose disposable slot 1-4 with "
-            "NEXUS_ISSUE_601_TEST_SLOT, and confirm its database name with "
-            "NEXUS_CONFIRM_DISPOSABLE_DB."
-        ),
+        os.environ.get("NEXUS_ISSUE_601_LIVE") != "1",
+        reason="Set NEXUS_ISSUE_601_LIVE=1 to run the live trait-confirmation proof.",
     ),
 ]
 
 
-@pytest.mark.asyncio
-async def test_live_trait_confirmation_persists_and_threads_constraint() -> None:
-    """The registry-selected wizard model types the live QA rationale in one call."""
+def stage_trait_confirmation(
+    dbname: str, model_name: str
+) -> tuple[dict[str, Any], WizardContext]:
+    """Stage the captured QA wizard cache in a routed clone; build the context.
+
+    Persists the slot model, the setting/character/seed drafts, and the
+    concept's three suggested traits with their rationales, then returns the
+    fixture and the character-phase ``WizardContext`` read back from the clone.
+    """
 
     from nexus.api.save_slots import upsert_slot
-    from scripts.new_story_setup import create_slot_schema_only
 
-    fixture = json.loads(
-        (
-            Path(__file__).parent / "fixtures" / "slot3_midnight_qa_wizard_cache.json"
-        ).read_text()
-    )
-    model_ref = os.environ.get("NEXUS_ISSUE_601_MODEL", registry_model("openai"))
-    model_name = resolve_model_ref(model_ref)
-
-    create_slot_schema_only(SLOT, source_db="NEXUS_template", force=True)
-    upsert_slot(SLOT, model=model_name, dbname=DBNAME)
+    fixture = json.loads(FIXTURE_PATH.read_text())
+    upsert_slot(ROUTED_SLOT, model=model_name, dbname=dbname)
     character = fixture["character"]
     seed = fixture["seed"]
     write_cache(
-        thread_id="issue_601_live_trait_confirmation",
+        thread_id=THREAD_ID,
         setting_draft=fixture["setting"],
         character_draft={
             "concept": character["concept"],
@@ -76,11 +80,11 @@ async def test_live_trait_confirmation_persists_and_threads_constraint() -> None
         zone_draft=seed["zone"],
         initial_location=seed["initial_location"],
         base_timestamp="2026-05-14T10:48:00+00:00",
-        target_slot=SLOT,
-        dbname=DBNAME,
+        target_slot=ROUTED_SLOT,
+        dbname=dbname,
     )
     write_suggested_traits(
-        DBNAME,
+        dbname,
         [
             {
                 "trait": trait,
@@ -91,10 +95,10 @@ async def test_live_trait_confirmation_persists_and_threads_constraint() -> None
     )
 
     context = WizardContext(
-        slot=SLOT,
-        cache=read_cache(DBNAME),
+        slot=ROUTED_SLOT,
+        cache=read_cache(dbname),
         phase="character",
-        thread_id="issue_601_live_trait_confirmation",
+        thread_id=THREAD_ID,
         model=model_name,
         context_data={
             "setting": fixture["setting"],
@@ -106,6 +110,28 @@ async def test_live_trait_confirmation_persists_and_threads_constraint() -> None
         user_turns=1,
         assistant_turns=1,
     )
+    return fixture, context
+
+
+@pytest.fixture()
+def trait_confirmation_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """A fresh migrated clone routed under ``ROUTED_SLOT``, source pins kept."""
+
+    with disposable_slot_database("qa640_issue_601", story_pin=None) as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=ROUTED_SLOT, dbname=dbname)
+        yield dbname
+
+
+@pytest.mark.asyncio
+async def test_live_trait_confirmation_persists_and_threads_constraint(
+    trait_confirmation_slot: str,
+) -> None:
+    """The registry-selected wizard model types the live QA rationale in one call."""
+
+    dbname = trait_confirmation_slot
+    model_ref = os.environ.get("NEXUS_ISSUE_601_MODEL", registry_model("openai"))
+    model_name = resolve_model_ref(model_ref)
+    _, context = stage_trait_confirmation(dbname, model_name)
     agent: Any = get_wizard_agent(context)
     result = await agent.run(
         (
@@ -127,13 +153,13 @@ async def test_live_trait_confirmation_persists_and_threads_constraint() -> None
     assert submitted_constraints["enemies"]["cold_start_relationships"] == "forbidden"
     assert submitted_constraints["enemies"]["preexisting_relationship_targets"] == []
 
-    hydrated = read_cache(DBNAME)
+    hydrated = read_cache(dbname)
     assert hydrated is not None
     packet = build_retrograde_dry_run_packet(
-        slot=SLOT,
-        dbname=DBNAME,
+        slot=ROUTED_SLOT,
+        dbname=dbname,
         cache=hydrated,
-        vocabulary=enumerate_seed_eligible_vocabulary(dbname=DBNAME),
+        vocabulary=enumerate_seed_eligible_vocabulary(dbname=dbname),
         settings=load_settings(),
         weird_level="low",
     )

@@ -1,24 +1,21 @@
 """Real-DB integration tests for the multi-entity tag DB-level predicates.
 
 Exercises ``pair_tag_exists`` / ``lookup_pair_tag_subjects`` /
-``lookup_pair_tag_objects`` against a live slot database (``save_05``).
-Activated by ``NEXUS_RUN_POSTGRES=1``.
+``lookup_pair_tag_objects`` against a disposable template clone that
+``pair_tag_slot`` owns for the module. Activated by ``NEXUS_RUN_POSTGRES=1``.
 
-**Test isolation:** the fixture creates *fresh* bare entities for each test
-(``INSERT INTO entities (kind, is_active)`` with no backing characters /
-factions subtype row) and DELETEs them on teardown — the ON DELETE CASCADE
-on ``entity_pair_tags.subject_entity_id`` / ``object_entity_id`` cleans up
-any pair tags created between them automatically. This guarantees tests
-are independent of whatever pre-existing data lives in save_05 (no risk
-that an existing `mentors(char_1 → char_3)` row makes a false-when-absent
-assertion fail). The trade-off: tests can't cross-check that
-pre-existing user data is unaffected, but they don't touch it in the
-first place.
+**Test isolation:** ``test_entities`` creates *fresh* bare entities for each
+test (``INSERT INTO entities (kind, is_active)`` with no backing characters /
+factions subtype row), so no test depends on rows another test wrote, and
+false-when-absent assertions cannot be broken by pre-existing pair tags. The
+clone carries the template's seeded ``pair_tags`` vocabulary and is dropped
+after the module, so no owner slot is touched.
 """
 
 from __future__ import annotations
 
-from typing import Generator
+from contextlib import closing
+from typing import Generator, Iterator
 
 import psycopg2
 import pytest
@@ -32,13 +29,13 @@ from nexus.agents.orrery.tag_writer import (
     apply_pair_tag_bestowal,
     clear_pair_tag,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
 
-
-TEST_DBNAME = "save_05"
+# Pair-tag names the suite bestows; migration 042 seeds them in the template.
+REQUIRED_TAGS = ("mentors", "protects")
 
 
 class _TestEntities:
@@ -60,44 +57,46 @@ class _TestEntities:
         self.all_ids = all_ids
 
 
+@pytest.fixture(scope="module")
+def pair_tag_slot() -> Iterator[str]:
+    """Own one template clone for the module; it is dropped afterward."""
+
+    with disposable_slot_database("qa640_pair_tag_predicates") as dbname:
+        yield dbname
+
+
 @pytest.fixture
-def slot_connection() -> Generator[psycopg2.extensions.connection, None, None]:
-    conn = psycopg2.connect(get_slot_db_url(dbname=TEST_DBNAME))
-    try:
+def slot_connection(
+    pair_tag_slot: str,
+) -> Generator[psycopg2.extensions.connection, None, None]:
+    with closing(connect(pair_tag_slot)) as conn:
         yield conn
-    finally:
-        conn.close()
 
 
 @pytest.fixture
 def test_entities(
     slot_connection: psycopg2.extensions.connection,
-) -> Generator[_TestEntities, None, None]:
-    """Create 3 fresh bare character entities + 1 fresh bare faction for
-    isolated testing. Bare = entity row with no backing characters/factions
-    subtype row, which is sufficient for pair-tag tests (they only need
-    valid entity_ids to satisfy FK constraints). Teardown DELETEs the
-    entities; the ON DELETE CASCADE on ``entity_pair_tags`` removes any
-    pair tags created between them."""
+) -> _TestEntities:
+    """Create 3 fresh bare character entities + 1 fresh bare faction.
 
-    # Vocabulary guard: confirm the pair_tag names the test suite uses are
-    # actually registered in `save_05.pair_tags`. If the slot was initialized
-    # from a template lacking migration 042's seed, skip cleanly rather than
-    # exploding with `ValueError: Unknown or deprecated pair_tag` deep in
-    # `apply_pair_tag_bestowal`.
-    required_tags = ("mentors", "protects")
+    Bare = entity row with no backing characters/factions subtype row, which
+    is sufficient for pair-tag tests (they only need valid entity_ids to
+    satisfy FK constraints). The clone's template vocabulary must carry the
+    pair tags the suite bestows (migration 042's seed); a clone without them
+    fails here by name rather than deep inside ``apply_pair_tag_bestowal``.
+    """
+
     with slot_connection.cursor() as cur:
         cur.execute(
             "SELECT tag FROM pair_tags WHERE NOT deprecated AND tag = ANY(%s)",
-            (list(required_tags),),
+            (list(REQUIRED_TAGS),),
         )
         registered = {row[0] for row in cur.fetchall()}
-    missing_tags = set(required_tags) - registered
-    if missing_tags:
-        pytest.skip(
-            f"{TEST_DBNAME}.pair_tags is missing {sorted(missing_tags)}; "
-            "predicate tests require migration 042's seed vocabulary."
-        )
+    slot_connection.rollback()
+    assert registered == set(REQUIRED_TAGS), (
+        f"pair_tag_slot's template vocabulary lacks "
+        f"{sorted(set(REQUIRED_TAGS) - registered)} (migration 042's seed)"
+    )
 
     created_ids: list[int] = []
     with slot_connection:
@@ -105,50 +104,27 @@ def test_entities(
             character_ids = []
             for _ in range(3):
                 cur.execute(
-                    "INSERT INTO entities (kind, is_active) VALUES ('character', true) RETURNING id"
+                    "INSERT INTO entities (kind, is_active) "
+                    "VALUES ('character', true) RETURNING id"
                 )
                 character_ids.append(cur.fetchone()[0])
             char_a, char_b, char_c = character_ids
             created_ids.extend(character_ids)
 
             cur.execute(
-                "INSERT INTO entities (kind, is_active) VALUES ('faction', true) RETURNING id"
+                "INSERT INTO entities (kind, is_active) "
+                "VALUES ('faction', true) RETURNING id"
             )
             faction = cur.fetchone()[0]
             created_ids.append(faction)
 
-    entities = _TestEntities(
+    return _TestEntities(
         char_a=char_a,
         char_b=char_b,
         char_c=char_c,
         faction=faction,
         all_ids=created_ids,
     )
-
-    try:
-        yield entities
-    finally:
-        with slot_connection:
-            with slot_connection.cursor() as cur:
-                # tag_clearance_log references entity_pair_tags without
-                # ON DELETE CASCADE (migration 064), so purge log rows for
-                # the test entities' pair rows first; the entities DELETE
-                # then cascades to entity_pair_tags as before.
-                cur.execute(
-                    """
-                    DELETE FROM tag_clearance_log
-                    WHERE entity_pair_tag_id IN (
-                        SELECT id FROM entity_pair_tags
-                        WHERE subject_entity_id = ANY(%s)
-                           OR object_entity_id = ANY(%s)
-                    )
-                    """,
-                    (created_ids, created_ids),
-                )
-                cur.execute(
-                    "DELETE FROM entities WHERE id = ANY(%s)",
-                    (created_ids,),
-                )
 
 
 def _bestow(
@@ -311,7 +287,7 @@ def test_lookup_subjects_returns_multiple_in_id_order(
     slot_connection: psycopg2.extensions.connection,
     test_entities: _TestEntities,
 ) -> None:
-    """Two distinct subjects both mentoring the same object appear in ascending ID order."""
+    """Two subjects mentoring the same object appear in ascending ID order."""
 
     with slot_connection:
         with slot_connection.cursor() as cur:
@@ -486,7 +462,7 @@ def test_lookup_objects_filters_by_tag(
     slot_connection: psycopg2.extensions.connection,
     test_entities: _TestEntities,
 ) -> None:
-    """Different relations from the same subject don't bleed into each other's results."""
+    """Different relations from one subject don't bleed into each other's results."""
 
     with slot_connection:
         with slot_connection.cursor() as cur:
@@ -607,10 +583,10 @@ def test_deprecated_pair_tag_is_excluded_from_all_predicates(
                     == []
                 )
     finally:
-        # The test's finally runs BEFORE the fixture's teardown, so the
-        # entity_pair_tags row using this pair_tag is still alive and would
-        # cause an FK violation on pair_tags DELETE. Clear the referring
-        # rows first, then drop the registry row.
+        # The active entity_pair_tags row still references the deprecated
+        # pair_tag, so a pair_tags DELETE alone would violate the FK. Clear
+        # the referring rows first, then drop the registry row. The entities
+        # themselves live until pair_tag_slot drops the module clone.
         if deprecated_tag_id is not None:
             with slot_connection:
                 with slot_connection.cursor() as cur:

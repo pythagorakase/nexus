@@ -28,9 +28,10 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
 from typing import Any
@@ -335,6 +336,78 @@ def require_disposable_target(dbname: str) -> str:
     return dbname
 
 
+# The unrouted slot resolver, captured at import under a name the routing
+# sweep below never rebinds.
+_UNROUTED_SLOT_DBNAME = slot_dbname
+
+# The active route as ``(slot, dbname)``, or ``None`` when no slot is routed.
+# ``route_slot_to_disposable`` sets it through its ``patch`` callable, so a
+# test's monkeypatch restores the previous route (usually ``None``) at
+# teardown.
+_ACTIVE_ROUTE: tuple[int, str] | None = None
+
+
+def _routed_slot_dbname(slot_number: int) -> str:
+    """Resolve a slot through the active route, or unrouted when none is set.
+
+    This one function is what every routed module binds, including a module
+    whose ``from nexus.api.slot_utils import slot_dbname`` first runs while a
+    route is active, which ``patch`` never records and so never undoes. Such
+    a binding stays correct after teardown: with ``_ACTIVE_ROUTE`` restored to
+    ``None`` it resolves exactly as ``_UNROUTED_SLOT_DBNAME`` does, and a later
+    route reaches it without another sweep.
+    """
+
+    route = _ACTIVE_ROUTE
+    if route is None:
+        return _UNROUTED_SLOT_DBNAME(slot_number)
+    slot, dbname = route
+    if slot_number != slot:
+        raise RuntimeError(
+            f"Slot {slot_number} is not routed: only slot {slot} reaches "
+            f"the disposable clone {dbname!r}"
+        )
+    return dbname
+
+
+def route_slot_to_disposable(
+    patch: Callable[[Any, str, Any], None], *, slot: int, dbname: str
+) -> None:
+    """Route one slot number to a disposable clone in every loaded module.
+
+    Production code resolves a slot's database through
+    ``nexus.api.slot_utils.slot_dbname``, either through the module attribute
+    (``require_slot_dbname``, ``get_slot_db_url``, ``connection_kwargs`` and
+    every function-local import) or through a name bound at import
+    (``from nexus.api.slot_utils import slot_dbname``). ``patch`` sets the
+    active route, then rebinds the module attribute and every loaded
+    module's bound name to ``_routed_slot_dbname``, which returns ``dbname``
+    for ``slot`` and raises for any other slot, and narrows ``VALID_DBNAMES``
+    to the clone, so a path this sweep missed fails loudly instead of
+    reaching an owner database. Modules imported afterward bind the same
+    resolver, which falls back to the unrouted contract once ``patch`` has
+    restored the route at teardown.
+
+    ``patch`` is ``monkeypatch.setattr`` inside a test (undone at teardown) or
+    the builtin ``setattr`` in a child process that serves the gateway for
+    the clone (``tests.slot_routed_gateway``). The caller sets ``NEXUS_SLOT``
+    when the code under test resolves the active slot.
+    """
+
+    from nexus.api import slot_utils
+
+    require_disposable_target(dbname)
+
+    patch(sys.modules[__name__], "_ACTIVE_ROUTE", (slot, dbname))
+    patch(slot_utils, "VALID_DBNAMES", {dbname})
+    patch(slot_utils, "slot_dbname", _routed_slot_dbname)
+    for name, module in list(sys.modules.items()):
+        if module is None or not name.startswith(("nexus.", "scripts.", "tests.")):
+            continue
+        if vars(module).get("slot_dbname") is _UNROUTED_SLOT_DBNAME:
+            patch(module, "slot_dbname", _routed_slot_dbname)
+
+
 def seed_protagonist(
     dbname: str,
     *,
@@ -570,6 +643,32 @@ def seed_story_clock(
         stamped is not None and stamped[0] == world_time
     ), f"seed_story_clock stamped {stamped!r}, expected {world_time}"
     return chunk_id
+
+
+def seed_story_setting(dbname: str, *, setting: Mapping[str, Any]) -> None:
+    """Persist a wizard setting card as the save's ``global_variables.setting``.
+
+    ``setting`` is validated as a ``SettingCard`` and written through
+    ``NewStoryDatabaseMapper.save_setting_to_globals``, the statement the
+    wizard's new-story transition runs, so the stored payload has the shape
+    that runtime readers such as Retrograde maturation's genre weird band
+    expect. The stored value is asserted equal to the card's JSON form.
+    """
+
+    from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
+    from nexus.api.new_story_schemas import SettingCard
+
+    require_disposable_target(dbname)
+    card = SettingCard.model_validate(setting)
+    expected = json.loads(json.dumps(card.model_dump()))
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        NewStoryDatabaseMapper(dbname).save_setting_to_globals(card, cursor=cur)
+        assert cur.rowcount == 1, f"{dbname} has no global_variables row"
+        cur.execute("SELECT setting FROM global_variables WHERE id = true")
+        stored = cur.fetchone()[0]
+    assert (
+        stored == expected
+    ), f"seed_story_setting stored {stored!r}, expected {expected!r}"
 
 
 def seed_zone(

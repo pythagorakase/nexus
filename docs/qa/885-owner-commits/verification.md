@@ -1,0 +1,387 @@
+# #885 Slice B1: No Test Commits to an Owner Slot
+
+Work order 885-B1 (issues #885 and #816). Base `origin/main` at `62efb25f`; code head `4dcf328c`, plus the review-round fixes recorded under Review Round Fixes. Every test that committed rows to, or could reset, an owner save slot now runs on a disposable template clone. No migration.
+
+## What Changed
+
+| File | Before | After |
+| --- | --- | --- |
+| `tests/pg_fixtures.py` | seed helpers only | `route_slot_to_disposable(patch, slot=, dbname=)`: sets the active route through `patch`, rebinds `slot_utils.slot_dbname` and every loaded module's bound copy to one shared resolver that returns the clone for the routed slot and raises for any other (and resolves unrouted once `patch` restores the route), and narrows `VALID_DBNAMES` to the clone; refuses owner databases. `seed_story_setting(dbname, setting=)` persists a `SettingCard` through `NewStoryDatabaseMapper.save_setting_to_globals` |
+| `tests/slot_routed_gateway.py` (new) | none | routes `NEXUS_ROUTED_SLOT` to `NEXUS_ROUTED_SLOT_DATABASE`, then runs `nexus.api.narrative` as `__main__` (the `python -m nexus.api.narrative` entry point) |
+| `tests/test_orrery/test_ecology_live.py` | committed hunt resolutions, events, pair tags, and `current_activity` into `save_02`; cleanup never restored the activity | `ecology_story` clone: `seed_story_clock` plus three `seed_character` rows; asserts the activity through all three commits |
+| `tests/test_orrery/test_live_cycle.py` | drained `save_02`'s real promotion and narration backlogs | `seed_live_cycle_story`: four accepted turns (`seed_played_story`, cast of two) commit the resolver's real pending resolutions, and `commit_orrery_tick_sync` adds one salient backlog row on an earlier tick; the test drains to idle and asserts the mundane backlog skipped, the salient backlog promoted, its narration job queued and narrated ahead of the synthetic row |
+| `tests/test_orrery/test_retrograde_maturation_live.py` | committed synthetic characters and maturation work to `save_02` | routed clone from `seed_maturation_story`, which persists the wizard setting maturation reads (`slot3_midnight_qa_wizard_cache.json`, genre thriller) and clocks one head chunk; live markers unchanged |
+| `tests/test_orrery/test_pair_tag_predicates.py`, `test_pair_tag_substrate.py` | entity and pair-tag rows in `save_05`, deleted afterward; `pytest.skip` on missing vocabulary | module clone; the vocabulary guard is an assertion |
+| `tests/test_orrery/test_weather_migration_pg.py` | created its schema inside `save_05` | `disposable_database`; asserts the surviving row |
+| `tests/test_api/test_reader_asset_endpoints.py` | character and image rows in `save_05`; files in the checkout's `ui/client/public/character_portraits` | module clone clocked by `seed_story_clock`, routed under slot 4; uploads in a per-test directory; the `save_02` reads stay read-only |
+| `tests/test_issue_601_wizard_live.py`, `tests/test_wizard_live.py`, `tests/test_golden_path_live.py` | `create_slot_schema_only(slot, force=True)` on `save_01`-`save_04` behind `NEXUS_*_TEST_SLOT` / `NEXUS_DISPOSABLE_TEST_SLOT` and `NEXUS_CONFIRM_DISPOSABLE_DB` | `disposable_slot_database(..., story_pin=None)` (which calls `initialize_slot_database`) routed under slot 4; the golden path's gateway subprocess starts through `tests.slot_routed_gateway`; the confirmation variables and slot-5 prose are deleted; the `live`, `live_llm`, `requires_postgres` markers and the `NEXUS_ISSUE_600_LIVE`, `NEXUS_ISSUE_601_LIVE`, `NEXUS_GOLDEN_PATH_E2E` opt-ins are unchanged |
+| `tests/test_orrery/test_retrograde_wizard_live.py` | `create_slot_schema_only(SLOT, force=True)` on `save_01`-`save_04` behind `NEXUS_DISPOSABLE_TEST_SLOT` and `NEXUS_CONFIRM_DISPOSABLE_DB` | `disposable_slot_database("qa640_retrograde_wizard", story_pin=None)` routed under slot 4, staged by `stage_fixture_world`; confirmation variables and slot-5 prose deleted; `live`, `live_llm`, `requires_postgres` markers and the `NEXUS_RETROGRADE_WIZARD_E2E` opt-in unchanged |
+| `tests/test_live_gate_clones_pg.py` (new) | none | runs each live gate's staging on TEST-pinned clones without the live opt-in (see below) |
+
+The live gates keep their markers, so their fixtures never run under `NEXUS_RUN_POSTGRES=1` alone. `tests/test_live_gate_clones_pg.py` runs the same staging functions without the opt-in: the live-cycle backlog seed (and a resolver dry run that binds the seeded cast), maturation enqueue plus queued-job idempotency, the issue #601 cache/model/suggested-trait staging, the issue #600 confirmed-setting seed context, the Retrograde wizard cold start's cache and slot-model staging, the maturation drain's pre-LLM job-context, story-setting, and packet build on the queued job, and the golden path's cache staging followed by the routed gateway subprocess on lane 8019 serving `/api/slot/4/state` from the clone (wizard mode, the fixture thread id) and returning 500 for `/api/slot/2/state` (`Slot 2 is not routed`).
+
+## Owner Slots Untouched
+
+Read-only fingerprint, every statement inside `BEGIN READ ONLY`:
+
+```sql
+SELECT '<db>',
+  (SELECT count(*) FROM narrative_chunks), (SELECT count(*) FROM characters),
+  (SELECT count(*) FROM entity_tags), (SELECT count(*) FROM character_relationships),
+  (SELECT max(updated_at) FROM characters), (SELECT max(updated_at) FROM character_relationships),
+  (SELECT max(created_at) FROM narrative_chunks), (SELECT count(*) FROM entities),
+  (SELECT count(*) FROM orrery_resolutions), (SELECT count(*) FROM world_events),
+  (SELECT count(*) FROM entity_pair_tags), (SELECT count(*) FROM assets.character_images),
+  (SELECT count(*) FROM orrery_maturation_jobs), (SELECT count(*) FROM orrery_narration_jobs),
+  (SELECT count(*) FROM pg_namespace);
+```
+
+`narrative_chunks` has no `updated_at`; its `max(created_at)` is recorded instead. The same rows were captured at session start (before any test ran), at 19:45:13 CDT before the gate, and at 19:57:59 CDT after the converted files, both Orrery batches, and both API batches; `diff` reported them identical each time.
+
+Before the gate (19:45:13 CDT):
+
+```
+db|narrative_chunks|characters|entity_tags|character_relationships|max_characters_updated_at|max_relationships_updated_at|max_chunks_created_at|entities|orrery_resolutions|world_events|entity_pair_tags|character_images|orrery_maturation_jobs|orrery_narration_jobs|schemas
+save_01|1425|35|0|84|2026-05-18 05:53:39.909294-04|2025-08-18 18:29:45-04|2025-04-21 00:49:46.677555-04|121|0|0|0|1|0|0|10
+save_02|1425|35|0|84|2026-09-29 19:20:46.793362-04|2025-08-18 18:29:45-04|2025-04-21 00:49:46.677555-04|121|0|0|0|1|0|0|9
+save_03|40|17|35|11|2026-08-09 03:54:16.80792-04|2026-07-30 12:33:27.950461-04|2026-08-09 03:54:16.80792-04|29|75|96|25|0|12|9|7
+save_04|46|23|42|15|2026-08-21 00:51:41.719029-04|2026-08-21 00:52:48.234363-04|2026-08-21 00:51:41.719029-04|39|103|133|28|0|3|0|9
+save_05|0|0|0|0||||0|0|0|0|0|0|0|7
+```
+
+After the gate (19:57:59 CDT):
+
+```
+db|narrative_chunks|characters|entity_tags|character_relationships|max_characters_updated_at|max_relationships_updated_at|max_chunks_created_at|entities|orrery_resolutions|world_events|entity_pair_tags|character_images|orrery_maturation_jobs|orrery_narration_jobs|schemas
+save_01|1425|35|0|84|2026-05-18 05:53:39.909294-04|2025-08-18 18:29:45-04|2025-04-21 00:49:46.677555-04|121|0|0|0|1|0|0|10
+save_02|1425|35|0|84|2026-09-29 19:20:46.793362-04|2025-08-18 18:29:45-04|2025-04-21 00:49:46.677555-04|121|0|0|0|1|0|0|9
+save_03|40|17|35|11|2026-08-09 03:54:16.80792-04|2026-07-30 12:33:27.950461-04|2026-08-09 03:54:16.80792-04|29|75|96|25|0|12|9|7
+save_04|46|23|42|15|2026-08-21 00:51:41.719029-04|2026-08-21 00:52:48.234363-04|2026-08-21 00:51:41.719029-04|39|103|133|28|0|3|0|9
+save_05|0|0|0|0||||0|0|0|0|0|0|0|7
+```
+
+`save_02`'s `max(characters.updated_at)` of 19:20:46 predates this session's first test run; it is the residue of an earlier `test_ecology_live` run on the base, the activity write this PR removes. That damage is still live and needs a coordinator repair (implementers may not write `save_02`): `save_02` `characters.id = 1` (entity 1, Alex) reads `current_activity = 'letting a hunt go cold'`, `updated_at = 2026-09-29 19:20:46.793362-04`, while the same row in `save_01` still holds the original four-point activity (`updated_at = 2026-05-18 05:53:39.909294-04`). Restore `current_activity` (and `updated_at` if wanted) from `save_01` row `id = 1` or from a backup. The owner fingerprint shows only that this session left the slots unchanged; it does not show that they are undamaged. The gate still contains the slice B2 tests that write owner slots inside rolled-back transactions; they leave counts and timestamps unchanged but advance sequences, which this fingerprint does not claim to cover.
+
+## Converted Files
+
+Gateway variables unset throughout; `$PY` is `/Users/pythagor/nexus/.venv/bin/python`, run from the worktree (`nexus.__file__` resolves under it).
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_ecology_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3 passed in 1.46s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_live_cycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 skipped in 0.24s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_retrograde_maturation_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 skipped in 0.23s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_pair_tag_predicates.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+13 passed in 1.54s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_pair_tag_substrate.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+4 passed in 1.48s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_weather_migration_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 passed in 0.46s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_api/test_reader_asset_endpoints.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+20 passed in 2.56s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_issue_601_wizard_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 skipped in 0.49s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_wizard_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+14 skipped in 0.48s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_golden_path_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+8 skipped in 0.22s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_live_gate_clones_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+5 passed in 8.83s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q <the eleven files above, together>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+46 passed, 25 skipped in 14.87s
+```
+
+The skips are the live-marked tests, unchanged: `test_live_cycle`, the maturation gate, the #601 proof, the golden path's eight stages, and in `test_wizard_live.py` the thirteen provider-calling `live` tests plus the #600 seed-repair proof. `test_live_cycle` makes no provider call (Resolve, Commit, Promote, Record, and Bleed are deterministic), so it was also run with its live opt-in on a TEST-pinned clone, keeping the provider-only guard set:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_TEST_PROVIDER_ONLY=1 NEXUS_KEYRING_DISABLE=1 $PY -m pytest -q tests/test_orrery/test_live_cycle.py
+secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
+1 passed in 2.79s
+```
+
+No other live gate was run (they make paid calls). Every converted module keeps its test count; assertion counts (lines starting `assert`) versus the base: ecology 21 to 25, live cycle 15 to 33, pair-tag predicates 18 to 19, pair-tag substrate 9 to 10, migration 094 0 to 1, the rest equal.
+
+## Tiers
+
+Orrery PostgreSQL tier in two batches at `5728fcff` (the later commit `4dcf328c` only rewraps literals and drops two unused imports):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line tests/test_orrery/test_[a-o]*.py
+FAILED tests/test_orrery/test_adjudication_history.py::test_history_is_non_vacuous_on_audited_slots
+FAILED tests/test_orrery/test_evidence.py::test_slot_backed_explain_carries_evidence_end_to_end
+ERROR tests/test_orrery/test_faction_project_contexts_live.py (8 ids, NoResultFound in the slot-5 fixture)
+2 failed, 793 passed, 29 skipped, 8 errors in 142.90s (0:02:22)
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line tests/test_orrery/test_[p-z]*.py
+FAILED tests/test_orrery/test_reveal_live.py (9 ids)
+FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
+ERROR tests/test_orrery/test_polymorphic_patron_live.py::test_roster_start_to_status_completion_closes_institutional_circle
+10 failed, 811 passed, 10 skipped, 1 error in 114.06s (0:01:54)
+```
+
+Every Orrery remainder is the slice B2 slot-5 content class already named on #885 (`test_reveal_live` x9, `test_faction_project_contexts_live` x8, `test_adjudication_history`, `test_evidence`, `test_tag_library`, `test_polymorphic_patron_live`).
+
+`tests/test_api` in two batches:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line tests/test_api/test_[a-n]*.py
+FAILED tests/test_api/test_narrative_post_commit.py::test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit
+1 failed, 310 passed, 2 skipped in 148.11s (0:02:28)
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q --tb=line tests/test_api/test_[o-z]*.py
+FAILED tests/test_api/test_orrery_dev_endpoints.py (10 ids)
+FAILED tests/test_api/test_place_reference_validation_pg.py::test_writer_reference_is_repaired_before_real_staging[mentions]
+FAILED tests/test_api/test_place_reference_validation_pg.py::test_writer_reference_is_repaired_before_real_staging[transit]
+FAILED tests/test_api/test_place_reference_validation_pg.py::test_writer_reference_is_repaired_before_real_staging[scene_reset]
+FAILED tests/test_api/test_return_recap_pg.py::test_live_loop_at_rest_offers_the_pending_drafts_decision
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_preserves_preempted_job_lease_and_refunds_unissued_attempt[False-character_experience_jobs]
+FAILED tests/test_api/test_scheduler_recovery_pg.py::test_scheduler_gateway_sigkill_resumes_inflight_experience
+FAILED tests/test_api/test_seat_policy_backfill_pg.py::test_seat_policy_migration_backfills_save04_active_jobs
+FAILED tests/test_api/test_session_truth_pg.py::test_generation_session_preserves_bootstrap_error_class[provider_timeout]
+18 failed, 536 passed, 2 skipped in 239.95s (0:03:59)
+```
+
+The four `TestAssetRoundTrip` setup errors are gone. By class:
+
+- Slice B2 slot-5 content (10): `test_orrery_dev_endpoints.py`.
+- Pre-existing on main, not slot 5, already recorded in `docs/qa/816-accepted-turn-factory/verification.md` (5): `test_narrative_post_commit` x1, `test_return_recap_pg` x1, `test_scheduler_recovery_pg` x2, `test_seat_policy_backfill_pg` x1.
+- New to the gate since that record, not slot 5, not from this PR (4): `test_place_reference_validation_pg.py` x3 (`AttributeError: 'dict' object has no attribute 'orrery'` at `nexus/agents/lore/logon_utility.py:444`) and `test_session_truth_pg.py::...[provider_timeout]` (`'dict' object has no attribute 'model_copy'` inside the bootstrap). They fail identically on a `git archive` of base `62efb25f`, which this PR's code does not reach:
+
+```
+$ cd <git archive 62efb25f> && env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q --tb=line tests/test_api/test_place_reference_validation_pg.py tests/test_api/test_session_truth_pg.py
+.../base/nexus/agents/lore/logon_utility.py:444: AttributeError: 'dict' object has no attribute 'orrery'   (x3)
+.../base/tests/test_api/test_session_truth_pg.py:176: AssertionError: {... 'Failed to generate bootstrap narrative: 'dict' object has no attribute 'model_copy'", 'error_class': 'AttributeError', ...}
+4 failed, 3 passed in 11.27s
+```
+
+## Offline and Static
+
+```
+$ env -u NEXUS_RUN_POSTGRES $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2336 passed, 353 skipped in 245.43s (0:04:05)
+$ env -u NEXUS_RUN_POSTGRES $PY -m pytest -q tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1807 passed, 726 skipped in 29.60s
+$ env -u NEXUS_RUN_POSTGRES $PY -m pytest -q tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed in 8.28s
+$ $PY -m black --check <13 changed files>
+13 files would be left unchanged.
+$ $PY -m flake8 <13 changed files>
+(no output)
+$ PYTHONPATH=$PWD $PY -m mypy -m tests.pg_fixtures -m tests.slot_routed_gateway -m tests.test_live_gate_clones_pg ... (all 13 changed modules)
+Found 39 errors in 5 files (checked 13 source files)
+```
+
+The 39 mypy errors are the base's, file for file (golden path 13, ecology 15, pair-tag predicates 3, substrate 2, wizard live 6; the same modules on the base archive report 39 in the same five files). The new modules and `tests/pg_fixtures.py` report none. The flake8 findings present on the base in the touched files (ten in `test_wizard_live.py`: two F401 and eight E501; four E501 in `test_pair_tag_predicates.py`) are gone.
+
+Lanes: `lsof` showed no listener on 8018 or 8019 before or after; the proof's gateway subprocess ran on 8019 and was terminated by the test. `NEXUS_GATEWAY_PORT=<lane> NEXUS_API_URL=http://127.0.0.1:<lane> nexus down` printed `nothing running` for both lanes.
+
+## Review Round Fixes
+
+The first review round found two P1 defects (one reported twice) and several P3s; each is fixed here.
+
+- The maturation live gate could not mature: a bare template clone has no `global_variables.setting`, and `_mature_one` raises in `_load_story_setting` before its first model call, so `assert failed == 0` could never pass. `seed_maturation_story` now persists a real setting card through `seed_story_setting` (the wizard transition's `save_setting_to_globals` statement). `test_maturation_enqueue_is_idempotent_on_the_routed_clone` now reads the queued job's columns (without leasing it) and runs the drain's pre-LLM path on the clone without the opt-in: `_load_job_context`, `_load_story_setting` (genre `thriller`, the fixture's `world_name`), and `build_runtime_maturation_packet` (weird band genre `thriller`, target name in the rendered prompt).
+- `test_orrery/test_retrograde_wizard_live.py` could reset `save_01`-`save_04` under `NEXUS_DISPOSABLE_TEST_SLOT`/`NEXUS_CONFIRM_DISPOSABLE_DB`. It now runs on a routed `disposable_slot_database` clone, with its staging proven without the opt-in by `test_retrograde_wizard_staging_persists_the_canned_cache`.
+- Routing teardown was incomplete: a module first imported inside a routed window bound the per-call closure, which monkeypatch never recorded, so after teardown it kept resolving to a dropped clone. Every route now binds one shared resolver that reads the active route, which `patch` sets and restores. `test_route_teardown_restores_a_module_first_imported_while_routed` and `test_nested_route_restores_the_outer_route` prove it offline. `tests/scheduler_helpers.route_slot` is left alone: it serves nine modules with a narrower contract (fixed slot 4, a fixed module list, sets `NEXUS_SLOT`).
+- The golden path's `golden_path` fixture sets `NEXUS_SLOT` to `ROUTED_SLOT` itself, so the gateway child always starts the SlotScheduler that drains maturation (stage 7, adaptive tail). The module docstring records the known blocker below (Observed, Not Changed): with that scheduler running on a wizard-phase clone, stage 8's clean-log scan fails until the `experiences.py:1827` defect is fixed.
+- Audit: `test_wizard_live.py:177` is reclassified as a read-only `save_05` read, and the class totals are recounted (see Audit).
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_retrograde_wizard_live.py
+1 skipped in 0.22s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_retrograde_maturation_live.py
+1 skipped in 0.24s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_golden_path_live.py
+8 skipped in 0.22s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_live_gate_clones_pg.py
+6 passed in 9.83s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_pg_disposable_target.py
+28 passed in 0.36s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q <the eleven converted files, test_live_gate_clones_pg.py, test_pg_disposable_target.py, together>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+75 passed, 26 skipped in 16.04s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_TEST_PROVIDER_ONLY=1 NEXUS_KEYRING_DISABLE=1 $PY -m pytest -q tests/test_orrery/test_live_cycle.py
+secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
+1 passed in 2.84s
+$ env -u NEXUS_RUN_POSTGRES $PY -m pytest -q tests/test_api tests/test_orrery tests/test_reachability.py tests/test_pg_disposable_target.py
+1872 passed, 727 skipped in 37.03s
+$ env -u NEXUS_RUN_POSTGRES $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
+2339 passed, 354 skipped in 241.42s (0:04:01)
+$ $PY -m black --check <6 changed test modules>
+6 files would be left unchanged.
+$ $PY -m flake8 <6 changed test modules>
+(no output)
+$ $PY -m mypy -m tests.test_orrery.test_retrograde_wizard_live
+Success: no issues found in 1 source file
+```
+
+`mypy` on the other changed modules reports only the base's errors (golden path 13, unchanged lines). The owner fingerprint above was captured again at 20:30:44 CDT, before this round's gate reruns, and at 20:37:14 CDT, after them; both are identical to the rows above. Lanes 8018 and 8019 had no listener before or after; the gateway proof ran on 8019 and was terminated by the test.
+
+### Second Round
+
+The second review round found one P1, one P2, and ten P3s; each is fixed here.
+
+- The live-cycle seed now asserts `len(backlog_ids) >= PROMOTION_BATCH`, the invariant the drain's `drains > 2` assertion depends on (with the synthetic row, that is at least two non-empty batches before the idle drain).
+- `test_pair_tag_predicates.py`: the deprecated-tag cleanup comment no longer cites a fixture teardown that this PR removed; the entities live until `pair_tag_slot` drops the module clone.
+- Imports: `test_pg_disposable_target.py` puts `nexus.api` before `tests`; `test_live_gate_clones_pg.py` imports the maturation module before the wizard module and hoists `json` and the `sqlalchemy` imports to module top; the Retrograde wizard gate's function-local `nexus.database` import follows the `nexus.api` and `nexus.config` imports.
+- `test_live_gate_clones_pg.py`: the maturation proof's docstring says it reads the queued job's columns without leasing it.
+- The golden-path blocker is issue #1027 (`drain_experience_outbox_sync` resolves the canonical player before it selects any job, so a wizard-phase slot logs an ERROR on every scheduler pass); the module docstring cites it.
+- Audit: fake-connection and model-only hits move from Disposable clone to Offline label, `tests/test_runtime/test_supervisor_live.py` joins the slice B2 list, the grep is widened, and every new hit is classified (see Audit).
+- `save_02`'s live ecology damage is flagged above for a coordinator repair.
+
+Every converted file in isolation at this round's head, then together, gateway variables unset; lanes 8018 and 8019 had no listener before or after:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_ecology_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3 passed, 5 warnings in 1.54s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_live_cycle.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 skipped, 5 warnings in 0.25s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_retrograde_maturation_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 skipped, 5 warnings in 0.24s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_pair_tag_predicates.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+13 passed, 5 warnings in 1.58s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_pair_tag_substrate.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+4 passed, 5 warnings in 1.48s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_weather_migration_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 passed, 5 warnings in 0.48s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_api/test_reader_asset_endpoints.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+20 passed, 5 warnings in 2.55s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_issue_601_wizard_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 skipped, 5 warnings in 0.51s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_wizard_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+14 skipped, 5 warnings in 0.50s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery/test_retrograde_wizard_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 skipped, 5 warnings in 0.23s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_golden_path_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+8 skipped, 5 warnings in 0.23s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_live_gate_clones_pg.py
+6 passed, 7 warnings in 10.11s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+28 passed, 5 warnings in 0.35s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q <the eleven converted files, test_live_gate_clones_pg.py, test_pg_disposable_target.py, together>
+75 passed, 26 skipped, 7 warnings in 16.21s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_TEST_PROVIDER_ONLY=1 NEXUS_KEYRING_DISABLE=1 $PY -m pytest -q tests/test_orrery/test_live_cycle.py
+1 passed, 7 warnings in 2.89s
+$ env -u NEXUS_RUN_POSTGRES $PY -m pytest -q tests/test_reachability.py <the six changed test modules>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+65 passed, 30 skipped, 5 warnings in 8.83s
+$ $PY -m black --check <6 changed test modules>
+6 files would be left unchanged.
+$ $PY -m flake8 <6 changed test modules>
+(no output)
+$ $PY -m mypy -m tests.test_live_gate_clones_pg -m tests.test_pg_disposable_target -m tests.test_orrery.test_live_cycle -m tests.test_orrery.test_retrograde_wizard_live
+Success: no issues found in 4 source files
+```
+
+`mypy` on the two remaining changed modules, whose edits are a docstring and a comment, reports the base's counts (golden path 13, pair-tag predicates 3). `test_live_cycle` with its opt-in exercises the tightened seed guard. `tests/test_runtime/test_supervisor_live.py` was not run: it writes `save_05` (slice B2). The owner fingerprint was captured at 20:54:09 CDT, before these reruns, and at 20:55:38 CDT, after them; both are identical to the rows above.
+
+## Audit
+
+`grep -rn "save_0[1-5]\|slot=[1-5]\b\|slot_dbname([1-5])\|WRITE_SLOT\|LIVE_SLOT\|force=True" tests/`: 913 hits before, 872 after (the new route-teardown guard tests add 16 refusal-class hits). In the eleven converted files, 60 hits before and 3 after, none of them a write:
+
+| File | Before | After | Remaining hits |
+| --- | ---: | ---: | --- |
+| `test_orrery/test_ecology_live.py` | 6 | 0 | |
+| `test_orrery/test_live_cycle.py` | 7 | 0 | |
+| `test_orrery/test_retrograde_maturation_live.py` | 16 | 0 | |
+| `test_orrery/test_pair_tag_predicates.py` | 4 | 0 | |
+| `test_orrery/test_pair_tag_substrate.py` | 2 | 0 | |
+| `test_orrery/test_weather_migration_pg.py` | 1 | 0 | |
+| `test_api/test_reader_asset_endpoints.py` | 19 | 2 | read-only owner read: lines 4 and 40 name `save_02` for `TestNarrativeReads`, GET-only routes over the mature corpus |
+| `test_issue_601_wizard_live.py` | 1 | 0 | |
+| `test_wizard_live.py` | 2 | 1 | read-only owner read (slot 5): line 177 `slot=5` is the `WizardContext` of the `live`-marked `mock_db_functions` tests, whose `slot_dbname` maps slot 5 to `save_05` (line 232). Each agent run reads `save_05`: the tag library for the system prompt (`nexus/api/wizard_agent.py:253`, `read_tag_library` SELECT at `nexus/agents/orrery/tag_library.py:111`) and, in the wildcard phase, tag-bestowal validation (`wizard_agent.py:501`, `validate_tag_bestowal` lookups). Both are SELECT-only; every write path (`guarded_wizard_write`, `record_drafts`, trait writes) is mocked. Slice B2 slot-5 content |
+| `test_orrery/test_retrograde_wizard_live.py` | 1 | 0 | |
+| `test_golden_path_live.py` | 1 | 0 | |
+
+The two new modules add no hit. The remaining hits elsewhere, by class (every one of the 151 files with a hit is in exactly the classes named, and the class totals sum to 872; the second review round moved 30 fake-connection and model-only hits from Disposable clone to Offline label). The widened grep after these classes adds 205 hits, classified separately:
+
+**Disposable clone** (52 files, 250 hits; hits are slot labels on a clone connection or routed to a clone, the `source_db` of a data clone, or a clone's own name): `test_orrery/test_retrograde_persistence.py` (41; fake cursor or `disposable_slot_database` connection), `test_orrery/test_retrograde_maturation.py` (35; migrated `include_data` clone of `save_02`, plus fake `Info` labels), `test_orrery/test_retrograde_projects_live.py` (18), `test_api/test_acceptance_staging_pg.py` (15), `test_orrery/test_worker.py` (2 of 13: `process_orrery_outbox_sync(slot=4)` at :439 and :444, routed to its clone), `test_api/test_attempt_manifest_pg.py` (10), `test_new_story_cache.py` (8; fake connection and a clone), `test_lore/test_pass2_baseline_pg.py` (8), `test_player_identity_consumers_pg.py` (7; slot 1 routed to its dump clone), `test_orrery/test_retrograde_constraints_pg.py` (6), `test_new_story_setup.py` (6), `test_api/test_wizard_confirmation_pg.py` (6), `test_wizard_opening_presence_pg.py` (4), `test_api/test_session_truth_pg.py` (4), `test_api/test_secret_requirements.py` (4), `test_api/test_narrative_retry_pg.py` (4), `test_orrery/test_need_absence_pg.py` (3), `test_orrery/test_generation_model_provenance_live.py` (3), `test_jobs_cli_pg.py` (3), `test_api/test_wizard_chat_validation.py` (3), `test_api/test_summary_budget_usage.py` (3), `test_api/test_reader_character_provenance_pg.py` (3), `test_prose_metrics_pg.py` (2), `test_presence_roster_pg.py` (2), `test_orrery/test_distortion_live.py` (1 of 2: the fixture's clone), `test_orrery/test_character_experiences_pg.py` (2), `test_orrery_tag_validation_pg.py` (2; slot 1 label on the qa649 clone), `test_memnon/test_ann_gate.py` (2; `save_01` source), `test_lore/test_scene_order_render.py` (2), `test_lore/test_baseline_fingerprint_refresh_pg.py` (2), `test_lore/conftest.py` (2; `save_01` source), `test_api/test_seat_policy_jobs_pg.py` (2), `test_api/test_scheduler_recovery_pg.py` (2), `test_api/test_scheduler_corpus_pg.py` (2), `test_api/test_reader_place_provenance_pg.py` (2), `test_api/test_narrative_summary_paid_pg.py` (2), `test_api/test_narrative_post_commit.py` (2), `test_api/test_narrative_jobs_pg.py` (2), `test_api/test_narrative_continue_validation.py` (2), `test_api/test_mock_wizard_responses.py` (2), `test_api/test_slot_mutation_guard.py` (8; its own clone), `test_orrery/test_need_clock_anchor_pg.py` (1), `test_orrery/test_drift_live.py` (1; `save_03` source), `test_orrery/test_card_identity.py` (1), `test_name_reveal_staged_bindings_pg.py` (1), `test_lore/test_seat_blocks.py` (1), `test_lore/test_pass2_chunk1369.py` (1; `save_01` source), `test_api/test_seat_policy_backfill_pg.py` (1; `pg_dump` source), `test_api/test_reentry_wire_pg.py` (1), `test_api/test_frontier_clock_pg.py` (1), `proofs/proof_session_truth.py` (1), `pg_fixtures.py` (1; docstring). `test_api/test_reader_asset_endpoints.py` is not in this class: its two remaining hits are read-only reads, below. A data clone reads its owner source only through `pg_dump`, which opens a read-only snapshot, and migrates the clone, never the source.
+
+**Read-only owner read** (10 files, 59 hits): `test_api/test_orrery_dev_endpoints.py` (27; `save_05`; the dev endpoints module issues no commit); `test_orrery/test_tag_library.py` (2 of 27; `save_05`, sessions set `readonly=True`); `test_skald_wire.py` (1 of 10; `save_05`, `readonly=True`); `test_place_tag_manifest.py` and `test_character_tag_manifest.py` (`save_02`; manifest and dry-run CLI reads, `execute=True` only in the refusal case); `test_orrery/test_evidence.py` (3; `save_05` resolve, no writes); `test_orrery/test_retrograde_vocabulary.py` (2; `save_02`/`save_05` vocabulary enumeration); `test_lore/test_intertitle_live.py` (2 of 3: the `LIVE_SLOT = 2` constant and the line 24 intertitle load, SELECT only); `test_api/test_reader_asset_endpoints.py` (2; `save_02` GETs); `test_wizard_live.py:177` (1; `save_05` tag-library and tag-validation SELECTs, see the table above). The `save_02` read at `test_faction_table_audit.py:297` (`SET TRANSACTION READ ONLY`) is counted with that file's slice B2 row, because its hits share `TEST_DBNAME` with the rolled-back write at line 967. These are safe because they open no write; the `save_05` ones are slice B2 content assumptions.
+
+**Refusal-case fixture** (3 files, 75 hits): `test_pg_disposable_target.py` (34; owner names asserted refused before a connection opens, and the route-teardown tests asserting that slot labels resolve to their owner names again once a route is undone, without connecting), `test_pg_target_contract.py` (16; source strings fed to the static guard), `test_database_contract.py` (25; URL and keyword construction, lazy engines never connected).
+
+**Private cluster** (1 file, 14 hits): `test_connection_lifecycle.py` (14; the private-cluster `save_04`).
+
+**Offline label** (49 files, 328 hits: labels passed to fakes, doubles, parsers, or bare models, so no connection opens; the files without `requires_postgres` also pass the default gate, whose psycopg2 tripwire fails any connection): `test_commit_handler_sync.py` (9; `commit_incubator_to_database_sync(conn, ..., slot=5)` on a fake connection, and `read_presence_baseline("save_05", ...)` with `psycopg2.connect` patched to a double), `test_orrery/test_worker.py` (11 of 13; `slot=5` on fake outbox rows and a docstring), `test_orrery/test_migrate.py` (6; `migrate_database("save_05")` with every connection helper patched to refuse, and the `migrate_targets` names fed to a fake callback), `test_api/test_wizard_model_resolution.py` (4; bare `ChatRequest`/`StartSetupRequest` Pydantic models), `test_orrery/test_events.py`, `test_orrery/test_tag_library.py` (25 of 27), `test_memnon/test_source_embeddings.py`, `test_orrery/test_retrograde_packet.py`, `test_turn_observation.py`, `test_lore/test_logon_prompt_formatting.py`, `test_cli.py`, `test_api/test_wizard_confirmation.py`, `test_api/test_wizard_weird_level.py`, `test_backfill_review_packet.py`, `test_api/test_wizard_resume.py`, `test_wizard_agent.py`, `test_orrery/test_retrograde_orchestrator.py`, `test_lore/test_two_pass_pipeline.py`, `test_api/test_narrative_retry.py`, `test_prose_metrics.py`, `test_runtime/test_readiness.py`, `test_api/test_narrative_generation.py`, `test_orrery/test_embedding_audit.py`, `test_qa_shift.py`, `test_cli_model_selection.py`, `test_api/test_slot_state.py`, `test_slot_utils.py`, `test_orrery_tag_validation.py`, `test_new_story_schemas.py` and `test_new_story_integration.py` (`NewStoryDatabaseMapper(dbname="save_02")` maps objects without a connection), `test_native_structured_output.py`, `test_memnon_db_access.py` (patched `psycopg2.connect`), `test_lore/test_memory_manager.py`, `test_lore/test_chunk_operations.py`, `test_api/test_runtime_status.py`, `test_usage_recorder.py`, `test_runtime/test_supervisor.py`, `test_runtime/test_remote_auth.py`, `test_postgres_tools.py` (refused before `createdb`), `test_orrery/test_retrograde_graph.py`, `test_memnon_embedding_contract.py`, `test_entity_tag_manifest_apply.py`, `test_config/test_seat_policies.py`, `test_cli_wizard_confirmation.py`, `test_api/test_wizard_stream_conflicts.py`, `test_api/test_route_capabilities.py`, `test_api/test_reader_player_boundary.py`, `live_seed_schema_test.py`, plus `test_skald_wire.py` (9 of 10, fake readers).
+
+**Slice B2 owner write** (41 files, 146 hits; the files on the list below, whose owner connections write inside rolled-back transactions; every hit in these files is counted here, including the labels and constants around the write; `tests/test_runtime/test_supervisor_live.py`, the committed writer the order's pattern misses, is counted under the widened grep below): `test_orrery/test_epistemics.py` (40), `test_orrery/test_stage2a_status_live.py` (15), `test_faction_table_audit.py` (11), `test_orrery/test_adjudication_history.py` (8), `test_trait_compiler_integration.py` (7), `test_orrery/test_tag_provenance.py` (6), `test_orrery/test_signal_events.py` (5), `test_lore/test_retrieval_coverage_live.py` (4), `test_orrery/test_claim_propagation_live.py` (4), `test_orrery/test_composition_sources_live.py` (4), `test_orrery/test_recruit_ally_projects.py` (4), `test_orrery/test_faction_project_contexts_live.py` (3), `test_orrery/test_projects.py` (3), `test_orrery/test_knowledge_surfacing_live.py` (2), `test_orrery/test_pursue_romance_replay.py` (2), `test_orrery/test_recruit_ally_replay.py` (2), `test_orrery/test_reveal_live.py` (2), `test_lore/test_intertitle_live.py` (1 of 3), `test_orrery/test_backstory_secrets_migration_pg.py` (1), `test_orrery/test_build_venture_async.py` (1), `test_orrery/test_build_venture_migration_pg.py` (1), `test_orrery/test_build_venture_projects.py` (1), `test_orrery/test_build_venture_replay.py` (1), `test_orrery/test_claim_accounts_migration_pg.py` (1), `test_orrery/test_court_patron_async.py` (1), `test_orrery/test_court_patron_migration_pg.py` (1), `test_orrery/test_court_patron_projects.py` (1), `test_orrery/test_distortion_live.py` (1 of 2), `test_orrery/test_distortion_migration_pg.py` (1), `test_orrery/test_geo_resolver_live.py` (1), `test_orrery/test_mood_migration_pg.py` (1), `test_orrery/test_polymorphic_patron_live.py` (1), `test_orrery/test_polymorphic_patron_migration_pg.py` (1), `test_orrery/test_pursue_romance_async.py` (1), `test_orrery/test_pursue_romance_migration_pg.py` (1), `test_orrery/test_pursue_romance_projects.py` (1), `test_orrery/test_recruit_ally_migration_pg.py` (1), `test_orrery/test_seek_redemption_async.py` (1), `test_orrery/test_seek_redemption_migration_pg.py` (1), `test_orrery/test_seek_redemption_projects.py` (1), `test_orrery/test_valence_float_migration_pg.py` (1).
+
+### Widened Grep
+
+The order's pattern misses slot numbers spelled through a constant, an f-string, a CLI flag, an environment variable, or a JSON body. The review found one committed owner writer that way (`tests/test_runtime/test_supervisor_live.py`, whose only literals are `TEST_SLOT = 5`, `"--slot", str(TEST_SLOT)`, and `f"save_0{TEST_SLOT}"`), so the audit adds six patterns and classifies every hit they add:
+
+```
+$ grep -rn 'save_0{\|"--slot", *"\?[1-5]\|TEST_SLOT\|SLOT *= *[1-5]\|setenv("NEXUS_SLOT", "[1-5]")\|"slot": *[1-5]\|?slot=[1-5]' tests/ \
+    | grep -v 'save_0[1-5]\|slot=[1-5]\b\|slot_dbname([1-5])\|WRITE_SLOT\|LIVE_SLOT\|force=True'
+```
+
+205 hits the order's pattern does not already match, in 59 files (23 of them have no hit under the order's pattern). By class, summing to 205:
+
+| Class | Files | Hits |
+| --- | ---: | ---: |
+| Disposable clone | 27 | 86 |
+| Read-only owner read | 2 | 3 |
+| Refusal-case fixture | 3 | 4 |
+| Private cluster | 1 | 5 |
+| Offline label | 26 | 98 |
+| Slice B2 owner write | 2 | 9 |
+
+**Disposable clone** (27 files, 86 hits): `test_api/test_narrative_continue_validation.py` (14 of 24; the `requires_postgres` tests from :785, routed by `_route_clone_to_slot` to `disposable_narrative_db`), `test_orrery/test_recall_disclosure_pg.py` (11; `_slot_session` patched to the rollback-only session on its disposable clone), `test_api/test_acceptance_staging_pg.py` (10; every `slot_dbname` routed to `qa640_acceptance`), `proofs/proof_session_truth.py` (7; `route_slot`), `test_api/test_attempt_manifest_pg.py` (7; `route_slot`), `test_api/test_session_truth_pg.py` (5; slots 4 and 5 routed to the `qa640_775_left`/`right` clones), `test_api/test_scheduler_corpus_pg.py` (3), `test_api/test_seat_policy_jobs_pg.py` (3), `test_orrery/test_narration_job_fencing_pg.py` (3; `worker.main(["--slot", "4"])` after `route_slot`), `test_api/test_slot_mutation_guard.py` (3; slot 5 routed to its protected clone), `test_api/test_backstage_endpoints_pg.py` (2; `_route_backstage_to`), `test_api/test_scheduler_locked_pg.py` (2; `offline_gate_db`), `test_api/test_wizard_chat_validation.py` (2 of 3; `offline_gate_db`), `fixtures/slot3_midnight_qa_wizard_cache.json` (1; cache data staged only into clones), `scheduler_helpers.py` (1; `route_slot` sets `NEXUS_SLOT=4` after routing slot 4 to the clone), `test_api/test_narrative_jobs_pg.py` (1), `test_api/test_return_recap_pg.py` (1; `SLOT = 5`, routed to `qa832_recap`), `test_api/test_wizard_confirmation_pg.py` (1), `test_api/test_wizard_model_resolution.py` (1; :113, `offline_gate_db`), `test_jobs_cli_pg.py` (1; parser only), and the `ROUTED_SLOT = 4` / `ISSUE_600_ROUTED_SLOT = 4` constants of the converted files (1 each): `test_api/test_reader_asset_endpoints.py`, `test_golden_path_live.py`, `test_issue_601_wizard_live.py`, `test_orrery/test_live_cycle.py`, `test_orrery/test_retrograde_maturation_live.py`, `test_orrery/test_retrograde_wizard_live.py`, `test_wizard_live.py`.
+
+**Read-only owner read** (2 files, 3 hits): `test_wizard_live.py` (2; the `save_0{slot}` resolver at :232, the same `live`-marked `mock_db_functions` read of `save_05` as line 177, and at :522 in `setup_db_mocks` for the manual `quick_test` script, which mocks every write), `test_api/test_orrery_dev_endpoints.py` (1; :834, the `save_05` coverage POST, which the dev endpoints module serves without a commit).
+
+**Refusal-case fixture** (3 files, 4 hits): `test_database_contract.py` (2; `NEXUS_SLOT=4` for URL construction and a lazy engine never connected), `test_gis_scripts_live.py` (1; `backfill_main(["--slot", "1", "--apply"])` returns `REFUSED` before `psycopg2.connect`, `scripts/gis_backfill.py:265`), `test_pg_disposable_target.py` (1).
+
+**Private cluster** (1 file, 5 hits): `test_connection_lifecycle.py` (5; the private-cluster slot 4).
+
+**Offline label** (26 files, 98 hits; no connection opens): `test_cli_contract.py` (19), `test_cli.py` (14), `test_cli_generation_http.py` (11), `test_cli_choice_http.py` (6) (the CLI against an in-process `ThreadingHTTPServer` or patched transport), `test_api/test_narrative_continue_validation.py` (10 of 24; the unmarked tests before :785, which run against transaction doubles), `test_api/test_wizard_weird_level.py` (8), `test_api/test_route_capabilities.py` (3), `test_cli_wizard_confirmation.py` (3), `test_api/test_narrative_status_operation.py` (2), `test_api/test_runtime_status.py` (2), `test_api/test_wizard_confirmation.py` (2), `test_new_story_cli.py` (2), `test_qa_shift.py` (2), `test_runtime/test_logging_config.py` (2; `TEST_SLOT = 5` passed to a supervisor that starts a toy `probe_app`, no gateway), `live_seed_schema_test.py` (1; `setup_db_mocks` for its manual `__main__` path), `test_api/test_narrative_generation.py` (1), `test_api/test_wizard_chat_validation.py` (1 of 3; blank-message rejection before any database), `test_api/test_wizard_model_switch.py` (1; the `chat` helper used only by the unmarked, mounted-wizard tests), `test_api/test_wizard_resume.py` (1), `test_api/test_wizard_stream_conflicts.py` (1), `test_cli_model_selection.py` (1), `test_lore/test_assembled_prompt_fingerprint.py` (1), `test_lore/test_retrieval_query_bakeoff.py` (1), `test_lore/test_two_pass_pipeline.py` (1), `test_orrery/test_retrograde_maturation.py` (1; `_slot_label` from `NEXUS_SLOT=3`), `test_turn_observation.py` (1).
+
+**Slice B2 owner write** (2 files, 9 hits): `test_runtime/test_supervisor_live.py` (8; see the slice B2 list), `test_faction_table_audit.py` (1; :1040, a manifest `source` label in a file already on the list).
+
+## Slice B2 List: Owner Writes Outside the Converted Files
+
+Every one below writes inside a transaction it rolls back (sequences still advance), except `test_runtime/test_supervisor_live.py`, which commits. File:line is the owner connection. No test in the tree can still reset a numbered owner slot: the last one, `test_orrery/test_retrograde_wizard_live.py`, is converted in this PR.
+
+- `save_02`: `test_orrery/test_epistemics.py:71, 648, 753, 838`; `test_orrery/test_adjudication_history.py:56`; `test_orrery/test_tag_provenance.py:47, 259`; `test_orrery/test_signal_events.py:109, 212`; `test_faction_table_audit.py:967`; `test_orrery/test_recruit_ally_projects.py:302, 782`; `test_orrery/test_projects.py:530, 583`; `test_lore/test_intertitle_live.py:52`; `test_orrery/test_recruit_ally_replay.py:43`; `test_orrery/test_pursue_romance_replay.py:45`; `test_orrery/test_valence_float_migration_pg.py:175`; `test_orrery/test_seek_redemption_projects.py:365`; `test_orrery/test_seek_redemption_migration_pg.py:19`; `test_orrery/test_seek_redemption_async.py:105`; `test_orrery/test_recruit_ally_migration_pg.py:21`; `test_orrery/test_pursue_romance_projects.py:348`; `test_orrery/test_pursue_romance_migration_pg.py:19`; `test_orrery/test_pursue_romance_async.py:89`; `test_orrery/test_distortion_migration_pg.py:25`; `test_orrery/test_court_patron_projects.py:436`; `test_orrery/test_court_patron_migration_pg.py:19`; `test_orrery/test_court_patron_async.py:102`; `test_orrery/test_claim_accounts_migration_pg.py:34`; `test_orrery/test_build_venture_replay.py:113`; `test_orrery/test_build_venture_projects.py:272`; `test_orrery/test_build_venture_migration_pg.py:22`; `test_orrery/test_build_venture_async.py:108`; `test_orrery/test_backstory_secrets_migration_pg.py:22`.
+- `save_05`: `test_orrery/test_stage2a_status_live.py:47`; `test_trait_compiler_integration.py:298, 555, 750, 898, 982`; `test_orrery/test_composition_sources_live.py:139`; `test_orrery/test_claim_propagation_live.py:86, 473, 1181`; `test_orrery/test_distortion_live.py:600` (`LIVE_SLOT` from `test_claim_propagation_live`); `test_lore/test_retrieval_coverage_live.py:42`; `test_orrery/test_faction_project_contexts_live.py:154`; `test_orrery/test_reveal_live.py:88, 335`; `test_orrery/test_knowledge_surfacing_live.py:229`; `test_orrery/test_polymorphic_patron_migration_pg.py:20`; `test_orrery/test_polymorphic_patron_live.py:44`; `test_orrery/test_mood_migration_pg.py:16`; `test_orrery/test_geo_resolver_live.py:22`.
+- `save_05`, committed, through a real gateway: `test_runtime/test_supervisor_live.py:133` (`test_local_profile_full_lifecycle` runs `nexus up --slot 5`, then restarts at :174 and :183 keep slot 5) and `:368` (the `external_gateway` fixture starts uvicorn with `NEXUS_SLOT=5` and the repository's real `nexus.toml`). Each gateway's lifespan starts `SlotScheduler(5)` (`nexus/api/narrative.py:121`), which commits a lease upsert into `save_05.deferred_work_scheduler` and drains `save_05`'s deferred work; `save_05` is not locked (`default_transaction_read_only` is `off`), and a read-only check shows a committed gateway lease row there (`owner_id gateway:69817:...`, heartbeat `2026-09-29 15:57:51-04`; this session did not establish which run wrote it). The no-slot `up` calls at :238, :241, :287, :296, and :332 start gateways on `runtime.default_slot = 1`, and only `save_01`'s lock (`default_transaction_read_only = on`) keeps their schedulers in observer mode. In slice B2, run the lifecycle against a clone: point the supervisor's gateway service at a routed clone (for example `python -m tests.slot_routed_gateway` with `NEXUS_ROUTED_SLOT`/`NEXUS_ROUTED_SLOT_DATABASE`), or use the private-cluster pattern of `test_connection_lifecycle.py`.
+
+## #885 Ids Retired
+
+- `tests/test_api/test_reader_asset_endpoints.py::TestAssetRoundTrip::test_cross_owner_image_ids_are_404`
+- `tests/test_api/test_reader_asset_endpoints.py::TestAssetRoundTrip::test_delete_handles_legacy_leading_slash_paths`
+- `tests/test_api/test_reader_asset_endpoints.py::TestAssetRoundTrip::test_invalid_type_rejected`
+- `tests/test_api/test_reader_asset_endpoints.py::TestAssetRoundTrip::test_portrait_upload_set_main_delete`
+
+`tests/test_orrery/test_ecology_live.py::test_outbound_pair_tag_and_detection_gate_live`, routed to #885 by the #964 static disposition, no longer depends on `save_02`.
+
+## Observed, Not Changed
+
+A gateway whose `NEXUS_SLOT` names a wizard-phase slot (no canonical player yet) logs `ERROR ... Deferred-work owner recovering ... Cannot resolve canonical player identity: user_character is NULL` with a traceback from `drain_experience_outbox_sync` (`nexus/agents/orrery/experiences.py:1827`) on every scheduler pass, even with no experience jobs queued. It surfaced when the routed gateway first ran with `NEXUS_SLOT=4` on a staged wizard clone. The launcher leaves `NEXUS_SLOT` to its caller; the golden path's fixture now sets it to 4 itself (its scheduler is the only production drain for maturation, which stage 7 and the adaptive tail need), and the no-opt-in clone proof unsets it. Stage 8's clean-log assertion therefore meets this error before the transition establishes the player: it is a blocker for the golden-path gate, stated in that module's docstring and in the PR's Deferred section, and needs a production fix, tracked as issue #1027.
