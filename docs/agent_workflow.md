@@ -44,6 +44,50 @@ more specific instructions.
     `security` itself, and `ctypes` calls into the Security framework. The
     guard is not a protected-path write guard, and no launcher preflight runs
     outside pytest; those parts of #963 are not implemented yet.
+- The owner-connection audit is opt-in: run a gate with
+  `-p tests.dbname_audit`, or set `NEXUS_DBNAME_AUDIT=1` before pytest starts
+  (`tests/conftest.py` reads it once and loads the same plugin), whenever a
+  change must prove that no test reaches an owner database, as every #885
+  slice does. `tests/dbname_audit.py` records the database named by every
+  psycopg2 connection (`psycopg2.connect` however imported, SQLAlchemy and
+  pool connections, and direct `psycopg2.extensions.connection`
+  construction) and every asyncpg connection. At configure time it swaps
+  the recording subclass into every loaded module that holds the original
+  connection class and rebinds the `__bases__` of each Python-level
+  subclass whose direct base is that class (`psycopg2.extras`
+  `LoggingConnection`, `DictConnection`, `RealDictConnection`,
+  `NamedTupleConnection`, and any other it finds), so a constructor imported
+  before the plugin loaded is audited too. Targets are read from the DSN,
+  URL, or keywords (or `PGDATABASE` when they name neither a database nor a
+  service) before connecting; psycopg2 also records libpq's resolved
+  `dbname` (`conn.info.dbname`) after connecting. A `save_NN` or
+  `NEXUS_template` target is refused at connect time: the call raises
+  `OwnerDatabaseConnectionRefused`, naming the target and the test, before
+  libpq or asyncpg opens a connection (a `dbname` that only a libpq service
+  file supplies is refused just after connecting, with the connection
+  closed). The session summary lists the targets and ends
+  `dbname audit: owner targets: none`; any owner target, even one whose
+  refusal a test caught, also fails the run (exit 1) naming each owner
+  target and the test that named it. `postgres`, `template0`, and disposable
+  clones are allowed. Outside the audit: subprocesses that connect on their
+  own (`pg_dump` and `psql` read `NEXUS_template` when
+  `disposable_slot_database` clones it; a routed gateway or nested pytest
+  needs its own audit), other drivers (psycopg 3, pg8000), and any subclass
+  whose `__bases__` rebind Python refused, with the classes built on it; the
+  summary lists each refused class as `unaudited connection classes`
+  (`psycopg2.extensions.ReplicationConnection`, a C type, is one). A
+  reference to the original psycopg2 connection class captured before the
+  plugin configured outside a module's globals (a default argument, a class
+  attribute, a closure cell, a container) is not swept; no such holder exists
+  in the modules the scan imports (psycopg2 with its extras and pool, the
+  SQLAlchemy psycopg2 dialect, `nexus.database`, `tests.conftest`,
+  `tests.pg_fixtures`), checked by a garbage-collector reference scan,
+  `test_no_preconfigure_holder_escapes_the_sweep`, which also searches the
+  untracked tuples and dicts `gc.get_referrers` misses; a holder in a module
+  outside that set is not caught. The AST
+  owner-target guard planned for #885 slice B2-9b covers the owner literals
+  those paths would need. asyncpg targets are read in asyncpg's own order:
+  the `database` keyword, else the DSN, else `PGDATABASE`.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 

@@ -36,7 +36,7 @@ from scripts.api_openai import OpenAIProvider
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
-    seed_entity_tag,
+    seed_deprecated_category_tag,
     seed_place,
     seed_protagonist,
     seed_zone,
@@ -284,7 +284,7 @@ def test_turn_grammar_offers_a_deprecated_tag_only_when_a_present_entity_has_it(
         carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
         bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
         seed_protagonist(dbname)
-        seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+        seed_deprecated_category_tag(dbname, entity_id=carrying_entity, tag="worksite")
 
         settings = load_settings()
         assert settings.apex.tag_library.schema_enums is True

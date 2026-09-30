@@ -4,8 +4,10 @@ Every test runs on one module-scoped disposable template clone whose story
 clock is seeded first, so no owner save slot is opened. The synchronous
 fixture then commits each test's starting graph: its characters through
 ``seed_character``, its conduits through ``seed_relationship`` (attributed to
-``manual`` under migration 115), and the cellular faction and culture tag
-through ``seed_faction`` and ``seed_entity_tag``. Each test's own writes
+``manual`` under migration 115), and the cellular faction and its culture
+tag through ``seed_faction`` and ``seed_legacy_faction_tag`` (the culture read
+still honors migration 043's deprecated ``operational_secrecy`` category, where
+``cellular_clandestine`` lives). Each test's own writes
 (chunks, claims, pair tags, drains) stay inside one transaction that always
 rolls back, and each test reads only the graph seeded under its own key.
 """
@@ -46,8 +48,8 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     seed_character,
-    seed_entity_tag,
     seed_faction,
+    seed_legacy_faction_tag,
     seed_relationship,
     seed_story_clock,
     sqlalchemy_url,
@@ -179,8 +181,11 @@ def propagation_clone() -> Iterator[PropagationClone]:
                 valence=valence,
             )
         _, cast["cellular-faction"] = seed_faction(dbname, name="propagation-cellular")
-        seed_entity_tag(
-            dbname, entity_id=cast["cellular-faction"], tag="cellular_clandestine"
+        seed_legacy_faction_tag(
+            dbname,
+            faction_entity_id=cast["cellular-faction"],
+            category="operational_secrecy",
+            tag="cellular_clandestine",
         )
         yield PropagationClone(
             dbname=dbname,

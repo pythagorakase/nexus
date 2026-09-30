@@ -110,6 +110,18 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
         pg_fixtures.seed_pair_tag,
         {"subject_entity_id": 1, "object_entity_id": 2, "tag": "ally"},
     ),
+    "seed_legacy_faction_tag": (
+        pg_fixtures.seed_legacy_faction_tag,
+        {"faction_entity_id": 1, "tag": "gray_legal"},
+    ),
+    "seed_deprecated_category_tag": (
+        pg_fixtures.seed_deprecated_category_tag,
+        {"entity_id": 1, "tag": "worksite"},
+    ),
+    "seed_adjudication_ledger": (
+        pg_fixtures.seed_adjudication_ledger,
+        {"actor_entity_id": 1, "ticks": (1, 2)},
+    ),
     "seed_pending_turn": (
         pg_fixtures.seed_pending_turn,
         {"user_text": "Refused.", "storyteller_text": "Refused."},

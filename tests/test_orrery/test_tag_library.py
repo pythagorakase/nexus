@@ -24,7 +24,7 @@ from nexus.prompts.registry import PromptId, load
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
-    seed_entity_tag,
+    seed_deprecated_category_tag,
     seed_place,
     seed_protagonist,
     seed_zone,
@@ -568,7 +568,7 @@ def test_scene_shows_a_present_entitys_deprecated_tag_as_clear_only(
         )
         carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
         bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
-        seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+        seed_deprecated_category_tag(dbname, entity_id=carrying_entity, tag="worksite")
         (worksite,) = [
             entry
             for entry in tag_library.read_tag_library(
@@ -649,7 +649,7 @@ def test_scene_clear_only_line_follows_the_carrying_entitys_kind(
                 """
             )
             assert cur.rowcount == 1
-        seed_entity_tag(dbname, entity_id=character_entity, tag="worksite")
+        seed_deprecated_category_tag(dbname, entity_id=character_entity, tag="worksite")
 
         entries = {
             entry.entity_kind: entry
@@ -699,7 +699,7 @@ def _seed_worksite_scene(dbname: str) -> tuple[int, int]:
     carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
     bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
     seed_protagonist(dbname)
-    seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+    seed_deprecated_category_tag(dbname, entity_id=carrying_entity, tag="worksite")
     return carrying, bare
 
 

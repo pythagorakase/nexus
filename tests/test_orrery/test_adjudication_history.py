@@ -1,25 +1,33 @@
-"""Live tests for adjudication-history persistence and the history payload.
+"""PostgreSQL tests for adjudication-history persistence and the history payload.
 
-The commit-side tests drive the real ``commit_orrery_tick_sync`` writer
-against save_02 inside a transaction that is **always rolled back** — real
-SQL, real constraints, zero persistent writes (see CLAUDE.md testing
-philosophy). They pin the three 063 guarantees:
+Everything runs on one module-scoped disposable template clone, routed under
+``ROUTED_SLOT`` and dropped afterward, so no owner slot is read or written.
+The clone carries a located player, an explicit actor, and a committed Skald
+ruling ledger from ``seed_adjudication_ledger``.
+
+The commit-side test drives the real ``commit_orrery_tick_sync`` writer on
+the clone inside a transaction that is **always rolled back** (real SQL, real
+constraints, nothing kept). It pins the three 063 guarantees:
 
 1. Adjudication log rows carry the subject (``actor_entity_id`` +
    ``bindings``) stamped while the draft is in hand.
 2. Scene pressures and the rendered-slice prompt exposures persist at
    commit, including on re-commit (idempotent, ON CONFLICT).
 3. A replace ruling whose resolution insert conflicts still reaches the log
-   with the existing resolution id — the pre-063 silent skip is closed.
+   with the existing resolution id; the pre-063 silent skip is closed.
 
-The history-payload tests read the real ledgers on save_02/save_05.
+The history-payload tests read the seeded ledger: the SQL oracle, and a
+self-check that the ledger holds every streak outcome and promotion status
+the history renders, so the oracle is never vacuous.
 """
 
 from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
+from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
+from typing import Any, NamedTuple
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -32,17 +40,83 @@ from nexus.agents.orrery.resolver import (
     OrreryScenePressureDraft,
     OrreryTickProposal,
 )
-from nexus.api.slot_utils import get_slot_db_url
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    AdjudicationLedgerSeed,
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_adjudication_ledger,
+    seed_character,
+    seed_place,
+    seed_protagonist,
+    seed_story_clock,
+    seed_zone,
+    sqlalchemy_url,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
-WRITE_SLOT = 2
-HISTORY_SLOTS = (2, 5)
+# The slot label the clone is routed under; the commit writer receives it as
+# the production turn does.
+ROUTED_SLOT = 2
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 
 
-def _connect(slot: int) -> Any:
-    return connect(f"save_{slot:02d}")
+class AdjudicationStory(NamedTuple):
+    """The clone, its explicit actor, the commit test's anchor, and the ledger."""
+
+    dbname: str
+    actor_entity_id: int
+    anchor_chunk_id: int
+    ledger: AdjudicationLedgerSeed
+
+
+@pytest.fixture(scope="module")
+def adjudication_story() -> Iterator[AdjudicationStory]:
+    """A routed clone with a player, an actor, a committed ledger, and an anchor.
+
+    Seeded in need-clock anchor order: zone, place, and the located player
+    (which sets ``base_timestamp``), then the first clocked chunk, the actor,
+    and two more ticks. The ledger is committed over the three ticks; the
+    commit test anchors on a fourth chunk that carries no ledger row.
+    """
+
+    with disposable_slot_database("qa885_adjudication_history") as dbname:
+        with pytest.MonkeyPatch.context() as mp:
+            route_slot_to_disposable(mp.setattr, slot=ROUTED_SLOT, dbname=dbname)
+            seed_zone(
+                dbname,
+                name="Adjudication Zone",
+                min_longitude=-74.1,
+                min_latitude=40.6,
+                max_longitude=-73.8,
+                max_latitude=40.9,
+            )
+            place_id, _ = seed_place(dbname, name="Adjudication Plaza")
+            seed_protagonist(
+                dbname,
+                base_timestamp=WORLD_TIME.isoformat(),
+                current_location=place_id,
+            )
+            ticks = [seed_story_clock(dbname, world_time=WORLD_TIME)]
+            _, actor_entity_id = seed_character(
+                dbname, name="Adjudication Actor", current_location=place_id
+            )
+            for scene in (2, 3):
+                ticks.append(
+                    seed_story_clock(
+                        dbname,
+                        world_time=WORLD_TIME + timedelta(hours=scene - 1),
+                        scene=scene,
+                    )
+                )
+            ledger = seed_adjudication_ledger(
+                dbname, actor_entity_id=actor_entity_id, ticks=ticks
+            )
+            anchor_chunk_id = seed_story_clock(
+                dbname, world_time=WORLD_TIME + timedelta(hours=3), scene=4
+            )
+            yield AdjudicationStory(dbname, actor_entity_id, anchor_chunk_id, ledger)
 
 
 def _fetch_one(cur: Any, sql: str, params: tuple = ()) -> tuple:
@@ -52,21 +126,29 @@ def _fetch_one(cur: Any, sql: str, params: tuple = ()) -> tuple:
     return row
 
 
-def test_commit_persists_enriched_history_then_rolls_back() -> None:
-    conn = _connect(WRITE_SLOT)
+def test_commit_persists_enriched_history_then_rolls_back(
+    adjudication_story: AdjudicationStory,
+) -> None:
+    anchor_chunk_id = adjudication_story.anchor_chunk_id
+    actor_entity_id = adjudication_story.actor_entity_id
+    conn = connect(adjudication_story.dbname)
     try:
         with conn.cursor() as cur:
-            anchor_chunk_id = _fetch_one(cur, "SELECT max(id) FROM narrative_chunks")[0]
-            actor_entity_id = _fetch_one(
+            # The seeded anchor and actor are real rows on the clone.
+            _fetch_one(
+                cur,
+                "SELECT id FROM narrative_chunks WHERE id = %s",
+                (anchor_chunk_id,),
+            )
+            _fetch_one(
                 cur,
                 """
                 SELECT c.entity_id FROM characters c
                 JOIN entities e ON e.id = c.entity_id
-                WHERE c.entity_id IS NOT NULL
-                ORDER BY c.entity_id
-                LIMIT 1
+                WHERE c.entity_id = %s
                 """,
-            )[0]
+                (actor_entity_id,),
+            )
 
         ratify_hash = f"audit-ratify-{uuid.uuid4().hex}"
         defer_hash = f"audit-defer-{uuid.uuid4().hex}"
@@ -111,7 +193,7 @@ def test_commit_persists_enriched_history_then_rolls_back() -> None:
             conn,
             proposal,
             tick_chunk_id=anchor_chunk_id,
-            slot=WRITE_SLOT,
+            slot=ROUTED_SLOT,
             adjudications=[{"proposal_id": deferred.proposal_id, "action": "defer"}],
             prompt_settings={
                 "max_rendered_proposals": 1,
@@ -177,7 +259,7 @@ def test_commit_persists_enriched_history_then_rolls_back() -> None:
             conn,
             proposal,
             tick_chunk_id=anchor_chunk_id,
-            slot=WRITE_SLOT,
+            slot=ROUTED_SLOT,
             adjudications=[
                 {"proposal_id": deferred.proposal_id, "action": "defer"},
                 {
@@ -220,7 +302,7 @@ def test_commit_persists_enriched_history_then_rolls_back() -> None:
             conn,
             proposal,
             tick_chunk_id=anchor_chunk_id,
-            slot=WRITE_SLOT,
+            slot=ROUTED_SLOT,
             adjudications=[
                 {
                     "proposal_id": ratified.proposal_id,
@@ -248,7 +330,7 @@ def test_commit_persists_enriched_history_then_rolls_back() -> None:
         conn.close()
 
     # Nothing persisted: the probe hashes must not exist outside the txn.
-    check = _connect(WRITE_SLOT)
+    check = connect(adjudication_story.dbname)
     try:
         with check.cursor() as cur:
             cur.execute(
@@ -263,9 +345,10 @@ def test_commit_persists_enriched_history_then_rolls_back() -> None:
         check.close()
 
 
-@pytest.mark.parametrize("slot", HISTORY_SLOTS)
-def test_adjudication_history_matches_sql_oracle(slot: int) -> None:
-    engine = create_engine(get_slot_db_url(slot=slot))
+def test_adjudication_history_matches_sql_oracle(
+    adjudication_story: AdjudicationStory,
+) -> None:
+    engine = create_engine(sqlalchemy_url(adjudication_story.dbname))
     try:
         with Session(engine) as session:
             payload = adjudication_history(session)
@@ -321,18 +404,68 @@ def test_adjudication_history_matches_sql_oracle(slot: int) -> None:
     json.dumps(payload)
 
 
-def test_history_is_non_vacuous_on_audited_slots() -> None:
-    """Both slots must still carry adjudication data or the suite is hollow."""
+def test_seeded_ledger_covers_every_outcome_the_history_renders(
+    adjudication_story: AdjudicationStory,
+) -> None:
+    """The oracle's ledger holds every streak outcome and promotion status.
 
-    total_rows = 0
-    for slot in HISTORY_SLOTS:
-        engine = create_engine(get_slot_db_url(slot=slot))
-        try:
-            with Session(engine) as session:
-                total_rows += adjudication_history(session)["totals"]["log_rows"]
-        finally:
-            engine.dispose()
-    assert total_rows > 0, (
-        "no audited slot has adjudication-log rows — the history assertions "
-        "are vacuous; repoint HISTORY_SLOTS at a slot with Skald rulings"
-    )
+    This replaces a probe that the owner's audited slots hold Skald
+    rulings (neither does). What the oracle needs is a ledger in which every
+    branch of the history is populated, so that is what is checked here.
+    """
+
+    ledger = adjudication_story.ledger
+    engine = create_engine(sqlalchemy_url(adjudication_story.dbname))
+    try:
+        with Session(engine) as session:
+            payload = adjudication_history(session)
+            statuses = {
+                (row["promotion_status"], row["narration_status"])
+                for row in session.execute(
+                    text(
+                        """
+                        SELECT promotion_status::text AS promotion_status,
+                               narration_status::text AS narration_status
+                        FROM orrery_resolutions
+                        """
+                    )
+                ).mappings()
+            }
+    finally:
+        engine.dispose()
+
+    totals = payload["totals"]
+    assert totals["log_rows"] == len(ledger.adjudication_log_ids) > 0
+    assert all(totals["actions"][action] > 0 for action in ("defer", "replace", "void"))
+    assert {streak["outcome"] for streak in payload["defer_streaks"]} == {
+        "ratified",
+        "replace",
+        "void",
+        "open",
+    }
+    assert {
+        streak["proposal_id"]: (streak["outcome"], streak["length"])
+        for streak in payload["defer_streaks"]
+    } == dict(ledger.streaks)
+    assert statuses == set(ledger.resolutions.values())
+    assert {promotion for promotion, _narration in statuses} == {
+        "promoted",
+        "skipped",
+        "pending",
+    }
+    assert ("promoted", "succeeded") in statuses
+    funnel = {
+        key: sum(entry[key] for entry in payload["templates"].values())
+        for key in (
+            "promoted",
+            "promotion_skipped",
+            "promotion_pending",
+            "narrated",
+            "replaced_with_delta_committed",
+        )
+    }
+    assert all(count > 0 for count in funnel.values()), funnel
+    assert payload["scene_pressures"]["rows"] == len(ledger.scene_pressure_ids)
+    assert payload["exposures"]["resolution"]["rows"] > 0
+    assert payload["exposures"]["scene_pressure"]["rows"] > 0
+    assert payload["epoch"]["log_rows_with_subject"] == totals["log_rows"]

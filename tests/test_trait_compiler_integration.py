@@ -1,8 +1,11 @@
 """Postgres-gated integration tests for the finished trait compiler (M5).
 
-These tests run the real compiler against ``save_05`` inside a transaction
-that is always rolled back, so the dev slot is left untouched. They require
-migration 061 (the ``sponsors`` pair-tag) to be applied.
+These tests run the real compiler against a module-scoped disposable template
+clone inside a transaction that is always rolled back; no owner slot is read
+or written. The clone is at the migration head (so migration 061's
+``sponsors`` pair-tag is registered) and carries a canonical player standing
+at a zoned place, which is the need-clock anchor every character insert
+needs and the zone ``story_active_zone`` resolves for domain stubs.
 
 Run with: ``NEXUS_RUN_POSTGRES=1 poetry run pytest
 tests/test_trait_compiler_integration.py``
@@ -11,10 +14,10 @@ tests/test_trait_compiler_integration.py``
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from itertools import permutations
 from typing import Any, Optional
 
-import psycopg2
 import pytest
 
 from nexus.api.new_story_schemas import (
@@ -43,9 +46,13 @@ from nexus.api.trait_compiler_schemas import (
     TraitCompileReasonCode,
     TraitCompileResult,
 )
-from tests.pg_fixtures import connect
-
-TEST_DBNAME = "save_05"
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_place,
+    seed_protagonist,
+    seed_zone,
+)
 
 DOMAIN_PLACE_NAME = "M5 Trait Test Spire"
 PATRON_NAME = "M5 Trait Test Hale"
@@ -57,75 +64,65 @@ DUNLOW_ENEMY_NAME = "Dunlow County Circuit Court Clerk"
 SHARED_CHARACTER_NAME = "Magistrate Hale [issue 602 rollback test]"
 
 
-def _install_valence_shadow(cur: Any) -> None:
-    """Shadow the pending migration-088 write boundary for rollback-only tests."""
+@pytest.fixture(scope="module")
+def trait_compiler_db() -> Iterator[str]:
+    """A clone with a canonical player at a zoned place; every test rolls back.
+
+    Seeded in need-clock anchor order: a bounded zone, a place resolved into
+    it, then the located player, whose ``base_timestamp`` anchors the need
+    clocks of the characters each test inserts.
+    """
+
+    with disposable_slot_database("qa885_trait_compiler") as dbname:
+        seed_zone(
+            dbname,
+            name="Trait Compiler Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        place_id, _ = seed_place(dbname, name="Trait Compiler Plaza")
+        seed_protagonist(
+            dbname,
+            name="Trait Compiler Player",
+            current_location=place_id,
+        )
+        yield dbname
+
+
+def _assert_real_relationship_triggers(
+    cur: Any, *, character_id: int, relationship_types: list[str]
+) -> None:
+    """Prove the writes reached the public table and its migrated triggers.
+
+    The valence-boundary trigger derives ``valence_current`` from the rung
+    the compiler wrote, and migration 115's provenance trigger records one
+    ``trait_compiler`` insert version per edge (it raises without a
+    producer, so a missing attribution fails the compile itself).
+    """
 
     cur.execute(
-        r"""
-        CREATE TEMP TABLE character_relationships ON COMMIT DROP AS
-        SELECT cr.* FROM public.character_relationships cr;
-
-        CREATE UNIQUE INDEX trait_compiler_relationship_pair_uq
-            ON pg_temp.character_relationships (character1_id, character2_id);
-
-        ALTER TABLE pg_temp.character_relationships
-            ADD COLUMN IF NOT EXISTS valence_current numeric;
-
-        UPDATE pg_temp.character_relationships
-        SET valence_current = substring(
-            emotional_valence::text FROM '^([+-]?[0-9]+)\|'
-        )::numeric / 5.5
-        WHERE valence_current IS NULL;
-
-        CREATE FUNCTION pg_temp.fn_trait_compiler_valence_boundary()
-        RETURNS trigger
-        LANGUAGE plpgsql
-        AS $$
-        DECLARE
-            rung integer;
-        BEGIN
-            IF TG_OP = 'INSERT' THEN
-                IF NEW.valence_current IS NULL THEN
-                    NEW.valence_current := substring(
-                        NEW.emotional_valence::text FROM '^([+-]?[0-9]+)\|'
-                    )::numeric / 5.5;
-                END IF;
-            ELSIF NEW.valence_current IS DISTINCT FROM OLD.valence_current THEN
-                NULL;
-            ELSIF NEW.emotional_valence IS DISTINCT FROM OLD.emotional_valence THEN
-                NEW.valence_current := substring(
-                    NEW.emotional_valence::text FROM '^([+-]?[0-9]+)\|'
-                )::numeric / 5.5;
-            ELSE
-                RETURN NEW;
-            END IF;
-
-            rung := greatest(
-                -5,
-                least(5, round(NEW.valence_current * 5.5)::integer)
-            );
-            NEW.emotional_valence := CASE rung
-                WHEN 5 THEN '+5|devoted'
-                WHEN 4 THEN '+4|admiring'
-                WHEN 3 THEN '+3|trusting'
-                WHEN 2 THEN '+2|friendly'
-                WHEN 1 THEN '+1|favorable'
-                WHEN 0 THEN '0|neutral'
-                WHEN -1 THEN '-1|wary'
-                WHEN -2 THEN '-2|disapproving'
-                WHEN -3 THEN '-3|resentful'
-                WHEN -4 THEN '-4|hostile'
-                WHEN -5 THEN '-5|hateful'
-            END;
-            RETURN NEW;
-        END;
-        $$;
-
-        CREATE TRIGGER trg_trait_compiler_valence_boundary
-            BEFORE INSERT OR UPDATE ON pg_temp.character_relationships
-            FOR EACH ROW EXECUTE FUNCTION pg_temp.fn_trait_compiler_valence_boundary();
         """
+        SELECT cr.relationship_type,
+               cr.valence_current
+                   = substring(cr.emotional_valence::text FROM '^([+-]?[0-9]+)\\|')
+                     ::numeric / 5.5,
+               (SELECT count(*) FROM relationship_versions rv
+                WHERE rv.relationship_table = 'character_relationships'
+                  AND rv.operation = 'insert'
+                  AND rv.producer = 'trait_compiler'
+                  AND (rv.old_row->>'character1_id')::int = cr.character1_id
+                  AND (rv.old_row->>'character2_id')::int = cr.character2_id)
+        FROM public.character_relationships cr
+        WHERE cr.character1_id = %s
+        ORDER BY cr.relationship_type
+        """,
+        (character_id,),
     )
+    assert cur.fetchall() == [
+        (relationship_type, True, 1) for relationship_type in relationship_types
+    ]
 
 
 def _character_sheet(
@@ -291,20 +288,18 @@ def _normalized_result_surface(
 
 
 @pytest.mark.requires_postgres
-def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
+def test_dunlow_shared_faction_is_permutation_invariant_on_seeded_clone(
+    trait_compiler_db: str,
+) -> None:
     """Every live-trio ordering shares one planned or materialized faction."""
 
-    try:
-        conn = connect(TEST_DBNAME)
-    except psycopg2.Error as exc:  # pragma: no cover - environment guard
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    conn = connect(trait_compiler_db)
 
     dry_result_surfaces: list[str] = []
     apply_result_surfaces: list[str] = []
     canonical_db_snapshots = []
     try:
         with conn.cursor() as cur:
-            _install_valence_shadow(cur)
             cur.execute(
                 "SELECT COUNT(*) FROM factions WHERE name = %s",
                 (DUNLOW_FACTION_NAME,),
@@ -548,20 +543,18 @@ def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_shared_character_relationship_is_permutation_invariant_on_save_05() -> None:
+def test_shared_character_relationship_is_permutation_invariant_on_seeded_clone(
+    trait_compiler_db: str,
+) -> None:
     """Patron deterministically owns a shared one-row relationship slot."""
 
-    try:
-        conn = connect(TEST_DBNAME)
-    except psycopg2.Error as exc:  # pragma: no cover - environment guard
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    conn = connect(trait_compiler_db)
 
     dry_result_surfaces: list[str] = []
     apply_result_surfaces: list[str] = []
     canonical_db_snapshots = []
     try:
         with conn.cursor() as cur:
-            _install_valence_shadow(cur)
             cur.execute(
                 "SELECT COUNT(*) FROM characters WHERE name = %s",
                 (SHARED_CHARACTER_NAME,),
@@ -743,17 +736,13 @@ def test_shared_character_relationship_is_permutation_invariant_on_save_05() -> 
 
 
 @pytest.mark.requires_postgres
-def test_full_trait_selection_compiles_on_save_05() -> None:
+def test_full_trait_selection_compiles_on_seeded_clone(trait_compiler_db: str) -> None:
     """A standard selection compiles with zero prose-only remainders."""
 
-    try:
-        conn = connect(TEST_DBNAME)
-    except psycopg2.Error as exc:  # pragma: no cover - environment guard
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    conn = connect(trait_compiler_db)
 
     try:
         with conn.cursor() as cur:
-            _install_valence_shadow(cur)
             drift_before = reconcile_trait_relationship_pair_tags(cur)
             character_id, character_entity_id = _insert_protagonist(cur)
 
@@ -861,6 +850,11 @@ def test_full_trait_selection_compiles_on_save_05() -> None:
                 ("obligation", "trait_compiler"),
                 ("patron", "trait_compiler"),
             ]
+            _assert_real_relationship_triggers(
+                cur,
+                character_id=character_id,
+                relationship_types=["obligation", "patron"],
+            )
 
             cur.execute(
                 """
@@ -891,17 +885,15 @@ def test_full_trait_selection_compiles_on_save_05() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_dependents_apply_and_dry_run_audit_on_save_05() -> None:
+def test_dependents_apply_and_dry_run_audit_on_seeded_clone(
+    trait_compiler_db: str,
+) -> None:
     """Dependents writes protects + bond; the audit surface reports cleanly."""
 
-    try:
-        conn = connect(TEST_DBNAME)
-    except psycopg2.Error as exc:  # pragma: no cover - environment guard
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    conn = connect(trait_compiler_db)
 
     try:
         with conn.cursor() as cur:
-            _install_valence_shadow(cur)
             character_id, character_entity_id = _insert_protagonist(cur)
 
             inputs = TraitCompileInputs(
@@ -969,23 +961,24 @@ def test_dependents_apply_and_dry_run_audit_on_save_05() -> None:
                 (character_id,),
             )
             assert cur.fetchall() == [("dependent", "+3|trusting", "protects")]
+            _assert_real_relationship_triggers(
+                cur, character_id=character_id, relationship_types=["dependent"]
+            )
     finally:
         conn.rollback()
         conn.close()
 
 
 @pytest.mark.requires_postgres
-def test_forbidden_relationship_traits_have_dry_run_apply_parity_on_save_05() -> None:
+def test_forbidden_relationship_traits_have_dry_run_apply_parity_on_seeded_clone(
+    trait_compiler_db: str,
+) -> None:
     """The constraint gate precedes #605 target pre-resolution in both modes."""
 
-    try:
-        conn = connect(TEST_DBNAME)
-    except psycopg2.Error as exc:  # pragma: no cover - environment guard
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    conn = connect(trait_compiler_db)
 
     try:
         with conn.cursor() as cur:
-            _install_valence_shadow(cur)
             character_id, character_entity_id = _insert_protagonist(cur)
             inputs = TraitCompileInputs.model_validate(
                 {

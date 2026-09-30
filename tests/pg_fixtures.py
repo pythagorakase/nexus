@@ -1044,6 +1044,36 @@ def seed_relationship(
     return int(row[0]), int(row[1])
 
 
+def _resolve_bestowable_tag(
+    cur: Any, *, entity_id: int, tag: str
+) -> tuple[int, str, str, bool | None]:
+    """Resolve ``tag`` for ``entity_id``'s kind; return its registry standing.
+
+    Returns ``(tag_id, category, entity_kind, category_deprecated)``, where
+    ``category_deprecated`` is ``None`` when ``tag_category_registry`` has no
+    ``(category, entity_kind)`` row. An unknown or deprecated tag, or a missing
+    entity, fails the assertion.
+    """
+
+    cur.execute(
+        """
+        SELECT t.id, t.category, e.kind::text, r.deprecated
+        FROM tags t
+        CROSS JOIN entities e
+        LEFT JOIN tag_category_registry r
+          ON r.category = t.category AND r.entity_kind = e.kind
+        WHERE t.tag = %s AND NOT t.deprecated AND e.id = %s
+        """,
+        (tag, entity_id),
+    )
+    rows = cur.fetchall()
+    assert (
+        len(rows) == 1
+    ), f"tag {tag!r} is not seeded (or entity {entity_id} is missing)"
+    tag_id, category, entity_kind, category_deprecated = rows[0]
+    return int(tag_id), str(category), str(entity_kind), category_deprecated
+
+
 def seed_entity_tag(
     dbname: str,
     *,
@@ -1051,30 +1081,55 @@ def seed_entity_tag(
     tag: str,
     source_kind: str = "template",
 ) -> int:
-    """Bestow one active, registered tag on an entity; return the row ID.
+    """Bestow one active, registered, live-category tag on an entity.
 
-    ``tag`` must be a non-deprecated tag from the template's seeded vocabulary;
-    an unknown or deprecated tag fails the row-count assertion. The row is
-    active (``cleared_at`` NULL), so checkpoints and ``entity_tags_current`` see
-    it. A tag on a character entity fires the need-applicability sync (migration
-    100), so the save needs the need-clock anchor first (``seed_story_clock`` or
-    ``seed_protagonist``).
+    Returns the ``entity_tags`` row ID. ``tag`` must be a non-deprecated tag
+    from the template's seeded vocabulary whose category is registered live in
+    ``tag_category_registry`` for the entity's kind; an unknown or deprecated
+    tag fails the assertion. A tag in a deprecated category (migration 043
+    deprecated categories and left their tags live, so ``gray_legal`` under
+    ``legitimacy_status`` still resolves) raises ``ValueError`` naming the
+    category: a faction's goes through ``seed_legacy_faction_tag`` and any
+    other kind's through ``seed_deprecated_category_tag``. A category with no
+    registry row for the entity's kind raises too. The row is active
+    (``cleared_at`` NULL), so checkpoints and ``entity_tags_current`` see it. A
+    tag on a character entity fires the need-applicability sync (migration
+    100), so the save needs the need-clock anchor first (``seed_story_clock``
+    or ``seed_protagonist``).
     """
 
     require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        tag_id, category, entity_kind, category_deprecated = _resolve_bestowable_tag(
+            cur, entity_id=entity_id, tag=tag
+        )
+        if category_deprecated is None:
+            raise ValueError(
+                f"tag {tag!r} is in category {category!r}, which "
+                f"tag_category_registry does not register for {entity_kind} "
+                "entities"
+            )
+        if category_deprecated:
+            legacy_seed = (
+                "seed_legacy_faction_tag"
+                if entity_kind == "faction"
+                else "seed_deprecated_category_tag"
+            )
+            raise ValueError(
+                f"seed_entity_tag bestows only live categories: tag {tag!r} is in "
+                f"the deprecated {entity_kind} category {category!r}; use "
+                f"{legacy_seed} to plant legacy vocabulary"
+            )
         cur.execute(
             """
             INSERT INTO entity_tags (entity_id, tag_id, source_kind)
-            SELECT %s, t.id, %s
-            FROM tags t
-            WHERE t.tag = %s AND NOT t.deprecated
+            VALUES (%s, %s, %s)
             RETURNING id
             """,
-            (entity_id, source_kind, tag),
+            (entity_id, tag_id, source_kind),
         )
         row = cur.fetchone()
-        assert row is not None and cur.rowcount == 1, f"tag {tag!r} is not seeded"
+        assert row is not None and cur.rowcount == 1
     return int(row[0])
 
 
@@ -1171,6 +1226,436 @@ def seed_pair_tag(
         row = cur.fetchone()
         assert row is not None and cur.rowcount == 1, f"pair tag {tag!r} is not seeded"
     return int(row[0])
+
+
+# The TEST provider's registered model id; a fixture turn records it as the
+# model that generated the staged prose, as the TEST seats do.
+FIXTURE_GENERATION_MODEL = "TEST"
+
+
+def seed_deprecated_category_tag(
+    dbname: str,
+    *,
+    entity_id: int,
+    tag: str,
+) -> int:
+    """Bestow a live tag in a deprecated non-faction category; return its ID.
+
+    Clear-only coverage needs an active tag whose category the registry
+    deprecates for the carrier's kind, such as ``worksite`` under migration
+    043's ``place_affordance`` on a place. ``seed_entity_tag`` refuses those
+    categories, so this helper plants them. It refuses a tag whose category is
+    live or unregistered for the entity's kind, and it refuses faction entities
+    outright: legacy faction vocabulary goes only through
+    ``seed_legacy_faction_tag``. The row is active, so ``entity_tags_current``
+    sees it.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        tag_id, category, entity_kind, category_deprecated = _resolve_bestowable_tag(
+            cur, entity_id=entity_id, tag=tag
+        )
+        if entity_kind == "faction":
+            raise ValueError(
+                f"seed_deprecated_category_tag does not plant faction tags; use "
+                f"seed_legacy_faction_tag for {tag!r} in {category!r}"
+            )
+        if category_deprecated is not True:
+            raise ValueError(
+                f"tag {tag!r} is in category {category!r}, which is not a "
+                f"deprecated {entity_kind} category; use seed_entity_tag"
+            )
+        cur.execute(
+            """
+            INSERT INTO entity_tags (entity_id, tag_id, source_kind)
+            VALUES (%s, %s, 'template')
+            RETURNING id
+            """,
+            (entity_id, tag_id),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+    return int(row[0])
+
+
+def seed_legacy_faction_tag(
+    dbname: str,
+    *,
+    faction_entity_id: int,
+    category: str = "legitimacy_status",
+    tag: str,
+) -> int:
+    """Bestow one tag in a migration-043 legacy faction category; return its ID.
+
+    This is the one seed that plants a tag in a deprecated faction category,
+    by construction: ``seed_entity_tag`` joins ``tag_category_registry`` on
+    the tag's category and the entity's kind and raises on a deprecated
+    category, and ``seed_deprecated_category_tag`` raises on any faction
+    entity. Migration 043 deprecated seven faction categories
+    (``LEGACY_TAG_CATEGORIES`` in ``nexus.api.faction_table_audit``) in
+    ``tag_category_registry`` while their tags stayed readable through
+    ``entity_tags_current``, and the faction table audit maps any such row it
+    finds; this helper makes that audit non-vacuous on a clone. Any other
+    category raises.
+
+    The helper registers ``(category, 'faction')`` as deprecated if the clone
+    lacks the row (043 leaves it deprecated), inserts the ``tags`` row if the
+    tag is new (an existing tag must already sit in ``category``), and bestows
+    it on the faction entity. It then asserts one registry row, one tag row,
+    and exactly one ``entity_tags_current`` row for the bestowal.
+    """
+
+    require_disposable_target(dbname)
+    from nexus.api.faction_table_audit import LEGACY_TAG_CATEGORIES
+
+    if category not in LEGACY_TAG_CATEGORIES:
+        raise ValueError(
+            f"seed_legacy_faction_tag plants only migration-043 legacy faction "
+            f"categories {LEGACY_TAG_CATEGORIES}, not {category!r}"
+        )
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT kind::text FROM entities WHERE id = %s", (faction_entity_id,)
+        )
+        assert cur.fetchone() == (
+            "faction",
+        ), f"entity {faction_entity_id} is not a faction entity"
+        cur.execute(
+            """
+            INSERT INTO tag_category_registry (
+                category, entity_kind, description, deprecated
+            ) VALUES (
+                %s, 'faction'::entity_kind,
+                'Legacy faction category deprecated by migration 043.', true
+            )
+            ON CONFLICT (category, entity_kind) DO NOTHING
+            """,
+            (category,),
+        )
+        cur.execute(
+            "SELECT deprecated FROM tag_category_registry "
+            "WHERE category = %s AND entity_kind = 'faction'",
+            (category,),
+        )
+        assert cur.fetchall() == [
+            (True,)
+        ], f"migration 043 leaves the faction category {category!r} deprecated"
+        cur.execute(
+            """
+            INSERT INTO tags (tag, category, description)
+            VALUES (%s, %s, 'Legacy faction tag seeded for PostgreSQL coverage.')
+            ON CONFLICT (tag) DO NOTHING
+            """,
+            (tag, category),
+        )
+        cur.execute(
+            "SELECT id FROM tags WHERE tag = %s AND category = %s "
+            "AND NOT deprecated AND synonym_for IS NULL",
+            (tag, category),
+        )
+        tag_rows = cur.fetchall()
+        assert (
+            len(tag_rows) == 1
+        ), f"tag {tag!r} is not a live tag in the legacy category {category!r}"
+        cur.execute(
+            """
+            INSERT INTO entity_tags (entity_id, tag_id, source_kind)
+            VALUES (%s, %s, 'template')
+            RETURNING id
+            """,
+            (faction_entity_id, tag_rows[0][0]),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
+        cur.execute(
+            """
+            SELECT count(*) FROM entity_tags_current
+            WHERE entity_tag_id = %s AND entity_id = %s
+              AND entity_kind = 'faction' AND category = %s AND tag = %s
+            """,
+            (row[0], faction_entity_id, category, tag),
+        )
+        assert cur.fetchone()[0] == 1, "the legacy tag is not current"
+    return int(row[0])
+
+
+class AdjudicationLedgerSeed(NamedTuple):
+    """The ledger ``seed_adjudication_ledger`` committed, by the rows it wrote.
+
+    ``resolutions`` maps each resolution ID to its ``(promotion_status,
+    narration_status)``; ``streaks`` maps each adjudicated proposal ID to
+    ``(outcome, length)`` as ``adjudication_history`` names them
+    (``ratified``, ``replace``, ``void``, ``open``).
+    """
+
+    tick_chunk_ids: tuple[int, ...]
+    resolutions: Mapping[int, tuple[str, str]]
+    adjudication_log_ids: tuple[int, ...]
+    streaks: Mapping[str, tuple[str, int]]
+    scene_pressure_ids: tuple[int, ...]
+    prompt_exposure_ids: tuple[int, ...]
+
+
+def seed_adjudication_ledger(
+    dbname: str,
+    *,
+    actor_entity_id: int,
+    ticks: tuple[int, ...] | list[int],
+) -> AdjudicationLedgerSeed:
+    """Commit a Skald ruling ledger over ``ticks``; return what it wrote.
+
+    Every write goes through the production writers, as the Orrery cycle
+    test does: one ``commit_orrery_tick_sync`` per tick with adjudications,
+    then ``promote_pending_resolutions_sync`` and
+    ``drain_narration_outbox_sync`` (deterministic descriptors; no provider
+    call). ``ticks`` are two or more committed chunk IDs in ascending order;
+    ``actor_entity_id`` is the character every draft binds as its actor.
+
+    The committed ledger holds, for the adjudication history to read:
+
+    - ``orrery_resolutions`` in every promotion status: on the first tick a
+      salient draft (promoted, narration ``succeeded``) and a below-threshold
+      draft (skipped, narration ``none``); on the second tick a draft
+      ratified after a deferral and one committed by a replace with a delta
+      (both pending, narration ``none``). The thresholds come from
+      ``[orrery.promote]``.
+    - ``orrery_adjudication_log`` defer streaks of every outcome: deferred on
+      the first tick, then ratified, replaced, or voided on the second, and
+      one draft deferred on every tick and never resolved (``open``).
+    - One ``orrery_scene_pressures`` row per tick and the
+      ``orrery_prompt_exposures`` rows for the drafts each tick renders under
+      ``[orrery.prompt]``.
+
+    The save must hold no pending resolution beforehand, so the promotion
+    drain decides exactly the first tick's two rows. The committed rows are
+    read back and asserted.
+    """
+
+    require_disposable_target(dbname)
+    from nexus.agents.orrery.events import commit_orrery_tick_sync
+    from nexus.agents.orrery.resolver import (
+        OrreryResolutionDraft,
+        OrreryScenePressureDraft,
+        OrreryTickProposal,
+    )
+    from nexus.agents.orrery.worker import (
+        drain_narration_outbox_sync,
+        promote_pending_resolutions_sync,
+    )
+    from nexus.config import load_settings_as_dict
+
+    tick_ids = tuple(int(tick) for tick in ticks)
+    if len(tick_ids) < 2 or list(tick_ids) != sorted(set(tick_ids)):
+        raise ValueError(
+            "seed_adjudication_ledger needs two or more distinct ascending "
+            f"tick chunk IDs, got {tick_ids!r}"
+        )
+    settings = load_settings_as_dict()
+    orrery_settings = settings["orrery"]
+    promote = orrery_settings["promote"]
+    priority_threshold = float(promote["priority_threshold"])
+    magnitude_threshold = float(promote["magnitude_threshold"])
+    token = uuid.uuid4().hex[:12]
+
+    def draft(
+        template_id: str, role: str, *, priority: int, magnitude: float
+    ) -> OrreryResolutionDraft:
+        return OrreryResolutionDraft(
+            template_id=template_id,
+            priority=priority,
+            binding_hash=f"ledger-{role}-{token}",
+            bindings={"actor": actor_entity_id},
+            branch_label=f"Ledger {role} fixture",
+            narrative_stub=f"{{actor}} carries the ledger's {role} fixture.",
+            magnitude=magnitude,
+        )
+
+    salient = int(priority_threshold) + 10
+    quiet = max(int(priority_threshold) - 20, 0)
+    promoted = draft("hide", "promoted", priority=salient, magnitude=0.9)
+    skipped = draft(
+        "stroll", "skipped", priority=quiet, magnitude=magnitude_threshold / 4
+    )
+    ratified = draft("eat", "ratified", priority=quiet, magnitude=0.1)
+    replaced = draft("sleep", "replaced", priority=quiet, magnitude=0.1)
+    voided = draft("drink", "voided", priority=quiet, magnitude=0.1)
+    held_open = draft("work", "open", priority=quiet, magnitude=0.1)
+
+    def pressure(tick: int) -> OrreryScenePressureDraft:
+        return OrreryScenePressureDraft(
+            template_id="sleep_need_pressure",
+            priority=quiet,
+            binding_hash=f"ledger-pressure-{tick}-{token}",
+            bindings={"actor": actor_entity_id},
+            branch_label="critical",
+            pressure_stub="{actor} is running on fumes.",
+            prompt_text="Someone is running on fumes.",
+            magnitude=0.3,
+        )
+
+    def defer(item: OrreryResolutionDraft) -> dict[str, Any]:
+        return {"proposal_id": item.proposal_id, "action": "defer"}
+
+    first, second = tick_ids[0], tick_ids[1]
+    plan: list[tuple[int, tuple[OrreryResolutionDraft, ...], list[dict[str, Any]]]]
+    plan = [
+        (
+            first,
+            (promoted, skipped, ratified, replaced, voided, held_open),
+            [defer(ratified), defer(replaced), defer(voided), defer(held_open)],
+        ),
+        (
+            second,
+            (ratified, replaced, voided, held_open),
+            [
+                {
+                    "proposal_id": replaced.proposal_id,
+                    "action": "replace",
+                    "note": "Ledger fixture: replaced after a deferral.",
+                    "replacement_state_delta": {
+                        "character.current_activity": "keeping a ledger fixture"
+                    },
+                },
+                {
+                    "proposal_id": voided.proposal_id,
+                    "action": "void",
+                    "note": "Ledger fixture: voided after a deferral.",
+                },
+                defer(held_open),
+            ],
+        ),
+        *((tick, (held_open,), [defer(held_open)]) for tick in tick_ids[2:]),
+    ]
+    with closing(_connect(dbname)) as conn:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM narrative_chunks WHERE id = ANY(%s)",
+                (list(tick_ids),),
+            )
+            assert cur.fetchone()[0] == len(
+                tick_ids
+            ), f"seed_adjudication_ledger ticks {tick_ids!r} are not all chunks"
+            cur.execute(
+                "SELECT count(*) FROM characters WHERE entity_id = %s",
+                (actor_entity_id,),
+            )
+            assert (
+                cur.fetchone()[0] == 1
+            ), f"actor entity {actor_entity_id} is not a character"
+            cur.execute(
+                "SELECT count(*) FROM orrery_resolutions "
+                "WHERE promotion_status = 'pending'"
+            )
+            assert cur.fetchone()[0] == 0, (
+                "seed_adjudication_ledger needs a save with no pending "
+                "resolution, so promotion decides only its own rows"
+            )
+        for tick, drafts, adjudications in plan:
+            with conn:
+                commit_orrery_tick_sync(
+                    conn,
+                    OrreryTickProposal(
+                        anchor_chunk_id=tick,
+                        actor_count=1,
+                        resolutions=drafts,
+                        scene_pressures=(pressure(tick),),
+                    ),
+                    tick_chunk_id=tick,
+                    sunhelm_settings=orrery_settings.get("sunhelm"),
+                    adjudications=adjudications,
+                    prompt_settings=orrery_settings.get("prompt"),
+                )
+        assert promote_pending_resolutions_sync(
+            limit=2, settings=settings, conn=conn
+        ) == (1, 1), "the first tick's salient and quiet rows decide promotion"
+        assert drain_narration_outbox_sync(settings=settings, conn=conn) == (
+            1,
+            0,
+        ), "the promoted row's narration job completes"
+        binding_hashes = [
+            item.binding_hash
+            for item in (promoted, skipped, ratified, replaced, voided, held_open)
+        ]
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, binding_hash, tick_chunk_id,
+                       promotion_status::text, narration_status::text
+                FROM orrery_resolutions
+                WHERE binding_hash = ANY(%s)
+                ORDER BY id
+                """,
+                (binding_hashes,),
+            )
+            resolution_rows = cur.fetchall()
+            cur.execute(
+                """
+                SELECT id, binding_hash, tick_chunk_id, action
+                FROM orrery_adjudication_log
+                WHERE binding_hash = ANY(%s)
+                ORDER BY id
+                """,
+                (binding_hashes,),
+            )
+            log_rows = cur.fetchall()
+            cur.execute(
+                "SELECT id FROM orrery_scene_pressures "
+                "WHERE tick_chunk_id = ANY(%s) AND binding_hash LIKE %s ORDER BY id",
+                (list(tick_ids), f"ledger-pressure-%-{token}"),
+            )
+            pressure_ids = tuple(int(row[0]) for row in cur.fetchall())
+            cur.execute(
+                "SELECT id FROM orrery_prompt_exposures "
+                "WHERE tick_chunk_id = ANY(%s) AND binding_hash LIKE %s ORDER BY id",
+                (list(tick_ids), f"ledger-%-{token}"),
+            )
+            exposure_ids = tuple(int(row[0]) for row in cur.fetchall())
+    committed = {
+        (binding_hash, tick): (promotion, narration)
+        for _id, binding_hash, tick, promotion, narration in resolution_rows
+    }
+    assert committed == {
+        (promoted.binding_hash, first): ("promoted", "succeeded"),
+        (skipped.binding_hash, first): ("skipped", "none"),
+        (ratified.binding_hash, second): ("pending", "none"),
+        (replaced.binding_hash, second): ("pending", "none"),
+    }, f"seed_adjudication_ledger committed {resolution_rows!r}"
+    rulings = [
+        (binding_hash, tick, action) for _id, binding_hash, tick, action in log_rows
+    ]
+    expected_rulings = [
+        (ratified.binding_hash, first, "defer"),
+        (replaced.binding_hash, first, "defer"),
+        (voided.binding_hash, first, "defer"),
+        (held_open.binding_hash, first, "defer"),
+        (replaced.binding_hash, second, "replace"),
+        (voided.binding_hash, second, "void"),
+        *((held_open.binding_hash, tick, "defer") for tick in tick_ids[1:]),
+    ]
+    assert sorted(rulings) == sorted(
+        expected_rulings
+    ), f"seed_adjudication_ledger logged {log_rows!r}"
+    assert len(pressure_ids) == len(
+        tick_ids
+    ), f"seed_adjudication_ledger wrote pressures {pressure_ids!r}"
+    assert exposure_ids, "seed_adjudication_ledger rendered no prompt exposure"
+    return AdjudicationLedgerSeed(
+        tick_chunk_ids=tick_ids,
+        resolutions={
+            int(row_id): (promotion, narration)
+            for row_id, _hash, _tick, promotion, narration in resolution_rows
+        },
+        adjudication_log_ids=tuple(int(row[0]) for row in log_rows),
+        streaks={
+            ratified.proposal_id: ("ratified", 1),
+            replaced.proposal_id: ("replace", 1),
+            voided.proposal_id: ("void", 1),
+            held_open.proposal_id: ("open", len(tick_ids)),
+        },
+        scene_pressure_ids=pressure_ids,
+        prompt_exposure_ids=exposure_ids,
+    )
 
 
 # The TEST provider's registered model id; a fixture turn records it as the

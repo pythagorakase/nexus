@@ -26,7 +26,7 @@ if "NEXUS_HOME" in os.environ:
 
 from nexus.telemetry import usage as usage_telemetry
 from nexus.util.secret_manager import InMemorySecretBackend, use_secret_backend
-from tests import secret_store_guard
+from tests import dbname_audit, secret_store_guard
 
 # Guard the real secret-store backends before collection, so test-module
 # imports and session- or module-scoped fixtures are covered as well as test
@@ -124,6 +124,19 @@ def _isolate_provider_usage(
         daily_allowance={"openai": 2_500_000},
     )
     monkeypatch.setattr(usage_telemetry, "_config", config)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Load the owner-connection audit when ``NEXUS_DBNAME_AUDIT=1`` is set.
+
+    ``-p tests.dbname_audit`` registers the same module under the same name,
+    so both spellings together audit once.
+    """
+    name = dbname_audit.__name__
+    if dbname_audit.enabled_by_environment() and not config.pluginmanager.has_plugin(
+        name
+    ):
+        config.pluginmanager.register(dbname_audit, name)
 
 
 def pytest_report_header(config: pytest.Config) -> str:
