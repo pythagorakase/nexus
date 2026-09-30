@@ -15,17 +15,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
 from threading import Event, Thread
 from typing import Any, Iterator, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import tomlkit
 
 from nexus import cli
+from nexus.api.route_capabilities import ROUTE_CAPABILITIES
 from nexus.cli_contract import (
     COMMAND_TRANSPORTS,
     ENVELOPE_COMMANDS,
@@ -76,9 +78,14 @@ class Gateway:
 
     routes: dict[tuple[str, str], tuple[int, Any]] = field(default_factory=dict)
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
+    # The parsed query string of each request, in the order of ``requests``.
+    queries: list[dict[str, list[str]]] = field(default_factory=list)
     # Accept and record every request but answer none while the gateway serves:
     # a runtime that is up yet never answers within the CLI's request timeout.
     stall: bool = False
+    # Promise a longer body than is sent, then close the connection: a gateway
+    # that dies while sending its answer.
+    truncate: bool = False
 
 
 @contextmanager
@@ -88,10 +95,12 @@ def _serve(gateway: Gateway) -> Iterator[str]:
 
     class Handler(BaseHTTPRequestHandler):
         def _answer(self, method: str) -> None:
-            path = urlparse(self.path).path
+            url = urlparse(self.path)
+            path = url.path
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b""
             gateway.requests.append((method, path, json.loads(raw) if raw else None))
+            gateway.queries.append(parse_qs(url.query))
             if gateway.stall:
                 released.wait()
                 return
@@ -101,9 +110,12 @@ def _serve(gateway: Gateway) -> Iterator[str]:
             body = json.dumps(payload).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
+            promised = len(body) + (4096 if gateway.truncate else 0)
+            self.send_header("Content-Length", str(promised))
             self.end_headers()
             self.wfile.write(body)
+            if gateway.truncate:
+                self.close_connection = True
 
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
             self._answer("GET")
@@ -703,6 +715,518 @@ def test_remote_profile_keeps_http_commands_and_the_runtime_probe(
         ("GET", "/runtime/status"),
         ("GET", "/runtime/status"),
     ]
+
+
+# ---------------------------------------------------------------------------
+# The player-plane inspect family
+# ---------------------------------------------------------------------------
+
+
+def _chunk(chunk_id: int) -> dict[str, Any]:
+    """One chunk in the reader routes' wire shape."""
+    return {
+        "id": chunk_id,
+        "rawText": f"Chunk {chunk_id} prose.",
+        "storytellerText": f"Chunk {chunk_id} prose.",
+        "choiceObject": None,
+        "choiceText": None,
+        "createdAt": "2100-01-01T00:00:00+00:00",
+        "hasInlineSceneMarkup": False,
+        "metadata": {"id": chunk_id, "chunkId": chunk_id, "season": 1, "episode": 1},
+    }
+
+
+def _adjacent(
+    chunk_id: int, previous: Optional[int], following: Optional[int]
+) -> tuple[tuple[str, str], tuple[int, Any]]:
+    """The adjacent-chunks route of ``chunk_id`` in a story of those chunks."""
+    return (
+        ("GET", f"/api/narrative/chunks/{chunk_id}/adjacent"),
+        (
+            200,
+            {
+                "previous": _chunk(previous) if previous is not None else None,
+                "next": _chunk(following) if following is not None else None,
+            },
+        ),
+    )
+
+
+DRAFT = {
+    "session_id": "815-draft",
+    "chunk_id": None,
+    "parent_chunk_id": 12,
+    "user_text": "Follow the lamplighter.",
+    "storyteller_text": "The lamplighter turns down an alley.",
+    "choice_object": {"presented": ["Follow.", "Wait."]},
+}
+CHARACTERS = [
+    {"id": 1, "name": "Fixture Player", "currentLocation": "1"},
+    {"id": 3, "name": "Mara Quill", "currentLocation": "2"},
+]
+PLACES = [
+    {"id": 1, "name": "Fixture Plaza", "type": "fixed_location"},
+    {"id": 2, "name": "Quill House", "type": "fixed_location"},
+]
+FACTIONS = [{"id": 7, "name": "The Lamplighters", "summary": "Keepers of light."}]
+# A story whose committed chunks are 10, 11, and 12 (13 was never committed).
+INSPECT_ROUTES: dict[tuple[str, str], tuple[int, Any]] = dict(
+    [
+        (("GET", "/api/narrative/latest-chunk"), (200, _chunk(12))),
+        (("GET", "/api/narrative/chunks/12"), (200, _chunk(12))),
+        _adjacent(0, None, 10),
+        _adjacent(9, None, 10),
+        _adjacent(10, None, 11),
+        _adjacent(11, 10, 12),
+        _adjacent(12, 11, None),
+        (("GET", "/api/narrative/incubator"), (200, DRAFT)),
+        (("GET", "/api/characters"), (200, CHARACTERS)),
+        (("GET", "/api/places"), (200, PLACES)),
+        (("GET", "/api/factions"), (200, FACTIONS)),
+    ]
+)
+SLOT_QUERY = {"slot": ["5"]}
+
+# Each verb, the data its envelope carries, and the requests it sends.
+INSPECT_CASES: dict[str, tuple[tuple[str, ...], Any, list[tuple[str, dict]]]] = {
+    "chunks-last": (
+        ("chunks", "--last", "2"),
+        [_chunk(11), _chunk(12)],
+        [
+            ("/api/narrative/latest-chunk", SLOT_QUERY),
+            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
+        ],
+    ),
+    "chunks-last-past-the-first": (
+        ("chunks", "--last", "5"),
+        [_chunk(10), _chunk(11), _chunk(12)],
+        [
+            ("/api/narrative/latest-chunk", SLOT_QUERY),
+            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
+            ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
+            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+        ],
+    ),
+    "chunks-range": (
+        ("chunks", "--from", "10", "--to", "11"),
+        [_chunk(10), _chunk(11)],
+        [
+            ("/api/narrative/chunks/9/adjacent", SLOT_QUERY),
+            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+        ],
+    ),
+    "chunks-first-to": (
+        ("chunks", "--to", "11"),
+        [_chunk(10), _chunk(11)],
+        [
+            ("/api/narrative/chunks/0/adjacent", SLOT_QUERY),
+            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+        ],
+    ),
+    # No committed chunk has id 13: one more request finds the story's end.
+    "chunks-range-past-the-last": (
+        ("chunks", "--from", "11", "--to", "13"),
+        [_chunk(11), _chunk(12)],
+        [
+            ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
+            ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
+            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
+        ],
+    ),
+    "chunk": (
+        ("chunk", "12"),
+        _chunk(12),
+        [("/api/narrative/chunks/12", SLOT_QUERY)],
+    ),
+    "incubator": (
+        ("incubator",),
+        DRAFT,
+        [("/api/narrative/incubator", SLOT_QUERY)],
+    ),
+    "characters": (
+        ("characters",),
+        CHARACTERS,
+        [("/api/characters", SLOT_QUERY)],
+    ),
+    "character": (
+        ("characters", "3"),
+        CHARACTERS[1],
+        [("/api/characters", {**SLOT_QUERY, "startId": ["3"], "endId": ["3"]})],
+    ),
+    "places": (("places",), PLACES, [("/api/places", SLOT_QUERY)]),
+    "place": (("places", "2"), PLACES[1], [("/api/places", SLOT_QUERY)]),
+    "factions": (("factions",), FACTIONS, [("/api/factions", SLOT_QUERY)]),
+    "faction": (("factions", "7"), FACTIONS[0], [("/api/factions", SLOT_QUERY)]),
+}
+
+
+def _inspect(
+    gateway: Gateway, *argv: str, json_output: bool = True
+) -> subprocess.CompletedProcess[str]:
+    """Run ``nexus inspect <argv> --slot 5`` against the gateway."""
+    with _serve(gateway) as base_url:
+        return _run(
+            "inspect",
+            *argv,
+            "--slot",
+            "5",
+            *(["--json"] if json_output else []),
+            env={"NEXUS_API_URL": base_url},
+        )
+
+
+def test_inspect_family_registers_every_verb_as_an_http_envelope_command() -> None:
+    """Every inspect verb is an HTTP, JSON-first, slot-checked command."""
+    registered = {
+        path for path in iter_command_paths(cli.build_parser()) if " " in path
+    }
+    verbs = {path for path in registered if path.startswith("inspect ")}
+    assert verbs == {
+        "inspect slot",
+        "inspect chunks",
+        "inspect chunk",
+        "inspect incubator",
+        "inspect characters",
+        "inspect places",
+        "inspect factions",
+    }
+    for verb in verbs:
+        assert COMMAND_TRANSPORTS[verb] == "http", verb
+        assert verb in ENVELOPE_COMMANDS, verb
+        assert verb in cli._SLOT_COMMANDS, verb
+
+
+@pytest.mark.parametrize("case", sorted(INSPECT_CASES))
+def test_inspect_verb_prints_the_route_body_in_the_envelope(case: str) -> None:
+    """Each verb reads its player-plane route and changes nothing but the envelope."""
+    argv, data, sent = INSPECT_CASES[case]
+    gateway = Gateway(routes=dict(INSPECT_ROUTES))
+    completed = _inspect(gateway, *argv)
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert completed.stderr == ""
+    assert json.loads(completed.stdout) == {"ok": True, "data": data}
+    assert [request[:2] for request in gateway.requests] == [
+        ("GET", path) for path, _query in sent
+    ]
+    assert gateway.queries == [query for _path, query in sent]
+
+
+def _route_template(path: str) -> Optional[tuple[str, str]]:
+    """The ROUTE_CAPABILITIES key serving a concrete GET path, if any.
+
+    Of the templates matching the path, the one with the fewest parameters
+    wins, as in the gateway: ``/chunks/12/adjacent`` is the adjacent-chunks
+    route, not ``/chunks/{season_id}/{episode_id}``.
+    """
+    matches = []
+    for method, template in ROUTE_CAPABILITIES:
+        if method != "GET" or "{full_path" in template:
+            continue
+        pattern = re.sub(r"\\{[^/]+?\\}", "[^/]+", re.escape(template))
+        if re.fullmatch(pattern, path):
+            matches.append((template.count("{"), method, template))
+    if not matches:
+        return None
+    _parameters, method, template = min(matches)
+    return method, template
+
+
+def test_inspect_verbs_read_only_player_plane_routes() -> None:
+    """No inspect verb reaches an operator route (issue #815's plane split)."""
+    gateway = Gateway(routes=dict(INSPECT_ROUTES))
+    with _serve(gateway) as base_url:
+        for argv, _data, _sent in INSPECT_CASES.values():
+            completed = _run(
+                "inspect", *argv, "--slot", "5", env={"NEXUS_API_URL": base_url}
+            )
+            assert completed.returncode == ExitCode.OK, completed.stderr
+
+    templates = set()
+    for method, path, _body in gateway.requests:
+        assert method == "GET", path
+        key = _route_template(path)
+        assert key is not None, f"{path} is not a declared route"
+        capability = ROUTE_CAPABILITIES[key]
+        assert capability.plane == "player", (key, capability)
+        assert capability.slot_mode == "read", (key, capability)
+        templates.add(key[1])
+    assert templates == {
+        "/api/narrative/latest-chunk",
+        "/api/narrative/chunks/{chunk_id}/adjacent",
+        "/api/narrative/chunks/{chunk_id}",
+        "/api/narrative/incubator",
+        "/api/characters",
+        "/api/places",
+        "/api/factions",
+    }
+
+
+def test_inspect_incubator_reports_an_empty_incubator_as_null() -> None:
+    """No pending draft is an explicit ``data: null``, not a message to parse."""
+    gateway = Gateway(
+        routes={
+            ("GET", "/api/narrative/incubator"): (
+                200,
+                {"message": "Incubator is empty"},
+            )
+        }
+    )
+    as_json = _inspect(gateway, "incubator")
+    human = _inspect(gateway, "incubator", json_output=False)
+
+    assert as_json.returncode == ExitCode.OK, as_json.stderr
+    assert json.loads(as_json.stdout) == {"ok": True, "data": None}
+    assert human.returncode == ExitCode.OK, human.stderr
+    assert human.stdout == "Incubator is empty.\n"
+
+
+def test_inspect_chunks_of_an_unplayed_story_is_an_empty_list() -> None:
+    """The latest-chunk route's "No chunks found" answer is an empty read."""
+    gateway = Gateway(
+        routes={
+            ("GET", "/api/narrative/latest-chunk"): (
+                404,
+                {"detail": "No chunks found"},
+            )
+        }
+    )
+    completed = _inspect(gateway, "chunks", "--last", "3")
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert json.loads(completed.stdout) == {"ok": True, "data": []}
+
+
+def test_inspect_chunk_range_sends_no_request_past_its_last_chunk() -> None:
+    """``--from 10 --to 11`` costs exactly two requests, one per chunk.
+
+    The walk stops at the chunk with id ``--to``, so a failing read of chunk
+    11's neighbours, which could only find chunk 12 outside the range, cannot
+    discard the complete range.
+    """
+    routes = dict(INSPECT_ROUTES)
+    routes[("GET", "/api/narrative/chunks/11/adjacent")] = (
+        500,
+        {"detail": "Internal Server Error"},
+    )
+    gateway = Gateway(routes=routes)
+    completed = _inspect(gateway, "chunks", "--from", "10", "--to", "11")
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert json.loads(completed.stdout) == {
+        "ok": True,
+        "data": [_chunk(10), _chunk(11)],
+    }
+    assert [request[:2] for request in gateway.requests] == [
+        ("GET", "/api/narrative/chunks/9/adjacent"),
+        ("GET", "/api/narrative/chunks/10/adjacent"),
+    ]
+
+
+def test_inspect_list_prints_each_record_without_json() -> None:
+    """Human output prints one field per line, records separated by a blank line."""
+    gateway = Gateway(routes=dict(INSPECT_ROUTES))
+    completed = _inspect(gateway, "characters", json_output=False)
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert completed.stdout == (
+        "id: 1\nname: Fixture Player\ncurrentLocation: 1\n\n"
+        "id: 3\nname: Mara Quill\ncurrentLocation: 2\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("argv", "code", "message"),
+    [
+        (("factions", "8"), "not_found", "/api/factions lists no faction 8 in slot 5"),
+        (("characters", "4"), "not_found", "lists no character 4 in slot 5"),
+        (("chunk", "13"), "not_found", "/api/narrative/chunks/13 returned 404"),
+    ],
+    ids=["faction", "character", "chunk"],
+)
+def test_inspect_missing_record_is_not_found(
+    argv: tuple[str, ...], code: str, message: str
+) -> None:
+    """An id the route does not serve exits 1 with not_found and the slot."""
+    routes = dict(INSPECT_ROUTES)
+    routes[("GET", "/api/characters")] = (200, [])
+    gateway = Gateway(routes=routes)
+    completed = _inspect(gateway, *argv)
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == code
+    assert message in envelope["error"]
+    assert envelope["partial"]["slot"] == 5
+
+
+@pytest.mark.parametrize(
+    ("argv", "body"),
+    [
+        (("characters",), {"detail": "not a list"}),
+        (("places",), [{"name": "No id"}]),
+        (("incubator",), ["not", "an", "object"]),
+        (("incubator",), {"storyteller_text": "No session"}),
+        (("chunks", "--last", "1"), [_chunk(12)]),
+    ],
+    ids=["list-shape", "record-id", "incubator-shape", "draft-session", "chunk"],
+)
+def test_inspect_unusable_body_is_an_invalid_response(
+    argv: tuple[str, ...], body: Any
+) -> None:
+    """A body the verb cannot pass through unchanged exits 1, never a traceback."""
+    route = {
+        "characters": "/api/characters",
+        "places": "/api/places",
+        "incubator": "/api/narrative/incubator",
+        "chunks": "/api/narrative/latest-chunk",
+    }[argv[0]]
+    gateway = Gateway(routes={("GET", route): (200, body)})
+    completed = _inspect(gateway, *argv)
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    assert _failure(completed)["code"] == "invalid_response"
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (("chunks",), "Pass --last N or a --from/--to chunk id range"),
+        (
+            ("chunks", "--last", "2", "--to", "9"),
+            "--last cannot be combined with --from or --to",
+        ),
+        (("chunks", "--last", "0"), "--last must be a positive integer"),
+        (("chunks", "--from", "0"), "--from must be a positive integer"),
+        (
+            ("chunks", "--from", "11"),
+            "--from needs --to, so a range cannot walk the whole story",
+        ),
+        (("chunks", "--from", "9", "--to", "3"), "--from must not exceed --to"),
+        (("chunk",), "the following arguments are required: chunk_id"),
+        (("characters", "first"), "argument entity_id: invalid int value: 'first'"),
+        (("places", "first"), "argument entity_id: invalid int value: 'first'"),
+        (("factions", "first"), "argument entity_id: invalid int value: 'first'"),
+    ],
+    ids=[
+        "no-range",
+        "last-and-range",
+        "last-zero",
+        "from-zero",
+        "from-open",
+        "reversed",
+        "chunk-id",
+        "character-id",
+        "place-id",
+        "faction-id",
+    ],
+)
+def test_inspect_rejects_unusable_arguments_before_any_request(
+    argv: tuple[str, ...], message: str
+) -> None:
+    """Bad inspect arguments are a usage error (exit 2) and send nothing."""
+    gateway = Gateway(routes=dict(INSPECT_ROUTES))
+    completed = _inspect(gateway, *argv)
+
+    assert completed.returncode == ExitCode.USAGE
+    envelope = _failure(completed)
+    assert envelope["code"] == "usage_error"
+    assert envelope["error"] == message
+    assert gateway.requests == []
+
+
+# One well-formed invocation of every inspect verb, less its --slot.
+INSPECT_VERB_ARGV: dict[str, tuple[str, ...]] = {
+    "slot": ("slot",),
+    "chunks": ("chunks", "--last", "1"),
+    "chunk": ("chunk", "12"),
+    "incubator": ("incubator",),
+    "characters": ("characters",),
+    "character": ("characters", "3"),
+    "places": ("places",),
+    "place": ("places", "2"),
+    "factions": ("factions",),
+    "faction": ("factions", "7"),
+}
+
+
+@pytest.mark.parametrize("verb", sorted(INSPECT_VERB_ARGV))
+@pytest.mark.parametrize(
+    ("slot_args", "message"),
+    [
+        (("--slot", "9"), "Slot must be between 1 and 5"),
+        ((), "the following arguments are required: --slot"),
+    ],
+    ids=["out-of-range", "missing"],
+)
+def test_inspect_verb_refuses_an_unusable_slot_before_any_request(
+    verb: str, slot_args: tuple[str, ...], message: str
+) -> None:
+    """Every inspect verb needs a slot from 1 to 5 and sends nothing without."""
+    gateway = Gateway(routes=dict(INSPECT_ROUTES))
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "inspect",
+            *INSPECT_VERB_ARGV[verb],
+            *slot_args,
+            "--json",
+            env={"NEXUS_API_URL": base_url},
+        )
+
+    assert completed.returncode == ExitCode.USAGE
+    envelope = _failure(completed)
+    assert envelope["code"] == "usage_error"
+    assert envelope["error"] == message
+    assert gateway.requests == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("chunks", "--last", "1"),
+        ("chunk", "12"),
+        ("incubator",),
+        ("characters",),
+        ("places", "2"),
+        ("factions",),
+    ],
+    ids=["chunks", "chunk", "incubator", "characters", "place", "factions"],
+)
+def test_inspect_verb_body_cut_off_mid_answer_exits_four(
+    argv: tuple[str, ...],
+) -> None:
+    """A gateway that drops the connection while sending a body is unreachable."""
+    gateway = Gateway(routes=dict(INSPECT_ROUTES), truncate=True)
+    completed = _inspect(gateway, *argv)
+
+    assert completed.returncode == ExitCode.UNREACHABLE
+    envelope = _failure(completed)
+    assert envelope["code"] == "api_unreachable"
+    assert envelope["error"].startswith("Cannot connect to API server at ")
+    assert gateway.requests
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("chunks", "--last", "1"),
+        ("chunk", "12"),
+        ("incubator",),
+        ("characters",),
+        ("places", "2"),
+        ("factions",),
+    ],
+    ids=["chunks", "chunk", "incubator", "characters", "place", "factions"],
+)
+def test_inspect_verb_unreachable_api_exits_four(argv: tuple[str, ...]) -> None:
+    """Nothing listening at the API URL is api_unreachable for every verb."""
+    base_url = f"http://127.0.0.1:{_closed_port()}"
+    completed = _run(
+        "inspect", *argv, "--slot", "5", "--json", env={"NEXUS_API_URL": base_url}
+    )
+
+    assert completed.returncode == ExitCode.UNREACHABLE
+    assert _failure(completed)["code"] == "api_unreachable"
 
 
 # ---------------------------------------------------------------------------

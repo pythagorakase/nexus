@@ -24,6 +24,8 @@ Commands:
     nexus place-apply --slot N  Dry-run ready place manifest operations
     nexus backfill-review-packet --slot N  Summarize manifest review queues
     nexus inspect slot --slot N  Read one slot's state as a JSON envelope
+    nexus inspect chunks|chunk|incubator|characters|places|factions --slot N
+                                 Read player-plane story records as JSON envelopes
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -59,6 +61,7 @@ from typing import (
 import uuid
 
 import requests  # type: ignore[import-untyped]
+from urllib3.exceptions import ReadTimeoutError
 
 from nexus.cli_contract import (
     API_URL_ENV,
@@ -1180,6 +1183,7 @@ _CREDENTIAL_ERRORS: tuple[type[BaseException], ...] = (
 # first (``except _TRANSPORT_ERRORS: raise``), so they reach main().
 _TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
     requests.exceptions.ConnectionError,
+    requests.exceptions.ChunkedEncodingError,
     requests.exceptions.Timeout,
     *_API_URL_ERRORS,
     *_CREDENTIAL_ERRORS,
@@ -1299,60 +1303,262 @@ def _inspect_timeout_seconds() -> float:
     return _runtime_cli_settings().inspect_timeout_seconds
 
 
-def run_inspect_slot(args: argparse.Namespace) -> Dict[str, Any]:
-    """Read one slot's state through GET /api/slot/{slot}/state, unchanged.
+class InspectFailure(Exception):
+    """An inspect read the API answered with something other than its record."""
 
-    The route is the player-plane ``slot.read`` capability in
-    nexus/api/route_capabilities.py; nothing is written. A request that cannot
-    connect or times out propagates to main(), which reports it as
-    ``api_unreachable`` (exit 4).
-    """
-    url = f"{get_api_url()}/api/slot/{args.slot}/state"
-    response = _api_get(url, timeout=_inspect_timeout_seconds())
+    def __init__(
+        self, code: str, message: str, *, status_code: Optional[int] = None
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+
+# The body GET /api/narrative/incubator answers when no draft is pending.
+_EMPTY_INCUBATOR = {"message": "Incubator is empty"}
+# The detail GET /api/narrative/latest-chunk answers for a story with no chunks.
+_NO_CHUNKS_DETAIL = "No chunks found"
+
+
+def _inspect_response(
+    path: str, *, params: Optional[Mapping[str, Any]] = None
+) -> requests.Response:
+    """Send one inspect GET; a request that cannot connect propagates to main()."""
+    return _api_get(
+        f"{get_api_url()}{path}", params=params, timeout=_inspect_timeout_seconds()
+    )
+
+
+def _inspect_body(response: requests.Response) -> Any:
+    """Return a 2xx response's JSON body, or raise the matching InspectFailure."""
+    url = response.url.split("?", 1)[0]
     status = response.status_code
-    failure: Dict[str, Any] = {"success": False, "slot": args.slot}
     if status == 404:
-        return {
-            **failure,
-            "code": "not_found",
-            "status_code": status,
-            "error": f"{url} returned 404: {response.text}",
-        }
+        raise InspectFailure(
+            "not_found", f"{url} returned 404: {response.text}", status_code=status
+        )
     if not 200 <= status < 300:
-        return {
-            **failure,
-            "code": "api_error",
-            "status_code": status,
-            "error": f"{url} returned HTTP {status}: {response.text}",
-        }
+        raise InspectFailure(
+            "api_error",
+            f"{url} returned HTTP {status}: {response.text}",
+            status_code=status,
+        )
     try:
-        data = response.json()
+        return response.json()
     except ValueError as exc:
-        return {
-            **failure,
-            "code": "invalid_response",
-            "error": f"{url} returned a body that is not JSON: {exc}",
-        }
-    if not isinstance(data, dict):
-        return {
-            **failure,
-            "code": "invalid_response",
-            "error": f"{url} returned JSON that is not an object: {data!r}",
-        }
-    return {"success": True, "data": data}
+        raise InspectFailure(
+            "invalid_response", f"{url} returned a body that is not JSON: {exc}"
+        ) from exc
+
+
+def _inspect_read(path: str, *, params: Optional[Mapping[str, Any]] = None) -> Any:
+    """GET one player-plane route and return its JSON body unchanged."""
+    return _inspect_body(_inspect_response(path, params=params))
+
+
+def _require_shape(value: Any, kind: type, what: str) -> Any:
+    """Raise invalid_response unless ``value`` is a ``kind`` (dict or list)."""
+    if not isinstance(value, kind):
+        raise InspectFailure(
+            "invalid_response", f"{what} is not a JSON {kind.__name__}: {value!r}"
+        )
+    return value
+
+
+def _require_records(value: Any, what: str) -> List[Dict[str, Any]]:
+    """Raise invalid_response unless ``value`` is a list of objects with ids."""
+    records = _require_shape(value, list, what)
+    for record in records:
+        if not isinstance(record, dict) or type(record.get("id")) is not int:
+            raise InspectFailure(
+                "invalid_response", f"{what} holds a record without an id: {record!r}"
+            )
+    return records
+
+
+def _inspect_slot(args: argparse.Namespace) -> Any:
+    """GET /api/slot/{slot}/state (player-plane ``slot.read``)."""
+    state = _inspect_read(f"/api/slot/{args.slot}/state")
+    return _require_shape(state, dict, f"Slot {args.slot} state")
+
+
+def _adjacent_chunk(slot: int, chunk_id: int, side: str) -> Optional[Dict[str, Any]]:
+    """The committed chunk before or after ``chunk_id`` (``previous``/``next``)."""
+    adjacent = _require_shape(
+        _inspect_read(
+            f"/api/narrative/chunks/{chunk_id}/adjacent", params={"slot": slot}
+        ),
+        dict,
+        f"Chunks adjacent to {chunk_id}",
+    )
+    if side not in adjacent:
+        raise InspectFailure(
+            "invalid_response", f"Chunks adjacent to {chunk_id} name no {side} chunk"
+        )
+    neighbour = adjacent[side]
+    if neighbour is None:
+        return None
+    return _require_records([neighbour], f"The {side} chunk of {chunk_id}")[0]
+
+
+def _inspect_chunks(args: argparse.Namespace) -> Any:
+    """Committed chunks, oldest first: the last N, or those in an id range.
+
+    ``--last N`` reads GET /api/narrative/latest-chunk, then walks
+    GET /api/narrative/chunks/{id}/adjacent backwards. ``--from``/``--to``
+    walk the same route forwards from the first committed chunk at or after
+    ``--from`` (default: the first chunk) through ``--to``, which is required
+    whenever ``--from`` is given, and stop at the chunk with id ``--to``.
+    Each chunk costs one sequential request, so a wide range or a large N
+    sends that many requests; a range sends one more when no committed chunk
+    has id ``--to``, to find where it ends. Every chunk is the route's own
+    payload.
+    """
+    slot = args.slot
+    chunks: List[Dict[str, Any]] = []
+    if args.last is not None:
+        response = _inspect_response(
+            "/api/narrative/latest-chunk", params={"slot": slot}
+        )
+        if response.status_code == 404:
+            try:
+                detail = response.json().get("detail")
+            except (ValueError, AttributeError):
+                detail = None
+            if detail == _NO_CHUNKS_DETAIL:
+                return chunks
+        latest: Optional[Dict[str, Any]] = _require_records(
+            [_inspect_body(response)], "The latest chunk"
+        )[0]
+        while latest is not None and len(chunks) < args.last:
+            chunks.append(latest)
+            if len(chunks) < args.last:
+                latest = _adjacent_chunk(slot, latest["id"], "previous")
+        chunks.reverse()
+        return chunks
+    first = 1 if args.from_id is None else args.from_id
+    cursor = _adjacent_chunk(slot, first - 1, "next")
+    while cursor is not None and cursor["id"] <= args.to_id:
+        chunks.append(cursor)
+        if cursor["id"] == args.to_id:
+            break
+        cursor = _adjacent_chunk(slot, cursor["id"], "next")
+    return chunks
+
+
+def _inspect_chunk(args: argparse.Namespace) -> Any:
+    """GET /api/narrative/chunks/{id}: one committed chunk."""
+    chunk = _inspect_read(
+        f"/api/narrative/chunks/{args.chunk_id}", params={"slot": args.slot}
+    )
+    return _require_shape(chunk, dict, f"Chunk {args.chunk_id}")
+
+
+def _inspect_incubator(args: argparse.Namespace) -> Any:
+    """GET /api/narrative/incubator: the pending draft, or null when none waits."""
+    body = _require_shape(
+        _inspect_read("/api/narrative/incubator", params={"slot": args.slot}),
+        dict,
+        "The incubator",
+    )
+    if body == _EMPTY_INCUBATOR:
+        return None
+    if not isinstance(body.get("session_id"), str):
+        raise InspectFailure(
+            "invalid_response", f"The incubator draft names no session: {body!r}"
+        )
+    return body
+
+
+def _entity_family(route: str, label: str) -> Callable[[argparse.Namespace], Any]:
+    """Build the reader for one entity family's list route and ``<id>`` detail."""
+
+    def read(args: argparse.Namespace) -> Any:
+        params: Dict[str, Any] = {"slot": args.slot}
+        if args.entity_id is not None and route == "/api/characters":
+            # The characters route filters by id range itself.
+            params.update(startId=args.entity_id, endId=args.entity_id)
+        records = _require_records(
+            _inspect_read(route, params=params), f"The {label} list"
+        )
+        if args.entity_id is None:
+            return records
+        matches = [record for record in records if record["id"] == args.entity_id]
+        if not matches:
+            raise InspectFailure(
+                "not_found",
+                f"{route} lists no {label} {args.entity_id} in slot {args.slot}",
+            )
+        return matches[0]
+
+    return read
+
+
+_INSPECT_READERS: Mapping[str, Callable[[argparse.Namespace], Any]] = {
+    "slot": _inspect_slot,
+    "chunks": _inspect_chunks,
+    "chunk": _inspect_chunk,
+    "incubator": _inspect_incubator,
+    "characters": _entity_family("/api/characters", "character"),
+    "places": _entity_family("/api/places", "place"),
+    "factions": _entity_family("/api/factions", "faction"),
+}
+
+# What human output prints for an explicitly empty read.
+_INSPECT_EMPTY: Mapping[str, str] = {
+    "chunks": "No committed chunks.",
+    "incubator": "Incubator is empty.",
+    "characters": "No characters.",
+    "places": "No places.",
+    "factions": "No factions.",
+}
 
 
 def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
-    """Run one read-only ``nexus inspect`` command."""
-    if args.inspect_command == "slot":
-        return run_inspect_slot(args)
-    raise ValueError(f"Unknown inspect command: {args.inspect_command!r}")
+    """Run one read-only ``nexus inspect`` command over the player-plane API.
+
+    Each verb reads GET routes nexus/api/route_capabilities.py declares on the
+    player plane and puts what they answer under ``data``: each record is the
+    route's own payload, unchanged. ``inspect chunks`` lists those payloads
+    oldest first, and ``inspect incubator`` reports the route's empty answer
+    as ``None`` (JSON ``null``). Nothing is written. A request that cannot
+    connect, is dropped, or times out reaches main(), which reports it as
+    ``api_unreachable`` (exit 4).
+    """
+    reader = _INSPECT_READERS.get(args.inspect_command)
+    if reader is None:
+        raise ValueError(f"Unknown inspect command: {args.inspect_command!r}")
+    try:
+        data = reader(args)
+    except InspectFailure as failure:
+        result: Dict[str, Any] = {
+            "success": False,
+            "slot": args.slot,
+            "code": failure.code,
+            "error": failure.message,
+        }
+        if failure.status_code is not None:
+            result["status_code"] = failure.status_code
+        return result
+    return {"success": True, "data": data}
 
 
-def _print_inspection(data: Mapping[str, Any], truncate: bool) -> None:
-    """Print an inspected record's fields, omitting empty ones."""
-    for key, value in data.items():
-        _print_value(key, value, indent=0, truncate=truncate)
+def _print_inspection(data: Any, truncate: bool, verb: str) -> None:
+    """Print an inspected record's fields, or each record of a list, in turn.
+
+    An empty read prints the verb's :data:`_INSPECT_EMPTY` line; only the
+    list and incubator verbs can read nothing, so only they have one.
+    """
+    if data is None or data == []:
+        print(_INSPECT_EMPTY[verb])
+        return
+    records = data if isinstance(data, list) else [data]
+    for index, record in enumerate(records):
+        if index:
+            print()
+        for key, value in record.items():
+            _print_value(key, value, indent=0, truncate=truncate)
 
 
 def _retrograde_wizard_settings(
@@ -1531,131 +1737,291 @@ def _generation_timeout_seconds() -> int:
     return load_settings().apex.generation_timeout_seconds
 
 
-def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
-    """Wait on one scheduled generation and load its matching narrative result."""
+def _poll_interval_seconds() -> float:
+    """Read the delay between session status reads from [runtime.cli]."""
+    return _runtime_cli_settings().poll_interval_seconds
 
-    def failure(status: str, detail: str) -> Dict[str, Any]:
-        return {
-            "success": False,
-            "error": detail,
-            "session_id": session_id,
-            "generation_error": {"status": status, "detail": detail},
-            "recovery_command": f"nexus load --slot {slot}",
-        }
 
+class SessionWaitFailure(Exception):
+    """A generation session wait that ended without a loadable result.
+
+    ``status`` names what ended the wait (``error``: the API reports the
+    generation failed; ``timeout``, ``interrupted``, ``unreachable``,
+    ``http_error``, ``invalid_response``, ``result_unavailable``); ``code`` is
+    the stable CLI error code the failure is reported under.
+    """
+
+    def __init__(
+        self, status: str, detail: str, *, code: str = "domain_failure"
+    ) -> None:
+        super().__init__(detail)
+        self.status = status
+        self.detail = detail
+        self.code = code
+
+
+def _unreachable_failure(exc: BaseException) -> SessionWaitFailure:
+    """A request mid-wait the gateway refused or dropped, as api_unreachable."""
+    return SessionWaitFailure(
+        "unreachable",
+        f"Cannot connect to API server at {get_api_url()}: {exc}",
+        code="api_unreachable",
+    )
+
+
+def _is_read_timeout(exc: BaseException) -> bool:
+    """Whether a failed request ran out of time reading the gateway's answer.
+
+    Requests raises ``ReadTimeout`` when the headers do not arrive in time, but
+    wraps urllib3's ``ReadTimeoutError`` in a ``ConnectionError`` when the body
+    stalls after them. Either means the gateway answered too slowly, not that
+    it refused or dropped the connection. The walk follows the cause chain:
+    what each exception wraps (an exception argument) or was raised from
+    (``__cause__``). It never follows ``__context__``: an exception a caller
+    was handling when the request failed is not a cause of the failure.
+    """
+    seen: set[int] = set()
+    chain: List[BaseException] = [exc]
+    while chain:
+        link = chain.pop()
+        if id(link) in seen:
+            continue
+        seen.add(id(link))
+        if isinstance(link, (requests.exceptions.ReadTimeout, ReadTimeoutError)):
+            return True
+        chain.extend(arg for arg in link.args if isinstance(arg, BaseException))
+        if link.__cause__ is not None:
+            chain.append(link.__cause__)
+    return False
+
+
+def _failed_session_read(
+    exc: requests.exceptions.RequestException, url: str, timeout_detail: str
+) -> SessionWaitFailure:
+    """Classify one failed request of a generation session.
+
+    A status read, the state load, and the seed's transition and opening-turn
+    POSTs map their failures here, so they cannot drift. A read that ran out
+    of time, a body stalled after its headers included
+    (:func:`_is_read_timeout`), is ``timeout`` with ``timeout_detail``. A
+    refused or dropped connection, a body cut off mid-answer included, is
+    ``unreachable`` (``api_unreachable``). Any other failed request is
+    ``http_error``.
+    """
+    if _is_read_timeout(exc):
+        return SessionWaitFailure("timeout", timeout_detail)
+    if isinstance(
+        exc,
+        (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+        ),
+    ):
+        return _unreachable_failure(exc)
+    if isinstance(exc, requests.exceptions.Timeout):
+        return SessionWaitFailure("timeout", timeout_detail)
+    return SessionWaitFailure("http_error", f"Could not read {url}: {exc}")
+
+
+def _session_status(payload: Any) -> Dict[str, Any]:
+    """Validate one generation status payload from the status route."""
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(payload.get("status"), str)
+        or not payload["status"].strip()
+    ):
+        raise ValueError(
+            "Generation status must be an object with a non-empty status string"
+        )
+    if payload.get("error") is not None and not isinstance(payload["error"], str):
+        raise ValueError("Generation status error must be a string or null")
+    chunk_id = payload.get("chunk_id")
+    if chunk_id is not None and type(chunk_id) is not int:
+        raise ValueError("Generation status chunk_id must be an integer or null")
+    return payload
+
+
+def wait_for_session(
+    session_id: str, *, slot: int, timeout: float, interval: float
+) -> Dict[str, Any]:
+    """Poll one generation session until it finishes; return its terminal status.
+
+    Reads ``GET /api/narrative/status/{session_id}?slot=N`` every ``interval``
+    seconds within ``timeout`` seconds overall; each read may take the whole
+    remaining budget, since a turn generating inside the gateway can hold a
+    status read until it finishes. Returns the status payload once it reports
+    a terminal status (:data:`TERMINAL_GENERATION_STATUSES`). Every other end
+    raises :class:`SessionWaitFailure`: the API reporting the generation failed
+    (``error``, with the API's own message), the budget spent while the
+    session still runs or a status read stalls, before or after its headers
+    (``timeout``), a gateway that refuses or drops the connection
+    (``unreachable``, reported as ``api_unreachable``), an HTTP error answer or
+    any other failed request (``http_error``), an unusable payload
+    (``invalid_response``), or Ctrl+C (``interrupted``). A failed read is
+    never retried.
+    """
+    url = f"{get_api_url()}/api/narrative/status/{session_id}"
+    deadline = time.monotonic() + timeout
     try:
-        deadline = time.monotonic() + _generation_timeout_seconds()
         while (remaining := deadline - time.monotonic()) > 0:
-            response = _api_get(
-                f"{get_api_url()}/api/narrative/status/{session_id}",
-                params={"slot": slot},
-                timeout=remaining,
-            )
-            response.raise_for_status()
-            status = response.json()
-            if (
-                not isinstance(status, dict)
-                or not isinstance(status.get("status"), str)
-                or not status["status"].strip()
-            ):
-                raise ValueError(
-                    "Generation status must be an object with a non-empty status string"
+            try:
+                response = _api_get(url, params={"slot": slot}, timeout=remaining)
+            except requests.exceptions.RequestException as exc:
+                raise _failed_session_read(
+                    exc,
+                    url,
+                    f"Generation timed out: no status answer within {timeout}s",
+                ) from exc
+            if not 200 <= response.status_code < 300:
+                raise SessionWaitFailure(
+                    "http_error",
+                    f"{url} returned HTTP {response.status_code}: {response.text}",
                 )
-            if status.get("error") is not None and not isinstance(status["error"], str):
-                raise ValueError("Generation status error must be a string or null")
-            if status.get("status") == "error":
-                return failure("error", status.get("error") or "Generation failed")
-            if _is_terminal_generation_status(status.get("status")):
-                response = _api_get(
-                    f"{get_api_url()}/api/slot/{slot}/state",
-                    timeout=_request_timeout_seconds(),
+            try:
+                status = _session_status(response.json())
+            except ValueError as exc:
+                raise SessionWaitFailure(
+                    "invalid_response",
+                    f"Invalid narrative generation response: {exc}",
+                ) from exc
+            if status["status"] == "error":
+                raise SessionWaitFailure(
+                    "error", status.get("error") or "Generation failed"
                 )
-                response.raise_for_status()
-                state = response.json()
-                if not isinstance(state, dict):
-                    raise ValueError("Narrative slot state must be an object")
-                for flag in ("is_empty", "is_wizard_mode", "has_pending"):
-                    if flag in state and not isinstance(state[flag], bool):
-                        raise ValueError(
-                            f"Narrative slot state {flag} must be a boolean"
-                        )
-                chunk_id = status.get("chunk_id")
-                for label, value in (
-                    ("Generation status chunk_id", chunk_id),
-                    (
-                        "Narrative slot state current_chunk_id",
-                        state.get("current_chunk_id"),
-                    ),
-                ):
-                    if value is not None and type(value) is not int:
-                        raise ValueError(f"{label} must be an integer or null")
-                choices = state.get("choices", [])
-                if not isinstance(choices, list) or any(
-                    not isinstance(choice, str) for choice in choices
-                ):
-                    raise ValueError(
-                        "Narrative slot state choices must be a list of strings"
-                    )
-                message = state.get("storyteller_text")
-                if (
-                    (not state.get("has_pending") and not chunk_id)
-                    or (
-                        chunk_id is not None
-                        and state.get("current_chunk_id") != chunk_id
-                    )
-                    or state.get("is_empty")
-                    or state.get("is_wizard_mode")
-                    or (
-                        state.get("has_pending")
-                        and state.get("session_id") != session_id
-                    )
-                ):
-                    return failure(
-                        "result_unavailable",
-                        "Completed generation no longer matches the slot's narrative.",
-                    )
-                if not isinstance(message, str) or not message.strip():
-                    return failure(
-                        "result_unavailable",
-                        "Completed generation has no narrative text available.",
-                    )
-                return {
-                    "success": True,
-                    "message": message,
-                    "choices": choices,
-                    "chunk_id": chunk_id,
-                    "session_id": session_id,
-                }
-            time.sleep(min(1, max(0, deadline - time.monotonic())))
-        return failure("timeout", "Generation timed out")
+            if _is_terminal_generation_status(status["status"]):
+                return status
+            time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
     except KeyboardInterrupt:
-        return failure(
+        raise SessionWaitFailure(
+            "interrupted", "Waiting for narrative generation was interrupted"
+        ) from None
+    raise SessionWaitFailure("timeout", "Generation timed out")
+
+
+def _load_session_result(
+    slot: int, session_id: str, status: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """Load the narrative a finished session produced from the slot's state.
+
+    Raises :class:`SessionWaitFailure` when the state cannot be read or no
+    longer shows this session's result: ``unreachable`` (``api_unreachable``)
+    when the gateway refuses or drops the connection, a domain failure for a
+    read that times out (a body stalled after its headers included) or fails
+    otherwise. :func:`_failed_session_read` classifies the failed read.
+    """
+    url = f"{get_api_url()}/api/slot/{slot}/state"
+    try:
+        response = _api_get(url, timeout=_request_timeout_seconds())
+    except requests.exceptions.RequestException as exc:
+        raise _failed_session_read(
+            exc, url, f"Timed out waiting for API server at {get_api_url()}: {exc}"
+        ) from exc
+    if not 200 <= response.status_code < 300:
+        raise SessionWaitFailure(
+            "http_error",
+            f"{url} returned HTTP {response.status_code}: {response.text}",
+        )
+    try:
+        state = response.json()
+        if not isinstance(state, dict):
+            raise ValueError("Narrative slot state must be an object")
+        for flag in ("is_empty", "is_wizard_mode", "has_pending"):
+            if flag in state and not isinstance(state[flag], bool):
+                raise ValueError(f"Narrative slot state {flag} must be a boolean")
+        current_chunk_id = state.get("current_chunk_id")
+        if current_chunk_id is not None and type(current_chunk_id) is not int:
+            raise ValueError(
+                "Narrative slot state current_chunk_id must be an integer or null"
+            )
+        choices = state.get("choices", [])
+        if not isinstance(choices, list) or any(
+            not isinstance(choice, str) for choice in choices
+        ):
+            raise ValueError("Narrative slot state choices must be a list of strings")
+    except ValueError as exc:
+        raise SessionWaitFailure(
+            "invalid_response", f"Invalid narrative generation response: {exc}"
+        ) from exc
+    chunk_id = status.get("chunk_id")
+    message = state.get("storyteller_text")
+    if (
+        (not state.get("has_pending") and not chunk_id)
+        or (chunk_id is not None and current_chunk_id != chunk_id)
+        or state.get("is_empty")
+        or state.get("is_wizard_mode")
+        or (state.get("has_pending") and state.get("session_id") != session_id)
+    ):
+        raise SessionWaitFailure(
+            "result_unavailable",
+            "Completed generation no longer matches the slot's narrative.",
+        )
+    if not isinstance(message, str) or not message.strip():
+        raise SessionWaitFailure(
+            "result_unavailable",
+            "Completed generation has no narrative text available.",
+        )
+    return {
+        "success": True,
+        "message": message,
+        "choices": choices,
+        "chunk_id": chunk_id,
+        "session_id": session_id,
+    }
+
+
+def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
+    """Wait on one scheduled generation and load its matching narrative result.
+
+    The one waiter of ``continue``, ``retry``, ``regenerate``, and the seed's
+    opening turn. A failed wait keeps the scheduled session and its recovery
+    command, reported under the failure's own code: ``api_unreachable``
+    (exit 4) when the gateway is gone, ``domain_failure`` (exit 1) otherwise.
+    """
+    try:
+        status = wait_for_session(
+            session_id,
+            slot=slot,
+            timeout=_generation_timeout_seconds(),
+            interval=_poll_interval_seconds(),
+        )
+        return _load_session_result(slot, session_id, status)
+    except KeyboardInterrupt:
+        failure = SessionWaitFailure(
             "interrupted", "Waiting for narrative generation was interrupted"
         )
-    except requests.exceptions.Timeout:
-        return failure("timeout", "Generation timed out")
-    except ValueError as exc:
-        return failure(
-            "invalid_response", f"Invalid narrative generation response: {exc}"
-        )
-    except requests.exceptions.RequestException as exc:
-        return failure("http_error", f"Could not load narrative generation: {exc}")
+    except SessionWaitFailure as exc:
+        failure = exc
+    return {
+        "success": False,
+        "code": failure.code,
+        "error": failure.detail,
+        "session_id": session_id,
+        "generation_error": {"status": failure.status, "detail": failure.detail},
+        "recovery_command": f"nexus load --slot {slot}",
+    }
 
 
 def _bootstrap_seed_narrative(
-    *, result: Dict[str, Any], slot: int, model: Optional[str]
+    *,
+    result: Dict[str, Any],
+    slot: int,
+    model: Optional[str],
+    schedule_timeout: float = 120,
 ) -> Dict[str, Any]:
-    """Preserve the saved seed while scheduling and awaiting its opening turn."""
+    """Preserve the saved seed while scheduling and awaiting its opening turn.
+
+    ``schedule_timeout`` bounds the POST that schedules the turn, in seconds;
+    the wait on the scheduled session keeps its own budgets.
+    """
 
     result["phase"] = None  # The successful transition has left wizard mode.
     result["narrative_bootstrap"] = False
     payload: Dict[str, Any] = {"slot": slot, "user_text": ""}
     if model:
         payload["model"] = model
+    url = f"{get_api_url()}/api/narrative/continue"
     try:
-        response = _api_post(
-            f"{get_api_url()}/api/narrative/continue", json=payload, timeout=120
-        )
+        response = _api_post(url, json=payload, timeout=schedule_timeout)
         response.raise_for_status()
         session_id = response.json().get("session_id")
         if not isinstance(session_id, str) or not session_id:
@@ -1666,6 +2032,20 @@ def _bootstrap_seed_narrative(
             "success": False,
             "error": "Scheduling the opening narrative was interrupted",
         }
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ChunkedEncodingError,
+        requests.exceptions.Timeout,
+    ) as exc:
+        # The seed is saved and kept as partial work either way, classified as
+        # the wait's reads are: a gateway that refused or dropped the
+        # connection is the transport code (exit 4); one that accepted the
+        # request but answered too late, a body stalled after its headers
+        # included, is a domain failure, like any late read.
+        failure = _failed_session_read(
+            exc, url, f"Timed out waiting for API server at {get_api_url()}: {exc}"
+        )
+        completion = {"success": False, "code": failure.code, "error": failure.detail}
     except (requests.exceptions.RequestException, ValueError) as exc:
         completion = {"success": False, "error": str(exc)}
 
@@ -1700,12 +2080,19 @@ def _seed_transition_failure(
     detail: str,
     status_code: Optional[int],
     status: str,
+    code: str = "domain_failure",
 ) -> Dict[str, Any]:
-    """Report a persisted seed whose narrative transition did not complete."""
+    """Report a persisted seed whose narrative transition did not complete.
+
+    ``code`` is the CLI error code: ``api_unreachable`` (exit 4) when the
+    gateway refused or dropped the transition, a domain failure otherwise.
+    Either way the saved seed and its retry command stay in the result.
+    """
     retry_command = f"nexus continue --slot {slot}"
     result.update(
         {
             "success": False,
+            "code": code,
             "error": (
                 "Seed artifact was saved, but the narrative transition failed. "
                 f"Retry with: {retry_command}"
@@ -2297,13 +2684,28 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                                     json=transition_payload,
                                     timeout=_transition_timeout_seconds(),
                                 )
-                        except requests.exceptions.Timeout as exc:
+                        except (
+                            requests.exceptions.ConnectionError,
+                            requests.exceptions.ChunkedEncodingError,
+                            requests.exceptions.Timeout,
+                        ) as exc:
+                            # Classified as the wait's reads are, the saved
+                            # seed kept either way: an answer that ran out of
+                            # time, a body stalled after its headers included,
+                            # is a domain failure (exit 1); a refused or
+                            # dropped connection is api_unreachable (exit 4).
+                            failure = _failed_session_read(
+                                exc,
+                                transition_url,
+                                str(exc) or "Transition request timed out.",
+                            )
                             return _seed_transition_failure(
                                 result=result,
                                 slot=args.slot,
-                                detail=str(exc) or "Transition request timed out.",
+                                detail=failure.detail,
                                 status_code=None,
-                                status="timeout",
+                                status=failure.status,
+                                code=failure.code,
                             )
                         if not 200 <= transition_response.status_code < 300:
                             detail = transition_response.text.strip() or (
@@ -2449,8 +2851,8 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Regenerate the last storyteller turn for a slot.
 
-    Calls POST /api/narrative/regenerate, then polls /api/narrative/status
-    until generation completes, matching run_continue's pattern.
+    Calls POST /api/narrative/regenerate, then waits on the new session and
+    loads the replacement draft exactly as ``nexus continue`` does.
     """
     url = f"{get_api_url()}/api/narrative/regenerate"
     payload: Dict[str, Any] = {"slot": args.slot}
@@ -2466,39 +2868,7 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
         if not session_id:
             return {"success": False, "error": "No session ID returned from regenerate"}
 
-        # Elapsed-time bound, matching the continue path — see that loop's note.
-        poll_deadline = time.monotonic() + _generation_timeout_seconds()
-        while time.monotonic() < poll_deadline:
-            status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
-            try:
-                status_response = _api_get(
-                    status_url,
-                    params={"slot": args.slot},
-                    timeout=_request_timeout_seconds(),
-                )
-            except requests.exceptions.RequestException:
-                # Transient hang on a single status GET (event loop briefly slammed
-                # by sync work in generate_narrative_async). Sleep and retry rather
-                # than aborting the whole polling loop.
-                time.sleep(1)
-                continue
-            if status_response.ok:
-                status = status_response.json()
-                if _is_terminal_generation_status(status.get("status")):
-                    load_result = run_load(args)
-                    return {
-                        "success": True,
-                        "message": load_result.get("message"),
-                        "choices": load_result.get("choices", []),
-                        "chunk_id": status.get("chunk_id"),
-                    }
-                elif status.get("status") == "error":
-                    return {
-                        "success": False,
-                        "error": status.get("error", "Regeneration failed"),
-                    }
-            time.sleep(1)
-        return {"success": False, "error": "Regeneration timed out"}
+        return _wait_for_narrative_result(args.slot, session_id)
 
     except _TRANSPORT_ERRORS:
         raise
@@ -4344,6 +4714,12 @@ Examples:
   nexus down                    Stop the runtime
   nexus load --slot 5           Show current state of slot 5
   nexus inspect slot --slot 5 --json   Slot state as a JSON envelope
+  nexus inspect chunks --slot 5 --last 2 --json   The newest two chunks
+  nexus inspect chunks --slot 5 --from 10 --to 12   Chunks 10 through 12
+  nexus inspect chunk 12 --slot 5  One committed chunk
+  nexus inspect incubator --slot 5  The pending draft, or null
+  nexus inspect characters --slot 5  Characters (also places, factions)
+  nexus inspect characters 3 --slot 5  One character by id
   nexus continue --slot 5       Advance the story
   nexus continue --slot 5 --choice 1   Select choice #1
   nexus continue --slot 5 --user-text "I approach carefully"
@@ -4545,6 +4921,51 @@ Examples:
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
     _add_global_output_args(inspect_slot_parser)
+
+    def _add_inspect_verb(name: str, help_text: str) -> argparse.ArgumentParser:
+        verb = inspect_verbs.add_parser(name, help=help_text)
+        verb.allow_abbrev = False
+        verb.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+        _add_global_output_args(verb)
+        return verb
+
+    inspect_chunks_parser = _add_inspect_verb(
+        "chunks", "Read committed chunks: the last N, or an id range"
+    )
+    inspect_chunks_parser.add_argument(
+        "--last",
+        type=int,
+        help="The newest N committed chunks (one request per chunk)",
+    )
+    inspect_chunks_parser.add_argument(
+        "--from",
+        dest="from_id",
+        type=int,
+        help=(
+            "First chunk id of the range (default: the first chunk); needs --to."
+            " One request per chunk in the range, one more if chunk --to does"
+            " not exist"
+        ),
+    )
+    inspect_chunks_parser.add_argument(
+        "--to",
+        dest="to_id",
+        type=int,
+        help=(
+            "Last chunk id of the range; required with --from (alone, the range"
+            " starts at the first chunk)"
+        ),
+    )
+    inspect_chunk_parser = _add_inspect_verb("chunk", "Read one committed chunk")
+    inspect_chunk_parser.add_argument("chunk_id", type=int, help="Chunk id")
+    _add_inspect_verb("incubator", "Read the pending draft, or null when none waits")
+    for family in ("characters", "places", "factions"):
+        entity_parser = _add_inspect_verb(
+            family, f"List the slot's {family}, or read one by id"
+        )
+        entity_parser.add_argument(
+            "entity_id", type=int, nargs="?", help=f"One {family[:-1]}'s id"
+        )
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
@@ -5138,6 +5559,12 @@ _SLOT_COMMANDS = frozenset(
         "lock",
         "unlock",
         "inspect slot",
+        "inspect chunks",
+        "inspect chunk",
+        "inspect incubator",
+        "inspect characters",
+        "inspect places",
+        "inspect factions",
         "model",
         "retrograde-seed-candidates",
         "up",
@@ -5146,11 +5573,40 @@ _SLOT_COMMANDS = frozenset(
 )
 
 
+def _inspect_chunks_usage_error(args: argparse.Namespace) -> Optional[str]:
+    """Why ``inspect chunks`` arguments select no range, or None when they do."""
+    ranged = args.from_id is not None or args.to_id is not None
+    if args.last is not None and ranged:
+        return "--last cannot be combined with --from or --to"
+    if args.last is None and not ranged:
+        return "Pass --last N or a --from/--to chunk id range"
+    for flag, value in (
+        ("--last", args.last),
+        ("--from", args.from_id),
+        ("--to", args.to_id),
+    ):
+        if value is not None and value < 1:
+            return f"{flag} must be a positive integer"
+    if args.from_id is not None and args.to_id is None:
+        return "--from needs --to, so a range cannot walk the whole story"
+    if (
+        args.from_id is not None
+        and args.to_id is not None
+        and args.from_id > args.to_id
+    ):
+        return "--from must not exceed --to"
+    return None
+
+
 def _usage_error(args: argparse.Namespace, command: str) -> Optional[str]:
     """Return why the parsed arguments are unusable, or None when they are."""
     slot: Optional[int] = getattr(args, "slot", None)
     if command in _SLOT_COMMANDS and slot is not None and not 1 <= slot <= 5:
         return "Slot must be between 1 and 5"
+    if command == "inspect chunks":
+        chunk_error = _inspect_chunks_usage_error(args)
+        if chunk_error is not None:
+            return chunk_error
     if command == "model" and not args.list and slot is None:
         return "--slot is required unless using --list"
     if command == "usage" and args.day is not None:
@@ -5332,7 +5788,10 @@ def main() -> int:
 
     try:
         outcome = _dispatch(args)
-    except requests.exceptions.ConnectionError as exc:
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ChunkedEncodingError,
+    ) as exc:
         outcome = {
             **_api_unreachable(),
             "error": f"Cannot connect to API server at {get_api_url()}: {exc}",
@@ -5368,7 +5827,9 @@ def main() -> int:
             envelope = success_envelope(result["data"])
             print(json.dumps(envelope, indent=2, sort_keys=True))
         else:
-            _print_inspection(result["data"], truncate=args.truncate)
+            _print_inspection(
+                result["data"], truncate=args.truncate, verb=args.inspect_command
+            )
         return int(ExitCode.OK)
 
     emit_output(result, args.json, truncate=args.truncate)

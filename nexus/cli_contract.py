@@ -48,8 +48,10 @@ HTTP handler's broad ``except`` never absorbs a refused connection, a timeout,
 an unusable API URL, or a missing or refused runtime credential: those
 propagate to ``nexus.cli.main()``, so every HTTP command reports them alike.
 Only a command that already saved work (a confirmed artifact, a saved seed, a
-scheduled turn) reports a later failed request as a domain failure whose
-``partial`` keeps that work and its recovery command. JSON-first
+scheduled turn) reports a later failed request itself, with a ``partial`` that
+keeps that work and its recovery command: as ``api_unreachable`` when the
+gateway refused or dropped the connection (``nexus.cli.wait_for_session``
+never retries a failed status read), otherwise as a domain failure. JSON-first
 commands (:data:`ENVELOPE_COMMANDS`) print :func:`success_envelope` on stdout;
 other commands keep their established success payloads. One exception is
 kept for existing consumers: a policy gate (``trait-audit
@@ -101,6 +103,12 @@ COMMAND_TRANSPORTS: Mapping[str, Transport] = MappingProxyType(
         "lock": "http",
         "unlock": "http",
         "inspect slot": "http",
+        "inspect chunks": "http",
+        "inspect chunk": "http",
+        "inspect incubator": "http",
+        "inspect characters": "http",
+        "inspect places": "http",
+        "inspect factions": "http",
         # Reading seat identities opens the slot database; see FLAG_TRANSPORTS.
         "model": "database",
         # Direct slot-database readers and writers.
@@ -146,7 +154,17 @@ RUNTIME_CONFIG_COMMANDS: FrozenSet[str] = frozenset(
 )
 
 # Commands whose --json success output is success_envelope(data).
-ENVELOPE_COMMANDS: FrozenSet[str] = frozenset({"inspect slot"})
+ENVELOPE_COMMANDS: FrozenSet[str] = frozenset(
+    {
+        "inspect slot",
+        "inspect chunks",
+        "inspect chunk",
+        "inspect incubator",
+        "inspect characters",
+        "inspect places",
+        "inspect factions",
+    }
+)
 
 # Commands that diagnose this machine's configuration and role themselves:
 # main() dispatches them without loading the configuration or applying the

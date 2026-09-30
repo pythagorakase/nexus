@@ -2,6 +2,7 @@
 
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import pytest
 import tomlkit
@@ -17,6 +18,7 @@ from nexus.config.settings_models import (
     APIModelEntry,
     ModelConfig,
     ProviderModels,
+    RuntimeCliSettings,
     RuntimeRemoteSettings,
     RuntimeServiceSettings,
     Settings,
@@ -776,6 +778,40 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
         .global_.model.api_models["test"]
         .base_url.endswith(":5102/v1")
     )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("inf"), float("nan"), 0, -1.0],
+    ids=["inf", "nan", "zero", "negative"],
+)
+def test_cli_poll_interval_must_be_finite_and_positive(
+    value: float, tmp_path: Path
+) -> None:
+    """A nonfinite or nonpositive session-wait interval fails validation by name.
+
+    An infinite interval would sleep through the whole generation budget after
+    the first running status, then report a timeout without reading again.
+    """
+    loc = ("runtime", "cli", "poll_interval_seconds")
+    with pytest.raises(ValidationError) as direct:
+        RuntimeCliSettings(poll_interval_seconds=value)
+    assert [error["loc"] for error in direct.value.errors()] == [loc[-1:]]
+
+    raw = _nexus_toml_dict()
+    raw["runtime"]["cli"]["poll_interval_seconds"] = value
+    with pytest.raises(ValidationError) as full:
+        Settings.model_validate(raw)
+    assert [error["loc"] for error in full.value.errors()] == [loc]
+
+    document: Any = tomlkit.parse(Path("nexus.toml").read_text())
+    document["runtime"]["cli"]["poll_interval_seconds"] = value
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document))
+    with pytest.raises(ValidationError) as loaded:
+        load_settings(config)
+    assert [error["loc"] for error in loaded.value.errors()] == [loc]
+    assert "runtime.cli.poll_interval_seconds" in str(loaded.value)
 
 
 def test_gateway_cors_origins_parse_and_accessor_returns_default() -> None:
