@@ -164,10 +164,11 @@ FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known
 1 failed, 150 passed in 42.26s
 ```
 
-The one failure is expected: migration 137 belongs to the parallel #819 order
-and is not on this branch, so the sequence test sees 137 as a gap. It is not
-added to `KNOWN_GAPS`; the coordinator merges `main` after 137 lands and reruns
-the test.
+Historical, at the pre-merge head: migration 137 belonged to the parallel #819
+order and was not on this branch yet, so the sequence test saw 137 as a gap.
+It was not added to `KNOWN_GAPS`. The "Post-Merge Results" section below
+records the rerun after `main` (with 137) was merged into this branch; the
+failure recorded here no longer occurs and must not be waived on a later head.
 
 ## Offline Suites
 
@@ -185,7 +186,8 @@ FAILED tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known
 1 failed, 1810 passed, 742 skipped, 7 warnings in 38.94s
 ```
 
-The one failure is the same expected 137 gap.
+The one failure is the same 137 gap, historical for the same reason (see
+"Post-Merge Results").
 
 ```
 $ $PY -m pytest -q tests/test_reachability.py
@@ -206,3 +208,31 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
   it reports sit in untouched code of `memnon.py` and in the `db_schema.py`
   model classes (`Base` as a declarative base), which this change does not
   edit.
+
+## Post-Merge Results
+
+Migration 137 landed on `main` in PR #1054 (d4a1756a). The coordinator merged
+`origin/main` into this branch (merge commit 2ce9d107, no history rewrite), so
+the branch now carries 137 and 138 in sequence. Both runs below are at that
+merged head, from the worktree root with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`,
+and `NEXUS_SLOT` unset.
+
+The sequence test that failed above passes:
+
+```
+$ $PY -m pytest -q -p no:cacheprovider "tests/test_orrery/test_migrate.py::test_migration_sequence_has_only_known_gaps"
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 passed, 5 warnings in 0.65s
+```
+
+Whole-tree PostgreSQL gate:
+
+```
+$ $PY -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests   # NEXUS_RUN_POSTGRES=1
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+5514 passed, 88 skipped, 10 warnings in 1850.99s (0:30:50)
+```
+
+`KNOWN_GAPS` is still `{013, 119}`. The two earlier failures in this record
+are history, not a standing exception.

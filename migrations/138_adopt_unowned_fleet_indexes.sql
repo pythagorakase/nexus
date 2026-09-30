@@ -41,10 +41,13 @@
 -- EXCLUSIVE lock on chunk_metadata before it finds the column, and each
 -- CREATE INDEX IF NOT EXISTS takes a SHARE lock on its table before it finds
 -- the index; both last milliseconds when nothing else holds the table. The
--- runner applies the file in one transaction, so lock_timeout below makes a
--- run that meets an open transaction on chunk_metadata fail at once, to be
--- rerun, instead of queuing every new read and write behind its request.
--- Apply it while the gateway is quiet.
+-- runner applies the file in one transaction. lock_timeout below bounds each
+-- lock request, not the transaction: a run that meets an open transaction on
+-- chunk_metadata waits up to five seconds for the ACCESS EXCLUSIVE lock, and
+-- while it waits, new reads and writes of the table queue behind its request;
+-- at five seconds the run fails, the queue drains, and the run is repeated
+-- later. Without the timeout the queue would last as long as the other
+-- transaction. Apply it while the gateway is quiet.
 
 SET LOCAL lock_timeout = '5s';
 
