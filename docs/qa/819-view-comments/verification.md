@@ -319,7 +319,7 @@ drops the clone):
 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY docs/qa/819-view-comments/listing.py
 ```
 
-Rerun at `9991e573` (the comment fixes after review): the script exited 0 and
+Rerun at `3a6406f1` (the second round of comment fixes: adjudication history readers in `entity_names_v`, the singleton id in `incubator_view`): the script exited 0 and
 printed schema version 137 for the clone (its stdout before the listing is
 the `psql` restore echo, and its stderr holds only `pg_dump`
 circular-foreign-key warnings for `tags` and `event_types`); no
@@ -331,8 +331,8 @@ clone qa640_819s1_listing_* at schema version 137
 chunk_entity_references_v (byte-identical to migration text: True, 947 bytes)
 Chunk references of characters, factions, and places in one shape: one row for each row of chunk_character_references, chunk_faction_references, and place_chunk_references, carrying its chunk_id and the entity_id of the referenced character, faction, or place. reference_type is chunk_character_references.reference or place_chunk_references.reference_type cast to text, and is NULL on every faction row, because chunk_faction_references has no role column. place_chunk_references keys its rows by place, chunk, and reference type, so one place can have several rows for one chunk. The view carries no entity kind and leaves out place_chunk_references.evidence. No code under nexus/ reads it; the Orrery dry-run sampler (scripts/orrery_sample.py) takes the first referencing chunk of each entity from it, and the chunk entity reference parity report (scripts/entity_reference_parity.py) compares it by default with the rows of the three junctions.
 
-entity_names_v (byte-identical to migration text: True, 910 bytes)
-Name of each character, faction, and place entity: one row for each entities row of kind character, faction, or place that has a characters, factions, or places row of the same kind, carrying the entity id, the kind, and the name from that row. Orrery code joins it to put names on entity ids: the commit tick for proposal entities, the resolver for draft bindings, the audit dashboard (explained dry run, cognition trace, entity hover, and adjudication history) through the resolver name loader, the resolution promotion and narration drains for resolution actors, bleed for resolution actors and event targets, experience seeding for world event actors and targets, and relationship provenance for claim participants. Experience rendering reads every name and rejects a rendered experience that names a known entity its seed does not allow, and Retrograde persistence builds its entity catalog from the view.
+entity_names_v (byte-identical to migration text: True, 1057 bytes)
+Name of each character, faction, and place entity: one row for each entities row of kind character, faction, or place that has a characters, factions, or places row of the same kind, carrying the entity id, the kind, and the name from that row. Orrery code joins it to put names on entity ids: the commit tick for proposal entities, the resolver for draft bindings, the audit dashboard (explained dry run, cognition trace, and entity hover) through the resolver name loader, adjudication history for defer streak actors through the same loader (read by the audit dashboard, Backstage, and the recent Orrery rulings of the storyteller context), the resolution promotion and narration drains for resolution actors, bleed for resolution actors and event targets, experience seeding for world event actors and targets, and relationship provenance for claim participants. Experience rendering reads every name and rejects a rendered experience that names a known entity its seed does not allow, and Retrograde persistence builds its entity catalog from the view.
 
 entity_relationships_v (byte-identical to migration text: True, 1028 bytes)
 Relationship edges between entities in one shape: one row for each row of character_relationships (relationship_scope character, source character1, target character2), faction_relationships (scope faction, source faction1, target faction2), and faction_character_relationships (scope faction_character, source the faction, target the character), with both ends mapped to entity ids. relationship_type carries the character relationship type, the faction relationship type, or the member role as text; dynamic carries dynamic in character scope and current_status in the other two; valence, recent_events, valence_magnitude, and valence_current are NULL outside character scope. Every reader under nexus/ selects character scope only: the Orrery resolver (orbit distances, relationship types and trust, actor-target bindings), secret reveal (trust), knowledge surfacing (valence between characters), and the audit entity hover. The resolver faction membership loader reads faction_character_relationships directly, not this view.
@@ -340,38 +340,38 @@ Relationship edges between entities in one shape: one row for each row of charac
 entity_tags_current (byte-identical to migration text: True, 1081 bytes)
 Uncleared tag applications: one row for each entity_tags row whose cleared_at is NULL and whose tag is neither deprecated nor a synonym (tags.synonym_for NULL), carrying the tag name, category, ephemeral flag, and clearance kind from tags, the entity kind, and the application provenance (applied_at, applied_at_world_time, source_kind, template_id, source_chunk_id). A partial unique index on entity_tags allows at most one such row per entity and tag. The view applies no expiry test: a tag whose expires_at_world_time has passed stays here until a clear, such as the expiry sweep, sets cleared_at. Every reader under nexus/ and scripts/ joins entity_tags on entity_tag_id and applies its own expires_at_world_time test: the Orrery resolver (current tags, place location classes, actors with ephemeral tags), need applicability and routine destination choice in the Orrery events module, communication culture tags, the audit entity hover, the faction table audit, the character and faction dossiers of the turn context, and the Orrery dry-run sampler (scripts/orrery_sample.py).
 
-incubator_view (byte-identical to migration text: True, 1116 bytes)
-The pending draft with its parent chunk text: at most one row, from the singleton incubator row (id true), with narrative_chunks.raw_text of parent_chunk_id as parent_chunk_text through a left join. It passes through chunk_id, parent_chunk_id, user_text, storyteller_text, choice_object, choice_text, authorial_directives, orrery_proposal, orrery_adjudications, status, session_id, and created_at; lifts episode_transition and time_delta_description (as time_delta) from metadata_updates.chronology, and world_layer and pacing from metadata_updates, although no current writer sets pacing; renames entity_updates to entity_changes and reference_updates to references; and counts entity_update_count as the lengths of the characters, locations, and factions arrays of entity_updates, leaving out its relationships array. It leaves out metadata_updates itself, new_entities, generation_model, llm_response_id, updated_at, lore_pass_baseline, and both staged correspondence letters. GET /api/narrative/incubator returns its row, filtered by session_id when one is given, and nexus inspect incubator reads that endpoint.
+incubator_view (byte-identical to migration text: True, 1134 bytes)
+The pending draft with its parent chunk text: at most one row, from the singleton incubator row (id true), with narrative_chunks.raw_text of parent_chunk_id as parent_chunk_text through a left join. It passes through chunk_id, parent_chunk_id, user_text, storyteller_text, choice_object, choice_text, authorial_directives, orrery_proposal, orrery_adjudications, status, session_id, and created_at; lifts episode_transition and time_delta_description (as time_delta) from metadata_updates.chronology, and world_layer and pacing from metadata_updates, although no current writer sets pacing; renames entity_updates to entity_changes and reference_updates to references; and counts entity_update_count as the lengths of the characters, locations, and factions arrays of entity_updates, leaving out its relationships array. It leaves out the singleton id, metadata_updates itself, new_entities, generation_model, llm_response_id, updated_at, lore_pass_baseline, and both staged correspondence letters. GET /api/narrative/incubator returns its row, filtered by session_id when one is given, and nexus inspect incubator reads that endpoint.
 ```
 
 ## Gates
 
 All from the worktree root with `PY=/Users/pythagor/nexus/.venv/bin/python`,
 `PYTHONPATH=$PWD`, and `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`
-unset, rerun after review at `9991e573` (the comment fixes, on top of the
-merge of `origin/main` at `d0e68868`). The PostgreSQL block is the complete
+unset, rerun after the second review at `3a6406f1` (the second round of
+comment fixes, on top of the merge of `origin/main` at `d0e68868`). The PostgreSQL block is the complete
 output after the progress dots. The two offline blocks show only the guard
 line and the summary line; the warnings summary above them is left out.
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_schema_documentation_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py tests/test_enum_column_comment_labels_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-dbname audit: 22 targets: nexus_m10_fresh_test_88980, nexus_m10_template_test_88980, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_819_labels_*, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6
+dbname audit: 22 targets: nexus_m10_fresh_test_99205, nexus_m10_template_test_99205, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_819_labels_*, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-133 passed in 26.90s
+133 passed in 26.39s
 
 $ $PY scripts/check_migration_comments.py
 OK: every object created after migration 129 has a comment.
 
 $ $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2624 passed, 415 skipped, 8 warnings in 412.59s (0:06:52)
+2624 passed, 415 skipped, 8 warnings in 408.97s (0:06:48)
 
 $ $PY -m pytest -q tests/test_api tests/test_orrery tests/test_reachability.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1849 passed, 742 skipped, 7 warnings in 47.82s
+1849 passed, 742 skipped, 7 warnings in 45.59s
 ```
 
 `tests/test_reachability.py` alone before the first rebase: `38 passed`.
