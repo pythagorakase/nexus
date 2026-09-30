@@ -32,12 +32,12 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
         },
         {
             "entity_kind": "place",
-            "category": "place_affordance",
-            "category_description": "Functional place affordance.",
+            "category": "place_function",
+            "category_description": "Functional role a place serves.",
             "prompt_order": 10,
-            "tag": "safe_house",
+            "tag": "haven",
             "is_ephemeral": False,
-            "description": "Place can shelter people from danger.",
+            "description": "Place can shelter or hide someone safely.",
         },
     ]
     monkeypatch.setattr(tag_library, "_connect", lambda _dbname: _Conn(rows))
@@ -50,7 +50,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
     assert "### Character Tags" in rendered
     assert "`wounded` (ephemeral): Character has an acute wound." in rendered
     assert "### Place Tags" in rendered
-    assert "`safe_house`: Place can shelter people from danger." in rendered
+    assert "`haven`: Place can shelter or hide someone safely." in rendered
 
 
 def test_format_tag_library_rejects_unknown_entity_kind() -> None:
@@ -119,11 +119,11 @@ def _fake_entries() -> list[tag_library.TagLibraryEntry]:
         ),
         tag_library.TagLibraryEntry(
             entity_kind="place",
-            category="place_affordance",
-            tag="safe_house",
+            category="place_function",
+            tag="haven",
             is_ephemeral=False,
-            description="Place can shelter people from danger.",
-            category_description="Functional place affordance.",
+            description="Place can shelter or hide someone safely.",
+            category_description="Functional role a place serves.",
             prompt_order=10,
         ),
         tag_library.TagLibraryEntry(
@@ -232,7 +232,7 @@ def test_contextual_library_keeps_complete_name_index(
                 tag_library.EntityRowReference("character", 1),
                 tag_library.EntityRowReference("place", 2),
             ],
-            proposal_tag_names={"safe_house"},
+            proposal_tag_names={"haven"},
             has_pending_proposals=True,
         ),
     )
@@ -251,7 +251,7 @@ def test_contextual_library_expands_active_and_proposal_tags(
         "save_05",
         context=tag_library.TagLibraryContext(
             present_entity_refs=[tag_library.EntityRowReference("character", 1)],
-            proposal_tag_names={"safe_house"},
+            proposal_tag_names={"haven"},
             has_pending_proposals=True,
         ),
     )
@@ -266,7 +266,7 @@ def test_contextual_library_expands_active_and_proposal_tags(
 
     relevant = with_proposals.split("### Scene-Relevant Tags", 1)[1]
     assert "`wounded` (ephemeral): Character has an acute wound." in relevant
-    assert "`safe_house`: Place can shelter people from danger." in relevant
+    assert "`haven`: Place can shelter or hide someone safely." in relevant
     assert "watchful" not in relevant
     assert "### Event-Type Names" in with_proposals
     assert "evade_pursuit" in with_proposals
@@ -360,7 +360,7 @@ class _TwoClockTagSession:
                 },
                 {
                     "entity_id": 9,
-                    "tag": "safe_house",
+                    "tag": "haven",
                     "is_ephemeral": False,
                     "expires_at": None,
                 },
@@ -406,7 +406,7 @@ def test_active_tag_lookup_translates_skewed_ids_and_uses_anchor_clock(
 
     assert "`watchful`: Character is alert to subtle danger." in relevant
     assert "`wounded`" not in relevant
-    assert "`safe_house`" not in relevant
+    assert "`haven`" not in relevant
     assert session.translation_queries == 1
 
 

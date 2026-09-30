@@ -213,26 +213,6 @@ def test_manifest_real_test_turn_and_child_job_correlation(
             slot=4,
         )
         _stage_pending_turn(dbname)
-        import subprocess
-        from nexus.database import database_url
-
-        real_run = subprocess.run
-
-        def run_in_clone(command, *args, **kwargs):
-            if (
-                isinstance(command, list)
-                and "scripts/regenerate_embeddings.py" in command
-            ):
-                command = list(command)
-                index = command.index("--database")
-                assert command[index + 1] == dbname
-                command[index : index + 2] = [
-                    "--db-url",
-                    database_url(dbname),
-                ]
-            return real_run(command, *args, **kwargs)
-
-        monkeypatch.setattr(subprocess, "run", run_in_clone)
         with gateway_lane(monkeypatch):
             # Real public CLI, real HTTP providers, real accepting transaction.
             output = run_cli(

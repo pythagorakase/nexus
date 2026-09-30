@@ -11,10 +11,7 @@ from nexus.agents.logon.apex_schema import (
     ReferencedEntities,
     StateUpdates,
 )
-from nexus.agents.orrery.reconstruction import (
-    log_state_delta_async,
-    log_state_delta_sync,
-)
+from nexus.agents.orrery.reconstruction import log_state_delta_sync
 from nexus.api.native_structured_output import WireContractViolation
 from nexus.presence.roster import IdentityIndex, RosterEntry
 
@@ -246,68 +243,3 @@ def apply_name_reveals(
                 new_value=reveal.new_name,
             )
         refresh_generated_aliases(cur)
-
-
-async def apply_name_reveals_async(
-    conn: Any,
-    declarations: Sequence[Mapping[str, Any]],
-    *,
-    narrative: str,
-    chunk_id: int,
-    generation_session_id: str,
-) -> None:
-    """Apply the identical rename and audit contract through async acceptance."""
-    from nexus.presence.identity import (
-        read_identity_index_async,
-        refresh_generated_aliases_async,
-    )
-
-    if not any(declaration.get("same_as") for declaration in declarations):
-        return
-    await conn.execute(
-        "SELECT pg_advisory_xact_lock(hashtext(current_database()), "
-        "hashtext('character-identity'))"
-    )
-    _, reveals = project_name_reveals(
-        declarations, await read_identity_index_async(conn), narrative=narrative
-    )
-    for reveal in reveals:
-        entity_id = await conn.fetchval(
-            "UPDATE characters SET name = $1 WHERE id = $2 AND name = $3 "
-            "RETURNING entity_id",
-            reveal.new_name,
-            reveal.target.id,
-            reveal.target.name,
-        )
-        if entity_id is None:
-            raise CharacterNameRevealConflict("Name changed during acceptance")
-        await conn.execute(
-            "INSERT INTO character_aliases (character_id, alias, provenance) "
-            "VALUES ($1, $2, 'authored') ON CONFLICT (character_id, alias) "
-            "DO UPDATE SET provenance = 'authored'",
-            reveal.target.id,
-            reveal.target.name,
-        )
-        await conn.execute(
-            "INSERT INTO character_identity_rulings "
-            "(source_chunk_id, character_id, entity_id, decision, previous_name, "
-            "new_name, evidence, generation_session_id) "
-            "VALUES ($1, $2, $3, 'same_as', $4, $5, $6, $7)",
-            chunk_id,
-            reveal.target.id,
-            entity_id,
-            reveal.target.name,
-            reveal.new_name,
-            reveal.evidence,
-            generation_session_id,
-        )
-        await log_state_delta_async(
-            conn,
-            source_chunk_id=chunk_id,
-            writer="skald_state_update",
-            entity_id=entity_id,
-            field="characters.name",
-            old_value=reveal.target.name,
-            new_value=reveal.new_name,
-        )
-    await refresh_generated_aliases_async(conn)

@@ -215,7 +215,7 @@ def test_category_seed_policy_returns_complete_struct() -> None:
         "entity_kind": "character",
         "policy": "stable_seed",
         "reason": (
-            "Stable identity, role, faction, or place affordance tags may "
+            "Stable identity, role, faction, or place character tags may "
             "be proposed as present-state seed outcomes."
         ),
     }
@@ -224,12 +224,12 @@ def test_category_seed_policy_returns_complete_struct() -> None:
 def test_category_seed_policy_settles_live_registry_split() -> None:
     """Issue #300 split: every live registry category classifies explicitly."""
 
-    # Stable identity/role/affordance categories promoted in M4.
+    # Stable identity/role categories promoted in M4.
     for category, entity_kind in (
         ("bodyform", "character"),
         ("role", "character"),
         ("profession_lite", "character"),
-        ("place_affordance", "place"),
+        ("place_function", "place"),
         ("ideology_axis", "faction"),
         ("resource_class", "faction"),
         ("legitimacy_status", "faction"),
@@ -249,6 +249,13 @@ def test_category_seed_policy_settles_live_registry_split() -> None:
         assert (
             category_seed_policy(category, entity_kind)["policy"] == "event_anchored"
         ), category
+
+
+def test_deprecated_place_affordance_is_not_seed_eligible() -> None:
+    """Migration 043 deprecated place_affordance; Retrograde must not seed it."""
+
+    policy = category_seed_policy("place_affordance", "place")
+    assert policy["policy"] == "prompt_visible_only"
 
 
 def test_category_seed_policy_pins_runtime_categories_prompt_only() -> None:

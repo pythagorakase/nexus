@@ -44,6 +44,6 @@ This chunk sets expectations for everything that follows. Be bold. Be vivid. Be 
 
 Orrery (Bethesda Creation Engine × Dwarf Fortress: radiant routines, autonomous agents with needs, emergent off-screen events) decides what off-screen entities are doing each tick by matching `entity_tags` against package gates.
 
-The protagonist's tags and the starting location's `place_affordance` tags were already bestowed during the wizard (in `submit_wildcard_trait` and `submit_starting_scenario`). Don't re-apply them.
+The protagonist's tags and the starting location's place tags were already bestowed during the wizard (in `submit_wildcard_trait` and `submit_starting_scenario`). Don't re-apply them.
 
 The bootstrap response contains prose and choices only. On subsequent turns, persistent new entities flow through the `new_entities` declaration channel; do not emit entity records from this bootstrap response.

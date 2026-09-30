@@ -230,9 +230,9 @@ STABLE_SEED_TAG_CATEGORIES: frozenset[str] = frozenset(
         "role.function",
         "role.resources",
         "role.fame",
-        # Place affordances and stable place character.
+        # Stable place character. The deprecated place_affordance category is
+        # no longer seed-eligible and falls through to prompt_visible_only.
         "place_function",
-        "place_affordance",
         "place_visibility",
         "place_access",
         "place_environment",
@@ -460,7 +460,7 @@ def category_seed_policy(category: str, entity_kind: str) -> CategorySeedPolicy:
             "entity_kind": normalized_kind,
             "policy": "stable_seed",
             "reason": (
-                "Stable identity, role, faction, or place affordance tags may "
+                "Stable identity, role, faction, or place character tags may "
                 "be proposed as present-state seed outcomes."
             ),
         }

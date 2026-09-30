@@ -33,7 +33,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from nexus.memory.entity_detector import EntityMatch, HighSpecificityEntityDetector
-from nexus.presence.roster import read_roster, read_roster_async
+from nexus.presence.roster import read_roster
 
 
 logger = logging.getLogger("nexus.api.presence_audit")
@@ -135,46 +135,6 @@ def audit_chunk_presence(
             active_detector = _character_only_detector(character_rows, alias_rows)
 
         entity_match = active_detector.detect_entities(prose)
-        findings = diff_presence(entity_match, accounted, chunk_id=chunk_id)
-        _emit_findings(findings)
-        return findings
-    except Exception:
-        logger.exception(
-            "presence audit failed for committed chunk %s; the commit itself "
-            "is unaffected",
-            chunk_id,
-        )
-        return []
-
-
-async def audit_chunk_presence_async(
-    conn: Any,
-    chunk_id: int,
-    prose: str,
-    *,
-    parent_chunk_id: Optional[int] = None,
-) -> List[Dict[str, Any]]:
-    """Asyncpg twin of audit_chunk_presence for the async commit handler."""
-    try:
-        roster = await read_roster_async(conn, chunk_id)
-        accounted = {
-            entry.id
-            for entry in roster.all_references.values()
-            if entry.kind == "character"
-        }
-        if parent_chunk_id:
-            accounted |= (
-                await read_roster_async(conn, parent_chunk_id)
-            ).present_character_ids
-
-        character_rows = await conn.fetch(
-            "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
-        )
-        alias_rows = await conn.fetch(
-            "SELECT character_id, alias FROM character_aliases"
-        )
-        detector = _character_only_detector(list(character_rows), list(alias_rows))
-        entity_match = detector.detect_entities(prose)
         findings = diff_presence(entity_match, accounted, chunk_id=chunk_id)
         _emit_findings(findings)
         return findings

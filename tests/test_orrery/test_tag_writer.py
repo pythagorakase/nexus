@@ -429,7 +429,7 @@ def _default_category_registry() -> dict[str, set[str]]:
         "disposition": {"character"},
         "orrery_need": {"character"},
         "orrery_state": {"character"},
-        "place_affordance": {"place"},
+        "place_function": {"place"},
         "power_posture": {"faction"},
         "profession_lite": {"character"},
         "role.function": {"character"},
@@ -796,13 +796,13 @@ def test_clear_entity_tag_unknown_or_deprecated_tag_is_noop():
 
 
 def test_incompatible_category_raises():
-    cur = FakeCursor(tags=_registered(("safe_house", "place_affordance", False)))
+    cur = FakeCursor(tags=_registered(("haven", "place_function", False)))
     with pytest.raises(ValueError, match="not registered for entity_kind"):
         apply_tag_bestowal(
             cur,
             entity_id=42,
             entity_kind="character",
-            bestowal=OrreryTagBestowal(applied_tags=["safe_house"]),
+            bestowal=OrreryTagBestowal(applied_tags=["haven"]),
         )
     assert cur.inserted_entity_tag_rows == []
 
