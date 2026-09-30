@@ -383,3 +383,59 @@ orrery_resolutions 0
 orrery_scene_pressures 0
 ```
 
+
+## Review Round (Astra)
+
+Astra's review of head `201ebd7f` (`CHANGES_REQUIRED`) raised two findings, both in `tests/test_api/test_orrery_dev_endpoints.py`. Both are fixed; no seed was added, since the played story already records world events for every cast member.
+
+| Finding | Before | Now asserts |
+| --- | --- | --- |
+| P2: recent-event anchor coverage accepted `recent_events: []` at every anchor | `test_entity_context_recent_events_respect_anchor` looped over each entity's events (zero iterations when empty) and `test_entity_context_hover_payload` checked only `len(...) <= 3` | the anchor test requests the page limit (`RECENT_EVENTS_PROBE_LIMIT = 50`), asserts the returned entity IDs equal the requested IDs (sorted) at both the head and genesis anchors, and asserts at least one seeded actor has a nonzero event count at the head before checking every entity is empty at anchor 0; the hover test asserts at least one hovered actor carries a recent event; both vacuity messages name `seed_played_story` |
+| P3: place vocabulary accepted `places: []` | `all(row["name"] ...)` over an empty list | `{"Fixture Plaza", "Fixture Docks"} <= {row["name"] ...}` (the two places `seed_played_story` creates) before the name check |
+
+### Recorded Events at the Head Anchor
+
+Scratch probe (`885-B2-8-fix3/probe_counts.log`; a temporary print in the anchor test, reverted afterwards): head anchor 10, recorded events per actor with the limit at 50:
+
+```
+PROBE head_anchor 10 {'Ines Marr': 10, 'Tobias Vey': 10, 'Oda Kell': 9}
+```
+
+The events are the accepted ticks' need and routine events (`drank`, `slept`, `ate`, `socialized`, `stroll_taken`, `upkeep_done`) over ticks 2-10, plus one `contact_made` (Ines -> Tobias, tick 2). At anchor 0 all three are empty.
+
+### Negative Control
+
+Scratch run (`885-B2-8-fix3/negative_control.log`): the entity-context query's result was replaced with `[]` in `nexus/agents/orrery/audit.py` (`events_by_entity[entity_id] = []`) and the vocab endpoint returned `"places": []` in `nexus/api/orrery_dev_endpoints.py`. Both edits were reverted with `git checkout --` afterwards (`git diff --stat` then showed only the test file).
+
+```
+E       AssertionError: no hovered actor carries a recent event — the recent-event checks are vacuous; the seed_played_story accepted ticks record world events for the off-screen cast
+E       AssertionError: no seeded actor has a recorded event at the head anchor ({4: 0, 5: 0, 6: 0}) — the genesis exclusion check is vacuous; the seed_played_story accepted ticks record world events for the off-screen cast
+E       AssertionError: the seeded places are missing from the place vocabulary — the name check is vacuous; seed_played_story creates both
+E       assert {'Fixture Doc...ixture Plaza'} <= set()
+FAILED tests/test_api/test_orrery_dev_endpoints.py::test_entity_context_hover_payload
+FAILED tests/test_api/test_orrery_dev_endpoints.py::test_entity_context_recent_events_respect_anchor
+FAILED tests/test_api/test_orrery_dev_endpoints.py::test_vocab_endpoint_serves_picker_vocabularies
+3 failed, 16 deselected, 7 warnings in 4.11s
+```
+
+Under the same two edits, the test file at `201ebd7f` passes all three (`885-B2-8-fix3/base_negative_control.log`: `3 passed, 16 deselected, 7 warnings in 3.93s`), which confirms the findings.
+
+### Gates
+
+Gateway variables unset:
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_orrery_dev_endpoints.py tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 3 targets: postgres, qa885_orrery_dev_*, qa885_transaction_writer_*
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+56 passed, 7 warnings in 8.97s
+$ black --check tests/test_api/test_orrery_dev_endpoints.py
+All done! ✨ 🍰 ✨
+1 file would be left unchanged.
+$ flake8 tests/test_api/test_orrery_dev_endpoints.py
+flake8: clean
+$ mypy --explicit-package-bases tests/test_api/test_orrery_dev_endpoints.py
+Success: no issues found in 1 source file
+```

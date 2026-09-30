@@ -82,6 +82,11 @@ QUARRY = "Tobias Vey"
 WORKER = "Oda Kell"
 CAST = (CONFIDANT, QUARRY, WORKER)
 SEED_TURNS = 10
+# The places seed_played_story creates: the protagonist's and the cast's.
+SEEDED_PROTAGONIST_PLACE = "Fixture Plaza"
+SEEDED_CAST_PLACE = "Fixture Docks"
+# The endpoint's largest recent-event page, so a head-anchor count is whole.
+RECENT_EVENTS_PROBE_LIMIT = 50
 SEED_TIME_DELTA = timedelta(hours=6)
 # A durable tag bestowed with no world time (seed_entity_tag leaves
 # applied_at_world_time NULL): the data-quality strip's pathology.
@@ -543,6 +548,11 @@ def test_entity_context_hover_payload(
         assert len(entity["recent_events"]) <= 3
         if entity["place"] is not None:
             assert isinstance(entity["place"]["classes"], list)
+    assert any(entity["recent_events"] for entity in payload["entities"]), (
+        "no hovered actor carries a recent event — the recent-event checks are "
+        "vacuous; the seed_played_story accepted ticks record world events for "
+        "the off-screen cast"
+    )
 
 
 @pytest.mark.requires_postgres
@@ -563,20 +573,39 @@ def test_entity_context_recent_events_respect_anchor(
             "slot": ROUTED_SLOT,
             "entity_ids": entity_ids,
             "anchor_chunk_id": head_anchor,
+            "recent_events_limit": RECENT_EVENTS_PROBE_LIMIT,
         },
     )
     assert at_head.status_code == 200
-    for entity in at_head.json()["entities"]:
+    head_entities = at_head.json()["entities"]
+    assert [e["entity_id"] for e in head_entities] == sorted(entity_ids)
+    events_at_head = {
+        entity["entity_id"]: len(entity["recent_events"]) for entity in head_entities
+    }
+    assert any(events_at_head.values()), (
+        f"no seeded actor has a recorded event at the head anchor "
+        f"({events_at_head}) — the genesis exclusion check is vacuous; the "
+        "seed_played_story accepted ticks record world events for the "
+        "off-screen cast"
+    )
+    for entity in head_entities:
         for event in entity["recent_events"]:
             assert event["tick_chunk_id"] <= head_anchor
 
     # Anchor 0 predates every event; the honest answer is "none yet".
     at_genesis = client.post(
         "/api/dev/orrery/context/entities",
-        json={"slot": ROUTED_SLOT, "entity_ids": entity_ids, "anchor_chunk_id": 0},
+        json={
+            "slot": ROUTED_SLOT,
+            "entity_ids": entity_ids,
+            "anchor_chunk_id": 0,
+            "recent_events_limit": RECENT_EVENTS_PROBE_LIMIT,
+        },
     )
     assert at_genesis.status_code == 200
-    for entity in at_genesis.json()["entities"]:
+    genesis_entities = at_genesis.json()["entities"]
+    assert [e["entity_id"] for e in genesis_entities] == sorted(entity_ids)
+    for entity in genesis_entities:
         assert entity["recent_events"] == []
 
 
@@ -1229,4 +1258,10 @@ def test_vocab_endpoint_serves_picker_vocabularies(
     assert {"threat_issued", "compliance_alert"} <= {
         row["type"] for row in payload["event_types"]
     }
+    assert {SEEDED_PROTAGONIST_PLACE, SEEDED_CAST_PLACE} <= {
+        row["name"] for row in payload["places"]
+    }, (
+        "the seeded places are missing from the place vocabulary — the name "
+        "check is vacuous; seed_played_story creates both"
+    )
     assert all(row["name"] for row in payload["places"])
