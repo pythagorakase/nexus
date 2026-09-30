@@ -147,6 +147,10 @@ def live_conn(propagation_clone: PropagationClone) -> Iterator[Any]:
                 )
                 registered, shaped = cur.fetchone()
                 _assert_migration_083(registered, shaped)
+                cur.execute("SELECT max(id) FROM narrative_chunks")
+                assert (
+                    cur.fetchone()[0] == propagation_clone.clock_chunk_id
+                ), "the seeded story-clock chunk is the clone's head chunk"
                 install_claim_accounts_shadow_sync(cur)
                 _install_valence_shadow(cur)
             yield conn

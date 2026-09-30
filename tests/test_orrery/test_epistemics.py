@@ -381,6 +381,7 @@ def test_retrograde_producer_mints_role_correct_awareness(epistemics_conn: Any) 
 
 @pytest.mark.requires_postgres
 def test_retrograde_faction_actor_mints_faction_awareness(
+    epistemics_clone: EpistemicsClone,
     epistemics_conn: Any,
 ) -> None:
     """PR #697 birth roles apply equally when the actor entity is a faction."""
@@ -400,6 +401,10 @@ def test_retrograde_faction_actor_mints_faction_awareness(
         faction = cur.fetchone()
         assert faction is not None, "the clone seeds one faction entity"
         assert faction["name"] == FACTION_NAME
+        assert (int(faction["faction_id"]), int(faction["entity_id"])) == (
+            epistemics_clone.faction["faction_id"],
+            epistemics_clone.faction["entity_id"],
+        ), "the faction row is the one the clone seeded"
         records = [
             _EntityRecord(
                 entity_id=int(faction["entity_id"]),
@@ -1251,7 +1256,7 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
         claim_id = int(cur.fetchone()["id"])
         cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
         expected_world_time = cur.fetchone()["world_time"]
-        assert expected_world_time is not None
+        assert expected_world_time == STORY_CLOCK
 
     parser = build_parser()
     first_args = parser.parse_args(
