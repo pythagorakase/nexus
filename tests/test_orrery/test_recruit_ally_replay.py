@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Iterator, Optional
 
-import psycopg2
 import pytest
 
 from nexus.agents.orrery.events import (
@@ -23,7 +22,15 @@ from nexus.agents.orrery.replay import (
 )
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import ProjectPolicy
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database
+from tests.test_orrery.checkpointed_story_support import (
+    CheckpointedStory,
+    seed_checkpointed_story,
+)
+from tests.test_orrery.test_pursue_romance_replay import (
+    PRIOR_RELATIONSHIP_CASES,
+    _seed_prior_relationship,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -38,39 +45,51 @@ POLICY = ProjectPolicy(
 )
 
 
+@pytest.fixture(scope="module")
+def recruit_replay_story() -> Iterator[tuple[str, CheckpointedStory]]:
+    """Own one seeded, checkpointed template clone for the whole module."""
+
+    with disposable_slot_database("qa885_recruit_ally_replay") as dbname:
+        yield dbname, seed_checkpointed_story(dbname)
+
+
 @pytest.fixture
-def replay_project_db() -> Iterator[dict[str, Any]]:
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+def replay_project_db(
+    recruit_replay_story: tuple[str, CheckpointedStory],
+) -> Iterator[dict[str, Any]]:
+    """Bind the story's free pair inside one rolled-back transaction.
+
+    ``seed_checkpointed_story`` relates protagonist and confidant as allies;
+    that committed relationship version can fall on the wrong side of the
+    fabricated transition chunks under replay gap 2. Protagonist and rival are
+    the pair it leaves unrelated.
+    """
+
+    dbname, story = recruit_replay_story
+    conn = connect(dbname)
     try:
         with conn.cursor() as cur:
             cur.execute("SET LOCAL nexus.write_producer = 'manual'")
             cur.execute(
-                "SELECT entity_id FROM characters "
-                "WHERE entity_id IS NOT NULL ORDER BY id LIMIT 2"
-            )
-            entities = [int(row[0]) for row in cur.fetchall()]
-            if len(entities) < 2:
-                pytest.skip("save_02 needs two character entities")
-            actor, target = entities
-            cur.execute(
-                "DELETE FROM character_project_states "
-                "WHERE character_entity_id = %s",
-                (actor,),
-            )
-            cur.execute(
                 """
-                UPDATE entity_pair_tags ept
-                SET cleared_at = now()
-                FROM pair_tags pt
-                WHERE ept.pair_tag_id = pt.id
-                  AND ept.subject_entity_id = %s
-                  AND ept.object_entity_id = %s
-                  AND pt.tag = 'ally'
-                  AND ept.cleared_at IS NULL
+                SELECT count(*)
+                FROM character_relationships
+                WHERE (character1_id, character2_id) IN ((%s, %s), (%s, %s))
                 """,
-                (actor, target),
+                (
+                    story.protagonist_character_id,
+                    story.rival_character_id,
+                    story.rival_character_id,
+                    story.protagonist_character_id,
+                ),
             )
-        yield {"conn": conn, "actor": actor, "target": target}
+            assert cur.fetchone()[0] == 0, "protagonist and rival are the free pair"
+        yield {
+            "conn": conn,
+            "actor": story.protagonist_entity_id,
+            "target": story.rival_entity_id,
+            "head_chunk": story.head_chunk_id,
+        }
     finally:
         conn.rollback()
         conn.close()
@@ -79,8 +98,8 @@ def replay_project_db() -> Iterator[dict[str, Any]]:
 def _next_world_time(cur: Any) -> datetime:
     cur.execute("SELECT max(world_time) FROM chunk_metadata")
     latest = cur.fetchone()[0]
-    base = latest or datetime(2026, 1, 1, tzinfo=timezone.utc)
-    return base + timedelta(hours=6)
+    assert latest is not None, "the seeded story has a clocked head chunk"
+    return latest + timedelta(hours=6)
 
 
 def _fabricate_chunk(
@@ -91,10 +110,8 @@ def _fabricate_chunk(
 ) -> int:
     cur.execute(
         """
-        INSERT INTO narrative_chunks (id, raw_text, created_at)
-        SELECT max(id) + 1, 'RECRUIT_ALLY replay probe',
-               now() + make_interval(mins => %s)
-        FROM narrative_chunks
+        INSERT INTO narrative_chunks (raw_text, created_at)
+        VALUES ('RECRUIT_ALLY replay probe', now() + make_interval(mins => %s))
         RETURNING id
         """,
         (created_offset_minutes,),
@@ -163,8 +180,10 @@ def _project_row(
     return matching[0]
 
 
+@pytest.mark.parametrize("prior_relationship", PRIOR_RELATIONSHIP_CASES)
 def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
     replay_project_db: dict[str, Any],
+    prior_relationship: Optional[str],
 ) -> None:
     db = replay_project_db
     actor = int(db["actor"])
@@ -172,6 +191,24 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
 
     with db["conn"].cursor() as cur:
         base_time = _next_world_time(cur)
+        if prior_relationship is not None:
+            cur.execute(
+                """
+                SELECT actor.id, target.id
+                FROM characters actor
+                JOIN characters target ON target.entity_id = %s
+                WHERE actor.entity_id = %s
+                """,
+                (target, actor),
+            )
+            pair_character_ids = cur.fetchone()
+            _seed_prior_relationship(
+                cur,
+                character1_id=int(pair_character_ids[0]),
+                character2_id=int(pair_character_ids[1]),
+                relationship_type=prior_relationship,
+                attributed_chunk_id=int(db["head_chunk"]),
+            )
         cur.execute(
             """
             SELECT actor.id, target.id, relationship.relationship_type
@@ -276,6 +313,7 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
             if row["character1_id"] == actor_character_id
             and row["character2_id"] == target_character_id
         ]
+        assert prior_relationship_type == prior_relationship
         if prior_relationship_type is None:
             assert prior_rows == []
         else:
