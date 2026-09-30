@@ -241,6 +241,78 @@ $ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
 
 The one remaining `mypy` error in the test file is the pre-existing teardown line (5 at `bdf59fd3`); `flake8 nexus/cli.py` reports the same 9 E501 lines.
 
+A fourth follow-up, in `3c584ce5`, applies the saved-work rule to the transition:
+
+- **A lost gateway during the transition now keeps the saved seed.** The third follow-up re-raised a refused or dropped transition POST to `main()`. `main()` reported `api_unreachable` (exit 4) with an empty `partial`, against the saved-work rule in `docs/cli.md`. That re-raise is gone: every failure `_failed_session_read` classifies at the transition now reports through `_seed_transition_failure`, which takes the failure's code (default `domain_failure`). A lost gateway stays exit 4 (`api_unreachable`) with the saved seed, `retry_command`, and `transition_error` (`status` `unreachable`, the `Cannot connect to API server at ...` detail) in `partial`. A timeout stays exit 1, and the HTTP-error path is unchanged. The dropped-transition case of `test_seed_transition_stalled_after_headers_keeps_the_seed` now asserts the same envelope fields as the stall case, with exit 4 and `status` `unreachable`.
+
+Before the fix (the stall case passes). The drop case failed because the envelope's `error` was `main()`'s `Cannot connect to API server at http://127.0.0.1:64595: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))`, with nothing in `partial`:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_generation_http.py -k "transition_stalled"
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_cli_generation_http.py::test_seed_transition_stalled_after_headers_keeps_the_seed[transition_drop]
+1 failed, 1 passed, 52 deselected in 3.09s
+```
+
+The dropped transition after the fix, printed by one run of the test's own harness (`GenerationScenario(result="transition_drop")` through `_run_cli`):
+
+```
+exit 4
+{
+  "code": "api_unreachable",
+  "error": "Seed artifact was saved, but the narrative transition failed. Retry with: nexus continue --slot 5",
+  "ok": false,
+  "partial": {
+    "artifact_data": {
+      "title": "The Glass Orchard"
+    },
+    "artifact_type": "story_seed",
+    "can_confirm": false,
+    "message": "The seed is saved.",
+    "phase": "seed",
+    "phase_complete": true,
+    "retry_command": "nexus continue --slot 5",
+    "subphase_complete": false,
+    "transition_error": {
+      "detail": "Cannot connect to API server at http://127.0.0.1:64684: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "status": "unreachable",
+      "status_code": null
+    }
+  }
+}
+```
+
+After:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_generation_http.py -k transition
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+10 passed, 44 deselected in 18.75s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_contract.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+120 passed in 76.50s (0:01:16)
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+71 passed in 2.24s
+$ $PY -m black --check nexus/cli.py tests/test_cli_generation_http.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+$ $PY -m flake8 tests/test_cli_generation_http.py; echo $?
+0
+$ $PY -m mypy nexus/cli.py
+Success: no issues found in 1 source file
+$ $PY -m mypy tests/test_cli_generation_http.py
+tests/test_cli_generation_http.py:331: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+Found 1 error in 1 file (checked 1 source file)
+$ NEXUS_GATEWAY_PORT=8017 NEXUS_API_URL=http://127.0.0.1:8017 PYTHONPATH=$PWD $PY -m nexus.cli down
+nothing running
+$ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
+1
+```
+
+`tests/test_cli.py` is beyond the requested runs; it covers the transition's HTTP-error and timeout paths through `_seed_transition_failure`. `flake8 nexus/cli.py` reports the same 9 E501 lines, and the test file's one `mypy` error is the pre-existing teardown line.
+
 ## CLI Transcript on the Played Clone
 
 `tests/test_cli_inspect_pg.py` at this branch's head, run with `-s`: `seed_played_story(turns=3, cast=("Mara Quill", "Oren Vale"))` and one seeded faction; the real gateway's empty incubator is read first, then a pending turn from `seed_pending_turn` is staged. The in-process gateway serves 127.0.0.1:8017 with every provider routed to TEST. Each command ran as a `python -m nexus.cli` subprocess. Verbatim stdout of that one run; only the in-process gateway's own output between commands (the fixture's schema load, model-load progress, retrieval logging, and tokenizer fork warnings) is removed:
