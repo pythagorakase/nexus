@@ -20,13 +20,6 @@ CHARACTER_EXPERIENCE_EMBEDDING_TABLE_PATTERN = re.compile(
 # deployment. Higher-dimensional tables still support exact vector search.
 PGVECTOR_ANN_INDEX_MAX_DIMENSIONS = 2000
 
-# Historical dimensions that may exist in older slots. New dimensions should not
-# be added here; table names are generated from the model output dimensionality.
-LEGACY_EMBEDDING_DIMENSIONS = (1024, 1536, 2560, 4096)
-DIMENSION_TABLES: List[str] = [
-    f"chunk_embeddings_{dimensions:04d}d" for dimensions in LEGACY_EMBEDDING_DIMENSIONS
-]
-
 
 class _DDLExecutor(Protocol):
     """Structural interface shared by SQLAlchemy connections and DBAPI cursors."""
