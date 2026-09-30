@@ -1,8 +1,126 @@
 # Verification: De-Own the Corpus Clones and Guard the Tree (#885 B2-9b)
 
-Every tail below was produced at `212ea7f9` (the code head of `claude/885-corpus-clones-guard` after the review-fix round; the earlier code head was `05eefab7`) with a clean tree: `git status --porcelain` was empty before the runs and `HEAD` did not move. The only later commit is this docs-only file. Every PostgreSQL run loaded `-p tests.dbname_audit` and ran with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, on the shared interpreter `/Users/pythagor/nexus/.venv/bin/python` (`$PY`) with `nexus` imported from this worktree. No paid provider was called. Each fenced tail lists whole lines selected from its run log with `grep -E "^(FAILED|ERROR)|^SKIPPED|secret-store guard|^dbname audit|[0-9]+ passed|[0-9]+ failed"`; no line is edited or shortened. Logs sit in the session scratchpad under `885-B2-9b-fix/`.
+The review-round-two tails below ran at `2ce4aba5`, the code head after the second review round; the earlier tails, kept under their own heading, ran at `212ea7f9`. Each run started from a clean tree (`git status --porcelain` empty) and `HEAD` did not move during it; the only later commit is this docs-only file. Every PostgreSQL run loaded `-p tests.dbname_audit` and ran with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, on the shared interpreter `/Users/pythagor/nexus/.venv/bin/python` (`$PY`) with `nexus` imported from this worktree. No paid provider was called. Each fenced tail lists whole lines selected from its run log with `grep -E "^(FAILED|ERROR)|^SKIPPED|secret-store guard|^dbname audit|[0-9]+ passed|[0-9]+ failed"` (the proof below also keeps its `^Lane ` line); no line is edited or shortened. Round-two logs sit in the session scratchpad under `885-B2-9b-fix2/`; the earlier ones under `885-B2-9b-fix/`.
 
-## Primary Proof Set
+## Review Round Two at `2ce4aba5`
+
+### `proof_session_truth.py` Once on Lane 8018
+
+Rerun at the code head, because the round-one rewrite of `tests/dbname_audit.py` (the plugin that prints the audit lines) postdates the first-round run. Lane 8018 had no listener before the run and none after it.
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -s -p tests.dbname_audit tests/proofs/proof_session_truth.py
+Lane 8018; evidence directory /private/var/folders/r5/zvbnrwp55r7dctnkr9s3b3780000gn/T/pytest-of-pythagor/pytest-1805/test_disconnected_session_brow0/775-session-truth
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_775_browser_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 passed, 4 warnings in 53.45s
+```
+
+### Primary Proof Set
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_scheduler_recovery_pg.py tests/test_api/test_session_truth_pg.py tests/test_api/test_reader_asset_endpoints.py tests/test_api/test_wizard_chat_validation.py tests/test_api/test_return_recap_pg.py tests/test_owner_target_guard.py tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 31 targets: postgres, qa640_775_errors_* x2, qa640_775_left_*, qa640_775_right_*, qa640_775_status_*, qa640_800_kill_*, qa640_800_renew_* x4, qa640_offline_gate_* x7, qa640_reader_assets_*, qa640_reader_reads_*, qa832_recap_* x10, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+146 passed, 7 warnings in 89.83s (0:01:29)
+```
+
+The count rises from 143 to 146 with the guard's three new spelling cases.
+
+### The Files This Round Changed
+
+`test_new_story_setup` (the template stand-in now lags migration 135, and the clone test asserts the lag set is exactly `{'135'}` and that the clone carries 135's comments again), `test_readiness_pg` (one routed stand-in is locked and stale, and the `--write-locked-slot` remediation is asserted unconditionally), `test_ann_gate` (the index build/drop and alias tests run on the seeded `qa640_766_schema_*` clone under the plain gate), `test_lore/test_infrastructure` (now holds the corpus fixtures), and `test_wizard_live` (the live tests skip; its script-path `setup_db_mocks()` resolves slots 1 and 5 to `qa640_fake_wizard_slot_1` and `qa640_fake_wizard_slot_5` through `route_slots_to_disposable`).
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_new_story_setup.py tests/test_runtime/test_readiness_pg.py tests/test_memnon/test_ann_gate.py tests/test_lore/test_infrastructure.py tests/test_wizard_live.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 22 targets: nexus_m10_fresh_test_75352, nexus_m10_template_test_75352, postgres, qa640_1013_readiness_* x2, qa640_766_schema_*, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa_lore_infra_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [1] tests/test_memnon/test_ann_gate.py:115: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [1] tests/test_lore/test_infrastructure.py:219: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [8] tests/test_wizard_live.py:244: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [5] tests/test_wizard_live.py:294: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
+SKIPPED [1] tests/test_wizard_live.py:433: Set NEXUS_ISSUE_600_LIVE=1 to run the live seed-repair proof.
+33 passed, 16 skipped, 5 warnings in 28.64s
+```
+
+### Every `@requires_corpus` Case Under Its Opt-In
+
+Eleven ran: `test_card_identity` x6, `test_projects`, `test_recruit_ally_projects`, `test_lore/test_infrastructure`, `test_pass2_chunk1369`, and `test_ann_gate::test_ann_operator_measures_and_verdict`. The two ANN tests that measure nothing corpus-specific left the opt-in for the plain gate (13 to 11).
+
+```
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 $PY -m pytest -q -rs -p tests.dbname_audit -m requires_corpus tests
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_766_*, qa640_781_cards_* x6, qa885_projects_corpus_*, qa885_recruit_ally_corpus_*, qa_lore_corpus_*, qa_pass2_corpus_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [1] tests/live_seed_schema_test.py:24: Set NEXUS_RUN_LIVE_LLM=1 to run live seed schema tests.
+SKIPPED [1] tests/live_set_designer_test.py:36: Set NEXUS_RUN_LIVE_LLM=1 to run live set designer tests.
+SKIPPED [1] tests/test_api/test_narrative_summary_paid_pg.py: Requires explicit two-call summary authorization
+11 passed, 3 skipped, 5482 deselected, 9 warnings in 111.75s (0:01:51)
+```
+
+### Offline Guard
+
+```
+$PY -m pytest -q tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+39 passed, 5 warnings in 2.49s
+```
+
+On this branch the guard finds 7 uses over the tree, all admitted by its exemption table (0 unexempted); the `test_lore/conftest.py` exemption is gone because the `save_01` data clone now lives in the `requires_corpus` module `test_lore/test_infrastructure.py`.
+
+### The Guard over `origin/main`
+
+The current guard (`2ce4aba5`), run over `git archive origin/main tests` (`95028625`) with its allowlist and exemptions applied. It reports 19 unexempted findings; the first round's 17 came from the first-round guard, before the clone/dump rule and before the lore conftest exemption was removed.
+
+```
+tests/proofs/proof_session_truth.py:89: include_data-without-requires_corpus: disposable_slot_database( "qa640_775_browser", source_db="save_04", include_data=True )
+tests/test_api/test_narrative_summary_paid_pg.py:69: include_data-without-requires_corpus: disposable_slot_database( "qa640_800b_paid", source_db="save_04", include_data=True )
+tests/test_api/test_reader_asset_endpoints.py:138: connection-owner-literal: get_connection(f"save_{READ_SLOT:02d}")
+tests/test_api/test_scheduler_recovery_pg.py:295: include_data-without-requires_corpus: disposable_slot_database( "qa640_800_renew", source_db="save_04", include_data=True )
+tests/test_api/test_scheduler_recovery_pg.py:443: include_data-without-requires_corpus: disposable_slot_database( "qa640_800_kill", source_db="save_04", include_data=True )
+tests/test_api/test_seat_policy_backfill_pg.py:24: subprocess-owner-literal: subprocess.run( [ "pg_dump", "--format=custom", "--file", str(archive), "--dbname", "save_04", ], check=True, capture_output=True, text=True, env=subprocess_env(), )
+tests/test_api/test_session_truth_pg.py:153: include_data-without-requires_corpus: disposable_slot_database( "qa640_775_errors", source_db="save_04", include_data=True )
+tests/test_api/test_summary_budget_usage.py:120: include_data-without-requires_corpus: disposable_slot_database( "qa640_937_budget", source_db="save_04", include_data=True )
+tests/test_lore/conftest.py:116: include_data-without-requires_corpus: disposable_slot_database( "qa_lore_corpus", source_db="save_01", include_data=True )
+tests/test_lore/test_baseline_fingerprint_refresh_pg.py:30: include_data-without-requires_corpus: disposable_slot_database( "qa640_908_fingerprint", source_db="save_04", include_data=True )
+tests/test_lore/test_pass2_chunk1369.py:38: include_data-without-requires_corpus: disposable_slot_database( "qa_pass2_corpus", source_db="save_01", include_data=True )
+tests/test_lore/test_scene_order_render.py:387: include_data-without-requires_corpus: disposable_slot_database( "qa640_scene_parent", source_db="save_04", include_data=True )
+tests/test_lore/test_seat_blocks.py:397: include_data-without-requires_corpus: disposable_slot_database( "qa640_742_seat_test", source_db="save_04", include_data=True )
+tests/test_memnon/test_ann_gate.py:81: clone-or-dump-literal-slot-without-requires_corpus: slot_clone(1)
+tests/test_orrery/test_card_identity.py:93: include_data-without-requires_corpus: disposable_slot_database( "qa640_781_cards", source_db="save_04", include_data=True )
+tests/test_orrery/test_drift_live.py:37: include_data-without-requires_corpus: disposable_slot_database( "qa640_drift", source_db="save_03", include_data=True )
+tests/test_orrery/test_retrograde_maturation.py:731: include_data-without-requires_corpus: disposable_slot_database( "qa640_maturation799", source_db="save_02", include_data=True )
+tests/test_orrery/test_retrograde_projects_live.py:70: include_data-without-requires_corpus: disposable_slot_database( "qa640_projects799", source_db="save_02", include_data=True )
+tests/test_prose_metrics_pg.py:22: include_data-without-requires_corpus: disposable_slot_database( "qa640_prose_metrics", source_db="save_04", include_data=True )
+19 unexempted findings on origin/main
+  clone-or-dump-literal-slot-without-requires_corpus: 1
+  connection-owner-literal: 1
+  include_data-without-requires_corpus: 16
+  subprocess-owner-literal: 1
+```
+
+### Lint and Types
+
+Black: clean on every changed file. flake8: per-file finding counts equal the previous head's (`tests/test_lore/test_infrastructure.py` 5, all W291 inside a SQL string; `tests/test_memnon/test_ann_gate.py` 4, all E501 in the alias test's SQL; both counts are the same at `3971a5e9`; the other changed files have none). mypy: `tests/test_owner_target_guard.py`, `tests/test_runtime/test_readiness_pg.py`, `tests/test_memnon/test_ann_gate.py` and both lore files check clean; `tests/test_new_story_setup.py` (4) and `tests/test_wizard_live.py` (6) report errors only on lines this round did not touch.
+
+### Not Rerun at `2ce4aba5`
+
+The whole-tree PostgreSQL gate and the two offline directory gates below ran at `212ea7f9` and were not rerun for this round. The round's changes are test-only and confined to seven files (the five named above, `tests/test_owner_target_guard.py`, and `tests/test_lore/conftest.py`, which lost the two corpus fixtures), each covered by a tail in this section; the two ANN tests now also run under the plain gate (they passed in the tail above).
+
+## Earlier Tails at `212ea7f9`
+
+### Primary Proof Set
 
 ```
 NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_api/test_scheduler_recovery_pg.py tests/test_api/test_session_truth_pg.py tests/test_api/test_reader_asset_endpoints.py tests/test_api/test_wizard_chat_validation.py tests/test_api/test_return_recap_pg.py tests/test_owner_target_guard.py tests/test_pg_disposable_target.py
@@ -14,7 +132,7 @@ dbname audit: owner targets: none
 143 passed, 7 warnings in 90.55s (0:01:30)
 ```
 
-## Every `@requires_corpus` Case Under Its Opt-In
+### Every `@requires_corpus` Case Under Its Opt-In
 
 The paid summary proof self-skips without `NEXUS_800B_PAID_PROOF=1`; the two live-LLM scripts skip without `NEXUS_RUN_LIVE_LLM=1`. The 13 that ran are `test_card_identity` (6), `test_projects` (1), `test_recruit_ally_projects` (1), `test_lore/test_infrastructure` (1, through `lore_corpus_database`), `test_pass2_chunk1369` (1), and `test_memnon/test_ann_gate` (3, newly marked in this round).
 
@@ -31,7 +149,7 @@ SKIPPED [1] tests/test_api/test_narrative_summary_paid_pg.py: Requires explicit 
 13 passed, 3 skipped, 5477 deselected, 9 warnings in 117.77s (0:01:57)
 ```
 
-## Whole-Tree PostgreSQL Gate
+### Whole-Tree PostgreSQL Gate
 
 A superset of `tests/test_api tests/test_orrery tests/test_lore`. No failure in any class. The registration line lists every cluster a private-cluster fixture registered; the admitted line lists every owner-named database opened on one, and none was opened on the owner's server.
 
@@ -47,7 +165,7 @@ dbname audit: owner targets: none
 5399 passed, 94 skipped, 10 warnings in 1504.02s (0:25:04)
 ```
 
-## Offline Gates
+### Offline Gates
 
 ```
 $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
@@ -61,12 +179,12 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 38 passed, 5 warnings in 9.13s
 ```
 
-## Negative Controls
+### Negative Controls
 
 - Identity check: with `if identity == _owner_identity():` changed to `if identity == -1:`, `tests/test_dbname_audit.py::test_owner_names_are_admitted_only_on_a_registered_disposable_cluster` fails, its nested session reporting `Failed: DID NOT RAISE <class 'tests.dbname_audit.OwnerEndpointRegistrationRefused'>` (the owner's server registered under a spelling the endpoint check was told to miss).
 - Clone rule: `scan_source` over `05eefab7`'s `tests/test_memnon/test_ann_gate.py` returns `tests/test_memnon/test_ann_gate.py:81: clone-or-dump-literal-slot-without-requires_corpus: slot_clone(1)`.
 - Exemptions: `test_an_exemption_admits_only_its_own_use` shows a new `psycopg2.connect(dbname="save_02")` in `test_memnon_db_access.py`, and a third copy of its exempted `database_url("save_04")`, are findings.
 
-## Lint and Types
+### Lint and Types
 
 Black: clean on every changed file. flake8: per-file finding counts equal `05eefab7`'s (`tests/dbname_audit.py`, `tests/test_owner_target_guard.py`, `tests/test_dbname_audit.py` and `tests/test_pg_target_contract.py` at zero), and the `test_scheduler_corpus_pg` docstring line is now within 88 columns (12 findings to 11). mypy: per-file error counts equal `05eefab7`'s; `tests/dbname_audit.py` and `tests/test_owner_target_guard.py` check clean.
