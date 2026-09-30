@@ -1,6 +1,9 @@
 # Issue 819 Slice E: Comments on the Five Uncommented Views
 
-Branch `claude/819-view-comments`, cut from `origin/main` at `c8dd8c85`.
+Branch `claude/819-view-comments`, cut from `origin/main` at `c8dd8c85`,
+rebased onto `88fddbde`, and after review merged with `origin/main` at
+`d0e68868` (merge `ba482bc0`), which brings in a new reader of
+`chunk_entity_references_v` (`scripts/entity_reference_parity.py`, #1051).
 One comment-only migration, `migrations/137_view_comments.sql`: five
 `COMMENT ON VIEW` statements and no other SQL. No paid provider call, no
 gateway lane. No `save_NN` or `NEXUS_template` was written: the template and
@@ -58,7 +61,11 @@ all six databases:
 | `incubator_view` | `d8910ed1448918f1809c32f71f31e4dc` |
 
 Reader lists come from `git grep -n "<view>" -- nexus scripts tests` at
-`c8dd8c85`. `nexus/agents/memnon/memnon.py:62-86` lists `entity_names_v` and
+`c8dd8c85`, rerun at `d0e68868` after the merge: the only new reader is
+`scripts/entity_reference_parity.py`, and no other cited file changed between
+the two commits (`git diff --quiet c8dd8c85 d0e68868 -- <file>` for each).
+The `entity_names_v` readers also include the callers of the resolver name
+loader, found with `git grep -n "_load_entity_names"`. `nexus/agents/memnon/memnon.py:62-86` lists `entity_names_v` and
 `entity_tags_current` in `READONLY_SQL_ALLOWED_TABLES`, but its only user,
 `MEMNON.execute_readonly_sql` (`memnon.py:429`), has no caller under `nexus/`
 or `scripts/`, so no comment cites it.
@@ -84,7 +91,11 @@ migration redefines it. The live definition matches it clause for clause.
 **Readers:** `scripts/orrery_sample.py:233-263` (`fetch_first_reference_chunk`:
 `SELECT entity_id, MIN(chunk_id) ... GROUP BY entity_id`, used by the dry-run
 harness to drop actors whose first reference postdates the anchor,
-`orrery_sample.py:425-440`). Tests only: `tests/test_orrery/test_need_absence_pg.py:84`,
+`orrery_sample.py:425-440`). `scripts/entity_reference_parity.py:18-19,78`
+(`DEFAULT_TARGET = "chunk_entity_references_v"`: the parity report builds the
+expected rows from the three junctions joined to their subtype tables,
+`entity_reference_parity.py:10-16`, and compares the target with them as a
+multiset). Tests only: `tests/test_orrery/test_need_absence_pg.py:84`,
 `tests/test_orrery/test_mood_live.py:379` (a stand-in table). No file under
 `nexus/`.
 
@@ -96,6 +107,7 @@ harness to drop actors whose first reference postdates the anchor,
 | place_chunk_references keyed by place, chunk, reference type, so several rows per place and chunk | catalog: `place_chunk_references_pkey PRIMARY KEY (place_id, chunk_id, reference_type)` |
 | No entity kind; leaves out `place_chunk_references.evidence` | definition projects three columns; catalog: `evidence text` on `place_chunk_references` |
 | No code under nexus/ reads it; the dry-run sampler takes the first chunk per entity | `git grep` (above); `scripts/orrery_sample.py:233-263` |
+| The parity report compares it by default with the rows of the three junctions | `scripts/entity_reference_parity.py:10-19,78` |
 
 **Comment:** see the listing at the end.
 
@@ -121,6 +133,7 @@ migration redefines it.
 
 - `nexus/agents/orrery/events.py:1553-1570` (`_entity_names_sync`/`_async`: `SELECT id, name ... WHERE id = ANY`), called from `commit_orrery_tick_sync` at `events.py:803` and its async twin at `events.py:1092` with the proposal entity ids (`_entity_ids_from_proposal`, `events.py:801`).
 - `nexus/agents/orrery/resolver.py:3443-3458` (`_load_entity_names`), used at `resolver.py:2677-2684` for `binding_names` and the bound narrative stub of each draft.
+- The same loader in the audit dashboard modules (`audit.py:1`, "for the Orrery audit dashboard"; `history.py:1`, "Adjudication history for the Orrery audit dashboard"): `nexus/agents/orrery/audit.py:790` (`explain_dry_run`, actor and location names), `audit.py:1498` (`cognition_trace`, source entity names), `audit.py:2485` (`entity_context`, the entity hover, event actor and target names), and `nexus/agents/orrery/history.py:377` (`adjudication_history`, defer streak actor names). `nexus/api/orrery_dev_endpoints.py:29-34` imports all four for the dashboard endpoints.
 - `nexus/agents/orrery/worker.py:176-205` (`promote_pending_resolutions_sync`, actor name) and `worker.py:235-286` (`drain_narration_outbox_sync`, actor name).
 - `nexus/agents/orrery/bleed.py:196-250` (`load_bleed_candidates`, actor and first world event target) and `bleed.py:415-436` (`record_bleed_uptake_sync`, actor).
 - `nexus/agents/orrery/experiences.py:647,720-752` (`seed_character_experiences_sync`, world event actor and target names, used at `experiences.py:438-439`).
@@ -135,9 +148,10 @@ migration redefines it.
 | One row per entity of kind character, faction, or place that has a subtype row of the same kind; id, kind, name from that row | definition; catalog: `entity_kind` is `{character,faction,place}`, `UNIQUE (entity_id)` on each subtype table, `name` NOT NULL |
 | Commit tick names proposal entities | `events.py:801-803,1553-1570` |
 | Resolver names draft bindings | `resolver.py:2677-2684,3443-3458` |
+| Audit dashboard (explained dry run, cognition trace, entity hover, adjudication history) names through the resolver name loader | `audit.py:1,790,1498,2485`; `history.py:1,377`; `resolver.py:3443-3458` |
 | Promotion and narration drains name resolution actors | `worker.py:176-205,235-286` |
 | Bleed names resolution actors and event targets | `bleed.py:196-250,415-436` |
-| Experience seeding names world event actors and targets | `experiences.py:647,720-752,438-439` |
+| Experience seeding names world event actors and targets | `experiences.py:438-439,647,720-752` |
 | Relationship provenance names claim participants | `relationship_provenance.py:427-452` |
 | Experience rendering reads every name and rejects a render naming a known entity its seed does not allow | `experiences.py:1136,1350-1355,1381-1382,1403-1405` |
 | Retrograde persistence builds its entity catalog from it | `retrograde_persistence.py:192,276,2725-2742` |
@@ -221,7 +235,7 @@ tests `et.expires_at_world_time` against a world time):
 | At most one row per entity and tag | catalog: `CREATE UNIQUE INDEX ix_entity_tags_current ON public.entity_tags USING btree (entity_id, tag_id) WHERE (cleared_at IS NULL)` |
 | No expiry test; an expired tag stays until a clear such as the expiry sweep sets cleared_at | definition has no `expires_at_world_time`; `events.py:7944-7967` (`_sweep_expired_entity_tags_sync` sets `cleared_at = now()`) |
 | Every reader under nexus/ and scripts/ joins entity_tags and applies its own expiry test | readers above |
-| Named reader groups | readers above |
+| Named reader groups, ending with the one scripts/ reader, the Orrery dry-run sampler | readers above; `scripts/orrery_sample.py:195-210` (`JOIN entity_tags et ON et.id = etc.entity_tag_id`, `et.expires_at_world_time > (SELECT max(world_time) FROM chunk_metadata)`) |
 
 ## incubator_view
 
@@ -248,6 +262,20 @@ No database carries it. "With parent chunk context" holds (the left join to
 `narrative_chunks` supplies `parent_chunk_text`) and is kept; "human-readable"
 is not a checkable claim and is dropped; "incubator contents" is too broad,
 because the view leaves out nine of the 23 columns of today's `incubator` table (`id` among them).
+
+**Two stale column comments on `incubator` (deferred):** `\d+ incubator` on
+`NEXUS_template` still shows `metadata_updates` as "JSON: {episode_transition,
+time_delta_seconds, time_delta_description, world_layer, pacing}" and
+`entity_updates` as "JSON array of entity state changes: [{type, id, field,
+old_value, new_value}]" (read 2026-09-30 with `col_description`). The first
+puts `episode_transition` and `time_delta_description` at the top level, where
+the writers below nest them under `chronology`, and names `time_delta_seconds`
+and `pacing`, which no writer sets (`git grep time_delta_seconds -- nexus
+scripts` finds only `scripts/create_incubator_table.sql:32`, the origin of the
+comment). The second describes an array, where the storyteller writes the
+`StateUpdates` object. Both now disagree with the `incubator_view` comment.
+Column comments are outside this order, so migration 137 leaves them alone;
+both belong in a later #819 column-comment slice.
 
 **Writers of the source columns the comment describes:**
 
@@ -276,7 +304,7 @@ creates a stand-in.
 | Leaves out metadata_updates, new_entities, generation_model, llm_response_id, updated_at, lore_pass_baseline, both correspondence letters | catalog `\d+ incubator` (23 columns) against the definition; `test_backstage_endpoints_pg.py:712-730` |
 | GET /api/narrative/incubator returns its row, filtered by session_id when given; nexus inspect incubator reads the endpoint | `narrative.py:1619-1638`; `cli.py:1459-1472,5036` |
 
-## After: Listing From a Migrated Disposable Clone
+## After: Listing from a Migrated Disposable Clone
 
 Command (from the worktree root, gateway variables unset; the script
 creates a `qa640_819s1_listing_*` clone with `tests.pg_fixtures.disposable_slot_database`,
@@ -289,23 +317,26 @@ drops the clone):
 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY docs/qa/819-view-comments/listing.py
 ```
 
-The migration log showed `Applied: 137_view_comments`; the script exited 0, and
-no `qa640_819s1*` database remained afterward.
+Rerun at `9991e573` (the comment fixes after review): the script exited 0 and
+printed schema version 137 for the clone (its stdout before the listing is
+the `psql` restore echo, and its stderr holds only `pg_dump`
+circular-foreign-key warnings for `tags` and `event_types`); no
+`qa640_819s1*` database remained afterward.
 
 ```
 clone qa640_819s1_listing_* at schema version 137
 
-chunk_entity_references_v (byte-identical to migration text: True, 804 bytes)
-Chunk references of characters, factions, and places in one shape: one row for each row of chunk_character_references, chunk_faction_references, and place_chunk_references, carrying its chunk_id and the entity_id of the referenced character, faction, or place. reference_type is chunk_character_references.reference or place_chunk_references.reference_type cast to text, and is NULL on every faction row, because chunk_faction_references has no role column. place_chunk_references keys its rows by place, chunk, and reference type, so one place can have several rows for one chunk. The view carries no entity kind and leaves out place_chunk_references.evidence. No code under nexus/ reads it; the Orrery dry-run sampler (scripts/orrery_sample.py) takes the first referencing chunk of each entity from it.
+chunk_entity_references_v (byte-identical to migration text: True, 947 bytes)
+Chunk references of characters, factions, and places in one shape: one row for each row of chunk_character_references, chunk_faction_references, and place_chunk_references, carrying its chunk_id and the entity_id of the referenced character, faction, or place. reference_type is chunk_character_references.reference or place_chunk_references.reference_type cast to text, and is NULL on every faction row, because chunk_faction_references has no role column. place_chunk_references keys its rows by place, chunk, and reference type, so one place can have several rows for one chunk. The view carries no entity kind and leaves out place_chunk_references.evidence. No code under nexus/ reads it; the Orrery dry-run sampler (scripts/orrery_sample.py) takes the first referencing chunk of each entity from it, and the chunk entity reference parity report (scripts/entity_reference_parity.py) compares it by default with the rows of the three junctions.
 
-entity_names_v (byte-identical to migration text: True, 779 bytes)
-Name of each character, faction, and place entity: one row for each entities row of kind character, faction, or place that has a characters, factions, or places row of the same kind, carrying the entity id, the kind, and the name from that row. Orrery code joins it to put names on entity ids: the commit tick for proposal entities, the resolver for draft bindings, the resolution promotion and narration drains for resolution actors, bleed for resolution actors and event targets, experience seeding for world event actors and targets, and relationship provenance for claim participants. Experience rendering reads every name and rejects a rendered experience that names a known entity its seed does not allow, and Retrograde persistence builds its entity catalog from the view.
+entity_names_v (byte-identical to migration text: True, 910 bytes)
+Name of each character, faction, and place entity: one row for each entities row of kind character, faction, or place that has a characters, factions, or places row of the same kind, carrying the entity id, the kind, and the name from that row. Orrery code joins it to put names on entity ids: the commit tick for proposal entities, the resolver for draft bindings, the audit dashboard (explained dry run, cognition trace, entity hover, and adjudication history) through the resolver name loader, the resolution promotion and narration drains for resolution actors, bleed for resolution actors and event targets, experience seeding for world event actors and targets, and relationship provenance for claim participants. Experience rendering reads every name and rejects a rendered experience that names a known entity its seed does not allow, and Retrograde persistence builds its entity catalog from the view.
 
 entity_relationships_v (byte-identical to migration text: True, 1028 bytes)
 Relationship edges between entities in one shape: one row for each row of character_relationships (relationship_scope character, source character1, target character2), faction_relationships (scope faction, source faction1, target faction2), and faction_character_relationships (scope faction_character, source the faction, target the character), with both ends mapped to entity ids. relationship_type carries the character relationship type, the faction relationship type, or the member role as text; dynamic carries dynamic in character scope and current_status in the other two; valence, recent_events, valence_magnitude, and valence_current are NULL outside character scope. Every reader under nexus/ selects character scope only: the Orrery resolver (orbit distances, relationship types and trust, actor-target bindings), secret reveal (trust), knowledge surfacing (valence between characters), and the audit entity hover. The resolver faction membership loader reads faction_character_relationships directly, not this view.
 
-entity_tags_current (byte-identical to migration text: True, 1026 bytes)
-Uncleared tag applications: one row for each entity_tags row whose cleared_at is NULL and whose tag is neither deprecated nor a synonym (tags.synonym_for NULL), carrying the tag name, category, ephemeral flag, and clearance kind from tags, the entity kind, and the application provenance (applied_at, applied_at_world_time, source_kind, template_id, source_chunk_id). A partial unique index on entity_tags allows at most one such row per entity and tag. The view applies no expiry test: a tag whose expires_at_world_time has passed stays here until a clear, such as the expiry sweep, sets cleared_at. Every reader under nexus/ and scripts/ joins entity_tags on entity_tag_id and applies its own expires_at_world_time test: the Orrery resolver (current tags, place location classes, actors with ephemeral tags), need applicability and routine destination choice in the Orrery events module, communication culture tags, the audit entity hover, the faction table audit, and the character and faction dossiers of the turn context.
+entity_tags_current (byte-identical to migration text: True, 1081 bytes)
+Uncleared tag applications: one row for each entity_tags row whose cleared_at is NULL and whose tag is neither deprecated nor a synonym (tags.synonym_for NULL), carrying the tag name, category, ephemeral flag, and clearance kind from tags, the entity kind, and the application provenance (applied_at, applied_at_world_time, source_kind, template_id, source_chunk_id). A partial unique index on entity_tags allows at most one such row per entity and tag. The view applies no expiry test: a tag whose expires_at_world_time has passed stays here until a clear, such as the expiry sweep, sets cleared_at. Every reader under nexus/ and scripts/ joins entity_tags on entity_tag_id and applies its own expires_at_world_time test: the Orrery resolver (current tags, place location classes, actors with ephemeral tags), need applicability and routine destination choice in the Orrery events module, communication culture tags, the audit entity hover, the faction table audit, the character and faction dossiers of the turn context, and the Orrery dry-run sampler (scripts/orrery_sample.py).
 
 incubator_view (byte-identical to migration text: True, 1116 bytes)
 The pending draft with its parent chunk text: at most one row, from the singleton incubator row (id true), with narrative_chunks.raw_text of parent_chunk_id as parent_chunk_text through a left join. It passes through chunk_id, parent_chunk_id, user_text, storyteller_text, choice_object, choice_text, authorial_directives, orrery_proposal, orrery_adjudications, status, session_id, and created_at; lifts episode_transition and time_delta_description (as time_delta) from metadata_updates.chronology, and world_layer and pacing from metadata_updates, although no current writer sets pacing; renames entity_updates to entity_changes and reference_updates to references; and counts entity_update_count as the lengths of the characters, locations, and factions arrays of entity_updates, leaving out its relationships array. It leaves out metadata_updates itself, new_entities, generation_model, llm_response_id, updated_at, lore_pass_baseline, and both staged correspondence letters. GET /api/narrative/incubator returns its row, filtered by session_id when one is given, and nexus inspect incubator reads that endpoint.
@@ -315,31 +346,33 @@ The pending draft with its parent chunk text: at most one row, from the singleto
 
 All from the worktree root with `PY=/Users/pythagor/nexus/.venv/bin/python`,
 `PYTHONPATH=$PWD`, and `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, `NEXUS_SLOT`
-unset, after the rebase onto `origin/main` at `88fddbde` (the two new commits
-touch none of the files cited here; the citations hold at both `c8dd8c85` and
-`88fddbde`).
+unset, rerun after review at `9991e573` (the comment fixes, on top of the
+merge of `origin/main` at `d0e68868`). The PostgreSQL block is the complete
+output after the progress dots. The two offline blocks show only the guard
+line and the summary line; the warnings summary above them is left out.
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_schema_documentation_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py tests/test_enum_column_comment_labels_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 22 targets: nexus_m10_fresh_test_88980, nexus_m10_template_test_88980, postgres, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_819_labels_*, qa640_docs_refresh_*, qa640_grieving_migration_*, qa640_schema_docs_* x3, qa640_vocab_migration_* x6
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-133 passed in 33.89s
+133 passed in 26.90s
 
 $ $PY scripts/check_migration_comments.py
 OK: every object created after migration 129 has a comment.
 
 $ $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2614 passed, 406 skipped, 8 warnings in 424.78s (0:07:04)
+2624 passed, 415 skipped, 8 warnings in 412.59s (0:06:52)
 
 $ $PY -m pytest -q tests/test_api tests/test_orrery tests/test_reachability.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1849 passed, 742 skipped, 7 warnings in 57.36s
+1849 passed, 742 skipped, 7 warnings in 47.82s
 ```
 
-`tests/test_reachability.py` alone before the rebase: `38 passed`.
+`tests/test_reachability.py` alone before the first rebase: `38 passed`.
 
 The offline skips are the PostgreSQL-marked tests (`NEXUS_RUN_POSTGRES`
 unset). Landing: the coordinator applies migration 137 fleet-wide
