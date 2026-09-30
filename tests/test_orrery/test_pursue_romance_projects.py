@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-import psycopg2
 import psycopg2.extras
 import pytest
 
@@ -30,11 +29,18 @@ from nexus.agents.orrery.templates import (
     ADVANCE_PURSUE_ROMANCE,
     START_PURSUE_ROMANCE,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    CharacterPairSeed,
+    connect,
+    disposable_slot_database,
+    seed_character_pair,
+)
 
 ACTOR = 10
 TARGET = 20
 NOW = datetime(2073, 8, 2, 12, tzinfo=timezone.utc)
+# The seeded story clock: the clone's head chunk, a day before NOW.
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(
     enabled=True,
     advance_interval_hours=24.0,
@@ -343,34 +349,33 @@ def _create_schema(cur: Any, schema: str) -> None:
     )
 
 
+@pytest.fixture(scope="module")
+def romance_clone() -> Iterator[tuple[str, CharacterPairSeed]]:
+    """Seed a disposable clone with an actor/target pair and a story clock."""
+
+    with disposable_slot_database("qa885_pursue_romance") as dbname:
+        yield dbname, seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Romance Actor",
+            target_name="Romance Target",
+        )
+
+
 @pytest.fixture()
-def live_romance_db() -> Iterator[dict[str, Any]]:
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+def live_romance_db(
+    romance_clone: tuple[str, CharacterPairSeed],
+) -> Iterator[dict[str, Any]]:
+    dbname, pair = romance_clone
+    conn = connect(dbname)
     try:
         with conn.cursor() as cur:
             _create_schema(cur, f"pursue_romance_{uuid4().hex[:12]}")
-            cur.execute(
-                "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
-                "ORDER BY id LIMIT 2"
-            )
-            actor, target = (int(row[0]) for row in cur.fetchall())
-            cur.execute(
-                "SELECT chunk_id FROM chunk_metadata WHERE world_time IS NOT NULL "
-                "ORDER BY chunk_id DESC LIMIT 1"
-            )
-            chunk_id = int(cur.fetchone()[0])
-            cur.execute(
-                "DELETE FROM character_relationships USING characters a, characters t "
-                "WHERE character_relationships.character1_id=a.id AND "
-                "character_relationships.character2_id=t.id "
-                "AND a.entity_id=%s AND t.entity_id=%s",
-                (actor, target),
-            )
         yield {
             "conn": conn,
-            "actor": actor,
-            "target": target,
-            "chunk": chunk_id,
+            "actor": pair.actor_entity_id,
+            "target": pair.target_entity_id,
+            "chunk": pair.chunk_id,
             "ids": count(1),
         }
     finally:

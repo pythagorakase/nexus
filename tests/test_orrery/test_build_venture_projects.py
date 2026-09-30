@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-import psycopg2
 import psycopg2.extras
 import pytest
 
@@ -30,12 +29,19 @@ from nexus.agents.orrery.templates import (
     ADVANCE_BUILD_VENTURE,
     START_BUILD_VENTURE,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    CharacterPairSeed,
+    connect,
+    disposable_slot_database,
+    seed_character_pair,
+)
 
 
 ACTOR = 10
 HUNTER = 20
 NOW = datetime(2073, 8, 2, 12, tzinfo=timezone.utc)
+# The seeded story clock: the clone's head chunk, a day before NOW.
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(
     enabled=True,
     advance_interval_hours=24.0,
@@ -265,31 +271,37 @@ def _create_runtime_schema(cur: Any, schema: str) -> None:
     cur.execute(migration_sql)
 
 
-@pytest.fixture()
-def live_venture_db() -> Iterator[dict[str, Any]]:
-    """Use live entities/time with project writes isolated in a throwaway schema."""
+@pytest.fixture(scope="module")
+def venture_clone() -> Iterator[tuple[str, CharacterPairSeed]]:
+    """Seed a disposable clone with an actor, a bystander, and a story clock."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+    with disposable_slot_database("qa885_build_venture") as dbname:
+        yield dbname, seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Venture Founder",
+            target_name="Venture Rival",
+        )
+
+
+@pytest.fixture()
+def live_venture_db(
+    venture_clone: tuple[str, CharacterPairSeed],
+) -> Iterator[dict[str, Any]]:
+    """Use seeded entities/time with project writes isolated in a throwaway schema."""
+
+    dbname, pair = venture_clone
+    conn = connect(dbname)
     schema = f"build_venture_{uuid4().hex[:12]}"
     try:
         with conn.cursor() as cur:
             _create_runtime_schema(cur, schema)
-            cur.execute(
-                "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
-                "ORDER BY id LIMIT 2"
-            )
-            actor, other = (int(row[0]) for row in cur.fetchall())
-            cur.execute(
-                "SELECT cm.chunk_id, cm.world_time FROM chunk_metadata cm "
-                "WHERE cm.world_time IS NOT NULL ORDER BY cm.chunk_id DESC LIMIT 1"
-            )
-            chunk_id, world_time = cur.fetchone()
         yield {
             "conn": conn,
-            "actor": actor,
-            "other": other,
-            "chunk_id": int(chunk_id),
-            "world_time": world_time,
+            "actor": pair.actor_entity_id,
+            "other": pair.target_entity_id,
+            "chunk_id": pair.chunk_id,
+            "world_time": pair.world_time,
             "resolution_ids": count(1),
         }
     finally:

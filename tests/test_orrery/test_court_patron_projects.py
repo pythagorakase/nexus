@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from itertools import count
@@ -9,7 +10,6 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-import psycopg2
 import psycopg2.extras
 import pytest
 
@@ -32,12 +32,20 @@ from nexus.agents.orrery.templates import (
     START_COURT_PATRON,
     START_COURT_PATRON_FACTION,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    CharacterPairSeed,
+    connect,
+    disposable_slot_database,
+    seed_character_pair,
+    seed_relationship,
+)
 
 ACTOR = 10
 TARGET = 20
 FACTION = 30
 NOW = datetime(2073, 8, 2, 12, tzinfo=timezone.utc)
+# The seeded story clock: the clone's head chunk, a day before NOW.
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(
     enabled=True,
     advance_interval_hours=24.0,
@@ -431,39 +439,72 @@ def _create_schema(cur: Any, schema: str) -> None:
     )
 
 
-@pytest.fixture()
-def live_patron_db() -> Iterator[dict[str, Any]]:
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+@pytest.fixture(scope="module")
+def patron_clone() -> Iterator[dict[str, Any]]:
+    """Seed a disposable clone with two actor/target pairs and a story clock.
+
+    The ``fresh`` pair has no relationship. The ``mentored`` pair carries a
+    committed ``mentor`` relationship for the valence-preservation test.
+    """
+
+    with disposable_slot_database("qa885_court_patron") as dbname:
+        fresh = seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Patron Seeker",
+            target_name="Court Patron",
+        )
+        mentored = seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Mentored Seeker",
+            target_name="Mentor Patron",
+        )
+        seed_relationship(
+            dbname,
+            subject_character_id=mentored.actor_character_id,
+            object_character_id=mentored.target_character_id,
+            relationship_type="mentor",
+            emotional_valence="+4|admiring",
+            dynamic="d",
+            recent_events="r",
+            history="h",
+        )
+        yield {"dbname": dbname, "fresh": fresh, "mentored": mentored}
+
+
+@contextmanager
+def _live_db(dbname: str, pair: CharacterPairSeed) -> Iterator[dict[str, Any]]:
+    """Open the clone in one transaction over the shadow schema; roll back."""
+
+    conn = connect(dbname)
     try:
         with conn.cursor() as cur:
             _create_schema(cur, f"court_patron_{uuid4().hex[:12]}")
-            cur.execute(
-                "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
-                "ORDER BY id LIMIT 2"
-            )
-            actor, target = (int(row[0]) for row in cur.fetchall())
-            cur.execute(
-                "SELECT chunk_id FROM chunk_metadata WHERE world_time IS NOT NULL "
-                "ORDER BY chunk_id DESC LIMIT 1"
-            )
-            chunk = int(cur.fetchone()[0])
-            cur.execute(
-                "DELETE FROM character_relationships USING characters a, characters t "
-                "WHERE character_relationships.character1_id=a.id "
-                "AND character_relationships.character2_id=t.id "
-                "AND a.entity_id=%s AND t.entity_id=%s",
-                (actor, target),
-            )
         yield {
             "conn": conn,
-            "actor": actor,
-            "target": target,
-            "chunk": chunk,
+            "actor": pair.actor_entity_id,
+            "target": pair.target_entity_id,
+            "chunk": pair.chunk_id,
             "ids": count(1),
         }
     finally:
         conn.rollback()
         conn.close()
+
+
+@pytest.fixture()
+def live_patron_db(patron_clone: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    with _live_db(patron_clone["dbname"], patron_clone["fresh"]) as db:
+        yield db
+
+
+@pytest.fixture()
+def live_mentored_patron_db(
+    patron_clone: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    with _live_db(patron_clone["dbname"], patron_clone["mentored"]) as db:
+        yield db
 
 
 def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> dict[str, Any]:
@@ -567,23 +608,13 @@ def test_completion_applies_inbound_outbound_and_patron_relationship(
 
 @pytest.mark.requires_postgres
 def test_completion_preserves_existing_relationship_valence(
-    live_patron_db: dict[str, Any],
+    live_mentored_patron_db: dict[str, Any],
 ) -> None:
     """The conflict arm updates the type but never the valence — the family
     convention (recruit_ally, pursue_romance); valence movement on existing
     rows is seek_redemption's deliberate innovation, not patron's."""
 
-    db = live_patron_db
-    with db["conn"].cursor() as cur:
-        cur.execute(
-            "INSERT INTO character_relationships "
-            "(character1_id, character2_id, relationship_type, "
-            " emotional_valence, dynamic, recent_events, history) "
-            "SELECT a.id, t.id, 'mentor', '+4|admiring', 'd', 'r', 'h' "
-            "FROM characters a, characters t "
-            "WHERE a.entity_id=%s AND t.entity_id=%s",
-            (db["actor"], db["target"]),
-        )
+    db = live_mentored_patron_db
     base = OrreryResolutionDraft(
         template_id="start_court_patron",
         priority=17,

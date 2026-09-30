@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from itertools import count
@@ -9,7 +10,6 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-import psycopg2
 import psycopg2.extras
 import pytest
 
@@ -35,11 +35,19 @@ from nexus.agents.orrery.templates import (
     CONSULT_RIVAL,
     START_SEEK_REDEMPTION,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    CharacterPairSeed,
+    connect,
+    disposable_slot_database,
+    seed_character_pair,
+    seed_relationship,
+)
 
 ACTOR = 10
 TARGET = 20
 NOW = datetime(2073, 8, 2, 12, tzinfo=timezone.utc)
+# The seeded story clock: the clone's head chunk, a day before NOW.
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(
     enabled=True,
     advance_interval_hours=24.0,
@@ -360,45 +368,72 @@ def _create_schema(cur: Any, schema: str) -> None:
     )
 
 
-@pytest.fixture()
-def live_redemption_db() -> Iterator[dict[str, Any]]:
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+@pytest.fixture(scope="module")
+def redemption_clone() -> Iterator[dict[str, Any]]:
+    """Seed a disposable clone with two actor/target pairs and a story clock.
+
+    The ``fresh`` pair has no relationship and no grudge. The ``estranged``
+    pair carries a committed ``enemy`` relationship for the repair test.
+    """
+
+    with disposable_slot_database("qa885_seek_redemption") as dbname:
+        fresh = seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Penitent",
+            target_name="Wronged Party",
+        )
+        estranged = seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Estranged Penitent",
+            target_name="Estranged Enemy",
+        )
+        seed_relationship(
+            dbname,
+            subject_character_id=estranged.actor_character_id,
+            object_character_id=estranged.target_character_id,
+            relationship_type="enemy",
+            emotional_valence="-4|hostile",
+            dynamic="d",
+            recent_events="r",
+            history="h",
+        )
+        yield {"dbname": dbname, "fresh": fresh, "estranged": estranged}
+
+
+@contextmanager
+def _live_db(dbname: str, pair: CharacterPairSeed) -> Iterator[dict[str, Any]]:
+    """Open the clone in one transaction over the shadow schema; roll back."""
+
+    conn = connect(dbname)
     try:
         with conn.cursor() as cur:
             _create_schema(cur, f"seek_redemption_{uuid4().hex[:12]}")
-            cur.execute(
-                "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
-                "ORDER BY id LIMIT 2"
-            )
-            actor, target = (int(row[0]) for row in cur.fetchall())
-            cur.execute(
-                "SELECT chunk_id FROM chunk_metadata WHERE world_time IS NOT NULL "
-                "ORDER BY chunk_id DESC LIMIT 1"
-            )
-            chunk = int(cur.fetchone()[0])
-            cur.execute(
-                "DELETE FROM character_relationships USING characters a, characters t "
-                "WHERE character_relationships.character1_id=a.id "
-                "AND character_relationships.character2_id=t.id "
-                "AND a.entity_id=%s AND t.entity_id=%s",
-                (actor, target),
-            )
-            cur.execute(
-                "UPDATE entity_tags et SET cleared_at=now() FROM tags t "
-                "WHERE et.tag_id=t.id AND et.entity_id=%s "
-                "AND t.tag='grudge_active' AND et.cleared_at IS NULL",
-                (target,),
-            )
         yield {
             "conn": conn,
-            "actor": actor,
-            "target": target,
-            "chunk": chunk,
+            "actor": pair.actor_entity_id,
+            "target": pair.target_entity_id,
+            "chunk": pair.chunk_id,
             "ids": count(1),
         }
     finally:
         conn.rollback()
         conn.close()
+
+
+@pytest.fixture()
+def live_redemption_db(redemption_clone: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    with _live_db(redemption_clone["dbname"], redemption_clone["fresh"]) as db:
+        yield db
+
+
+@pytest.fixture()
+def live_estranged_redemption_db(
+    redemption_clone: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    with _live_db(redemption_clone["dbname"], redemption_clone["estranged"]) as db:
+        yield db
 
 
 def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> dict[str, Any]:
@@ -503,19 +538,10 @@ def test_fresh_completion_inserts_reconciliation_and_absent_grudge_is_noop(
 
 @pytest.mark.requires_postgres
 def test_existing_negative_relationship_is_repaired_and_originals_survive_rewrite(
-    live_redemption_db: dict[str, Any],
+    live_estranged_redemption_db: dict[str, Any],
 ) -> None:
-    db = live_redemption_db
+    db = live_estranged_redemption_db
     with db["conn"].cursor() as cur:
-        cur.execute(
-            "INSERT INTO character_relationships "
-            "(character1_id, character2_id, relationship_type, "
-            " emotional_valence, dynamic, recent_events, history) "
-            "SELECT a.id, t.id, 'enemy', '-4|hostile', 'd', 'r', 'h' "
-            "FROM characters a, characters t "
-            "WHERE a.entity_id=%s AND t.entity_id=%s",
-            (db["actor"], db["target"]),
-        )
         cur.execute(
             "INSERT INTO entity_tags (entity_id,tag_id,source_kind,template_id) "
             "SELECT %s,id,'template','test_seek_redemption' FROM tags "

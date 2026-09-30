@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 from uuid import uuid4
 
 import asyncpg
@@ -13,13 +15,18 @@ from nexus.agents.orrery.events import _apply_state_delta_async
 from nexus.agents.orrery.needs import NeedTuning
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import ProjectPolicy
-from nexus.database import asyncpg_kwargs
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    CharacterPairSeed,
+    asyncpg_kwargs,
+    disposable_slot_database,
+    seed_character_pair,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
 
 POLICY = ProjectPolicy(enabled=True, advance_interval_hours=24.0)
+WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 
 
 async def _create_runtime_schema(conn: asyncpg.Connection, schema: str) -> None:
@@ -103,25 +110,34 @@ async def _create_runtime_schema(conn: asyncpg.Connection, schema: str) -> None:
     await conn.execute(migration_sql)
 
 
+@pytest.fixture(scope="module")
+def venture_async_clone() -> Iterator[tuple[str, CharacterPairSeed]]:
+    """Seed a disposable clone with an actor, a bystander, and a story clock.
+
+    Seeding is synchronous psycopg2, so it runs here, outside the event loop.
+    """
+
+    with disposable_slot_database("qa885_build_venture_async") as dbname:
+        yield dbname, seed_character_pair(
+            dbname,
+            world_time=WORLD_TIME,
+            actor_name="Venture Founder",
+            target_name="Venture Rival",
+        )
+
+
 @pytest.mark.asyncio
-async def test_async_build_venture_start_and_completion_match_sync() -> None:
-    conn = await asyncpg.connect(**asyncpg_kwargs("save_02"))
+async def test_async_build_venture_start_and_completion_match_sync(
+    venture_async_clone: tuple[str, CharacterPairSeed],
+) -> None:
+    dbname, pair = venture_async_clone
+    actor = pair.actor_entity_id
+    chunk_id = pair.chunk_id
+    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
     transaction = conn.transaction()
     await transaction.start()
     try:
         await _create_runtime_schema(conn, f"build_venture_async_{uuid4().hex[:12]}")
-        actor = int(
-            await conn.fetchval(
-                "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
-                "ORDER BY id LIMIT 1"
-            )
-        )
-        chunk = await conn.fetchrow(
-            "SELECT chunk_id, world_time FROM chunk_metadata "
-            "WHERE world_time IS NOT NULL ORDER BY chunk_id DESC LIMIT 1"
-        )
-        assert chunk is not None
-        chunk_id = int(chunk["chunk_id"])
 
         start = OrreryResolutionDraft(
             template_id="start_build_venture",
