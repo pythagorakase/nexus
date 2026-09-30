@@ -386,6 +386,34 @@ def test_route_sweeps_a_test_module_pytest_named_by_its_directory() -> None:
         sys.modules.pop(name, None)
 
 
+def test_route_sweeps_an_aliased_resolver_binding() -> None:
+    """A resolver bound under another name is routed and restored by identity.
+
+    ``from nexus.api.slot_utils import slot_dbname as sd`` binds the unrouted
+    function as ``sd``; a sweep by the name ``slot_dbname`` alone left it
+    resolving owner names while a route was active.
+    """
+
+    name = "tests._route_probe_aliased"
+    probe = types.ModuleType(name)
+    exec("from nexus.api.slot_utils import slot_dbname as sd", vars(probe))
+    unrouted = probe.sd
+    sys.modules[name] = probe
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            route_slot_to_disposable(patch.setattr, slot=4, dbname="qa640_alias")
+            assert probe.sd is not unrouted
+            assert probe.sd(4) == "qa640_alias"
+            with pytest.raises(RuntimeError, match="Slot 2 is not routed"):
+                probe.sd(2)
+            # The capture the sweep resolves through is never rebound.
+            assert pg_fixtures._UNROUTED_SLOT_DBNAME is unrouted
+        assert probe.sd is unrouted
+        assert probe.sd(4) == "save_04"
+    finally:
+        sys.modules.pop(name, None)
+
+
 def test_multi_slot_route_keeps_its_own_copy_of_the_mapping() -> None:
     """Changing the caller's mapping after the route changes nothing."""
 

@@ -427,9 +427,10 @@ def route_slots_to_disposable(
     ``nexus.api.slot_utils.slot_dbname``, either through the module attribute
     (``require_slot_dbname``, ``get_slot_db_url``, ``connection_kwargs`` and
     every function-local import) or through a name bound at import
-    (``from nexus.api.slot_utils import slot_dbname``). ``patch`` sets the
-    active routes, then rebinds the module attribute and the bound name in
-    every loaded ``nexus``, ``scripts``, or ``tests`` module, and in every
+    (``from nexus.api.slot_utils import slot_dbname``, aliased or not).
+    ``patch`` sets the active routes, then rebinds the module attribute and
+    every module attribute whose value is the unrouted resolver, whatever its
+    name, in every loaded ``nexus``, ``scripts``, or ``tests`` module, and in every
     module whose file lies under this repository's ``tests/`` directory
     (pytest imports ``tests/test_runtime/test_x.py`` as
     ``test_runtime.test_x``), to ``_routed_slot_dbname``, which returns the mapped
@@ -465,15 +466,24 @@ def route_slots_to_disposable(
     patch(sys.modules[__name__], "_ACTIVE_ROUTE", frozen)
     patch(slot_utils, "VALID_DBNAMES", set(frozen.values()))
     patch(slot_utils, "slot_dbname", _routed_slot_dbname)
+    this_module = sys.modules[__name__]
     for name, module in list(sys.modules.items()):
         if module is None:
             continue
-        # The identity check comes first: it is cheap, and only a module that
-        # bound the unrouted resolver needs its file resolved.
-        if vars(module).get("slot_dbname") is not _UNROUTED_SLOT_DBNAME:
-            continue
-        if _is_swept_module(name, module):
-            patch(module, "slot_dbname", _routed_slot_dbname)
+        # Sweep by identity, whatever the binding is called: an aliased import
+        # (``from nexus.api.slot_utils import slot_dbname as sd``) holds the
+        # same unrouted function. The identity scan comes first: it is cheap,
+        # and only a module that bound the unrouted resolver needs its file
+        # resolved.
+        bound = [
+            attribute
+            for attribute, value in list(vars(module).items())
+            if value is _UNROUTED_SLOT_DBNAME
+            and not (module is this_module and attribute == "_UNROUTED_SLOT_DBNAME")
+        ]
+        if bound and _is_swept_module(name, module):
+            for attribute in bound:
+                patch(module, attribute, _routed_slot_dbname)
 
 
 def route_slot_to_disposable(

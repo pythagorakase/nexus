@@ -10,11 +10,14 @@ that reach an owner database.
 - A connection call (``connect``, ``psycopg2.connect``, ``get_connection``,
   ``asyncpg_kwargs``, ``connection_kwargs``, ``database_url``,
   ``sqlalchemy_url``) whose argument, or a value of a ``**{...}`` dict
-  literal or ``**dict(...)`` call, is a string literal naming ``save_NN`` or
+  literal or ``**dict(...)`` call (a ``dict(...)`` call's positional dict
+  literals included), is a string literal naming ``save_NN`` or
   ``NEXUS_template`` (a whole name, a DSN or URL naming one, or an f-string
-  that starts ``save_``). A name counts in any spelling libpq reads as that
-  name: single-quoted with backslash escapes (``dbname='save_04'``), spaced
-  around ``=``, and percent-encoded in a URL
+  that starts ``save_`` or whose text anywhere ends a DSN value with ``save_``
+  before a formatted slot number, as in
+  ``f"host={host} dbname='save_{slot:02d}'"``). A name counts in any spelling
+  libpq reads as that name: single-quoted with backslash escapes
+  (``dbname='save_04'``), spaced around ``=``, and percent-encoded in a URL
   (``postgresql://u@audit.invalid/save%5F04``); a double-quoted
   ``dbname="save_04"`` is refused as well.
 - An assignment of such a literal to a ``*DBNAME*`` name
@@ -22,8 +25,10 @@ that reach an owner database.
 - A child-process call (``subprocess.run``, ``Popen``, ``check_call``,
   ``check_output``, ``call``) whose argument list holds such a literal
   (``pg_dump --dbname save_04``, ``pg_dump --dbname "dbname='save_04'"``),
-  or whose ``shell=True`` command string does: a child connects outside the
-  in-process connection audit.
+  or whose ``shell=True`` command string does, word by word as the shell
+  splits it at whitespace and at its control operators (``;``, ``&&``,
+  ``||``, ``|``, ``&``, ``<``, ``>``), so ``pg_dump -d save_04>dump.sql`` is
+  refused: a child connects outside the in-process connection audit.
 - ``include_data=True`` (a data clone), passed as a keyword or through a
   ``**{...}`` or ``**dict(...)`` expansion, in a module that never applies
   the ``requires_corpus`` marker.
@@ -44,6 +49,7 @@ from __future__ import annotations
 
 import ast
 import re
+import shlex
 from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
@@ -59,6 +65,9 @@ OWNER_NAME = re.compile(r"save_\d+|NEXUS_template")
 OWNER_IN_DSN = re.compile(r"(?:^|[/=\s])(?:save_\d+|NEXUS_template)(?:$|[?&\s])")
 # An f-string's leading text that a formatted slot number completes.
 SLOT_PREFIX_IN_DSN = re.compile(r"(?:^|[/=\s])save_$")
+# Shell control operators, which end a word without whitespace
+# (``pg_dump -d save_04>dump.sql``, ``pg_dump -d save_04;true``).
+SHELL_OPERATORS = re.compile(r"&&|\|\||[;&|<>()]")
 # Quote characters around a DSN value: libpq's single quotes, and double
 # quotes, which a caller may mistake for them.
 DSN_QUOTES = re.compile(r"['\"]")
@@ -222,38 +231,103 @@ def _text_names_owner(text: str) -> bool:
     )
 
 
+def _completes_slot_name(text: str, *, head: bool) -> bool:
+    """Whether a formatted slot number after ``text`` completes an owner name.
+
+    Any constant part of an f-string that ends a DSN value with ``save_``
+    (``" dbname='save_"``) does; the head part also does when it starts
+    ``save_``.
+    """
+
+    return any(
+        (head and spelling.strip().startswith("save_"))
+        or SLOT_PREFIX_IN_DSN.search(spelling)
+        for spelling in _spellings(text)
+    )
+
+
 def _names_owner(node: ast.expr) -> bool:
     """Whether ``node`` is a string literal spelling an owner database."""
 
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return _text_names_owner(node.value)
-    if isinstance(node, ast.JoinedStr) and node.values:
-        head = node.values[0]
-        if (
-            isinstance(head, ast.Constant)
-            and isinstance(head.value, str)
-            and any(
-                spelling.strip().startswith("save_")
-                or SLOT_PREFIX_IN_DSN.search(spelling)
-                for spelling in _spellings(head.value)
+    if isinstance(node, ast.JoinedStr):
+        parts = node.values
+        for index, part in enumerate(parts):
+            if not (isinstance(part, ast.Constant) and isinstance(part.value, str)):
+                continue
+            if _text_names_owner(part.value):
+                return True
+            followed_by_value = index + 1 < len(parts) and isinstance(
+                parts[index + 1], ast.FormattedValue
             )
-        ):
-            return True
-        return any(
-            isinstance(part, ast.Constant)
-            and isinstance(part.value, str)
-            and _text_names_owner(part.value)
-            for part in node.values
-        )
+            if followed_by_value and _completes_slot_name(part.value, head=index == 0):
+                return True
     return False
+
+
+def _shell_words(text: str) -> list[str]:
+    """Return a shell command's words, split at whitespace and control operators.
+
+    ``shlex`` in punctuation mode reads quotes and escapes as the shell does;
+    text it cannot read (an unbalanced quote, or an f-string part cut inside a
+    quoted word) is split at whitespace and ``SHELL_OPERATORS`` instead.
+    """
+
+    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        return list(lexer)
+    except ValueError:
+        return SHELL_OPERATORS.sub(" ", text).split()
+
+
+def _shell_names_owner(node: ast.expr) -> bool:
+    """Whether a ``shell=True`` command literal names an owner database.
+
+    Each word the shell would pass is checked on its own, so an operator glued
+    to the database argument (``-d save_04>dump.sql``) does not hide it.
+    """
+
+    if _names_owner(node):
+        return True
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        texts = [node.value]
+    elif isinstance(node, ast.JoinedStr):
+        texts = [
+            part.value
+            for part in node.values
+            if isinstance(part, ast.Constant) and isinstance(part.value, str)
+        ]
+    else:
+        return False
+    return any(_text_names_owner(word) for text in texts for word in _shell_words(text))
+
+
+def _subprocess_names_owner(value: ast.expr, *, shell: bool) -> bool:
+    """Whether a child-process call's argument names an owner database.
+
+    An argument list is checked element by element; with ``shell=True`` a
+    command string (or a list's command string) is checked word by word.
+    """
+
+    if isinstance(value, (ast.List, ast.Tuple)):
+        elements = value.elts
+    elif shell:
+        elements = [value]
+    else:
+        return False
+    check = _shell_names_owner if shell else _names_owner
+    return any(check(element) for element in elements)
 
 
 def _expanded_keywords(mapping: ast.expr) -> list[tuple[str | None, ast.expr]]:
     """Return the ``(name, value)`` pairs a ``**`` expansion spells literally.
 
     A dict literal's string keys and a ``dict(...)`` call's keywords are
-    keywords of the call they expand into, nested expansions included; any
-    other expansion is one ``(None, expression)`` pair.
+    keywords of the call they expand into, nested expansions and a
+    ``dict(...)`` call's positional dict literals and ``dict(...)`` calls
+    included; any other expansion is one ``(None, expression)`` pair.
     """
 
     pairs: list[tuple[str | None, ast.expr]] = []
@@ -266,7 +340,11 @@ def _expanded_keywords(mapping: ast.expr) -> list[tuple[str | None, ast.expr]]:
             else:
                 pairs.append((None, value))
     elif isinstance(mapping, ast.Call) and _called_name(mapping.func) == "dict":
-        pairs.extend((None, arg) for arg in mapping.args)
+        for arg in mapping.args:
+            if isinstance(arg, (ast.Dict, ast.Call)):
+                pairs.extend(_expanded_keywords(arg))
+            else:
+                pairs.append((None, arg))
         for keyword in mapping.keywords:
             if keyword.arg is None:
                 pairs.extend(_expanded_keywords(keyword.value))
@@ -347,13 +425,7 @@ def scan_source(source: str, path: str) -> list[Finding]:
                 for keyword, value in keywords
             )
             if name in SUBPROCESS_CALLS and any(
-                _names_owner(element)
-                for value in values
-                for element in (
-                    value.elts
-                    if isinstance(value, (ast.List, ast.Tuple))
-                    else [value] if shell else []
-                )
+                _subprocess_names_owner(value, shell=shell) for value in values
             ):
                 add(node, RULE_SUBPROCESS)
             if (
@@ -527,6 +599,26 @@ def test_an_exemption_admits_only_its_own_use() -> None:
         ),
         ("get_connection(f\"dbname='save_{slot:02d}'\")", RULE_CONNECTION),
         ("connect(f\"dbname='NEXUS_template' host={host}\")", RULE_CONNECTION),
+        # A slot number completing a later part of an f-string (final round).
+        ("connect(f\"host={host} dbname='save_{slot:02d}'\")", RULE_CONNECTION),
+        ('connect(f"host={host} dbname=save_{slot:02d}")', RULE_CONNECTION),
+        # Shell operators glued to the database argument (final round).
+        ('subprocess.run("pg_dump -d save_04>dump.sql", shell=True)', RULE_SUBPROCESS),
+        (
+            'subprocess.run(args="pg_dump -d save_04; true", shell=True)',
+            RULE_SUBPROCESS,
+        ),
+        ('subprocess.run("pg_dump -d save_04;true", shell=True)', RULE_SUBPROCESS),
+        ('run("pg_dump -d save_04&&true", shell=True)', RULE_SUBPROCESS),
+        ('run("pg_dump -d save_04 && true", shell=True)', RULE_SUBPROCESS),
+        ('run("pg_dump -d save_04||true", shell=True)', RULE_SUBPROCESS),
+        ('run("pg_dump -d save_04|gzip", shell=True)', RULE_SUBPROCESS),
+        ('run("psql -d NEXUS_template<in.sql", shell=True)', RULE_SUBPROCESS),
+        ('run("pg_dump -d save_04&", shell=True)', RULE_SUBPROCESS),
+        ("run(\"pg_dump -d 'save_04'>dump.sql\", shell=True)", RULE_SUBPROCESS),
+        ('run(["pg_dump -d save_04>dump.sql"], shell=True)', RULE_SUBPROCESS),
+        ('run(f"pg_dump -d save_04>{out}", shell=True)', RULE_SUBPROCESS),
+        ('run("pg_dump -d \'save_04>x", shell=True)', RULE_SUBPROCESS),
         # Literal keyword expansion of include_data (review of PR #1045).
         (
             "disposable_slot_database('qa_probe', source_db='save_04', "
@@ -541,6 +633,16 @@ def test_an_exemption_admits_only_its_own_use() -> None:
             "disposable_slot_database('qa_probe', **{**{'include_data': True}})",
             RULE_DATA_CLONE,
         ),
+        # A dict(...) call's positional dict literal (final round).
+        (
+            "disposable_slot_database('qa', **dict({'include_data': True}))",
+            RULE_DATA_CLONE,
+        ),
+        (
+            "disposable_slot_database('qa', **dict(dict({'include_data': True})))",
+            RULE_DATA_CLONE,
+        ),
+        ("connect(**dict({'dbname': 'save_02'}))", RULE_CONNECTION),
     ],
 )
 def test_each_refused_spelling_is_found(source: str, rule: str) -> None:
@@ -571,6 +673,10 @@ def test_each_refused_spelling_is_found(source: str, rule: str) -> None:
         "connect(\"dbname='qa640_save_04_copy'\")",
         "disposable_slot_database('qa640_x', **{'include_data': False})",
         "subprocess.run(['pg_dump', '--dbname', f\"dbname='{clone}'\"])",
+        "subprocess.run('pg_dump -d qa640_save_04_copy>dump.sql', shell=True)",
+        "subprocess.run('pg_dump -d save_04>dump.sql')",
+        "connect(f\"host={host} dbname='qa640_{slot:02d}'\")",
+        "disposable_slot_database('qa', **dict({'include_data': False}))",
     ],
 )
 def test_disposable_and_marked_spellings_pass(source: str) -> None:
