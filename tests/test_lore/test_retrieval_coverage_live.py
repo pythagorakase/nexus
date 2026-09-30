@@ -38,24 +38,25 @@ ROUTED_SLOT = 5
 WARM_SLICE = [{"chunk_id": 1, "text": "Baseline."}]
 
 
-@pytest.fixture()
-def coverage_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+@pytest.fixture(scope="module")
+def coverage_db() -> Iterator[str]:
     """A routed clone with a canonical player and two committed chunks.
 
     The first chunk is the warm slice's; the covered probe's reference lands
     on the second (the head), so the retrieved chunk is not already in the
-    warm slice.
+    warm slice. Each test's own writes roll back in its transaction.
     """
 
     with disposable_slot_database("qa885_retrieval_coverage") as dbname:
-        route_slot_to_disposable(monkeypatch.setattr, slot=ROUTED_SLOT, dbname=dbname)
-        seed_protagonist(dbname, name="Coverage Player")
-        warm_chunk_id = seed_committed_chunk(dbname, raw_text="Baseline.", scene=1)
-        assert warm_chunk_id == WARM_SLICE[0]["chunk_id"]
-        seed_committed_chunk(
-            dbname, raw_text="Fixture chunk the covered probe is in.", scene=2
-        )
-        yield dbname
+        with pytest.MonkeyPatch.context() as mp:
+            route_slot_to_disposable(mp.setattr, slot=ROUTED_SLOT, dbname=dbname)
+            seed_protagonist(dbname, name="Coverage Player")
+            warm_chunk_id = seed_committed_chunk(dbname, raw_text="Baseline.", scene=1)
+            assert warm_chunk_id == WARM_SLICE[0]["chunk_id"]
+            seed_committed_chunk(
+                dbname, raw_text="Fixture chunk the covered probe is in.", scene=2
+            )
+            yield dbname
 
 
 class LiveReferenceMemnon:
