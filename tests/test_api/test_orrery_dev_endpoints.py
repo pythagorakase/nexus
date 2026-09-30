@@ -380,9 +380,11 @@ def test_resolve_parity_with_production_resolver(
         }
 
     assert set(endpoint_pressures) == set(production_pressures)
-    for key, draft in production_pressures.items():
-        assert endpoint_pressures[key]["magnitude"] == pytest.approx(draft.magnitude)
-        assert endpoint_pressures[key]["prompt_text"] == draft.prompt_text
+    for key, pressure_draft in production_pressures.items():
+        assert endpoint_pressures[key]["magnitude"] == pytest.approx(
+            pressure_draft.magnitude
+        )
+        assert endpoint_pressures[key]["prompt_text"] == pressure_draft.prompt_text
 
 
 @pytest.mark.requires_postgres
