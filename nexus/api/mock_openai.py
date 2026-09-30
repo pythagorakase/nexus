@@ -10,7 +10,12 @@ The mock database mirrors save_* schemas and contains:
 - incubator: Bootstrap narrative
 
 Usage:
-    poetry run uvicorn nexus.api.mock_openai:app --port 5102
+    python -m nexus.api.mock_openai
+        Direct launch: binds 127.0.0.1 on the port from
+        [runtime.services.mock_openai] and applies the dictConfig built from
+        [runtime.logs] (see ``direct_launch_config``).
+    nexus up
+        Supervised launch through [runtime.services.mock_openai].
 """
 
 from nexus.database import connection_kwargs
