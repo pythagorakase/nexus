@@ -66,6 +66,17 @@ ROUTING_IMPORTS = (
     "scripts.new_story_setup",
     "scripts.utils.embedding_utils",
 )
+# Command-line scripts that took their logging from importing the setup script
+# until issue #1037. Each now configures logging on its command-line path, so
+# importing one as a module must configure nothing.
+COMMAND_LINE_SCRIPTS = (
+    "scripts.benchmark_experience_enqueue_fence",
+    "scripts.qa_shift.ann_gate",
+    "scripts.qa_shift.historical_passage_limit",
+    "scripts.qa_shift.card_identity_probe",
+    "scripts.qa_shift.long_absence_probe",
+    "scripts.new_story_cli",
+)
 # Prints the root logger's handlers and level before and after importing
 # sys.argv[1] in a fresh interpreter, as one JSON line.
 ROOT_LOGGER_PROBE = """
@@ -261,7 +272,7 @@ def test_entry_point_refuses_before_anything_runs(
     assert not _port_open("127.0.0.1", port)
 
 
-@pytest.mark.parametrize("module", ROUTING_IMPORTS)
+@pytest.mark.parametrize("module", ROUTING_IMPORTS + COMMAND_LINE_SCRIPTS)
 def test_import_leaves_the_root_logger_unconfigured(module: str) -> None:
     """Importing the routing fixtures or a script adds no handler or level.
 
