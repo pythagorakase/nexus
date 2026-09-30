@@ -119,7 +119,7 @@ from tests.pg_fixtures import (
     seed_routine_anchor,
 )
 
-LIVE_SLOT = 5
+ROUTED_SLOT = 5
 
 ACTOR, TARGET, FACTION_ID = 1, 2, 9
 PLACE_ENTITY = 501
@@ -459,8 +459,8 @@ def test_slot_backed_explain_carries_evidence_end_to_end(
 
     orrery = load_settings_as_dict()["orrery"]
     with disposable_slot_database("qa885_evidence") as dbname:
-        route_slot_to_disposable(monkeypatch.setattr, slot=LIVE_SLOT, dbname=dbname)
-        monkeypatch.setenv("NEXUS_SLOT", str(LIVE_SLOT))
+        route_slot_to_disposable(monkeypatch.setattr, slot=ROUTED_SLOT, dbname=dbname)
+        monkeypatch.setenv("NEXUS_SLOT", str(ROUTED_SLOT))
         _, hunter_entity = seed_protagonist(dbname, name="Evidence Hunter")
         _, grieving_entity = seed_character(dbname, name="Evidence Mourner")
         _, hunted_entity = seed_character(dbname, name="Evidence Quarry")

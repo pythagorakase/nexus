@@ -199,11 +199,60 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 38 passed in 9.61s
 ```
 
-The three `test_pg_target_contract.py` failures come from main and fall outside this slice. They name only `tests/dbname_audit.py` (lines 181, 182, and 206, which read `PGSERVICE` and `PGDATABASE`) and `tests/test_dbname_audit.py` (lines 126, 244, and 703 to 710, which build loopback `postgresql://…@localhost:5432` URLs and set `PGHOST` and `PGDATABASE`). Both files arrived with B2-6 (eed7c716), and `git diff origin/main -- tests/dbname_audit.py tests/test_dbname_audit.py tests/test_pg_target_contract.py` is empty on this branch.
+The three `test_pg_target_contract.py` failures come from main and fall outside this slice. They name only `tests/dbname_audit.py` (lines 181, 182, and 206, which read `PGSERVICE` and `PGDATABASE`) and `tests/test_dbname_audit.py` (lines 126, 244, 248, and 703 to 710, which build loopback `postgresql://…@localhost:5432` URLs and set `PGHOST` and `PGDATABASE`). Both files arrived with B2-6 (eed7c716), and `git diff origin/main -- tests/dbname_audit.py tests/test_dbname_audit.py tests/test_pg_target_contract.py` is empty on this branch.
+
+The `E` offender blocks from `$PY -m pytest -q tests/test_pg_target_contract.py`, verbatim:
+
+```
+E       AssertionError: Resolve PostgreSQL through nexus.database.database_url(), nexus.database.connection_kwargs(), or tests.pg_fixtures.connect(); use a .invalid host for URLs that never connect:
+E         tests/test_dbname_audit.py:244: loopback host on port 5432: DSN = f"postgresql://{getpass.getuser()}@localhost:5432"
+E         tests/test_dbname_audit.py:244: PostgreSQL URL naming a loopback host: DSN = f"postgresql://{getpass.getuser()}@localhost:5432"
+E         tests/test_dbname_audit.py:703: loopback host on port 5432: ("postgres", "postgresql://u@localhost:5432", "postgres"),
+E         tests/test_dbname_audit.py:703: PostgreSQL URL naming a loopback host: ("postgres", "postgresql://u@localhost:5432", "postgres"),
+E         tests/test_dbname_audit.py:704: loopback host on port 5432: ("qa640_x", "postgresql://u@localhost:5432/save_02", "qa640_x"),
+E         tests/test_dbname_audit.py:704: PostgreSQL URL naming a loopback host: ("qa640_x", "postgresql://u@localhost:5432/save_02", "qa640_x"),
+E         tests/test_dbname_audit.py:705: loopback host on port 5432: (None, "postgresql://u@localhost:5432/save_02", "save_02"),
+E         tests/test_dbname_audit.py:705: PostgreSQL URL naming a loopback host: (None, "postgresql://u@localhost:5432/save_02", "save_02"),
+E         tests/test_dbname_audit.py:706: loopback host on port 5432: (None, "postgresql://u@localhost:5432?dbname=save_03", "save_03"),
+E         tests/test_dbname_audit.py:706: PostgreSQL URL naming a loopback host: (None, "postgresql://u@localhost:5432?dbname=save_03", "save_03"),
+E         tests/test_dbname_audit.py:707: loopback host on port 5432: (None, "postgresql://u@localhost:5432?database=save_04", "save_04"),
+E         tests/test_dbname_audit.py:707: PostgreSQL URL naming a loopback host: (None, "postgresql://u@localhost:5432?database=save_04", "save_04"),
+E         tests/test_dbname_audit.py:708: loopback host on port 5432: (None, "postgresql://u@localhost:5432", "save_01"),
+E         tests/test_dbname_audit.py:708: PostgreSQL URL naming a loopback host: (None, "postgresql://u@localhost:5432", "save_01"),
+E         tests/test_dbname_audit.py:710: loopback host on port 5432: (None, "postgresql://u@localhost:5432/", None),
+E         tests/test_dbname_audit.py:710: PostgreSQL URL naming a loopback host: (None, "postgresql://u@localhost:5432/", None),
+E       assert ['tests/test_...40_x"),', ...] == []
+E         
+E         Left contains 16 more items, first extra item: 'tests/test_dbname_audit.py:244: loopback host on port 5432: DSN = f"postgresql://{getpass.getuser()}@localhost:5432"'
+E         Use -v to get more diff
+E       AssertionError: Resolve PostgreSQL through tests.pg_fixtures.connect(), nexus.database.connection_kwargs(), database_url(), or tests.pg_fixtures.asyncpg_kwargs(); give subprocesses subprocess_env():
+E         tests/dbname_audit.py:181: environ.get("PGSERVICE"
+E         tests/dbname_audit.py:182: environ.get("PGDATABASE"
+E         tests/dbname_audit.py:206: environ.get("PGDATABASE"
+E         tests/test_dbname_audit.py:126: environ["PGHOST"
+E         tests/test_dbname_audit.py:248: environ["PGDATABASE"
+E       assert ['tests/dbnam..."PGDATABASE"'] == []
+E         
+E         Left contains 5 more items, first extra item: 'tests/dbname_audit.py:181: environ.get("PGSERVICE"'
+E         Use -v to get more diff
+E       AssertionError: Build PostgreSQL URLs with nexus.database.database_url(); use a .invalid host for URLs that never connect:
+E         tests/test_dbname_audit.py:244: postgresql://{getpass.getuser()}@localhost:5432
+E         tests/test_dbname_audit.py:703: postgresql://u@localhost:5432
+E         tests/test_dbname_audit.py:704: postgresql://u@localhost:5432/save_02
+E         tests/test_dbname_audit.py:705: postgresql://u@localhost:5432/save_02
+E         tests/test_dbname_audit.py:706: postgresql://u@localhost:5432
+E         tests/test_dbname_audit.py:707: postgresql://u@localhost:5432
+E         tests/test_dbname_audit.py:708: postgresql://u@localhost:5432
+E         tests/test_dbname_audit.py:710: postgresql://u@localhost:5432
+E       assert ['tests/test_...st:5432', ...] == []
+E         
+E         Left contains 8 more items, first extra item: 'tests/test_dbname_audit.py:244: postgresql://{getpass.getuser()}@localhost:5432'
+E         Use -v to get more diff
+```
 
 Black (`5 files left unchanged`), flake8 (exit 0), and `mypy --explicit-package-bases` (`Success: no issues found in 5 source files`) pass on the five changed files. Plain `mypy <files>` stops at `Source file found twice under different module names: "test_orrery" and "tests.test_orrery"`, a module-path issue that has nothing to do with this change.
 
-## Retired #885 Ids
+## Retired #885 IDs
 
 - `tests/test_orrery/test_evidence.py::test_slot_backed_explain_carries_evidence_end_to_end`
 - `tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size`, renamed `test_contextual_library_seeded_story_completeness_and_size`
