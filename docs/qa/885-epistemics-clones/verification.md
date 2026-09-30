@@ -811,6 +811,61 @@ After the review fixes (`23c16622`), `NEXUS_RUN_POSTGRES=1 python -m pytest -q t
 
 Changed files (first round): `black --check` reports 9 files unchanged; `flake8` is clean; `mypy --explicit-package-bases` reports `Success: no issues found in 9 source files`. On the base, the same mypy command reported nine errors in these files: `None`-unpack and `driver_connection` union errors, the `RetrogradeExpansionParticipant.role` literal, and an untyped `asyncpg` import. All nine are fixed here.
 
+## Review Round (Astra)
+
+Finding (P2): `claim_accounts_test_support.py:319` `_insert_relationship` wrote `character_relationships` (public row plus `pg_temp` twin) directly. It carried migration 115's `manual` attribution through `relationship_producer` but not the shared helpers' owner-target refusal, and the synchronous propagation, reveal and distortion tests still used it. Fixed in `891ad973`.
+
+### Helper-Seeded Rows
+
+Every row that is a test's starting state is now committed from the module's synchronous clone fixture through `tests/pg_fixtures.py`, and the in-test INSERT for it is deleted:
+
+- `test_claim_propagation_live.py`: ten chains (`CHAIN_LENGTHS`, `seed_chain` at :165), seventeen cast characters (`CAST`, `seed_character` at :171), seven conduits (`CONDUITS`, `seed_conduit` at :175, including the `0|neutral` fan-out edge), the cellular faction (`seed_faction` at :181) and its `cellular_clandestine` culture tag (`seed_entity_tag` at :182; the local `_insert_culture_tag` is deleted). The async pair was already seeded (:148-:154). The `authority_over` pair tag stays in-transaction (`_insert_pair_tag`): `entity_pair_tags` has no shared helper.
+- `test_distortion_live.py`: four chains (`seed_chain` at :96), five cast characters (`seed_character` at :102) and two conduits (`seed_conduit` at :106). The function-scoped fixture that cloned `qa640_distortion` per test is replaced by one module-scoped `qa885_distortion` clone (`distortion_clone`), which the async test shares; `live_conn` is a per-test rolled-back connection on it.
+- `test_reveal_live.py`: eight incident casts (holder, first, second) at the reveal place (`seed_character` at :156), the next-tick recipient (:163) and the same-tick holder's conduit to it (`seed_conduit` at :168). `_insert_private_incident` now takes a seeded cast and asserts all three stand at the place; the local `_insert_character` is deleted. The same-tick test asserts the seeded conduit reaches its valence shadow.
+- `test_knowledge_surfacing_live.py`: alpha, beta and the told source, which every test reads (`seed_character` at :227-:229); the local `_insert_character` is deleted.
+- `test_claim_awareness_replay_live.py`: each test's characters (`seed_character` at :62-:64); the bare-entity `_insert_character_entity` is deleted.
+- `claim_accounts_test_support.py`: `seed_conduit` (:433, the Stage 2c `associate` shape through `seed_relationship`) and `seed_chain` (:456, :460).
+
+### Transaction-Scoped Rows
+
+The in-transaction writers are renamed `insert_transaction_character`, `insert_transaction_relationship`, `insert_transaction_faction` and `insert_transaction_chain`. Each calls `require_transaction_target(cur)` before its first statement; that reads `cur.connection.info.dbname` client side (libpq `PQdb`, no statement) and passes it to `tests.pg_fixtures.require_disposable_target`. The relationship writer's docstring states why it exists next to `seed_relationship`: a relationship whose endpoints a test creates mid-test, with a `pg_temp` twin because the valence shadow was copied before the row existed.
+
+None of the eight modules calls a transaction-scoped writer any more. The remaining calls are:
+
+- `claim_accounts_test_support.py:559` and `:563` (inside `insert_transaction_chain`).
+- `test_claim_accounts_live.py:157`, `:158`, `:400`, `:403`, `:406`, `:409`, `:412`, `:415` (characters) and `:418`, `:421` (relationships).
+- `test_claim_consumption_live.py:199`, `:202`, `:203`, `:206`, `:282`, `:283`, `:284`, `:287`, `:336`, `:337`, `:338`, `:388`, `:389`, `:392`, `:393`, `:394`, `:395`, `:471`, `:472`, `:475`, `:563`, `:564`, `:567`, `:657`, `:720` (characters), `:396` (faction), `:397`, `:476`, `:568`, `:569` (relationships) and `:655`, `:718` (chains).
+
+Those two modules are outside this slice's eight: they already ran on their own clones (`qa640_claim_accounts`, `qa640_claim_consumption`), and only their import lines and helper names change here. Their calls now refuse an owner cursor.
+
+### Covered-Table Grep
+
+`grep -nE "INSERT INTO (public\.|pg_temp\.)?(entity_tags|entities|characters|factions|places|character_relationships)\b"` over the support module and the eight modules prints only the writer bodies in `claim_accounts_test_support.py` (:331, :336 character; :367, :379 relationship and its twin; :406, :413 faction). `test_tag_provenance.py` writes `entity_tags` only through the production writers it tests (`apply_tag_bestowal`, the resolver commit). The owner-literal audit grep still prints nothing for the nine files.
+
+### New Tests
+
+`tests/test_pg_disposable_target.py`:
+
+- `test_transaction_writers_refuse_owner_cursors_before_connecting` (PostgreSQL): each of the four writers, on a cursor stand-in whose connection names each owner database and whose `execute` fails the test, raises the `require_disposable_target` error, with `psycopg2.connect` as a tripwire; `pg_stat_database.sessions` for every owner database is unchanged across the calls, and a control connection proves the counter moves. With the guard line removed from `insert_transaction_relationship`, this test fails (`A transaction-scoped writer ran a statement before refusing its target.`); the guard was restored before the commit.
+- `test_transaction_relationship_writer_writes_on_a_clone` (PostgreSQL): on a `qa885_transaction_writer` clone, the writer inserts the public row (`associate`, `+3|trusting`), a `relationship_versions` row with producer `manual`, and the `pg_temp` twin with `valence_current = 3/5.5`; after the caller's rollback the public row is gone.
+
+### Gates at `891ad973`
+
+Gateway variables unset (`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL`):
+
+```
+$ NEXUS_RUN_POSTGRES=1 python -m pytest -q tests/test_orrery/test_epistemics.py tests/test_orrery/test_claim_propagation_live.py tests/test_orrery/test_reveal_live.py tests/test_orrery/test_distortion_live.py tests/test_orrery/test_knowledge_surfacing_live.py tests/test_orrery/test_tag_provenance.py tests/test_orrery/test_signal_events.py tests/test_orrery/test_claim_awareness_replay_live.py tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+79 passed, 19 skipped, 5 warnings in 13.51s
+$ NEXUS_RUN_POSTGRES=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_TEST_PROVIDER_ONLY=1 python -m pytest -q <same nine files>
+secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
+98 passed, 5 warnings in 18.39s
+```
+
+The 19 skips in the first run are the `live_llm`-marked propagation module, which the second run admits. The two modules whose helper names changed: `NEXUS_RUN_POSTGRES=1 python -m pytest -q tests/test_orrery/test_claim_accounts_live.py tests/test_orrery/test_claim_consumption_live.py` gives `14 passed, 5 warnings in 3.62s` (`secret-store guard: active; nexus-api: denied; disposable keychain: denied`). Offline, `tests/test_pg_target_contract.py` gives `107 passed, 1 skipped`.
+
+Black reports the nine changed files unchanged and flake8 is clean on them. `mypy --explicit-package-bases` on them reports only the two pre-existing `union-attr` errors named above (`test_claim_accounts_live.py:117`, `test_claim_consumption_live.py:71`).
+
 ## #885 Ids Retired
 
 From the canonical named list (2026-09-24 comment): `tests/test_orrery/test_reveal_live.py` x9, now green in the plain PostgreSQL gate, and `tests/test_orrery/test_claim_propagation_live.py` x19, green whenever its `live_llm` marker admits it. The #964 disposition also routed `test_epistemics` x12, `test_tag_provenance` x4 and `test_signal_events` x2 here because they depended on `save_02`'s content; they now depend on seeded rows only.
