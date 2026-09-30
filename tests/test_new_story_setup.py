@@ -23,6 +23,7 @@ from __future__ import annotations
 from contextlib import closing
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from typing import Generator
@@ -226,6 +227,35 @@ def test_fresh_database_is_baseline_stamped(
         )
 
 
+# The migration the template stand-in lags on purpose. Migration 135 is
+# comment-only and idempotent (its header says so): undoing it is setting each
+# comment it writes back to NULL, and reapplying it on top of the later schema
+# restores them. A clone of the stand-in must apply it after copying the
+# stand-in's stamps, which is the path a real template takes whenever a branch
+# adds a migration the fleet template has not seen.
+_LAGGING_MIGRATION = "135"
+# One object migration 135 comments, read back to prove it was reapplied.
+_LAG_PROBE_SQL = "SELECT obj_description('public.orrery_job_state'::regtype, 'pg_type')"
+
+
+def _lagging_comment_targets() -> list[str]:
+    """Every ``COMMENT ON <target> IS`` target in the lagging migration."""
+    (path,) = [
+        path
+        for version, _, path in migrate.discover_migrations()
+        if version == _LAGGING_MIGRATION
+    ]
+    targets = re.findall(r"^COMMENT ON (.+) IS$", path.read_text(), flags=re.M)
+    assert targets, f"migration {_LAGGING_MIGRATION} writes no comment"
+    return targets
+
+
+def _lag_probe(dbname: str) -> object:
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(_LAG_PROBE_SQL)
+        return cur.fetchone()[0]
+
+
 @pytest.fixture(scope="module")
 def template_source() -> Generator[str, None, None]:
     """A disposable stand-in for the canonical template, shared by the module.
@@ -233,10 +263,22 @@ def template_source() -> Generator[str, None, None]:
     ``disposable_slot_database`` builds it the way every fresh slot is built
     from ``NEXUS_template`` (schema, seed rows, and the template's stamps with
     their original applied_at, then any migration the template lags), so it
-    is a stamped, fully migrated template image. These tests read and clone
-    it; the owner's ``NEXUS_template`` is read only by that initial pg_dump.
+    starts as a stamped, fully migrated template image. The fixture then rolls
+    back ``_LAGGING_MIGRATION`` (its comments and its stamp), so the stand-in
+    lags ``main`` by one migration the way the fleet template does whenever a
+    branch adds one. These tests read and clone it; the owner's
+    ``NEXUS_template`` is read only by that initial pg_dump.
     """
     with disposable_slot_database("qa640_810_template") as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            for target in _lagging_comment_targets():
+                cur.execute(f"COMMENT ON {target} IS NULL")
+            cur.execute(
+                "DELETE FROM public.schema_migrations WHERE version = %s",
+                (_LAGGING_MIGRATION,),
+            )
+            assert cur.rowcount == 1, "the stand-in carries no lagging stamp"
+        assert _lag_probe(dbname) is None
         yield dbname
 
 
@@ -277,13 +319,19 @@ def test_template_clone_replays_no_migration(template_source: str) -> None:
     The template's stamps arrive with their original applied_at (copied, not
     re-applied); the only other stamps are migrations the template has not
     seen yet, which initialization applied; and a follow-up run is a no-op.
+    The stand-in lags ``_LAGGING_MIGRATION``, so the applied branch runs.
     """
     template_stamps = _stamps(template_source)
     discovered = {version for version, _, _ in migrate.discover_migrations()}
+    # The lag branch is proven, not vacuous: the stand-in misses a migration.
+    assert discovered - set(template_stamps) == {_LAGGING_MIGRATION}
     with disposable_slot_database(
         "qa640_810_clone", source_db=template_source
     ) as dbname:
         clone_stamps = _stamps(dbname)
+        # Initialization applied the lagging migration's effect, not only
+        # its stamp.
+        assert _lag_probe(dbname)
         # Idempotence check only: initialization already raises on any
         # unapplied migration. The applied_at and stamp-set assertions below
         # are the proof that nothing was replayed.

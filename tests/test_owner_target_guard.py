@@ -6,12 +6,12 @@ parses every module under ``tests/`` with ``ast`` and fails on the spellings
 that reach an owner database.
 
 - ``get_slot_db_url(slot=<int literal>)`` (or a positional int literal).
-- ``slot_dbname(<int literal>)``.
+- ``slot_dbname(<int literal>)``, positionally or by keyword.
 - A connection call (``connect``, ``psycopg2.connect``, ``get_connection``,
   ``asyncpg_kwargs``, ``connection_kwargs``, ``database_url``,
-  ``sqlalchemy_url``) whose argument is a string literal naming ``save_NN``
-  or ``NEXUS_template`` (a whole name, a DSN or URL naming one, or an
-  f-string that starts ``save_``).
+  ``sqlalchemy_url``) whose argument, or a value of a ``**{...}`` dict
+  literal, is a string literal naming ``save_NN`` or ``NEXUS_template`` (a
+  whole name, a DSN or URL naming one, or an f-string that starts ``save_``).
 - An assignment of such a literal to a ``*DBNAME*`` name
   (``TEST_DBNAME = "save_04"``).
 - A child-process call (``subprocess.run``, ``Popen``, ``check_call``,
@@ -150,14 +150,6 @@ EXEMPTIONS: tuple[Exemption, ...] = (
         "fake, which records statements and never reaches a driver",
     ),
     Exemption(
-        "test_lore/conftest.py",
-        RULE_DATA_CLONE,
-        'disposable_slot_database( "qa_lore_corpus", source_db="save_01", '
-        "include_data=True )",
-        "lore_corpus_database fails unless NEXUS_RUN_CORPUS=1, and only "
-        "requires_corpus tests (test_lore/test_infrastructure.py) request it",
-    ),
-    Exemption(
         "test_idf_dictionary_pg.py",
         RULE_DATA_CLONE,
         'disposable_slot_database( "qa762_corpus_copy", source_db=idf_slot, '
@@ -244,6 +236,14 @@ def scan_source(source: str, path: str) -> list[Finding]:
         if isinstance(node, ast.Call):
             name = _called_name(node.func)
             values = [*node.args, *(keyword.value for keyword in node.keywords)]
+            # ``connect(**{"dbname": "save_02"})`` spells its keywords as a
+            # dict literal; its values are arguments too.
+            values.extend(
+                value
+                for keyword in node.keywords
+                if keyword.arg is None and isinstance(keyword.value, ast.Dict)
+                for value in keyword.value.values
+            )
             if name == "get_slot_db_url" and (
                 any(_is_int_literal(arg) for arg in node.args)
                 or any(
@@ -252,7 +252,10 @@ def scan_source(source: str, path: str) -> list[Finding]:
                 )
             ):
                 add(node, RULE_SLOT_URL)
-            if name == "slot_dbname" and node.args and _is_int_literal(node.args[0]):
+            if name == "slot_dbname" and (
+                (node.args and _is_int_literal(node.args[0]))
+                or any(_is_int_literal(keyword.value) for keyword in node.keywords)
+            ):
                 add(node, RULE_SLOT_DBNAME)
             if name in CONNECTION_CALLS and any(_names_owner(v) for v in values):
                 add(node, RULE_CONNECTION)
@@ -378,9 +381,12 @@ def test_an_exemption_admits_only_its_own_use() -> None:
         ("slot_utils.get_slot_db_url(5)", RULE_SLOT_URL),
         ("slot_dbname(4)", RULE_SLOT_DBNAME),
         ("slot_utils.slot_dbname(1)", RULE_SLOT_DBNAME),
+        ("slot_dbname(slot_number=1)", RULE_SLOT_DBNAME),
         ("connect('save_02')", RULE_CONNECTION),
         ("psycopg2.connect(dbname='save_05', host='')", RULE_CONNECTION),
         ("psycopg2.connect('dbname=save_03 connect_timeout=1')", RULE_CONNECTION),
+        ("connect(**{'dbname': 'save_02'})", RULE_CONNECTION),
+        ("psycopg2.connect(host='', **{'dbname': 'NEXUS_template'})", RULE_CONNECTION),
         ("get_connection(f'save_{slot:02d}')", RULE_CONNECTION),
         ("asyncpg.connect(**asyncpg_kwargs('NEXUS_template'))", RULE_CONNECTION),
         ("create_engine(database_url('save_01'))", RULE_CONNECTION),

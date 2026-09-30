@@ -1,13 +1,14 @@
-"""Real ANN gate checks on a read-only-source save_01 clone.
+"""Real ANN gate checks on PostgreSQL.
 
-Uses narrative_chunks, chunk_metadata, and 2560d embeddings. All index and
-fixture writes are confined to qa640_766_*. SQL and EXPLAIN run on PostgreSQL;
-no database results are fabricated.
+Uses narrative_chunks, chunk_metadata, and 2560d embeddings. SQL and EXPLAIN
+run on PostgreSQL; no database results are fabricated.
 
-The gate measures the owner's golden-master corpus (its embedded document
-count, planner choice, and latency), so the clone is a ``pg_dump`` data read
-of ``save_01``: every test that uses it is ``requires_corpus``, and the
-fixture fails without ``NEXUS_RUN_CORPUS=1``.
+The operator measurement reads the owner's golden-master corpus (its embedded
+document count, planner choice, and latency), so its clone is a ``pg_dump``
+data read of ``save_01`` confined to qa640_766_*: that test is
+``requires_corpus``, and its fixture fails without ``NEXUS_RUN_CORPUS=1``.
+The index build/drop and alias-search tests measure nothing corpus-specific;
+they run on a seeded template clone under the plain PostgreSQL gate.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import ast
 import hashlib
 import json
 import os
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +31,7 @@ from nexus.agents.memnon.utils.embedding_tables import (
     build_candidate_ann_index,
     candidate_ann_index_name,
     drop_candidate_ann_index,
+    ensure_embedding_table,
 )
 from nexus.config import load_settings
 from nexus.config.settings_models import ANNConfig
@@ -39,6 +42,10 @@ from scripts.qa_shift.ann_gate import (
     promotion_verdict,
     slot_clone,
 )
+from tests.pg_fixtures import connect, disposable_slot_database, seed_committed_chunk
+
+ANN_FIXTURE_MODEL = "qa640-ann-fixture"
+ANN_FIXTURE_TEXT = "Fixture narrative for the alias search."
 
 
 @pytest.mark.parametrize(
@@ -143,10 +150,29 @@ def test_ann_operator_measures_and_verdict(ann_clone: str) -> None:
         measure_clone("save_01", config)
 
 
+@pytest.fixture(scope="module")
+def ann_schema_clone() -> Any:
+    """Yield a template clone with one committed chunk and its 2560-d vector.
+
+    The build/drop test needs only the embedding table; the alias test needs
+    one embedded chunk with a word of three or more letters.
+    """
+    with disposable_slot_database("qa640_766_schema") as dbname:
+        chunk_id = seed_committed_chunk(dbname, raw_text=ANN_FIXTURE_TEXT)
+        vector = "[" + ",".join(str((i % 7 + 1) / 10) for i in range(2560)) + "]"
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cursor:
+            assert ensure_embedding_table(cursor, 2560) == TABLE
+            cursor.execute(
+                f"INSERT INTO {TABLE} (chunk_id, model, embedding) "
+                "VALUES (%s, %s, %s::vector)",
+                (chunk_id, ANN_FIXTURE_MODEL, vector),
+            )
+        yield dbname
+
+
 @pytest.mark.requires_postgres
-@pytest.mark.requires_corpus
-def test_ann_candidate_index_build_drop(ann_clone: str) -> None:
-    connection = psycopg2.connect(**connection_kwargs(ann_clone))
+def test_ann_candidate_index_build_drop(ann_schema_clone: str) -> None:
+    connection = psycopg2.connect(**connection_kwargs(ann_schema_clone))
     try:
         with connection.cursor() as cursor:
             drop_candidate_ann_index(cursor, TABLE)
@@ -166,9 +192,8 @@ def test_ann_candidate_index_build_drop(ann_clone: str) -> None:
 
 
 @pytest.mark.requires_postgres
-@pytest.mark.requires_corpus
-def test_ann_alias_candidates_and_database_errors(ann_clone: str) -> None:
-    engine = create_engine(database_url(ann_clone))
+def test_ann_alias_candidates_and_database_errors(ann_schema_clone: str) -> None:
+    engine = create_engine(database_url(ann_schema_clone))
     try:
         with engine.connect() as conn:
             chunk_id, model, vector = conn.execute(

@@ -528,7 +528,11 @@ def setup_db_mocks():
     ]
     wizard_module.get_trait_menu = lambda _: dummy_traits
     wizard_module.get_selected_trait_count = lambda _: 0
-    wizard_module.slot_dbname = lambda slot: f"fake_wizard_slot_{slot}"
+    # Every slot routes to a disposable label no database carries; the
+    # script's process ends with the routes in place.
+    route_slots_to_disposable(
+        setattr, {slot: f"qa640_fake_wizard_slot_{slot}" for slot in all_slots()}
+    )
 
 
 async def quick_test():

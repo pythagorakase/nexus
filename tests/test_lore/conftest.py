@@ -5,9 +5,7 @@ pytest configuration and fixtures for LORE tests.
 import pytest
 import logging
 import json
-import os
 import psycopg2
-from contextlib import closing
 from pathlib import Path
 from typing import Dict, Any, Generator, Iterator
 from unittest.mock import MagicMock
@@ -108,55 +106,6 @@ def db_connection(
     finally:
         conn.rollback()  # Rollback any test changes
         conn.close()
-
-
-@pytest.fixture(scope="module")
-def lore_corpus_database() -> Iterator[str]:
-    """Yield a disposable data clone of the save_01 golden master.
-
-    Only ``requires_corpus`` tests may use it; the flag check stops an
-    unmarked test from cloning the owner's corpus under the plain gate.
-    """
-    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
-        pytest.fail(
-            "lore_corpus_database needs the requires_corpus marker and "
-            "NEXUS_RUN_CORPUS=1",
-            pytrace=False,
-        )
-    with disposable_slot_database(
-        "qa_lore_corpus", source_db="save_01", include_data=True
-    ) as dbname:
-        yield dbname
-
-
-@pytest.fixture
-def sample_chunks(lore_corpus_database: str, test_scenes) -> Dict[str, Dict]:
-    """Load the curated scenes from a disposable clone of the golden master."""
-    chunks = {}
-    with closing(connect(lore_corpus_database)) as conn, conn.cursor() as cursor:
-        for scene_name, chunk_id in test_scenes.items():
-            cursor.execute(
-                """
-                SELECT id, raw_text, season, episode, scene, world_layer, world_time
-                FROM narrative_view
-                WHERE id = %s
-                """,
-                (chunk_id,),
-            )
-
-            row = cursor.fetchone()
-            if row:
-                chunks[scene_name] = {
-                    "id": row[0],
-                    "raw_text": row[1],
-                    "season": row[2],
-                    "episode": row[3],
-                    "scene": row[4],
-                    "world_layer": row[5],
-                    "world_time": row[6],
-                }
-
-    return chunks
 
 
 @pytest.fixture
