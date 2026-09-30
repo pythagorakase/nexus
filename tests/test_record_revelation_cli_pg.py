@@ -75,8 +75,8 @@ def route_disposable_db(
     """Route slot 4 to the disposable clone through the shared contract.
 
     ``route_slot_to_disposable`` rebinds every loaded resolver to the clone,
-    narrows ``VALID_DBNAMES`` to it, and raises ``RuntimeError`` for any other
-    slot.
+    admits only the clone as a slot database name, and raises
+    ``RuntimeError`` for any other slot.
     """
 
     route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=disposable_db)
