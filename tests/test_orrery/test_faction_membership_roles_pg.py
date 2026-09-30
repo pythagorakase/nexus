@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+import nexus.config
 from nexus.agents.logon.apex_enums import FactionMemberRole
 from nexus.agents.orrery.resolver import hydrate_world_state
 from nexus.agents.orrery.substrate import Slot, WorldState, faction_member
@@ -110,8 +111,14 @@ def test_clone_seeds_every_faction_member_role_label(
 def test_faction_member_is_true_for_exactly_the_configured_roles(
     membership_clone: dict[str, Any],
     membership_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Hydration reads nexus.toml's membership roles and filters by them."""
+    """Hydration reads the loaded settings' membership roles and filters by them.
+
+    The shipped list equals the model default, so the second hydration swaps
+    the loaded settings for a list no default carries: only a ``None`` branch
+    that reads ``load_settings()`` yields it.
+    """
 
     orrery = load_settings().orrery
     assert orrery is not None
@@ -129,6 +136,16 @@ def test_faction_member_is_true_for_exactly_the_configured_roles(
     for role in set(membership_clone["labels"]) - configured:
         entity_id = membership_clone["member_entities"][role]
         assert faction not in state.faction_memberships.get(entity_id, frozenset())
+
+    loaded = settings_with({"orrery.resolver.membership_roles": ["leader", "exile"]})
+    monkeypatch.setattr(nexus.config, "load_settings", lambda *_a, **_k: loaded)
+    swapped = hydrate_world_state(
+        membership_session,
+        anchor_chunk_id=None,
+        window_chunks=30,
+    )
+
+    assert _member_roles(swapped, membership_clone) == {"leader", "exile"}
 
 
 def test_narrowed_membership_roles_change_hydrated_membership(

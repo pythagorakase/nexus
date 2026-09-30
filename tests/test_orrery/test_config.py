@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from nexus.agents.orrery.resolver import coerce_resolver_settings
 from nexus.config import load_settings
 from nexus.api.new_story_schemas import Genre
 from nexus.config.settings_models import (
@@ -319,6 +320,17 @@ def test_resolver_membership_roles_must_be_nonempty_and_distinct(
 
     with pytest.raises(ValidationError, match=message):
         OrreryResolverSettings(membership_roles=roles)
+
+
+@pytest.mark.parametrize(
+    ("roles", "message"),
+    [(["leader", "overlord"], "overlord"), ([], "must not be empty")],
+)
+def test_resolver_settings_mapping_is_validated(roles: list[str], message: str) -> None:
+    """The dumped mapping the resolve phase passes is validated, not trusted."""
+
+    with pytest.raises(ValidationError, match=message):
+        coerce_resolver_settings({"membership_roles": roles})
 
 
 def test_mood_defaults_off_and_requires_positive_duration() -> None:
