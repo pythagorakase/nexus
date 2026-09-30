@@ -122,6 +122,14 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
         pg_fixtures.seed_adjudication_ledger,
         {"actor_entity_id": 1, "ticks": (1, 2)},
     ),
+    "seed_adjudication_rulings": (
+        pg_fixtures.seed_adjudication_rulings,
+        {
+            "template_id": "surveil",
+            "bindings": {"actor": 1},
+            "rulings": ((1, "defer"),),
+        },
+    ),
     "seed_pending_turn": (
         pg_fixtures.seed_pending_turn,
         {"user_text": "Refused.", "storyteller_text": "Refused."},
