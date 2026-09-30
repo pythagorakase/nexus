@@ -31,12 +31,13 @@ from tests.pg_fixtures import connect
 
 # Measured against the shipped NEXUS_template registry on 2026-07-30:
 # 24,321 bytes / 5,982 o200k tokens. The byte and token ceilings retain
-# ~10% headroom. The post-#916 registry had 625 enum values; #811 slice B
-# drops the 97 live tags under deprecated registry categories, leaving 528
-# (23,846 bytes / 5,806 tokens on 2026-09-30).
+# ~10% headroom. The post-#916 registry has 625 enum values. #811 slice B
+# moves the 97 live tags under deprecated registry categories out of the
+# add/hint enums into clear-only enums, so the count stays 625
+# (25,920 bytes / 6,349 tokens on 2026-09-30).
 GAIA_REGISTRY_STRICT_MAX_BYTES = 26_800
 GAIA_REGISTRY_STRICT_MAX_TOKENS = 6_600
-GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 528
+GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 625
 
 # Current OpenAI Structured Outputs documentation:
 # https://developers.openai.com/api/docs/guides/structured-outputs
@@ -89,14 +90,15 @@ def _enum_values(definition: dict[str, Any]) -> set[str]:
     raise AssertionError(f"Definition is not an enum: {definition!r}")
 
 
-def _array_item_ref(property_schema: dict[str, Any]) -> str:
+def _array_item_refs(property_schema: dict[str, Any]) -> list[str]:
     candidates = property_schema.get("anyOf") or [property_schema]
     array_schema = next(
         candidate
         for candidate in candidates
         if isinstance(candidate, dict) and candidate.get("type") == "array"
     )
-    return str(array_schema["items"]["$ref"])
+    items = array_schema["items"]
+    return [str(item["$ref"]) for item in items.get("anyOf") or [items]]
 
 
 def _all_enum_nodes(value: Any) -> list[dict[str, Any]]:
@@ -131,6 +133,17 @@ def test_gaia_grammar_exactly_matches_clone_validator_partitions(
         "PairTagName": set(vocabulary.pair_tag_names),
         "EventTypeName": set(vocabulary.event_types),
     }
+    for kind, prefix in (
+        ("character", "Character"),
+        ("place", "Place"),
+        ("faction", "Faction"),
+    ):
+        clear_only = (
+            vocabulary.clearable_tags(kind) - vocabulary.tag_names_by_kind[kind]
+        )
+        # Every kind carries live tags under a deprecated registry category.
+        assert clear_only
+        expected[f"{prefix}ClearOnlyTagName"] = set(clear_only)
     for definition_name, values in expected.items():
         assert _enum_values(definitions[definition_name]) == values
 
@@ -139,11 +152,15 @@ def test_gaia_grammar_exactly_matches_clone_validator_partitions(
         ("PlaceUpdateDeltaRegistry", "PlaceTagName"),
         ("FactionUpdateDeltaRegistry", "FactionTagName"),
     ):
-        for field_name in ("tags_add", "tags_clear"):
-            assert (
-                _array_item_ref(definitions[model_name]["properties"][field_name])
-                == f"#/$defs/{definition_name}"
-            )
+        properties = definitions[model_name]["properties"]
+        clear_only_name = definition_name.replace("TagName", "ClearOnlyTagName")
+        assert _array_item_refs(properties["tags_add"]) == [
+            f"#/$defs/{definition_name}"
+        ]
+        assert _array_item_refs(properties["tags_clear"]) == [
+            f"#/$defs/{definition_name}",
+            f"#/$defs/{clear_only_name}",
+        ]
 
     for model_name, kind, definition_name in (
         (

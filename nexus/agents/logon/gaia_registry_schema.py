@@ -55,6 +55,9 @@ class GaiaRegistryVocabulary:
     faction_tags: tuple[str, ...]
     pair_tags: tuple[str, ...]
     event_types: tuple[str, ...]
+    character_clear_only_tags: tuple[str, ...] = ()
+    place_clear_only_tags: tuple[str, ...] = ()
+    faction_clear_only_tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -163,8 +166,21 @@ def _normalize_vocabulary(
         faction_tags=_normalize_names("faction tag", tag_names_by_kind.get("faction")),
         pair_tags=_normalize_names("pair tag", vocabulary.pair_tag_names),
         event_types=_normalize_names("event type", vocabulary.event_types),
+        character_clear_only_tags=_clear_only_names(vocabulary, "character"),
+        place_clear_only_tags=_clear_only_names(vocabulary, "place"),
+        faction_clear_only_tags=_clear_only_names(vocabulary, "faction"),
     )
     return normalized
+
+
+def _clear_only_names(
+    vocabulary: StorytellerVocabulary,
+    entity_kind: str,
+) -> tuple[str, ...]:
+    """Return the sorted tags a clear may name but an application may not."""
+
+    promptable = vocabulary.tag_names_by_kind.get(entity_kind, frozenset())
+    return tuple(sorted(vocabulary.clearable_tags(entity_kind) - promptable))
 
 
 def _normalize_names(label: str, values: object) -> tuple[str, ...]:
@@ -212,6 +228,28 @@ def _literal_alias(
     return TypeAliasType(name, literal)
 
 
+def _clear_tag_type(
+    name: str,
+    tag_name_type: Any,
+    clear_only_tags: tuple[str, ...],
+) -> Any:
+    """Return the item type of ``tags_clear`` for one entity kind.
+
+    A clear names a promptable tag or a tag of a deprecated registry category
+    that existing rows may still carry. The second set gets its own named enum,
+    so ``tags_add`` never offers it.
+    """
+
+    if not clear_only_tags:
+        return tag_name_type
+    clear_only_name = _literal_alias(
+        name,
+        clear_only_tags,
+        description="Tag of a deprecated category: clear only, never add.",
+    )
+    return _union_type(tag_name_type, clear_only_name)
+
+
 def _list_type(item_type: Any) -> Any:
     return list[item_type]
 
@@ -244,6 +282,21 @@ def _build_gaia_registry_wire_model(
         description="Registered pair-tag name (e.g., protects, obligation).",
     )
     event_type_name = _literal_alias("EventTypeName", vocabulary.event_types)
+    character_clear_tag_name = _clear_tag_type(
+        "CharacterClearOnlyTagName",
+        character_tag_name,
+        vocabulary.character_clear_only_tags,
+    )
+    place_clear_tag_name = _clear_tag_type(
+        "PlaceClearOnlyTagName",
+        place_tag_name,
+        vocabulary.place_clear_only_tags,
+    )
+    faction_clear_tag_name = _clear_tag_type(
+        "FactionClearOnlyTagName",
+        faction_tag_name,
+        vocabulary.faction_clear_only_tags,
+    )
 
     pair_hint_model = create_model(
         "NewEntityPairTagHintRegistry",
@@ -307,18 +360,18 @@ def _build_gaia_registry_wire_model(
             | type[FactionUpdateDelta]
         ),
         tag_name_type: Any,
+        clear_tag_name_type: Any,
     ) -> Any:
-        optional_tag_list = _optional_type(_list_type(tag_name_type))
         return create_model(
             name,
             __base__=base,
             __module__=__name__,
             tags_add=(
-                optional_tag_list,
+                _optional_type(_list_type(tag_name_type)),
                 Field(default=None, description="Registered tags to add."),
             ),
             tags_clear=(
-                optional_tag_list,
+                _optional_type(_list_type(clear_tag_name_type)),
                 Field(default=None, description="Registered tags to clear."),
             ),
         )
@@ -327,16 +380,19 @@ def _build_gaia_registry_wire_model(
         "CharacterUpdateDeltaRegistry",
         CharacterUpdateDelta,
         character_tag_name,
+        character_clear_tag_name,
     )
     place_update_model = update_model(
         "PlaceUpdateDeltaRegistry",
         PlaceUpdateDelta,
         place_tag_name,
+        place_clear_tag_name,
     )
     faction_update_model = update_model(
         "FactionUpdateDeltaRegistry",
         FactionUpdateDelta,
         faction_tag_name,
+        faction_clear_tag_name,
     )
     updates_model = create_model(
         "UpdatesBlockRegistry",

@@ -45,6 +45,7 @@ class TagLibraryEntry:
     reapplication_policy: Optional[str] = None
     clearance_kind: Optional[str] = None
     default_duration: Optional[timedelta] = None
+    category_deprecated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,11 +101,15 @@ def read_tag_library(
     dbname: Optional[str] = None,
     *,
     entity_kinds: Optional[Sequence[str]] = None,
+    include_deprecated_categories: bool = False,
 ) -> list[TagLibraryEntry]:
     """Read promptable Orrery tags from the target slot database.
 
     A tag is promptable when neither it nor its registry category is
-    deprecated and it is not a synonym.
+    deprecated and it is not a synonym. ``include_deprecated_categories``
+    keeps the tags of deprecated registry categories: existing rows may still
+    carry them, so a clear must be able to name them even though no prompt
+    offers them for a new application.
     """
 
     kind_filter = _normalize_entity_kinds(entity_kinds)
@@ -113,10 +118,11 @@ def read_tag_library(
         with conn.cursor() as cur:
             params: list[object] = []
             where = [
-                _LIVE_CATEGORY_PREDICATE,
                 "t.deprecated = FALSE",
                 "t.synonym_for IS NULL",
             ]
+            if not include_deprecated_categories:
+                where.insert(0, _LIVE_CATEGORY_PREDICATE)
             if kind_filter is not None:
                 where.append("r.entity_kind = ANY(%s::entity_kind[])")
                 params.append(list(kind_filter))
@@ -127,6 +133,7 @@ def read_tag_library(
                     r.category,
                     r.description AS category_description,
                     r.prompt_order,
+                    r.deprecated AS category_deprecated,
                     t.tag,
                     t.is_ephemeral,
                     t.description,
@@ -164,6 +171,7 @@ def read_tag_library(
                         else None
                     ),
                     default_duration=row.get("default_duration"),
+                    category_deprecated=bool(row["category_deprecated"]),
                 )
                 for row in cur.fetchall()
             ]

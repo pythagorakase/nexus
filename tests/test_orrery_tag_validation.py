@@ -225,7 +225,7 @@ def _stub_storyteller_vocabulary_readers(
     monkeypatch.setattr(
         orrery_tag_validation,
         "read_tag_library",
-        lambda _dbname: [
+        lambda _dbname, **_options: [
             _tag_entry("character", "bodyform", "human"),
             _tag_entry("character", "disposition", "perceptive"),
             _tag_entry(
@@ -1165,7 +1165,7 @@ async def test_storyteller_validator_reads_each_catalog_once_per_attempt(
 
     read_counts = {"tags": 0, "pair_tags": 0, "event_types": 0}
 
-    def read_tags(_dbname: str) -> list[TagLibraryEntry]:
+    def read_tags(_dbname: str, **_options: Any) -> list[TagLibraryEntry]:
         read_counts["tags"] += 1
         return [
             _tag_entry("character", "bodyform", "human"),

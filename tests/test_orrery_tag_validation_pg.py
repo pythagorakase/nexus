@@ -37,6 +37,8 @@ from nexus.agents.logon.skald_wire import (
     SkaldGaiaWire,
     SkaldTurnWire,
 )
+from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+from nexus.agents.orrery.tag_writer import apply_tag_bestowal
 from nexus.api.commit_handler_sync import (
     apply_state_updates_sync,
     commit_incubator_to_database_sync,
@@ -924,6 +926,120 @@ def test_active_place_and_faction_identity_only_reassert_arms_are_removed_by_id(
     assert response.updates is not None
     assert getattr(response.updates, array_name) == []
     assert issues == []
+
+
+# One live, non-deprecated tag per kind whose registry category is deprecated.
+# Existing rows on save_03 and save_04 still carry these (issue #811).
+_DEPRECATED_CATEGORY_TAGS = [
+    ("characters", "active_character", "character", "black_market_operator"),
+    ("places", "place", "place", "worksite"),
+    ("factions", "faction", "faction", "gray_legal"),
+]
+
+
+def _deprecated_category_update(
+    entity: _EntityRef, field_name: str, tag: str
+) -> List[dict[str, Any]]:
+    return [{"id": entity.wire_id, "name": entity.name, field_name: [tag]}]
+
+
+@pytest.mark.parametrize(
+    ("array_name", "entity_attribute", "entity_kind", "tag"),
+    _DEPRECATED_CATEGORY_TAGS,
+)
+def test_deprecated_category_tag_is_clearable_but_not_addable(
+    qa649_db: _Qa649Database,
+    array_name: str,
+    entity_attribute: str,
+    entity_kind: str,
+    tag: str,
+) -> None:
+    entity = getattr(qa649_db, entity_attribute)
+    vocabulary = read_storyteller_vocabulary(qa649_db.dbname)
+    assert tag not in vocabulary.tag_names_by_kind[entity_kind]
+    assert tag in vocabulary.clearable_tags(entity_kind)
+
+    clear_arrays: dict[str, Any] = {
+        array_name: _deprecated_category_update(entity, "tags_clear", tag)
+    }
+    add_arrays: dict[str, Any] = {
+        array_name: _deprecated_category_update(entity, "tags_add", tag)
+    }
+    clear = _response(**clear_arrays)
+    add = _response(**add_arrays)
+    _clear_normalized, clear_issues = _normalize_and_collect(clear, qa649_db)
+    _add_normalized, add_issues = _normalize_and_collect(add, qa649_db)
+
+    assert clear_issues == []
+    assert len(add_issues) == 1
+    assert (
+        f"applied_tags: Unknown or entity-kind-incompatible tag {tag!r} "
+        f"for {entity_kind!r}"
+    ) in add_issues[0]
+
+    # The validated clear reaches an active row through the real writer. The
+    # transaction rolls back so the module-scoped clone stays unchanged.
+    conn = _connect(qa649_db.dbname)
+    try:
+        with conn.cursor() as cur:
+            _activate_tag(cur, entity.entity_id, tag)
+            apply_tag_bestowal(
+                cur,
+                entity_id=entity.entity_id,
+                entity_kind=entity_kind,
+                bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
+            )
+            cur.execute(
+                """
+                SELECT count(*)
+                FROM entity_tags et
+                JOIN tags t ON t.id = et.tag_id
+                WHERE et.entity_id = %s AND t.tag = %s AND et.cleared_at IS NULL
+                """,
+                (entity.entity_id, tag),
+            )
+            assert cur.fetchone()[0] == 0
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    ("array_name", "entity_attribute", "entity_kind", "tag"),
+    _DEPRECATED_CATEGORY_TAGS,
+)
+def test_gaia_grammar_clears_but_never_adds_deprecated_category_tag(
+    qa649_db: _Qa649Database,
+    array_name: str,
+    entity_attribute: str,
+    entity_kind: str,
+    tag: str,
+) -> None:
+    entity = getattr(qa649_db, entity_attribute)
+    schema_model = load_gaia_registry_wire_spec(qa649_db.dbname).model
+
+    def payload(field_name: str) -> dict[str, Any]:
+        updates: dict[str, Any] = {
+            "characters": [],
+            "places": [],
+            "factions": [],
+            "relationships": [],
+        }
+        updates[array_name] = _deprecated_category_update(entity, field_name, tag)
+        return {
+            "letter": "Clear a tag an existing row still carries.",
+            "new_entities": [],
+            "orrery_adjudications": [],
+            "updates": updates,
+        }
+
+    cleared = coerce_gaia_registry_wire(
+        schema_model.model_validate(payload("tags_clear"))
+    )
+    assert cleared.updates is not None
+    assert getattr(cleared.updates, array_name)[0].tags_clear == [tag]
+    with pytest.raises(ValidationError):
+        schema_model.model_validate(payload("tags_add"))
 
 
 def test_migration_109_seeds_only_time_cleared_defaults(
