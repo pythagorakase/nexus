@@ -20,17 +20,24 @@ that reach an owner database.
   connection audit.
 - ``include_data=True`` (a data clone) in a module that never applies the
   ``requires_corpus`` marker.
+- A clone or dump helper (a callee whose name ends ``_clone`` or ``_dump``)
+  given an int-literal slot, positionally or as ``slot=`` (``slot_clone(1)``
+  dumps ``save_01`` with its data), in a module that never applies the
+  ``requires_corpus`` marker.
 
 ``ALLOWLISTED_FILES`` exempts, by exact path, the contract and private-cluster
 tests whose subject is the owner names themselves. ``EXEMPTIONS`` names every
-other permitted use by file and rule, with its reason; each must still match
-a finding, so a stale entry fails too.
+other permitted use by file, rule, and the finding's exact source text, with
+its reason. Each exemption admits one finding: a new use in an exempted file,
+even of the same rule, fails until it is listed, and an exemption that no
+longer matches a finding fails as stale.
 """
 
 from __future__ import annotations
 
 import ast
 import re
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
@@ -59,6 +66,9 @@ RULE_CONNECTION = "connection-owner-literal"
 RULE_DBNAME_CONSTANT = "dbname-constant-owner-literal"
 RULE_DATA_CLONE = "include_data-without-requires_corpus"
 RULE_SUBPROCESS = "subprocess-owner-literal"
+RULE_SLOT_CLONE = "clone-or-dump-literal-slot-without-requires_corpus"
+# A callee named ``*_clone`` or ``*_dump`` copies a slot's database.
+CLONE_OR_DUMP = re.compile(r".+_(?:clone|dump)")
 # Child processes (pg_dump, psql, a CLI) connect outside the in-process
 # connection audit; an owner name in their argument list reaches the owner.
 SUBPROCESS_CALLS = frozenset({"run", "Popen", "check_call", "check_output", "call"})
@@ -91,41 +101,67 @@ ALLOWLISTED_FILES: dict[str, str] = {
 
 
 class Exemption(NamedTuple):
-    """One permitted finding kind in one file, and why it is safe."""
+    """One permitted finding in one file, and why it is safe.
+
+    ``source`` is the finding's exact source text (``Finding.source``), so an
+    exemption admits that one use and no other finding of its rule.
+    """
 
     path: str
     rule: str
+    source: str
     reason: str
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        return (self.path, self.rule, self.source)
 
 
 EXEMPTIONS: tuple[Exemption, ...] = (
-    Exemption(
-        "test_scheduler_helpers_routing.py",
-        RULE_SLOT_DBNAME,
-        "tests of route_slot itself: slot numbers resolve to prove routing "
-        "and its restoration; nothing connects",
+    *(
+        Exemption(
+            "test_scheduler_helpers_routing.py",
+            RULE_SLOT_DBNAME,
+            source,
+            "a test of route_slot itself: the slot number resolves to prove "
+            "routing and its restoration; nothing connects",
+        )
+        for source in (
+            "module.slot_dbname(4)",
+            "module.slot_dbname(5)",
+            "slot_utils.slot_dbname(4)",
+        )
     ),
-    Exemption(
-        "test_memnon_db_access.py",
-        RULE_CONNECTION,
-        "fake-backed label: database_url('save_04') is handed to a monkeypatched "
-        "psycopg2.connect that returns a recording fake",
+    *(
+        Exemption(
+            "test_memnon_db_access.py",
+            RULE_CONNECTION,
+            'database_url("save_04")',
+            "fake-backed label: the URL is handed to a monkeypatched "
+            "psycopg2.connect that returns a recording fake",
+        )
+        for _ in range(2)
     ),
     Exemption(
         "test_memnon/test_source_embeddings.py",
         RULE_CONNECTION,
-        "fake-backed label: connect('save_05') is a method of the test's own "
-        "_Database fake, which records statements and never reaches a driver",
+        'database.connect("save_05", dict_cursor=True)',
+        "fake-backed label: connect is a method of the test's own _Database "
+        "fake, which records statements and never reaches a driver",
     ),
     Exemption(
         "test_lore/conftest.py",
         RULE_DATA_CLONE,
+        'disposable_slot_database( "qa_lore_corpus", source_db="save_01", '
+        "include_data=True )",
         "lore_corpus_database fails unless NEXUS_RUN_CORPUS=1, and only "
         "requires_corpus tests (test_lore/test_infrastructure.py) request it",
     ),
     Exemption(
         "test_idf_dictionary_pg.py",
         RULE_DATA_CLONE,
+        'disposable_slot_database( "qa762_corpus_copy", source_db=idf_slot, '
+        "include_data=True )",
         "the data clone's source_db is the module's own disposable idf_slot "
         "clone (qa762_*), not an owner slot",
     ),
@@ -197,8 +233,12 @@ def scan_source(source: str, path: str) -> list[Finding]:
 
     def add(node: ast.AST, rule: str) -> None:
         line = getattr(node, "lineno", 0)
-        text = lines[line - 1].strip() if 0 < line <= len(lines) else ""
-        findings.append(Finding(path, line, rule, text))
+        segment = ast.get_source_segment(source, node)
+        if segment is None:
+            segment = lines[line - 1] if 0 < line <= len(lines) else ""
+        # The whole call or assignment, whitespace collapsed: an exemption
+        # names this exact text.
+        findings.append(Finding(path, line, rule, " ".join(segment.split())))
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
@@ -223,6 +263,19 @@ def scan_source(source: str, path: str) -> list[Finding]:
                 for element in value.elts
             ):
                 add(node, RULE_SUBPROCESS)
+            if (
+                not corpus_marked
+                and name is not None
+                and CLONE_OR_DUMP.fullmatch(name)
+                and (
+                    any(_is_int_literal(arg) for arg in node.args)
+                    or any(
+                        keyword.arg == "slot" and _is_int_literal(keyword.value)
+                        for keyword in node.keywords
+                    )
+                )
+            ):
+                add(node, RULE_SLOT_CLONE)
             if not corpus_marked and any(
                 keyword.arg == "include_data"
                 and isinstance(keyword.value, ast.Constant)
@@ -257,16 +310,28 @@ def tree_findings() -> list[Finding]:
     return findings
 
 
-def _exempted(finding: Finding) -> bool:
-    return any(
-        (finding.path, finding.rule) == (item.path, item.rule) for item in EXEMPTIONS
-    )
+def unexempted(findings: list[Finding]) -> list[Finding]:
+    """Return the findings no exemption admits.
+
+    Each exemption admits one finding with its exact (path, rule, source); a
+    finding beyond the exemptions listed for its source is not admitted.
+    """
+
+    remaining = Counter(item.key for item in EXEMPTIONS)
+    offending: list[Finding] = []
+    for finding in findings:
+        key = (finding.path, finding.rule, finding.source)
+        if remaining[key] > 0:
+            remaining[key] -= 1
+        else:
+            offending.append(finding)
+    return offending
 
 
 def test_no_test_spells_an_owner_target() -> None:
     """Every owner spelling outside the allowlist and exemptions fails here."""
 
-    offending = [str(item) for item in tree_findings() if not _exempted(item)]
+    offending = [str(item) for item in unexempted(tree_findings())]
     assert offending == [], "Owner database targets in tests:\n" + "\n".join(offending)
 
 
@@ -276,13 +341,34 @@ def test_every_allowlist_and_exemption_entry_is_live() -> None:
     for relative, reason in ALLOWLISTED_FILES.items():
         assert (TESTS_ROOT / relative).is_file(), relative
         assert reason.strip(), relative
-    findings = tree_findings()
+    found = Counter(
+        (finding.path, finding.rule, finding.source) for finding in tree_findings()
+    )
+    listed = Counter(item.key for item in EXEMPTIONS)
     for item in EXEMPTIONS:
         assert item.reason.strip(), item
-        assert any(
-            (finding.path, finding.rule) == (item.path, item.rule)
-            for finding in findings
-        ), f"stale exemption: {item.path} no longer has a {item.rule} finding"
+    stale = {key: count for key, count in listed.items() if found[key] < count}
+    assert stale == {}, f"stale exemptions (listed more than found): {stale}"
+
+
+def test_an_exemption_admits_only_its_own_use() -> None:
+    """A second use of an exempted rule in an exempted file is still a finding."""
+
+    source = (
+        'database_url("save_04")\n'
+        'database_url("save_04")\n'
+        'psycopg2.connect(dbname="save_02")\n'
+    )
+    findings = scan_source(source, "test_memnon_db_access.py")
+    assert [finding.rule for finding in findings] == [RULE_CONNECTION] * 3
+    # The two listed database_url uses are admitted; the new connect is not.
+    assert [str(item) for item in unexempted(findings)] == [
+        "tests/test_memnon_db_access.py:3: connection-owner-literal: "
+        'psycopg2.connect(dbname="save_02")'
+    ]
+    # A third copy of an exempted source exceeds its listed count.
+    tripled = scan_source('database_url("save_04")\n' * 3, "test_memnon_db_access.py")
+    assert [finding.line for finding in unexempted(tripled)] == [3]
 
 
 @pytest.mark.parametrize(
@@ -310,6 +396,9 @@ def test_every_allowlist_and_exemption_entry_is_live() -> None:
             "disposable_slot_database('qa', source_db='save_04', include_data=True)",
             RULE_DATA_CLONE,
         ),
+        ("slot_clone(1)", RULE_SLOT_CLONE),
+        ("ann_gate.slot_clone(slot=1)", RULE_SLOT_CLONE),
+        ("corpus_dump(4, path)", RULE_SLOT_CLONE),
     ],
 )
 def test_each_refused_spelling_is_found(source: str, rule: str) -> None:
@@ -334,6 +423,9 @@ def test_each_refused_spelling_is_found(source: str, rule: str) -> None:
         # A marked module may clone an owner corpus with data.
         "pytestmark = pytest.mark.requires_corpus\n"
         "disposable_slot_database('qa', source_db='save_04', include_data=True)",
+        "slot_clone(slot)",
+        "measure_clone('qa640_766_x', config)",
+        "pytestmark = pytest.mark.requires_corpus\nslot_clone(1)",
     ],
 )
 def test_disposable_and_marked_spellings_pass(source: str) -> None:

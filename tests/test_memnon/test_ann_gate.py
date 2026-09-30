@@ -3,6 +3,11 @@
 Uses narrative_chunks, chunk_metadata, and 2560d embeddings. All index and
 fixture writes are confined to qa640_766_*. SQL and EXPLAIN run on PostgreSQL;
 no database results are fabricated.
+
+The gate measures the owner's golden-master corpus (its embedded document
+count, planner choice, and latency), so the clone is a ``pg_dump`` data read
+of ``save_01``: every test that uses it is ``requires_corpus``, and the
+fixture fails without ``NEXUS_RUN_CORPUS=1``.
 """
 
 from __future__ import annotations
@@ -10,6 +15,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +84,16 @@ def test_ann_settings_validate_bounds(field: str, value: float) -> None:
 
 @pytest.fixture(scope="module")
 def ann_clone() -> Any:
+    """Yield a disposable data clone of the golden master's embedded corpus.
+
+    The flag check stops an unmarked test from dumping the owner's corpus
+    under the plain gate.
+    """
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        pytest.fail(
+            "ann_clone needs the requires_corpus marker and NEXUS_RUN_CORPUS=1",
+            pytrace=False,
+        )
     with slot_clone(1) as name:
         yield name
     connection = psycopg2.connect(**connection_kwargs("postgres"))
@@ -90,6 +106,7 @@ def ann_clone() -> Any:
 
 
 @pytest.mark.requires_postgres
+@pytest.mark.requires_corpus
 def test_ann_operator_measures_and_verdict(ann_clone: str) -> None:
     config = load_settings().memnon.retrieval.ann.model_copy(
         update={"probe_queries": 20}
@@ -127,6 +144,7 @@ def test_ann_operator_measures_and_verdict(ann_clone: str) -> None:
 
 
 @pytest.mark.requires_postgres
+@pytest.mark.requires_corpus
 def test_ann_candidate_index_build_drop(ann_clone: str) -> None:
     connection = psycopg2.connect(**connection_kwargs(ann_clone))
     try:
@@ -148,6 +166,7 @@ def test_ann_candidate_index_build_drop(ann_clone: str) -> None:
 
 
 @pytest.mark.requires_postgres
+@pytest.mark.requires_corpus
 def test_ann_alias_candidates_and_database_errors(ann_clone: str) -> None:
     engine = create_engine(database_url(ann_clone))
     try:
