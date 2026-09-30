@@ -1,14 +1,14 @@
 """The live gates' clone fixtures and non-LLM paths, without the live opt-in.
 
 The live-LLM gates (the golden path, the issue #600 and #601 wizard proofs,
-runtime maturation, and the Orrery cycle) keep their live markers, so their
-fixtures never run in the PostgreSQL gate. Each of them now runs on a
-disposable template clone routed under a slot label instead of resetting or
-writing a numbered owner slot. These tests run the same staging functions on
-TEST-pinned clones under ``NEXUS_RUN_POSTGRES=1`` and assert what each gate
-relies on before its first model call, including that the golden path's
-gateway subprocess serves the clone for the routed slot and refuses any other
-slot. No provider is called.
+the Retrograde wizard cold start, runtime maturation, and the Orrery cycle)
+keep their live markers, so their fixtures never run in the PostgreSQL gate.
+Each of them now runs on a disposable template clone routed under a slot
+label instead of resetting or writing a numbered owner slot. These tests run
+the same staging functions on TEST-pinned clones under
+``NEXUS_RUN_POSTGRES=1`` and assert what each gate relies on before its first
+model call, including that the golden path's gateway subprocess serves the
+clone for the routed slot and refuses any other slot. No provider is called.
 """
 
 from __future__ import annotations
@@ -20,11 +20,19 @@ from pathlib import Path
 
 import pytest
 import requests  # type: ignore[import-untyped]
+from psycopg2.extras import RealDictCursor
 from sqlalchemy.engine import make_url
 
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.retrograde_maturation import (
+    _load_job_context,
+    _load_story_setting,
+    _maturation_settings,
+    build_runtime_maturation_packet,
     enqueue_declared_entity_maturations,
+)
+from nexus.agents.orrery.retrograde_vocabulary import (
+    enumerate_seed_eligible_vocabulary,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api import slot_utils
@@ -54,8 +62,15 @@ from tests.test_orrery.test_live_cycle import (
     ROUTED_SLOT as LIVE_CYCLE_SLOT,
     seed_live_cycle_story,
 )
+from tests.test_orrery.test_retrograde_wizard_live import (
+    ROUTED_SLOT as RETROGRADE_WIZARD_SLOT,
+    THREAD_ID as RETROGRADE_WIZARD_THREAD_ID,
+    _live_run_model as retrograde_wizard_model,
+    stage_fixture_world,
+)
 from tests.test_orrery.test_retrograde_maturation_live import (
     ROUTED_SLOT as MATURATION_SLOT,
+    SETTING_FIXTURE as MATURATION_SETTING_FIXTURE,
     archivist_declaration,
     seed_maturation_story,
 )
@@ -120,7 +135,16 @@ def test_live_cycle_seed_routes_and_queues_a_promotion_backlog(
 def test_maturation_enqueue_is_idempotent_on_the_routed_clone(
     clone: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The maturation gate's declaration stubs once and queues one job."""
+    """The maturation gate's job stubs once, queues once, and loads its context.
+
+    The drain loads the job's context and the persisted story setting, then
+    builds the maturation packet, before its first model call; a clone
+    without ``global_variables.setting`` fails the job there. This runs
+    that pre-LLM path on the leased job's columns and asserts the packet
+    carries the seeded setting's genre band.
+    """
+
+    import json
 
     monkeypatch.setenv("NEXUS_SLOT", str(MATURATION_SLOT))
     story = seed_maturation_story(clone, monkeypatch.setattr)
@@ -150,6 +174,41 @@ def test_maturation_enqueue_is_idempotent_on_the_routed_clone(
             jobs = cur.fetchall()
         conn.rollback()
         assert jobs == [("queued", str(MATURATION_SLOT), story.chunk_id, name)]
+
+        cfg = _maturation_settings(load_settings_as_dict())
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id AS job_id, entity_id, entity_kind, entity_subtype_id,
+                       entity_name, slot, requesting_chunk_id, declaration
+                FROM orrery_maturation_jobs
+                WHERE entity_name = %s
+                """,
+                (name,),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            context = _load_job_context(cur, row=row, cfg=cfg)
+            story_setting = _load_story_setting(cur)
+        conn.rollback()
+        seeded_setting = json.loads(MATURATION_SETTING_FIXTURE.read_text())["setting"]
+        assert story_setting["genre"] == seeded_setting["genre"] == "thriller"
+        assert story_setting["world_name"] == seeded_setting["world_name"]
+        assert context["canonical_name"] == name
+        assert "archive stacks" in context["chunk_excerpt"]
+        packet = build_runtime_maturation_packet(
+            vocabulary=enumerate_seed_eligible_vocabulary(clone),
+            row=row,
+            context=context,
+            cfg=cfg,
+            dbname=clone,
+            setting=story_setting,
+        )
+        assert packet["dbname"] == clone
+        assert packet["maturation_target"]["name"] == name
+        assert packet["requesting_chunk_id"] == story.chunk_id
+        assert packet["weird"]["genre"] == "thriller"
+        assert name in packet["seed_generation_prompt"]
 
         rerun = enqueue_declared_entity_maturations(
             conn,
@@ -210,6 +269,49 @@ def test_issue_600_staging_confirms_setting_and_character(
     assert persisted.thread_id == ISSUE_600_THREAD_ID
     assert persisted.pending_confirmation() is None
     assert persisted.base_timestamp is None, "the seed has not been submitted"
+
+
+def test_retrograde_wizard_staging_persists_the_canned_cache(
+    clone: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cold-start proof's cache, model, and transition data persist."""
+
+    from nexus.api.new_story_schemas import CharacterCreationState
+    from nexus.api.wizard_test_cache import load_cache
+
+    route_slot_to_disposable(
+        monkeypatch.setattr, slot=RETROGRADE_WIZARD_SLOT, dbname=clone
+    )
+    monkeypatch.delenv("NEXUS_RETROGRADE_WIZARD_MODEL", raising=False)
+    transition_data = stage_fixture_world(clone)
+
+    cache = load_cache()
+    assert (
+        get_slot_model(RETROGRADE_WIZARD_SLOT, dbname=clone)
+        == retrograde_wizard_model()
+        == get_new_story_model()
+    )
+    staged = read_cache(clone)
+    assert staged is not None
+    assert staged.thread_id == RETROGRADE_WIZARD_THREAD_ID
+    assert staged.target_slot == RETROGRADE_WIZARD_SLOT
+    staged_setting = staged.get_setting_dict()
+    assert staged_setting is not None
+    assert {key: staged_setting[key] for key in cache["setting_draft"]} == cache[
+        "setting_draft"
+    ]
+    expected_name = (
+        CharacterCreationState(**cache["character_draft"]).to_character_sheet().name
+    )
+    assert transition_data.character.name == expected_name
+    assert transition_data.thread_id == RETROGRADE_WIZARD_THREAD_ID
+    assert transition_data.setting.world_name == cache["setting_draft"]["world_name"]
+    with closing(connect(clone)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM world_events WHERE source = 'retrograde'::"
+            "event_source_kind"
+        )
+        assert cur.fetchone()[0] == 0, "the transition has not run"
 
 
 def test_golden_path_staging_and_routed_gateway_serve_only_the_clone(

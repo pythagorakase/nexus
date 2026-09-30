@@ -39,11 +39,21 @@ Stages (ordered; each test asserts one category against the shared run):
   8. Server log scan: no tracebacks, no ERROR lines.
 
 Gating: NEXUS_RUN_LIVE_LLM=1, NEXUS_RUN_POSTGRES=1, and the expensive-run
-opt-in NEXUS_GOLDEN_PATH_E2E=1. The gateway subprocess inherits NEXUS_SLOT:
-set it to ROUTED_SLOT (4) for the gateway's scheduler to own the clone's
-deferred work; any other slot fails at gateway startup, never reaching an
-owner database. Staging the wizard cache and booting the routed gateway are
-proven without the live opt-in in ``tests/test_live_gate_clones_pg.py``.
+opt-in NEXUS_GOLDEN_PATH_E2E=1. The ``golden_path`` fixture sets NEXUS_SLOT to
+ROUTED_SLOT (4) for the run, so the gateway subprocess starts the SlotScheduler
+that owns the clone's deferred work (the only production caller of
+``drain_maturation_jobs_sync``, which stage 7 and the adaptive tail need); the
+operator's own NEXUS_SLOT is ignored. Staging the wizard cache and booting the
+routed gateway are proven without the live opt-in in
+``tests/test_live_gate_clones_pg.py``.
+
+Known blocker (recorded in the deferred list of #885 slice B1, PR #1026): a
+gateway whose NEXUS_SLOT names a wizard-phase slot logs ``ERROR ...
+Cannot resolve canonical player identity: user_character is NULL`` with a
+traceback from ``drain_experience_outbox_sync``
+(``nexus/agents/orrery/experiences.py:1827``) on every scheduler pass until
+the transition binds the player. Stage 8's clean-log scan rejects those lines,
+so this gate cannot pass until that production defect is fixed.
 
 Cost and wall clock: measured green run (2026-06-11, gpt-5.5 +
 @anthropic.default narration): 20 frontier calls, 14m30s end to end.
@@ -200,9 +210,10 @@ def launch_routed_gateway(
 ) -> subprocess.Popen:
     """Boot the gateway entry point with ``ROUTED_SLOT`` routed to ``dbname``.
 
-    The child inherits ``NEXUS_SLOT``: set it to ``ROUTED_SLOT`` to let the
-    gateway's scheduler own the clone's deferred work (any other slot fails
-    at startup). ``store_access`` hands the child the owner's secret store,
+    The child inherits ``NEXUS_SLOT``: the golden path sets it to
+    ``ROUTED_SLOT`` so the gateway's scheduler owns the clone's deferred work,
+    and the no-opt-in proof unsets it so no scheduler starts (any other slot
+    fails at startup). ``store_access`` hands the child the owner's secret store,
     which the live gate's frontier calls need; without it the child runs in
     env-only mode.
     """
@@ -518,6 +529,9 @@ def golden_path(tmp_path_factory: pytest.TempPathFactory) -> Any:
             pytest.MonkeyPatch.context() as patch,
         ):
             route_slot_to_disposable(patch.setattr, slot=ROUTED_SLOT, dbname=dbname)
+            # The gateway child inherits this: its SlotScheduler is the only
+            # production drain for maturation (stage 7) and the adaptive tail.
+            patch.setenv("NEXUS_SLOT", str(ROUTED_SLOT))
             _RUN_DATABASE.append(dbname)
             try:
                 stage_reset_slot(dbname)

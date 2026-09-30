@@ -2,20 +2,24 @@
 
 Skipped unless ``NEXUS_RUN_LIVE_LLM=1`` is set. Makes real frontier calls
 (R4 seed generation + R6 expansion) and commits real rows to a disposable
-template clone that ``maturation_story`` seeds with a clocked head chunk and
-routes under ``ROUTED_SLOT``; the clone is dropped afterward, so no owner slot
-is written. Each run declares a uniquely named entity. The enqueue and
-idempotency path this test drives before its first model call is proven
-without the live opt-in in ``tests/test_live_gate_clones_pg.py``.
+template clone that ``maturation_story`` seeds with a persisted wizard setting
+and a clocked head chunk and routes under ``ROUTED_SLOT``; the clone is
+dropped afterward, so no owner slot is written. Each run declares a uniquely
+named entity. The enqueue and
+idempotency path this test drives before its first model call, and the drain's
+job-context and story-setting loads, are proven without the live opt-in in
+``tests/test_live_gate_clones_pg.py``.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,6 +35,7 @@ from tests.pg_fixtures import (
     disposable_slot_database,
     route_slot_to_disposable,
     seed_story_clock,
+    seed_story_setting,
 )
 
 pytestmark = [pytest.mark.live, pytest.mark.live_llm, pytest.mark.requires_postgres]
@@ -39,6 +44,13 @@ pytestmark = [pytest.mark.live, pytest.mark.live_llm, pytest.mark.requires_postg
 # drain resolves its connection through it.
 ROUTED_SLOT = 4
 WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+# Maturation reads the persisted wizard setting before its first model call;
+# its genre selects the Retrograde weird band.
+SETTING_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "slot3_midnight_qa_wizard_cache.json"
+)
 
 
 @dataclass(frozen=True)
@@ -52,9 +64,12 @@ class MaturationStory:
 def seed_maturation_story(
     dbname: str, patch: Callable[[Any, str, Any], None]
 ) -> MaturationStory:
-    """Clock the clone with one head chunk and route ``ROUTED_SLOT`` to it."""
+    """Persist a setting, clock one head chunk, and route ``ROUTED_SLOT``."""
 
     route_slot_to_disposable(patch, slot=ROUTED_SLOT, dbname=dbname)
+    seed_story_setting(
+        dbname, setting=json.loads(SETTING_FIXTURE.read_text())["setting"]
+    )
     chunk_id = seed_story_clock(
         dbname,
         world_time=WORLD_TIME,
