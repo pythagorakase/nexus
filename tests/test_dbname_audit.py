@@ -245,7 +245,7 @@ DSN = f"postgresql://{getpass.getuser()}@audit.invalid"
 
 
 def test_database_keyword_outranks_pgdatabase():
-    libpq_variables = {{k: v for k, v in os.environ.items() if k.startswith("PG")}}
+    libpq_variables = {k: v for k, v in os.environ.items() if k.startswith("PG")}
     assert libpq_variables.get("PGDATABASE") == "save_01"
 
     # The keyword wins: admitted, recorded as postgres, stopped at the dial.
