@@ -1,9 +1,9 @@
 """Tests for character tag migration manifest helpers."""
 
 from argparse import Namespace
+from collections.abc import Iterator
 from typing import Any
 
-import psycopg2  # type: ignore[import-untyped]
 import pytest
 
 from nexus import cli
@@ -12,9 +12,63 @@ from nexus.api.character_tag_manifest import (
     build_character_migration_manifest_from_rows,
 )
 from nexus.api.db_pool import close_pool
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_character,
+    seed_deprecated_category_tag,
+    seed_entity_tag,
+    seed_protagonist,
+)
+
+# The row-builder tests below take no database; the builders only echo this
+# label into the manifest's ``source``.
+LABEL_DBNAME = "fixture_character_manifest_db"
+TEST_SLOT = 2
+
+# The review-required operations the seeded characters yield, by
+# ``(character name, source tag, operation type, target tag or None)``. Each
+# source row exercises one branch of the manifest's legacy mapping:
+# ``bodyform:android`` (deprecated ``bodyform`` category) canonicalizes to the
+# registered ``inorganic``; ``debt_pulse_active`` (deprecated
+# ``orrery_signal``) is a structured remainder; ``off_grid`` (live
+# ``orrery_state``) is preserved as prose; ``hunter`` (live
+# ``role.function``) is a watched collision tag reviewed in place.
+SEEDED_CHARACTER_OPERATIONS = {
+    ("Fixture Android", "bodyform:android", "review_entity_tag", "inorganic"),
+    ("Fixture Debtor", "debt_pulse_active", "structured_remainder", None),
+    ("Fixture Drifter", "off_grid", "preserve_prose", None),
+    ("Fixture Hunter", "hunter", "review_entity_tag", "hunter"),
+}
 
 
-TEST_DBNAME = "save_02"
+@pytest.fixture(scope="module")
+def character_manifest_dbname() -> Iterator[str]:
+    """Route slot 2 to a template clone seeded with legacy character tags.
+
+    A fifth character, "Fixture Guardian", carries only the live
+    ``kin_protector`` disposition tag, which is neither legacy nor watched,
+    so it must not appear in the manifest.
+    """
+
+    with disposable_slot_database("qa885_character_manifest") as dbname:
+        with pytest.MonkeyPatch.context() as mp:
+            route_slot_to_disposable(mp.setattr, slot=TEST_SLOT, dbname=dbname)
+            _, android = seed_protagonist(dbname, name="Fixture Android")
+            _, debtor = seed_character(dbname, name="Fixture Debtor")
+            _, drifter = seed_character(dbname, name="Fixture Drifter")
+            _, hunter = seed_character(dbname, name="Fixture Hunter")
+            _, guardian = seed_character(dbname, name="Fixture Guardian")
+            seed_deprecated_category_tag(
+                dbname, entity_id=android, tag="bodyform:android"
+            )
+            seed_deprecated_category_tag(
+                dbname, entity_id=debtor, tag="debt_pulse_active"
+            )
+            seed_entity_tag(dbname, entity_id=drifter, tag="off_grid")
+            seed_entity_tag(dbname, entity_id=hunter, tag="hunter")
+            seed_entity_tag(dbname, entity_id=guardian, tag="kin_protector")
+            yield dbname
 
 
 def test_character_manifest_canonicalizes_resolved_collision_names() -> None:
@@ -34,7 +88,7 @@ def test_character_manifest_canonicalizes_resolved_collision_names() -> None:
             "hunter": {"category": "role.function"},
         },
         slot=2,
-        dbname="save_02",
+        dbname=LABEL_DBNAME,
     )
 
     operations = {
@@ -63,7 +117,7 @@ def test_character_manifest_reports_missing_target_tags() -> None:
         [_row(tag="black_market_operator", category="profession_lite")],
         registered_tags={},
         slot=2,
-        dbname="save_02",
+        dbname=LABEL_DBNAME,
     )
 
     operation = manifest["operations"][0]
@@ -84,22 +138,48 @@ def test_cli_character_apply_requires_manifest_for_execute() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_cli_character_manifest_returns_live_slot2_payload() -> None:
+def test_cli_character_manifest_returns_seeded_slot_payload(
+    character_manifest_dbname: str,
+) -> None:
     """CLI character-manifest should read the slot and return a manifest."""
 
     try:
-        result = cli.run_character_manifest(Namespace(slot=2, output=None))
-    except psycopg2.Error as exc:
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+        result = cli.run_character_manifest(Namespace(slot=TEST_SLOT, output=None))
     finally:
-        close_pool(TEST_DBNAME)
+        close_pool(character_manifest_dbname)
 
     assert result["success"] is True
-    assert result["character_manifest"]["schema_version"] == (
-        CHARACTER_MANIFEST_SCHEMA_VERSION
+    assert result["dbname"] == character_manifest_dbname
+    manifest = result["character_manifest"]
+    assert manifest["schema_version"] == (CHARACTER_MANIFEST_SCHEMA_VERSION)
+    assert manifest["dry_run"] is True
+    assert manifest["source"]["slot"] == TEST_SLOT
+    assert manifest["source"]["dbname"] == character_manifest_dbname
+    assert {
+        (
+            operation["character_name"],
+            operation["source"]["tag"],
+            operation["operation_type"],
+            operation["target"].get("tag"),
+        )
+        for operation in manifest["operations"]
+    } == SEEDED_CHARACTER_OPERATIONS
+    assert all(
+        operation["status"] == "review_required"
+        and operation["review_required"] is True
+        for operation in manifest["operations"]
     )
-    assert result["character_manifest"]["dry_run"] is True
-    assert result["character_manifest"]["source"]["slot"] == 2
+    (android,) = [
+        operation
+        for operation in manifest["operations"]
+        if operation["source"]["tag"] == "bodyform:android"
+    ]
+    assert android["target"]["category"] == "bodyform.lineage"
+    assert android["target"]["target_registered"] is True
+    counters = manifest["counters"]
+    assert counters["legacy_character_tag_rows"] == len(SEEDED_CHARACTER_OPERATIONS)
+    assert counters["review_required_operations"] == len(SEEDED_CHARACTER_OPERATIONS)
+    assert "missing_target_tag_operations" not in counters
 
 
 # Slot-2 retrofit live coverage was retired by owner order on 2026-07-17;
