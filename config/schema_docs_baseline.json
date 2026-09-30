@@ -27,10 +27,5 @@
   "function:public.hybrid_search(query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text, alias_terms_input text[])": "Legacy SQL search overload; no code under nexus/ or scripts/ calls it (MEMNON's execute_hybrid_search delegates to execute_multi_model_hybrid_search, which builds its own SQL; nexus/agents/memnon/utils/db_access.py:581), and no reader/writer evidence establishes its contract yet.",
   "function:public.migrate_embeddings()": "Legacy copy from chunk_embeddings_small into chunk_embeddings; no code under nexus/ or scripts/ calls it, and NEXUS_template has neither table.",
   "function:public.pad_vector_384_to_1024(v vector)": "Legacy 384-to-1024 vector padding helper; no code under nexus/ or scripts/ and no other NEXUS function calls it.",
-  "function:public.pad_vector_to_1024(v vector)": "Legacy 384-to-1024 vector padding helper; no code under nexus/ or scripts/ and no other NEXUS function calls it.",
-  "view:public.chunk_entity_references_v": "Legacy view named in scripts/orrery_sample.py; predates the migration comment lint, and a comment waits for the backfill slice that cites reader/writer evidence.",
-  "view:public.entity_names_v": "Legacy view named in 9 Python files under nexus/ and scripts/, including nexus/agents/memnon/memnon.py; predates the migration comment lint, and a comment waits for the backfill slice that cites reader/writer evidence.",
-  "view:public.entity_relationships_v": "Legacy view named in 5 Python files under nexus/ and scripts/, including nexus/agents/orrery/audit.py; predates the migration comment lint, and a comment waits for the backfill slice that cites reader/writer evidence.",
-  "view:public.entity_tags_current": "Legacy view named in 8 Python files under nexus/ and scripts/, including nexus/agents/lore/utils/entity_queries.py; predates the migration comment lint, and a comment waits for the backfill slice that cites reader/writer evidence.",
-  "view:public.incubator_view": "Legacy view named in nexus/api/narrative.py; predates the migration comment lint, and a comment waits for the backfill slice that cites reader/writer evidence."
+  "function:public.pad_vector_to_1024(v vector)": "Legacy 384-to-1024 vector padding helper; no code under nexus/ or scripts/ and no other NEXUS function calls it."
 }
