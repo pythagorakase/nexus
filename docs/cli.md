@@ -75,8 +75,8 @@ active `nexus.toml`, or a `NEXUS_API_URL` without a host, is a `config_error`
 checked for every command but `doctor` before it runs. A `NEXUS_API_URL` that
 is not `http://` or `https://`, and a runtime credential that is missing or
 refused, are a `config_error` when the first request is sent. Every HTTP
-command reports these, and an API that refuses the connection or does not
-answer in time (exit 4), the same way. Only a command that already saved work
+command reports these, and an API that refuses or drops the connection or
+does not answer in time (exit 4), the same way. Only a command that already saved work
 (a confirmed artifact, a saved seed, a scheduled turn) reports a later failed
 request itself, with a `partial` that keeps that work and its recovery
 command: as `api_unreachable` (exit 4) when the gateway refused or dropped the
@@ -158,10 +158,12 @@ helper, `nexus.cli.wait_for_session`:
   gateway can hold the read until it finishes.
 - A session the API reports as failed is a domain failure (exit 1) whose
   `error` is the API's own message.
-- A session still running when the budget ends, an HTTP error answer, or an
-  unusable payload is a domain failure (exit 1).
-- A gateway that refuses or drops the connection mid-wait is
-  `api_unreachable` (exit 4). A failed read is never retried.
+- A session still running when the budget ends, a read that times out, an
+  HTTP error answer or any other failed request, or an unusable payload is a
+  domain failure (exit 1).
+- A gateway that refuses or drops the connection mid-wait, a body cut off
+  mid-answer included, is `api_unreachable` (exit 4). A failed read is never
+  retried.
 
 Every failed wait keeps the scheduled work in `partial`: `session_id`,
 `generation_error` (`status` and `detail`), and `recovery_command`

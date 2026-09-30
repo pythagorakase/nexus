@@ -1182,6 +1182,7 @@ _CREDENTIAL_ERRORS: tuple[type[BaseException], ...] = (
 # first (``except _TRANSPORT_ERRORS: raise``), so they reach main().
 _TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
     requests.exceptions.ConnectionError,
+    requests.exceptions.ChunkedEncodingError,
     requests.exceptions.Timeout,
     *_API_URL_ERRORS,
     *_CREDENTIAL_ERRORS,
@@ -1511,8 +1512,8 @@ def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
 
     Each verb reads GET routes nexus/api/route_capabilities.py declares on the
     player plane and returns their bodies unchanged under ``data``; nothing is
-    written. A request that cannot connect or times out propagates to main(),
-    which reports it as ``api_unreachable`` (exit 4).
+    written. A request that cannot connect, is dropped, or times out reaches
+    main(), which reports it as ``api_unreachable`` (exit 4).
     """
     reader = _INSPECT_READERS.get(args.inspect_command)
     if reader is None:
@@ -1529,17 +1530,17 @@ def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
         if failure.status_code is not None:
             result["status_code"] = failure.status_code
         return result
-    return {
-        "success": True,
-        "data": data,
-        "empty": _INSPECT_EMPTY.get(args.inspect_command),
-    }
+    return {"success": True, "data": data}
 
 
-def _print_inspection(data: Any, truncate: bool, empty: Optional[str]) -> None:
-    """Print an inspected record's fields, or each record of a list, in turn."""
+def _print_inspection(data: Any, truncate: bool, verb: str) -> None:
+    """Print an inspected record's fields, or each record of a list, in turn.
+
+    An empty read prints the verb's :data:`_INSPECT_EMPTY` line; only the
+    list and incubator verbs can read nothing, so only they have one.
+    """
     if data is None or data == []:
-        print(empty or "Nothing to show.")
+        print(_INSPECT_EMPTY[verb])
         return
     records = data if isinstance(data, list) else [data]
     for index, record in enumerate(records):
@@ -1747,7 +1748,7 @@ class SessionWaitFailure(Exception):
 
 
 def _unreachable_failure(exc: BaseException) -> SessionWaitFailure:
-    """A request mid-wait that found no gateway, reported as api_unreachable."""
+    """A request mid-wait the gateway refused or dropped, as api_unreachable."""
     return SessionWaitFailure(
         "unreachable",
         f"Cannot connect to API server at {get_api_url()}: {exc}",
@@ -1787,9 +1788,9 @@ def wait_for_session(
     (``error``, with the API's own message), the budget spent while the
     session still runs (``timeout``), a gateway that refuses or drops the
     connection (``unreachable``, reported as ``api_unreachable``), an HTTP
-    error answer (``http_error``), an unusable payload
-    (``invalid_response``), or Ctrl+C (``interrupted``). A failed read is
-    never retried.
+    error answer or any other failed request (``http_error``), an unusable
+    payload (``invalid_response``), or Ctrl+C (``interrupted``). A failed
+    read is never retried.
     """
     url = f"{get_api_url()}/api/narrative/status/{session_id}"
     deadline = time.monotonic() + timeout
@@ -1806,6 +1807,10 @@ def wait_for_session(
                 raise SessionWaitFailure(
                     "timeout",
                     f"Generation timed out: no status answer within {timeout}s",
+                ) from exc
+            except requests.exceptions.RequestException as exc:
+                raise SessionWaitFailure(
+                    "http_error", f"Could not read {url}: {exc}"
                 ) from exc
             if not 200 <= response.status_code < 300:
                 raise SessionWaitFailure(
@@ -1839,7 +1844,9 @@ def _load_session_result(
     """Load the narrative a finished session produced from the slot's state.
 
     Raises :class:`SessionWaitFailure` when the state cannot be read or no
-    longer shows this session's result.
+    longer shows this session's result: ``unreachable`` (``api_unreachable``)
+    when the gateway refuses or drops the connection, a domain failure for a
+    read that times out or fails otherwise.
     """
     url = f"{get_api_url()}/api/slot/{slot}/state"
     try:
@@ -1847,9 +1854,14 @@ def _load_session_result(
     except (
         requests.exceptions.ConnectionError,
         requests.exceptions.ChunkedEncodingError,
-        requests.exceptions.Timeout,
     ) as exc:
         raise _unreachable_failure(exc) from exc
+    except requests.exceptions.Timeout as exc:
+        raise SessionWaitFailure(
+            "timeout", f"Timed out waiting for API server at {get_api_url()}: {exc}"
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        raise SessionWaitFailure("http_error", f"Could not read {url}: {exc}") from exc
     if not 200 <= response.status_code < 300:
         raise SessionWaitFailure(
             "http_error",
@@ -1962,12 +1974,18 @@ def _bootstrap_seed_narrative(
     except (
         requests.exceptions.ConnectionError,
         requests.exceptions.ChunkedEncodingError,
-        requests.exceptions.Timeout,
     ) as exc:
-        # The seed is saved; a gateway that is gone keeps it as partial work
-        # under the transport code (exit 4) rather than a domain failure.
+        # The seed is saved; a gateway that refused or dropped the connection
+        # keeps it as partial work under the transport code (exit 4).
         failure = _unreachable_failure(exc)
         completion = {"success": False, "code": failure.code, "error": failure.detail}
+    except requests.exceptions.Timeout as exc:
+        # A gateway that accepted the request but answered too late is a
+        # domain failure that keeps the saved seed, like any late read.
+        completion = {
+            "success": False,
+            "error": f"Timed out waiting for API server at {get_api_url()}: {exc}",
+        }
     except (requests.exceptions.RequestException, ValueError) as exc:
         completion = {"success": False, "error": str(exc)}
 
@@ -4617,7 +4635,7 @@ Examples:
   nexus inspect chunks --slot 5 --last 2 --json   The newest two chunks
   nexus inspect chunks --slot 5 --from 10 --to 12   Chunks 10 through 12
   nexus inspect chunk 12 --slot 5  One committed chunk
-  nexus inspect incubator --slot 5 The pending draft, or null
+  nexus inspect incubator --slot 5  The pending draft, or null
   nexus inspect characters --slot 5  Characters (also places, factions)
   nexus inspect characters 3 --slot 5  One character by id
   nexus continue --slot 5       Advance the story
@@ -5677,7 +5695,10 @@ def main() -> int:
 
     try:
         outcome = _dispatch(args)
-    except requests.exceptions.ConnectionError as exc:
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ChunkedEncodingError,
+    ) as exc:
         outcome = {
             **_api_unreachable(),
             "error": f"Cannot connect to API server at {get_api_url()}: {exc}",
@@ -5714,7 +5735,7 @@ def main() -> int:
             print(json.dumps(envelope, indent=2, sort_keys=True))
         else:
             _print_inspection(
-                result["data"], truncate=args.truncate, empty=result.get("empty")
+                result["data"], truncate=args.truncate, verb=args.inspect_command
             )
         return int(ExitCode.OK)
 
