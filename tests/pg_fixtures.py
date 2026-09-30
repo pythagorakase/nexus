@@ -416,6 +416,22 @@ ROUTED_SLOT_ENV = "NEXUS_ROUTED_SLOT"
 ROUTED_SLOT_DATABASE_ENV = "NEXUS_ROUTED_SLOT_DATABASE"
 
 
+def _require_routable_database(dbname: str) -> str:
+    """Return ``dbname`` unless it names an owner database, which raises.
+
+    The routing counterpart of ``require_disposable_target``: the refusal
+    names ``NEXUS_ROUTED_SLOT_DATABASE``, the variable that carries the
+    database into a routed child process, rather than a seed helper.
+    """
+
+    if dbname in _OWNER_DATABASES:
+        raise RuntimeError(
+            f"{ROUTED_SLOT_DATABASE_ENV}={dbname!r} names an owner database; "
+            "a routed entry point serves only a disposable clone"
+        )
+    return dbname
+
+
 def routed_slot_environment(slot: int, dbname: str) -> dict[str, str]:
     """Return the child-process variables that route ``slot`` to ``dbname``.
 
@@ -423,7 +439,7 @@ def routed_slot_environment(slot: int, dbname: str) -> dict[str, str]:
     environment that the child would refuse only after it started.
     """
 
-    require_disposable_target(dbname)
+    _require_routable_database(dbname)
     return {ROUTED_SLOT_ENV: str(slot), ROUTED_SLOT_DATABASE_ENV: dbname}
 
 
@@ -464,7 +480,7 @@ def route_slot_from_environment(
         raise RuntimeError(
             f"{ROUTED_SLOT_ENV}={slot} is not a slot; slots are {all_slots()}"
         )
-    dbname = env[ROUTED_SLOT_DATABASE_ENV]
+    dbname = _require_routable_database(env[ROUTED_SLOT_DATABASE_ENV])
     route_slot_to_disposable(setattr, slot=slot, dbname=dbname)
     return slot, dbname
 

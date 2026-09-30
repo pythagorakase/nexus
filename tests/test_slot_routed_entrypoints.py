@@ -169,11 +169,12 @@ def test_route_from_environment_refuses_owner_databases(owner: str) -> None:
     resolver = slot_utils.slot_dbname
     valid = slot_utils.VALID_DBNAMES
     environ = {ROUTED_SLOT_ENV: "5", ROUTED_SLOT_DATABASE_ENV: owner}
-    with pytest.raises(RuntimeError, match="Refusing to seed owner database"):
+    refusal = f"{ROUTED_SLOT_DATABASE_ENV}={owner!r} names an owner database"
+    with pytest.raises(RuntimeError, match=refusal):
         route_slot_from_environment(environ)
     assert slot_utils.slot_dbname is resolver
     assert slot_utils.VALID_DBNAMES is valid
-    with pytest.raises(RuntimeError, match="Refusing to seed owner database"):
+    with pytest.raises(RuntimeError, match=refusal):
         routed_slot_environment(ROUTED_SLOT, owner)
 
 
@@ -187,7 +188,7 @@ def test_route_from_environment_refuses_owner_databases(owner: str) -> None:
         ),
         (
             {ROUTED_SLOT_ENV: "5", ROUTED_SLOT_DATABASE_ENV: "save_05"},
-            "Refusing to seed owner database 'save_05'",
+            f"{ROUTED_SLOT_DATABASE_ENV}='save_05' names an owner database",
         ),
     ],
 )
