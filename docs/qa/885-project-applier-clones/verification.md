@@ -200,6 +200,17 @@ exit=0
 
 Identical.
 
+### First Run's Gate Tail (Between the Pair Above)
+
+The slice gate run that the 03:18:53Z/03:19:11Z pair brackets, with `dbname_audit` v1 (gateway variables unset; the command is the one under Slice Gate below):
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname-audit: postgres, qa885_build_venture_2f10d388db03, qa885_build_venture_async_452deaa4e9da, qa885_build_venture_replay_37185028cbb7, qa885_character_pair_5bee3dec709b, qa885_character_pair_ec765b98ec11, qa885_court_patron_062ca319223d, qa885_court_patron_async_3c4d4f5fa0b7, qa885_court_patron_daf9915bd905, qa885_pursue_romance_24df10f133ff, qa885_pursue_romance_async_acf4ac46279b, qa885_seek_redemption_4a406d4d5d87, qa885_seek_redemption_async_f68f74847dd8, qa885_seek_redemption_cdf8c82af736
+dbname-audit owner targets: []
+112 passed, 5 warnings in 17.35s
+```
+
 ### Rerun After Review (2026-09-30T03:36:03Z to 03:36:22Z)
 
 The review fixes reran the slice gate with the corrected audit plugin (below) between a second pair of snapshots. Another session was running `pytest tests/test_orrery` (which still includes unconverted modules that write `save_02`) during that window, and the second pair differs:
@@ -229,7 +240,169 @@ $ diff before.txt after.txt; echo exit=$?
 exit=1
 ```
 
-The same rerun's audit line shows this process opened no owner database (`dbname-audit owner targets: []`), so the drift belongs to the other session. A before/after pair is evidence only for a window that no other session wrote in, as the first one was.
+The same rerun's audit line shows this process opened no owner database (`dbname-audit owner targets: []`), so the drift belongs to the other session. A before/after pair is evidence only for a window that no other session wrote in, as the first and third ones were.
+
+### Fresh Pair at HEAD e4a9d766 (2026-09-30T03:43:19Z to 2026-09-30T03:43:38Z)
+
+After the second review, the slice gate reran at `e4a9d766` with the corrected `dbname_audit` plugin, between a third pair of snapshots, in a window when no other session was running `tests/test_orrery` (`ps` showed only another worktree's offline run, `tests --ignore=tests/test_api --ignore=tests/test_orrery`, before the run). This pair is identical, so it pairs a passing tail with its matching snapshot.
+
+#### Before (2026-09-30T03:43:19Z)
+
+```
+BEGIN
+ schemaname |               sequencename                | last_value 
+------------+-------------------------------------------+------------
+ public     | ai_notebook_id_seq                        |           
+ public     | backstory_secrets_id_seq                  |           
+ public     | character_experience_jobs_id_seq          |           
+ public     | character_experiences_id_seq              |           
+ public     | character_identity_rulings_id_seq         |           
+ public     | character_project_states_id_seq           |       3414
+ public     | character_relationships_id_seq            |          7
+ public     | character_routine_anchors_id_seq          |           
+ public     | characters_id_seq                         |        101
+ public     | chunk_metadata_id_seq                     |       8642
+ public     | claim_awareness_id_seq                    |       1044
+ public     | claims_id_seq                             |        475
+ public     | correspondence_compaction_jobs_id_seq     |           
+ public     | entities_id_seq                           |        561
+ public     | entity_pair_tags_id_seq                   |       3510
+ public     | entity_tags_id_seq                        |       1145
+ public     | generation_session_phases_id_seq          |           
+ public     | interaction_authorizations_id_seq         |           
+ public     | interaction_events_id_seq                 |           
+ public     | interaction_participants_id_seq           |           
+ public     | items_id_seq                              |           
+ public     | layers_id_seq                             |          1
+ public     | narrative_chunks_id_seq                   |       2621
+ public     | narrative_embedding_jobs_id_seq           |           
+ public     | narrative_summary_jobs_id_seq             |           
+ public     | offscreen_narrations_id_seq               |           
+ public     | orrery_adjudication_log_id_seq            |        546
+ public     | orrery_maturation_jobs_id_seq             |        504
+ public     | orrery_narration_jobs_id_seq              |           
+ public     | orrery_prompt_exposures_id_seq            |       3174
+ public     | orrery_recall_trace_id_seq                |           
+ public     | orrery_resolutions_id_seq                 |       7261
+ public     | orrery_route_graph_edges_id_seq           |           
+ public     | orrery_route_graph_nodes_id_seq           |           
+ public     | orrery_scene_pressures_id_seq             |        546
+ public     | orrery_travel_edges_id_seq                |           
+ public     | pair_tags_id_seq                          |         29
+ public     | places_id_seq                             |          4
+ public     | relationship_versions_id_seq              |     100126
+ public     | retrieval_coverage_log_id_seq             |         52
+ public     | retrograde_summaries_id_seq               |       1435
+ public     | state_checkpoints_id_seq                  |       2966
+ public     | state_delta_log_id_seq                    |         33
+ public     | storyteller_correspondence_letters_id_seq |           
+ public     | tag_clearance_log_id_seq                  |       1061
+ public     | tags_id_seq                               |        556
+ public     | world_events_id_seq                       |       8128
+ public     | zones_id_seq                              |          1
+(48 rows)
+
+              t               | count 
+------------------------------+-------
+ character_relationships      |    84
+ relationship_versions        |    84
+ entity_pair_tags             |     0
+ entity_tags                  |     0
+ tag_clearance_log            |     0
+ relationship_milestone_queue |     0
+(6 rows)
+
+COMMIT
+```
+
+#### Gate Tail
+
+```
+$ NEXUS_RUN_POSTGRES=1 PYTHONPATH=<scratch> $PY -m pytest -q -p dbname_audit <the eleven modules> \
+    tests/test_pg_disposable_target.py tests/test_pg_character_pair_seed.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname-audit: postgres, qa885_build_venture_async_e3bb3230be45, qa885_build_venture_dcd622581391, qa885_build_venture_replay_e51281537c19, qa885_character_pair_65881475f85d, qa885_character_pair_7f3725a64e21, qa885_court_patron_6a33c0b5332e, qa885_court_patron_7a1861815ed8, qa885_court_patron_async_8e0061763d36, qa885_pursue_romance_5a182aa93c0f, qa885_pursue_romance_async_e7c71ef7939c, qa885_seek_redemption_38d7fda43800, qa885_seek_redemption_58ff6b5118c4, qa885_seek_redemption_async_ee88a7bbd0d6
+dbname-audit owner targets: []
+112 passed, 5 warnings in 18.00s
+```
+
+#### After (2026-09-30T03:43:38Z)
+
+```
+BEGIN
+ schemaname |               sequencename                | last_value 
+------------+-------------------------------------------+------------
+ public     | ai_notebook_id_seq                        |           
+ public     | backstory_secrets_id_seq                  |           
+ public     | character_experience_jobs_id_seq          |           
+ public     | character_experiences_id_seq              |           
+ public     | character_identity_rulings_id_seq         |           
+ public     | character_project_states_id_seq           |       3414
+ public     | character_relationships_id_seq            |          7
+ public     | character_routine_anchors_id_seq          |           
+ public     | characters_id_seq                         |        101
+ public     | chunk_metadata_id_seq                     |       8642
+ public     | claim_awareness_id_seq                    |       1044
+ public     | claims_id_seq                             |        475
+ public     | correspondence_compaction_jobs_id_seq     |           
+ public     | entities_id_seq                           |        561
+ public     | entity_pair_tags_id_seq                   |       3510
+ public     | entity_tags_id_seq                        |       1145
+ public     | generation_session_phases_id_seq          |           
+ public     | interaction_authorizations_id_seq         |           
+ public     | interaction_events_id_seq                 |           
+ public     | interaction_participants_id_seq           |           
+ public     | items_id_seq                              |           
+ public     | layers_id_seq                             |          1
+ public     | narrative_chunks_id_seq                   |       2621
+ public     | narrative_embedding_jobs_id_seq           |           
+ public     | narrative_summary_jobs_id_seq             |           
+ public     | offscreen_narrations_id_seq               |           
+ public     | orrery_adjudication_log_id_seq            |        546
+ public     | orrery_maturation_jobs_id_seq             |        504
+ public     | orrery_narration_jobs_id_seq              |           
+ public     | orrery_prompt_exposures_id_seq            |       3174
+ public     | orrery_recall_trace_id_seq                |           
+ public     | orrery_resolutions_id_seq                 |       7261
+ public     | orrery_route_graph_edges_id_seq           |           
+ public     | orrery_route_graph_nodes_id_seq           |           
+ public     | orrery_scene_pressures_id_seq             |        546
+ public     | orrery_travel_edges_id_seq                |           
+ public     | pair_tags_id_seq                          |         29
+ public     | places_id_seq                             |          4
+ public     | relationship_versions_id_seq              |     100126
+ public     | retrieval_coverage_log_id_seq             |         52
+ public     | retrograde_summaries_id_seq               |       1435
+ public     | state_checkpoints_id_seq                  |       2966
+ public     | state_delta_log_id_seq                    |         33
+ public     | storyteller_correspondence_letters_id_seq |           
+ public     | tag_clearance_log_id_seq                  |       1061
+ public     | tags_id_seq                               |        556
+ public     | world_events_id_seq                       |       8128
+ public     | zones_id_seq                              |          1
+(48 rows)
+
+              t               | count 
+------------------------------+-------
+ character_relationships      |    84
+ relationship_versions        |    84
+ entity_pair_tags             |     0
+ entity_tags                  |     0
+ tag_clearance_log            |     0
+ relationship_milestone_queue |     0
+(6 rows)
+
+COMMIT
+```
+
+#### Diff
+
+```
+$ diff before.txt after.txt; echo exit=$?
+exit=0
+```
+
+Identical.
 
 Other sessions' concurrent runs of unconverted modules still write `save_02`. A snapshot taken at 03:04Z, before this branch ran any PostgreSQL test, read `relationship_versions_id_seq` 100056 and `entity_pair_tags_id_seq` 3475; by 03:18Z they read 100089 and 3490. In that window this branch ran only its converted modules, which the audited gate below shows open no owner database. For proof that does not depend on concurrency, the slice gate also ran with a pytest plugin that wraps `psycopg2.connect` and `asyncpg.connect` and records every database name the process opens (`dbname-audit` lines below). It opened `postgres` (the clone admin connection) and `qa885_*` clones only; no owner database. Clone creation also runs `pg_dump -s` against `NEXUS_template` in a subprocess, which is read-only.
 
@@ -250,7 +423,7 @@ dbname-audit owner targets: []
 112 passed, 5 warnings in 18.40s
 ```
 
-The `dbname_audit` plugin (scratch file, not committed). It resolves a positional or `dsn=` connection string to its `dbname` with `psycopg2.extensions.parse_dsn`, and its owner test matches `save_0` or `NEXUS_template` anywhere in the name, so a `psycopg2.connect(get_slot_db_url(slot=2))` call is flagged as `save_02`. A direct check of `_record` on `postgresql://pythagor@localhost:5432/save_02` and on `dbname=NEXUS_template host=localhost` flags both. The first run used an earlier version that recorded such a connection as `dsn:<url>` and did not flag it; its full name list had no `dsn:` entry. The tail above is from the rerun with this version.
+The `dbname_audit` plugin (scratch file, not committed). It resolves a positional or `dsn=` connection string to its `dbname` with `psycopg2.extensions.parse_dsn`, and its owner test matches `save_0` or `NEXUS_template` anywhere in the name, so a `psycopg2.connect(get_slot_db_url(slot=2))` call is flagged as `save_02`. A direct check of `_record` on `postgresql://pythagor@localhost:5432/save_02` and on `dbname=NEXUS_template host=localhost` flags both. The first run used an earlier version that recorded such a connection as `dsn:<url>` and did not flag it; its full name list had no `dsn:` entry. The tail above is from the 03:36Z rerun with this version; the fresh pair's run at `e4a9d766` used the same version.
 
 ```python
 """Record every PostgreSQL database this pytest process connects to."""
@@ -391,4 +564,4 @@ Black and flake8 are clean on every changed file. `mypy --explicit-package-bases
 
 ## Deferred
 
-- `_fabricate_chunk` in `tests/test_orrery/test_pursue_romance_replay.py` (B2-4 scope) still assigns `max(id) + 1`. The two coupled replay modules here import it and pass on the clone, because `seed_character_pair` guarantees a chunk. The sequence-assigned rewrite belongs to B2-4 with the file.
+- `_fabricate_chunk` in `tests/test_orrery/test_pursue_romance_replay.py` (B2-4 scope) still assigns `max(id) + 1`. The two coupled replay modules here import it and pass on the clone, because `seed_character_pair` guarantees a chunk. The sequence-assigned rewrite (`INSERT INTO narrative_chunks (raw_text, created_at) VALUES (...) RETURNING id`, as `_chunk` in `test_build_venture_replay.py` now does) belongs to B2-4 with the file, and B2-4 must rerun `test_court_patron_replay.py` and `test_seek_redemption_replay.py` after it, because both import the helper.
