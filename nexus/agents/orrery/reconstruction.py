@@ -315,32 +315,6 @@ def log_state_delta_sync(
     )
 
 
-async def log_state_delta_async(
-    conn: Any,
-    *,
-    source_chunk_id: int,
-    writer: str,
-    entity_id: Optional[int],
-    field: str,
-    new_value: Any,
-    old_value: Any = None,
-) -> None:
-    """Persist encoded JSON through text so asyncpg codecs cannot encode it twice."""
-    await conn.execute(
-        """
-        INSERT INTO state_delta_log (
-            source_chunk_id, writer, entity_id, field, old_value, new_value
-        ) VALUES ($1, $2, $3, $4, $5::text::jsonb, $6::text::jsonb)
-        """,
-        source_chunk_id,
-        writer,
-        entity_id,
-        field,
-        json.dumps(old_value) if old_value is not None else None,
-        json.dumps(new_value),
-    )
-
-
 def set_commit_chunk_attribution_sync(cur: Any, chunk_id: int) -> None:
     """Attribute this transaction's trigger-versioned writes to a chunk.
 

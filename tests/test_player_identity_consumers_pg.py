@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Iterator
 
-import asyncpg  # type: ignore[import-untyped]
 import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2 import sql  # type: ignore[import-untyped]
@@ -28,7 +27,7 @@ from nexus.agents.lore.utils.entity_queries import (
 )
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.memnon.memnon import MEMNON
-from nexus.agents.orrery.geo import story_active_zone, story_active_zone_async
+from nexus.agents.orrery.geo import story_active_zone
 from nexus.agents.orrery.player_identity import (
     PlayerIdentityNotEstablishedError,
     canonical_player_character_id,
@@ -43,7 +42,7 @@ from nexus.config import load_settings
 from nexus.config.settings_models import OrreryWeatherSettings
 from nexus.memory.manager import ContextMemoryManager
 from scripts import new_story_setup
-from tests.pg_fixtures import asyncpg_kwargs, connect, sqlalchemy_url
+from tests.pg_fixtures import connect, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -968,83 +967,3 @@ async def test_soft_sites_do_not_catch_generic_runtime_error(
     with pytest.raises(RuntimeError) as lifecycle_error:
         slot_state.get_slot_state(1)
     assert type(lifecycle_error.value) is RuntimeError
-
-
-@pytest.mark.asyncio
-async def test_async_gis_consumer_uses_same_identity_contract(
-    disposable_player_db: tuple[str, Engine],
-) -> None:
-    """The asyncpg place-stub path resolves and rejects the same identity."""
-
-    dbname, _engine = disposable_player_db
-    conn = await asyncpg.connect(**asyncpg_kwargs(dbname))
-    transaction = conn.transaction()
-    await transaction.start()
-    try:
-        await conn.execute(
-            "UPDATE global_variables "
-            "SET user_character = NULL, base_timestamp = $1 "
-            "WHERE id = true",
-            _WORLD_TIME,
-        )
-        layer_id = int(
-            await conn.fetchval(
-                "INSERT INTO layers (name) VALUES ($1) RETURNING id",
-                f"identity-layer-{uuid.uuid4().hex[:8]}",
-            )
-        )
-        zone_id = int(
-            await conn.fetchval(
-                "INSERT INTO zones (name, layer) VALUES ($1, $2) RETURNING id",
-                f"identity-zone-{uuid.uuid4().hex[:8]}",
-                layer_id,
-            )
-        )
-        place_entity_id = int(
-            await conn.fetchval(
-                "INSERT INTO entities (kind, is_active) "
-                "VALUES ('place', true) RETURNING id"
-            )
-        )
-        place_id = int(
-            await conn.fetchval(
-                "INSERT INTO places (name, type, zone, entity_id) "
-                "VALUES ($1, 'fixed_location', $2, $3) RETURNING id",
-                f"identity-async-place-{uuid.uuid4().hex[:8]}",
-                zone_id,
-                place_entity_id,
-            )
-        )
-        character_entity_id = int(
-            await conn.fetchval(
-                "INSERT INTO entities (kind, is_active) "
-                "VALUES ('character', true) RETURNING id"
-            )
-        )
-        character_id = int(
-            await conn.fetchval(
-                "INSERT INTO characters (name, current_location, entity_id) "
-                "VALUES ($1, $2, $3) RETURNING id",
-                f"identity-async-player-{uuid.uuid4().hex[:8]}",
-                place_id,
-                character_entity_id,
-            )
-        )
-        await conn.execute(
-            "UPDATE global_variables SET user_character = $1 WHERE id = true",
-            character_id,
-        )
-
-        assert await story_active_zone_async(conn) == zone_id
-
-        await conn.execute(
-            "UPDATE global_variables SET user_character = NULL WHERE id = true"
-        )
-        with pytest.raises(
-            PlayerIdentityNotEstablishedError,
-            match="user_character is NULL",
-        ):
-            await story_active_zone_async(conn)
-    finally:
-        await transaction.rollback()
-        await conn.close()

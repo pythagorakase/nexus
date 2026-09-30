@@ -3,31 +3,15 @@
 import pytest
 from datetime import timedelta
 from nexus.agents.logon.apex_schema import (
-    CharacterReference,
     ChronologyUpdate,
-    FactionReference,
     PlaceReference,
     PlaceReferenceType,
-    ReferenceType,
 )
 from nexus.api.db_converters import (
     time_fields_to_interval,
     interval_to_time_fields,
     chronology_to_db_values,
-    resolve_character_references,
-    resolve_faction_references,
-    resolve_place_references,
 )
-
-
-class MissingLookupConnection:
-    async def fetch(self, *args):
-        return []
-
-    """Async connection stand-in whose name lookups find no rows."""
-
-    async def fetchval(self, *_args, **_kwargs):
-        return None
 
 
 class TestTimeConversion:
@@ -148,49 +132,6 @@ class TestPlaceReference:
         # Invalid - no reference provided
         with pytest.raises(ValueError, match="Must provide either"):
             PlaceReference(reference_type=PlaceReferenceType.SETTING)
-
-
-class TestReferenceResolution:
-    """Test reference resolver tolerance for non-canonical extraction metadata."""
-
-    @pytest.mark.asyncio
-    async def test_unresolved_character_reference_raises(self):
-        with pytest.raises(ValueError, match="Unresolved character"):
-            await resolve_character_references(
-                [
-                    CharacterReference(
-                        character_name="Unresolved Name",
-                        reference_type=ReferenceType.MENTIONED,
-                    )
-                ],
-                MissingLookupConnection(),
-            )
-
-    @pytest.mark.asyncio
-    async def test_unresolved_place_reference_raises(self):
-        with pytest.raises(ValueError, match="Unresolved place"):
-            await resolve_place_references(
-                [
-                    PlaceReference(
-                        place_name="Unresolved Name",
-                        reference_type=PlaceReferenceType.MENTIONED,
-                    )
-                ],
-                MissingLookupConnection(),
-            )
-
-    @pytest.mark.asyncio
-    async def test_unresolved_faction_reference_raises(self):
-        with pytest.raises(ValueError, match="Unresolved faction"):
-            await resolve_faction_references(
-                [
-                    FactionReference(
-                        faction_name="Unresolved Name",
-                        reference_type=ReferenceType.MENTIONED,
-                    )
-                ],
-                MissingLookupConnection(),
-            )
 
 
 class TestTimeFieldValidation:

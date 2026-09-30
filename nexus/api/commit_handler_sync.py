@@ -165,7 +165,7 @@ def _require_chunk_world_time_sync(cur: Any, chunk_id: int) -> datetime:
 def resolve_place_references_sync(
     place_references: List[PlaceReference], conn
 ) -> List[dict]:
-    """Synchronous version of resolve_place_references"""
+    """Resolve existing place references to canonical IDs, or fail loudly."""
     resolved_refs = []
     for ref in place_references:
         entry = resolve_reference(
@@ -185,7 +185,7 @@ def resolve_place_references_sync(
 def resolve_character_references_sync(
     character_references: List[CharacterReference], conn
 ) -> List[dict]:
-    """Synchronous version of resolve_character_references"""
+    """Resolve existing character references to canonical IDs, or fail loudly."""
     resolved_refs = []
     for ref in character_references:
         entry = resolve_reference(
@@ -204,7 +204,7 @@ def resolve_character_references_sync(
 def resolve_faction_references_sync(
     faction_references: List[FactionReference], conn
 ) -> List[dict]:
-    """Synchronous version of resolve_faction_references"""
+    """Resolve existing faction references to canonical IDs, or fail loudly."""
     resolved_refs = []
     for ref in faction_references:
         entry = resolve_reference(
