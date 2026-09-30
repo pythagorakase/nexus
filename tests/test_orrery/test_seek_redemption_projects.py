@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from contextlib import contextmanager
 from itertools import count
 from pathlib import Path
 from typing import Any, Iterator
