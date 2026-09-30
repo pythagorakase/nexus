@@ -18,8 +18,10 @@ from sqlalchemy.orm import Session
 
 import nexus.config
 from nexus.agents.logon.apex_enums import FactionMemberRole
-from nexus.agents.orrery.resolver import hydrate_world_state
+from nexus.agents.orrery.audit import explain_dry_run
+from nexus.agents.orrery.resolver import hydrate_world_state, resolve_dry_run
 from nexus.agents.orrery.substrate import Slot, WorldState, faction_member
+from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.config import load_settings
 from tests.pg_fixtures import (
     connect,
@@ -178,3 +180,73 @@ def test_narrowed_membership_roles_change_hydrated_membership(
             {membership_clone["faction_entity_id"]}
         )
     }
+
+
+def _raise_on_load_settings(*_args: Any, **_kwargs: Any) -> Any:
+    """Stand in for ``load_settings``: an entry point that drops a section fails."""
+
+    raise AssertionError("an Orrery entry point fell back to load_settings()")
+
+
+def _resolve_phase_sections(orrery: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the sections the resolve phase hands ``resolve_dry_run``.
+
+    Mirrors ``TurnCycle`` in ``nexus/agents/lore/utils/turn_cycle.py``: every
+    section comes from one dump of the Orrery settings.
+    """
+
+    return {
+        "sunhelm_settings": orrery["sunhelm"],
+        "selection_settings": orrery["selection"],
+        "habituation_settings": orrery["habituation"],
+        "package_selection_settings": orrery["package_selection"],
+        "project_settings": orrery["projects"],
+        "epistemics_settings": orrery["epistemics"],
+        "fanout_settings": orrery["fanout"],
+        "contagion_settings": orrery["contagion"],
+        "weather_settings": orrery["weather"],
+        "mood_settings": orrery["mood"],
+        "composition_settings": orrery["composition"],
+        "resolver_settings": orrery["resolver"],
+    }
+
+
+@pytest.mark.parametrize("entry_point", ["resolve_dry_run", "explain_dry_run"])
+def test_dry_run_entry_points_forward_resolver_settings(
+    entry_point: str,
+    membership_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both dry-run entry points hand their resolver section to hydration.
+
+    ``load_settings`` raises, so an entry point that drops
+    ``resolver_settings`` reaches the ``None`` branch of
+    ``coerce_resolver_settings`` and fails loudly instead of reading the
+    default ``nexus.toml``, whose roles equal the shipped ones.
+    """
+
+    settings = settings_with({"orrery.resolver.membership_roles": ["leader"]})
+    assert settings.orrery is not None
+    sections = _resolve_phase_sections(settings.orrery.model_dump(by_alias=True))
+    monkeypatch.setattr(nexus.config, "load_settings", _raise_on_load_settings)
+
+    if entry_point == "resolve_dry_run":
+        proposal = resolve_dry_run(
+            membership_session,
+            BUILTIN_TEMPLATES,
+            anchor_chunk_id=None,
+            window_chunks=30,
+            ambient_settings=settings.orrery.model_dump(by_alias=True)["ambient"],
+            ambient_pacing_allowed=False,
+            **sections,
+        )
+        assert proposal.anchor_chunk_id is None
+    else:
+        report = explain_dry_run(
+            membership_session,
+            BUILTIN_TEMPLATES,
+            anchor_chunk_id=None,
+            window_chunks=30,
+            **sections,
+        )
+        assert report.anchor_chunk_id is None
