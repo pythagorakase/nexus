@@ -744,6 +744,8 @@ entity_tags | 0
 
 ## Gates
 
+Every gate in this section ran at `b85ab4ea`, the last commit that changes code. It follows `23c16622` (five test files: `test_reveal_live.py`, `claim_accounts_test_support.py`, `test_claim_propagation_live.py`, `test_claim_consumption_live.py`, `test_claim_accounts_live.py`) and adds the seeded-id assertions in `test_epistemics.py` and `test_claim_propagation_live.py`. The first-round runs at `38896df8` gave the same counts; these runs replace them.
+
 Slice modules, PostgreSQL gate, gateway variables unset:
 
 ```
@@ -754,7 +756,7 @@ $ NEXUS_RUN_POSTGRES=1 python -m pytest -q tests/test_orrery/test_epistemics.py 
     tests/test_orrery/test_claim_awareness_replay_live.py
 .................sssssssssssssssssss................................     [100%]
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-49 passed, 19 skipped, 5 warnings in 19.05s
+49 passed, 19 skipped, 5 warnings in 17.94s
 ```
 
 The 19 skips are `test_claim_propagation_live.py`, whose `live_llm` marker stays. With the opt-in:
@@ -763,14 +765,12 @@ The 19 skips are `test_claim_propagation_live.py`, whose `live_llm` marker stays
 $ NEXUS_RUN_POSTGRES=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_TEST_PROVIDER_ONLY=1 python -m pytest -q <same eight modules>
 ....................................................................     [100%]
 secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
-68 passed, 5 warnings in 20.40s
+68 passed, 5 warnings in 18.60s
 ```
-
-Rerun at `23c16622` (the `pg4` window above): `68 passed, 5 warnings in 18.25s`. The plain run at the same commit: `49 passed, 19 skipped, 5 warnings in 16.97s`.
 
 `tests/secret_store_guard.py:691` prints `read-only (live LLM)` whenever `NEXUS_RUN_LIVE_LLM=1`, so this run cannot print `denied`; `docs/agent_workflow.md` requires the flag unset for the `denied` line. No test in these modules calls a provider.
 
-Full Orrery PostgreSQL tier on the final code (`NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery`, gateway variables unset):
+Full Orrery PostgreSQL tier at `b85ab4ea` (`NEXUS_RUN_POSTGRES=1 python -m pytest -q -rfE tests/test_orrery`, gateway variables unset):
 
 ```
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
@@ -786,24 +786,26 @@ ERROR tests/test_orrery/test_faction_project_contexts_live.py::test_live_faction
 ERROR tests/test_orrery/test_faction_project_contexts_live.py::test_live_target_faction_product_is_bounded_and_deterministic
 ERROR tests/test_orrery/test_faction_project_contexts_live.py::test_live_production_and_explain_compose_same_faction_bindings
 ERROR tests/test_orrery/test_polymorphic_patron_live.py::test_roster_start_to_status_completion_closes_institutional_circle
-3 failed, 1613 passed, 39 skipped, 7 warnings, 9 errors in 273.98s (0:04:33)
+3 failed, 1613 passed, 39 skipped, 7 warnings, 9 errors in 274.03s (0:04:34)
 ```
 
-All twelve fall into the #885 empty-owner-slot class that the issue's 2026-09-29 comments already list for later slices, and none is in this slice's files: `test_adjudication_history` (B2-5, marked "cannot be made honest"), `test_evidence` and `test_tag_library` (B2-7), `test_faction_project_contexts_live` x8 and `test_polymorphic_patron_live` (B2-4). The `test_reveal_live` x9 entry on that list no longer fails. No new failure.
+All twelve fall into the #885 empty-owner-slot class that the issue's 2026-09-29 comments already list for later slices, and none is in this slice's files: `test_adjudication_history` (B2-5, marked "cannot be made honest"), `test_evidence` and `test_tag_library` (B2-7), `test_faction_project_contexts_live` x8 and `test_polymorphic_patron_live` (B2-4). The `test_reveal_live` x9 entry on that list no longer fails. No new failure. The first-round run at `38896df8` listed the same twelve with the same counts.
 
-Offline gates:
+Offline gates at `b85ab4ea`:
 
 ```
 $ python -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2441 passed, 355 skipped, 8 warnings in 361.61s (0:06:01)
+2441 passed, 355 skipped, 8 warnings in 341.31s (0:05:41)
 $ python -m pytest -q tests/test_api tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1807 passed, 726 skipped, 7 warnings in 31.30s
+1807 passed, 726 skipped, 7 warnings in 29.84s
 $ python -m pytest -q tests/test_reachability.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-38 passed in 8.68s
+38 passed in 8.65s
 ```
+
+For `b85ab4ea`, Black and flake8 are clean on its two files, and `mypy --explicit-package-bases` on them reports `Success: no issues found in 2 source files`.
 
 After the review fixes (`23c16622`), `NEXUS_RUN_POSTGRES=1 python -m pytest -q tests/test_orrery/test_reveal_live.py tests/test_orrery/test_claim_consumption_live.py tests/test_orrery/test_claim_accounts_live.py` gives `24 passed, 5 warnings in 5.95s` (`secret-store guard: active; nexus-api: denied; disposable keychain: denied`). Black and flake8 are clean on the five files that commit touched. `mypy --explicit-package-bases` on them reports two `union-attr` errors, `test_claim_accounts_live.py:117` and `test_claim_consumption_live.py:71` (`connection.connection.cursor()`); the same command on the base versions of those two files reports the same two errors (`:117`, `:73`), so they predate this slice, and only the import lines of those files changed.
 
