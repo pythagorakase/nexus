@@ -92,7 +92,8 @@ def test_truncate_table_keeps_rows_when_the_model_artifact_is_missing(
 
     config, missing, _ = _config_with_missing_artifact(tmp_path)
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
-    # The script opens its log file in the working directory.
+    # An import opens no log file (issue #1037); the chdir keeps any stray output
+    # in tmp_path.
     monkeypatch.chdir(tmp_path)
 
     spec = importlib.util.spec_from_file_location(

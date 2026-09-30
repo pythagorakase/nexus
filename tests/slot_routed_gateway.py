@@ -18,30 +18,20 @@ behind the supervisor's uvicorn argv instead of ``NARRATIVE_API_PORT``.
 
 from __future__ import annotations
 
-import logging
 import runpy
 
 
 def route_child_process() -> tuple[int, str]:
-    """Route this child process's slot and leave its logging untouched.
+    """Route this child process's slot before its entry point loads.
 
-    ``tests.pg_fixtures`` imports ``scripts.migrate`` and
-    ``scripts.new_story_setup``, whose import-time ``logging.basicConfig``
-    would add an INFO handler on stderr to the root logger. The CLI prints
-    its JSON errors on stderr and a gateway without ``--log-config`` keeps
-    uvicorn's own logging, so the root logger is restored after the import
-    and the entry point logs exactly as the production one does. Returns the
-    routed ``(slot, dbname)``; raises before routing anything when a routing
-    variable is missing or names an owner database.
+    Returns the routed ``(slot, dbname)``; raises before routing anything
+    when a routing variable is missing or names an owner database. Importing
+    ``tests.pg_fixtures`` leaves the root logger unconfigured (issue #1037),
+    so the entry point logs exactly as the production one does.
     """
 
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    try:
-        from tests.pg_fixtures import route_slot_from_environment
-    finally:
-        root.handlers[:] = handlers
-        root.setLevel(level)
+    from tests.pg_fixtures import route_slot_from_environment
+
     return route_slot_from_environment()
 
 
