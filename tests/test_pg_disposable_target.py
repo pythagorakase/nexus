@@ -30,8 +30,10 @@ from tests import pg_fixtures
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
+    active_slot_routes,
     require_disposable_target,
     route_slot_to_disposable,
+    route_slots_to_disposable,
     seed_character,
     seed_entity_tag,
     seed_story_clock,
@@ -299,6 +301,98 @@ def test_nested_route_restores_the_outer_route() -> None:
         assert slot_utils.slot_dbname(4) == "qa640_outer"
         assert slot_utils.VALID_DBNAMES == {"qa640_outer"}
     assert slot_utils.slot_dbname(3) == "save_03"
+
+
+def test_multi_slot_route_sweeps_bound_and_late_imported_resolvers() -> None:
+    """Each mapped slot reaches its own clone in every module; others raise.
+
+    One probe binds ``slot_dbname`` before the route (the sweep rebinds it and
+    the monkeypatch restores it), the other first binds it inside the route
+    (the monkeypatch never records it). Both resolve the mapping while routed
+    and the owner names after teardown.
+    """
+
+    bound_name = "tests._route_probe_bound_before"
+    late_name = "tests._route_probe_bound_during"
+    bound = types.ModuleType(bound_name)
+    late = types.ModuleType(late_name)
+    exec("from nexus.api.slot_utils import slot_dbname", vars(bound))
+    unrouted = bound.slot_dbname
+    sys.modules[bound_name] = bound
+    sys.modules[late_name] = late
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            route_slots_to_disposable(
+                patch.setattr, {4: "qa640_left", 5: "qa640_right"}
+            )
+            exec("from nexus.api.slot_utils import slot_dbname", vars(late))
+            for probe in (bound, late, slot_utils):
+                assert probe.slot_dbname(4) == "qa640_left"
+                assert probe.slot_dbname(5) == "qa640_right"
+                with pytest.raises(RuntimeError, match="Slot 2 is not routed"):
+                    probe.slot_dbname(2)
+            assert slot_utils.VALID_DBNAMES == {"qa640_left", "qa640_right"}
+            assert dict(active_slot_routes() or {}) == {
+                4: "qa640_left",
+                5: "qa640_right",
+            }
+        assert bound.slot_dbname is unrouted
+        for probe in (bound, late, slot_utils):
+            assert probe.slot_dbname(4) == "save_04"
+            assert probe.slot_dbname(5) == "save_05"
+        assert active_slot_routes() is None
+        assert "qa640_left" not in slot_utils.VALID_DBNAMES
+    finally:
+        sys.modules.pop(bound_name, None)
+        sys.modules.pop(late_name, None)
+
+
+def test_multi_slot_route_keeps_its_own_copy_of_the_mapping() -> None:
+    """Changing the caller's mapping after the route changes nothing."""
+
+    routes = {4: "qa640_left"}
+    with pytest.MonkeyPatch.context() as patch:
+        route_slots_to_disposable(patch.setattr, routes)
+        routes[4] = "save_04"
+        routes[5] = "save_05"
+        assert slot_utils.slot_dbname(4) == "qa640_left"
+        with pytest.raises(RuntimeError, match="Slot 5 is not routed"):
+            slot_utils.slot_dbname(5)
+
+
+def test_single_slot_route_is_the_one_slot_mapping() -> None:
+    """``route_slot_to_disposable`` installs exactly ``{slot: dbname}``."""
+
+    with pytest.MonkeyPatch.context() as patch:
+        route_slot_to_disposable(patch.setattr, slot=3, dbname="qa640_one")
+        assert dict(active_slot_routes() or {}) == {3: "qa640_one"}
+        assert slot_utils.VALID_DBNAMES == {"qa640_one"}
+
+
+@pytest.mark.parametrize(
+    ("routes", "message"),
+    [
+        ({}, "needs at least one slot"),
+        ({4: "qa640_left", 9: "qa640_right"}, "Cannot route slot 9"),
+        *(
+            ({4: "qa640_left", 5: owner}, re.escape(repr(owner)))
+            for owner in OWNER_DATABASES
+        ),
+    ],
+)
+def test_multi_slot_route_refuses_before_patching(
+    routes: dict[int, str], message: str
+) -> None:
+    """An empty mapping, an unknown slot or an owner clone patches nothing."""
+
+    resolver = slot_utils.slot_dbname
+    valid = slot_utils.VALID_DBNAMES
+    with pytest.MonkeyPatch.context() as patch:
+        with pytest.raises(RuntimeError, match=message):
+            route_slots_to_disposable(patch.setattr, routes)
+        assert slot_utils.slot_dbname is resolver
+        assert slot_utils.VALID_DBNAMES is valid
+        assert active_slot_routes() is None
 
 
 def _sessions(cur: Any, dbname: str) -> int:
