@@ -31,10 +31,12 @@ from tests.pg_fixtures import connect
 
 # Measured against the shipped NEXUS_template registry on 2026-07-30:
 # 24,321 bytes / 5,982 o200k tokens. The byte and token ceilings retain
-# ~10% headroom. The post-#916 registry has 625 enum values.
+# ~10% headroom. The post-#916 registry had 625 enum values; #811 slice B
+# drops the 97 live tags under deprecated registry categories, leaving 528
+# (23,846 bytes / 5,806 tokens on 2026-09-30).
 GAIA_REGISTRY_STRICT_MAX_BYTES = 26_800
 GAIA_REGISTRY_STRICT_MAX_TOKENS = 6_600
-GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 625
+GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 528
 
 # Current OpenAI Structured Outputs documentation:
 # https://developers.openai.com/api/docs/guides/structured-outputs
