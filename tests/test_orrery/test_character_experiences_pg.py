@@ -1544,6 +1544,9 @@ def test_malformed_event_quarantines_without_blocking_accept_response(
 ) -> None:
     """One malformed historical receipt is loud once while the save advances."""
 
+    # The gateway lifespan starts its scheduler for the ambient NEXUS_SLOT;
+    # unset, it starts none, so an exported slot never reaches an owner save.
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
     )

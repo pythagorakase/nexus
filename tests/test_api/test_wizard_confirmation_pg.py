@@ -293,7 +293,7 @@ def test_tool_transaction_rolls_back_trait_mutation_on_error(
 async def test_successful_tool_captures_metadata_inside_its_commit(
     saved_character: str, monkeypatch
 ) -> None:
-    from nexus.api import wizard_agent
+    from nexus.api import wizard_agent, wizard_chat
     from nexus.api.wizard_agent import WizardContext
     from pydantic_ai import CallDeferred
     from fastapi import HTTPException

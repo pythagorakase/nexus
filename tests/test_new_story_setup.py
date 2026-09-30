@@ -13,8 +13,9 @@ initialization raise before the fresh-slot IDF corpora are seeded; a plain-dump
 restore stops at its first failing statement; and the runner propagates a
 connection error to an existing database instead of reporting nothing pending.
 
-Uses throwaway databases created and dropped by the test itself. Live slots
-(save_01 .. save_05) are never touched; NEXUS_template is only read.
+Uses throwaway databases created and dropped by the test itself, including a
+disposable stand-in for the template. Live slots (save_01 .. save_05) are
+never touched; NEXUS_template is only read, by the stand-in's pg_dump.
 """
 
 from __future__ import annotations
@@ -225,7 +226,19 @@ def test_fresh_database_is_baseline_stamped(
         )
 
 
-_TEMPLATE = "NEXUS_template"
+@pytest.fixture(scope="module")
+def template_source() -> Generator[str, None, None]:
+    """A disposable stand-in for the canonical template, shared by the module.
+
+    ``disposable_slot_database`` builds it the way every fresh slot is built
+    from ``NEXUS_template`` (schema, seed rows, and the template's stamps with
+    their original applied_at, then any migration the template lags), so it
+    is a stamped, fully migrated template image. These tests read and clone
+    it; the owner's ``NEXUS_template`` is read only by that initial pg_dump.
+    """
+    with disposable_slot_database("qa640_810_template") as dbname:
+        yield dbname
+
 
 # A pending migration that fails inside its transaction, in the repository's
 # migration header style.
@@ -258,16 +271,18 @@ def _failing_tree(tmp_path: Path) -> Path:
     return tree
 
 
-def test_template_clone_replays_no_migration() -> None:
-    """A NEXUS_template clone keeps the template's stamps and ends fully migrated.
+def test_template_clone_replays_no_migration(template_source: str) -> None:
+    """A template clone keeps the template's stamps and ends fully migrated.
 
     The template's stamps arrive with their original applied_at (copied, not
     re-applied); the only other stamps are migrations the template has not
     seen yet, which initialization applied; and a follow-up run is a no-op.
     """
-    template_stamps = _stamps(_TEMPLATE)
+    template_stamps = _stamps(template_source)
     discovered = {version for version, _, _ in migrate.discover_migrations()}
-    with disposable_slot_database("qa640_810_clone") as dbname:
+    with disposable_slot_database(
+        "qa640_810_clone", source_db=template_source
+    ) as dbname:
         clone_stamps = _stamps(dbname)
         # Idempotence check only: initialization already raises on any
         # unapplied migration. The applied_at and stamp-set assertions below
@@ -280,7 +295,7 @@ def test_template_clone_replays_no_migration() -> None:
 
 
 def test_template_clone_first_runner_pass_applies_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, template_source: str
 ) -> None:
     """A raw template clone's first runner pass finds nothing to replay.
 
@@ -290,7 +305,7 @@ def test_template_clone_first_runner_pass_applies_nothing(
     applied_at and adds none: nothing was replayed on the first pass.
     """
     monkeypatch.setattr(new_story_setup, "USE_POOL", False)
-    template_stamps = _stamps(_TEMPLATE)
+    template_stamps = _stamps(template_source)
     tree = tmp_path / "migrations"
     tree.mkdir()
     for version, _, path in migrate.discover_migrations():
@@ -299,13 +314,13 @@ def test_template_clone_first_runner_pass_applies_nothing(
 
     with disposable_database("qa640_810_firstpass") as dbname:
         new_story_setup.initialize_slot_database(
-            dbname, source_db=_TEMPLATE, force=True, migrations_dir=tree
+            dbname, source_db=template_source, force=True, migrations_dir=tree
         )
         assert _stamps(dbname) == template_stamps
 
 
 def test_failing_migration_is_unapplied_and_initialization_raises(
-    tmp_path: Path,
+    tmp_path: Path, template_source: str
 ) -> None:
     """A failing pending migration stays unstamped and aborts initialization."""
     tree = _failing_tree(tmp_path)
@@ -320,7 +335,7 @@ def test_failing_migration_is_unapplied_and_initialization_raises(
             match=rf"^Migrations failed on {dbname}: \d+ applied, 1 unapplied\.",
         ) as raised:
             new_story_setup.initialize_slot_database(
-                dbname, source_db=_TEMPLATE, force=True, migrations_dir=tree
+                dbname, source_db=template_source, force=True, migrations_dir=tree
             )
         assert "partial database was left in place" in str(raised.value)
         assert "recreate it with --force (force=True)" in str(raised.value)
@@ -360,14 +375,14 @@ def test_restore_plain_dump_stops_at_first_error(tmp_path: Path) -> None:
 
 
 def test_clone_with_data_restores_template_into_disposable_target(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, template_source: str
 ) -> None:
     """The data clone replays a real dump under ON_ERROR_STOP into ``target_db``."""
     monkeypatch.setattr(new_story_setup, "USE_POOL", False)
-    template_stamps = _stamps(_TEMPLATE)
+    template_stamps = _stamps(template_source)
     with disposable_database("qa640_810_dataclone") as dbname:
         new_story_setup.clone_slot_with_data(
-            5, source_db=_TEMPLATE, force=True, target_db=dbname
+            5, source_db=template_source, force=True, target_db=dbname
         )
         assert _stamps(dbname) == template_stamps
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:

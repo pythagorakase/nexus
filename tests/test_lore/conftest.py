@@ -34,17 +34,17 @@ def settings() -> Dict[str, Any]:
         return json.load(f)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def ensure_nexus_slot_env() -> None:
-    """Ensure NEXUS_SLOT is set for tests that rely on slot-based databases."""
-    if os.environ.get("NEXUS_SLOT") is not None:
-        yield
-        return
-    os.environ["NEXUS_SLOT"] = "1"
-    try:
-        yield
-    finally:
-        os.environ.pop("NEXUS_SLOT", None)
+@pytest.fixture(autouse=True)
+def ensure_nexus_slot_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure NEXUS_SLOT is set for tests that rely on slot-based databases.
+
+    Function-scoped through ``monkeypatch``, so the default leaves with each
+    test here. A session-scoped ``os.environ`` write leaked ``NEXUS_SLOT=1``
+    into every later directory of a full run, where an unrouted gateway
+    lifespan started its scheduler on the owner's ``save_01``.
+    """
+    if os.environ.get("NEXUS_SLOT") is None:
+        monkeypatch.setenv("NEXUS_SLOT", "1")
 
 
 @pytest.fixture(scope="session")
