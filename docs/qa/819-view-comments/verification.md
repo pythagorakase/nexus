@@ -133,7 +133,8 @@ migration redefines it.
 
 - `nexus/agents/orrery/events.py:1553-1570` (`_entity_names_sync`/`_async`: `SELECT id, name ... WHERE id = ANY`), called from `commit_orrery_tick_sync` at `events.py:803` and its async twin at `events.py:1092` with the proposal entity ids (`_entity_ids_from_proposal`, `events.py:801`).
 - `nexus/agents/orrery/resolver.py:3443-3458` (`_load_entity_names`), used at `resolver.py:2677-2684` for `binding_names` and the bound narrative stub of each draft.
-- The same loader in the audit dashboard modules (`audit.py:1`, "for the Orrery audit dashboard"; `history.py:1`, "Adjudication history for the Orrery audit dashboard"): `nexus/agents/orrery/audit.py:790` (`explain_dry_run`, actor and location names), `audit.py:1498` (`cognition_trace`, source entity names), `audit.py:2485` (`entity_context`, the entity hover, event actor and target names), and `nexus/agents/orrery/history.py:377` (`adjudication_history`, defer streak actor names). `nexus/api/orrery_dev_endpoints.py:29-34` imports all four for the dashboard endpoints.
+- The same loader in the audit dashboard modules (`audit.py:1`, "for the Orrery audit dashboard"; `history.py:1`, "Adjudication history for the Orrery audit dashboard"): `nexus/agents/orrery/audit.py:790` (`explain_dry_run`, actor and location names), `audit.py:1498` (`cognition_trace`, source entity names), `audit.py:2485` (`entity_context`, the entity hover, event actor and target names), and `nexus/agents/orrery/history.py:377` (`adjudication_history`, defer streak actor names; the loader is imported from the resolver at `history.py:25`). `nexus/api/orrery_dev_endpoints.py:29-34` imports all four for the dashboard endpoints.
+- `adjudication_history` has two readers outside the dashboard (`nexus/api/orrery_dev_endpoints.py:601-612` is the dashboard one): Backstage, `nexus/agents/orrery/backstage.py:15,282` (`_correspondence`, open defer streaks for the Backstage drawer, `backstage.py:1`); and the storyteller turn, `nexus/agents/lore/utils/turn_cycle.py:957` (context payload assembly) calling `_build_recent_orrery_rulings_section` at `turn_cycle.py:1095-1125`, which returns nothing unless `[orrery]` is enabled (`turn_cycle.py:1100-1102`, `232-241`) and otherwise calls `LogonUtility.build_recent_orrery_rulings_section` at `nexus/agents/lore/logon_utility.py:2491-2510`, which calls `adjudication_history` for the recent Orrery rulings of the storyteller context. Inside `adjudication_history` the view is read when some ledger proposal has an actor, and the names label the defer streak actors (`history.py:374-383`).
 - `nexus/agents/orrery/worker.py:176-205` (`promote_pending_resolutions_sync`, actor name) and `worker.py:235-286` (`drain_narration_outbox_sync`, actor name).
 - `nexus/agents/orrery/bleed.py:196-250` (`load_bleed_candidates`, actor and first world event target) and `bleed.py:415-436` (`record_bleed_uptake_sync`, actor).
 - `nexus/agents/orrery/experiences.py:647,720-752` (`seed_character_experiences_sync`, world event actor and target names, used at `experiences.py:438-439`).
@@ -148,7 +149,8 @@ migration redefines it.
 | One row per entity of kind character, faction, or place that has a subtype row of the same kind; id, kind, name from that row | definition; catalog: `entity_kind` is `{character,faction,place}`, `UNIQUE (entity_id)` on each subtype table, `name` NOT NULL |
 | Commit tick names proposal entities | `events.py:801-803,1553-1570` |
 | Resolver names draft bindings | `resolver.py:2677-2684,3443-3458` |
-| Audit dashboard (explained dry run, cognition trace, entity hover, adjudication history) names through the resolver name loader | `audit.py:1,790,1498,2485`; `history.py:1,377`; `resolver.py:3443-3458` |
+| Audit dashboard (explained dry run, cognition trace, entity hover) names through the resolver name loader | `audit.py:1,790,1498,2485`; `resolver.py:3443-3458` |
+| Adjudication history names defer streak actors through the same loader; read by the audit dashboard, Backstage, and the recent Orrery rulings of the storyteller context | `history.py:25,374-383`; `orrery_dev_endpoints.py:601-612`; `backstage.py:282`; `logon_utility.py:2491-2510`; `turn_cycle.py:957,1095-1125` |
 | Promotion and narration drains name resolution actors | `worker.py:176-205,235-286` |
 | Bleed names resolution actors and event targets | `bleed.py:196-250,415-436` |
 | Experience seeding names world event actors and targets | `experiences.py:438-439,647,720-752` |
@@ -301,7 +303,7 @@ creates a stand-in.
 | No current writer sets pacing | writers above |
 | entity_updates renamed entity_changes, reference_updates renamed references | definition |
 | entity_update_count counts characters, locations, factions; leaves out relationships | definition; `apex_schema.py:531-547` |
-| Leaves out metadata_updates, new_entities, generation_model, llm_response_id, updated_at, lore_pass_baseline, both correspondence letters | catalog `\d+ incubator` (23 columns) against the definition; `test_backstage_endpoints_pg.py:712-730` |
+| Leaves out the singleton id, metadata_updates, new_entities, generation_model, llm_response_id, updated_at, lore_pass_baseline, both correspondence letters | catalog `\d+ incubator` (23 columns) against the definition; `test_backstage_endpoints_pg.py:712-730` |
 | GET /api/narrative/incubator returns its row, filtered by session_id when given; nexus inspect incubator reads the endpoint | `narrative.py:1619-1638`; `cli.py:1459-1472,5036` |
 
 ## After: Listing from a Migrated Disposable Clone
