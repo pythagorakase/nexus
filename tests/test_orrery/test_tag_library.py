@@ -12,9 +12,14 @@ from typing import Any, cast, Optional
 import pytest
 import tiktoken
 
+from nexus.agents.logon.skald_wire import PlaceRef, PresenceBaseline
 import nexus.agents.orrery.tag_library as tag_library
-from nexus.agents.lore.logon_utility import proposal_tag_names_from_payload
+from nexus.agents.lore.logon_utility import (
+    LogonUtility,
+    proposal_tag_names_from_payload,
+)
 from nexus.api import slot_utils
+from nexus.config.story_model import StorySettings
 from nexus.prompts.registry import PromptId, load
 from tests.pg_fixtures import (
     connect,
@@ -24,6 +29,7 @@ from tests.pg_fixtures import (
     seed_protagonist,
     seed_zone,
 )
+from tests.settings_helpers import settings_with
 
 
 def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None:
@@ -674,6 +680,138 @@ def test_scene_clear_only_line_follows_the_carrying_entitys_kind(
         )
         assert [line for line in scene if "(clear only)" in line] == [character_line]
         assert not any(line.startswith("- place/place_affordance") for line in scene)
+
+
+def _seed_worksite_scene(dbname: str) -> tuple[int, int]:
+    """Seed a player, a place carrying ``worksite``, and a bare place.
+
+    Returns the carrying and bare place row IDs.
+    """
+
+    seed_zone(
+        dbname,
+        name="Harbor Ward",
+        min_longitude=-74.1,
+        min_latitude=40.6,
+        max_longitude=-73.8,
+        max_latitude=40.9,
+    )
+    carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
+    bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
+    seed_protagonist(dbname)
+    seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+    return carrying, bare
+
+
+@pytest.mark.requires_postgres
+def test_full_turn_library_still_lists_scene_clear_only_tags(monkeypatch) -> None:
+    """``contextual = false`` keeps the scene's clear-only tags visible.
+
+    A turn with the switch off renders the full live-only library. With the
+    place carrying ``worksite`` as its setting, the ``worksite`` clear-only
+    line follows under Clear-Only Tags in This Scene; with the bare place as
+    the setting, the full library stands alone.
+    """
+
+    with disposable_slot_database("qa640_811_full_clear_only") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        carrying, bare = _seed_worksite_scene(dbname)
+        utility = LogonUtility(
+            settings_with({"apex.tag_library.contextual": False}),
+            dbname=dbname,
+            model_override="TEST",
+            story_settings=StorySettings(),
+        )
+        (worksite,) = [
+            entry
+            for entry in tag_library.read_tag_library(
+                dbname, include_deprecated_categories=True
+            )
+            if entry.tag == "worksite"
+        ]
+        full_library = tag_library.format_tag_library_for_prompt(dbname)
+        assert "worksite" not in full_library
+        assert "### Place Tags" in full_library
+
+        def _turn_library(place_id: int, name: str) -> str:
+            return utility._format_turn_tag_library(
+                {"user_input": "Continue."},
+                presence_baseline=PresenceBaseline(
+                    setting=PlaceRef(kind="place", id=place_id, name=name)
+                ),
+            )
+
+        present = _turn_library(carrying, "Dry Dock Nine")
+        assert present == (
+            f"{full_library}\n\n### Clear-Only Tags in This Scene\n\n"
+            f"- place/place_affordance: {tag_library._format_tag_entry(worksite)}"
+            " (clear only)"
+        )
+
+        absent = _turn_library(bare, "Lamplighter Row")
+        assert absent == full_library
+        assert "Clear-Only Tags in This Scene" not in absent
+        assert "worksite" not in absent
+
+
+@pytest.mark.requires_postgres
+def test_contextual_scene_rendering_is_pinned(monkeypatch) -> None:
+    """``contextual = true`` renders the scene exactly as before the refactor.
+
+    The contextual library and the full-library turn share one clear-only
+    selection and line renderer. The Scene-Relevant Tags section, the only
+    one that selection touches, is pinned byte for byte for a scene with and
+    without ``worksite``; the clear-only line sorts before the live
+    ``haven`` entry by category order, so it stays interleaved, not appended.
+    """
+
+    with disposable_slot_database("qa640_811_scene_pin") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        carrying, bare = _seed_worksite_scene(dbname)
+        haven = (
+            "- place/place_function: `haven`: "
+            "Place can shelter or hide someone safely."
+        )
+        worksite = (
+            "- place/place_affordance: `worksite`: Place supports physical, "
+            "field, maintenance, construction, or repair work. (clear only)"
+        )
+
+        present = _scene_library(dbname, carrying)
+        absent = _scene_library(dbname, bare)
+
+        assert present.split("### Scene-Relevant Tags\n", 1)[1] == (
+            f"\n{worksite}\n{haven}"
+        )
+        assert absent.split("### Scene-Relevant Tags\n", 1)[1] == f"\n{haven}"
+        assert (
+            present.split("### Scene-Relevant Tags\n", 1)[0]
+            == absent.split("### Scene-Relevant Tags\n", 1)[0]
+        )
+        assert (
+            tag_library.format_scene_clear_only_tags(
+                dbname,
+                present_entity_refs=[
+                    tag_library.EntityRowReference(kind="place", row_id=carrying)
+                ],
+                anchor_chunk_id=None,
+            )
+            == worksite
+        )
+        assert (
+            tag_library.format_scene_clear_only_tags(
+                dbname,
+                present_entity_refs=[
+                    tag_library.EntityRowReference(kind="place", row_id=bare)
+                ],
+                anchor_chunk_id=None,
+            )
+            == ""
+        )
 
 
 @pytest.mark.skipif(

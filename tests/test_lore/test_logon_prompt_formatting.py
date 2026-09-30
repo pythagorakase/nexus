@@ -704,7 +704,27 @@ def test_bootstrap_context_keeps_full_tag_library(monkeypatch) -> None:
 
 
 def test_contextual_false_restores_full_library(monkeypatch) -> None:
-    """The measurement-stage switch selects the original full renderer."""
+    """The measurement-stage switch selects the original full renderer.
+
+    The turn still asks for the scene's clear-only tags from its presence
+    baseline; with none active the full library stands alone. The rendering
+    with a clear-only tag is covered on a template clone in
+    ``tests/test_orrery/test_tag_library.py``.
+    """
+
+    scene_requests: list[tuple[list[tuple[str, int]], Any]] = []
+
+    def _no_clear_only(_dbname: str, **kwargs: Any) -> str:
+        scene_requests.append(
+            (
+                [
+                    (reference.kind, reference.row_id)
+                    for reference in kwargs["present_entity_refs"]
+                ],
+                kwargs["anchor_chunk_id"],
+            )
+        )
+        return ""
 
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
@@ -716,13 +736,30 @@ def test_contextual_false_restores_full_library(monkeypatch) -> None:
             "contextual=false must use the full renderer"
         ),
     )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_scene_clear_only_tags",
+        _no_clear_only,
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.read_user_character_id",
+        lambda _dbname: 99,
+    )
+    baseline = PresenceBaseline(
+        setting=PlaceRef(kind="place", id=12, name="The Sluice"),
+    )
 
     prompt = LogonUtility(
         _pipeline(overrides={"apex.tag_library.contextual": False}),
         dbname="save_05",
-    )._format_context_prompt({"user_input": "Continue."}, seat="gaia")
+    )._format_context_prompt(
+        {"user_input": "Continue.", "metadata": {"target_chunk_id": 44}},
+        presence_baseline=baseline,
+        seat="gaia",
+    )
 
     assert "=== ORRERY TAG LIBRARY ===\nFULL TAG LIBRARY" in prompt
+    assert "Clear-Only Tags in This Scene" not in prompt
+    assert scene_requests == [([("place", 12), ("character", 99)], 44)]
 
 
 class _Conn:

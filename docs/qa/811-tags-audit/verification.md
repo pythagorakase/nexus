@@ -643,3 +643,75 @@ The one failure is the #885 `save_05` exemption ("save_05 must contain
 current entity tags"). The three E501 lines are in the `qa649_db` fixture and
 exist on the HEAD copy (lines 224, 225, and 301 there). Gateway variables were
 unset; no gateway was started and no provider was called.
+
+### Follow-Up: Scene Clearance Without the Contextual Switch
+
+Astra's second pass (frozen at `6d77aa5a`) found that
+`[apex.tag_library] contextual = false` sent every turn the full live-only
+library, so a present entity's deprecated-category tag was invisible there,
+and on a provider without the registry enum (Anthropic, local) the writer
+could not see it to clear it.
+
+- `format_scene_clear_only_tags(dbname, *, present_entity_refs,
+  anchor_chunk_id)` in `nexus/agents/orrery/tag_library.py` returns the
+  kind-scoped ` (clear only)` lines for the present entities, or `""`. It and
+  `format_contextual_tag_library` share one selection
+  (`_scene_clear_only_entries`), one sort key (`_scene_entry_order`), and one
+  line renderer (`_scene_entry_lines`). The contextual library does not call
+  the string function itself: its clear-only lines interleave with the live
+  entries by category order (on the template, `place_affordance` sorts before
+  `place_function`), so appending the string would reorder the section.
+- `_format_turn_tag_library` resolves the presence baseline before the switch
+  (the passed baseline, else `_read_presence_baseline_for_context`, else the
+  same `RuntimeError`). With the switch off it renders
+  `format_tag_library_for_prompt` and, when the scene has clear-only tags,
+  appends them under `### Clear-Only Tags in This Scene`. Bootstrap is
+  unchanged. Nothing under `prompts/` changed.
+- Byte-for-byte check of the contextual library across the refactor, on a
+  template clone with the same scene as the pin test (a place carrying
+  `worksite`, proposals `worksite` and `haven`), rendered at `b0785d4e` and
+  again after the change:
+
+```text
+before: with    10408 bytes  sha256 20200a03240e231ca2503732857db1169a2e2f9fde9738d0c59fa3db31dbea62
+before: without 10282 bytes  sha256 152234749582d6dd46ba2abebc780e8dc5225386e9e306fdd204cac06c05ecf9
+after:  with    10408 bytes  sha256 20200a03240e231ca2503732857db1169a2e2f9fde9738d0c59fa3db31dbea62
+after:  without 10282 bytes  sha256 152234749582d6dd46ba2abebc780e8dc5225386e9e306fdd204cac06c05ecf9
+$ cmp before/with.txt after/with.txt && cmp before/without.txt after/without.txt && echo IDENTICAL
+IDENTICAL
+```
+
+- Tests: `test_full_turn_library_still_lists_scene_clear_only_tags` builds a
+  `LogonUtility` from `settings_with({"apex.tag_library.contextual": False})`
+  on a clone and renders the turn library from a real `PresenceBaseline`. With
+  the `worksite` place as the setting the output equals the full library
+  followed by the heading and the `worksite` clear-only line; with the bare
+  place it equals the full library alone. `test_contextual_scene_rendering_is_pinned`
+  pins the Scene-Relevant Tags section literally for both scenes (the section
+  the shared helpers render) and checks `format_scene_clear_only_tags` for
+  both. `test_contextual_false_restores_full_library` now passes a baseline,
+  since a turn always has one, and asserts the scene the switch-off path reads.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rfs tests/test_orrery/test_tag_library.py tests/test_orrery_tag_validation_pg.py tests/test_lore/test_two_pass_pipeline.py tests/test_skald_wire.py tests/test_prompt_lint.py tests/test_lore/test_logon_prompt_formatting.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
+SKIPPED [1] tests/test_orrery/test_tag_library.py:919: save_05 has no character whose characters.id differs from characters.entity_id; cannot exercise namespace translation
+SKIPPED [1] tests/test_skald_wire.py:2061: Slot has no parent chunk with presence junction rows
+SKIPPED [1] tests/test_skald_wire.py:2094: Set NEXUS_639_PRESENCE_E2E=1 for the live writer presence gate.
+1 failed, 271 passed, 3 skipped, 5 warnings in 30.70s
+$ $PY -m black --check nexus/agents/orrery/tag_library.py nexus/agents/lore/logon_utility.py tests/test_orrery/test_tag_library.py tests/test_lore/test_logon_prompt_formatting.py
+4 files would be left unchanged.
+$ $PY -m flake8 nexus/agents/orrery/tag_library.py tests/test_orrery/test_tag_library.py tests/test_lore/test_logon_prompt_formatting.py
+(clean)
+$ $PY -m flake8 nexus/agents/lore/logon_utility.py | wc -l
+10
+$ $PY -m mypy nexus/agents/orrery/tag_library.py
+Success: no issues found in 1 source file
+```
+
+The one failure is the #885 `save_05` exemption ("save_05 must contain
+current entity tags"). The ten flake8 findings in `logon_utility.py` all sit
+on lines this change does not touch; the `b0785d4e` copy of the file has the
+same ten. Gateway variables were unset; no gateway was started and no
+provider was called.

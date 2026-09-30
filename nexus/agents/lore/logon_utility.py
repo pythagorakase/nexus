@@ -70,6 +70,7 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
     EntityRowReference,
     TagLibraryContext,
     format_contextual_tag_library,
+    format_scene_clear_only_tags,
     format_tag_library_for_prompt,
 )
 from nexus.api.native_structured_output import (  # noqa: E402
@@ -3111,14 +3112,17 @@ class LogonUtility:
         *,
         presence_baseline: Optional[PresenceBaseline],
     ) -> str:
-        """Render the bootstrap or scene-contextual tag library for one turn."""
+        """Render the bootstrap or scene-contextual tag library for one turn.
+
+        With ``[apex.tag_library] contextual = false`` a turn still lists the
+        scene's clear-only tags after the full live-only library, so a present
+        entity's deprecated-category tag stays visible, and clearable, on a
+        provider whose grammar carries no registry enum.
+        """
 
         if self.dbname is None:
             return ""
         if self._is_bootstrap_context(context):
-            return format_tag_library_for_prompt(self.dbname)
-
-        if not self._tag_library_settings().contextual:
             return format_tag_library_for_prompt(self.dbname)
 
         baseline = presence_baseline
@@ -3131,6 +3135,17 @@ class LogonUtility:
             raise RuntimeError(
                 "Contextual Orrery tag library requires a presence baseline"
             )
+
+        if not self._tag_library_settings().contextual:
+            library = format_tag_library_for_prompt(self.dbname)
+            clear_only = format_scene_clear_only_tags(
+                self.dbname,
+                present_entity_refs=present_entity_refs(self.dbname, baseline),
+                anchor_chunk_id=self._parent_chunk_id(context),
+            )
+            if not clear_only:
+                return library
+            return f"{library}\n\n### Clear-Only Tags in This Scene\n\n{clear_only}"
 
         imminent_activity = context.get("orrery_imminent_activity") or []
         return format_contextual_tag_library(

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from hashlib import sha256
 import os
-from typing import Iterator, Literal, Optional, Sequence
+from typing import Iterator, Literal, Mapping, Optional, Sequence
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -419,17 +419,11 @@ def format_contextual_tag_library(
     categories = read_tag_categories(dbname)
     pair_entries = read_pair_tag_entries(dbname)
     event_types = read_event_types(dbname)
-    refs_by_kind: dict[str, list[EntityRowReference]] = defaultdict(list)
-    for reference in context.present_entity_refs:
-        refs_by_kind[reference.kind].append(reference)
-    active_names_by_kind: dict[str, set[str]] = {
-        entity_kind: read_current_entity_tag_names(
-            dbname,
-            entity_refs=references,
-            anchor_chunk_id=context.anchor_chunk_id,
-        )
-        for entity_kind, references in refs_by_kind.items()
-    }
+    active_names_by_kind = _active_tag_names_by_kind(
+        dbname,
+        present_entity_refs=context.present_entity_refs,
+        anchor_chunk_id=context.anchor_chunk_id,
+    )
     active_tag_names: set[str] = set().union(*active_names_by_kind.values())
 
     by_kind: dict[str, dict[str, list[TagLibraryEntry]]] = defaultdict(
@@ -522,44 +516,123 @@ def format_contextual_tag_library(
         for tag_name in sorted(relevant_names)
         for entry in entries_by_name.get(tag_name, [])
     ]
-    # Only a present entity's active tag selects a deprecated-category entry,
-    # and only for that entity's own kind; a proposal never does, and neither
-    # does the index.
-    relevant_entries.extend(
-        entry
-        for entry in library
-        if entry.category_deprecated
-        and entry.tag in active_names_by_kind.get(entry.entity_kind, set())
-    )
+    relevant_entries.extend(_scene_clear_only_entries(library, active_names_by_kind))
     lines.extend(["### Scene-Relevant Tags", ""])
     if relevant_entries:
-        for entry in sorted(
-            relevant_entries,
-            key=lambda item: (
-                _kind_order(item.entity_kind),
-                item.prompt_order,
-                item.category,
-                item.tag,
-            ),
-        ):
-            clear_only = " (clear only)" if entry.category_deprecated else ""
-            lines.append(
-                f"- {entry.entity_kind}/{entry.category}: "
-                f"{_format_tag_entry(entry)}{clear_only}"
-            )
-            if entry.reapplication_policy == "extend_expiry":
-                status = (
-                    f"`{entry.tag}` is active in this context"
-                    if entry.tag in active_tag_names
-                    else f"When `{entry.tag}` is already active"
-                )
-                lines.append(load(PromptId.TAG_LIBRARY_ACTIVE_TAG, STATUS=f"{status}"))
+        for entry in sorted(relevant_entries, key=_scene_entry_order):
+            lines.extend(_scene_entry_lines(entry, active_tag_names))
     else:
         lines.append(
             "No present entity or pending proposal currently selects a full tag entry."
         )
 
     return "\n".join(lines).rstrip()
+
+
+def format_scene_clear_only_tags(
+    dbname: Optional[str],
+    *,
+    present_entity_refs: Sequence[EntityRowReference],
+    anchor_chunk_id: Optional[int],
+) -> str:
+    """Render the scene's clear-only entries, or ``""`` when none is active.
+
+    A present entity may carry an active tag whose registry category is
+    deprecated. Each such entry, scoped to the carrying entity's kind, renders
+    exactly as under Scene-Relevant Tags, marked ``(clear only)``. The
+    contextual library interleaves these lines with its live entries; a turn
+    that renders the full live-only library appends them under their own
+    heading, so the storyteller sees what it may clear whatever the
+    ``[apex.tag_library] contextual`` switch says (issue #811).
+    """
+
+    active_names_by_kind = _active_tag_names_by_kind(
+        dbname,
+        present_entity_refs=present_entity_refs,
+        anchor_chunk_id=anchor_chunk_id,
+    )
+    entries = _scene_clear_only_entries(
+        read_tag_library(dbname, include_deprecated_categories=True),
+        active_names_by_kind,
+    )
+    active_tag_names: set[str] = set().union(*active_names_by_kind.values())
+    return "\n".join(
+        line
+        for entry in sorted(entries, key=_scene_entry_order)
+        for line in _scene_entry_lines(entry, active_tag_names)
+    )
+
+
+def _active_tag_names_by_kind(
+    dbname: Optional[str],
+    *,
+    present_entity_refs: Sequence[EntityRowReference],
+    anchor_chunk_id: Optional[int],
+) -> dict[str, set[str]]:
+    """Read the present entities' active tag names, keyed by entity kind."""
+
+    refs_by_kind: dict[str, list[EntityRowReference]] = defaultdict(list)
+    for reference in present_entity_refs:
+        refs_by_kind[reference.kind].append(reference)
+    return {
+        entity_kind: read_current_entity_tag_names(
+            dbname,
+            entity_refs=references,
+            anchor_chunk_id=anchor_chunk_id,
+        )
+        for entity_kind, references in refs_by_kind.items()
+    }
+
+
+def _scene_clear_only_entries(
+    library: Sequence[TagLibraryEntry],
+    active_names_by_kind: Mapping[str, set[str]],
+) -> list[TagLibraryEntry]:
+    """Select deprecated-category entries a present entity of that kind carries.
+
+    Only a present entity's active tag selects a deprecated-category entry,
+    and only for that entity's own kind; a proposal never does, and neither
+    does the index.
+    """
+
+    return [
+        entry
+        for entry in library
+        if entry.category_deprecated
+        and entry.tag in active_names_by_kind.get(entry.entity_kind, set())
+    ]
+
+
+def _scene_entry_order(entry: TagLibraryEntry) -> tuple[int, int, str, str]:
+    """Sort key for scene entries: kind, category order, category, tag."""
+
+    return (
+        _kind_order(entry.entity_kind),
+        entry.prompt_order,
+        entry.category,
+        entry.tag,
+    )
+
+
+def _scene_entry_lines(
+    entry: TagLibraryEntry,
+    active_tag_names: set[str],
+) -> list[str]:
+    """Render one scene entry, with its active-tag note when it extends expiry."""
+
+    clear_only = " (clear only)" if entry.category_deprecated else ""
+    lines = [
+        f"- {entry.entity_kind}/{entry.category}: "
+        f"{_format_tag_entry(entry)}{clear_only}"
+    ]
+    if entry.reapplication_policy == "extend_expiry":
+        status = (
+            f"`{entry.tag}` is active in this context"
+            if entry.tag in active_tag_names
+            else f"When `{entry.tag}` is already active"
+        )
+        lines.append(load(PromptId.TAG_LIBRARY_ACTIVE_TAG, STATUS=f"{status}"))
+    return lines
 
 
 def _registry_digest(
