@@ -345,3 +345,54 @@ $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_api/test_place_reference_vali
   `nexus/presence/roster.py:398` from 82ca8a9d). The test files cannot be
   checked together because mypy finds `tests/test_orrery/__init__.py` under
   two module names, as on main.
+
+## Review Fixes: Clears Stay Open, and the Last Async Twin
+
+Review found that the registry filter on the prompt-facing library also
+narrowed the vocabulary that clears are checked against. With it, Skald and
+Gaia could no longer clear the ten active deprecated-category rows on
+`save_03` and `save_04` (`worksite`, `black_market_operator`, `gray_legal`,
+`debt_pulse_active`). Blocking those clears would be write-gate enforcement,
+which stays on #811 behind the owner's rulings. The fix:
+
+- `read_tag_library(..., include_deprecated_categories=True)` drops only the
+  registry-category predicate, and each entry now carries
+  `category_deprecated`. `read_storyteller_vocabulary` makes one read and
+  splits it. `tag_names_by_kind` (the add and hint vocabulary) stays filtered.
+  The new `clearable_tag_names_by_kind` also holds the 97 live tags of
+  deprecated categories.
+- The generation-time validator checks `tags_to_clear` (and replacement
+  `entity_tags_*_remove`) against `StorytellerVocabulary.clearable_tags(kind)`.
+  An add of those tags is still rejected.
+- Gaia's strict grammar: `tags_clear` items are `anyOf` of `<Kind>TagName` and
+  a new `<Kind>ClearOnlyTagName` enum. `tags_add` and `tag_hints` keep only
+  `<Kind>TagName`. The enum-value count is back to 625 (25,920 bytes / 6,349
+  tokens, inside the 26,800 / 6,600 ceilings). This replaces the 528 given in
+  09f68223.
+- `canonical_player_character_id_async` (`nexus/agents/orrery/player_identity.py`)
+  lost its only caller when `story_active_zone_async` was deleted, so it is
+  deleted too. `_PLAYER_IDENTITY_SQL` and `_coerce_player_identity` stay:
+  the sync `_canonical_player_identity` still uses both.
+
+New PostgreSQL tests on the `qa649_*` template clone, one per entity kind
+(`black_market_operator`, `worksite`, `gray_legal`): the validator accepts
+the clear and rejects the add, and the registry Gaia model validates the
+clear and raises `ValidationError` on the add.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery_tag_validation_pg.py -k deprecated_category
+6 passed, 31 deselected, 5 warnings in 1.61s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery_tag_validation_pg.py tests/test_orrery/test_gaia_registry_schema_pg.py tests/test_orrery/test_tag_library.py tests/test_orrery/test_tag_writer.py tests/test_orrery/test_retrograde_vocabulary.py tests/test_orrery/test_retrograde_seed_candidates.py tests/test_orrery/test_retrograde_expansion.py tests/test_tags_audit_pg.py tests/test_player_identity_consumers_pg.py tests/test_orrery/test_identity_consumers_pg.py
+FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
+1 failed, 240 passed, 2 skipped, 7 warnings in 35.27s
+$ $PY -m pytest -q tests/test_reachability.py tests/test_orrery_tag_validation.py
+90 passed, 5 warnings in 10.17s
+$ $PY -m pytest -q -x
+4250 passed, 1090 skipped, 8 warnings in 385.44s (0:06:25)
+```
+
+The one failure is the #885 `save_05` exemption described above. Black is
+clean on the changed files. flake8 and mypy report only findings that also
+exist on the HEAD copies of `orrery_tag_validation.py` and
+`tests/test_orrery_tag_validation_pg.py` (three and three E501 long lines,
+and two mypy `index` errors). No gateway was started for these fixes.
