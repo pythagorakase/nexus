@@ -28,6 +28,10 @@ produces that proof.
   as `scripts/qa_shift/prose_metrics.py` does for the first two. The pin
   makes every unqualified name (the junctions, subtype tables, `entities`
   and the target) resolve to the relations the invariant block reads.
+  `build_report` reads `transaction_read_only` and `transaction_isolation`
+  back again in its first query, raises unless they are `on` and
+  `repeatable read`, and writes the values it read into `read_only` and
+  `snapshot.isolation` (no literal).
 - Expected rows: each junction left-joined to its subtype table and to
   `entities`, as `(chunk_id, entity_id, kind, reference_type, evidence)` with
   `kind` from `entities.kind`. A row whose subtype has no entity
@@ -38,12 +42,17 @@ produces that proof.
   attributed to a kind through `entities.kind` of their `entity_id`, so a
   kind mismatch is reported once, as an invariant violation, and not also as
   a missing and an extra row. Rows with no entity fall into an `unattributed`
-  bucket on both sides (`expected`, `target`, `missing`, `extra`, `parity`);
-  `unattributed_target_rows` lists every target row with no entity. A column
-  the target lacks is reported as `"carried": false` with its non-NULL
-  expected count and does not fail the run.
-- Invariants from `pg_catalog`: primary key, unique constraints, unique
-  indexes not owned by the relation's own primary-key, unique or exclusion
+  bucket on both sides (`expected`, `target`, `missing`, `extra`, `parity`),
+  the one record of such rows. A column the target lacks is reported as
+  `"carried": false` with its non-NULL expected count and does not fail the
+  run. `expected_non_null_by_kind` uses the same attribution as the parity
+  buckets: `entities.kind`, or `unattributed`.
+- Invariants from `pg_catalog`: primary key and unique constraints, each
+  with its columns, its `pg_get_constraintdef` definition,
+  `nulls_not_distinct` (from the owning index) and `deferrable` /
+  `initially_deferred`, so a unified key over the nullable `reference_type`
+  shows whether it reproduces the faction and character keys; unique
+  indexes (definition and `nulls_not_distinct`) not owned by the relation's own primary-key, unique or exclusion
   constraint (a foreign key elsewhere that references an index does not hide
   it), foreign keys with target and actions, NOT NULL columns, the role
   column's type and enum labels, row counts, NULL-evidence place rows, and
@@ -56,9 +65,13 @@ produces that proof.
 
 ## Read-Only Run on `save_01`
 
-Rerun on 2026-09-30 at commit `5c89510c`, after the review fixes; the
-numbers are unchanged from the first run except the fleet's migration level,
-which moved from 135 to 136 between the runs.
+Rerun on 2026-09-30 at commit `0b571386`, after the second round of review
+fixes; the numbers are unchanged from the first run except the fleet's
+migration level, which moved from 135 to 136 between the first run and the
+run on `5c89510c`. Each junction's primary key is an ordinary key
+(`nulls_not_distinct`, `deferrable` and `initially_deferred` all false; its
+columns are NOT NULL), and no junction has a unique constraint or a separate
+unique index. The view has none of these.
 
 ```
 $ PYTHONPATH=$PWD $PY scripts/entity_reference_parity.py --dbname save_01
@@ -91,6 +104,7 @@ omitted:
 ```json
 {
   "database": "save_01",
+  "read_only": true,
   "snapshot": {
     "isolation": "repeatable read",
     "server_version_num": 170011,
@@ -145,7 +159,8 @@ omitted:
       "expected_non_null_by_kind": {
         "character": 5800,
         "place": 1996,
-        "faction": 632
+        "faction": 632,
+        "unattributed": 0
       }
     },
     "entity_id": {
@@ -154,7 +169,8 @@ omitted:
       "expected_non_null_by_kind": {
         "character": 5800,
         "place": 1996,
-        "faction": 632
+        "faction": 632,
+        "unattributed": 0
       }
     },
     "kind": {
@@ -163,7 +179,8 @@ omitted:
       "expected_non_null_by_kind": {
         "character": 5800,
         "place": 1996,
-        "faction": 632
+        "faction": 632,
+        "unattributed": 0
       }
     },
     "reference_type": {
@@ -172,7 +189,8 @@ omitted:
       "expected_non_null_by_kind": {
         "character": 5800,
         "place": 1996,
-        "faction": 0
+        "faction": 0,
+        "unattributed": 0
       }
     },
     "evidence": {
@@ -181,7 +199,8 @@ omitted:
       "expected_non_null_by_kind": {
         "character": 0,
         "place": 1994,
-        "faction": 0
+        "faction": 0,
+        "unattributed": 0
       }
     }
   },
@@ -198,18 +217,21 @@ omitted:
     },
     "parity": true
   },
-  "unattributed_target_rows": {
-    "count": 0,
-    "examples": []
-  },
   "invariants": {
     "chunk_character_references": {
       "relation": "public.chunk_character_references",
       "relkind": "table",
-      "primary_key": [
-        "chunk_id",
-        "character_id"
-      ],
+      "primary_key": {
+        "name": "chunk_character_references_pkey",
+        "columns": [
+          "chunk_id",
+          "character_id"
+        ],
+        "definition": "PRIMARY KEY (chunk_id, character_id)",
+        "nulls_not_distinct": false,
+        "deferrable": false,
+        "initially_deferred": false
+      },
       "unique_constraints": [],
       "unique_indexes": [],
       "foreign_keys": [
@@ -255,11 +277,18 @@ omitted:
     "place_chunk_references": {
       "relation": "public.place_chunk_references",
       "relkind": "table",
-      "primary_key": [
-        "place_id",
-        "chunk_id",
-        "reference_type"
-      ],
+      "primary_key": {
+        "name": "place_chunk_references_pkey",
+        "columns": [
+          "place_id",
+          "chunk_id",
+          "reference_type"
+        ],
+        "definition": "PRIMARY KEY (place_id, chunk_id, reference_type)",
+        "nulls_not_distinct": false,
+        "deferrable": false,
+        "initially_deferred": false
+      },
       "unique_constraints": [],
       "unique_indexes": [],
       "foreign_keys": [
@@ -312,10 +341,17 @@ omitted:
     "chunk_faction_references": {
       "relation": "public.chunk_faction_references",
       "relkind": "table",
-      "primary_key": [
-        "chunk_id",
-        "faction_id"
-      ],
+      "primary_key": {
+        "name": "chunk_faction_references_pkey",
+        "columns": [
+          "chunk_id",
+          "faction_id"
+        ],
+        "definition": "PRIMARY KEY (chunk_id, faction_id)",
+        "nulls_not_distinct": false,
+        "deferrable": false,
+        "initially_deferred": false
+      },
       "unique_constraints": [],
       "unique_indexes": [],
       "foreign_keys": [
@@ -386,16 +422,19 @@ the second turn's references give Fixture Plaza both `setting` and
 `tests/pg_fixtures.py`. The last test seeds a second clone the same way,
 because it changes an entity's kind.
 
-- `test_view_has_exact_parity_with_the_seeded_junctions`: the CLI exits 0;
-  per-kind expected and target counts equal the seeded counts (each non-zero)
-  and the junction counts; the invariant block names each key, role enum and
-  the six `CASCADE`/`CASCADE` foreign keys.
+- `test_view_has_exact_parity_with_the_seeded_junctions`: the CLI exits 0
+  with `read_only` true and isolation `repeatable read` as read from the
+  session; per-kind expected and target counts equal the seeded counts (each
+  non-zero) and the junction counts; the invariant block names each key (the
+  character key with its definition and NULL semantics), role enum and the
+  six `CASCADE`/`CASCADE` foreign keys.
 - `test_place_with_two_roles_counts_as_two_rows_and_one_pair`: the plaza's
   two roles in one chunk are two expected and two target rows, and one
   multi-role pair on the junction and on the view.
 - `test_evidence_not_carried_counts_rows_with_evidence`: `evidence` is
   `"carried": false` with `expected_non_null` equal to the 3 rows with
-  evidence; `null_evidence_rows` is 2.
+  evidence, all under `place` (and 0 `unattributed`); `null_evidence_rows`
+  is 2.
 - `test_unified_table_target_carries_every_column_and_catches_drift`: a table
   of the unified shape filled from the junctions shows parity with every
   column carried, and `null_evidence_rows` on the target counts place rows
@@ -409,31 +448,70 @@ because it changes an entity's kind.
 - `test_connection_helper_refuses_writes`: the session's `search_path` is
   `pg_catalog, public`; a `DELETE` and a `CREATE TABLE` through
   `open_read_only_connection` raise `ReadOnlySqlTransaction`.
+- `test_report_refuses_a_session_that_is_not_read_only_repeatable_read`:
+  `build_report` handed a plain `connect()` session raises naming
+  `transaction_read_only='off'` and `read committed`; the same session set
+  read-only still raises naming `read committed`.
+- `test_unique_constraints_report_their_null_semantics`: three unified-shape
+  tables filled from the junctions, keyed `UNIQUE (chunk_id, entity_id,
+  reference_type)`, `UNIQUE NULLS NOT DISTINCT (...)` and `UNIQUE (...)
+  DEFERRABLE INITIALLY DEFERRED`, each show parity; their
+  `unique_constraints` entries differ in `definition`, `nulls_not_distinct`
+  and `deferrable`/`initially_deferred`. A second copy of a role-less faction
+  row inserts into the first table and raises `UniqueViolation` on the
+  second, so the difference the report shows is the one that matters.
 - `test_kind_mismatch_and_unattributed_rows_fail_the_run`, on a second
   clone: `entities.kind` of Fixture Docks (one junction row) is set to
   `faction` directly, since no production writer reaches this case and
   `entities` has no trigger or check on `kind`. The view run exits 3 with
   one `entity_kind_mismatch`, no missing or extra row in any kind, and the
-  row filed under `faction` on both sides. With the kind restored, a
-  unified table whose plain unique index another table's foreign key
-  references lists that index under `unique_indexes`. A unified row naming
-  an absent entity gives `unattributed_target_rows.count == 1`, one
-  unattributed extra row, and exit 3.
+  row filed under `faction` on both sides; `reference_type`'s
+  `expected_non_null_by_kind` counts that row under `faction` too (place 4,
+  faction 1). With the kind restored, a unified table whose plain unique
+  index another table's foreign key references lists that index under
+  `unique_indexes` with `nulls_not_distinct` false. A unified row naming an
+  absent entity gives `unattributed.target == 1`, one unattributed extra
+  row, and exit 3.
 
 Each fix was checked against its regression on a scratch copy of the script
 (restored before the commit): counting rows instead of distinct roles, a set
 difference instead of a multiset difference, the old unique-index exclusion,
 and grouping expected rows by the junction's kind each fail exactly one of
-these tests.
+these tests. The second round was checked the same way on `0b571386`
+(`git checkout` restored the file after each): skipping the session
+check in `build_report`, reporting `nulls_not_distinct` as always false, and
+tallying non-NULL values by junction kind each fail exactly one test
+(`1 failed, 7 passed` each).
 
 ## Proof
 
-The PostgreSQL gate below and the offline tails after the review fixes ran
-on commit `5c89510c` (the review fixes). The first offline tails predate
-those fixes and are kept as the original record.
+The first PostgreSQL tail below ran on commit `0b571386` (the second round
+of review fixes); the second, and the offline tails after the first round,
+ran on `5c89510c`. The first offline tails predate both rounds and are kept
+as the original record. The second round changes only
+`scripts/entity_reference_parity.py` and the PostgreSQL test file, which
+the offline runs skip; `tests/test_reachability.py` was rerun on it.
 
 PostgreSQL gate, from the worktree root with `PYTHONPATH=$PWD` and
 `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset:
+
+On `0b571386`:
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests/test_entity_reference_parity_pg.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 4 targets: postgres, qa640_836_parity_* x2, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+149 passed, 2 warnings in 16.69s
+
+$ $PY -m pytest -q -p no:cacheprovider tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.95s
+```
+
+On `5c89510c`:
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests/test_entity_reference_parity_pg.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
@@ -483,5 +561,6 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 ```
 
 Black, flake8 and mypy on `scripts/entity_reference_parity.py` and
-`tests/test_entity_reference_parity_pg.py`, on `5c89510c`: `2 files left
-unchanged`, no flake8 finding, `Success: no issues found in 2 source files`.
+`tests/test_entity_reference_parity_pg.py`, on `5c89510c` and again on
+`0b571386`: `2 files left unchanged`, no flake8 finding, `Success: no
+issues found in 2 source files`.
