@@ -2,6 +2,8 @@
 
 ## Owner-Sequence Snapshot Bracket
 
+Head `1f70e54d`, rebased on `3e8e692e`.
+
 The audited proof below ran between two read-only snapshots of every public
 sequence on `save_02`, `save_05`, and `NEXUS_template`. Each snapshot ran in a
 `READ ONLY` transaction:
@@ -27,6 +29,8 @@ The md5 is over the psql output (the `BEGIN` and `COMMIT` tags plus 48
 
 ## Audited Gate
 
+Head `1f70e54d`, rebased on `3e8e692e`.
+
 Gateway variables unset (`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL`):
 
 ```
@@ -49,7 +53,7 @@ $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit \
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 dbname audit: 14 targets: postgres, qa640_geo_resolver_*, qa640_mig077_*, qa640_mig084_*, qa640_mig085_*, qa640_mig086_*, qa640_mig087_*, qa640_mig088_*, qa640_mig090_*, qa640_mig091_*, qa640_mig092_*, qa640_mig095_*, qa640_mig096_*, qa640_weather_migration_*
 dbname audit: owner targets: none
-48 passed, 5 warnings in 8.37s
+48 passed, 5 warnings in 8.61s
 ```
 
 Exit status 0.

@@ -55,12 +55,12 @@ more specific instructions.
   URL, or keywords before connecting and from libpq's resolved `dbname`
   (`conn.info.dbname`) after connecting; asyncpg targets are recorded from the
   keywords, the DSN, and asyncpg's resolved connection parameters before
-  connecting. The summary
-  lists the targets and ends `dbname audit: owner targets: none`; any
-  `save_NN` or `NEXUS_template` target turns the run into a failure (exit 1)
-  naming each owner target and the test that opened it, even when every test
-  passed. `postgres`, `template0`, and disposable clones are allowed. Child
-  processes are not audited: `pg_dump` and `psql` read `NEXUS_template` when
+  connecting. The summary lists the targets and ends
+  `dbname audit: owner targets: none`; any `save_NN` or `NEXUS_template`
+  target turns the run into a failure (exit 1) naming each owner target and
+  the test that opened it, even when every test passed. `postgres`,
+  `template0`, and disposable clones are allowed. Child processes are not
+  audited: `pg_dump` and `psql` read `NEXUS_template` when
   `disposable_slot_database` clones it, and a routed gateway or nested pytest
   needs its own audit.
 - Include a concise PR summary, validation commands, and any schema,
