@@ -446,10 +446,11 @@ name `mood` as the one live category that deliberately takes that default
 only one:
 
 ```text
-$ psql -d NEXUS_template -Atc "select category, deprecated from tag_category_registry order by 1"
+$ psql -d NEXUS_template -Atc "select count(*), count(*) filter (where not deprecated) from tag_category_registry"
+45|33
 ```
 
-Of the 46 rows, the live categories outside `STABLE_SEED_TAG_CATEGORIES`,
+Of the 33 live categories, the ones outside `STABLE_SEED_TAG_CATEGORIES`,
 `EVENT_ANCHORED_TAG_CATEGORIES`, and the `orrery_` prefix are `{mood}`.
 `test_registry_deprecated_categories_are_never_seed_eligible` now reads the
 whole registry from its template clone and also asserts that set equals
