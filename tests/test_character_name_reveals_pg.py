@@ -1,4 +1,4 @@
-"""Actual sync/async acceptance keeps name revelations on the original row."""
+"""Actual acceptance keeps name revelations on the original row."""
 
 import json
 
