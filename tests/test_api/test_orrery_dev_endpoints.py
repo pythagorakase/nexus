@@ -1,20 +1,37 @@
 """Live tests for the /api/dev/orrery/* audit endpoints.
 
-These exercise the real router over HTTP through a TestClient against real
-slot databases — no mocks (see CLAUDE.md testing philosophy). The central
+These exercise the real router over HTTP through a TestClient against a real
+PostgreSQL database — no mocks (see CLAUDE.md testing philosophy). The central
 contract is parity: for the same anchor, the explained payload must name
 exactly the winners the production ``resolve_dry_run`` selects, stack by
 stack, including branch, magnitude, event type, binding hash, and the
 rendered narrative stub.
 
-save_05 is the Orrery-native live-runtime audit target. A module-wide
-non-vacuity test guards against it drifting into a state where a parity block
-silently runs zero iterations. All endpoints are read-only, so no cleanup is
-needed.
+The audit target is a disposable template clone that ``seeded_story`` seeds
+once per module through the production accepted-turn path: ten turns six
+story hours apart, a protagonist at Fixture Plaza, and three off-screen cast
+members at Fixture Docks whose accepted ticks commit real resolutions and
+accrue sleep debt. On top of that story it seeds one relationship from a cast
+member to the protagonist (an on-screen target, so a template scene pressure
+fires), a friendship in both directions between two cast members (so their
+two-party winners compose a joint beat), a durable tag bestowed without a
+world time, a work routine anchor at the plaza (a routine winner whose gate
+passes through ``NOT(has_inbound_pair_tag(hunting))``), and a ``hunting``
+pair tag inbound to the third cast member. The module-wide non-vacuity
+checks fail loudly if any of those stops producing what the parity and
+what-if blocks iterate over.
+
+Only the PostgreSQL tests route slot ``ROUTED_SLOT`` to the clone, each for
+its own duration; ``test_resolve_rejects_invalid_slot`` runs unrouted so an
+out-of-range slot still fails validation with a 400. No test reads or writes
+an owner slot. All endpoints are read-only; the clone is dropped afterward.
 """
 
 from __future__ import annotations
 
+from contextlib import closing
+from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -36,9 +53,35 @@ from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.orrery_dev_endpoints import router as orrery_dev_router
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings, load_settings_as_dict
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_entity_tag,
+    seed_pair_tag,
+    seed_played_story,
+    seed_relationship,
+    seed_routine_anchor,
+)
 
-LIVE_SLOT = 5
-AUDIT_SLOTS = (LIVE_SLOT,)
+# The slot label routed to the seeded clone while a PostgreSQL test runs.
+ROUTED_SLOT = 5
+AUDIT_SLOTS = (ROUTED_SLOT,)
+AUDIT_SLOT_IDS = ["seeded_story"]
+
+PROTAGONIST = "Fixture Player"
+# Off-screen cast, by role in the seed: the confidant relates to the
+# protagonist and hunts the quarry; the worker keeps a routine anchor at the
+# plaza; the confidant and the worker are friends in both directions.
+CONFIDANT = "Ines Marr"
+QUARRY = "Tobias Vey"
+WORKER = "Oda Kell"
+CAST = (CONFIDANT, QUARRY, WORKER)
+SEED_TURNS = 10
+SEED_TIME_DELTA = timedelta(hours=6)
+# A durable tag bestowed with no world time (seed_entity_tag leaves
+# applied_at_world_time NULL): the data-quality strip's pathology.
+NULL_WORLD_TIME_TAG = "kin_protector"
 
 MULTI_PARTY_TEMPLATE_IDS = {
     t.id for t in BUILTIN_TEMPLATES if len(t.required_slots) >= 2
@@ -50,6 +93,104 @@ REQUIRED_SLOTS_BY_TEMPLATE = {
     t.id: {slot.value for slot in t.required_slots} for t in BUILTIN_TEMPLATES
 }
 COUNTERPARTY_SLOTS = {"target", "faction"}
+
+
+@dataclass(frozen=True)
+class SeededAuditStory:
+    """The clone ``seeded_story`` seeded and the entities it placed there."""
+
+    dbname: str
+    chunk_ids: tuple[int, ...]
+    protagonist_entity_id: int
+    cast_entity_ids: dict[str, int]
+
+
+def _seed_audit_story(dbname: str) -> SeededAuditStory:
+    """Seed the played story and the extra rows the audit guards need.
+
+    The slot must already be routed to ``dbname`` under ``ROUTED_SLOT``: the
+    accepted turns label their jobs with that slot.
+    """
+
+    chunk_ids = seed_played_story(
+        dbname,
+        turns=SEED_TURNS,
+        protagonist_name=PROTAGONIST,
+        cast=CAST,
+        time_delta=SEED_TIME_DELTA,
+        slot=ROUTED_SLOT,
+    )
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT name, id, entity_id FROM characters WHERE name = ANY(%s)",
+            ([PROTAGONIST, *CAST],),
+        )
+        characters = {row[0]: (int(row[1]), int(row[2])) for row in cur.fetchall()}
+        cur.execute("SELECT id FROM places WHERE name = 'Fixture Plaza'")
+        (plaza_id,) = cur.fetchone()
+    assert set(characters) == {PROTAGONIST, *CAST}, characters
+
+    seed_relationship(
+        dbname,
+        subject_character_id=characters[CONFIDANT][0],
+        object_character_id=characters[PROTAGONIST][0],
+        relationship_type="ally",
+    )
+    for subject, obj in ((CONFIDANT, WORKER), (WORKER, CONFIDANT)):
+        seed_relationship(
+            dbname,
+            subject_character_id=characters[subject][0],
+            object_character_id=characters[obj][0],
+            relationship_type="friend",
+        )
+    seed_entity_tag(dbname, entity_id=characters[QUARRY][1], tag=NULL_WORLD_TIME_TAG)
+    seed_routine_anchor(
+        dbname,
+        character_entity_id=characters[WORKER][1],
+        place_id=int(plaza_id),
+        anchor_type="work",
+    )
+    seed_pair_tag(
+        dbname,
+        subject_entity_id=characters[CONFIDANT][1],
+        object_entity_id=characters[QUARRY][1],
+        tag="hunting",
+    )
+    return SeededAuditStory(
+        dbname=dbname,
+        chunk_ids=tuple(chunk_ids),
+        protagonist_entity_id=characters[PROTAGONIST][1],
+        cast_entity_ids={name: characters[name][1] for name in CAST},
+    )
+
+
+@pytest.fixture(scope="module")
+def seeded_story() -> Iterator[SeededAuditStory]:
+    """One seeded clone for the module, routed only while it is seeded.
+
+    A module-scoped fixture cannot take the function-scoped ``monkeypatch``,
+    so the seeding route lives in its own ``MonkeyPatch`` context and ends
+    before any test runs; each PostgreSQL test routes again through
+    ``routed_story``.
+    """
+
+    with disposable_slot_database("qa885_orrery_dev") as dbname:
+        with pytest.MonkeyPatch.context() as mp:
+            route_slot_to_disposable(mp.setattr, slot=ROUTED_SLOT, dbname=dbname)
+            story = _seed_audit_story(dbname)
+        yield story
+
+
+@pytest.fixture
+def routed_story(
+    seeded_story: SeededAuditStory, monkeypatch: pytest.MonkeyPatch
+) -> SeededAuditStory:
+    """Route ``ROUTED_SLOT`` to the seeded clone for one test."""
+
+    route_slot_to_disposable(
+        monkeypatch.setattr, slot=ROUTED_SLOT, dbname=seeded_story.dbname
+    )
+    return seeded_story
 
 
 @pytest.fixture(scope="module")
@@ -92,8 +233,14 @@ def _production_proposal(slot: int) -> tuple[Optional[int], OrreryTickProposal]:
 
 
 @pytest.fixture(scope="module")
-def production_proposals() -> dict[int, tuple[Optional[int], OrreryTickProposal]]:
-    return {slot: _production_proposal(slot) for slot in AUDIT_SLOTS}
+def production_proposals(
+    seeded_story: SeededAuditStory,
+) -> dict[int, tuple[Optional[int], OrreryTickProposal]]:
+    with pytest.MonkeyPatch.context() as mp:
+        route_slot_to_disposable(
+            mp.setattr, slot=ROUTED_SLOT, dbname=seeded_story.dbname
+        )
+        return {slot: _production_proposal(slot) for slot in AUDIT_SLOTS}
 
 
 def _all_stacks(payload: dict) -> Iterator[tuple[dict, dict]]:
@@ -111,14 +258,15 @@ def _winner(stack: dict) -> dict:
 
 @pytest.mark.requires_postgres
 def test_slots_jointly_exercise_both_parity_contracts(
+    routed_story: SeededAuditStory,
     production_proposals: dict[int, tuple[Optional[int], OrreryTickProposal]],
 ) -> None:
-    """Guard against the parity test going vacuous as slot data drifts.
+    """Guard against the parity test going vacuous as the seed drifts.
 
     Each parity block below iterates over whatever the production resolver
-    yields; if every audited slot stopped producing resolutions (or scene
+    yields; if the seeded story stopped producing resolutions (or scene
     pressures), that block would silently pass with zero iterations. This
-    test fails loudly instead, telling us to repoint AUDIT_SLOTS.
+    test fails loudly instead, naming the seed that should produce them.
     """
 
     total_resolutions = sum(
@@ -128,18 +276,20 @@ def test_slots_jointly_exercise_both_parity_contracts(
         len(proposal.scene_pressures) for _, proposal in production_proposals.values()
     )
     assert total_resolutions > 0, (
-        "no audited slot produces resolutions — winner parity is vacuous; "
-        "repoint AUDIT_SLOTS at a slot with Orrery activity"
+        "the seeded story produces no resolutions — winner parity is "
+        "vacuous; seed_played_story's off-screen cast should resolve"
     )
     assert total_pressures > 0, (
-        "no audited slot produces scene pressures — pressure parity is "
-        "vacuous; repoint AUDIT_SLOTS at a slot with on-screen targets"
+        "the seeded story produces no scene pressures — pressure parity is "
+        "vacuous; the confidant's relationship to the protagonist and the "
+        "protagonist's accrued needs should produce them"
     )
 
 
 @pytest.mark.requires_postgres
-@pytest.mark.parametrize("slot", AUDIT_SLOTS)
+@pytest.mark.parametrize("slot", AUDIT_SLOTS, ids=AUDIT_SLOT_IDS)
 def test_resolve_parity_with_production_resolver(
+    routed_story: SeededAuditStory,
     client: TestClient,
     production_proposals: dict[int, tuple[Optional[int], OrreryTickProposal]],
     slot: int,
@@ -237,14 +387,15 @@ def test_resolve_parity_with_production_resolver(
 
 @pytest.mark.requires_postgres
 def test_resolve_four_template_states_are_distinguishable(
+    routed_story: SeededAuditStory,
     client: TestClient,
 ) -> None:
     """Winner / shadowed / gate-failed / not-applicable must never blur."""
 
-    response = client.post("/api/dev/orrery/resolve", json={"slot": LIVE_SLOT})
+    response = client.post("/api/dev/orrery/resolve", json={"slot": ROUTED_SLOT})
     assert response.status_code == 200
     payload = response.json()
-    assert payload["actors"], "save_05 is expected to bind off-screen actors"
+    assert payload["actors"], "the seeded cast is expected to bind off-screen actors"
 
     for group in payload["actors"]:
         # Stack composition respects arity — the stack-split trap guard.
@@ -299,8 +450,10 @@ def test_resolve_four_template_states_are_distinguishable(
 
 
 @pytest.mark.requires_postgres
-def test_entity_context_hover_payload(client: TestClient) -> None:
-    resolve = client.post("/api/dev/orrery/resolve", json={"slot": LIVE_SLOT})
+def test_entity_context_hover_payload(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
+    resolve = client.post("/api/dev/orrery/resolve", json={"slot": ROUTED_SLOT})
     assert resolve.status_code == 200
     groups = resolve.json()["actors"]
     assert groups
@@ -309,7 +462,7 @@ def test_entity_context_hover_payload(client: TestClient) -> None:
     response = client.post(
         "/api/dev/orrery/context/entities",
         json={
-            "slot": LIVE_SLOT,
+            "slot": ROUTED_SLOT,
             "entity_ids": entity_ids,
             "recent_events_limit": 3,
         },
@@ -365,10 +518,12 @@ def test_entity_context_hover_payload(client: TestClient) -> None:
 
 
 @pytest.mark.requires_postgres
-def test_entity_context_recent_events_respect_anchor(client: TestClient) -> None:
+def test_entity_context_recent_events_respect_anchor(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
     """A historical anchor must not surface events from its own future."""
 
-    resolve = client.post("/api/dev/orrery/resolve", json={"slot": LIVE_SLOT})
+    resolve = client.post("/api/dev/orrery/resolve", json={"slot": ROUTED_SLOT})
     assert resolve.status_code == 200
     resolved = resolve.json()
     head_anchor = resolved["anchor_chunk_id"]
@@ -377,7 +532,7 @@ def test_entity_context_recent_events_respect_anchor(client: TestClient) -> None
     at_head = client.post(
         "/api/dev/orrery/context/entities",
         json={
-            "slot": LIVE_SLOT,
+            "slot": ROUTED_SLOT,
             "entity_ids": entity_ids,
             "anchor_chunk_id": head_anchor,
         },
@@ -390,7 +545,7 @@ def test_entity_context_recent_events_respect_anchor(client: TestClient) -> None
     # Anchor 0 predates every event; the honest answer is "none yet".
     at_genesis = client.post(
         "/api/dev/orrery/context/entities",
-        json={"slot": LIVE_SLOT, "entity_ids": entity_ids, "anchor_chunk_id": 0},
+        json={"slot": ROUTED_SLOT, "entity_ids": entity_ids, "anchor_chunk_id": 0},
     )
     assert at_genesis.status_code == 200
     for entity in at_genesis.json()["entities"]:
@@ -433,8 +588,10 @@ def _not_hunted_winners(payload: dict) -> Iterator[tuple[int, dict]]:
 
 
 @pytest.mark.requires_postgres
-def test_current_mode_carries_no_what_if_payload(client: TestClient) -> None:
-    payload = _resolve(client, LIVE_SLOT)
+def test_current_mode_carries_no_what_if_payload(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
+    payload = _resolve(client, ROUTED_SLOT)
     assert payload["mode"] == "current"
     assert payload["overrides"] is None
     assert payload["need_pressures_diff"] is None
@@ -442,13 +599,15 @@ def test_current_mode_carries_no_what_if_payload(client: TestClient) -> None:
         assert stack["diff"] is None
 
     # An explicitly empty override set is still current mode.
-    empty = _resolve(client, LIVE_SLOT, overrides={})
+    empty = _resolve(client, ROUTED_SLOT, overrides={})
     assert empty["mode"] == "current"
     assert empty["overrides"] is None
 
 
 @pytest.mark.requires_postgres
-def test_what_if_pair_tag_injection_kills_a_winner(client: TestClient) -> None:
+def test_what_if_pair_tag_injection_kills_a_winner(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
     """The guaranteed flip: a winner that required NOT(inbound hunting) at the
     top of its AND gate cannot survive the tag's injection, so the diff must
     record both the fired flip and the winner change."""
@@ -463,10 +622,9 @@ def test_what_if_pair_tag_injection_kills_a_winner(client: TestClient) -> None:
                 candidates.append((slot, actor_id, subjects[0], winner["template_id"]))
                 break
     assert candidates, (
-        "no audited slot yields an actor-only winner gated on "
+        "the seeded story yields no actor-only winner gated on "
         "NOT(has_inbound_pair_tag(hunting)) — the what-if kill test is "
-        "vacuous; repoint AUDIT_SLOTS at a slot with routine/concealment "
-        "winners"
+        "vacuous; the worker's routine anchor should yield a routine winner"
     )
 
     for slot, actor_id, subject_id, winner_id in candidates:
@@ -500,6 +658,7 @@ def test_what_if_pair_tag_injection_kills_a_winner(client: TestClient) -> None:
 
 @pytest.mark.requires_postgres
 def test_what_if_need_override_reaches_stacks_and_pressures(
+    routed_story: SeededAuditStory,
     client: TestClient,
 ) -> None:
     """Setting sleep debt sky-high must surface both in off-screen stacks
@@ -544,26 +703,28 @@ def test_what_if_need_override_reaches_stacks_and_pressures(
             assert draft["template_id"] == "sleep_need_pressure"
 
     assert flipped_stacks > 0, (
-        "sleep debt 500 flipped no off-screen actor's sleep template on any "
-        "audited slot — the stack-side what-if assertion is vacuous; repoint "
-        "AUDIT_SLOTS"
+        "sleep debt 500 flipped no off-screen actor's sleep template in the "
+        "seeded story — the stack-side what-if assertion is vacuous; the "
+        "seeded cast should carry sleep stacks"
     )
     assert pressure_changes > 0, (
-        "sleep debt 500 changed no present actor's need pressure on any "
-        "audited slot — the pressure-side what-if assertion is vacuous; "
-        "repoint AUDIT_SLOTS at a slot with on-screen characters"
+        "sleep debt 500 changed no present actor's need pressure in the "
+        "seeded story — the pressure-side what-if assertion is vacuous; the "
+        "protagonist should be present at the anchor"
     )
 
 
 @pytest.mark.requires_postgres
-def test_what_if_validation_rejections(client: TestClient) -> None:
-    payload = _resolve(client, LIVE_SLOT)
+def test_what_if_validation_rejections(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
+    payload = _resolve(client, ROUTED_SLOT)
     actor_id = payload["actors"][0]["actor_entity_id"]
 
     def _post(overrides: dict) -> tuple[int, str]:
         response = client.post(
             "/api/dev/orrery/resolve",
-            json={"slot": LIVE_SLOT, "overrides": overrides},
+            json={"slot": ROUTED_SLOT, "overrides": overrides},
         )
         return response.status_code, response.json().get("detail", "")
 
@@ -603,7 +764,7 @@ def test_what_if_validation_rejections(client: TestClient) -> None:
     context = client.post(
         "/api/dev/orrery/context/entities",
         json={
-            "slot": LIVE_SLOT,
+            "slot": ROUTED_SLOT,
             "entity_ids": [g["actor_entity_id"] for g in payload["actors"]],
         },
     ).json()
@@ -616,8 +777,9 @@ def test_what_if_validation_rejections(client: TestClient) -> None:
         None,
     )
     assert carried is not None, (
-        "no audited actor on save_05 carries a durable tag — layer-mismatch "
-        "and no-op rejection checks are vacuous; repoint the test"
+        "no audited actor in the seeded story carries a durable tag — "
+        "layer-mismatch and no-op rejection checks are vacuous; the quarry's "
+        "seeded tag should be one"
     )
     tagged_entity, durable_tag = carried
 
@@ -644,7 +806,7 @@ def test_what_if_validation_rejections(client: TestClient) -> None:
     response = client.post(
         "/api/dev/orrery/resolve",
         json={
-            "slot": LIVE_SLOT,
+            "slot": ROUTED_SLOT,
             "overrides": {
                 "tags": [{"entity_id": actor_id, "tag": "x", "op": "toggle"}]
             },
@@ -692,7 +854,9 @@ def test_catalog_endpoint_over_http(client: TestClient) -> None:
 
 def test_resolve_rejects_invalid_slot(client: TestClient) -> None:
     # Slot validation fails inside get_slot_db_url before any engine or
-    # database connection exists, so no postgres marker is needed.
+    # database connection exists, so no postgres marker is needed. The test
+    # takes no routed fixture on purpose: under a route, the routed resolver
+    # raises RuntimeError for slot 9, which the endpoint maps to a 500.
     response = client.post("/api/dev/orrery/resolve", json={"slot": 9})
     assert response.status_code == 400
 
@@ -744,9 +908,9 @@ def test_dashboard_flag_gates_router_registration(tmp_path: Path) -> None:
 
 
 @pytest.mark.requires_postgres
-@pytest.mark.parametrize("slot", AUDIT_SLOTS)
+@pytest.mark.parametrize("slot", AUDIT_SLOTS, ids=AUDIT_SLOT_IDS)
 def test_coverage_report_is_internally_consistent(
-    client: TestClient, slot: int
+    routed_story: SeededAuditStory, client: TestClient, slot: int
 ) -> None:
     response = client.post(
         "/api/dev/orrery/coverage", json={"slot": slot, "count": 3, "stride": 5}
@@ -806,6 +970,7 @@ def test_coverage_report_is_internally_consistent(
 
 @pytest.mark.requires_postgres
 def test_coverage_head_anchor_reconciles_with_production(
+    routed_story: SeededAuditStory,
     client: TestClient,
     production_proposals: dict[int, tuple[Optional[int], OrreryTickProposal]],
 ) -> None:
@@ -813,8 +978,9 @@ def test_coverage_head_anchor_reconciles_with_production(
 
     for slot in AUDIT_SLOTS:
         anchor_chunk_id, proposal = production_proposals[slot]
-        if anchor_chunk_id is None:
-            continue
+        assert (
+            anchor_chunk_id == routed_story.chunk_ids[-1]
+        ), "the production oracle must anchor on the seeded story's head chunk"
         response = client.post(
             "/api/dev/orrery/coverage",
             json={"slot": slot, "anchor_chunk_ids": [anchor_chunk_id]},
@@ -827,15 +993,20 @@ def test_coverage_head_anchor_reconciles_with_production(
 
 
 @pytest.mark.requires_postgres
-def test_coverage_data_quality_matches_sql_oracle(client: TestClient) -> None:
-    """save_05 exhibits the NULL-world-time bestowal pathology; the health
-    strip must report exactly what SQL reports."""
+def test_coverage_data_quality_matches_sql_oracle(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
+    """The seeded story exhibits the NULL-world-time bestowal pathology (the
+    quarry's seeded tag); the health strip must report exactly what SQL
+    reports."""
 
-    response = client.post("/api/dev/orrery/coverage", json={"slot": 5, "count": 1})
+    response = client.post(
+        "/api/dev/orrery/coverage", json={"slot": ROUTED_SLOT, "count": 1}
+    )
     assert response.status_code == 200, response.text
     findings = response.json()["data_quality"]["null_world_time_bestowals"]
 
-    engine = create_engine(get_slot_db_url(slot=5))
+    engine = create_engine(get_slot_db_url(slot=ROUTED_SLOT))
     try:
         with Session(engine) as session:
             oracle_nulls, oracle_active = session.execute(
@@ -854,20 +1025,23 @@ def test_coverage_data_quality_matches_sql_oracle(client: TestClient) -> None:
     assert sum(f["null_world_time_rows"] for f in tag_rows) == oracle_nulls
     assert sum(f["active_rows"] for f in tag_rows) == oracle_active
     assert oracle_nulls > 0, (
-        "save_05 no longer exhibits the NULL-world-time pathology — the "
-        "data-quality assertion is vacuous; repoint at a slot that does"
+        "the seeded story no longer exhibits the NULL-world-time pathology "
+        "— the data-quality assertion is vacuous; seed_entity_tag should "
+        "leave applied_at_world_time NULL"
     )
 
 
 @pytest.mark.requires_postgres
-def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
+def test_coverage_anchor_cap_and_sampling(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
     from nexus.config import load_settings_as_dict
 
     max_anchors = load_settings_as_dict()["orrery"]["dashboard"]["coverage_max_anchors"]
 
     over = client.post(
         "/api/dev/orrery/coverage",
-        json={"slot": LIVE_SLOT, "count": max_anchors + 1},
+        json={"slot": ROUTED_SLOT, "count": max_anchors + 1},
     )
     assert over.status_code == 400
     assert "coverage_max_anchors" in over.json()["detail"]
@@ -875,14 +1049,14 @@ def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
     over_explicit = client.post(
         "/api/dev/orrery/coverage",
         json={
-            "slot": LIVE_SLOT,
+            "slot": ROUTED_SLOT,
             "anchor_chunk_ids": list(range(1, max_anchors + 2)),
         },
     )
     assert over_explicit.status_code == 400
 
     # Stride sampling walks real chunk ids backward from the head.
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
+    engine = create_engine(get_slot_db_url(slot=ROUTED_SLOT))
     try:
         with Session(engine) as session:
             ids_desc = list(
@@ -900,15 +1074,17 @@ def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
 
     response = client.post(
         "/api/dev/orrery/coverage",
-        json={"slot": LIVE_SLOT, "count": 3, "stride": 3},
+        json={"slot": ROUTED_SLOT, "count": 3, "stride": 3},
     )
     assert response.status_code == 200
     assert response.json()["anchor_chunk_ids"] == expected
 
 
 @pytest.mark.requires_postgres
-def test_adjudication_history_endpoint_over_http(client: TestClient) -> None:
-    response = client.get("/api/dev/orrery/history/adjudications?slot=5")
+def test_adjudication_history_endpoint_over_http(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
+    response = client.get(f"/api/dev/orrery/history/adjudications?slot={ROUTED_SLOT}")
     assert response.status_code == 200
     payload = response.json()
     assert set(payload["totals"]["actions"]) == {"defer", "replace", "void"}
@@ -919,7 +1095,8 @@ def test_adjudication_history_endpoint_over_http(client: TestClient) -> None:
         assert streak["outcome"] in {"ratified", "replace", "void", "open"}
 
     filtered = client.get(
-        "/api/dev/orrery/history/adjudications?slot=5&template_id=surveil"
+        "/api/dev/orrery/history/adjudications",
+        params={"slot": ROUTED_SLOT, "template_id": "surveil"},
     )
     assert filtered.status_code == 200
     filtered_payload = filtered.json()
@@ -927,8 +1104,9 @@ def test_adjudication_history_endpoint_over_http(client: TestClient) -> None:
 
 
 @pytest.mark.requires_postgres
-@pytest.mark.parametrize("slot", AUDIT_SLOTS)
+@pytest.mark.parametrize("slot", AUDIT_SLOTS, ids=AUDIT_SLOT_IDS)
 def test_joint_beats_parity_with_production(
+    routed_story: SeededAuditStory,
     client: TestClient,
     production_proposals: dict[int, tuple[Optional[int], OrreryTickProposal]],
     slot: int,
@@ -950,16 +1128,23 @@ def test_joint_beats_parity_with_production(
         (beat.forward_proposal_id, beat.reverse_proposal_id)
         for beat in proposal.joint_beats
     }
+    assert production_beats, (
+        "the seeded story composes no joint beat — joint-beat parity is "
+        "vacuous; the confidant and the worker are seeded as friends in both "
+        "directions so their two-party winners pair up"
+    )
     assert endpoint_beats == production_beats
     for beat in payload["joint_beats"]:
         assert beat["kind"] in {"reciprocal", "crossed"}
 
 
 @pytest.mark.requires_postgres
-def test_vocab_endpoint_serves_picker_vocabularies(client: TestClient) -> None:
+def test_vocab_endpoint_serves_picker_vocabularies(
+    client: TestClient, routed_story: SeededAuditStory
+) -> None:
     """The what-if drawer's pickers read slot-scoped vocab from one call."""
 
-    response = client.get(f"/api/dev/orrery/vocab?slot={LIVE_SLOT}")
+    response = client.get(f"/api/dev/orrery/vocab?slot={ROUTED_SLOT}")
     assert response.status_code == 200
     payload = response.json()
     assert set(payload) == {"tags", "pair_tags", "event_types", "places"}
