@@ -36,6 +36,127 @@ Work order 815-A. Issue #815. Base: `origin/main` at 696ccf29. No migration. Gat
 - `SessionWaitFailure.__init__` is annotated `-> None`.
 - The base commit above is corrected to the branch's real merge base, and the transcript below is one run at this branch's head.
 
+## Astra Review Fixes
+
+The independent review of `adb4843e` (GPT-6 Astra, `CHANGES_REQUIRED`) raised three findings; this round fixes those three and nothing else, in `c62f6ba3` (finding 1), `d69884d9` (finding 2), and `614d91e5` (finding 3). The gates below ran on the tree those commits produce. Each new test was written first and failed on the unfixed code.
+
+- **[P2] A body stalled after its headers was reported as a lost gateway.** Requests 2.32.3 raises `ReadTimeout` when the headers do not arrive in time, but reports a body that stalls after them as a `requests.exceptions.ConnectionError` wrapping urllib3's `ReadTimeoutError` (not a `Timeout`; its `__cause__` is `None` and the urllib3 error is its wrapped argument), so `wait_for_session` and `_load_session_result` exited 4 with `api_unreachable`. Both reads now classify a failed request through one helper, `_failed_session_read`: a read timeout in the cause chain (`_is_read_timeout`) is `timeout`, a domain failure (exit 1) that keeps the partial; a refused or dropped connection, a body cut off mid-answer included, stays `unreachable` (exit 4); any other failed request stays `http_error`. Error messages are unchanged. The walk follows only causes (exception arguments and `__cause__`), never `__context__`: with `__context__` followed, a gone gateway reached while a caller handles a `ReadTimeout` was classified as a timeout (probe below). `docs/cli.md` now says a read that times out before its headers arrive or while its body stalls after them is exit 1.
+- **[P2] `poll_interval_seconds` accepted infinity.** `RuntimeCliSettings.poll_interval_seconds` adds `allow_inf_nan=False` to `gt=0`: the Pydantic form of `math.isfinite(value) and value > 0`, as the repository's other finite floats in `settings_models.py` declare it. `inf` and `nan` fail with `finite_number` and `0` and `-1.0` with `greater_than`, each located at `runtime.cli.poll_interval_seconds` (`poll_interval_seconds` on the bare model). The `nexus.toml` comment and the field description state the constraint.
+- **[P3] The range walk requested one chunk past `--to`.** `inspect chunks --from/--to` stops at the chunk with id `--to`, so `--from 10 --to 11` sends exactly two requests and a failing read of chunk 11's neighbours can no longer discard the complete range. A range sends one more request only when no committed chunk has id `--to`, to find where it ends; `docs/cli.md`, the `--from` help, and the `_inspect_chunks` docstring say so.
+- New tests: a status answer stalled after its headers, in process (`timeout`, `domain_failure`, the cause a wrapped `ConnectionError`, not retried); `continue` against a status read and a slot-state read that each stall after their headers (exit 1, `generation_error.status` `timeout`, `session_id` and `recovery_command` kept); a gone gateway reached while a `ReadTimeout` is being handled (still `unreachable`); `inf`, `nan`, `0`, and `-1.0` rejected by `RuntimeCliSettings`, by `Settings`, and by `load_settings` of a TOML file; `--from 10 --to 11` with chunk 11's adjacent route answering 500 (exit 0, both chunks, exactly two requests); and a `--from 11 --to 13` case pinning the extra request when chunk `--to` does not exist. The `chunks-range` and `chunks-first-to` cases now expect two requests, not three. The existing before-headers slot-state stall test is unchanged and green.
+
+Before the fixes (tests written first, run on the unfixed code):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_session_wait.py -k "stalled_after_its_headers"
+E       AssertionError: {
+E           "code": "api_unreachable",
+E           "error": "Cannot connect to API server at http://127.0.0.1:56406: HTTPConnectionPool(host='127.0.0.1', port=56406): Read timed out.",
+E           "ok": false,
+E           "partial": {
+E             "generation_error": {
+E               "detail": "Cannot connect to API server at http://127.0.0.1:56406: HTTPConnectionPool(host='127.0.0.1', port=56406): Read timed out.",
+E               "status": "unreachable"
+E             },
+E             "recovery_command": "nexus load --slot 5",
+E             "session_id": "815-wait-session"
+E           }
+E         }
+E
+E       assert 4 == <ExitCode.DOMAIN_FAILURE: 1>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_cli_session_wait.py::test_wait_reports_a_status_answer_stalled_after_its_headers_as_a_timeout
+FAILED tests/test_cli_session_wait.py::test_continue_reports_an_answer_stalled_after_its_headers_as_a_domain_failure[status]
+FAILED tests/test_cli_session_wait.py::test_continue_reports_an_answer_stalled_after_its_headers_as_a_domain_failure[state]
+3 failed, 20 deselected in 5.01s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/config/test_settings_models.py -k "poll_interval"
+>       with pytest.raises(ValidationError) as direct:
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/config/test_settings_models.py::test_cli_poll_interval_must_be_finite_and_positive[inf]
+1 failed, 3 passed, 81 deselected in 0.72s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_contract.py -k "inspect_verb_prints or no_request_past or read_only_player_plane"
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_cli_contract.py::test_inspect_verb_prints_the_route_body_in_the_envelope[chunks-first-to]
+FAILED tests/test_cli_contract.py::test_inspect_verb_prints_the_route_body_in_the_envelope[chunks-range]
+FAILED tests/test_cli_contract.py::test_inspect_chunk_range_sends_no_request_past_its_last_chunk
+3 failed, 12 passed, 105 deselected in 19.04s
+```
+
+On the unfixed walk, the range with a failing read past `--to` discarded both chunks:
+
+```
+E       AssertionError: {
+E           "code": "api_error",
+E           "error": "http://127.0.0.1:56798/api/narrative/chunks/11/adjacent returned HTTP 500: {\"detail\": \"Internal Server Error\"}",
+E           "ok": false,
+E           "partial": {
+E             "slot": 5,
+E             "status_code": 500
+E           }
+E         }
+E
+E       assert 1 == <ExitCode.OK: 0>
+```
+
+Why the walk skips `__context__`: a scratch probe outside the repository (`context_probe.py`; the new test is its reproducible form) calls `wait_for_session` against a closed loopback port, once plainly and once inside an `except requests.exceptions.ReadTimeout` block. With `__context__` followed, the second call was misclassified; with causes only (as shipped) it is not. With `__context__` added back to the walk, `test_wait_keeps_a_gone_gateway_unreachable_while_a_read_timeout_is_handled` fails (`1 failed, 23 deselected in 0.30s`).
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_RUNTIME_CONFIG -u NEXUS_HOME PYTHONPATH=$PWD $PY context_probe.py   # __context__ followed
+  cause: ConnectionError | args[0]: MaxRetryError
+plain call: unreachable
+  cause: ConnectionError | args[0]: MaxRetryError
+inside a handled ReadTimeout: timeout
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_RUNTIME_CONFIG -u NEXUS_HOME PYTHONPATH=$PWD $PY context_probe.py   # causes only
+  cause: ConnectionError | args[0]: MaxRetryError
+plain call: unreachable
+  cause: ConnectionError | args[0]: MaxRetryError
+inside a handled ReadTimeout: unreachable
+```
+
+The validation messages after the fix:
+
+```
+inf -> poll_interval_seconds | finite_number | Input should be a finite number
+nan -> poll_interval_seconds | finite_number | Input should be a finite number
+0 -> poll_interval_seconds | greater_than | Input should be greater than 0
+-1.0 -> poll_interval_seconds | greater_than | Input should be greater than 0
+1.0 -> 1.0
+```
+
+Gates after the fixes, from the worktree root with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset (`PYTHONPATH=$PWD $PY -c 'import nexus;print(nexus.__file__)'` printed the worktree's `nexus/__init__.py`):
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q tests/test_cli_contract.py tests/test_cli_session_wait.py tests/config/test_settings_models.py tests/test_cli.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+300 passed, 5 warnings in 110.54s (0:01:50)
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q tests/test_cli_inspect_pg.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 passed, 9 warnings in 18.01s
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_generation_http.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+89 passed in 92.19s (0:01:32)
+$ NEXUS_GATEWAY_PORT=8017 NEXUS_API_URL=http://127.0.0.1:8017 PYTHONPATH=$PWD $PY -m nexus.cli down
+nothing running
+$ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
+1
+$ psql -d postgres -Atc "select datname from pg_database where datname like 'qa640_815%'"
+$ $PY -m black --check nexus/cli.py nexus/config/settings_models.py tests/test_cli_session_wait.py tests/test_cli_contract.py tests/config/test_settings_models.py
+All done! ✨ 🍰 ✨
+5 files would be left unchanged.
+$ $PY -m flake8 tests/test_cli_session_wait.py tests/test_cli_contract.py tests/config/test_settings_models.py; echo $?
+0
+$ $PY -m mypy nexus/cli.py tests/test_cli_session_wait.py tests/test_cli_contract.py tests/config/test_settings_models.py
+Success: no issues found in 4 source files
+```
+
+`flake8 nexus/cli.py` still reports the 9 E501 lines and `flake8 nexus/config/settings_models.py` the 6 it reported at `adb4843e`, none in a changed line; `mypy nexus/config/settings_models.py` reports the same 7 pre-existing errors.
+
 ## CLI Transcript on the Played Clone
 
 `tests/test_cli_inspect_pg.py` at this branch's head, run with `-s`: `seed_played_story(turns=3, cast=("Mara Quill", "Oren Vale"))` and one seeded faction; the real gateway's empty incubator is read first, then a pending turn from `seed_pending_turn` is staged. The in-process gateway serves 127.0.0.1:8017 with every provider routed to TEST. Each command ran as a `python -m nexus.cli` subprocess. Verbatim stdout of that one run; only the in-process gateway's own output between commands (the fixture's schema load, model-load progress, retrieval logging, and tokenizer fork warnings) is removed:
