@@ -164,3 +164,75 @@ $ $PY -m flake8 tests/dbname_audit.py tests/test_dbname_audit.py
 $ $PY -m mypy -p tests.dbname_audit -p tests.test_dbname_audit
 Success: no issues found in 2 source files
 ```
+
+### Round 2: Unswept Holders and asyncpg Precedence
+
+Working tree on `ba19361b` with the round-2 fixes applied (the commit that
+adds this subsection). Gateway variables unset.
+
+The unswept-holder gap is stated, not closed: a reference to the original
+connection class captured before configure outside a module's globals is not
+swept. `test_no_preconfigure_holder_escapes_the_sweep` runs a plain script
+that imports `psycopg2`, `psycopg2.extras`, `psycopg2.pool`, the SQLAlchemy
+psycopg2 dialect, `nexus.database`, `tests.pg_fixtures`, and `tests.conftest`,
+then searches every object the collector reaches for a direct reference to
+the class. `gc.get_referrers` alone is blind to the named holder kinds: the
+class is a static C type the collector does not track, so a defaults tuple
+`(connection,)`, a class `__dict__`, and a dict `{"plain": connection}` are
+untracked too (checked on Python 3.11.12: `gc.get_referrers` found the list
+and the closure cell, but not the defaults tuple, the dict, or the class
+dict). The scan therefore walks `gc.get_referents` from `gc.get_objects()`
+and descends into untracked tuples, dicts, lists, and sets. Allowed holders
+are module globals (with the import system's saved copy of
+`psycopg2._psycopg`'s globals), the class's own descriptors and bound
+`__new__`, direct subclasses and their `__bases__`, and subclass MROs. The
+repository scan finds nothing else; the script then plants a default
+argument, a class attribute, a closure cell, and a container, and the test
+requires all four to be found.
+
+asyncpg targets are now read in asyncpg's order: the `database` keyword,
+else the DSN's path and `dbname`/`database` query parameters, else
+`PGDATABASE`. `test_asyncpg_session_follows_asyncpg_precedence` runs a
+child with `PGDATABASE=save_01` and every asyncpg dial blocked by a module
+loaded ahead of the audit (no socket opens): `asyncpg.connect(dsn=
+"postgresql://<user>@localhost:5432", database="postgres")` is admitted,
+recorded as `postgres`, and reaches the blocked dial for `postgres`; the same
+call without `database=` raises `OwnerDatabaseConnectionRefused` for
+`save_01` with no dial. With the old pre-parse check restored, this case
+fails on the first call with the refusal for `save_01`.
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_dbname_audit.py \
+    <the same twelve modules and tests/test_orrery/test_weather_migration_pg.py as above>
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 14 targets: postgres, qa640_geo_resolver_*, qa640_mig077_*, qa640_mig084_*, qa640_mig085_*, qa640_mig086_*, qa640_mig087_*, qa640_mig088_*, qa640_mig090_*, qa640_mig091_*, qa640_mig092_*, qa640_mig095_*, qa640_mig096_*, qa640_weather_migration_*
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+60 passed, 5 warnings in 10.77s
+exit 0
+```
+
+The run before that one ended `1 failed, 59 passed` (exit 1) with
+`FAILED tests/test_dbname_audit.py::test_owner_session_starts_no_owner_backend`
+and the same `owner targets: none` summary; its assertion tail was not
+captured. That test is unchanged in this round. Run alone five times
+afterwards it passed each time (`1 passed` in 0.98 to 1.75s). The likeliest
+cause is the counter noise described above (concurrent gates cloning
+`NEXUS_template`) moving a counter in all five brackets; it is reported here
+rather than hidden.
+
+```
+$ $PY -m pytest -q tests/test_dbname_audit.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+20 passed, 3 skipped, 5 warnings in 1.53s
+exit 0
+$ $PY -m black --check tests/dbname_audit.py tests/test_dbname_audit.py
+All done!
+2 files would be left unchanged.
+$ $PY -m flake8 tests/dbname_audit.py tests/test_dbname_audit.py
+(no output; exit 0)
+$ $PY -m mypy -p tests.dbname_audit -p tests.test_dbname_audit
+Success: no issues found in 2 source files
+```

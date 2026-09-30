@@ -13,6 +13,7 @@ asyncpg is entered, so no owner connection is ever attempted.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -205,6 +206,188 @@ def test_preloaded_constructors_are_recorded_and_refused():
         early.cached_connection(f"dbname=save_01 host={{MISSING}}")
     with pytest.raises(Refused, match="'save_02'"):
         early.LoggingConnection(f"dbname=save_02 host={{MISSING}}")
+"""
+
+
+# Loaded with ``-p`` ahead of the audit: every asyncpg dial stops here, so the
+# session opens no socket whatever the audit admits or misses.
+SOCKET_BLOCK = """
+from asyncpg import connect_utils
+
+DIALED = []
+
+
+class SocketBlocked(RuntimeError):
+    pass
+
+
+async def blocked_connect_addr(*, params, **kwargs):
+    DIALED.append(params.database)
+    raise SocketBlocked(params.database)
+
+
+connect_utils._connect_addr = blocked_connect_addr
+"""
+
+ASYNCPG_PRECEDENCE_SESSION = """
+import asyncio
+import getpass
+import os
+
+import asyncpg
+import pytest
+
+import socket_block
+from tests import dbname_audit
+
+Refused = dbname_audit.OwnerDatabaseConnectionRefused
+DSN = f"postgresql://{getpass.getuser()}@localhost:5432"
+
+
+def test_database_keyword_outranks_pgdatabase():
+    assert os.environ["PGDATABASE"] == "save_01"
+
+    # The keyword wins: admitted, recorded as postgres, stopped at the dial.
+    with pytest.raises(socket_block.SocketBlocked, match="postgres"):
+        asyncio.run(asyncpg.connect(dsn=DSN, database="postgres"))
+    assert dbname_audit.recorded()["postgres"] == {"asyncpg"}
+    assert "save_01" not in dbname_audit.recorded()
+    assert socket_block.DIALED == ["postgres"]
+
+    # Neither the keyword nor the DSN names one: PGDATABASE, refused undialed.
+    with pytest.raises(Refused, match="'save_01'"):
+        asyncio.run(asyncpg.connect(dsn=DSN))
+    assert socket_block.DIALED == ["postgres"]
+"""
+
+# Run as a plain script, before any audit configures: every object the
+# collector reaches (and every untracked tuple, dict, list, or set inside one,
+# which ``gc.get_referrers`` alone never sees) is searched for a direct
+# reference to the original connection class. A module's globals are swept by
+# the audit; anything else holding the class would escape it. The script then
+# plants one holder of each kind and requires the search to find them all.
+REFERRER_SCAN = """
+import gc
+import importlib.machinery
+import json
+import sys
+import types
+
+import psycopg2
+import psycopg2.extensions
+import psycopg2.extras
+import psycopg2.pool
+import sqlalchemy.dialects.postgresql.psycopg2
+
+import nexus.database
+import tests.conftest
+import tests.pg_fixtures
+
+ORIGINAL = psycopg2.extensions.connection
+CONTAINERS = (tuple, dict, list, set, frozenset)
+
+
+def holders_of(target):
+    # Explicit loops: a generator expression naming ``target`` would put the
+    # class in a closure cell of this scan's own.
+    gc.collect()
+    visited = {}
+    stack = gc.get_objects()
+    holders = []
+    while stack:
+        obj = stack.pop()
+        if id(obj) in visited:
+            continue
+        visited[id(obj)] = obj
+        for ref in gc.get_referents(obj):
+            if ref is target:
+                holders.append(obj)
+            elif isinstance(ref, CONTAINERS) and not gc.is_tracked(ref):
+                stack.append(ref)
+    return holders
+
+
+def is_module_globals(ref):
+    for module in list(sys.modules.values()):
+        if not isinstance(module, types.ModuleType):
+            continue
+        if ref is vars(module):
+            return True
+        # The import system keeps a copy of a single-phase C extension's
+        # globals (psycopg2._psycopg's) to rebuild the module if it is imported
+        # afresh; nothing reaches the class through it otherwise.
+        origin = getattr(getattr(module, "__spec__", None), "origin", None) or ""
+        if (
+            origin.endswith(tuple(importlib.machinery.EXTENSION_SUFFIXES))
+            and ref.get("__name__") == module.__name__
+        ):
+            return True
+    return False
+
+
+def is_swept(ref):
+    if isinstance(ref, dict):
+        return is_module_globals(ref)
+    # The class's own descriptors and its bound __new__.
+    if getattr(ref, "__objclass__", None) is ORIGINAL:
+        return True
+    if getattr(ref, "__self__", None) is ORIGINAL:
+        return True
+    # A direct subclass, whose __bases__ the audit rebinds, and its bases.
+    if isinstance(ref, type):
+        return ORIGINAL in ref.__bases__
+    if isinstance(ref, tuple):
+        for cls in ORIGINAL.__subclasses__():
+            if ref is cls.__bases__:
+                return True
+        # Any subclass's MRO, which follows its bases.
+        return bool(ref) and isinstance(ref[0], type) and ref is ref[0].__mro__
+    return False
+
+
+def escaped():
+    return [ref for ref in holders_of(ORIGINAL) if not is_swept(ref)]
+
+
+repository = [f"{type(ref).__name__}: {ref!r}"[:300] for ref in escaped()]
+
+
+def make(dsn, factory=ORIGINAL):
+    return factory(dsn)
+
+
+class Holder:
+    factory = ORIGINAL
+
+
+def enclosing():
+    factory = ORIGINAL
+    return lambda dsn: factory(dsn)
+
+
+held = enclosing()
+FACTORIES = {"plain": ORIGINAL}
+PLANTED = {
+    "default argument": make.__defaults__,
+    "class attribute": gc.get_referents(Holder),
+    "closure cell": held.__closure__[0],
+    "container": FACTORIES,
+}
+
+
+def label(ref):
+    for name, planted in PLANTED.items():
+        if ref is planted or (
+            isinstance(planted, list) and any(ref is item for item in planted)
+        ):
+            return name
+    return f"unplanted {type(ref).__name__}"
+
+
+print(json.dumps({
+    "repository": repository,
+    "planted": sorted(label(ref) for ref in escaped()),
+}))
 """
 
 
@@ -488,3 +671,82 @@ def test_owner_filter_matches_whole_names_only(name: str, owner: bool) -> None:
     """Only an exact slot or template name is an owner target."""
 
     assert dbname_audit.is_owner_target(name) is owner
+
+
+def test_asyncpg_session_follows_asyncpg_precedence(tmp_path: Path) -> None:
+    """``database=`` outranks ``PGDATABASE``; without it, ``PGDATABASE`` refuses.
+
+    Every asyncpg dial in the child is blocked, so neither call opens a socket;
+    the session fails because the refused ``save_01`` is recorded.
+    """
+
+    result = _nested_session(
+        tmp_path,
+        ASYNCPG_PRECEDENCE_SESSION,
+        activation=["-p", "socket_block", "-p", "tests.dbname_audit"],
+        environment={"PGDATABASE": "save_01"},
+        modules={"socket_block": SOCKET_BLOCK},
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == pytest.ExitCode.TESTS_FAILED, output
+    assert "1 passed" in output, output
+    assert "dbname audit: 2 targets: postgres, save_01" in output, output
+    failure_line = _owner_failure_line(output)
+    assert failure_line.startswith(
+        "dbname audit: FAILED: owner targets: save_01 (asyncpg) from "
+    ), output
+
+
+@pytest.mark.parametrize(
+    ("database", "dsn", "expected"),
+    [
+        ("postgres", "postgresql://u@localhost:5432", "postgres"),
+        ("qa640_x", "postgresql://u@localhost:5432/save_02", "qa640_x"),
+        (None, "postgresql://u@localhost:5432/save_02", "save_02"),
+        (None, "postgresql://u@localhost:5432?dbname=save_03", "save_03"),
+        (None, "postgresql://u@localhost:5432?database=save_04", "save_04"),
+        (None, "postgresql://u@localhost:5432", "save_01"),
+        (None, None, "save_01"),
+        (None, "postgresql://u@localhost:5432/", None),
+    ],
+)
+def test_asyncpg_target_is_read_in_asyncpg_order(
+    monkeypatch: pytest.MonkeyPatch,
+    database: str | None,
+    dsn: str | None,
+    expected: str | None,
+) -> None:
+    """Keyword, then DSN path and query, then ``PGDATABASE``, as asyncpg reads."""
+
+    monkeypatch.setenv("PGDATABASE", "save_01")
+    assert dbname_audit._asyncpg_dbname(database, dsn) == expected
+
+
+def test_no_preconfigure_holder_escapes_the_sweep(tmp_path: Path) -> None:
+    """Only module globals hold the original connection class before configure.
+
+    The audit sweeps module globals and rebinds subclasses; a default argument,
+    class attribute, closure cell, or container that captured the class first
+    would reach libpq unaudited. None exists in the modules the PostgreSQL
+    tests load, and the scan finds one of each kind once they are planted.
+    """
+
+    script = tmp_path / "referrer_scan.py"
+    script.write_text(REFERRER_SCAN)
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=REPO_ROOT,
+        env=_child_environment(os.environ, {}, tmp_path),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout.splitlines()[-1])
+    assert report["repository"] == [], report
+    assert report["planted"] == [
+        "class attribute",
+        "closure cell",
+        "container",
+        "default argument",
+    ], report

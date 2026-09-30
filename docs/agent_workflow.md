@@ -75,9 +75,16 @@ more specific instructions.
   needs its own audit), other drivers (psycopg 3, pg8000), and any subclass
   whose `__bases__` rebind Python refused, with the classes built on it; the
   summary lists each refused class as `unaudited connection classes`
-  (`psycopg2.extensions.ReplicationConnection`, a C type, is one). The AST
+  (`psycopg2.extensions.ReplicationConnection`, a C type, is one). A
+  reference to the original psycopg2 connection class captured before the
+  plugin configured outside a module's globals (a default argument, a class
+  attribute, a closure cell, a container) is not swept; no such holder exists
+  in the repository today (checked by a garbage-collector reference scan,
+  `test_no_preconfigure_holder_escapes_the_sweep`, which also searches the
+  untracked tuples and dicts `gc.get_referrers` misses). The AST
   owner-target guard planned for #885 slice B2-9b covers the owner literals
-  those paths would need.
+  those paths would need. asyncpg targets are read in asyncpg's own order:
+  the `database` keyword, else the DSN, else `PGDATABASE`.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 

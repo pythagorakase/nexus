@@ -21,9 +21,10 @@ connection this pytest process attempts:
   connecting, and libpq's resolved ``dbname`` (``conn.info.dbname``, a
   client-side value, not one the server reports) after connecting.
 - asyncpg: every ``asyncpg.connect``, pool, and SQLAlchemy asyncpg connection,
-  through ``asyncpg.connect_utils._parse_connect_arguments``. The ``database``
-  keyword, the DSN, and asyncpg's resolved connection parameters are recorded
-  before any socket opens.
+  through ``asyncpg.connect_utils._parse_connect_arguments``. The database is
+  read in asyncpg's own order (the ``database`` keyword, else the DSN's
+  database, else ``PGDATABASE``) and again from asyncpg's resolved connection
+  parameters, both before any socket opens.
 
 An owner target is ``NEXUS_template`` or a save slot (``save_NN``);
 ``postgres``, ``template0``, and disposable databases are allowed. The plugin
@@ -43,7 +44,13 @@ whose ``__bases__`` rebind Python refused, with every class built on it;
 the summary names each refused class as unaudited
 (``psycopg2.extensions.ReplicationConnection``, a C type that
 ``LogicalReplicationConnection`` and ``PhysicalReplicationConnection``
-extend, is one).
+extend, is one). A reference to the original psycopg2 connection class
+captured before the plugin configured outside a module's globals (a default
+argument, a class attribute, a closure cell, a container) is not swept; no
+such holder exists in the repository today (checked by a garbage-collector
+reference scan that also searches the untracked tuples and dicts
+``gc.get_referrers`` misses,
+``tests/test_dbname_audit.py::test_no_preconfigure_holder_escapes_the_sweep``).
 The AST owner-target guard planned for #885 slice B2-9b covers the owner
 literals those paths would need.
 """
@@ -54,6 +61,7 @@ import os
 import re
 import sys
 import types
+import urllib.parse
 from collections.abc import Callable
 from typing import Any
 
@@ -169,6 +177,29 @@ def _dsn_dbname(dsn: Any) -> str | None:
     if not name and not (parsed.get("service") or os.environ.get("PGSERVICE")):
         name = os.environ.get("PGDATABASE")
     return str(name) if name else None
+
+
+def _asyncpg_dbname(database: Any, dsn: Any) -> str | None:
+    """Return the database asyncpg will connect to, read before it parses.
+
+    asyncpg's own order (``asyncpg.connect_utils._parse_connect_dsn_and_args``):
+    an explicit ``database`` keyword; else the DSN's path, then its ``dbname``
+    and ``database`` query parameters; else ``PGDATABASE``. asyncpg reads no
+    service file. An empty name leaves the choice to the server, which the
+    check on asyncpg's resolved parameters then records.
+    """
+
+    if database is not None:
+        return str(database) or None
+    if dsn:
+        parsed = urllib.parse.urlparse(str(dsn))
+        if parsed.path:
+            return urllib.parse.unquote(parsed.path.removeprefix("/")) or None
+        query = urllib.parse.parse_qs(parsed.query)
+        for key in ("dbname", "database"):
+            if key in query:
+                return query[key][-1] or None
+    return os.environ.get("PGDATABASE") or None
 
 
 def _connected_dbname(conn: Any) -> str | None:
@@ -318,8 +349,7 @@ def _install_asyncpg() -> None:
         )
 
     def audited_parse(*args: Any, **kwargs: Any) -> Any:
-        dsn = kwargs.get("dsn")
-        _admit([kwargs.get("database"), _dsn_dbname(dsn) if dsn else None], "asyncpg")
+        _admit([_asyncpg_dbname(kwargs.get("database"), kwargs.get("dsn"))], "asyncpg")
         result = original_parse(*args, **kwargs)
         # Resolved parameters; asyncpg opens its socket only after this returns.
         _admit([getattr(result[1], "database", None)], "asyncpg")
