@@ -1,8 +1,129 @@
 # Verification: De-Own the Corpus Clones and Guard the Tree (#885 B2-9b)
 
-The review-round-two tails below ran at `2ce4aba5`, the code head after the second review round; the earlier tails, kept under their own heading, ran at `212ea7f9`. Each run started from a clean tree (`git status --porcelain` empty) and `HEAD` did not move during it; the only later commit is this docs-only file. Every PostgreSQL run loaded `-p tests.dbname_audit` and ran with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, on the shared interpreter `/Users/pythagor/nexus/.venv/bin/python` (`$PY`) with `nexus` imported from this worktree. No paid provider was called. Each fenced tail lists whole lines selected from its run log with `grep -E "^(FAILED|ERROR)|^SKIPPED|secret-store guard|^dbname audit|[0-9]+ passed|[0-9]+ failed"` (the proof below also keeps its `^Lane ` line); no line is edited or shortened. Round-two logs sit in the session scratchpad under `885-B2-9b-fix2/`; the earlier ones under `885-B2-9b-fix/`.
+The Astra review round's tails ran at `46aaabce` (the code head after the Astra round: `7dd8f1ec` plus a guard-probe spelling fix), under "Review Round (Astra)" directly below; the older sections keep their own heads. The same run rules hold: a clean tree before and after each run, `HEAD` unmoved, `-p tests.dbname_audit` on every PostgreSQL run, `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, the shared interpreter with `nexus` imported from this worktree, no paid call. Each fenced tail lists whole lines selected from its run log with the same `grep -E` as the older sections (the scratch summary run also keeps its `^SCRATCH` line); no line is edited or shortened. Round logs sit in the session scratchpad under `885-B2-9b-fix3/`. Not run this round: the whole-tree PostgreSQL gate, which the coordinator runs at the final commit.
+
+## Review Round (Astra) at `46aaabce`
+
+### Changed Files and the Named Neighbors, PostgreSQL Gate
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_inherited_slot_isolation_pg.py tests/test_pg_disposable_target.py tests/test_scheduler_helpers_routing.py tests/test_owner_target_guard.py tests/test_runtime/test_readiness_pg.py tests/test_lore/test_baseline_fingerprint_refresh_pg.py tests/test_pg_accepted_turn_factory.py tests/test_orrery/test_card_identity.py tests/test_api/test_narrative_summary_paid_pg.py tests/test_dbname_audit.py tests/test_pg_target_contract.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 26 targets: postgres, qa640_1013_readiness_* x2, qa640_816_factory_*, qa640_816_free_text_*, qa640_816_pending_*, qa640_816_preconditions_*, qa640_816_staging_failure_*, qa640_885_remembered_*, qa640_885_remembered_opening_*, qa640_885_ren_replay_* x4, qa640_908_fingerprint_*, qa640_lane_close_*, qa804_fixture_target, qa885_transaction_writer_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+SKIPPED [2] tests/test_orrery/test_card_identity.py:121: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
+SKIPPED [1] tests/test_api/test_narrative_summary_paid_pg.py: Requires explicit two-call summary authorization
+286 passed, 3 skipped, 9 warnings in 62.08s (0:01:02)
+```
+
+The two skipped `test_card_identity` cases are the corpus exposure test (it ranks the owner's current `save_04` frontier); the four Ren/Gaia replays now run here. The paid summary proof skips without its authorization flag, as before.
+
+### Offline Gate (the Guard Included)
+
+```
+$PY -m pytest -q tests/test_owner_target_guard.py tests/test_pg_target_contract.py tests/test_inherited_slot_isolation_pg.py tests/test_pg_disposable_target.py tests/test_scheduler_helpers_routing.py tests/test_runtime/test_readiness_pg.py tests/test_lore/test_baseline_fingerprint_refresh_pg.py tests/test_pg_accepted_turn_factory.py tests/test_orrery/test_card_identity.py tests/test_api/test_narrative_summary_paid_pg.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+278 passed, 25 skipped, 7 warnings in 17.18s
+```
+
+### The Corpus Opt-In Once (`test_card_identity`)
+
+```
+NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_orrery/test_card_identity.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 7 targets: postgres, qa640_781_cards_* x2, qa640_885_ren_replay_* x4
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+11 passed, 2 warnings in 8.40s
+```
+
+### P1: An Inherited `NEXUS_SLOT` Never Reaches a Test
+
+`tests/conftest.py` deletes `NEXUS_SLOT` at import (before collection), in a session-scoped autouse fixture, and in a function-scoped autouse fixture. Every routed fixture that needs an active slot already sets it for its own scope (`scheduler_helpers.route_slot`, `fake_routed_slots`, and the tests that `monkeypatch.setenv("NEXUS_SLOT", ...)`); the gate has always run with `NEXUS_SLOT` unset, so no routed fixture depended on an inherited value. `tests/test_inherited_slot_isolation_pg.py` runs a nested session with `NEXUS_SLOT=1` exported, `-p tests.conftest` and `-p tests.dbname_audit`. Its three tests: no slot at collection or in a test; a routed test (slot 3) that sets no slot enters the gateway lifespan, recovers nothing and starts no scheduler; a routed test that sets slot 3 recovers `[3]`, its scheduler is `(3, clone)`, and `/runtime/status` names the clone. The nested session's own tail, rerun by hand from the generated file with `NEXUS_SLOT=1`:
+
+```
+dbname audit: 3 targets: postgres, qa885_inherited_slot_* x2
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+3 passed, 3 warnings in 3.01s
+```
+
+Negative control (scratch, reverted): with `tests/conftest.py` restored to `2ceb1529`, the nested session fails, `2 failed, 1 passed`: `assert '1' is None` (the exported slot reached collection), and the slot-less routed lifespan recovered `recovered = [1]` and raised `RuntimeError: Slot 1 is not routed: only slot 3 -> 'qa885_inherited_slot_fb1ec4e69c13' reach disposable clones`. Without routing, that lifespan would have recovered and scheduled the owner's `save_01`.
+
+### P2: The Routing Sweep Covers Pytest's Test-Module Names
+
+`route_slots_to_disposable` rebinds a bound `slot_dbname` in `nexus.*`, `scripts.*` and `tests.*` modules and in any module whose resolved `__file__` lies under this repository's `tests/` (the identity check runs first, so only a module that bound the unrouted resolver has its file resolved). `test_route_sweeps_a_test_module_pytest_named_by_its_directory` binds the resolver in a `test_runtime._route_probe_review` module and proves it routed and restored. The readiness workaround is removed: `test_readiness_pg` imports `slot_dbname` again and calls it bare. Negative control (scratch, reverted): with the file check disabled (a name-only sweep), `2 failed, 62 passed`: the probe (`assert 'save_04' == 'qa640_by_file'`) and `test_owner_host_database_checks_run_against_the_contract_server` (`assert 'save_01' in 'readiness803_slot1_... at 135; ...'`).
+
+### P2: Quoted DSNs and Keyword Expansion in the Guard
+
+A string literal names an owner database in any spelling libpq reads as that name: libpq single quotes with backslash escapes, spaces around `=`, a double-quoted value, and URL percent-encoding (each spelling is read as written, percent-decoded, and with quotes as delimiters). This holds in connection calls, in child-process argument lists, and (new) in a `shell=True` command string; every constant part of an f-string counts. Literal `**{...}` and `**dict(...)` expansions (nested ones too) are keywords of the call for every rule, `include_data` included (a `dict(...)` call is judged as the call it feeds, so one expansion is one finding). New negative cases, each a finding: the review's `subprocess.run(["pg_dump", "--dbname", "dbname='save_04'"], check=True)` and `disposable_slot_database("qa_probe", source_db="save_04", **{"include_data": True})`, plus `dbname="save_04"`, `dbname = save_03`, `dbname='save\_05'`, `postgresql://u@audit.invalid/save%5F04`, `?dbname='save_02'`, `f"dbname='save_{slot:02d}'"`, `f"dbname='NEXUS_template' host={host}"`, a quoted `shell=True` command, `**dict(include_data=True)`, `**{**{'include_data': True}}`, `slot_clone(**{'slot': 1})`, and `slot_dbname(**{'slot_number': 3})`; new passing cases: `dbname='qa640_save_04_copy'`, `**{'include_data': False}`, and an f-string DSN of a variable clone. Over the tree the guard still finds 7 uses, all exempted (0 unexempted).
+
+### P2: A Non-Empty Pass-2 Baseline
+
+`seed_pending_turn(remembered_baseline=True)` (and `seed_played_story(remembered_baselines=True)`, for every continuation) stages the baseline a played continuation exports: the production `ContextMemoryManager` stores Pass 1 from the turn's prose, a warm slice of the committed chunks up to the parent, and token counts (`total_available` is the story's apex window; `warm_slice` sums the chunks' estimated tokens), then `export_pass2_baseline()` gives the memory identities, the accounting with the manager's derived entries (`baseline_tokens`, `reserved_for_pass2`, `reserve_shortfall`), and a positive remaining budget. The bootstrap opening refuses it. `test_played_story_can_bind_remembering_pass2_baselines` asserts the shape per bound chunk. The refresh test seeds it and asserts, before the preservation checks, that the tail remembers `chunk_ids[:-1]`, has positive `warm_slice` accounting and a positive remaining budget, and after the refresh that the continuation starts from those identities. Negative control (scratch, reverted): with `refresh_tail_fingerprint` clearing `memory_identities` after `restamp_pass2_baseline`, `1 failed` at `assert after == before` (`At index 2 diff: (3, 2, {...`).
+
+### P2: The Ren/Gaia Replay on a Frozen Fixture
+
+`ren_replay_story` reads the saved receipt's Ren cards, collects each bound entity id with the name the card recorded (`Ren Vale`, `Dr. Sera Vey`, `Elian Rook`), seeds a played story with that cast on a template clone, and maps each saved id to the seeded entity id. `test_ren_rank_commit_replay` rebinds the saved cards to those ids (the binding hash, and so the proposal ids Gaia's decisions name, stay the saved ones), and the four cases are back in the ordinary PostgreSQL gate, unchanged in what they assert: three resolutions committed in both writers, and the rank winner's (or Gaia's replacement's) activity on Ren. No owner identity is needed.
+
+### P2: The Paid Summary Proof on a Seeded Story
+
+`seed_two_episode_story` seeds season 1 on a template clone: episode 1 (the played story's two turns), episode 2 (two accepted turns opened by a `new_episode` turn), and episode 3 begun (so episode 2 is closed), with the slot routed to the clone; `@requires_corpus` is gone and the authorization gates (`live_llm`, `NEXUS_800B_PAID_PROOF=1`, the two-call budget) are unchanged. The paid test was not run. A scratch test (not committed; `885-B2-9b-fix3/test_summary_setup_scratch.py`) ran the proof's two setup functions and its scheduler pass with every provider routed to the repository mock, and checked every assertion the paid proof makes except the provider identity:
+
+```
+SCRATCH {"result": {"owner": true, "drained": true, "promotion": [0, 0], "orrery_narration_jobs": [0, 0], "character_experience_jobs": [0, 0], "orrery_maturation_jobs": [0, 0], "relationship_milestone_queue": 0, "narrative_summary_jobs": 2, "narrative_embedding_jobs": 0, "character_experience_embeddings": 0}, "jobs": [["episode", "succeeded", 1, "252c104b-e701-488d-a8c9-434aeacbde02", "3"], ["season", "succeeded", 1, "252c104b-e701-488d-a8c9-434aeacbde02", "4"]], "lengths": [99, 99], "summary_events": [{"provider": "test", "run_id": "3", "total_tokens": 1800}, {"provider": "test", "run_id": "4", "total_tokens": 1800}]}
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1 passed, 7 warnings in 4.30s
+```
+
+### Lint and Types
+
+Black: clean on every changed file. flake8: `tests/conftest.py`, `tests/pg_fixtures.py`, `tests/test_owner_target_guard.py`, `tests/test_pg_disposable_target.py`, `tests/test_runtime/test_readiness_pg.py`, `tests/test_pg_accepted_turn_factory.py` and the new `tests/test_inherited_slot_isolation_pg.py` at zero; `test_baseline_fingerprint_refresh_pg` 3 and `test_card_identity` 5 (equal to `2ceb1529`), `test_narrative_summary_paid_pg` 3 (4 at `2ceb1529`; all long SQL strings). mypy `--explicit-package-bases`: clean on every changed file except `test_card_identity` (12, equal to `2ceb1529`, none on lines this round wrote) and `test_baseline_fingerprint_refresh_pg` (1, equal to `2ceb1529`, the pre-existing `turn_context.memory_state` line).
+
+### Final Tree-Wide Grep
+
+```
+$ grep -rn "include_data=True" tests --include="*.py"
+tests/test_idf_dictionary_pg.py:673:        "qa762_corpus_copy", source_db=idf_slot, include_data=True
+tests/test_owner_target_guard.py:27:- ``include_data=True`` (a data clone), passed as a keyword or through a
+tests/test_owner_target_guard.py:169:        "include_data=True )",
+tests/test_owner_target_guard.py:373:            # call it feeds, so ``clone(**dict(include_data=True))`` is one
+tests/test_owner_target_guard.py:497:            "disposable_slot_database('qa', source_db='save_04', include_data=True)",
+tests/test_owner_target_guard.py:537:            "disposable_slot_database('qa_probe', **dict(include_data=True))",
+tests/test_owner_target_guard.py:567:        "disposable_slot_database('qa', source_db='save_04', include_data=True)",
+tests/test_orrery/test_card_identity.py:116:        "qa640_781_cards", source_db="save_04", include_data=True
+tests/test_orrery/test_projects.py:561:        "qa885_projects_corpus", source_db="save_02", include_data=True
+tests/test_orrery/test_recruit_ally_projects.py:362:        "qa885_recruit_ally_corpus", source_db="save_02", include_data=True
+tests/test_lore/test_pass2_chunk1369.py:41:            "qa_pass2_corpus", source_db="save_01", include_data=True
+tests/test_lore/test_infrastructure.py:47:        "qa_lore_corpus", source_db="save_01", include_data=True
+
+$ grep -rnE "(_clone|_dump)\((slot=)?[0-9]" tests --include="*.py"
+tests/dbname_audit.py:80:int-literal slot passed to a clone or dump helper (``slot_clone(1)``, which
+tests/test_owner_target_guard.py:31:  given an int-literal slot, positionally or as ``slot=`` (``slot_clone(1)``
+tests/test_owner_target_guard.py:500:        ("slot_clone(1)", RULE_SLOT_CLONE),
+tests/test_owner_target_guard.py:501:        ("ann_gate.slot_clone(slot=1)", RULE_SLOT_CLONE),
+tests/test_owner_target_guard.py:502:        ("corpus_dump(4, path)", RULE_SLOT_CLONE),
+tests/test_owner_target_guard.py:570:        "pytestmark = pytest.mark.requires_corpus\nslot_clone(1)",
+tests/test_memnon/test_ann_gate.py:104:    with slot_clone(1) as name:
+
+$ grep -rlE "save_0[1-5]|NEXUS_template" tests --include="*.py" | wc -l
+      79
+
+$ guard scan
+findings: 7; unexempted: 0
+```
+
+Every `include_data=True` with an owner `source_db` sits in a `@requires_corpus` module (`test_card_identity`'s exposure test, `test_projects`, `test_recruit_ally_projects`, `test_pass2_chunk1369`, `test_lore/test_infrastructure.py`); the paid summary proof is no longer among them. The only literal-slot clone helper is `test_ann_gate`'s `@requires_corpus` `slot_clone(1)`.
 
 ## Review Round Two at `2ce4aba5`
+
+The review-round-two tails below ran at `2ce4aba5`, the code head after the second review round; the earlier tails, kept under their own heading, ran at `212ea7f9`. Each run started from a clean tree (`git status --porcelain` empty) and `HEAD` did not move during it; the only later commit is this docs-only file. Every PostgreSQL run loaded `-p tests.dbname_audit` and ran with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset, on the shared interpreter `/Users/pythagor/nexus/.venv/bin/python` (`$PY`) with `nexus` imported from this worktree. No paid provider was called. Each fenced tail lists whole lines selected from its run log with `grep -E "^(FAILED|ERROR)|^SKIPPED|secret-store guard|^dbname audit|[0-9]+ passed|[0-9]+ failed"` (the proof below also keeps its `^Lane ` line); no line is edited or shortened. Round-two logs sit in the session scratchpad under `885-B2-9b-fix2/`; the earlier ones under `885-B2-9b-fix/`.
 
 ### `proof_session_truth.py` Once on Lane 8018
 
