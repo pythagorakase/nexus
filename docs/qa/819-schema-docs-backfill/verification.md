@@ -14,7 +14,7 @@ with the same function identity arguments, at schema version 134.
 `tests.pg_fixtures.disposable_slot_database("qa640_819_verify")` cloned
 `NEXUS_template` into a disposable database and migrated it with
 `scripts.migrate` (log: `Applied: 135_schema_docs_backfill`, `Applied 1
-migrations to qa640_819_verify_420b5082be76`). A read-only session then read
+migrations to qa640_819_verify_e67fa81b97ae`). A read-only session then read
 `obj_description(oid, 'pg_type')` for each enum and
 `obj_description(oid, 'pg_proc')` for each function named by a `COMMENT ON` in
 the migration, asserting exactly one catalog object per name and matching
@@ -27,7 +27,7 @@ entries: ['enum:public.tone']`, which shows the ratchet sees migration 135.
 
 ## Catalog Listing on the Migrated Clone
 
-Clone `qa640_819_verify_420b5082be76`; `schema_migrations` maximum version after migrating: **135**.
+Clone `qa640_819_verify_e67fa81b97ae`; `schema_migrations` maximum version after migrating: **135**.
 
 | enum | obj_description(oid, 'pg_type') |
 |---|---|
@@ -38,7 +38,7 @@ Clone `qa640_819_verify_420b5082be76`; `schema_migrations` maximum version after
 | `entity_tag_clearance_kind` | How an ephemeral tag clears: event when a matching event type fires (events._clear_event_tags_sync), time when expires_at_world_time passes (events._sweep_expired_entity_tags_sync), semantic only by an explicit clear. authored appears only in tag_clearance_log.mechanism, for any explicit clear by a writer (bestowal tags_to_clear, exclusive and status ladder replacement, template state deltas, clear_entity_tag). |
 | `entity_tag_reapplication_policy` | What the tag writer does when a tag is applied while it is still active: new_row (the default) keeps the active row, replace overwrites its timing and provenance, extend_expiry pushes its expiry out by the duration (semantic and event tags land without expiry). |
 | `entity_tag_source_kind` | Provenance of a tag row: skald_inline for runtime bestowals (storyteller, wizard, trait compiler), template for Orrery template effects, retrograde for Retrograde history, system for the entity tag and faction migration manifest applies, authored and llm_generated for offline or CLI backfills. The Orrery tag writer rejects auto_registered. |
-| `event_role_kind` | Role of an entity in a world event: resolver, propagation, and relationship-provenance writers record actor and target, and Retrograde persistence records any role its expansion assigns (observer by default). epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded. |
+| `event_role_kind` | Role of an entity in a world event: the resolver event writers and relationship provenance record actor and target, and Retrograde persistence records any role its expansion assigns (observer by default). epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded. |
 | `event_severity_kind` | Registered weight of an event type, seeded with the event vocabulary. Knowledge surfacing maps it through the configured severity_scores into candidate scoring, and the cognition audit reports it. |
 | `event_source_kind` | Writer family of a world event: resolver for Orrery resolver-side writers (resolutions, propagation, relationship provenance, reveals), authored for authored backstory secrets, retrograde for Retrograde history, which Retrograde persistence and replay select by this value. No current writer uses apex, narrator, or bleed. |
 | `faction_member_role` | Position of a character in a faction, written by the offline faction relationship analyst (scripts/faction_relationship_analyst.py) and exposed as entity_relationships_v.relationship_type with scope faction_character. The Orrery membership loader counts every row as membership whatever its role. |
@@ -50,7 +50,7 @@ Clone `qa640_819_verify_420b5082be76`; `schema_migrations` maximum version after
 | `seed_type` | Opening-situation vocabulary of the new-story wizard seed draft; write_cache stores the selected seed in assets.new_story_creator.seed_type, and its presence is part of the seed phase completion check. |
 | `layer_type` | World layer kind of the new-story wizard, stored in assets.new_story_creator.layer_type while drafting and in layers.type when new_story_db_mapper inserts the accepted layer. |
 | `offscreen_embedding_status` | Embedding state of an offscreen narration. The narration worker inserts rows at the pending default and no current writer moves them to embedded or failed; load_orrery_status_sync counts pending and failed rows. |
-| `orrery_job_state` | Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed (requeued as queued below the attempt cap), or stale_rejected when the source the job was frozen against changed before completion. |
+| `orrery_job_state` | Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed once the attempt cap is reached or on an error that cannot be retried (earlier retryable failures return to queued), or stale_rejected when the source the job was frozen against changed before completion. |
 | `orrery_narration_status` | Offscreen narration progress of a resolution, set by the narration worker: none (the default) until promotion queues it, and it stays none when promotion skips it; queued when promoted or retried; succeeded with narration_chunk_id; failed on a final or stale-anchor failure. Bleed offers only succeeded rows; no current writer sets leased. |
 | `orrery_promotion_status` | Promotion verdict of a resolution: pending for promotable drafts until promote_pending_resolutions_sync decides, promoted (which queues narration) or skipped. Non-promotable drafts are inserted as skipped; bleed reads promoted rows. |
 | `orrery_routine_anchor_type` | Which routine anchor routine travel resolves (events._routine_anchor_destination_sync); a works_from_home work anchor resolves through the home anchor. |
@@ -68,9 +68,9 @@ Clone `qa640_819_verify_420b5082be76`; `schema_migrations` maximum version after
 |---|---|
 | `nexus_reject_legacy_retrograde_summary_chunk()` | BEFORE INSERT OR UPDATE OF authorial_directives trigger on narrative_chunks (migration 078): rejects the orrery:retrograde_event_summary marker, because Retrograde event summaries live in retrograde_summaries. |
 | `nexus_reject_legacy_retrograde_summary_link()` | BEFORE INSERT OR UPDATE OF payload trigger on world_events (migration 078): rejects the retired retrograde_summary_chunk_id payload key. |
-| `nexus_require_retrograde_maturation_manifest_v1()` | BEFORE INSERT OR UPDATE OF result_manifest trigger on orrery_maturation_jobs (migration 078): a nonempty manifest must carry schema_version orrery_retrograde_maturation_manifest.v1, must not carry embedding_pending_chunk_ids, and must key embedding results by summary_id, not chunk_id. |
+| `nexus_require_retrograde_maturation_manifest_v1()` | BEFORE INSERT OR UPDATE OF result_manifest trigger on orrery_maturation_jobs (migration 078): a nonempty manifest must carry schema_version orrery_retrograde_maturation_manifest.v1, must not carry embedding_pending_chunk_ids, and its embedding results must not carry chunk_id (results are keyed by summary_id). |
 | `orrery_active_character_tag_names(p_character_entity_id bigint)` | Distinct names of the uncleared entity_tags on an entity; orrery_sync_character_need_states passes them to orrery_need_applies_to_tags. |
-| `orrery_need_applies_to_tags(p_need_type character_need_type, p_active_tags text[])` | False when an active tag exempts the need (bodyform or mind tags for sleep, hunger, and thirst; also libido_absent for intimacy), else true. orrery_sync_character_need_states uses it to create and delete need rows; needs.need_applies_to_tags is the Python mirror. |
+| `orrery_need_applies_to_tags(p_need_type character_need_type, p_active_tags text[])` | False when an active tag exempts the need (bodyform:android, bodyform:construct, bodyform:non_corporeal, digital_mind, inorganic, or virtual for sleep, hunger, and thirst; bodyform:non_corporeal, digital_mind, virtual, or libido_absent for intimacy), else true. orrery_sync_character_need_states uses it to create and delete need rows; needs.need_applies_to_tags is the Python mirror. |
 | `orrery_ensure_subtype_entity_kind()` | BEFORE INSERT OR UPDATE OF entity_id trigger on characters, factions, and places, with the expected entity_kind as its argument: creates the entities row when entity_id is NULL and raises when the linked entity is missing or of another kind. |
 | `orrery_initialize_character_need_states()` | AFTER INSERT OR UPDATE OF entity_id trigger on characters: runs orrery_sync_character_need_states for the new entity_id so every applicable need row exists. |
 | `orrery_sync_need_states_after_entity_tag_change()` | AFTER INSERT, UPDATE, or DELETE trigger on entity_tags: resynchronizes need rows for the affected entity through orrery_sync_character_need_states, skipped when fired from inside another trigger. |

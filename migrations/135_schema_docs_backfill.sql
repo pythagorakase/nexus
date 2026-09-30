@@ -85,7 +85,7 @@ COMMENT ON TYPE public.entity_tag_source_kind IS
     'Provenance of a tag row: skald_inline for runtime bestowals (storyteller, wizard, trait compiler), template for Orrery template effects, retrograde for Retrograde history, system for the entity tag and faction migration manifest applies, authored and llm_generated for offline or CLI backfills. The Orrery tag writer rejects auto_registered.';
 
 COMMENT ON TYPE public.event_role_kind IS
-    'Role of an entity in a world event: resolver, propagation, and relationship-provenance writers record actor and target, and Retrograde persistence records any role its expansion assigns (observer by default). epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded.';
+    'Role of an entity in a world event: the resolver event writers and relationship provenance record actor and target, and Retrograde persistence records any role its expansion assigns (observer by default). epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded.';
 
 COMMENT ON TYPE public.event_severity_kind IS
     'Registered weight of an event type, seeded with the event vocabulary. Knowledge surfacing maps it through the configured severity_scores into candidate scoring, and the cognition audit reports it.';
@@ -121,7 +121,7 @@ COMMENT ON TYPE public.offscreen_embedding_status IS
     'Embedding state of an offscreen narration. The narration worker inserts rows at the pending default and no current writer moves them to embedded or failed; load_orrery_status_sync counts pending and failed rows.';
 
 COMMENT ON TYPE public.orrery_job_state IS
-    'Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed (requeued as queued below the attempt cap), or stale_rejected when the source the job was frozen against changed before completion.';
+    'Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed once the attempt cap is reached or on an error that cannot be retried (earlier retryable failures return to queued), or stale_rejected when the source the job was frozen against changed before completion.';
 
 COMMENT ON TYPE public.orrery_narration_status IS
     'Offscreen narration progress of a resolution, set by the narration worker: none (the default) until promotion queues it, and it stays none when promotion skips it; queued when promoted or retried; succeeded with narration_chunk_id; failed on a final or stale-anchor failure. Bleed offers only succeeded rows; no current writer sets leased.';
@@ -168,13 +168,13 @@ COMMENT ON FUNCTION public.nexus_reject_legacy_retrograde_summary_link() IS
     'BEFORE INSERT OR UPDATE OF payload trigger on world_events (migration 078): rejects the retired retrograde_summary_chunk_id payload key.';
 
 COMMENT ON FUNCTION public.nexus_require_retrograde_maturation_manifest_v1() IS
-    'BEFORE INSERT OR UPDATE OF result_manifest trigger on orrery_maturation_jobs (migration 078): a nonempty manifest must carry schema_version orrery_retrograde_maturation_manifest.v1, must not carry embedding_pending_chunk_ids, and must key embedding results by summary_id, not chunk_id.';
+    'BEFORE INSERT OR UPDATE OF result_manifest trigger on orrery_maturation_jobs (migration 078): a nonempty manifest must carry schema_version orrery_retrograde_maturation_manifest.v1, must not carry embedding_pending_chunk_ids, and its embedding results must not carry chunk_id (results are keyed by summary_id).';
 
 COMMENT ON FUNCTION public.orrery_active_character_tag_names(p_character_entity_id bigint) IS
     'Distinct names of the uncleared entity_tags on an entity; orrery_sync_character_need_states passes them to orrery_need_applies_to_tags.';
 
 COMMENT ON FUNCTION public.orrery_need_applies_to_tags(p_need_type character_need_type, p_active_tags text[]) IS
-    'False when an active tag exempts the need (bodyform or mind tags for sleep, hunger, and thirst; also libido_absent for intimacy), else true. orrery_sync_character_need_states uses it to create and delete need rows; needs.need_applies_to_tags is the Python mirror.';
+    'False when an active tag exempts the need (bodyform:android, bodyform:construct, bodyform:non_corporeal, digital_mind, inorganic, or virtual for sleep, hunger, and thirst; bodyform:non_corporeal, digital_mind, virtual, or libido_absent for intimacy), else true. orrery_sync_character_need_states uses it to create and delete need rows; needs.need_applies_to_tags is the Python mirror.';
 
 COMMENT ON FUNCTION public.orrery_ensure_subtype_entity_kind() IS
     'BEFORE INSERT OR UPDATE OF entity_id trigger on characters, factions, and places, with the expected entity_kind as its argument: creates the entities row when entity_id is NULL and raises when the linked entity is missing or of another kind.';
