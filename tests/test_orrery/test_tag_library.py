@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
-import os
 import re
-from typing import Any, cast, Optional
+from typing import Any, cast, Iterator, Optional
 
 
 import pytest
@@ -24,12 +23,20 @@ from nexus.prompts.registry import PromptId, load
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
+    route_slot_to_disposable,
     seed_deprecated_category_tag,
+    seed_entity_tag,
     seed_place,
     seed_protagonist,
+    seed_story_clock,
     seed_zone,
 )
 from tests.settings_helpers import settings_with
+from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
+
+# A label for the fake-backed tests below, which replace every connection and
+# session with fakes; no database of this name exists or is ever opened.
+FAKE_DBNAME = "fake_tag_library_db"
 
 
 def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None:
@@ -61,7 +68,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
     ]
     monkeypatch.setattr(tag_library, "_connect", lambda _dbname: _Conn(rows))
 
-    rendered = tag_library.format_tag_library_for_prompt("save_05")
+    rendered = tag_library.format_tag_library_for_prompt(FAKE_DBNAME)
 
     assert "Current Orrery Tag Library" in rendered
     assert load(PromptId.TAG_LIBRARY_HEADER) in rendered
@@ -75,7 +82,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
 def test_format_tag_library_rejects_unknown_entity_kind() -> None:
     with pytest.raises(ValueError, match="Unknown Orrery entity kind"):
         tag_library.format_tag_library_for_prompt(
-            "save_05", entity_kinds=["character", "monster"]
+            FAKE_DBNAME, entity_kinds=["character", "monster"]
         )
 
 
@@ -83,7 +90,7 @@ def test_read_pair_tag_library_uses_shared_connection(monkeypatch) -> None:
     rows = [{"tag": "hiding"}, {"tag": "shelters"}]
     monkeypatch.setattr(tag_library, "_connect", lambda _dbname: _Conn(rows))
 
-    assert tag_library.read_pair_tag_library("save_05") == ["hiding", "shelters"]
+    assert tag_library.read_pair_tag_library(FAKE_DBNAME) == ["hiding", "shelters"]
 
 
 def test_read_tag_library_captures_reapplication_policy(monkeypatch) -> None:
@@ -103,7 +110,7 @@ def test_read_tag_library_captures_reapplication_policy(monkeypatch) -> None:
     ]
     monkeypatch.setattr(tag_library, "_connect", lambda _dbname: _Conn(rows))
 
-    entries = tag_library.read_tag_library("save_05")
+    entries = tag_library.read_tag_library(FAKE_DBNAME)
 
     assert len(entries) == 1
     assert entries[0].reapplication_policy == "extend_expiry"
@@ -247,7 +254,7 @@ def test_contextual_library_keeps_complete_name_index(
     _patch_contextual_registry(monkeypatch, entries=entries, active_tags={"wounded"})
 
     rendered = tag_library.format_contextual_tag_library(
-        "save_05",
+        FAKE_DBNAME,
         context=tag_library.TagLibraryContext(
             present_entity_refs=[
                 tag_library.EntityRowReference("character", 1),
@@ -269,7 +276,7 @@ def test_contextual_library_expands_active_and_proposal_tags(
 
     _patch_contextual_registry(monkeypatch, active_tags={"wounded"})
     with_proposals = tag_library.format_contextual_tag_library(
-        "save_05",
+        FAKE_DBNAME,
         context=tag_library.TagLibraryContext(
             present_entity_refs=[tag_library.EntityRowReference("character", 1)],
             proposal_tag_names={"haven"},
@@ -277,7 +284,7 @@ def test_contextual_library_expands_active_and_proposal_tags(
         ),
     )
     without_proposals = tag_library.format_contextual_tag_library(
-        "save_05",
+        FAKE_DBNAME,
         context=tag_library.TagLibraryContext(
             present_entity_refs=[tag_library.EntityRowReference("character", 1)],
             proposal_tag_names=set(),
@@ -310,7 +317,7 @@ def test_pending_mood_set_expands_the_mood_description(
     )
 
     rendered = tag_library.format_contextual_tag_library(
-        "save_05",
+        FAKE_DBNAME,
         context=tag_library.TagLibraryContext(
             present_entity_refs=[],
             proposal_tag_names=proposal_names,
@@ -415,7 +422,7 @@ def test_active_tag_lookup_translates_skewed_ids_and_uses_anchor_clock(
     _patch_contextual_registry(monkeypatch, patch_active_lookup=False)
 
     rendered = tag_library.format_contextual_tag_library(
-        "save_05",
+        FAKE_DBNAME,
         context=tag_library.TagLibraryContext(
             present_entity_refs=[tag_library.EntityRowReference("character", 9)],
             proposal_tag_names=set(),
@@ -438,8 +445,8 @@ def test_contextual_library_digest_is_stable_and_registry_sensitive(
 
     _patch_contextual_registry(monkeypatch)
     context = tag_library.TagLibraryContext([], set(), False)
-    first = tag_library.format_contextual_tag_library("save_05", context=context)
-    second = tag_library.format_contextual_tag_library("save_05", context=context)
+    first = tag_library.format_contextual_tag_library(FAKE_DBNAME, context=context)
+    second = tag_library.format_contextual_tag_library(FAKE_DBNAME, context=context)
     expanded_entries = [
         *_fake_entries(),
         tag_library.TagLibraryEntry(
@@ -453,7 +460,7 @@ def test_contextual_library_digest_is_stable_and_registry_sensitive(
         ),
     ]
     _patch_contextual_registry(monkeypatch, entries=expanded_entries)
-    expanded = tag_library.format_contextual_tag_library("save_05", context=context)
+    expanded = tag_library.format_contextual_tag_library(FAKE_DBNAME, context=context)
 
     assert _registry_digest(first) == _registry_digest(second)
     assert _registry_digest(first) != _registry_digest(expanded)
@@ -814,14 +821,28 @@ def test_contextual_scene_rendering_is_pinned(monkeypatch) -> None:
         )
 
 
-@pytest.mark.skipif(
-    os.environ.get("NEXUS_RUN_POSTGRES") != "1",
-    reason="Set NEXUS_RUN_POSTGRES=1 for the read-only save_05 size proof.",
-)
-def test_contextual_library_save_05_completeness_and_size() -> None:
-    """Live registry stays complete while a realistic slice is at most half-size."""
+@pytest.fixture
+def routed_slot5_clone(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Yield a template clone that slot 5 resolves to for the test's duration."""
 
-    conn = tag_library._connect("save_05")
+    with disposable_slot_database("qa885_tag_library") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        yield dbname
+
+
+@pytest.mark.requires_postgres
+def test_contextual_library_seeded_story_completeness_and_size(
+    routed_slot5_clone: str,
+) -> None:
+    """Live registry stays complete while a realistic slice is at most half-size.
+
+    ``seed_checkpointed_story`` gives the clone a tagged confidant
+    (``kin_protector``) and a head chunk on the canonical clock.
+    """
+
+    dbname = routed_slot5_clone
+    story = seed_checkpointed_story(dbname)
+    conn = tag_library._connect(dbname)
     try:
         conn.set_session(readonly=True, autocommit=True)
         with conn.cursor() as cur:
@@ -866,13 +887,17 @@ def test_contextual_library_save_05_completeness_and_size() -> None:
             anchor_row = cur.fetchone()
     finally:
         conn.close()
-    assert entity_refs, "save_05 must contain current entity tags"
-    assert anchor_row is not None, "save_05 must contain an anchor world time"
+    assert entity_refs == [
+        tag_library.EntityRowReference("character", story.confidant_character_id)
+    ], "the seeded confidant's kin_protector tag must be current"
+    assert anchor_row is not None and int(anchor_row["chunk_id"]) == (
+        story.head_chunk_id
+    ), "the seeded head chunk must carry the anchor world time"
 
-    entries = tag_library.read_tag_library("save_05")
-    full = tag_library.format_tag_library_for_prompt("save_05")
+    entries = tag_library.read_tag_library(dbname)
+    full = tag_library.format_tag_library_for_prompt(dbname)
     contextual = tag_library.format_contextual_tag_library(
-        "save_05",
+        dbname,
         context=tag_library.TagLibraryContext(
             present_entity_refs=entity_refs,
             proposal_tag_names={"recently_violent"},
@@ -884,24 +909,54 @@ def test_contextual_library_save_05_completeness_and_size() -> None:
     full_tokens = len(encoding.encode(full))
     contextual_tokens = len(encoding.encode(contextual))
     print(
-        "save_05 tag library size: "
+        "seeded story tag library size: "
         f"full={len(full.encode('utf-8'))} bytes/{full_tokens} o200k tokens; "
         f"contextual={len(contextual.encode('utf-8'))} bytes/"
         f"{contextual_tokens} o200k tokens"
     )
 
+    relevant = contextual.split("### Scene-Relevant Tags", 1)[1]
+    assert "`kin_protector`" in relevant
+    assert "`recently_violent`" in relevant
     assert sorted(_index_names(contextual)) == sorted(entry.tag for entry in entries)
     assert contextual_tokens <= full_tokens * 0.5
 
 
-@pytest.mark.skipif(
-    os.environ.get("NEXUS_RUN_POSTGRES") != "1",
-    reason="Set NEXUS_RUN_POSTGRES=1 for the read-only save_05 namespace proof.",
-)
-def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
-    """A skewed character row ID must not select another entity's tags."""
+@pytest.mark.requires_postgres
+def test_contextual_library_skewed_character_row_id_uses_entity_id(
+    routed_slot5_clone: str,
+) -> None:
+    """A skewed character row ID must not select another entity's tags.
 
-    conn = tag_library._connect("save_05")
+    The zone and place are seeded first, so the place takes the clone's
+    first entity ID and the protagonist's ``characters.id`` equals that
+    place's entity ID while its own ``entity_id`` differs. The character
+    carries ``kin_protector`` and the place carries ``haven``; a lookup by
+    row ID instead of entity ID would render ``haven`` for the character.
+    """
+
+    dbname = routed_slot5_clone
+    seed_zone(
+        dbname,
+        name="Namespace Ward",
+        min_longitude=-74.1,
+        min_latitude=40.6,
+        max_longitude=-73.8,
+        max_latitude=40.9,
+    )
+    _, place_entity_id = seed_place(dbname, name="Namespace Refuge")
+    seeded_row_id, seeded_entity_id = seed_protagonist(
+        dbname, name="Namespace Protagonist"
+    )
+    assert place_entity_id == seeded_row_id != seeded_entity_id, (
+        f"place entity {place_entity_id}, character row {seeded_row_id}, and "
+        f"character entity {seeded_entity_id} must skew the two namespaces"
+    )
+    seed_story_clock(dbname, world_time=datetime(2100, 1, 2, tzinfo=timezone.utc))
+    seed_entity_tag(dbname, entity_id=seeded_entity_id, tag="kin_protector")
+    seed_entity_tag(dbname, entity_id=place_entity_id, tag="haven")
+
+    conn = tag_library._connect(dbname)
     try:
         conn.set_session(readonly=True, autocommit=True)
         with conn.cursor() as cur:
@@ -915,11 +970,13 @@ def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
                 """
             )
             character = cur.fetchone()
-            if character is None:
-                pytest.skip(
-                    "save_05 has no character whose characters.id differs from "
-                    "characters.entity_id; cannot exercise namespace translation"
-                )
+            assert character is not None and (
+                int(character["id"]),
+                int(character["entity_id"]),
+            ) == (seeded_row_id, seeded_entity_id), (
+                "the seeded protagonist must be a character whose characters.id "
+                "differs from characters.entity_id"
+            )
             row_id = int(character["id"])
             entity_id = int(character["entity_id"])
             character_name = str(character["name"])
@@ -934,7 +991,7 @@ def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
                 """
             )
             anchor = cur.fetchone()
-            assert anchor is not None, "save_05 must contain an anchor world time"
+            assert anchor is not None, "the seeded story clock must set world time"
 
             def active_tags(target_entity_id: int) -> set[str]:
                 cur.execute(
@@ -968,7 +1025,7 @@ def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
     ), f"canonical entity {row_id} must have a tag not active on {character_name}"
 
     rendered = tag_library.format_contextual_tag_library(
-        "save_05",
+        dbname,
         context=tag_library.TagLibraryContext(
             present_entity_refs=[tag_library.EntityRowReference("character", row_id)],
             proposal_tag_names=set(),

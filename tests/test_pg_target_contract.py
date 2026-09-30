@@ -156,12 +156,21 @@ def test_environment_guard_allows_contract_spellings(line: str) -> None:
     assert DIRECT_PG_ENVIRONMENT.search(line) is None
 
 
+# The connection audit classifies the database a call names before the
+# connection opens. To do that it must read PGDATABASE and PGSERVICE the way
+# libpq and asyncpg do; it never resolves a server or opens a connection of its
+# own, and its own tests run under a sanitized environment. Nothing else may
+# read PG* directly.
+PG_ENVIRONMENT_READ_ALLOWLIST = frozenset({"tests/dbname_audit.py"})
+
+
 def test_tests_never_read_the_pg_environment_directly() -> None:
     """No test module, fixture included, resolves host, port, or user from PG*."""
     reads = [
         f"{path.relative_to(TESTS_ROOT.parent)}:{_line_number(text, match.start())}:"
         f" {match.group(0)}"
         for path in _tree_sources(frozenset({".py"}))
+        if str(path.relative_to(TESTS_ROOT.parent)) not in PG_ENVIRONMENT_READ_ALLOWLIST
         for text in [path.read_text()]
         for match in DIRECT_PG_ENVIRONMENT.finditer(text)
     ]
@@ -1214,6 +1223,16 @@ def test_tests_never_hand_a_driver_its_own_target() -> None:
         "**tests.pg_fixtures.asyncpg_kwargs(dbname), database_url(dbname), or "
         "call tests.pg_fixtures.connect(dbname):\n" + "\n".join(violations)
     )
+
+
+def test_environment_allowlist_names_only_current_exceptions() -> None:
+    """The one file allowed to read PG* exists and still reads it."""
+    for relative in sorted(PG_ENVIRONMENT_READ_ALLOWLIST):
+        path = REPO_ROOT / relative
+        assert path.is_file(), f"{relative} is gone; drop it from the allowlist"
+        assert DIRECT_PG_ENVIRONMENT.search(
+            path.read_text()
+        ), f"{relative} no longer reads PG*; drop it from the allowlist"
 
 
 def test_driver_allowlist_names_only_current_exceptions() -> None:
