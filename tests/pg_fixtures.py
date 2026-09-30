@@ -2431,3 +2431,59 @@ def seed_played_story(
         )
         user_text = FIXTURE_TURN_CHOICES[0]
     return chunk_ids
+
+
+# The off-screen cast ``seed_starved_story`` mentions in every turn.
+STARVED_STORY_CAST = ("Mara Quill", "Oren Vale")
+
+
+def seed_starved_story(dbname: str, *, slot: int) -> list[int]:
+    """Play a story whose scene reset leaves experience renders queued.
+
+    Four accepted turns six story hours apart, with ``STARVED_STORY_CAST``
+    off-screen and writer and Gaia letters on every turn, then a
+    scene-boundary turn one hour later, all through ``seed_played_story``
+    and ``seed_accepted_turn``. The scene reset is the production path that
+    enqueues ``character_experience_jobs``: the accepting commit inserts the
+    cast's experience seeds and one render batch per scene. Returns the IDs
+    of the render jobs the reset enqueued, in order.
+
+    Every returned job is queued and resolved to the TEST model through the
+    clone's TEST story pin (``disposable_slot_database`` pins clones to TEST),
+    so a scheduler that renders it reaches only the TEST provider; the helper
+    asserts both. ``slot`` must route to ``dbname``.
+    """
+
+    seed_played_story(
+        dbname,
+        turns=4,
+        cast=STARVED_STORY_CAST,
+        time_delta=timedelta(hours=6),
+        correspondence=True,
+        slot=slot,
+    )
+    boundary = seed_accepted_turn(
+        dbname,
+        user_text=FIXTURE_TURN_CHOICES[0],
+        storyteller_text="The scene resets as the plaza empties for the night.",
+        choices=list(FIXTURE_TURN_CHOICES),
+        choice_text=FIXTURE_TURN_CHOICES[0],
+        scene_boundary=True,
+        time_delta=timedelta(hours=1),
+        correspondence_writer_letter="Writer note for the scene reset.",
+        correspondence_gaia_letter="Gaia note for the scene reset.",
+        slot=slot,
+    )
+    with closing(_connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, state::text, resolved_model FROM character_experience_jobs "
+            "WHERE boundary_chunk_id = %s ORDER BY id",
+            (boundary,),
+        )
+        jobs = cur.fetchall()
+    assert jobs, "The scene reset enqueued no experience render jobs"
+    assert all(
+        (state, model) == ("queued", FIXTURE_GENERATION_MODEL)
+        for _, state, model in jobs
+    ), f"seed_starved_story enqueued jobs that are not queued on TEST: {jobs!r}"
+    return [int(job_id) for job_id, _, _ in jobs]
