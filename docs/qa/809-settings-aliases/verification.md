@@ -198,3 +198,24 @@ $ npm --prefix ui test
       Tests  462 passed (462)
    Duration  6.87s (transform 2.26s, setup 2.47s, collect 13.64s, tests 15.87s, environment 16.99s, prepare 2.12s)
 ```
+
+### After the Rebase
+
+`origin/main` moved to `c8dd8c85` (#1048: migration 136, one PostgreSQL test
+file, one evidence file; no overlap with this change) while the gates ran.
+The branch was rebased onto it, and `b1c87960` became `13d0b3ec` with an
+identical diff. The named test files and reachability were rerun at the
+rebased head:
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit \
+    tests/test_api/test_settings_endpoints.py tests/test_api/test_route_capabilities.py \
+    tests/test_api/test_slot_settings.py
+dbname audit: owner targets: none
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+44 passed, 7 warnings in 12.45s
+
+$ $PY -m pytest -q -p no:cacheprovider tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+38 passed, 5 warnings in 10.05s
+```
