@@ -4,12 +4,20 @@ The claim-accounts shadows install post-090 shapes in the connection's temp
 schema, so a test's writes to ``claims``, ``claim_awareness`` and
 ``backstory_secrets`` stay in ``pg_temp`` and never reach the public tables.
 The valence shadow is a ``pg_temp.character_relationships`` table with the
-post-088 ``valence_current`` column. ``_insert_relationship`` is the exception:
-it writes one attributed row to ``public.character_relationships`` (undone when
-the caller's transaction rolls back) plus that row's ``pg_temp`` twin. The row
-helpers (characters, factions, pair tags, relationship chains, chunks, minted
-claims, contagion settings) take an open cursor and name no database: each test
-module supplies a cursor on its own disposable clone.
+post-088 ``valence_current`` column, copied from the public rows when a test
+opens its transaction.
+
+Rows come from two kinds of helper. The ``seed_*`` helpers here (``seed_conduit``
+and ``seed_chain``) commit a module's starting graph from its synchronous clone
+fixture through ``tests.pg_fixtures`` (``seed_character`` and
+``seed_relationship``), which refuse the owner's databases by name. The
+``insert_transaction_*`` writers (characters, factions, relationships, chains)
+write public rows inside the caller's rolled-back transaction, for the rows a
+test must create mid-test; each first reads the cursor's database name and
+refuses an owner database exactly as the seed helpers do. The remaining row
+helpers (pair tags, chunks, minted claims, contagion settings) take an open
+cursor and name no database: each test module supplies a cursor on its own
+disposable clone.
 """
 
 from __future__ import annotations
@@ -26,6 +34,11 @@ from nexus.agents.orrery.epistemics import ClaimParticipant, mint_claim_for_even
 from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.agents.orrery.replay import canonicalize
 from nexus.config.settings_models import OrreryContagionSettings
+from tests.pg_fixtures import (
+    require_disposable_target,
+    seed_character,
+    seed_relationship,
+)
 
 
 MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
@@ -291,9 +304,28 @@ def _insert_chunk(
     return chunk_id, stamped_world_time
 
 
-def _insert_character(cur: Any, label: str) -> tuple[int, int]:
-    """Insert one active character; return its entity and character IDs."""
+def require_transaction_target(cur: Any) -> str:
+    """Return the cursor's database name, refusing an owner database.
 
+    The name is read client side from the psycopg2 connection
+    (``connection.info.dbname``, libpq's ``PQdb``), so the check runs no
+    statement: a cursor on the template or a save slot raises through
+    ``tests.pg_fixtures.require_disposable_target`` before anything reaches
+    the server.
+    """
+
+    return require_disposable_target(str(cur.connection.info.dbname))
+
+
+def insert_transaction_character(cur: Any, label: str) -> tuple[int, int]:
+    """Insert one active character in the caller's transaction.
+
+    Returns its entity and character IDs. This is the transaction-scoped twin
+    of ``tests.pg_fixtures.seed_character`` for a character a test creates
+    mid-test; it refuses an owner database before writing.
+    """
+
+    require_transaction_target(cur)
     token = uuid4().hex[:10]
     cur.execute(
         "INSERT INTO entities (kind, is_active) "
@@ -307,15 +339,28 @@ def _insert_character(cur: Any, label: str) -> tuple[int, int]:
     return entity_id, int(cur.fetchone()["id"])
 
 
-def _insert_relationship(
+def insert_transaction_relationship(
     cur: Any,
     source_character_id: int,
     target_character_id: int,
     *,
     valence: str = "+3|trusting",
 ) -> None:
-    """Write one attributed public relationship and its valence-shadow twin."""
+    """Write one attributed relationship and its valence-shadow twin in-transaction.
 
+    ``tests.pg_fixtures.seed_relationship`` (through ``seed_conduit``) is the
+    writer for a module's starting graph: it commits from the synchronous clone
+    fixture, and each test's valence shadow copies the committed row. This
+    writer exists next to it for a relationship a test must create inside its
+    own rolled-back transaction: one whose endpoints the test itself creates
+    mid-test, or a conduit added after the test has already authored state that
+    a committed edge would change. It refuses an owner database exactly as the
+    seed helpers do, attributes the public row to ``manual`` under migration
+    115, and writes the ``pg_temp`` twin that the drain reads, because the
+    shadow was copied before the row existed.
+    """
+
+    require_transaction_target(cur)
     with relationship_producer(cur, "manual"):
         cur.execute(
             """
@@ -348,9 +393,15 @@ def _insert_relationship(
     )
 
 
-def _insert_faction(cur: Any, label: str) -> int:
-    """Insert one active faction at the next free ``factions.id``; return its entity."""
+def insert_transaction_faction(cur: Any, label: str) -> int:
+    """Insert one active faction in the caller's transaction; return its entity.
 
+    The transaction-scoped twin of ``tests.pg_fixtures.seed_faction``: the row
+    takes the next free ``factions.id``, and an owner database is refused
+    before writing.
+    """
+
+    require_transaction_target(cur)
     cur.execute(
         "INSERT INTO entities (kind, is_active) "
         "VALUES ('faction', true) RETURNING id"
@@ -363,6 +414,51 @@ def _insert_faction(cur: Any, label: str) -> int:
         (faction_id, f"propagation-{label}-{uuid4().hex[:10]}", entity_id),
     )
     return entity_id
+
+
+def seed_conduit(
+    dbname: str,
+    source_character_id: int,
+    target_character_id: int,
+    *,
+    valence: str = "+3|trusting",
+) -> None:
+    """Commit one Stage 2c ``associate`` conduit through ``seed_relationship``.
+
+    Called from a module's synchronous clone fixture. ``valence_current`` is
+    derived by the table's valence trigger, and each test's valence shadow
+    copies the committed row when the test opens its transaction.
+    """
+
+    seed_relationship(
+        dbname,
+        subject_character_id=source_character_id,
+        object_character_id=target_character_id,
+        relationship_type="associate",
+        emotional_valence=valence,
+        dynamic="Stage 2c conduit fixture.",
+        recent_events="None.",
+        history="Fixture.",
+    )
+
+
+def seed_chain(dbname: str, label: str, length: int) -> list[int]:
+    """Commit ``length`` characters linked in order by trusting conduits.
+
+    Returns the chain's entity IDs in hop order. The fixture twin of
+    ``insert_transaction_chain``: every character goes through
+    ``seed_character`` and every edge through ``seed_conduit``.
+    """
+
+    entities: list[int] = []
+    characters: list[int] = []
+    for index in range(length):
+        character_id, entity_id = seed_character(dbname, name=f"{label}-{index}")
+        entities.append(entity_id)
+        characters.append(character_id)
+    for source, target in zip(characters, characters[1:]):
+        seed_conduit(dbname, source, target)
+    return entities
 
 
 def _insert_pair_tag(
@@ -449,17 +545,22 @@ def _insert_claim(
     return claim_id
 
 
-def _chain(cur: Any, length: int) -> tuple[list[int], list[int]]:
-    """Insert ``length`` characters linked by trusting relationships in order."""
+def insert_transaction_chain(cur: Any, length: int) -> tuple[list[int], list[int]]:
+    """Insert ``length`` characters linked by trusting relationships in order.
+
+    Transaction-scoped: every row goes through ``insert_transaction_character``
+    and ``insert_transaction_relationship``, so an owner database is refused
+    before the first write. ``seed_chain`` is the fixture twin.
+    """
 
     entities: list[int] = []
     characters: list[int] = []
     for index in range(length):
-        entity, character = _insert_character(cur, f"chain-{index}")
+        entity, character = insert_transaction_character(cur, f"chain-{index}")
         entities.append(entity)
         characters.append(character)
     for source, target in zip(characters, characters[1:]):
-        _insert_relationship(cur, source, target)
+        insert_transaction_relationship(cur, source, target)
     return entities, characters
 
 

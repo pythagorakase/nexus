@@ -2,8 +2,11 @@
 
 The tests run on one module-scoped disposable template clone seeded with a
 zoned place, a protagonist standing there, and a story clock, so no owner save
-slot is opened. Each test's writes stay inside one transaction that always
-rolls back.
+slot is opened. The synchronous fixture then commits each test's incident
+cast (holder, first, second) at that place through ``seed_character``, plus
+the next-tick recipient and its conduit from the same-tick holder through
+``seed_relationship``. Each test's own writes (the incident's event, claim,
+awareness, and secret) stay inside one transaction that always rolls back.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from itertools import count
 from pathlib import Path
-from typing import Any, Iterator, NamedTuple
+from typing import Any, Iterator, Mapping, NamedTuple
 from uuid import uuid4
 
 import psycopg2  # type: ignore[import-untyped]
@@ -33,16 +36,17 @@ from tests.pg_fixtures import (
     asyncpg_kwargs,
     connect,
     disposable_slot_database,
+    seed_character,
     seed_place,
     seed_protagonist,
     seed_story_clock,
     seed_zone,
 )
 from tests.test_orrery.claim_accounts_test_support import (
-    _insert_relationship,
     _install_valence_shadow,
     _settings,
     install_claim_accounts_shadow_async,
+    seed_conduit,
 )
 
 
@@ -54,6 +58,18 @@ _SCENES = count(400)
 BASE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
 STORY_CLOCK = BASE_TIMESTAMP + timedelta(hours=6)
 REVEAL_PLACE_NAME = "Reveal Square"
+# One committed incident cast per incident a test builds; the parametrized
+# world-layer test reuses its cast, since each case rolls back.
+CAST_KEYS = (
+    "bounded",
+    "private",
+    "grant_completes",
+    "commit_reveals",
+    "same_tick",
+    "unregistered_gate",
+    "world_layer",
+    "replay",
+)
 
 
 class RevealClone(NamedTuple):
@@ -63,6 +79,8 @@ class RevealClone(NamedTuple):
     place_id: int
     protagonist_entity_id: int
     clock_chunk_id: int
+    casts: Mapping[str, tuple[int, int, int]]
+    outsider_entity_id: int
 
 
 def _install_claim_schema(cur: Any) -> None:
@@ -107,7 +125,13 @@ def _install_claim_schema(cur: Any) -> None:
 
 @pytest.fixture(scope="module")
 def reveal_clone() -> Iterator[RevealClone]:
-    """Seed a zoned place, a protagonist there, then the story clock."""
+    """Seed a zoned place, a protagonist there, the story clock, then the casts.
+
+    Each incident cast (holder, first, second entity IDs) stands at the place
+    and is committed through ``seed_character``; the same-tick test's
+    next-tick recipient stands there too, reached from that cast's holder by a
+    trusting conduit committed through ``seed_relationship``.
+    """
 
     with disposable_slot_database("qa885_reveal") as dbname:
         seed_zone(
@@ -125,11 +149,30 @@ def reveal_clone() -> Iterator[RevealClone]:
             current_location=place_id,
         )
         clock_chunk_id = seed_story_clock(dbname, world_time=STORY_CLOCK)
+        casts: dict[str, tuple[int, int, int]] = {}
+        holder_characters: dict[str, int] = {}
+        for key in CAST_KEYS:
+            seeded = [
+                seed_character(
+                    dbname, name=f"reveal-{key}-{role}", current_location=place_id
+                )
+                for role in ("holder", "first", "second")
+            ]
+            holder_characters[key] = seeded[0][0]
+            casts[key] = (seeded[0][1], seeded[1][1], seeded[2][1])
+        outsider_character, outsider_entity_id = seed_character(
+            dbname,
+            name="reveal-same_tick-next-tick-recipient",
+            current_location=place_id,
+        )
+        seed_conduit(dbname, holder_characters["same_tick"], outsider_character)
         yield RevealClone(
             dbname=dbname,
             place_id=place_id,
             protagonist_entity_id=protagonist_entity_id,
             clock_chunk_id=clock_chunk_id,
+            casts=casts,
+            outsider_entity_id=outsider_entity_id,
         )
 
 
@@ -211,36 +254,30 @@ def _insert_chunk(
     return chunk_id, world_time
 
 
-def _insert_character(cur: Any, label: str, place_id: int) -> int:
-    cur.execute(
-        "INSERT INTO entities (kind, is_active) "
-        "VALUES ('character', true) RETURNING id"
-    )
-    entity_id = int(cur.fetchone()["id"])
-    cur.execute(
-        """
-        INSERT INTO characters (name, entity_id, current_location)
-        VALUES (%s, %s, %s)
-        """,
-        (f"reveal-{label}-{uuid4().hex[:10]}", entity_id, place_id),
-    )
-    return entity_id
-
-
 def _insert_private_incident(
     cur: Any,
     *,
+    cast: tuple[int, int, int],
     place_id: int,
     source_chunk_id: int,
     scope: str = "private",
     holder_aware: bool = True,
 ) -> tuple[int, int, tuple[int, int, int], int]:
+    """Stage one private incident among a committed cast, in-transaction."""
+
     cur.execute("SELECT name FROM places WHERE id = %s", (place_id,))
     place = cur.fetchone()
     assert place is not None and place["name"] == REVEAL_PLACE_NAME, place
-    holder = _insert_character(cur, "holder", place_id)
-    first = _insert_character(cur, "first", place_id)
-    second = _insert_character(cur, "second", place_id)
+    holder, first, second = cast
+    cur.execute(
+        """
+        SELECT count(*) AS located
+        FROM characters
+        WHERE entity_id = ANY(%s) AND current_location = %s
+        """,
+        (list(cast), place_id),
+    )
+    assert cur.fetchone()["located"] == 3, "the seeded cast stands at the place"
     cur.execute(
         """
         INSERT INTO world_events (
@@ -293,6 +330,7 @@ def test_authoring_rejects_non_private_and_unregistered_gate(
         source_chunk_id, source_world_time = _insert_chunk(cur)
         _, bounded_claim, participants, _ = _insert_private_incident(
             cur,
+            cast=reveal_clone.casts["bounded"],
             place_id=reveal_clone.place_id,
             source_chunk_id=source_chunk_id,
             scope="bounded",
@@ -307,7 +345,10 @@ def test_authoring_rejects_non_private_and_unregistered_gate(
             )
 
         _, private_claim, private_participants, _ = _insert_private_incident(
-            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
+            cur,
+            cast=reveal_clone.casts["private"],
+            place_id=reveal_clone.place_id,
+            source_chunk_id=source_chunk_id,
         )
         with pytest.raises(ValueError, match="Unregistered reveal gate"):
             author_backstory_secret_sync(
@@ -327,6 +368,7 @@ def test_authoring_grants_unpossessed_holder_and_reveal_completes(
         source_chunk_id, source_world_time = _insert_chunk(cur)
         _, claim_id, participants, place_id = _insert_private_incident(
             cur,
+            cast=reveal_clone.casts["grant_completes"],
             place_id=reveal_clone.place_id,
             source_chunk_id=source_chunk_id,
             holder_aware=False,
@@ -525,7 +567,10 @@ def test_commit_reveals_promotes_grants_once_and_redrain_is_noop(
     with live_conn.cursor() as cur:
         source_chunk_id, source_world_time = _insert_chunk(cur)
         _, claim_id, participants, place_id = _insert_private_incident(
-            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
+            cur,
+            cast=reveal_clone.casts["commit_reveals"],
+            place_id=reveal_clone.place_id,
+            source_chunk_id=source_chunk_id,
         )
         holder, first, second = participants
         sibling_id = mint_account_variant_sync(
@@ -643,7 +688,10 @@ def test_same_tick_reveal_waits_until_next_tick_to_propagate(
     with live_conn.cursor() as cur:
         source_chunk_id, source_world_time = _insert_chunk(cur)
         incident_id, claim_id, participants, place_id = _insert_private_incident(
-            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
+            cur,
+            cast=reveal_clone.casts["same_tick"],
+            place_id=reveal_clone.place_id,
+            source_chunk_id=source_chunk_id,
         )
         holder, same_tick_recipient, _ = participants
         cur.execute(
@@ -669,13 +717,21 @@ def test_same_tick_reveal_waits_until_next_tick_to_propagate(
             holder_entity_id=holder,
             source_chunk_id=source_chunk_id,
         )
-        outsider = _insert_character(cur, "next-tick-recipient", place_id)
+        outsider = reveal_clone.outsider_entity_id
         cur.execute(
-            "SELECT id FROM characters WHERE entity_id = ANY(%s) ORDER BY entity_id",
-            ([holder, outsider],),
+            """
+            SELECT relationship_type, emotional_valence
+            FROM character_relationships cr
+            JOIN characters teller ON teller.id = cr.character1_id
+            JOIN characters listener ON listener.id = cr.character2_id
+            WHERE teller.entity_id = %s AND listener.entity_id = %s
+            """,
+            (holder, outsider),
         )
-        character_ids = [int(row["id"]) for row in cur.fetchall()]
-        _insert_relationship(cur, character_ids[0], character_ids[1])
+        assert cur.fetchone() == {
+            "relationship_type": "associate",
+            "emotional_valence": "+3|trusting",
+        }, "the seeded holder-to-recipient conduit reaches the valence shadow"
         reveal_chunk_id, reveal_world_time = _insert_chunk(
             cur, time_delta=timedelta(hours=2)
         )
@@ -765,7 +821,10 @@ def test_unregistered_gate_in_latent_row_raises_loudly(
     with live_conn.cursor() as cur:
         source_chunk_id, _ = _insert_chunk(cur)
         _, claim_id, participants, _ = _insert_private_incident(
-            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
+            cur,
+            cast=reveal_clone.casts["unregistered_gate"],
+            place_id=reveal_clone.place_id,
+            source_chunk_id=source_chunk_id,
         )
         cur.execute(
             """
@@ -798,7 +857,10 @@ def test_world_layer_and_disabled_config_leave_secret_latent(
     with live_conn.cursor() as cur:
         source_chunk_id, _ = _insert_chunk(cur)
         _, claim_id, participants, _ = _insert_private_incident(
-            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
+            cur,
+            cast=reveal_clone.casts["world_layer"],
+            place_id=reveal_clone.place_id,
+            source_chunk_id=source_chunk_id,
         )
         secret_id = author_backstory_secret_sync(
             cur,
@@ -831,6 +893,7 @@ def test_authored_and_revealed_secrets_replay_between_checkpoints(
         base_chunk, _ = _insert_chunk(cur)
         _, claim_id, participants, _ = _insert_private_incident(
             cur,
+            cast=reveal_clone.casts["replay"],
             place_id=reveal_clone.place_id,
             source_chunk_id=base_chunk,
         )

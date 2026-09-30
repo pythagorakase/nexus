@@ -1,14 +1,18 @@
 """Rollback-only coverage for the Stage 2c propagation frontier.
 
 Every test runs on one module-scoped disposable template clone whose story
-clock is seeded first, so the characters each test inserts get exact need
-clocks and no owner save slot is opened. Each test's writes stay inside one
-transaction that always rolls back.
+clock is seeded first, so no owner save slot is opened. The synchronous
+fixture then commits each test's starting graph: its characters through
+``seed_character``, its conduits through ``seed_relationship`` (attributed to
+``manual`` under migration 115), and the cellular faction and culture tag
+through ``seed_faction`` and ``seed_entity_tag``. Each test's own writes
+(chunks, claims, pair tags, drains) stay inside one transaction that always
+rolls back, and each test reads only the graph seeded under its own key.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from typing import Any, NamedTuple
@@ -42,6 +46,8 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     seed_character,
+    seed_entity_tag,
+    seed_faction,
     seed_relationship,
     seed_story_clock,
     sqlalchemy_url,
@@ -50,17 +56,15 @@ from tests.test_orrery.claim_accounts_test_support import (
     _SCENE_NUMBERS,
     EPISTEMICS,
     _canonical_rows,
-    _chain,
-    _insert_character,
     _insert_chunk,
     _insert_claim,
-    _insert_faction,
     _insert_pair_tag,
-    _insert_relationship,
     _install_valence_shadow,
     _settings,
     install_claim_accounts_shadow_async,
     install_claim_accounts_shadow_sync,
+    seed_chain,
+    seed_conduit,
 )
 
 
@@ -68,9 +72,55 @@ pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
 
 STORY_CLOCK = datetime(2100, 1, 1, tzinfo=timezone.utc)
 
+# Each chain test's starting graph: that many characters linked in hop order
+# by trusting conduits, committed once under the test's key.
+CHAIN_LENGTHS = {
+    "salience": 2,
+    "large_skip": 4,
+    "not_yet_mature": 2,
+    "depth_cap": 4,
+    "late_drain": 3,
+    "non_primary": 2,
+    "idempotent": 2,
+    "resolution_free": 2,
+    "replay_readmits": 3,
+    "replay_reconstructs": 3,
+}
+# The hand-built graphs: characters by role, seeded in this order (so
+# ``fanout-low`` takes a lower entity ID than ``fanout-high``), then the
+# conduits between them as (teller, listener, valence).
+CAST = (
+    "single-source",
+    "single-listener",
+    "fanout-source",
+    "fanout-low",
+    "fanout-high",
+    "fanout-slow",
+    "gating-source",
+    "gating-listener",
+    "terminal-source",
+    "terminal-knower",
+    "terminal-downstream",
+    "clockless-source",
+    "clockless-listener",
+    "cellular-listener",
+    "drift-source",
+    "drift-rogue",
+    "old-checkpoint-source",
+)
+CONDUITS = (
+    ("single-source", "single-listener", "+3|trusting"),
+    ("fanout-source", "fanout-high", "+3|trusting"),
+    ("fanout-source", "fanout-low", "+3|trusting"),
+    ("fanout-source", "fanout-slow", "0|neutral"),
+    ("gating-source", "gating-listener", "+3|trusting"),
+    ("terminal-knower", "terminal-downstream", "+3|trusting"),
+    ("clockless-source", "clockless-listener", "+3|trusting"),
+)
+
 
 class PropagationClone(NamedTuple):
-    """The module's seeded clone and the committed async-conduit pair."""
+    """The module's seeded clone and the committed rows each test names."""
 
     dbname: str
     clock_chunk_id: int
@@ -78,15 +128,19 @@ class PropagationClone(NamedTuple):
     async_source_character_id: int
     async_listener_entity_id: int
     async_listener_character_id: int
+    chains: Mapping[str, list[int]]
+    cast: Mapping[str, int]
 
 
 @pytest.fixture(scope="module")
 def propagation_clone() -> Iterator[PropagationClone]:
-    """Seed one clone: the story clock first, then the async conduit pair.
+    """Seed one clone: the story clock first, then every test's starting graph.
 
-    The async test's trusting edge is committed through ``seed_relationship``
-    (attributed to ``manual`` under migration 115) from this synchronous
-    fixture, never inside the test's event loop.
+    The async test's trusting edge, each chain, and each hand-built conduit are
+    committed through ``seed_relationship`` (attributed to ``manual`` under
+    migration 115) from this synchronous fixture, never inside a test's
+    transaction or event loop. ``cast`` maps each role in ``CAST`` (plus
+    ``cellular-faction``) to its entity ID.
     """
 
     with disposable_slot_database("qa885_claim_propagation") as dbname:
@@ -107,6 +161,27 @@ def propagation_clone() -> Iterator[PropagationClone]:
             recent_events="None.",
             history="Fixture.",
         )
+        chains = {
+            key: seed_chain(dbname, f"propagation-{key}", length)
+            for key, length in CHAIN_LENGTHS.items()
+        }
+        cast: dict[str, int] = {}
+        cast_characters: dict[str, int] = {}
+        for role in CAST:
+            cast_characters[role], cast[role] = seed_character(
+                dbname, name=f"propagation-{role}"
+            )
+        for teller, listener, valence in CONDUITS:
+            seed_conduit(
+                dbname,
+                cast_characters[teller],
+                cast_characters[listener],
+                valence=valence,
+            )
+        _, cast["cellular-faction"] = seed_faction(dbname, name="propagation-cellular")
+        seed_entity_tag(
+            dbname, entity_id=cast["cellular-faction"], tag="cellular_clandestine"
+        )
         yield PropagationClone(
             dbname=dbname,
             clock_chunk_id=clock_chunk_id,
@@ -114,6 +189,8 @@ def propagation_clone() -> Iterator[PropagationClone]:
             async_source_character_id=source_character,
             async_listener_entity_id=listener_entity,
             async_listener_character_id=listener_character,
+            chains=chains,
+            cast=cast,
         )
 
 
@@ -158,18 +235,6 @@ def live_conn(propagation_clone: PropagationClone) -> Iterator[Any]:
             conn.rollback()
 
 
-def _insert_culture_tag(cur: Any, entity_id: int, tag: str) -> None:
-    cur.execute(
-        """
-        INSERT INTO entity_tags (entity_id, tag_id, source_kind, template_id)
-        SELECT %s, id, 'template', 'test_claim_propagation_live'
-        FROM tags WHERE tag = %s AND NOT deprecated
-        """,
-        (entity_id, tag),
-    )
-    assert cur.rowcount == 1
-
-
 def _awareness(cur: Any, claim_id: int) -> list[dict[str, Any]]:
     cur.execute(
         """
@@ -202,15 +267,14 @@ def _propagation_events(cur: Any, claim_id: int) -> list[dict[str, Any]]:
 
 
 def test_single_hop_ledgers_scheduled_time_provenance_and_policy(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """One mature edge mints matching projection and payload-only event."""
 
     settings = _settings()
+    source = propagation_clone.cast["single-source"]
+    listener = propagation_clone.cast["single-listener"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "single-source")
-        listener, listener_character = _insert_character(cur, "single-listener")
-        _insert_relationship(cur, source_character, listener_character)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -316,7 +380,7 @@ def test_propagation_event_does_not_change_salience_or_hydration_feed(
             )
             install_claim_accounts_shadow_sync(cur)
             _install_valence_shadow(cur)
-            entities, _ = _chain(cur, 2)
+            entities = propagation_clone.chains["salience"]
             birth_chunk, birth_world_time = _insert_chunk(cur)
             claim_id = _insert_claim(
                 cur,
@@ -358,11 +422,13 @@ def test_propagation_event_does_not_change_salience_or_hydration_feed(
         engine.dispose()
 
 
-def test_large_skip_drains_chained_hops_at_staggered_times(live_conn: Any) -> None:
+def test_large_skip_drains_chained_hops_at_staggered_times(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """A single fixpoint drain releases every mature hop, never at W."""
 
+    entities = propagation_clone.chains["large_skip"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 4)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -388,11 +454,13 @@ def test_large_skip_drains_chained_hops_at_staggered_times(live_conn: Any) -> No
     ]
 
 
-def test_not_yet_mature_edge_waits(live_conn: Any) -> None:
+def test_not_yet_mature_edge_waits(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """An edge whose scheduled acquisition is later than W stays pending."""
 
+    entities = propagation_clone.chains["not_yet_mature"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 2)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -410,18 +478,18 @@ def test_not_yet_mature_edge_waits(live_conn: Any) -> None:
     assert [row["knower_entity_id"] for row in rows] == [entities[0]]
 
 
-def test_fan_out_cap_uses_latency_then_listener_id(live_conn: Any) -> None:
+def test_fan_out_cap_uses_latency_then_listener_id(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """Only the sorted first cap edges ever transmit for a knower/claim."""
 
     settings = _settings(neutral="2h", fan_out_cap=2)
+    source = propagation_clone.cast["fanout-source"]
+    low = propagation_clone.cast["fanout-low"]
+    high = propagation_clone.cast["fanout-high"]
+    slow = propagation_clone.cast["fanout-slow"]
+    assert low < high, "fanout-low is seeded first, so it has the lower entity ID"
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "fanout-source")
-        low, low_character = _insert_character(cur, "fanout-low")
-        high, high_character = _insert_character(cur, "fanout-high")
-        slow, slow_character = _insert_character(cur, "fanout-slow")
-        _insert_relationship(cur, source_character, high_character)
-        _insert_relationship(cur, source_character, low_character)
-        _insert_relationship(cur, source_character, slow_character, valence="0|neutral")
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -440,12 +508,14 @@ def test_fan_out_cap_uses_latency_then_listener_id(live_conn: Any) -> None:
     assert slow not in knowers
 
 
-def test_depth_cap_is_recovered_across_separate_drains(live_conn: Any) -> None:
+def test_depth_cap_is_recovered_across_separate_drains(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """Persisted event depth releases hop two later and blocks hop three."""
 
     settings = _settings(depth_cap=2)
+    entities = propagation_clone.chains["depth_cap"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 4)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -476,15 +546,13 @@ def test_depth_cap_is_recovered_across_separate_drains(live_conn: Any) -> None:
 
 
 def test_age_horizon_and_nonbounded_scopes_do_not_propagate(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """Old bounded, private, and common claims retain only seeded awareness."""
 
     settings = _settings(trusting="3h", age_horizon="2h")
+    source = propagation_clone.cast["gating-source"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "gating-source")
-        _, listener_character = _insert_character(cur, "gating-listener")
-        _insert_relationship(cur, source_character, listener_character)
         old_chunk, old_world_time = _insert_chunk(cur)
         old_claim = _insert_claim(
             cur,
@@ -522,11 +590,13 @@ def test_age_horizon_and_nonbounded_scopes_do_not_propagate(
     assert counts == {old_claim: 1, private_claim: 1, common_claim: 1}
 
 
-def test_late_drain_lands_hop_scheduled_inside_age_horizon(live_conn: Any) -> None:
+def test_late_drain_lands_hop_scheduled_inside_age_horizon(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """Hop eligibility uses its scheduled time, never narration cadence W."""
 
+    entities = propagation_clone.chains["late_drain"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 3)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -555,14 +625,15 @@ def test_late_drain_lands_hop_scheduled_inside_age_horizon(live_conn: Any) -> No
     assert rows[2]["acquired_at_world_time"] == birth_world_time + timedelta(hours=2)
 
 
-def test_null_awareness_is_possession_terminal(live_conn: Any) -> None:
+def test_null_awareness_is_possession_terminal(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """A clockless knower blocks re-minting but schedules no outbound hop."""
 
+    source = propagation_clone.cast["terminal-source"]
+    terminal = propagation_clone.cast["terminal-knower"]
+    downstream = propagation_clone.cast["terminal-downstream"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, _ = _insert_character(cur, "terminal-source")
-        terminal, terminal_character = _insert_character(cur, "terminal-knower")
-        downstream, downstream_character = _insert_character(cur, "terminal-downstream")
-        _insert_relationship(cur, terminal_character, downstream_character)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -593,14 +664,13 @@ def test_null_awareness_is_possession_terminal(live_conn: Any) -> None:
 
 
 def test_null_birth_world_time_excludes_claim_from_propagation(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """A genuinely clockless claim is legal history outside the frontier."""
 
+    source = propagation_clone.cast["clockless-source"]
+    listener = propagation_clone.cast["clockless-listener"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "clockless-source")
-        listener, listener_character = _insert_character(cur, "clockless-listener")
-        _insert_relationship(cur, source_character, listener_character)
         cur.execute(
             """
             INSERT INTO narrative_chunks (raw_text, storyteller_text)
@@ -628,11 +698,13 @@ def test_null_birth_world_time_excludes_claim_from_propagation(
     assert listener not in {row["knower_entity_id"] for row in rows}
 
 
-def test_non_primary_commit_skips_propagation_drain(live_conn: Any) -> None:
+def test_non_primary_commit_skips_propagation_drain(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """Dream/flashback/atemporal-equivalent chunks never move knowledge."""
 
+    entities = propagation_clone.chains["non_primary"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 2)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -654,7 +726,7 @@ def test_non_primary_commit_skips_propagation_drain(live_conn: Any) -> None:
 
 
 def test_cellular_clandestine_channel_uses_multiplied_latency(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """Institutional culture delays the scheduled channel acquisition."""
 
@@ -668,11 +740,10 @@ def test_cellular_clandestine_channel_uses_multiplied_latency(
         },
         culture_profiles={"cellular_clandestine": 4.0},
     )
+    faction = propagation_clone.cast["cellular-faction"]
+    listener = propagation_clone.cast["cellular-listener"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        faction = _insert_faction(cur, "cellular")
-        listener, _ = _insert_character(cur, "cellular-listener")
         _insert_pair_tag(cur, faction, listener, "authority_over")
-        _insert_culture_tag(cur, faction, "cellular_clandestine")
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -696,12 +767,14 @@ def test_cellular_clandestine_channel_uses_multiplied_latency(
     assert rows[1]["acquired_at_world_time"] == birth_world_time + timedelta(hours=4)
 
 
-def test_idempotent_redrain_and_disabled_config_are_noops(live_conn: Any) -> None:
+def test_idempotent_redrain_and_disabled_config_are_noops(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """The awareness uniqueness key closes a drain; disabled reads nothing."""
 
     settings = _settings()
+    entities = propagation_clone.chains["idempotent"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 2)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -729,11 +802,13 @@ def test_idempotent_redrain_and_disabled_config_are_noops(live_conn: Any) -> Non
     assert len(events) == 1
 
 
-def test_resolution_free_commit_still_drains(live_conn: Any) -> None:
+def test_resolution_free_commit_still_drains(
+    live_conn: Any, propagation_clone: PropagationClone
+) -> None:
     """An accepted tick with no proposal/resolutions still advances knowledge."""
 
+    entities = propagation_clone.chains["resolution_free"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 2)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -759,7 +834,7 @@ def test_resolution_free_commit_still_drains(live_conn: Any) -> None:
 
 
 def test_replay_readmits_target_participant_awareness_and_never_mints_beneficiary(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """PR #697 replay readmits a target but never birth-mints a beneficiary.
 
@@ -771,8 +846,8 @@ def test_replay_readmits_target_participant_awareness_and_never_mints_beneficiar
         **EPISTEMICS,
         "aware_roles": ["actor", "target", "beneficiary"],
     }
+    entities = propagation_clone.chains["replay_readmits"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 3)
         actor_id, target_id, beneficiary_id = entities
         base_chunk, _ = _insert_chunk(cur)
         with live_conn.cursor() as checkpoint_cur:
@@ -850,12 +925,12 @@ def test_replay_readmits_target_participant_awareness_and_never_mints_beneficiar
 
 
 def test_replay_reconstructs_propagated_awareness_from_event(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """The event ledger reproduces the live awareness projection after a drain."""
 
+    entities = propagation_clone.chains["replay_reconstructs"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 3)
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -886,13 +961,13 @@ def test_replay_reconstructs_propagated_awareness_from_event(
 
 
 def test_checkpoint_verify_reports_unledgered_awareness_drift(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """A projection-only awareness INSERT is visible to the replay oracle."""
 
+    source = propagation_clone.cast["drift-source"]
+    rogue = propagation_clone.cast["drift-rogue"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, _ = _insert_character(cur, "drift-source")
-        rogue, _ = _insert_character(cur, "drift-rogue")
         base_chunk, base_world_time = _insert_chunk(cur)
         claim_id = _insert_claim(
             cur,
@@ -943,12 +1018,12 @@ def test_checkpoint_verify_reports_unledgered_awareness_drift(
 
 
 def test_old_checkpoint_without_awareness_section_is_skipped(
-    live_conn: Any,
+    live_conn: Any, propagation_clone: PropagationClone
 ) -> None:
     """Pre-section checkpoints remain verifiable through explicit skipping."""
 
+    source = propagation_clone.cast["old-checkpoint-source"]
     with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source, _ = _insert_character(cur, "old-checkpoint-source")
         base_chunk, base_world_time = _insert_chunk(cur)
         _insert_claim(
             cur,

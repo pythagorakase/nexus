@@ -33,14 +33,14 @@ from nexus.agents.orrery.substrate import (
 from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
 from tests.test_orrery.claim_accounts_test_support import (
     EPISTEMICS,
-    _chain,
-    _insert_character,
     _insert_chunk,
-    _insert_faction,
     _insert_pair_tag,
-    _insert_relationship,
     _install_valence_shadow,
     _settings,
+    insert_transaction_chain,
+    insert_transaction_character,
+    insert_transaction_faction,
+    insert_transaction_relationship,
     install_claim_accounts_shadow_sync,
 )
 
@@ -196,10 +196,16 @@ def test_hydration_excludes_irrelevant_history_and_empty_universe_issues_no_sql(
     irrelevant_count = 32
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        relevant_source, _ = _insert_character(cur, "hydrate-relevant-source")
-        relevant_about, _ = _insert_character(cur, "hydrate-relevant-about")
-        irrelevant_source, _ = _insert_character(cur, "hydrate-irrelevant-source")
-        irrelevant_about, _ = _insert_character(cur, "hydrate-irrelevant-about")
+        relevant_source, _ = insert_transaction_character(
+            cur, "hydrate-relevant-source"
+        )
+        relevant_about, _ = insert_transaction_character(cur, "hydrate-relevant-about")
+        irrelevant_source, _ = insert_transaction_character(
+            cur, "hydrate-irrelevant-source"
+        )
+        irrelevant_about, _ = insert_transaction_character(
+            cur, "hydrate-irrelevant-about"
+        )
         chunk_id, _ = _insert_chunk(cur)
         relevant_claim_id = _insert_claim_about(
             cur,
@@ -273,10 +279,14 @@ def test_entity_audit_common_claims_are_bounded_to_their_about_entities(
 
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        audited, _ = _insert_character(cur, "audit-common-subject")
-        relevant_source, _ = _insert_character(cur, "audit-common-source")
-        unrelated_source, _ = _insert_character(cur, "audit-unrelated-source")
-        unrelated_subject, _ = _insert_character(cur, "audit-unrelated-subject")
+        audited, _ = insert_transaction_character(cur, "audit-common-subject")
+        relevant_source, _ = insert_transaction_character(cur, "audit-common-source")
+        unrelated_source, _ = insert_transaction_character(
+            cur, "audit-unrelated-source"
+        )
+        unrelated_subject, _ = insert_transaction_character(
+            cur, "audit-unrelated-subject"
+        )
         chunk_id, _ = _insert_chunk(cur)
         relevant_claim_id = _insert_claim_about(
             cur,
@@ -323,9 +333,9 @@ def test_recent_claim_scope_survives_inactive_endpoints(
 
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        source, _ = _insert_character(cur, "scope-inactive-source")
-        target, _ = _insert_character(cur, "scope-inactive-target")
-        non_knower, _ = _insert_character(cur, "scope-active-non-knower")
+        source, _ = insert_transaction_character(cur, "scope-inactive-source")
+        target, _ = insert_transaction_character(cur, "scope-inactive-target")
+        non_knower, _ = insert_transaction_character(cur, "scope-active-non-knower")
         chunk_id, _ = _insert_chunk(cur)
         claim_id = _insert_claim_about(
             cur,
@@ -375,14 +385,16 @@ def test_live_predicates_cover_participant_told_common_false_and_faction(
     )
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "consume-source")
-        listener, listener_character = _insert_character(cur, "consume-listener")
-        about, _ = _insert_character(cur, "consume-about")
-        common_knower, _ = _insert_character(cur, "consume-common-knower")
-        common_about, _ = _insert_character(cur, "consume-common-about")
-        no_claim_about, _ = _insert_character(cur, "consume-no-claim")
-        faction = _insert_faction(cur, "consume-faction")
-        _insert_relationship(cur, source_character, listener_character)
+        source, source_character = insert_transaction_character(cur, "consume-source")
+        listener, listener_character = insert_transaction_character(
+            cur, "consume-listener"
+        )
+        about, _ = insert_transaction_character(cur, "consume-about")
+        common_knower, _ = insert_transaction_character(cur, "consume-common-knower")
+        common_about, _ = insert_transaction_character(cur, "consume-common-about")
+        no_claim_about, _ = insert_transaction_character(cur, "consume-no-claim")
+        faction = insert_transaction_faction(cur, "consume-faction")
+        insert_transaction_relationship(cur, source_character, listener_character)
         _insert_pair_tag(cur, source, faction, "authority_over")
         birth_chunk, birth_world_time = _insert_chunk(cur)
         bounded_claim = _insert_claim_about(
@@ -456,10 +468,12 @@ def test_historical_anchor_excludes_future_claim_and_awareness(
     settings = _settings()
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "anchor-source")
-        listener, listener_character = _insert_character(cur, "anchor-listener")
-        about, _ = _insert_character(cur, "anchor-about")
-        _insert_relationship(cur, source_character, listener_character)
+        source, source_character = insert_transaction_character(cur, "anchor-source")
+        listener, listener_character = insert_transaction_character(
+            cur, "anchor-listener"
+        )
+        about, _ = insert_transaction_character(cur, "anchor-about")
+        insert_transaction_relationship(cur, source_character, listener_character)
         historical_anchor, _ = _insert_chunk(cur)
         mint_chunk, _ = _insert_chunk(cur, time_delta=timedelta(hours=2))
         claim_id = _insert_claim_about(
@@ -546,11 +560,13 @@ def test_template_gate_flips_on_drain_with_production_explain_parity(
     template = _consumption_template()
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        source, source_character = _insert_character(cur, "gate-source")
-        listener, listener_character = _insert_character(cur, "gate-listener")
-        about, about_character = _insert_character(cur, "gate-about")
-        _insert_relationship(cur, source_character, listener_character)
-        _insert_relationship(cur, listener_character, about_character)
+        source, source_character = insert_transaction_character(cur, "gate-source")
+        listener, listener_character = insert_transaction_character(
+            cur, "gate-listener"
+        )
+        about, about_character = insert_transaction_character(cur, "gate-about")
+        insert_transaction_relationship(cur, source_character, listener_character)
+        insert_transaction_relationship(cur, listener_character, about_character)
         birth_chunk, _ = _insert_chunk(cur)
         _insert_claim_about(
             cur,
@@ -636,9 +652,9 @@ def test_entity_audit_renders_two_hop_provenance_and_ledger_depth(
     settings = _settings()
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 3)
+        entities, _ = insert_transaction_chain(cur, 3)
         source, relay, recipient = entities
-        about, _ = _insert_character(cur, "audit-about")
+        about, _ = insert_transaction_character(cur, "audit-about")
         birth_chunk, birth_world_time = _insert_chunk(cur)
         claim_id = _insert_claim_about(
             cur,
@@ -699,9 +715,9 @@ def test_entity_audit_joins_distorted_delivery_to_real_depth(
     settings = _settings()
     raw_connection = live_connection.connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
-        entities, _ = _chain(cur, 2)
+        entities, _ = insert_transaction_chain(cur, 2)
         source, recipient = entities
-        about, _ = _insert_character(cur, "audit-distortion-about")
+        about, _ = insert_transaction_character(cur, "audit-distortion-about")
         birth_chunk, birth_world_time = _insert_chunk(cur)
         canonical_claim_id = _insert_claim_about(
             cur,

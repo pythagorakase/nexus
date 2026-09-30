@@ -1,8 +1,9 @@
 """Clone-backed live coverage for claim-awareness checkpoint verification.
 
 The tests run on one module-scoped disposable clone of the template, never on
-the template database itself (the canonical schema source), and roll back every
-write.
+the template database itself (the canonical schema source). The clone's story
+clock is seeded first, then each test's characters through ``seed_character``;
+every test write rolls back.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 from contextlib import closing
 from datetime import datetime, timezone
 from itertools import count
-from typing import Any, Iterator
+from typing import Any, Iterator, NamedTuple
 from uuid import uuid4
 
 import pytest
@@ -19,7 +20,12 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 from nexus.agents.orrery.epistemics import ClaimParticipant, mint_claim_for_event
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import verify_checkpoints_sync
-from tests.pg_fixtures import connect, disposable_slot_database, seed_story_clock
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_story_clock,
+)
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
@@ -38,20 +44,37 @@ EPISTEMICS = {
 }
 
 
+class ReplayClone(NamedTuple):
+    """The module's seeded clone and the character entities each test names."""
+
+    dbname: str
+    drift_source: int
+    drift_rogue: int
+    skip_source: int
+
+
 @pytest.fixture(scope="module")
-def replay_clone() -> Iterator[str]:
-    """Seed the story clock on one clone so fixture chunks carry exact clocks."""
+def replay_clone() -> Iterator[ReplayClone]:
+    """Seed the story clock, then each test's characters, on one clone."""
 
     with disposable_slot_database("qa885_claim_awareness_replay") as dbname:
         seed_story_clock(dbname, world_time=STORY_CLOCK)
-        yield dbname
+        _, drift_source = seed_character(dbname, name="Replay Drift Source")
+        _, drift_rogue = seed_character(dbname, name="Replay Drift Rogue")
+        _, skip_source = seed_character(dbname, name="Replay Skip Source")
+        yield ReplayClone(
+            dbname=dbname,
+            drift_source=drift_source,
+            drift_rogue=drift_rogue,
+            skip_source=skip_source,
+        )
 
 
 @pytest.fixture()
-def replay_conn(replay_clone: str) -> Iterator[Any]:
+def replay_conn(replay_clone: ReplayClone) -> Iterator[Any]:
     """Open one clone transaction and roll back every fixture write."""
 
-    with closing(connect(replay_clone)) as conn:
+    with closing(connect(replay_clone.dbname)) as conn:
         try:
             with conn.cursor() as cur:
                 install_claim_accounts_shadow_sync(cur)
@@ -83,14 +106,6 @@ def _insert_chunk(cur: Any) -> int:
         (chunk_id, next(_SCENE_NUMBERS), token[:10]),
     )
     return chunk_id
-
-
-def _insert_character_entity(cur: Any) -> int:
-    cur.execute(
-        "INSERT INTO entities (kind, is_active) "
-        "VALUES ('character', true) RETURNING id"
-    )
-    return int(cur.fetchone()["id"])
 
 
 def _mint_fixture_claim(cur: Any, *, chunk_id: int, source: int) -> int:
@@ -130,12 +145,14 @@ def _mint_fixture_claim(cur: Any, *, chunk_id: int, source: int) -> int:
     return minted.claim_id
 
 
-def test_verify_reports_projection_only_awareness_drift(replay_conn: Any) -> None:
+def test_verify_reports_projection_only_awareness_drift(
+    replay_conn: Any, replay_clone: ReplayClone
+) -> None:
     """A new checkpoint window catches awareness with no mint-event twin."""
 
+    source = replay_clone.drift_source
+    rogue = replay_clone.drift_rogue
     with replay_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source = _insert_character_entity(cur)
-        rogue = _insert_character_entity(cur)
         base_chunk = _insert_chunk(cur)
         claim_id = _mint_fixture_claim(cur, chunk_id=base_chunk, source=source)
         base_id = capture_state_checkpoint_sync(
@@ -175,12 +192,12 @@ def test_verify_reports_projection_only_awareness_drift(replay_conn: Any) -> Non
 
 
 def test_verify_skips_checkpoint_that_predates_awareness_section(
-    replay_conn: Any,
+    replay_conn: Any, replay_clone: ReplayClone
 ) -> None:
     """An old base document uses the missing-section skip contract."""
 
+    source = replay_clone.skip_source
     with replay_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        source = _insert_character_entity(cur)
         base_chunk = _insert_chunk(cur)
         _mint_fixture_claim(cur, chunk_id=base_chunk, source=source)
         base_id = capture_state_checkpoint_sync(
