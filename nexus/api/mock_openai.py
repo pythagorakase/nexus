@@ -29,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
 
-from nexus.config import load_settings
+from nexus.config import Settings, load_settings
 
 logger = logging.getLogger("nexus.api.mock_openai")
 
@@ -1250,7 +1250,46 @@ async def responses_create(request: ResponsesRequest):
     }
 
 
+def direct_launch_config(settings: Optional[Settings] = None) -> Dict[str, Any]:
+    """Return the ``uvicorn.run`` keyword arguments for a direct launch.
+
+    #842: a direct launch (``python -m nexus.api.mock_openai``) bypasses the
+    supervisor's ``--log-config`` argv, so it applies the same dictConfig built
+    from ``[runtime.logs]``. The port is the supervised service's port from
+    ``[runtime.services.mock_openai]``; the host is loopback (#415/#458: the
+    application has no authentication of its own).
+
+    Args:
+        settings: Typed settings; ``load_settings()`` when omitted.
+
+    Returns:
+        ``host``, ``port`` and ``log_config`` for ``uvicorn.run``.
+
+    Raises:
+        RuntimeError: ``[runtime]`` or ``[runtime.services.mock_openai]`` is
+            absent from the configuration.
+    """
+    # Deferred like the gateway's direct launch: nexus.runtime imports the
+    # supervisor, which the ASGI app itself never needs.
+    from nexus.runtime.logging_config import build_logging_config
+
+    runtime = (settings if settings is not None else load_settings()).runtime
+    if runtime is None:
+        raise RuntimeError("nexus.toml has no [runtime] section for [runtime.logs]")
+    service = runtime.services.get("mock_openai")
+    if service is None:
+        raise RuntimeError(
+            "nexus.toml has no [runtime.services.mock_openai] section for the "
+            "mock provider's port"
+        )
+    return {
+        "host": "127.0.0.1",
+        "port": service.port,
+        "log_config": build_logging_config(runtime.logs),
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=5102)
+    uvicorn.run(app, **direct_launch_config())
