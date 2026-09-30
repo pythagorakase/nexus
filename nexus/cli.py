@@ -1798,9 +1798,10 @@ def _is_read_timeout(exc: BaseException) -> bool:
 def _failed_session_read(
     exc: requests.exceptions.RequestException, url: str, timeout_detail: str
 ) -> SessionWaitFailure:
-    """Classify one failed read of a session wait: a status read or the state load.
+    """Classify one failed request of a generation session.
 
-    Both reads map their failures here, so they cannot drift. A read that ran
+    A status read, the state load, and the POST that schedules the seed's
+    opening turn map their failures here, so they cannot drift. A read that ran
     out of time, a body stalled after its headers included
     (:func:`_is_read_timeout`), is ``timeout`` with ``timeout_detail``. A
     refused or dropped connection, a body cut off mid-answer included, is
@@ -2001,19 +2002,26 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
 
 
 def _bootstrap_seed_narrative(
-    *, result: Dict[str, Any], slot: int, model: Optional[str]
+    *,
+    result: Dict[str, Any],
+    slot: int,
+    model: Optional[str],
+    schedule_timeout: float = 120,
 ) -> Dict[str, Any]:
-    """Preserve the saved seed while scheduling and awaiting its opening turn."""
+    """Preserve the saved seed while scheduling and awaiting its opening turn.
+
+    ``schedule_timeout`` bounds the POST that schedules the turn, in seconds;
+    the wait on the scheduled session keeps its own budgets.
+    """
 
     result["phase"] = None  # The successful transition has left wizard mode.
     result["narrative_bootstrap"] = False
     payload: Dict[str, Any] = {"slot": slot, "user_text": ""}
     if model:
         payload["model"] = model
+    url = f"{get_api_url()}/api/narrative/continue"
     try:
-        response = _api_post(
-            f"{get_api_url()}/api/narrative/continue", json=payload, timeout=120
-        )
+        response = _api_post(url, json=payload, timeout=schedule_timeout)
         response.raise_for_status()
         session_id = response.json().get("session_id")
         if not isinstance(session_id, str) or not session_id:
@@ -2027,18 +2035,17 @@ def _bootstrap_seed_narrative(
     except (
         requests.exceptions.ConnectionError,
         requests.exceptions.ChunkedEncodingError,
+        requests.exceptions.Timeout,
     ) as exc:
-        # The seed is saved; a gateway that refused or dropped the connection
-        # keeps it as partial work under the transport code (exit 4).
-        failure = _unreachable_failure(exc)
+        # The seed is saved and kept as partial work either way, classified as
+        # the wait's reads are: a gateway that refused or dropped the
+        # connection is the transport code (exit 4); one that accepted the
+        # request but answered too late, a body stalled after its headers
+        # included, is a domain failure, like any late read.
+        failure = _failed_session_read(
+            exc, url, f"Timed out waiting for API server at {get_api_url()}: {exc}"
+        )
         completion = {"success": False, "code": failure.code, "error": failure.detail}
-    except requests.exceptions.Timeout as exc:
-        # A gateway that accepted the request but answered too late is a
-        # domain failure that keeps the saved seed, like any late read.
-        completion = {
-            "success": False,
-            "error": f"Timed out waiting for API server at {get_api_url()}: {exc}",
-        }
     except (requests.exceptions.RequestException, ValueError) as exc:
         completion = {"success": False, "error": str(exc)}
 

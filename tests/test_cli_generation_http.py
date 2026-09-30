@@ -3,6 +3,8 @@
 The server serves gateway-shaped scheduling, durable-status, and slot-state
 responses. CLI parsing, HTTP transport, polling, result validation, formatting,
 exit codes, and interruption run in a subprocess; no slot or provider is used.
+One seed-bootstrap case runs in process, to pass the scheduling POST a budget
+short enough for a real stalled answer to trip it.
 """
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 import tomlkit
+
+from nexus import cli
+from nexus.cli_contract import ExitCode, exit_code_for, partial_fields
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSION_ID = "776-opening-session"
@@ -139,6 +144,18 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     return
                 if scenario.result == "schedule_drop":
                     # The gateway dies while scheduling: no answer at all.
+                    self.close_connection = True
+                    return
+                if scenario.result == "schedule_stall":
+                    # The gateway sends the headers and half the body, then
+                    # holds the rest until teardown.
+                    stalled = json.dumps({"session_id": SESSION_ID}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(stalled)))
+                    self.end_headers()
+                    self.wfile.write(stalled[: len(stalled) // 2])
+                    scenario.release_response.wait(timeout=10)
                     self.close_connection = True
                     return
                 scenario.scheduled = True
@@ -480,6 +497,56 @@ def test_seed_bootstrap_lost_gateway_is_unreachable_and_keeps_the_seed(
         )
         == 1
     )
+
+
+def test_seed_bootstrap_schedule_stalled_after_headers_keeps_the_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A scheduling answer that stalls after its headers is exit 1, seed kept.
+
+    Requests reports the stalled body as a ConnectionError wrapping urllib3's
+    ReadTimeoutError. The opening turn classifies it with the waiter's helper
+    as a timeout, a domain failure, not a lost gateway (exit 4). The request
+    and the stall are real; only the POST's 120 s budget is passed as 0.5 s.
+    """
+    scenario = GenerationScenario(result="schedule_stall")
+    saved = {
+        "success": True,
+        "phase": "seed",
+        "artifact_data": {"title": "The Glass Orchard"},
+        "retrograde": {"status": "complete"},
+    }
+    monkeypatch.delenv("NEXUS_RUNTIME_CONFIG", raising=False)
+    monkeypatch.delenv("NEXUS_HOME", raising=False)
+    with _gateway(scenario) as base_url:
+        monkeypatch.setenv("NEXUS_API_URL", base_url)
+        result = cli._bootstrap_seed_narrative(
+            result=saved, slot=5, model=None, schedule_timeout=0.5
+        )
+
+    assert result["success"] is False
+    # main() exits with the result's code, domain_failure when it names none.
+    code = result.get("code", "domain_failure")
+    assert (code, exit_code_for(code)) == ("domain_failure", ExitCode.DOMAIN_FAILURE)
+    detail = result["bootstrap_error"]["detail"]
+    assert detail.startswith(f"Timed out waiting for API server at {base_url}: ")
+    assert "Read timed out" in detail
+    assert result["error"] == (
+        "The seed was saved and the story initialized, but the opening "
+        f"narrative could not be loaded: {detail}. Inspect with: nexus load --slot 5"
+    )
+    # The partial main() prints: the saved seed, and no session to recover.
+    assert partial_fields(result) == {
+        "artifact_data": {"title": "The Glass Orchard"},
+        "retrograde": {"status": "complete"},
+        "narrative_bootstrap": False,
+        "bootstrap_error": {"detail": detail, "session_id": None},
+        "recovery_command": "nexus load --slot 5",
+    }
+    assert scenario.status_reads == 0
+    assert [request[:2] for request in scenario.requests] == [
+        ("POST", "/api/narrative/continue")
+    ]
 
 
 @pytest.mark.parametrize("seed", [True, False], ids=["seed", "continuation"])
