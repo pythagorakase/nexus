@@ -1,8 +1,8 @@
 /**
  * Shapes for the read-only GET /api/settings surface (FastAPI, proxied by
- * Express). GET serves the nexus.toml sections with concrete model selections
- * and a derived `settings_meta` block. Single source of truth for the
- * client - extend here, not locally.
+ * Express). GET serves the nexus.toml sections (minus `secrets`) with concrete
+ * model selections and a derived `settings_meta` block. Single source of truth
+ * for the client - extend here, not locally.
  */
 
 export type ThemeId = "veil" | "gilded" | "vector";

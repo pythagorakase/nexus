@@ -115,8 +115,10 @@ None describes the payload of this endpoint as it is today, so none is edited.
 
 ## Commands and Tails
 
-All tails below ran on commit `b1c87960` (the product, client-type, and test
-change), itself on `origin/main` at `172bd0e2`, on 2026-09-30, from the
+The tails in the Named Test Files through UI subsections ran on commit
+`b1c87960` (the product, client-type, and test change), itself on
+`origin/main` at `172bd0e2`; the subsections after them name their own
+commits. All ran on 2026-09-30, from the
 worktree root with the shared interpreter (`$PY`), `PYTHONPATH=$PWD`, and
 `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`, and `NEXUS_SLOT` unset. The import
 check printed
@@ -220,7 +222,7 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 38 passed, 5 warnings in 10.05s
 ```
 
-### At the Pushed Head (`b5f54abd`)
+### At `b5f54abd` (Same Code as `d4db8800`)
 
 The offline suites, Black, flake8, mypy, and both UI gates were rerun on
 2026-09-30 at `b5f54abd` (on `origin/main` at `c8dd8c85`). Its product, test,
@@ -310,3 +312,24 @@ $ npm --prefix ui test -- --minWorkers=1 --maxWorkers=2
 The client change removes one optional type field and a comment, which
 TypeScript erases, so it cannot change test timing. The same suite passed
 462 of 462 with default workers at `b1c87960` (above).
+
+### After the Review Fixes
+
+The commit that adds this subsection changes two things: the header comment of
+`ui/client/src/types/settings.ts` now says GET serves the nexus.toml sections
+minus `secrets`, as the endpoint docstring says, and this file now names the
+commit of each group of tails. No Python file changed. These tails ran on
+2026-09-30 on `d4db8800` with those two edits in the working tree:
+
+```
+$ npm --prefix ui run check
+> tsc && npm run check:design-sync
+> nexus-ui@1.0.0 check:design-sync
+> tsc -p .design-sync/tsconfig.previews.json
+(exit 0)
+
+$ npm --prefix ui test -- src/components/nexus/SettingsPane.test.tsx
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+   Duration  4.94s (transform 311ms, setup 149ms, collect 809ms, tests 2.10s, environment 949ms, prepare 636ms)
+```
