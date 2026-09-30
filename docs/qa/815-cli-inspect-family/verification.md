@@ -16,11 +16,31 @@ Work order 815-A. Issue #815. Base: `origin/main` at 3ca248df. No migration. Gat
 
 1. Reads `GET /api/narrative/status/{id}?slot=N` every `[runtime.cli].poll_interval_seconds`, within `[apex].generation_timeout_seconds` overall; returns the terminal status payload.
 2. `status: "error"` from the API: domain failure (exit 1) whose `error` is the API's message.
-3. Budget spent while the session runs, an HTTP error answer, or an unusable payload: domain failure (exit 1).
-4. Connection refused or dropped mid-wait: `api_unreachable` (exit 4). A failed read is never retried.
+3. Budget spent while the session runs, a read that times out (the status read or the slot-state read after it), an HTTP error answer or any other failed request (too many redirects, an undecodable body), or an unusable payload: domain failure (exit 1).
+4. Connection refused or dropped mid-wait, a body cut off mid-answer included: `api_unreachable` (exit 4). A failed read is never retried.
 5. Every failed wait keeps `session_id`, `generation_error`, and `recovery_command` (and the saved seed) in `partial`.
 
+## Review Fix Round
+
+- `wait_for_session` and the slot-state load after it map every other `requests` failure (for example `TooManyRedirects`) to `http_error`, so it keeps the scheduled session in `partial` instead of escaping to `continue`'s broad `except` or `retry`'s traceback.
+- A slot-state read or seed scheduling request that times out is a domain failure (exit 1) worded `Timed out waiting for API server at ...`, matching the status read and the saved-work rule in `docs/cli.md`. Only a refused or dropped connection is `api_unreachable` there, worded `Cannot connect to API server at ...`.
+- `main()` and `_TRANSPORT_ERRORS` treat `ChunkedEncodingError` (a body cut off mid-answer) like `ConnectionError`, so every inspect verb exits 4 with `api_unreachable`.
+- Human `inspect` output prints `_INSPECT_EMPTY[verb]` directly; the unreachable `"Nothing to show."` default is gone. The help epilog's incubator example has its two-space column gap.
+- New tests: a self-redirecting status route (in process, and `continue`/`regenerate` keeping the partial, exit 1); a dropped and a stalled slot-state read (`continue`, exit 4 and exit 1); `continue`/`regenerate` polling at a configured 0.3s interval; the seed's opening turn losing the gateway on the schedule POST and on the second status read (exit 4, seed kept in `partial`); every inspect verb with a truncated body (exit 4); every inspect verb with `--slot 9` and with no `--slot` (exit 2, no request); non-integer `places`/`factions` ids; and the PostgreSQL proof reads the real gateway's empty incubator as `null` before the pending turn is staged.
+
 ## CLI Transcript on the Played Clone
+
+The fix round added one read before the pending turn is staged: the real gateway's empty incubator, verbatim from `$PY -m pytest -q -s tests/test_cli_inspect_pg.py` (PostgreSQL enabled):
+
+```
+$ nexus inspect incubator --slot 4 --json
+{
+  "data": null,
+  "ok": true
+}
+```
+
+The transcript below is the first round's run, unchanged.
 
 `tests/test_cli_inspect_pg.py`, run with `-s`: `seed_played_story(turns=3, cast=("Mara Quill", "Oren Vale"))`, one seeded faction, and a pending turn from `seed_pending_turn`, served by the in-process gateway on 127.0.0.1:8017 with every provider routed to TEST. Each command ran as a `python -m nexus.cli` subprocess. Verbatim stdout (tokenizer fork warnings removed):
 
@@ -569,67 +589,72 @@ $ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
 
 `$PY` is `/Users/pythagor/nexus/.venv/bin/python`; every run is from the worktree root with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset. `PYTHONPATH=$PWD $PY -c 'import nexus;print(nexus.__file__)'` printed the worktree's `nexus/__init__.py`.
 
-Order PostgreSQL gate:
+Order PostgreSQL gate (rerun after the review fix round):
 
 ```
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:warnings tests/test_cli_contract.py tests/test_cli.py tests/test_cli_inspect_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-161 passed in 78.39s (0:01:18)
+189 passed in 96.11s (0:01:36)
 ```
 
 Reachability and every other CLI, `continue`, and `regenerate` test (PostgreSQL enabled, no skips):
 
 ```
-$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:warnings tests/test_reachability.py \
-    tests/test_cli_session_wait.py tests/test_cli_generation_http.py tests/test_cli_choice_http.py \
-    tests/test_cli_wizard_confirmation.py tests/test_cli_model_selection.py tests/test_new_story_cli.py \
-    tests/test_record_revelation_cli_pg.py tests/test_jobs_cli_pg.py tests/test_api/test_acceptance_staging_pg.py \
-    tests/test_api/test_seat_policy_jobs_pg.py tests/test_api/test_attempt_manifest_pg.py
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:warnings tests/test_reachability.py tests/test_cli_session_wait.py tests/test_cli_generation_http.py tests/test_cli_choice_http.py tests/test_cli_wizard_confirmation.py tests/test_cli_model_selection.py tests/test_new_story_cli.py tests/test_record_revelation_cli_pg.py tests/test_jobs_cli_pg.py tests/test_api/test_acceptance_staging_pg.py tests/test_api/test_seat_policy_jobs_pg.py tests/test_api/test_attempt_manifest_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-174 passed in 165.25s (0:02:45)
+183 passed in 178.33s (0:02:58)
 ```
 
-Offline `pytest -q`, split to stay under the ten-minute command limit (the four parts cover `tests/`; part A is the first 57 top-level files plus a second run of `tests/test_cli_session_wait.py`):
+Offline `pytest -q`, split to stay under the ten-minute command limit. `tests/` holds 105 top-level `test_*.py` files; parts A and B take them in `ls` order (1-57 and 58-105), and parts C and D take every test directory:
 
 ```
-$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL $PY -m pytest -q -p no:warnings <tests/test_*.py, files 1-57> tests/test_cli_session_wait.py
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL $PY -m pytest -q -p no:warnings $(ls tests/test_*.py | sed -n 1,57p)
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 =========================== short test summary info ============================
 FAILED tests/test_database_contract.py::test_postgres_installer_helper_from_foreign_directory[False]
 FAILED tests/test_database_contract.py::test_postgres_installer_helper_from_foreign_directory[True]
-2 failed, 805 passed, 98 skipped in 215.82s (0:03:35)
-$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL $PY -m pytest -q -p no:warnings <tests/test_*.py, files 58-105>
+2 failed, 829 passed, 98 skipped in 230.77s (0:03:50)
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL $PY -m pytest -q -p no:warnings $(ls tests/test_*.py | sed -n 58,105p)
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-807 passed, 179 skipped in 52.01s
+807 passed, 179 skipped in 52.84s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL $PY -m pytest -q -p no:warnings tests/config tests/proofs tests/test_api tests/test_config tests/test_ir_eval_v2 tests/test_runtime tests/test_util
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-964 passed, 254 skipped in 40.95s
+964 passed, 254 skipped in 40.72s
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL $PY -m pytest -q -p no:warnings tests/test_lore tests/test_memnon tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1628 passed, 543 skipped in 30.51s
+1628 passed, 543 skipped in 30.10s
 ```
 
 The two `test_postgres_installer_helper_from_foreign_directory` failures are this worktree's environment, not the change. The test runs `python -c 'from nexus.config import load_settings ...'` from a foreign directory without `PYTHONPATH`, so the child imports the shared venv's editable install, which points at the main checkout (`File "/Users/pythagor/nexus/nexus/database.py"` in the failure). That checkout's `RuntimeCliSettings` has no `poll_interval_seconds`, so it rejects the worktree's `nexus.toml` (`runtime.cli.poll_interval_seconds  Extra inputs are not permitted`). With the worktree's code on the path the same test passes:
 
 ```
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings "tests/test_database_contract.py::test_postgres_installer_helper_from_foreign_directory"
-..                                                                       [100%]
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2 passed in 1.76s
+2 passed in 1.84s
+```
+
+Lane 8017 afterwards:
+
+```
+$ NEXUS_GATEWAY_PORT=8017 NEXUS_API_URL=http://127.0.0.1:8017 PYTHONPATH=$PWD $PY -m nexus.cli down
+nothing running
+$ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
+1
 ```
 
 Formatting, lint, and types on the changed Python files:
 
 ```
-$ $PY -m black --check nexus/cli.py nexus/cli_contract.py nexus/config/settings_models.py tests/test_cli_contract.py tests/test_cli_session_wait.py tests/test_cli_inspect_pg.py
-6 files would be left unchanged.
-$ $PY -m flake8 nexus/cli_contract.py tests/test_cli_contract.py tests/test_cli_session_wait.py tests/test_cli_inspect_pg.py; echo $?
+$ $PY -m black --check nexus/cli.py nexus/cli_contract.py nexus/config/settings_models.py tests/test_cli_contract.py tests/test_cli_session_wait.py tests/test_cli_inspect_pg.py tests/test_cli_generation_http.py
+All done! ✨ 🍰 ✨
+7 files would be left unchanged.
+$ $PY -m flake8 nexus/cli_contract.py tests/test_cli_contract.py tests/test_cli_session_wait.py tests/test_cli_inspect_pg.py tests/test_cli_generation_http.py; echo $?
 0
 $ $PY -m mypy nexus/cli.py nexus/cli_contract.py tests/test_cli_contract.py tests/test_cli_session_wait.py tests/test_cli_inspect_pg.py
 Success: no issues found in 5 source files
 ```
 
-`flake8 nexus/cli.py` reports 9 E501 lines and `flake8 nexus/config/settings_models.py` 6, the same counts as `origin/main` (all in lines this change does not touch). `mypy nexus/config/settings_models.py` reports the same 7 `[operator]` errors at `origin/main` (lines 130, 131, 138, and the local-window check).
+`flake8 nexus/cli.py` reports 9 E501 lines and `flake8 nexus/config/settings_models.py` 6, the same counts as `origin/main` (all in lines this change does not touch). `mypy nexus/config/settings_models.py` reports the same 7 `[operator]` errors at `origin/main` (lines 130, 131, 138, and the local-window check). `mypy tests/test_cli_generation_http.py` reports the same 5 errors before and after the fix round (the `tomlkit` config indexing in `_run_cli` and one `str-bytes-safe` line), none in lines this round added.
 
 ## Deferred on #815
 
