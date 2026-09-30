@@ -19,11 +19,6 @@ from tests.pg_fixtures import (
     seed_committed_chunk,
 )
 
-# Configure logging for tests
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-
 # Add nexus module to path
 nexus_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(nexus_root))

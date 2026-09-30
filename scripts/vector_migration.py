@@ -23,11 +23,13 @@ import uuid
 import time
 
 # Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("vector_migration.log"), logging.StreamHandler()],
-)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler("vector_migration.log"), logging.StreamHandler()],
+    )
 logger = logging.getLogger("nexus.vector_migration")
 
 

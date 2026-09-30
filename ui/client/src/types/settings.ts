@@ -1,8 +1,8 @@
 /**
  * Shapes for the read-only GET /api/settings surface (FastAPI, proxied by
- * Express). GET serves concrete model selections plus legacy "Agent Settings" aliases
- * and a derived `settings_meta` block. Single source of truth for the
- * client - extend here, not locally.
+ * Express). GET serves the nexus.toml sections (minus `secrets`) with concrete
+ * model selections and a derived `settings_meta` block. Single source of truth
+ * for the client - extend here, not locally.
  */
 
 export type ThemeId = "veil" | "gilded" | "vector";
@@ -52,11 +52,6 @@ export interface OrreryDashboardKnobs {
 }
 
 export interface SettingsPayload {
-  ["Agent Settings"]?: {
-    global?: {
-      model?: { default_model?: string };
-    };
-  };
   /** Concrete model ID supplied by the roster. */
   apex?: { provider?: string; model?: string; gaia_model?: string | null };
   local_models?: { model?: string };

@@ -13,10 +13,7 @@ from nexus.agents.memnon.utils.embedding_tables import (
     table_name_for_dimensions,
 )
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# A library module: its importers configure logging, never this import.
 logger = logging.getLogger(__name__)
 
 # Model dimension mapping

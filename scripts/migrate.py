@@ -35,10 +35,6 @@ from nexus.database import connection_kwargs, maintenance_connection  # noqa: E4
 from scripts.database_targets import evaluation_dbname  # noqa: E402
 
 LOG = logging.getLogger("nexus.migrate")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s %(message)s",
-)
 
 # Migration directory relative to this script
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
@@ -545,6 +541,12 @@ def show_status() -> None:
 
 
 def main():
+    """Run the migration runner from the command line.
+
+    Logging is configured here, not at import, so a library importer (the
+    readiness checks, the test fixtures) keeps its own root logger.
+    """
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(
         description="Apply database migrations to NEXUS slot databases",
         formatter_class=argparse.RawDescriptionHelpFormatter,
