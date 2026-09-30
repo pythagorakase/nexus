@@ -2,8 +2,12 @@
 
 These exercise the real routers over HTTP through a TestClient against real
 slot databases - no mocks. Read coverage runs against save_02 (mature
-corpus, read-only); the asset upload round-trip runs against save_05 (the
-disposable dev slot) with a self-cleaning character fixture.
+corpus, read-only). The asset upload round-trip runs against a disposable
+template clone (``asset_slot``) routed under ``ROUTED_SLOT``: the character is
+inserted through the real pool after ``seed_story_clock`` anchors its need
+clock, image rows are written through HTTP, and uploaded files land in a
+per-test directory instead of the checkout's ``ui/client/public``. The clone
+is dropped after the module, so no owner slot or portrait is written.
 
 Wire-format assertions mirror the legacy Express/Drizzle responses: the
 client code under ui/client/src was written against those shapes and this
@@ -13,20 +17,29 @@ PR re-homed them without redesign.
 from __future__ import annotations
 
 import io
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterator, Tuple
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nexus.api.asset_endpoints import UPLOAD_ROOT, router as asset_router
+from nexus.api import asset_endpoints
+from nexus.api.asset_endpoints import router as asset_router
 from nexus.api.db_pool import get_connection
 from nexus.api.reader_endpoints import router as reader_router
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_story_clock,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
 READ_SLOT = 2  # save_02: mature corpus, read-only verification
-WRITE_SLOT = 5  # save_05: empty dev slot, fair game
+ROUTED_SLOT = 4  # routed to asset_slot's disposable clone for writes
+WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
 
 # Minimal valid 1x1 PNG (89 bytes).
 PNG_BYTES = bytes.fromhex(
@@ -249,11 +262,32 @@ class TestWorldReads:
         assert client.get("/api/places?slot=9").status_code == 400
 
 
+@pytest.fixture(scope="module")
+def asset_slot() -> Iterator[str]:
+    """A template clone with a story clock, owned by this module."""
+
+    with disposable_slot_database("qa640_reader_assets") as dbname:
+        seed_story_clock(dbname, world_time=WORLD_TIME)
+        yield dbname
+
+
 @pytest.fixture()
-def temp_character() -> Iterator[Tuple[int, str]]:
-    """A disposable character row in save_05 for asset round-trips."""
-    dbname = f"save_{WRITE_SLOT:02d}"
-    with get_connection(dbname) as conn:
+def upload_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Serve uploads from a per-test directory, never the checkout's public."""
+
+    root = tmp_path / "public"
+    monkeypatch.setattr(asset_endpoints, "UPLOAD_ROOT", root)
+    return root
+
+
+@pytest.fixture()
+def temp_character(
+    asset_slot: str, upload_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> Tuple[int, str]:
+    """A character in the routed clone, inserted through the real pool."""
+
+    route_slot_to_disposable(monkeypatch.setattr, slot=ROUTED_SLOT, dbname=asset_slot)
+    with get_connection(asset_slot) as conn:
         with conn.cursor() as cur:
             cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
             entity_id = cur.fetchone()[0]
@@ -266,17 +300,7 @@ def temp_character() -> Iterator[Tuple[int, str]]:
                 (f"__test_upload_{entity_id}", entity_id),
             )
             character_id = cur.fetchone()[0]
-    try:
-        yield character_id, dbname
-    finally:
-        with get_connection(dbname) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM assets.character_images WHERE character_id = %s",
-                    (character_id,),
-                )
-                cur.execute("DELETE FROM characters WHERE id = %s", (character_id,))
-                cur.execute("DELETE FROM entities WHERE id = %s", (entity_id,))
+    return character_id, asset_slot
 
 
 class TestAssetRoundTrip:
@@ -287,7 +311,7 @@ class TestAssetRoundTrip:
 
         # Upload: first portrait becomes main automatically.
         response = client.post(
-            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}",
+            f"/api/characters/{character_id}/images?slot={ROUTED_SLOT}",
             files={"images": ("portrait one.png", io.BytesIO(PNG_BYTES), "image/png")},
         )
         assert response.status_code == 200, response.text
@@ -304,12 +328,12 @@ class TestAssetRoundTrip:
         }
         assert image["isMain"] == 1
         assert image["filePath"].startswith(f"character_portraits/{character_id}/")
-        stored = UPLOAD_ROOT / image["filePath"]
+        stored = asset_endpoints.UPLOAD_ROOT / image["filePath"]
         assert stored.is_file() and stored.read_bytes() == PNG_BYTES
 
         # Second upload is not main.
         second = client.post(
-            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}",
+            f"/api/characters/{character_id}/images?slot={ROUTED_SLOT}",
             files={"images": ("two.jpg", io.BytesIO(PNG_BYTES), "image/jpeg")},
         ).json()["images"][0]
         assert second["isMain"] == 0
@@ -318,11 +342,11 @@ class TestAssetRoundTrip:
         # Promote the second to main.
         response = client.put(
             f"/api/characters/{character_id}/images/{second['id']}/main"
-            f"?slot={WRITE_SLOT}"
+            f"?slot={ROUTED_SLOT}"
         )
         assert response.json() == {"success": True}
         listed = client.get(
-            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}"
+            f"/api/characters/{character_id}/images?slot={ROUTED_SLOT}"
         ).json()
         mains = {row["id"]: row["isMain"] for row in listed}
         assert mains[second["id"]] == 1 and mains[image["id"]] == 0
@@ -331,13 +355,13 @@ class TestAssetRoundTrip:
         for row in listed:
             response = client.delete(
                 f"/api/characters/{character_id}/images/{row['id']}"
-                f"?slot={WRITE_SLOT}"
+                f"?slot={ROUTED_SLOT}"
             )
             assert response.json() == {"success": True}
         assert not stored.exists()
         assert (
             client.get(
-                f"/api/characters/{character_id}/images?slot={WRITE_SLOT}"
+                f"/api/characters/{character_id}/images?slot={ROUTED_SLOT}"
             ).json()
             == []
         )
@@ -347,7 +371,7 @@ class TestAssetRoundTrip:
     ) -> None:
         character_id, _ = temp_character
         response = client.post(
-            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}",
+            f"/api/characters/{character_id}/images?slot={ROUTED_SLOT}",
             files={"images": ("nope.gif", io.BytesIO(b"GIF89a"), "image/gif")},
         )
         assert response.status_code == 400
@@ -363,7 +387,9 @@ class TestAssetRoundTrip:
         orphaned (Codex P2 on PR #400).
         """
         character_id, dbname = temp_character
-        rel_dir = UPLOAD_ROOT / "character_portraits" / str(character_id)
+        rel_dir = (
+            asset_endpoints.UPLOAD_ROOT / "character_portraits" / str(character_id)
+        )
         rel_dir.mkdir(parents=True, exist_ok=True)
         stored = rel_dir / "legacy.png"
         stored.write_bytes(PNG_BYTES)
@@ -385,7 +411,7 @@ class TestAssetRoundTrip:
                 image_id = cur.fetchone()["id"]
 
         response = client.delete(
-            f"/api/characters/{character_id}/images/{image_id}?slot={WRITE_SLOT}"
+            f"/api/characters/{character_id}/images/{image_id}?slot={ROUTED_SLOT}"
         )
         assert response.json() == {"success": True}
         assert not stored.exists(), "legacy-path file must be unlinked"
@@ -400,7 +426,7 @@ class TestAssetRoundTrip:
         """
         character_id, _ = temp_character
         own = client.post(
-            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}",
+            f"/api/characters/{character_id}/images?slot={ROUTED_SLOT}",
             files={"images": ("mine.png", io.BytesIO(PNG_BYTES), "image/png")},
         ).json()["images"][0]
         assert own["isMain"] == 1
@@ -408,21 +434,21 @@ class TestAssetRoundTrip:
         foreign_id = own["id"] + 999_999  # guaranteed not this character's
         response = client.put(
             f"/api/characters/{character_id}/images/{foreign_id}/main"
-            f"?slot={WRITE_SLOT}"
+            f"?slot={ROUTED_SLOT}"
         )
         assert response.status_code == 404
         response = client.delete(
-            f"/api/characters/{character_id}/images/{foreign_id}?slot={WRITE_SLOT}"
+            f"/api/characters/{character_id}/images/{foreign_id}?slot={ROUTED_SLOT}"
         )
         assert response.status_code == 404
 
         listed = client.get(
-            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}"
+            f"/api/characters/{character_id}/images?slot={ROUTED_SLOT}"
         ).json()
         assert [row["id"] for row in listed] == [own["id"]]
         assert listed[0]["isMain"] == 1, "failed set-main must not clear the flag"
 
         # Cleanup through the API (also exercises the happy delete path).
         assert client.delete(
-            f"/api/characters/{character_id}/images/{own['id']}?slot={WRITE_SLOT}"
+            f"/api/characters/{character_id}/images/{own['id']}?slot={ROUTED_SLOT}"
         ).json() == {"success": True}
