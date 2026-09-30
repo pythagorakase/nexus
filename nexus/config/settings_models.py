@@ -905,10 +905,12 @@ class RuntimeCliSettings(BaseModel):
     poll_interval_seconds: float = Field(
         default=1.0,
         gt=0,
+        allow_inf_nan=False,
         description=(
             "Delay between status reads while continue, retry, regenerate, and "
-            "the seed's opening turn wait on a scheduled generation session; "
-            "the whole wait is bounded by apex.generation_timeout_seconds"
+            "the seed's opening turn wait on a scheduled generation session: a "
+            "finite number of seconds greater than 0; the whole wait is bounded "
+            "by apex.generation_timeout_seconds"
         ),
     )
 

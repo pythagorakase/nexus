@@ -1390,8 +1390,9 @@ inspect_timeout_seconds = 30.0  # per request of `nexus inspect`; no answer in t
 # their own budgets.
 request_timeout_seconds = 30.0
 # Delay between status reads while continue, retry, regenerate and the seed's
-# opening turn wait on a generation session; apex.generation_timeout_seconds
-# bounds the whole wait.
+# opening turn wait on a generation session: a finite number of seconds greater
+# than 0 (inf and nan are rejected); apex.generation_timeout_seconds bounds the
+# whole wait.
 poll_interval_seconds = 1.0
 
 [runtime.logs]
