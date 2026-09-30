@@ -72,6 +72,11 @@ RETIRED_LABELS = frozenset(
 
 STALE_MEMBERSHIP_SENTENCE = "counts every row as membership whatever its role"
 
+# Proper nouns the comments use that would otherwise read as a label once case
+# is folded: "Retrograde" (the subsystem) is not the world_layer_type label
+# ``retrograde``.
+PROPER_NOUNS = frozenset({"Retrograde"})
+
 COLUMN_SQL = """
 SELECT format_type(a.atttypid, NULL) AS enum_type,
        t.typtype,
@@ -99,13 +104,17 @@ WHERE t.oid = 'public.faction_member_role'::regtype
 
 
 def _tokens(comment: str) -> set[str]:
-    """Split a comment into case-sensitive identifier-like words.
+    """Split a comment into case-folded identifier-like words.
 
-    Enum labels are lower-case identifiers; matching case-sensitively keeps
-    proper names such as "Retrograde" (the subsystem) from reading as the
-    ``world_layer_type`` label ``retrograde``.
+    Folding case catches a stale label that comes back capitalized
+    ("Secondary"); only the words in ``PROPER_NOUNS`` keep their case, so
+    "Retrograde" (the subsystem) does not read as the ``world_layer_type``
+    label ``retrograde``.
     """
-    return set(re.findall(r"[A-Za-z0-9_]+", comment))
+    return {
+        word if word in PROPER_NOUNS else word.lower()
+        for word in re.findall(r"[A-Za-z0-9_]+", comment)
+    }
 
 
 def _read_columns(dbname: str) -> dict[tuple[str, str], dict[str, object]]:
@@ -187,6 +196,17 @@ def test_pre_136_comment_is_rejected(
         row["labels"],  # type: ignore[arg-type]
         _vocabulary(columns),
     ), f"the check accepts the pre-136 comment on {table}.{column}"
+
+
+def test_capitalized_stale_label_is_rejected(migrated_clone: str) -> None:
+    """A stale label is flagged even when a comment capitalizes it."""
+    columns = _read_columns(migrated_clone)
+    row = columns[("chunk_metadata", "world_layer")]
+    assert _foreign_labels(
+        "Narrative layer (e.g. Primary, Secondary)",
+        row["labels"],  # type: ignore[arg-type]
+        _vocabulary(columns),
+    ) == {"secondary"}
 
 
 def test_faction_member_role_type_comment_follows_the_membership_rule(
