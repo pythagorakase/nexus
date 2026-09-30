@@ -567,9 +567,10 @@ def test_live_acquaintance_rebuffs_prior_ties_and_separation(
             text("SELECT id FROM places ORDER BY id")
         ).scalars()
     ]
-    assert place_ids == sorted(composition_db["places"]), (
-        "the clone must hold exactly the two seeded places, " f"found {place_ids!r}"
-    )
+    seeded_places = sorted(composition_db["places"])
+    assert (
+        place_ids == seeded_places
+    ), f"the clone must hold exactly the two seeded places, found {place_ids!r}"
     actor_place = place_ids[0]
     target_place = place_ids[1] if rebuff == "different_place" else actor_place
     session.execute(

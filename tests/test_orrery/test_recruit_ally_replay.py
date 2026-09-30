@@ -288,11 +288,8 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
             if row["character1_id"] == actor_character_id
             and row["character2_id"] == target_character_id
         ]
-        if prior_relationship_type is None:
-            assert prior_rows == []
-        else:
-            assert len(prior_rows) == 1
-            assert prior_rows[0]["relationship_type"] == prior_relationship_type
+        assert prior_relationship_type is None, "the replay binds the seeded free pair"
+        assert prior_rows == []
 
         cur.execute("SELECT id FROM pair_tags WHERE tag = 'ally'")
         ally_tag_id = int(cur.fetchone()[0])
