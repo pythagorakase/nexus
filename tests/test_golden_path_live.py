@@ -1,10 +1,13 @@
 """Golden-Path Release Gate (M9): one live end-to-end run proves the MVP.
 
-DESTRUCTIVE, EXPENSIVE, SLOW. This is the backend v1.0 release gate: it drops
-and recreates an explicitly confirmed disposable save slot (never slot 5), boots
-the real API server as a subprocess, runs the wizard -> narrative transition
-with a real Retrograde cold start, then plays live turns through the
-production HTTP surface -- every model call is a real frontier call.
+EXPENSIVE, SLOW. This is the backend v1.0 release gate: it creates and
+migrates a disposable template clone through the production slot initializer
+(``disposable_slot_database`` -> ``initialize_slot_database``), boots the real
+API server as a subprocess with ``ROUTED_SLOT`` routed to that clone
+(``tests.slot_routed_gateway``), runs the wizard -> narrative transition with a
+real Retrograde cold start, then plays live turns through the production HTTP
+surface -- every model call is a real frontier call. No numbered owner slot is
+reset, read, or written.
 
 Reduced-path note: the wizard CHAT phases are staged from a canned cache
 captured from a full manual CLI wizard run (the conversational wizard is
@@ -35,19 +38,20 @@ Stages (ordered; each test asserts one category against the shared run):
      history persisted, embedded, and became retrievable.
   8. Server log scan: no tracebacks, no ERROR lines.
 
-Gating: NEXUS_RUN_LIVE_LLM=1, NEXUS_RUN_POSTGRES=1, and the destructive
-opt-in NEXUS_GOLDEN_PATH_E2E=1. The disposable slot is selected with
-NEXUS_DISPOSABLE_TEST_SLOT=1..4 and its database name must be repeated exactly
-in NEXUS_CONFIRM_DISPOSABLE_DB.
+Gating: NEXUS_RUN_LIVE_LLM=1, NEXUS_RUN_POSTGRES=1, and the expensive-run
+opt-in NEXUS_GOLDEN_PATH_E2E=1. The gateway subprocess inherits NEXUS_SLOT:
+set it to ROUTED_SLOT (4) for the gateway's scheduler to own the clone's
+deferred work; any other slot fails at gateway startup, never reaching an
+owner database. Staging the wizard cache and booting the routed gateway are
+proven without the live opt-in in ``tests/test_live_gate_clones_pg.py``.
 
 Cost and wall clock: measured green run (2026-06-11, gpt-5.5 +
 @anthropic.default narration): 20 frontier calls, 14m30s end to end.
 Budget ~20-35 calls / 15-30 minutes; the adaptive tail adds turns only
 when promotion/bleed-weave/persisted maturation lag. Budget accordingly before CI.
 
-Cleanup: the API server subprocess is terminated on teardown. The explicitly
-selected disposable slot is left with the run's data for post-mortem inspection;
-reset that same disposable slot before reuse.
+Cleanup: the API server subprocess is terminated on teardown and the clone
+is dropped with the module fixture.
 """
 
 from __future__ import annotations
@@ -61,16 +65,24 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import psycopg2  # type: ignore[import-untyped]
 import pytest
 import requests
 import tomlkit
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 from tests import secret_store_guard
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
 
-SLOT = int(os.environ.get("NEXUS_DISPOSABLE_TEST_SLOT", "0"))
-DBNAME = f"save_{SLOT:02d}"
+# The slot label the clone is routed under, in this process and in the
+# gateway subprocess.
+ROUTED_SLOT = 4
+# The clone of the active run; empty outside the golden_path fixture, so a
+# query can never resolve an owner database.
+_RUN_DATABASE: List[str] = []
 # NARRATIVE_API_PORT lets the gate run beside a live dev stack on 8002
 # (agent worktrees); the spawned server subprocess inherits it via env.
 API = f"http://localhost:{os.environ.get('NARRATIVE_API_PORT', '8002')}"
@@ -118,29 +130,28 @@ pytestmark = [
     pytest.mark.live_llm,
     pytest.mark.requires_postgres,
     pytest.mark.skipif(
-        os.environ.get("NEXUS_GOLDEN_PATH_E2E") != "1"
-        or SLOT not in {1, 2, 3, 4}
-        or os.environ.get("NEXUS_CONFIRM_DISPOSABLE_DB") != DBNAME,
-        reason=(
-            "Set NEXUS_GOLDEN_PATH_E2E=1, choose disposable slot 1-4 with "
-            "NEXUS_DISPOSABLE_TEST_SLOT, and confirm its database name with "
-            "NEXUS_CONFIRM_DISPOSABLE_DB. Slot 5 is forbidden."
-        ),
+        os.environ.get("NEXUS_GOLDEN_PATH_E2E") != "1",
+        reason="Set NEXUS_GOLDEN_PATH_E2E=1 to run the expensive golden-path gate.",
     ),
 ]
 
 
+def _dbname() -> str:
+    """Return the active run's clone; fail loudly outside the fixture."""
+    if len(_RUN_DATABASE) != 1:
+        raise RuntimeError("No golden-path clone is active")
+    return _RUN_DATABASE[0]
+
+
 def _dsn() -> str:
-    """Resolve the disposable slot through the shared connection contract."""
+    """Resolve the run's clone through the shared connection contract."""
     from nexus.database import database_url
 
-    return database_url(DBNAME)
+    return database_url(_dbname())
 
 
 def _query(sql: str, params: Any = None) -> List[Dict[str, Any]]:
-    from nexus.database import database_url
-
-    conn = psycopg2.connect(database_url(DBNAME))
+    conn = connect(_dbname())
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params)
@@ -172,11 +183,11 @@ def _port_free(port: int) -> bool:
         return sock.connect_ex(("127.0.0.1", port)) != 0
 
 
-def _wait_health(timeout: float = 60.0) -> None:
+def _wait_health(api: str = API, timeout: float = 60.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            if requests.get(f"{API}/health", timeout=3).ok:
+            if requests.get(f"{api}/health", timeout=3).ok:
                 return
         except requests.RequestException:
             pass
@@ -184,14 +195,40 @@ def _wait_health(timeout: float = 60.0) -> None:
     raise RuntimeError("Stage server-boot: API server never became healthy")
 
 
-def _stage_reset_slot() -> None:
+def launch_routed_gateway(
+    dbname: str, log_handle: Any, *, store_access: bool
+) -> subprocess.Popen:
+    """Boot the gateway entry point with ``ROUTED_SLOT`` routed to ``dbname``.
+
+    The child inherits ``NEXUS_SLOT``: set it to ``ROUTED_SLOT`` to let the
+    gateway's scheduler own the clone's deferred work (any other slot fails
+    at startup). ``store_access`` hands the child the owner's secret store,
+    which the live gate's frontier calls need; without it the child runs in
+    env-only mode.
+    """
+
+    env = {
+        **os.environ,
+        "NEXUS_ROUTED_SLOT": str(ROUTED_SLOT),
+        "NEXUS_ROUTED_SLOT_DATABASE": dbname,
+    }
+    return subprocess.Popen(
+        [sys.executable, "-m", "tests.slot_routed_gateway"],
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        # The live gate's server reads provider keys from the owner's
+        # Keychain. Without this opt-out the secret-store guard (#963)
+        # starts it in env-only mode and its first model call fails with
+        # MissingSecretError.
+        env=secret_store_guard.store_access_env(env) if store_access else env,
+    )
+
+
+def stage_reset_slot(dbname: str) -> None:
+    """Stage the canned, confirmed wizard cache in a fresh routed clone."""
     from nexus.api.db_pool import close_pool
     from nexus.api.save_slots import upsert_slot
     from nexus.api.new_story_cache import write_cache
-    from scripts.new_story_setup import create_slot_schema_only
-
-    close_pool(DBNAME)
-    create_slot_schema_only(SLOT, source_db="NEXUS_template", force=True)
 
     cache = json.loads(FIXTURE.read_text())
     write_cache(
@@ -203,16 +240,16 @@ def _stage_reset_slot() -> None:
         zone_draft=cache["zone_draft"],
         initial_location=cache["initial_location"],
         base_timestamp=cache["base_timestamp"],
-        target_slot=SLOT,
-        dbname=DBNAME,
+        target_slot=ROUTED_SLOT,
+        dbname=dbname,
     )
     from nexus.api.new_story_cache import read_cache
     from nexus.api.wizard_confirmation import confirm_artifact
 
     for phase in ("setting", "character"):
-        draft = read_cache(DBNAME)
+        draft = read_cache(dbname)
         confirm_artifact(
-            DBNAME,
+            dbname,
             thread_id=draft.thread_id,
             phase=phase,
             artifact_token=draft.artifact_token(phase),
@@ -222,14 +259,14 @@ def _stage_reset_slot() -> None:
     # Retrograde + trait derivation with real frontier calls.
     from nexus.api.config_utils import get_new_story_model
 
-    upsert_slot(SLOT, model=get_new_story_model(), dbname=DBNAME)
-    close_pool(DBNAME)
+    upsert_slot(ROUTED_SLOT, model=get_new_story_model(), dbname=dbname)
+    close_pool(dbname)
 
 
 def _stage_run_transition(run: GoldenPathRun) -> None:
     response = requests.post(
         f"{API}/api/story/new/transition",
-        json={"slot": SLOT},
+        json={"slot": ROUTED_SLOT},
         timeout=TRANSITION_TIMEOUT_SECONDS,
     )
     if not response.ok:
@@ -243,7 +280,7 @@ def _poll_generation(session_id: str) -> None:
         try:
             status = requests.get(
                 f"{API}/api/narrative/status/{session_id}",
-                params={"slot": SLOT},
+                params={"slot": ROUTED_SLOT},
                 timeout=60,
             )
         except requests.RequestException:
@@ -273,7 +310,10 @@ def _poll_generation(session_id: str) -> None:
 
 
 def _continue_turn(payload: Dict[str, Any]) -> Dict[str, Any]:
-    body: Dict[str, Any] = {"slot": SLOT, "user_text": payload.get("user_text", "")}
+    body: Dict[str, Any] = {
+        "slot": ROUTED_SLOT,
+        "user_text": payload.get("user_text", ""),
+    }
     if payload.get("choice") is not None:
         body["choice"] = payload["choice"]
     response = requests.post(f"{API}/api/narrative/continue", json=body, timeout=120)
@@ -473,38 +513,40 @@ def golden_path(tmp_path_factory: pytest.TempPathFactory) -> Any:
         assert settings.orrery.retrograde.maturation.enabled
 
         run = GoldenPathRun()
-        _stage_reset_slot()
+        with (
+            disposable_slot_database("qa640_golden_path", story_pin=None) as dbname,
+            pytest.MonkeyPatch.context() as patch,
+        ):
+            route_slot_to_disposable(patch.setattr, slot=ROUTED_SLOT, dbname=dbname)
+            _RUN_DATABASE.append(dbname)
+            try:
+                stage_reset_slot(dbname)
 
-        run.log_path = tmp_path_factory.mktemp("golden_path") / "server.log"
-        log_handle = run.log_path.open("w")
-        run.server = subprocess.Popen(
-            [sys.executable, "-m", "nexus.api.narrative"],
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            # The live gate's server reads provider keys from the owner's
-            # Keychain. Without this opt-out the secret-store guard (#963)
-            # starts it in env-only mode and its first model call fails with
-            # MissingSecretError.
-            env=secret_store_guard.store_access_env(os.environ),
-        )
-        try:
-            _wait_health()
-            _stage_run_transition(run)
-            run.prologue_chunk_id = _scalar(
-                "SELECT id FROM narrative_chunks "
-                "WHERE authorial_directives @> %s::jsonb",
-                (json.dumps(["orrery:retrograde_prologue_anchor"]),),
-            )
-            _stage_play_turns(run)
-            yield run
-        finally:
-            if run.server is not None:
-                run.server.terminate()
+                run.log_path = tmp_path_factory.mktemp("golden_path") / "server.log"
+                log_handle = run.log_path.open("w")
+                run.server = launch_routed_gateway(
+                    dbname, log_handle, store_access=True
+                )
                 try:
-                    run.server.wait(timeout=15)
-                except subprocess.TimeoutExpired:
-                    run.server.kill()
-            log_handle.close()
+                    _wait_health()
+                    _stage_run_transition(run)
+                    run.prologue_chunk_id = _scalar(
+                        "SELECT id FROM narrative_chunks "
+                        "WHERE authorial_directives @> %s::jsonb",
+                        (json.dumps(["orrery:retrograde_prologue_anchor"]),),
+                    )
+                    _stage_play_turns(run)
+                    yield run
+                finally:
+                    if run.server is not None:
+                        run.server.terminate()
+                        try:
+                            run.server.wait(timeout=15)
+                        except subprocess.TimeoutExpired:
+                            run.server.kill()
+                    log_handle.close()
+            finally:
+                _RUN_DATABASE.clear()
     finally:
         if original_runtime_config is None:
             os.environ.pop(RUNTIME_CONFIG_ENV, None)
@@ -719,7 +761,12 @@ def test_stage8_server_log_clean(golden_path: GoldenPathRun) -> None:
     """
 
     assert golden_path.log_path is not None
-    log_text = golden_path.log_path.read_text()
+    assert_server_log_clean(golden_path.log_path.read_text())
+
+
+def assert_server_log_clean(log_text: str) -> None:
+    """Fail on a traceback or an ERROR/CRITICAL line in a gateway log."""
+
     assert " - INFO - " in log_text, (
         "Log format canary failed: no ' - INFO - ' lines found, so the "
         "ERROR matcher below cannot be trusted. Update both matchers to "
