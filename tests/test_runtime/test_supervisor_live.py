@@ -1,9 +1,19 @@
 """Real process lifecycle tests for the managed runtime (issue #396).
 
 No mocks: these spawn the actual gateway and mock_openai with uvicorn via the
-real CLI entrypoint (``python -m nexus.cli``), probe real HTTP health, and
-assert teardown by port and pid. They run on lane-assigned ports (8032+/5133)
-so a developer stack on :8002/:5102 is never touched.
+real CLI entrypoint, probe real HTTP health, and assert teardown by port and
+pid. Every port is OS-assigned (``ephemeral_ports``), so a developer stack on
+:8002/:5102 is never touched.
+
+No owner slot is touched either (issue #885). Every gateway serves slot
+``TEST_SLOT`` routed to one module-scoped disposable template clone: the
+supervisor spawns ``tests.slot_routed_uvicorn`` in place of ``python -m
+uvicorn`` (same argv otherwise), the CLI runs as ``tests.slot_routed_cli`` so
+the supervisor's own ``recover_active_slot_choice`` reaches the clone, and
+``runtime.default_slot`` in each temporary config is the routed slot, so an
+``up`` without ``--slot`` resolves to it as well. Each gateway lifespan's
+``SlotScheduler`` therefore takes its lease in the clone's
+``deferred_work_scheduler``.
 
 Run with: NEXUS_RUN_POSTGRES=1 python -m pytest tests/test_runtime
 """
@@ -18,7 +28,11 @@ import socket
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 import requests  # type: ignore[import-untyped]
@@ -28,15 +42,82 @@ from nexus.config import load_settings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.supervisor import _pid_alive, _port_open
 from tests.model_registry_helpers import registry_model
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    routed_slot_environment,
+    seed_protagonist,
+    seed_story_clock,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GATEWAY_PORT = 8032
-MOCK_PORT = 5133
-EXTERNAL_GATEWAY_PORT = 8034
-OVERRIDE_GATEWAY_PORT = 8036
+# Placeholders only: the autouse ephemeral_ports fixture replaces all four with
+# OS-assigned ports before every test.
+GATEWAY_PORT = 0
+MOCK_PORT = 0
+EXTERNAL_GATEWAY_PORT = 0
+OVERRIDE_GATEWAY_PORT = 0
+# The routed slot number: it resolves to ROUTED_DATABASE, never to an owner
+# save, in every process these tests start.
 TEST_SLOT = 5
+# A slot the routed processes refuse: the restart steps set it as NEXUS_SLOT to
+# prove the running slot, not the environment or the default, is restarted.
+CONFLICTING_SLOT = 3
+# The disposable clone serving TEST_SLOT; routed_clone sets it before each test.
+ROUTED_DATABASE = ""
+ROUTED_LAUNCHER = "tests.slot_routed_uvicorn"
+ROUTED_CLI = "tests.slot_routed_cli"
+# The supervisor's own gateway argv template, as nexus.toml ships it.
+GATEWAY_ARGV_TEMPLATE = [
+    "{python}",
+    "-m",
+    "uvicorn",
+    "nexus.api.narrative:app",
+    "--host",
+    "{host}",
+    "--port",
+    "{port}",
+    "--log-config",
+    "{log_config}",
+]
 
 pytestmark = pytest.mark.requires_postgres
+
+
+@pytest.fixture(scope="module")
+def supervisor_clone() -> Iterator[str]:
+    """One disposable template clone that every gateway in this module serves.
+
+    The protagonist and story clock give the clone a canonical clock; no
+    playable story is needed, because these tests exercise the supervisor,
+    not narration.
+    """
+    with disposable_slot_database("qa885_supervisor") as dbname:
+        seed_protagonist(dbname)
+        seed_story_clock(
+            dbname, world_time=datetime(2100, 1, 1, 1, tzinfo=timezone.utc)
+        )
+        yield dbname
+
+
+@pytest.fixture(autouse=True)
+def routed_clone(supervisor_clone: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point ROUTED_DATABASE at the module clone for the helpers below."""
+    monkeypatch.setitem(globals(), "ROUTED_DATABASE", supervisor_clone)
+
+
+def _routed_env() -> dict[str, str]:
+    """The variables that route TEST_SLOT to the clone in a child process."""
+    assert ROUTED_DATABASE, "routed_clone did not run"
+    return routed_slot_environment(TEST_SLOT, ROUTED_DATABASE)
+
+
+def _clone_lease_owner() -> str | None:
+    """The owner of the clone's deferred-work scheduler lease, if any."""
+    with closing(connect(ROUTED_DATABASE)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT owner_id FROM deferred_work_scheduler WHERE id")
+        row = cur.fetchone()
+    return None if row is None else row[0]
 
 
 @pytest.fixture(autouse=True)
@@ -68,10 +149,19 @@ def _write_config(
 ) -> Path:
     gateway_port = GATEWAY_PORT if gateway_port is None else gateway_port
     mock_port = MOCK_PORT if mock_port is None else mock_port
-    doc = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    doc: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
     doc["runtime"]["profile"] = profile
     doc["runtime"]["state_dir"] = str(tmp_path / "state")
-    doc["runtime"]["services"]["gateway"]["port"] = gateway_port
+    # An `up` without --slot resolves runtime.default_slot: keep it routed.
+    doc["runtime"]["default_slot"] = TEST_SLOT
+    gateway = doc["runtime"]["services"]["gateway"]
+    # Spawn the routed launcher with the supervisor's own argv template.
+    command = [str(part) for part in gateway["command"]]
+    assert command == GATEWAY_ARGV_TEMPLATE, command
+    command[2] = ROUTED_LAUNCHER
+    gateway["command"] = command
+    gateway["env"] = _routed_env()
+    gateway["port"] = gateway_port
     doc["runtime"]["services"]["mock_openai"]["port"] = mock_port
     if include_test_provider:
         doc["global"]["model"]["api_models"]["test"][
@@ -106,10 +196,11 @@ def _cli(
     ):
         env.pop(name, None)
     env["PYTHONPATH"] = str(REPO_ROOT)
+    env.update(_routed_env())
     if env_extra:
         env.update(env_extra)
     completed = subprocess.run(
-        [sys.executable, "-m", "nexus.cli", "--json", *args, "--config", str(config)],
+        [sys.executable, "-m", ROUTED_CLI, "--json", *args, "--config", str(config)],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -117,7 +208,13 @@ def _cli(
         timeout=timeout,
     )
     output = completed.stdout or completed.stderr
-    payload = json.loads(output)
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        raise AssertionError(
+            f"nexus {' '.join(args)} exited {completed.returncode} without JSON:\n"
+            f"{completed.stderr[-2000:]}"
+        ) from None
     payload["_returncode"] = completed.returncode
     return payload
 
@@ -135,6 +232,10 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert set(up["services"]) == {"gateway", "mock_openai"}
         gateway_pid = up["services"]["gateway"]["pid"]
         assert _pid_alive(gateway_pid)
+        # The supervisor spawned the routed launcher with its own argv.
+        assert up["services"]["gateway"]["command"][1:3] == ["-m", ROUTED_LAUNCHER]
+        # The gateway's scheduler holds its lease in the clone, not an owner.
+        assert (_clone_lease_owner() or "").startswith(f"gateway:{gateway_pid}:")
 
         # The gateway answers /health and the aggregate /runtime/status.
         base = f"http://127.0.0.1:{GATEWAY_PORT}"
@@ -145,7 +246,7 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert runtime_status["profile"] == "local"
         assert runtime_status["slot"] == TEST_SLOT
         assert runtime_status["database"]["ok"] is True
-        assert runtime_status["database"]["dbname"] == f"save_0{TEST_SLOT}"
+        assert runtime_status["database"]["dbname"] == ROUTED_DATABASE
         assert runtime_status["services"]["gateway"]["ok"] is True
         assert runtime_status["services"]["mock_openai"]["ok"] is True
         assert runtime_status["auth"]["header"] == "X-Nexus-Auth"
@@ -158,29 +259,48 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert status["processes"]["gateway"]["port"] == GATEWAY_PORT
         assert status["processes"]["gateway"]["uptime_seconds"] >= 0
         assert status["runtime"]["ok"] is True
+        assert status["runtime"]["database"]["dbname"] == ROUTED_DATABASE
 
-        # Captured logs are readable through nexus logs.
+        # Captured logs are readable through nexus logs; the routed launcher
+        # runs uvicorn's own __main__, so the banner is uvicorn's.
         logs = _cli("logs", "gateway", "-n", "50", config=config)
         assert logs["_returncode"] == 0
-        assert any("Uvicorn running" in line for line in logs["lines"])
+        assert any(
+            f"Uvicorn running on http://127.0.0.1:{GATEWAY_PORT}" in line
+            for line in logs["lines"]
+        )
 
         # A second up refuses while services run.
         again = _cli("up", config=config)
         assert again["_returncode"] == 1
         assert "already running" in again["error"]
 
+        # runtime.default_slot is the routed slot here, so a restart that
+        # dropped the recorded running slot and fell back to the default would
+        # still pick TEST_SLOT. The restarts therefore run with a conflicting
+        # NEXUS_SLOT: a restart that resolves the slot from the environment or
+        # the default hands the routed CLI a slot it refuses, and the test
+        # fails before any database opens.
+        conflicting_slot = {"NEXUS_SLOT": str(CONFLICTING_SLOT)}
+
         # Restarting the gateway yields a new pid; mock_openai is untouched.
         mock_pid = up["services"]["mock_openai"]["pid"]
-        restart = _cli("restart", "gateway", config=config)
+        restart = _cli("restart", "gateway", config=config, env_extra=conflicting_slot)
+        assert restart["_returncode"] == 0, restart
+        assert restart["services"]["gateway"]["slot"] == TEST_SLOT
         new_pid = restart["services"]["gateway"]["pid"]
         assert new_pid != gateway_pid
         assert _pid_alive(new_pid)
         assert _pid_alive(mock_pid)
         assert requests.get(f"{base}/health", timeout=5).status_code == 200
+        status = _cli("status", config=config)
+        assert status["runtime"]["slot"] == TEST_SLOT
+        assert status["runtime"]["database"]["dbname"] == ROUTED_DATABASE
 
         # A full restart without --slot preserves the running slot instead of
-        # falling back to runtime.default_slot.
-        full_restart = _cli("restart", config=config)
+        # falling back to NEXUS_SLOT or runtime.default_slot.
+        full_restart = _cli("restart", config=config, env_extra=conflicting_slot)
+        assert full_restart["_returncode"] == 0, full_restart
         assert full_restart["slot"] == TEST_SLOT
         full_gateway_pid = full_restart["services"]["gateway"]["pid"]
         full_mock_pid = full_restart["services"]["mock_openai"]["pid"]
@@ -188,7 +308,7 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert full_mock_pid != mock_pid
         runtime_status = requests.get(f"{base}/runtime/status", timeout=5).json()
         assert runtime_status["slot"] == TEST_SLOT
-        assert runtime_status["database"]["dbname"] == f"save_0{TEST_SLOT}"
+        assert runtime_status["database"]["dbname"] == ROUTED_DATABASE
         new_pid = full_gateway_pid
         mock_pid = full_mock_pid
 
@@ -362,18 +482,27 @@ def test_mock_openai_auto_gating_follows_test_provider(tmp_path):
 
 @pytest.fixture()
 def external_gateway(tmp_path_factory):
-    """A gateway this test suite does NOT manage - started out-of-band."""
+    """A gateway this test suite does NOT manage - started out-of-band.
+
+    It serves the routed clone under its own temporary config, never the
+    repository nexus.toml (whose state_dir and TEST base_url are the owner's).
+    """
+    external_dir = tmp_path_factory.mktemp("external")
+    config = _write_config(external_dir, gateway_port=EXTERNAL_GATEWAY_PORT)
     env = dict(os.environ)
+    for name in ("NEXUS_API_URL", "NEXUS_GATEWAY_PORT"):
+        env.pop(name, None)
     env["PYTHONPATH"] = str(REPO_ROOT)
     env["NEXUS_SLOT"] = str(TEST_SLOT)
-    env[RUNTIME_CONFIG_ENV] = str(REPO_ROOT / "nexus.toml")
-    log_path = tmp_path_factory.mktemp("external") / "gateway.log"
+    env[RUNTIME_CONFIG_ENV] = str(config)
+    env.update(_routed_env())
+    log_path = external_dir / "gateway.log"
     with open(log_path, "wb") as log:
         process = subprocess.Popen(
             [
                 sys.executable,
                 "-m",
-                "uvicorn",
+                ROUTED_LAUNCHER,
                 "nexus.api.narrative:app",
                 "--host",
                 "127.0.0.1",
@@ -428,12 +557,18 @@ def test_external_profile_attaches_and_never_spawns(tmp_path, external_gateway):
 
 def test_external_profile_fails_loud_when_target_is_down(tmp_path):
     """Attaching to a dead stack is an error, not a silent success."""
-    config = _write_config(
-        tmp_path,
-        profile="external",
-        external_gateway_url="http://127.0.0.1:39999",
-    )
-    up = _cli("up", config=config)
+    # An OS-assigned port held bound but never listening: connections to it
+    # are refused for as long as the socket stays open, so no other process
+    # on the host can answer /health there while `up` runs.
+    with socket.socket() as dead:
+        dead.bind(("127.0.0.1", 0))
+        dead_port = dead.getsockname()[1]
+        config = _write_config(
+            tmp_path,
+            profile="external",
+            external_gateway_url=f"http://127.0.0.1:{dead_port}",
+        )
+        up = _cli("up", config=config)
     assert up["_returncode"] == 1
     assert "unhealthy" in up["error"]
 
@@ -445,6 +580,7 @@ def test_remote_profile_status_hits_runtime_endpoint(tmp_path, external_gateway)
     assert up["_returncode"] == 0
     assert up["profile"] == "remote"
     assert up["runtime"]["services"]["gateway"]["ok"] is True
+    assert up["runtime"]["database"]["dbname"] == ROUTED_DATABASE
 
     status = _cli("status", config=config)
     assert status["gateway_url"] == external_gateway
@@ -454,7 +590,7 @@ def test_remote_profile_status_hits_runtime_endpoint(tmp_path, external_gateway)
 
 def test_mock_port_must_match_test_base_url(tmp_path):
     """Config-load consistency: mock service port vs test provider base_url."""
-    doc = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
+    doc: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
     doc["runtime"]["services"]["mock_openai"]["port"] = 5999
     path = tmp_path / "drift.toml"
     path.write_text(tomlkit.dumps(doc))
