@@ -230,8 +230,8 @@ STABLE_SEED_TAG_CATEGORIES: frozenset[str] = frozenset(
         "role.function",
         "role.resources",
         "role.fame",
-        # Stable place character (the deprecated place_affordance category is
-        # left unclassified, so it stays prompt-visible only).
+        # Stable place character. The deprecated place_affordance category is
+        # no longer seed-eligible and falls through to prompt_visible_only.
         "place_function",
         "place_visibility",
         "place_access",

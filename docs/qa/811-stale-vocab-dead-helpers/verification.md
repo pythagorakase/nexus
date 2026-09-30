@@ -297,3 +297,31 @@ PASSED tests/test_api/test_attempt_manifest_pg.py::test_inspect_turn_pre_session
   copy of the `diff_presence` arg-type error went away with the deleted
   `audit_chunk_presence_async`. The `asyncpg` stub error went away with the
   deleted identity test's import.
+
+## Rerun After f97eba5e
+
+The offline suite above finished before f97eba5e changed the stable-seed
+reason string (`nexus/agents/orrery/retrograde_vocabulary.py`) and its pin.
+These reruns are at ef81ef0f plus the review-fix commit (comment and doc
+wording only), started 2026-09-30 00:18 UTC, with gateway variables unset.
+Twelve zero-byte untracked files at the worktree root (tool-output debris,
+never committed) were deleted first; with them present, the reachability
+checker reported them as newly unreachable.
+
+```
+$ $PY -m pytest -q tests/test_orrery tests/test_turn_observation.py
+1188 passed, 489 skipped, 7 warnings in 8.56s
+```
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs tests/test_orrery/test_retrograde_vocabulary.py
+28 passed, 5 warnings in 0.47s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rA tests/test_orrery/test_retrograde_vocabulary.py -k live_tag_registry
+PASSED tests/test_orrery/test_retrograde_vocabulary.py::test_seed_eligible_vocabulary_can_include_live_tag_registry
+1 passed, 27 deselected, 5 warnings in 0.34s
+```
+
+```
+$ $PY -m pytest -q tests/test_reachability.py
+38 passed in 8.48s
+```

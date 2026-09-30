@@ -224,7 +224,7 @@ def test_category_seed_policy_returns_complete_struct() -> None:
 def test_category_seed_policy_settles_live_registry_split() -> None:
     """Issue #300 split: every live registry category classifies explicitly."""
 
-    # Stable identity/role/affordance categories promoted in M4.
+    # Stable identity/role categories promoted in M4.
     for category, entity_kind in (
         ("bodyform", "character"),
         ("role", "character"),
