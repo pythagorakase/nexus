@@ -1,11 +1,12 @@
 """The inspect family and the shared session waiter on a factory-played clone.
 
 A disposable clone holds a story played by ``seed_played_story``. The real
-gateway serves it on lane 8017 with every provider routed to TEST, and the
-public CLI runs in subprocesses: ``inspect incubator`` reads the empty
-incubator as null, the next turn is staged as pending, ``continue --choice 1``
-accepts it and waits on the new session through ``wait_for_session``, then the
-inspect verbs read the result back through the player-plane routes.
+gateway serves it on ``gateway_lane``'s lane with every provider routed to
+TEST, and the public CLI runs in subprocesses: ``inspect incubator`` reads the
+empty incubator as null, the next turn is staged as pending, ``continue
+--choice 1`` accepts it and waits on the new session through
+``wait_for_session``, then the inspect verbs read the result back through the
+player-plane routes.
 """
 
 from __future__ import annotations
@@ -37,7 +38,6 @@ from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 pytestmark = pytest.mark.requires_postgres
 
 ROOT = Path(__file__).resolve().parents[1]
-LANE = "8017"
 PENDING_TEXT = "The pending fixture turn waits for the player's choice."
 CAST = ("Mara Quill", "Oren Vale")
 
@@ -75,8 +75,6 @@ def test_continue_waits_then_inspect_reads_the_played_clone(
 ) -> None:
     """``continue`` waits through the helper; inspect reads what it produced."""
     configure_test(tmp_path, mock_openai_server, monkeypatch)
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", LANE)
-    monkeypatch.setenv("NEXUS_API_URL", f"http://127.0.0.1:{LANE}")
     with disposable_slot_database("qa640_815_inspect") as dbname:
         route_slot(monkeypatch, dbname)
         committed = seed_played_story(
