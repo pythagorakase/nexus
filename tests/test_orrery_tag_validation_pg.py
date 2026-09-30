@@ -53,7 +53,10 @@ pytestmark = pytest.mark.requires_postgres
 
 CHARACTER_TAG = "recently_protective"
 EVENT_TAG = "dying"
-FACTION_TAG = "schismatic_internal_threat"
+# A disposable extend_expiry faction tag under the live agenda category; the
+# template's only extend_expiry faction tag (schismatic_internal_threat) sits
+# under the deprecated hidden_agenda_class, which the tag library excludes.
+FACTION_TAG = "qa649_faction_schism"
 PLACE_TAG = "qa649_place_watch"
 TIME_TAG = "intoxicated:stimulant"
 CHARACTER_REJECTION = (
@@ -319,6 +322,26 @@ def qa649_db() -> Iterator[_Qa649Database]:
                     )
                     """,
                     (PLACE_TAG,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO tags (
+                        tag,
+                        category,
+                        is_ephemeral,
+                        clearance_kind,
+                        reapplication_policy,
+                        description
+                    ) VALUES (
+                        %s,
+                        'agenda',
+                        true,
+                        'semantic',
+                        'extend_expiry',
+                        'Issue 649 disposable faction tag.'
+                    )
+                    """,
+                    (FACTION_TAG,),
                 )
                 _activate_tag(cur, active_character.entity_id, CHARACTER_TAG)
                 _activate_tag(cur, place.entity_id, PLACE_TAG)
