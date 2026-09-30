@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import math
-from pathlib import Path
+import os
+from typing import Iterator
 
 import pytest
 
@@ -31,6 +32,13 @@ from nexus.agents.orrery.templates import (
     BUILTIN_TEMPLATES,
     EVADE_PURSUERS,
     START_RELOCATION_PLAN,
+)
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_story_clock,
+    sqlalchemy_url,
 )
 
 
@@ -519,24 +527,53 @@ def test_configured_milestones_promote_while_routine_progress_stays_below_floor(
     assert all(branch.magnitude < 0.35 for branch in routine)
 
 
+@pytest.fixture(scope="module")
+def promotion_clone() -> Iterator[dict[str, int | str]]:
+    """Own one clone with a clocked head chunk and one character."""
+
+    with disposable_slot_database("qa885_project_promotion") as dbname:
+        chunk_id = seed_story_clock(dbname, world_time=NOW - timedelta(days=1))
+        _, actor_entity_id = seed_character(dbname, name="Promotion Probe Actor")
+        yield {
+            "dbname": dbname,
+            "chunk_id": chunk_id,
+            "actor_entity_id": actor_entity_id,
+        }
+
+
+@pytest.fixture(scope="module")
+def projects_corpus_database() -> Iterator[str]:
+    """Yield a disposable data clone of slot 2's played corpus.
+
+    The clone is a read of the owner's slot through ``pg_dump``; nothing is
+    written to the source. Only ``requires_corpus`` tests may use it; the flag
+    check stops an unmarked test from cloning the owner's corpus under the
+    plain gate.
+    """
+
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        pytest.fail(
+            "projects_corpus_database needs the requires_corpus marker and "
+            "NEXUS_RUN_CORPUS=1",
+            pytrace=False,
+        )
+    with disposable_slot_database(
+        "qa885_projects_corpus", source_db="save_02", include_data=True
+    ) as dbname:
+        yield dbname
+
+
 @pytest.mark.requires_postgres
-def test_resolution_insert_skips_routine_promotion_but_queues_milestone() -> None:
+def test_resolution_insert_skips_routine_promotion_but_queues_milestone(
+    promotion_clone: dict[str, int | str],
+) -> None:
     """The branch opt-out reaches the persisted promotion status directly."""
 
-    import psycopg2
-
-    from nexus.api.slot_utils import get_slot_db_url
-
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
+    conn = connect(str(promotion_clone["dbname"]))
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT max(id) FROM narrative_chunks")
-            chunk_id = cur.fetchone()[0]
-            cur.execute(
-                "SELECT entity_id FROM characters "
-                "WHERE entity_id IS NOT NULL ORDER BY id LIMIT 1"
-            )
-            actor_entity_id = cur.fetchone()[0]
+            chunk_id = int(promotion_clone["chunk_id"])
+            actor_entity_id = int(promotion_clone["actor_entity_id"])
             statuses: dict[str, str] = {}
             for label, promotable in (("routine", False), ("milestone", True)):
                 draft = OrreryResolutionDraft(
@@ -570,26 +607,29 @@ def test_resolution_insert_skips_routine_promotion_but_queues_milestone() -> Non
 
 
 @pytest.mark.requires_postgres
-def test_slot2_coverage_distribution_and_project_gate_payload() -> None:
-    """One due project displaces surveillance without distorting routine shares."""
+@pytest.mark.requires_corpus
+def test_corpus_coverage_distribution_and_project_gate_payload(
+    projects_corpus_database: str,
+) -> None:
+    """One due project displaces surveillance without distorting routine shares.
+
+    Baseline winners and routine shares are emergent statistics of slot 2's
+    played story, so the test runs on a data clone of that corpus.
+    """
 
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
 
-    from nexus.api.slot_utils import get_slot_db_url
     from nexus.config import load_settings_as_dict
 
     orrery = load_settings_as_dict()["orrery"]
-    engine = create_engine(get_slot_db_url(slot=2))
+    engine = create_engine(sqlalchemy_url(projects_corpus_database))
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
     try:
-        connection.exec_driver_sql(
-            Path("migrations/074_plan_relocation_projects.sql").read_text()
-        )
         anchors = sample_anchor_ids(session, count=35, stride=1)
-        assert anchors, "save_02 must provide coverage anchors"
+        assert anchors, "the corpus clone must provide coverage anchors"
         kwargs = {
             "anchor_chunk_ids": anchors,
             "window_chunks": int(orrery["binding"]["window_chunks"]),
@@ -610,7 +650,7 @@ def test_slot2_coverage_distribution_and_project_gate_payload() -> None:
             for winner in anchor["resolution_winners"]
             if winner["template_id"] == "surveil"
         ]
-        assert surveil_rows, "slot_2 pilot anchors must include surveillance idling"
+        assert surveil_rows, "the corpus anchors must include surveillance idling"
         actor = surveil_rows[0]["actor_entity_id"]
         earliest_world_time = session.execute(
             text(

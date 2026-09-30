@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from itertools import count
@@ -39,7 +40,15 @@ from nexus.agents.orrery.templates import (
     START_RECRUIT_ALLY,
 )
 from nexus.api.trait_compiler import reconcile_trait_relationship_pair_tags
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_place,
+    seed_story_clock,
+    seed_zone,
+    sqlalchemy_url,
+)
 
 
 ACTOR = 10
@@ -297,49 +306,76 @@ def test_canonical_ally_relationship_satisfies_existing_ally_gate() -> None:
     assert predicate(state, BINDINGS) is True
 
 
-@pytest.fixture
-def live_project_db() -> Iterator[dict[str, Any]]:
-    conn = psycopg2.connect(get_slot_db_url(slot=2))
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
-            cur.execute("SELECT max(id) FROM narrative_chunks")
-            chunk_id = int(cur.fetchone()[0])
-            cur.execute(
-                "SELECT entity_id FROM characters "
-                "WHERE entity_id IS NOT NULL ORDER BY id LIMIT 3"
-            )
-            entities = [int(row[0]) for row in cur.fetchall()]
-            if len(entities) < 3:
-                pytest.skip("save_02 needs three character entities")
-            actor, target, other = entities
-            cur.execute(
-                "DELETE FROM character_project_states "
-                "WHERE character_entity_id = %s",
-                (actor,),
-            )
-            cur.execute(
-                """
-                UPDATE entity_pair_tags ept
-                SET cleared_at = now()
-                FROM pair_tags pt
-                WHERE ept.pair_tag_id = pt.id
-                  AND ept.subject_entity_id = %s
-                  AND ept.object_entity_id = %s
-                  AND pt.tag = 'ally'
-                  AND ept.cleared_at IS NULL
-                """,
-                (actor, target),
-            )
-            cur.execute("SELECT id FROM places ORDER BY id LIMIT 1")
-            place_id = int(cur.fetchone()[0])
+@pytest.fixture(scope="module")
+def recruit_ally_clone() -> Iterator[dict[str, Any]]:
+    """Own one clone with a clocked head chunk, a place, and three characters.
+
+    The head chunk sits a day before the pinned ``NOW``, so project clocks
+    computed from the tick world time stay before the evaluated time. No
+    relationship or pair tag is seeded: each test writes the ones it needs.
+    """
+
+    with disposable_slot_database("qa885_recruit_ally_projects") as dbname:
+        seed_zone(
+            dbname,
+            name="Recruit Ally Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        place_id, _ = seed_place(dbname, name="Recruit Ally Hall")
+        chunk_id = seed_story_clock(dbname, world_time=NOW - timedelta(days=1))
+        _, actor = seed_character(dbname, name="Recruit Ally Actor")
+        _, target = seed_character(dbname, name="Recruit Ally Target")
+        _, other = seed_character(dbname, name="Recruit Ally Other")
         yield {
-            "conn": conn,
+            "dbname": dbname,
             "chunk_id": chunk_id,
             "actor": actor,
             "target": target,
             "other": other,
             "place_id": place_id,
+        }
+
+
+@pytest.fixture(scope="module")
+def recruit_ally_corpus_database() -> Iterator[str]:
+    """Yield a disposable data clone of slot 2's played corpus.
+
+    The clone is a read of the owner's slot through ``pg_dump``; nothing is
+    written to the source. Only ``requires_corpus`` tests may use it; the flag
+    check stops an unmarked test from cloning the owner's corpus under the
+    plain gate.
+    """
+
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        pytest.fail(
+            "recruit_ally_corpus_database needs the requires_corpus marker and "
+            "NEXUS_RUN_CORPUS=1",
+            pytrace=False,
+        )
+    with disposable_slot_database(
+        "qa885_recruit_ally_corpus", source_db="save_02", include_data=True
+    ) as dbname:
+        yield dbname
+
+
+@pytest.fixture
+def live_project_db(
+    recruit_ally_clone: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    conn = connect(recruit_ally_clone["dbname"])
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SET LOCAL nexus.write_producer = 'manual'")
+        yield {
+            "conn": conn,
+            "chunk_id": recruit_ally_clone["chunk_id"],
+            "actor": recruit_ally_clone["actor"],
+            "target": recruit_ally_clone["target"],
+            "other": recruit_ally_clone["other"],
+            "place_id": recruit_ally_clone["place_id"],
             "sequence": count(1),
         }
     finally:
@@ -767,8 +803,15 @@ def test_live_schema_target_discipline_and_one_project_budget(
 
 
 @pytest.mark.requires_postgres
-def test_slot2_recruitment_routes_persisted_target_without_routine_drift() -> None:
-    """A 35-anchor run keeps recruitment routable after its contact clears."""
+@pytest.mark.requires_corpus
+def test_corpus_recruitment_routes_persisted_target_without_routine_drift(
+    recruit_ally_corpus_database: str,
+) -> None:
+    """A 35-anchor run keeps recruitment routable after its contact clears.
+
+    The anchors, winners, and routine shares are emergent statistics of slot
+    2's played story, so the test runs on a data clone of that corpus.
+    """
 
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
@@ -779,13 +822,13 @@ def test_slot2_recruitment_routes_persisted_target_without_routine_drift() -> No
     from nexus.config import load_settings_as_dict
 
     orrery = load_settings_as_dict()["orrery"]
-    engine = create_engine(get_slot_db_url(slot=2))
+    engine = create_engine(sqlalchemy_url(recruit_ally_corpus_database))
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
     try:
         anchors = sample_anchor_ids(session, count=35, stride=1)
-        assert len(anchors) == 35, "save_02 must provide 35 coverage anchors"
+        assert len(anchors) == 35, "the corpus clone must provide 35 coverage anchors"
         kwargs = {
             "anchor_chunk_ids": anchors,
             "window_chunks": int(orrery["binding"]["window_chunks"]),
@@ -825,7 +868,7 @@ def test_slot2_recruitment_routes_persisted_target_without_routine_drift() -> No
             if int(winner["actor_entity_id"]) not in open_project_actor_ids
         ]
         assert surveil_rows, (
-            "slot 2 anchors must include a surveillance actor without an "
+            "the corpus anchors must include a surveillance actor without an "
             "open project"
         )
         actor = int(surveil_rows[0]["actor_entity_id"])
@@ -864,8 +907,9 @@ def test_slot2_recruitment_routes_persisted_target_without_routine_drift() -> No
             ),
             {"actor": actor, "anchor": anchors[0]},
         ).scalar_one_or_none()
-        if target is None:
-            pytest.skip("slot 2 needs an unrelated off-screen recruit target")
+        assert (
+            target is not None
+        ), "the corpus clone must hold an unrelated off-screen recruit target"
         target = int(target)
         earliest_world_time = session.execute(
             text(
