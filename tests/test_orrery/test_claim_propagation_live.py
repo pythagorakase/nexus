@@ -1,15 +1,20 @@
-"""Rollback-only slot-5 coverage for the Stage 2c propagation frontier."""
+"""Rollback-only coverage for the Stage 2c propagation frontier.
+
+Every test runs on one module-scoped disposable template clone whose story
+clock is seeded first, so the characters each test inserts get exact need
+clocks and no owner save slot is opened. Each test's writes stay inside one
+transaction that always rolls back.
+"""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from decimal import Decimal
-from itertools import count
-from typing import Any, Iterator, Mapping, Sequence
+from collections.abc import Iterator
+from contextlib import closing
+from datetime import datetime, timedelta, timezone
+from typing import Any, NamedTuple
 from uuid import uuid4
 
 import asyncpg  # type: ignore[import-untyped]
-import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 from sqlalchemy import create_engine
@@ -27,17 +32,31 @@ from nexus.agents.orrery.propagation import (
     drain_claim_propagation_sync,
 )
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
-from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.agents.orrery.replay import (
-    canonicalize,
     reconstruct_state_at_sync,
     verify_checkpoints_sync,
 )
 from nexus.agents.orrery.resolver import _load_recent_events, compose_actor_bindings
-from nexus.api.slot_utils import get_slot_db_url, slot_dbname
-from nexus.config.settings_models import OrreryContagionSettings
-from nexus.database import asyncpg_kwargs
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_relationship,
+    seed_story_clock,
+    sqlalchemy_url,
+)
 from tests.test_orrery.claim_accounts_test_support import (
+    _SCENE_NUMBERS,
+    EPISTEMICS,
+    _canonical_rows,
+    _chain,
+    _insert_character,
+    _insert_chunk,
+    _insert_claim,
+    _insert_relationship,
+    _install_valence_shadow,
+    _settings,
     install_claim_accounts_shadow_async,
     install_claim_accounts_shadow_sync,
 )
@@ -45,154 +64,92 @@ from tests.test_orrery.claim_accounts_test_support import (
 
 pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
 
-LIVE_SLOT = 5
-
-# The chunk_metadata slug trigger renders scene with TO_CHAR(..., 'FM000');
-# scenes >= 1000 overflow the mask to literal '###' and collide. Fixtures
-# must therefore use small bounded scene numbers, never chunk ids (the
-# narrative_chunks sequence never rolls back and grows without bound).
-_SCENE_NUMBERS = count(1)
-EPISTEMICS = {
-    "enabled": True,
-    "claim_event_types": ["threat_issued"],
-    "aware_roles": ["actor", "target", "observer", "witness"],
-}
+STORY_CLOCK = datetime(2100, 1, 1, tzinfo=timezone.utc)
 
 
-def _install_valence_shadow(cur: Any) -> None:
-    """Shadow the pending-088 table shape in this connection's temp schema."""
+class PropagationClone(NamedTuple):
+    """The module's seeded clone and the committed async-conduit pair."""
 
-    cur.execute(
-        r"""
-        CREATE TEMP TABLE character_relationships ON COMMIT DROP AS
-        SELECT cr.* FROM public.character_relationships cr;
+    dbname: str
+    clock_chunk_id: int
+    async_source_entity_id: int
+    async_source_character_id: int
+    async_listener_entity_id: int
+    async_listener_character_id: int
 
-        ALTER TABLE pg_temp.character_relationships
-            ADD COLUMN IF NOT EXISTS valence_current numeric;
 
-        UPDATE pg_temp.character_relationships
-        SET valence_current = substring(
-            emotional_valence::text FROM '^([+-]?[0-9]+)\|'
-        )::numeric / 5.5
-        WHERE valence_current IS NULL
-        """
-    )
+@pytest.fixture(scope="module")
+def propagation_clone() -> Iterator[PropagationClone]:
+    """Seed one clone: the story clock first, then the async conduit pair.
+
+    The async test's trusting edge is committed through ``seed_relationship``
+    (attributed to ``manual`` under migration 115) from this synchronous
+    fixture, never inside the test's event loop.
+    """
+
+    with disposable_slot_database("qa885_claim_propagation") as dbname:
+        clock_chunk_id = seed_story_clock(dbname, world_time=STORY_CLOCK)
+        source_character, source_entity = seed_character(
+            dbname, name="Propagation Async Source"
+        )
+        listener_character, listener_entity = seed_character(
+            dbname, name="Propagation Async Listener"
+        )
+        seed_relationship(
+            dbname,
+            subject_character_id=source_character,
+            object_character_id=listener_character,
+            relationship_type="associate",
+            emotional_valence="+3|trusting",
+            dynamic="Rollback-only Stage 2c conduit.",
+            recent_events="None.",
+            history="Fixture.",
+        )
+        yield PropagationClone(
+            dbname=dbname,
+            clock_chunk_id=clock_chunk_id,
+            async_source_entity_id=source_entity,
+            async_source_character_id=source_character,
+            async_listener_entity_id=listener_entity,
+            async_listener_character_id=listener_character,
+        )
+
+
+def _assert_migration_083(registered: bool, shaped: bool) -> None:
+    """The clone is head-migrated, so migration 083's ledger must be present."""
+
+    assert registered, "the clone must register claim_propagated (migration 083)"
+    assert shaped, "the clone must carry world_events.world_time (migration 083)"
 
 
 @pytest.fixture()
-def live_conn() -> Iterator[Any]:
-    """Open one slot-5 transaction and roll back fixture writes."""
+def live_conn(propagation_clone: PropagationClone) -> Iterator[Any]:
+    """Open one clone transaction and roll back fixture writes."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=LIVE_SLOT))
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT EXISTS (
-                           SELECT 1 FROM event_types
-                           WHERE type = 'claim_propagated'
-                       ),
-                       EXISTS (
-                           SELECT 1 FROM information_schema.columns
-                           WHERE table_schema = ANY(current_schemas(false))
-                             AND table_name = 'world_events'
-                             AND column_name = 'world_time'
-                       )
-                """
-            )
-            registered, shaped = cur.fetchone()
-            if not registered or not shaped:
-                pytest.skip(
-                    "slot 5 has not applied migration 083: claim_propagated "
-                    "registration and world_events.world_time are required"
+    with closing(connect(propagation_clone.dbname)) as conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                               SELECT 1 FROM event_types
+                               WHERE type = 'claim_propagated'
+                           ),
+                           EXISTS (
+                               SELECT 1 FROM information_schema.columns
+                               WHERE table_schema = ANY(current_schemas(false))
+                                 AND table_name = 'world_events'
+                                 AND column_name = 'world_time'
+                           )
+                    """
                 )
-            install_claim_accounts_shadow_sync(cur)
-            _install_valence_shadow(cur)
-        yield conn
-    finally:
-        conn.rollback()
-        conn.close()
-
-
-def _settings(
-    *,
-    trusting: str = "1h",
-    neutral: str = "never",
-    hostile: str = "never",
-    depth_cap: int = 4,
-    age_horizon: str = "14d",
-    fan_out_cap: int = 6,
-    channels: Mapping[str, Any] | None = None,
-    culture_profiles: Mapping[str, float] | None = None,
-    enabled: bool = True,
-) -> OrreryContagionSettings:
-    return OrreryContagionSettings.model_validate(
-        {
-            "enabled": enabled,
-            "dyad_tiers": {
-                "trusting": trusting,
-                "neutral": neutral,
-                "hostile": hostile,
-            },
-            "dyad_overrides": {},
-            "channels": dict(channels or {}),
-            "culture_profiles": dict(culture_profiles or {}),
-            "guards": {
-                "depth_cap": depth_cap,
-                "age_horizon": age_horizon,
-                "fan_out_cap": fan_out_cap,
-            },
-        }
-    )
-
-
-def _insert_chunk(
-    cur: Any,
-    *,
-    time_delta: timedelta = timedelta(0),
-    world_layer: str = "primary",
-) -> tuple[int, datetime]:
-    token = uuid4().hex[:12]
-    cur.execute(
-        """
-        INSERT INTO narrative_chunks (raw_text, storyteller_text)
-        VALUES (%s, 'Rollback-only Stage 2c fixture.')
-        RETURNING id
-        """,
-        (f"Stage 2c propagation fixture {token}.",),
-    )
-    chunk_id = int(cur.fetchone()["id"])
-    cur.execute(
-        """
-        INSERT INTO chunk_metadata (
-            chunk_id, season, episode, scene, world_layer, time_delta,
-            generation_date, slug
-        ) VALUES (
-            %s, 99, 99, %s, %s::world_layer_type, %s, now(), %s
-        )
-        """,
-        (chunk_id, next(_SCENE_NUMBERS), world_layer, time_delta, token[:10]),
-    )
-    cur.execute(
-        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s", (chunk_id,)
-    )
-    stamped_world_time = cur.fetchone()["world_time"]
-    assert stamped_world_time is not None
-    return chunk_id, stamped_world_time
-
-
-def _insert_character(cur: Any, label: str) -> tuple[int, int]:
-    token = uuid4().hex[:10]
-    cur.execute(
-        "INSERT INTO entities (kind, is_active) "
-        "VALUES ('character', true) RETURNING id"
-    )
-    entity_id = int(cur.fetchone()["id"])
-    cur.execute(
-        "INSERT INTO characters (name, entity_id) VALUES (%s, %s) RETURNING id",
-        (f"propagation-{label}-{token}", entity_id),
-    )
-    return entity_id, int(cur.fetchone()["id"])
+                registered, shaped = cur.fetchone()
+                _assert_migration_083(registered, shaped)
+                install_claim_accounts_shadow_sync(cur)
+                _install_valence_shadow(cur)
+            yield conn
+        finally:
+            conn.rollback()
 
 
 def _insert_faction(cur: Any, label: str) -> int:
@@ -208,45 +165,6 @@ def _insert_faction(cur: Any, label: str) -> int:
         (faction_id, f"propagation-{label}-{uuid4().hex[:10]}", entity_id),
     )
     return entity_id
-
-
-def _insert_relationship(
-    cur: Any,
-    source_character_id: int,
-    target_character_id: int,
-    *,
-    valence: str = "+3|trusting",
-) -> None:
-    with relationship_producer(cur, "manual"):
-        cur.execute(
-            """
-            INSERT INTO public.character_relationships (
-                character1_id, character2_id, relationship_type,
-                emotional_valence, dynamic, recent_events, history
-            ) VALUES (
-                %s, %s, 'associate', %s,
-                'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
-            )
-            """,
-            (source_character_id, target_character_id, valence),
-        )
-    cur.execute(
-        """
-        INSERT INTO pg_temp.character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, valence_current, dynamic, recent_events, history
-        ) VALUES (
-            %s, %s, 'associate', %s, %s,
-            'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
-        )
-        """,
-        (
-            source_character_id,
-            target_character_id,
-            valence,
-            Decimal(valence.split("|", maxsplit=1)[0]) / Decimal("5.5"),
-        ),
-    )
 
 
 def _insert_pair_tag(
@@ -278,69 +196,6 @@ def _insert_culture_tag(cur: Any, entity_id: int, tag: str) -> None:
     assert cur.rowcount == 1
 
 
-def _insert_claim(
-    cur: Any,
-    *,
-    chunk_id: int,
-    source_entity_id: int,
-    birth_world_time: datetime | None,
-    scope: str = "bounded",
-) -> int:
-    cur.execute(
-        """
-        INSERT INTO world_events (
-            event_type, tick_chunk_id, actor_entity_id, world_layer,
-            source, changed_fields, payload
-        ) VALUES (
-            'threat_issued', %s, %s, 'primary', 'resolver', '{}', '{}'::jsonb
-        )
-        RETURNING id
-        """,
-        (chunk_id, source_entity_id),
-    )
-    event_id = int(cur.fetchone()["id"])
-    cur.execute(
-        """
-        INSERT INTO world_event_entities (event_id, role, entity_id)
-        VALUES (%s, 'actor', %s)
-        """,
-        (event_id, source_entity_id),
-    )
-    cur.execute("SELECT kind::text FROM entities WHERE id = %s", (source_entity_id,))
-    source_kind = str(cur.fetchone()["kind"])
-    minted = mint_claim_for_event(
-        cur,
-        world_event_id=event_id,
-        event_type="threat_issued",
-        summary="Rollback-only propagated claim.",
-        participants=(
-            ClaimParticipant(
-                source_entity_id,
-                "actor",
-                f"Propagation source {source_entity_id}",
-                source_kind,
-            ),
-        ),
-        source_chunk_id=chunk_id,
-        source_resolution_id=None,
-        settings=EPISTEMICS,
-    )
-    assert minted is not None
-    claim_id = minted.claim_id
-    if scope != "bounded":
-        cur.execute("UPDATE claims SET scope = %s WHERE id = %s", (scope, claim_id))
-    cur.execute(
-        """
-        SELECT acquired_at_world_time
-        FROM claim_awareness
-        WHERE claim_id = %s AND knower_entity_id = %s
-        """,
-        (claim_id, source_entity_id),
-    )
-    assert cur.fetchone()["acquired_at_world_time"] == birth_world_time
-    return claim_id
-
-
 def _awareness(cur: Any, claim_id: int) -> list[dict[str, Any]]:
     cur.execute(
         """
@@ -370,18 +225,6 @@ def _propagation_events(cur: Any, claim_id: int) -> list[dict[str, Any]]:
         (claim_id,),
     )
     return [dict(row) for row in cur.fetchall()]
-
-
-def _chain(cur: Any, length: int) -> tuple[list[int], list[int]]:
-    entities: list[int] = []
-    characters: list[int] = []
-    for index in range(length):
-        entity, character = _insert_character(cur, f"chain-{index}")
-        entities.append(entity)
-        characters.append(character)
-    for source, target in zip(characters, characters[1:]):
-        _insert_relationship(cur, source, target)
-    return entities, characters
 
 
 def test_single_hop_ledgers_scheduled_time_provenance_and_policy(
@@ -467,14 +310,17 @@ def test_single_hop_ledgers_scheduled_time_provenance_and_policy(
     assert participants == set()
 
 
-def test_propagation_event_does_not_change_salience_or_hydration_feed() -> None:
+def test_propagation_event_does_not_change_salience_or_hydration_feed(
+    propagation_clone: PropagationClone,
+) -> None:
     """Payload-only acquisitions stay out of actor and recent-event readers."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
+    engine = create_engine(sqlalchemy_url(propagation_clone.dbname))
     connection = engine.connect()
     transaction = connection.begin()
     try:
         raw_connection = connection.connection.driver_connection
+        assert raw_connection is not None
         with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
@@ -491,11 +337,9 @@ def test_propagation_event_does_not_change_salience_or_hydration_feed() -> None:
                 """
             )
             migration_state = cur.fetchone()
-            if not migration_state["registered"] or not migration_state["shaped"]:
-                pytest.skip(
-                    "slot 5 has not applied migration 083: salience isolation "
-                    "requires the real propagation ledger"
-                )
+            _assert_migration_083(
+                migration_state["registered"], migration_state["shaped"]
+            )
             install_claim_accounts_shadow_sync(cur)
             _install_valence_shadow(cur)
             entities, _ = _chain(cur, 2)
@@ -1175,10 +1019,14 @@ def test_old_checkpoint_without_awareness_section_is_skipped(
 
 
 @pytest.mark.asyncio
-async def test_async_drain_matches_sync_single_hop() -> None:
+async def test_async_drain_matches_sync_single_hop(
+    propagation_clone: PropagationClone,
+) -> None:
     """The async accepted-chunk twin mints the same scheduled ledger pair."""
 
-    conn = await asyncpg.connect(**asyncpg_kwargs(slot_dbname(LIVE_SLOT)))
+    source = propagation_clone.async_source_entity_id
+    listener = propagation_clone.async_listener_entity_id
+    conn = await asyncpg.connect(**asyncpg_kwargs(propagation_clone.dbname))
     transaction = conn.transaction()
     await transaction.start()
     try:
@@ -1196,11 +1044,7 @@ async def test_async_drain_matches_sync_single_hop() -> None:
                    ) AS shaped
             """
         )
-        if not migration_state["registered"] or not migration_state["shaped"]:
-            pytest.skip(
-                "slot 5 has not applied migration 083: async propagation "
-                "coverage requires the registered event and shaped ledger"
-            )
+        _assert_migration_083(migration_state["registered"], migration_state["shaped"])
         await install_claim_accounts_shadow_async(conn)
         await conn.execute(
             r"""
@@ -1217,61 +1061,21 @@ async def test_async_drain_matches_sync_single_hop() -> None:
             WHERE valence_current IS NULL
             """
         )
-        source = int(
-            await conn.fetchval(
-                "INSERT INTO entities (kind, is_active) "
-                "VALUES ('character', true) RETURNING id"
-            )
-        )
-        listener = int(
-            await conn.fetchval(
-                "INSERT INTO entities (kind, is_active) "
-                "VALUES ('character', true) RETURNING id"
-            )
-        )
-        source_character = int(
-            await conn.fetchval(
-                "INSERT INTO characters (name, entity_id) "
-                "VALUES ($1, $2) RETURNING id",
-                f"propagation-async-source-{uuid4().hex[:10]}",
-                source,
-            )
-        )
-        listener_character = int(
-            await conn.fetchval(
-                "INSERT INTO characters (name, entity_id) "
-                "VALUES ($1, $2) RETURNING id",
-                f"propagation-async-listener-{uuid4().hex[:10]}",
-                listener,
-            )
-        )
-        await conn.execute(
+        # The seeded, producer-attributed conduit reaches the drain through
+        # the valence shadow with the trusting tier's valence.
+        conduit = await conn.fetchrow(
             """
-            INSERT INTO public.character_relationships (
-                character1_id, character2_id, relationship_type,
-                emotional_valence, dynamic, recent_events, history
-            ) VALUES (
-                $1, $2, 'associate', '+3|trusting',
-                'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
-            )
+            SELECT relationship_type, emotional_valence, valence_current
+            FROM pg_temp.character_relationships
+            WHERE character1_id = $1 AND character2_id = $2
             """,
-            source_character,
-            listener_character,
+            propagation_clone.async_source_character_id,
+            propagation_clone.async_listener_character_id,
         )
-        await conn.execute(
-            """
-            INSERT INTO pg_temp.character_relationships (
-                character1_id, character2_id, relationship_type,
-                emotional_valence, valence_current, dynamic,
-                recent_events, history
-            ) VALUES (
-                $1, $2, 'associate', '+3|trusting', 3::numeric / 5.5,
-                'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
-            )
-            """,
-            source_character,
-            listener_character,
-        )
+        assert conduit is not None
+        assert conduit["relationship_type"] == "associate"
+        assert conduit["emotional_valence"] == "+3|trusting"
+        assert float(conduit["valence_current"]) == pytest.approx(3 / 5.5)
         birth_chunk, birth_world_time = await _insert_chunk_async(conn)
         event_id = int(
             await conn.fetchval(
@@ -1387,10 +1191,3 @@ async def _insert_chunk_async(
     )
     assert stamped is not None
     return chunk_id, stamped
-
-
-def _canonical_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {key: canonicalize(value) for key, value in sorted(row.items())}
-        for row in sorted(rows, key=lambda item: int(item["id"]))
-    ]

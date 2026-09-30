@@ -8,7 +8,6 @@ import json
 from typing import Any, Iterator
 
 import asyncpg  # type: ignore[import-untyped]
-import psycopg2  # type: ignore[import-untyped]
 import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
@@ -20,15 +19,13 @@ from nexus.agents.orrery.epistemics import (
 from nexus.agents.orrery.propagation import drain_claim_propagation_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import reconstruct_state_at_sync
-from nexus.database import asyncpg_kwargs
-from nexus.api.slot_utils import get_slot_db_url
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
-from tests.test_orrery.claim_accounts_test_support import (
-    install_claim_accounts_shadow_async,
-    install_claim_accounts_shadow_sync,
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_protagonist,
 )
-from tests.test_orrery.test_claim_propagation_live import (
-    LIVE_SLOT,
+from tests.test_orrery.claim_accounts_test_support import (
     _canonical_rows,
     _chain,
     _insert_character,
@@ -37,6 +34,8 @@ from tests.test_orrery.test_claim_propagation_live import (
     _insert_relationship,
     _install_valence_shadow,
     _settings,
+    install_claim_accounts_shadow_async,
+    install_claim_accounts_shadow_sync,
 )
 
 
@@ -593,11 +592,22 @@ def test_partial_stage_c_payload_fails_frontier_reconciliation(
             )
 
 
+@pytest.fixture(scope="module")
+def distortion_async_db() -> Iterator[str]:
+    """Seed one clone for the async test from a synchronous fixture."""
+
+    with disposable_slot_database("qa885_distortion") as dbname:
+        seed_protagonist(dbname)
+        yield dbname
+
+
 @pytest.mark.asyncio
-async def test_async_variant_mint_persists_validated_depth() -> None:
+async def test_async_variant_mint_persists_validated_depth(
+    distortion_async_db: str,
+) -> None:
     """The async authoring twin stores the same nullable-positive contract."""
 
-    conn = await asyncpg.connect(**asyncpg_kwargs(f"save_{LIVE_SLOT:02d}"))
+    conn = await asyncpg.connect(**asyncpg_kwargs(distortion_async_db))
     transaction = conn.transaction()
     await transaction.start()
     try:

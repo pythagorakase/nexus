@@ -1,11 +1,18 @@
-"""Rollback-only live PostgreSQL coverage for durable backstory reveals."""
+"""Rollback-only live PostgreSQL coverage for durable backstory reveals.
+
+The tests run on one module-scoped disposable template clone seeded with a
+zoned place, a protagonist standing there, and a story clock, so no owner save
+slot is opened. Each test's writes stay inside one transaction that always
+rolls back.
+"""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from contextlib import closing
+from datetime import datetime, timedelta, timezone
 from itertools import count
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, NamedTuple
 from uuid import uuid4
 
 import psycopg2  # type: ignore[import-untyped]
@@ -22,15 +29,20 @@ from nexus.agents.orrery.reveal import drain_backstory_reveals_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import verify_checkpoints_sync
 from nexus.agents.orrery.substrate import WorldState
-from nexus.api.slot_utils import get_slot_db_url, slot_dbname
-from nexus.database import asyncpg_kwargs
-from tests.test_orrery.claim_accounts_test_support import (
-    install_claim_accounts_shadow_async,
+from tests.pg_fixtures import (
+    asyncpg_kwargs,
+    connect,
+    disposable_slot_database,
+    seed_place,
+    seed_protagonist,
+    seed_story_clock,
+    seed_zone,
 )
-from tests.test_orrery.test_claim_propagation_live import (
-    _install_valence_shadow,
+from tests.test_orrery.claim_accounts_test_support import (
     _insert_relationship,
+    _install_valence_shadow,
     _settings,
+    install_claim_accounts_shadow_async,
 )
 
 
@@ -39,6 +51,17 @@ MIGRATION_SQL = Path("migrations/091_backstory_secrets.sql").read_text()
 ACCOUNT_MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
 DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
 _SCENES = count(400)
+BASE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
+STORY_CLOCK = BASE_TIMESTAMP + timedelta(hours=6)
+
+
+class RevealClone(NamedTuple):
+    """The module's seeded clone and the rows each reveal test names."""
+
+    dbname: str
+    place_id: int
+    protagonist_entity_id: int
+    clock_chunk_id: int
 
 
 def _install_claim_schema(cur: Any) -> None:
@@ -81,45 +104,75 @@ def _install_claim_schema(cur: Any) -> None:
     cur.execute(DISTORTION_MIGRATION_SQL)
 
 
+@pytest.fixture(scope="module")
+def reveal_clone() -> Iterator[RevealClone]:
+    """Seed a zoned place, a protagonist there, then the story clock."""
+
+    with disposable_slot_database("qa885_reveal") as dbname:
+        seed_zone(
+            dbname,
+            name="Reveal Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        place_id, _ = seed_place(dbname, name="Reveal Square")
+        _, protagonist_entity_id = seed_protagonist(
+            dbname,
+            base_timestamp=BASE_TIMESTAMP.isoformat(),
+            current_location=place_id,
+        )
+        clock_chunk_id = seed_story_clock(dbname, world_time=STORY_CLOCK)
+        yield RevealClone(
+            dbname=dbname,
+            place_id=place_id,
+            protagonist_entity_id=protagonist_entity_id,
+            clock_chunk_id=clock_chunk_id,
+        )
+
+
 @pytest.fixture()
-def live_conn() -> Iterator[Any]:
+def live_conn(reveal_clone: RevealClone) -> Iterator[Any]:
     """Install migration 091 in a throwaway schema and roll back all writes."""
 
-    conn = psycopg2.connect(get_slot_db_url(slot=5), cursor_factory=RealDictCursor)
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT to_regclass('claims') IS NOT NULL AS claims_ready,
-                       EXISTS (
-                           SELECT 1
-                           FROM information_schema.columns
-                           WHERE table_schema = ANY(current_schemas(false))
-                             AND table_name = 'claims'
-                             AND column_name = 'account_label'
-                       ) AS accounts_ready,
-                       EXISTS (
-                           SELECT 1
-                           FROM information_schema.columns
-                           WHERE table_schema = ANY(current_schemas(false))
-                             AND table_name = 'world_events'
-                             AND column_name = 'world_time'
-                       ) AS event_clock_ready
-                """
-            )
-            readiness = cur.fetchone()
-            if not all(readiness.values()):
-                pytest.skip("slot 5 requires applied migrations 083 and 090")
-            schema = f"reveal_live_{uuid4().hex[:12]}"
-            cur.execute(f'CREATE SCHEMA "{schema}"')
-            cur.execute(f'SET LOCAL search_path = "{schema}", public')
-            _install_claim_schema(cur)
-            cur.execute(MIGRATION_SQL)
-            _install_valence_shadow(cur)
-        yield conn
-    finally:
-        conn.rollback()
-        conn.close()
+    with closing(connect(reveal_clone.dbname, cursor_factory=RealDictCursor)) as conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT to_regclass('claims') IS NOT NULL AS claims_ready,
+                           EXISTS (
+                               SELECT 1
+                               FROM information_schema.columns
+                               WHERE table_schema = ANY(current_schemas(false))
+                                 AND table_name = 'claims'
+                                 AND column_name = 'account_label'
+                           ) AS accounts_ready,
+                           EXISTS (
+                               SELECT 1
+                               FROM information_schema.columns
+                               WHERE table_schema = ANY(current_schemas(false))
+                                 AND table_name = 'world_events'
+                                 AND column_name = 'world_time'
+                           ) AS event_clock_ready
+                    """
+                )
+                readiness = cur.fetchone()
+                assert readiness == {
+                    "claims_ready": True,
+                    "accounts_ready": True,
+                    "event_clock_ready": True,
+                }, f"the head-migrated clone lacks migrations 083/090: {readiness}"
+                schema = f"reveal_live_{uuid4().hex[:12]}"
+                cur.execute(f'CREATE SCHEMA "{schema}"')
+                cur.execute(f'SET LOCAL search_path = "{schema}", public')
+                _install_claim_schema(cur)
+                cur.execute(MIGRATION_SQL)
+                _install_valence_shadow(cur)
+            yield conn
+        finally:
+            conn.rollback()
 
 
 def _insert_chunk(
@@ -181,7 +234,9 @@ def _insert_private_incident(
     holder_aware: bool = True,
 ) -> tuple[int, int, tuple[int, int, int], int]:
     cur.execute("SELECT id FROM places ORDER BY id LIMIT 1")
-    place_id = int(cur.fetchone()["id"])
+    place = cur.fetchone()
+    assert place is not None, "the reveal clone seeds one place"
+    place_id = int(place["id"])
     holder = _insert_character(cur, "holder", place_id)
     first = _insert_character(cur, "first", place_id)
     second = _insert_character(cur, "second", place_id)
@@ -326,13 +381,15 @@ def test_authoring_grants_unpossessed_holder_and_reveal_completes(
         )
 
 
-def test_async_authoring_grants_unpossessed_holder() -> None:
+def test_async_authoring_grants_unpossessed_holder(
+    reveal_clone: RevealClone,
+) -> None:
     import asyncio
 
     import asyncpg  # type: ignore[import-untyped]
 
     async def run() -> None:
-        conn = await asyncpg.connect(**asyncpg_kwargs(slot_dbname(5)))
+        conn = await asyncpg.connect(**asyncpg_kwargs(reveal_clone.dbname))
         transaction = conn.transaction()
         await transaction.start()
         try:
@@ -378,6 +435,11 @@ def test_async_authoring_grants_unpossessed_holder() -> None:
                 """
             )
             assert clock is not None
+            # The seeded story clock is the head chunk and the seeded
+            # protagonist is the lowest character entity.
+            assert clock["chunk_id"] == reveal_clone.clock_chunk_id
+            assert clock["world_time"] == STORY_CLOCK
+            assert clock["holder_entity_id"] == reveal_clone.protagonist_entity_id
             event_id = await conn.fetchval(
                 """
                 INSERT INTO world_events (
