@@ -1,4 +1,11 @@
-"""Rollback-only PostgreSQL coverage for Stage 2a Epistemics repairs."""
+"""Rollback-only PostgreSQL coverage for Stage 2a Epistemics repairs.
+
+Every test runs on one module-scoped disposable template clone, routed under
+``ROUTED_SLOT`` for the module like its Stage 2a status sibling, so no owner
+slot or the template is written. The clone carries a canonical player, one
+faction, and the world clock (``base_timestamp``) at ``WORLD_TIME``; each
+test's chunks, entities, and world events roll back.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +22,13 @@ from nexus.agents.orrery.epistemics import (
     mint_claim_for_event,
     record_revelation,
 )
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_faction,
+    seed_protagonist,
+)
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
@@ -23,7 +36,8 @@ from tests.test_orrery.claim_accounts_test_support import (
 
 pytestmark = pytest.mark.requires_postgres
 
-LIVE_DATABASE = "NEXUS_template"
+# The slot label the clone is routed under for the whole module.
+ROUTED_SLOT = 5
 WORLD_TIME = datetime(2073, 8, 1, 15, 30, tzinfo=timezone.utc)
 EPISTEMICS = {
     "enabled": True,
@@ -32,11 +46,33 @@ EPISTEMICS = {
 }
 
 
-@pytest.fixture()
-def live_conn() -> Iterator[Any]:
-    """Use the migrated template in a transaction rolled back after each test."""
+@pytest.fixture(scope="module")
+def epistemics_db() -> Iterator[str]:
+    """A routed clone with a player, a faction, and the world clock set.
 
-    conn = connect(LIVE_DATABASE)
+    The player sets ``base_timestamp`` to ``WORLD_TIME``, the need-clock
+    anchor, then the faction follows. No head chunk is seeded: each test
+    inserts the story's first chunk (``S01E01_001``) itself, at zero elapsed
+    time, so the ``chunk_metadata`` trigger stamps it exactly ``WORLD_TIME``.
+    """
+
+    with disposable_slot_database("qa885_stage2a_epistemics") as dbname:
+        with pytest.MonkeyPatch.context() as mp:
+            route_slot_to_disposable(mp.setattr, slot=ROUTED_SLOT, dbname=dbname)
+            seed_protagonist(
+                dbname,
+                name="Stage 2a Epistemics Player",
+                base_timestamp=WORLD_TIME.isoformat(),
+            )
+            seed_faction(dbname, name="Stage 2a Epistemics Assembly")
+            yield dbname
+
+
+@pytest.fixture()
+def live_conn(epistemics_db: str) -> Iterator[Any]:
+    """Use the clone in a transaction rolled back after each test."""
+
+    conn = connect(epistemics_db)
     try:
         with conn.cursor() as cur:
             install_claim_accounts_shadow_sync(cur)
@@ -112,7 +148,7 @@ def test_faction_participant_mints_awareness_at_source_chunk_world_time(
             (chunk_id,),
         )
         source_world_time = cur.fetchone()["world_time"]
-        assert source_world_time is not None
+        assert source_world_time == WORLD_TIME
         faction = _insert_entity(cur, "faction")
         target = _insert_entity(cur, "character")
         event_id = _insert_event(
