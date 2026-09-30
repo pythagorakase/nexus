@@ -92,18 +92,12 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _build_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Raw settings + legacy aliases + derived metadata, minus secrets refs."""
+    """Raw settings under their nexus.toml names + derived metadata, minus secrets."""
     raw = materialize_model_selections(raw)
     payload = dict(raw)
     # 1Password reference strings are bootstrap-only config; the browser has
     # no business seeing them even though they contain no secret material.
     payload.pop("secrets", None)
-    payload["Agent Settings"] = {
-        "global": raw.get("global", {}),
-        "LORE": raw.get("lore", {}),
-        "MEMNON": raw.get("memnon", {}),
-    }
-    payload["API Settings"] = {"apex": raw.get("apex", {})}
     payload["settings_meta"] = _build_settings_meta(raw)
     return payload
 
