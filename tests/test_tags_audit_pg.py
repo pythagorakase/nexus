@@ -24,6 +24,7 @@ from tests.pg_fixtures import (
     disposable_slot_database,
     seed_entity_tag,
     seed_faction,
+    seed_legacy_faction_tag,
 )
 
 pytestmark = pytest.mark.requires_postgres
@@ -37,19 +38,23 @@ def audited_clone() -> Iterator[tuple[str, dict[str, int]]]:
     replaced by ``legitimacy``); one carries ``ancient_continuous``
     (deprecated ``history_class``, no replacement), a cleared
     ``criminal_underground`` (deprecated, but no longer active), and
-    ``contested`` (the live ``legitimacy`` category).
+    ``contested`` (the live ``legitimacy`` category). The deprecated-category
+    rows go through ``seed_legacy_faction_tag``, since ``seed_entity_tag``
+    refuses deprecated categories.
     """
     with disposable_slot_database("qa640_811_tags_audit") as dbname:
         _, first = seed_faction(dbname, name="Lantern Syndicate")
         _, second = seed_faction(dbname, name="Tidewater Compact")
-        for entity_id, tag in (
-            (first, "gray_legal"),
-            (second, "gray_legal"),
-            (first, "ancient_continuous"),
-            (first, "criminal_underground"),
-            (first, "contested"),
+        for entity_id, category, tag in (
+            (first, "legitimacy_status", "gray_legal"),
+            (second, "legitimacy_status", "gray_legal"),
+            (first, "history_class", "ancient_continuous"),
+            (first, "legitimacy_status", "criminal_underground"),
         ):
-            seed_entity_tag(dbname, entity_id=entity_id, tag=tag)
+            seed_legacy_faction_tag(
+                dbname, faction_entity_id=entity_id, category=category, tag=tag
+            )
+        seed_entity_tag(dbname, entity_id=first, tag="contested")
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             cur.execute(
                 """

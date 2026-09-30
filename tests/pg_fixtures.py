@@ -1044,6 +1044,36 @@ def seed_relationship(
     return int(row[0]), int(row[1])
 
 
+def _resolve_bestowable_tag(
+    cur: Any, *, entity_id: int, tag: str
+) -> tuple[int, str, str, bool | None]:
+    """Resolve ``tag`` for ``entity_id``'s kind; return its registry standing.
+
+    Returns ``(tag_id, category, entity_kind, category_deprecated)``, where
+    ``category_deprecated`` is ``None`` when ``tag_category_registry`` has no
+    ``(category, entity_kind)`` row. An unknown or deprecated tag, or a missing
+    entity, fails the assertion.
+    """
+
+    cur.execute(
+        """
+        SELECT t.id, t.category, e.kind::text, r.deprecated
+        FROM tags t
+        CROSS JOIN entities e
+        LEFT JOIN tag_category_registry r
+          ON r.category = t.category AND r.entity_kind = e.kind
+        WHERE t.tag = %s AND NOT t.deprecated AND e.id = %s
+        """,
+        (tag, entity_id),
+    )
+    rows = cur.fetchall()
+    assert (
+        len(rows) == 1
+    ), f"tag {tag!r} is not seeded (or entity {entity_id} is missing)"
+    tag_id, category, entity_kind, category_deprecated = rows[0]
+    return int(tag_id), str(category), str(entity_kind), category_deprecated
+
+
 def seed_entity_tag(
     dbname: str,
     *,
@@ -1051,30 +1081,101 @@ def seed_entity_tag(
     tag: str,
     source_kind: str = "template",
 ) -> int:
-    """Bestow one active, registered tag on an entity; return the row ID.
+    """Bestow one active, registered, live-category tag on an entity.
 
-    ``tag`` must be a non-deprecated tag from the template's seeded vocabulary;
-    an unknown or deprecated tag fails the row-count assertion. The row is
-    active (``cleared_at`` NULL), so checkpoints and ``entity_tags_current`` see
-    it. A tag on a character entity fires the need-applicability sync (migration
-    100), so the save needs the need-clock anchor first (``seed_story_clock`` or
-    ``seed_protagonist``).
+    Returns the ``entity_tags`` row ID. ``tag`` must be a non-deprecated tag
+    from the template's seeded vocabulary whose category is registered live in
+    ``tag_category_registry`` for the entity's kind; an unknown or deprecated
+    tag fails the assertion. A tag in a deprecated category (migration 043
+    deprecated categories and left their tags live, so ``gray_legal`` under
+    ``legitimacy_status`` still resolves) raises ``ValueError`` naming the
+    category: a faction's goes through ``seed_legacy_faction_tag`` and any
+    other kind's through ``seed_deprecated_category_tag``. A category with no
+    registry row for the entity's kind raises too. The row is active
+    (``cleared_at`` NULL), so checkpoints and ``entity_tags_current`` see it. A
+    tag on a character entity fires the need-applicability sync (migration
+    100), so the save needs the need-clock anchor first (``seed_story_clock``
+    or ``seed_protagonist``).
     """
 
     require_disposable_target(dbname)
     with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        tag_id, category, entity_kind, category_deprecated = _resolve_bestowable_tag(
+            cur, entity_id=entity_id, tag=tag
+        )
+        if category_deprecated is None:
+            raise ValueError(
+                f"tag {tag!r} is in category {category!r}, which "
+                f"tag_category_registry does not register for {entity_kind} "
+                "entities"
+            )
+        if category_deprecated:
+            legacy_seed = (
+                "seed_legacy_faction_tag"
+                if entity_kind == "faction"
+                else "seed_deprecated_category_tag"
+            )
+            raise ValueError(
+                f"seed_entity_tag bestows only live categories: tag {tag!r} is in "
+                f"the deprecated {entity_kind} category {category!r}; use "
+                f"{legacy_seed} to plant legacy vocabulary"
+            )
         cur.execute(
             """
             INSERT INTO entity_tags (entity_id, tag_id, source_kind)
-            SELECT %s, t.id, %s
-            FROM tags t
-            WHERE t.tag = %s AND NOT t.deprecated
+            VALUES (%s, %s, %s)
             RETURNING id
             """,
-            (entity_id, source_kind, tag),
+            (entity_id, tag_id, source_kind),
         )
         row = cur.fetchone()
-        assert row is not None and cur.rowcount == 1, f"tag {tag!r} is not seeded"
+        assert row is not None and cur.rowcount == 1
+    return int(row[0])
+
+
+def seed_deprecated_category_tag(
+    dbname: str,
+    *,
+    entity_id: int,
+    tag: str,
+) -> int:
+    """Bestow a live tag in a deprecated non-faction category; return its ID.
+
+    Clear-only coverage needs an active tag whose category the registry
+    deprecates for the carrier's kind, such as ``worksite`` under migration
+    043's ``place_affordance`` on a place. ``seed_entity_tag`` refuses those
+    categories, so this helper plants them. It refuses a tag whose category is
+    live or unregistered for the entity's kind, and it refuses faction entities
+    outright: legacy faction vocabulary goes only through
+    ``seed_legacy_faction_tag``. The row is active, so ``entity_tags_current``
+    sees it.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        tag_id, category, entity_kind, category_deprecated = _resolve_bestowable_tag(
+            cur, entity_id=entity_id, tag=tag
+        )
+        if entity_kind == "faction":
+            raise ValueError(
+                f"seed_deprecated_category_tag does not plant faction tags; use "
+                f"seed_legacy_faction_tag for {tag!r} in {category!r}"
+            )
+        if category_deprecated is not True:
+            raise ValueError(
+                f"tag {tag!r} is in category {category!r}, which is not a "
+                f"deprecated {entity_kind} category; use seed_entity_tag"
+            )
+        cur.execute(
+            """
+            INSERT INTO entity_tags (entity_id, tag_id, source_kind)
+            VALUES (%s, %s, 'template')
+            RETURNING id
+            """,
+            (entity_id, tag_id),
+        )
+        row = cur.fetchone()
+        assert row is not None and cur.rowcount == 1
     return int(row[0])
 
 
@@ -1087,13 +1188,16 @@ def seed_legacy_faction_tag(
 ) -> int:
     """Bestow one tag in a migration-043 legacy faction category; return its ID.
 
-    This is the one seed allowed to plant a tag in a deprecated category.
-    Migration 043 deprecated seven faction categories (``LEGACY_TAG_CATEGORIES``
-    in ``nexus.api.faction_table_audit``) in ``tag_category_registry`` while
-    their tags stayed readable through ``entity_tags_current``, and the faction
-    table audit maps any such row it finds. ``seed_entity_tag`` bestows only
-    live vocabulary, so this helper exists to make that audit non-vacuous on a
-    clone. Any other category raises.
+    This is the one seed that plants a tag in a deprecated faction category,
+    by construction: ``seed_entity_tag`` joins ``tag_category_registry`` on
+    the tag's category and the entity's kind and raises on a deprecated
+    category, and ``seed_deprecated_category_tag`` raises on any faction
+    entity. Migration 043 deprecated seven faction categories
+    (``LEGACY_TAG_CATEGORIES`` in ``nexus.api.faction_table_audit``) in
+    ``tag_category_registry`` while their tags stayed readable through
+    ``entity_tags_current``, and the faction table audit maps any such row it
+    finds; this helper makes that audit non-vacuous on a clone. Any other
+    category raises.
 
     The helper registers ``(category, 'faction')`` as deprecated if the clone
     lacks the row (043 leaves it deprecated), inserts the ``tags`` row if the
