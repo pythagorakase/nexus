@@ -97,8 +97,9 @@ ORDER BY 1
 KINDS = ("table:", "column:", "enum:", "function:", "view:")
 
 # Documented probe objects committed to the shared clone so the refresh tests
-# prove an enum, a function, and a view comment survive the schema copy even
-# while every legacy enum is still baselined debt.
+# prove an enum, a function, and a view comment survive the schema copy with
+# known, test-owned comment text, independent of which legacy objects remain
+# baselined debt.
 REFRESH_PROBE_DDL = """
 CREATE TYPE public.schema_docs_refresh_probe AS ENUM ('kept');
 COMMENT ON TYPE public.schema_docs_refresh_probe IS 'Refresh probe enum';
