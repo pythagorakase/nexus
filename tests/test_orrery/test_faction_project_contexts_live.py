@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
-from uuid import uuid4
 
 import psycopg2
 import pytest
@@ -36,12 +36,24 @@ from nexus.agents.orrery.substrate import (
     Template,
     project_faction_is,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    seed_character,
+    seed_faction,
+    seed_pair_tag,
+    seed_place,
+    seed_protagonist,
+    seed_relationship,
+    seed_routine_anchor,
+    seed_story_clock,
+    seed_zone,
+    sqlalchemy_url,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
 
-LIVE_SLOT = 5
+STORY_WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(enabled=True, advance_interval_hours=24.0)
 START_FACTION_PROJECT = Template(
     id="test_start_faction_project",
@@ -147,11 +159,93 @@ TRIPLE_TEMPLATE = Template(
 )
 
 
-@pytest.fixture()
-def faction_context_db() -> Iterator[dict[str, Any]]:
-    """Apply 081 and build isolated slot-5 fixtures in one transaction."""
+@pytest.fixture(scope="module")
+def faction_context_clone() -> Iterator[dict[str, Any]]:
+    """Own one clone seeded with the faction-context cast and its edges.
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
+    Two factions, a bound actor with an ``obligation`` edge to each, a
+    zero-edge actor, and two relationship targets. The protagonist gives the
+    resolver a canonical player at the anchored place; it has no routine
+    anchor, tag, or edge, so it never composes as an actor here.
+    """
+
+    with disposable_slot_database("qa885_faction_contexts") as dbname:
+        seed_zone(
+            dbname,
+            name="Faction Context Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        place_id, _ = seed_place(dbname, name="Faction Context Hall")
+        seed_protagonist(
+            dbname,
+            current_location=place_id,
+            base_timestamp=STORY_WORLD_TIME.isoformat(),
+        )
+        chunk_id = seed_story_clock(dbname, world_time=STORY_WORLD_TIME)
+        faction_ids = tuple(
+            seed_faction(dbname, name=f"Faction Context {label}")[1]
+            for label in ("Guild", "Council")
+        )
+
+        actors: dict[str, int] = {}
+        character_ids: dict[str, int] = {}
+        for label in ("bound", "zero", "target_a", "target_b"):
+            character_id, entity_id = seed_character(
+                dbname, name=f"faction-context-{label}"
+            )
+            actors[label] = entity_id
+            character_ids[label] = character_id
+
+        for label in ("bound", "zero"):
+            seed_routine_anchor(
+                dbname,
+                character_entity_id=actors[label],
+                place_id=place_id,
+                source="test_faction_project_contexts_live",
+            )
+
+        for faction_id in faction_ids:
+            seed_pair_tag(
+                dbname,
+                subject_entity_id=actors["bound"],
+                object_entity_id=faction_id,
+                tag="obligation",
+                template_id="test_faction_project_contexts_live",
+            )
+
+        for actor_label, target_label, dynamic in (
+            ("bound", "target_a", "Faction context fixture."),
+            ("bound", "target_b", "Faction context fixture."),
+            ("zero", "target_a", "Zero-edge fixture."),
+        ):
+            seed_relationship(
+                dbname,
+                subject_character_id=character_ids[actor_label],
+                object_character_id=character_ids[target_label],
+                relationship_type="associate",
+                emotional_valence="+1|fixture",
+                dynamic=dynamic,
+                recent_events="No persistent events.",
+                history="Created for issue 477 coverage.",
+            )
+        yield {
+            "dbname": dbname,
+            "chunk_id": chunk_id,
+            "actors": actors,
+            "factions": faction_ids,
+        }
+
+
+@pytest.fixture()
+def faction_context_db(
+    faction_context_clone: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """Apply 081 over the seeded clone inside one rolled-back transaction."""
+
+    engine = create_engine(sqlalchemy_url(faction_context_clone["dbname"]), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -162,16 +256,7 @@ def faction_context_db() -> Iterator[dict[str, Any]]:
     try:
         with raw_connection.cursor() as cur:
             cur.execute(migration_sql)
-        token = uuid4().hex[:12]
-        place_id = int(
-            session.execute(
-                text("SELECT id FROM places ORDER BY id LIMIT 1")
-            ).scalar_one()
-        )
-        chunk_id = int(
-            session.execute(text("SELECT max(id) FROM narrative_chunks")).scalar_one()
-        )
-        faction_ids = [
+        faction_ids = tuple(
             int(value)
             for value in session.execute(
                 text(
@@ -181,125 +266,21 @@ def faction_context_db() -> Iterator[dict[str, Any]]:
                     JOIN entities e ON e.id = f.entity_id
                     WHERE f.entity_id IS NOT NULL AND e.is_active
                     ORDER BY f.entity_id
-                    LIMIT 2
                     """
                 )
             ).scalars()
-        ]
-        if len(faction_ids) != 2:
-            pytest.skip("save_05 needs two active faction entities")
-
-        actors: dict[str, int] = {}
-        character_ids: dict[str, int] = {}
-        for label in ("bound", "zero", "target_a", "target_b"):
-            entity_id = int(
-                session.execute(
-                    text(
-                        """
-                        INSERT INTO entities (kind, is_active)
-                        VALUES ('character', true)
-                        RETURNING id
-                        """
-                    )
-                ).scalar_one()
-            )
-            character_id = int(
-                session.execute(
-                    text(
-                        """
-                        INSERT INTO characters (name, entity_id)
-                        VALUES (:name, :entity_id)
-                        RETURNING id
-                        """
-                    ),
-                    {
-                        "name": f"faction-context-{token}-{label}",
-                        "entity_id": entity_id,
-                    },
-                ).scalar_one()
-            )
-            actors[label] = entity_id
-            character_ids[label] = character_id
-
-        for label in ("bound", "zero"):
-            session.execute(
-                text(
-                    """
-                    INSERT INTO character_routine_anchors (
-                        character_entity_id, anchor_type, place_id,
-                        mobility_policy, source
-                    ) VALUES (
-                        :entity_id, 'home', :place_id, 'fixed_place',
-                        'test_faction_project_contexts_live'
-                    )
-                    """
-                ),
-                {"entity_id": actors[label], "place_id": place_id},
-            )
-
-        for faction_id in faction_ids:
-            session.execute(
-                text(
-                    """
-                    INSERT INTO entity_pair_tags (
-                        subject_entity_id, object_entity_id, pair_tag_id,
-                        source_kind, template_id
-                    )
-                    SELECT :actor_id, :faction_id, pt.id,
-                           'template', 'test_faction_project_contexts_live'
-                    FROM pair_tags pt
-                    WHERE pt.tag = 'obligation'
-                    """
-                ),
-                {"actor_id": actors["bound"], "faction_id": faction_id},
-            )
-
-        for target_label in ("target_a", "target_b"):
-            session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
-            session.execute(
-                text(
-                    """
-                    INSERT INTO character_relationships (
-                        character1_id, character2_id, relationship_type,
-                        emotional_valence, dynamic, recent_events, history
-                    ) VALUES (
-                        :actor_character_id, :target_character_id, 'associate',
-                        '+1|fixture', 'Rollback-only faction context fixture.',
-                        'No persistent events.', 'Created for issue 477 coverage.'
-                    )
-                    """
-                ),
-                {
-                    "actor_character_id": character_ids["bound"],
-                    "target_character_id": character_ids[target_label],
-                },
-            )
-        session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
-        session.execute(
-            text(
-                """
-                INSERT INTO character_relationships (
-                    character1_id, character2_id, relationship_type,
-                    emotional_valence, dynamic, recent_events, history
-                ) VALUES (
-                    :actor_character_id, :target_character_id, 'associate',
-                    '+1|fixture', 'Rollback-only zero-edge fixture.',
-                    'No persistent events.', 'Created for issue 477 coverage.'
-                )
-                """
-            ),
-            {
-                "actor_character_id": character_ids["zero"],
-                "target_character_id": character_ids["target_a"],
-            },
+        )
+        assert faction_ids == tuple(sorted(faction_context_clone["factions"])), (
+            "the clone must hold exactly the two seeded active factions, "
+            f"found {faction_ids!r}"
         )
         yield {
             "connection": connection,
             "session": session,
             "raw_connection": raw_connection,
-            "chunk_id": chunk_id,
-            "actors": actors,
-            "factions": tuple(faction_ids),
+            "chunk_id": faction_context_clone["chunk_id"],
+            "actors": faction_context_clone["actors"],
+            "factions": faction_ids,
         }
     finally:
         session.close()

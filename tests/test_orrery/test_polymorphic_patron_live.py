@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
-from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.events import (
@@ -32,16 +32,97 @@ from nexus.agents.orrery.substrate import (
     WorldState,
 )
 from nexus.agents.orrery.templates import START_COURT_PATRON_FACTION
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    seed_character,
+    seed_faction,
+    seed_pair_tag,
+    seed_place,
+    seed_protagonist,
+    seed_relationship,
+    seed_routine_anchor,
+    seed_story_clock,
+    seed_zone,
+    sqlalchemy_url,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
+STORY_WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(enabled=True, advance_interval_hours=24.0)
 
 
+@pytest.fixture(scope="module")
+def patron_circle_clone() -> Iterator[dict[str, Any]]:
+    """Own one clone seeded with the patron circle: actor, member, faction.
+
+    The actor lives at its home anchor; the member holds ``status:senior`` in
+    the faction and is the actor's associate, which is the roster path into
+    the institution. The protagonist gives the anchored dry run a canonical
+    player. The story clock and every need anchor share one world time, so
+    need debt is zero and the start gate's need clauses pass.
+    """
+
+    with disposable_slot_database("qa885_patron_circle") as dbname:
+        seed_zone(
+            dbname,
+            name="Patron Circle Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        place_id, _ = seed_place(dbname, name="Patron Circle Hall")
+        seed_protagonist(
+            dbname,
+            current_location=place_id,
+            base_timestamp=STORY_WORLD_TIME.isoformat(),
+        )
+        chunk = seed_story_clock(dbname, world_time=STORY_WORLD_TIME)
+        actor_character, actor = seed_character(
+            dbname, name="patron-circle-actor", current_location=place_id
+        )
+        member_character, member = seed_character(dbname, name="patron-circle-member")
+        _, faction = seed_faction(dbname, name="Patron Circle Court")
+        seed_relationship(
+            dbname,
+            subject_character_id=actor_character,
+            object_character_id=member_character,
+            relationship_type="associate",
+            emotional_valence="+1|fixture",
+            dynamic="The member can introduce the actor to the institution.",
+            recent_events="No persistent events.",
+            history="Created for the polymorphic patron live proof.",
+        )
+        seed_routine_anchor(
+            dbname,
+            character_entity_id=actor,
+            place_id=place_id,
+            source="test_polymorphic_patron_live",
+        )
+        seed_pair_tag(
+            dbname,
+            subject_entity_id=member,
+            object_entity_id=faction,
+            tag="status:senior",
+            template_id="test_polymorphic_patron_live",
+        )
+        yield {
+            "dbname": dbname,
+            "actor": actor,
+            "member": member,
+            "faction": faction,
+            "chunk": chunk,
+        }
+
+
 @pytest.fixture()
-def patron_circle_db() -> Iterator[dict[str, Any]]:
-    engine = create_engine(get_slot_db_url(slot=5), future=True)
+def patron_circle_db(
+    patron_circle_clone: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """Re-run 096 over the seeded clone inside one rolled-back transaction."""
+
+    engine = create_engine(sqlalchemy_url(patron_circle_clone["dbname"]), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -53,120 +134,13 @@ def patron_circle_db() -> Iterator[dict[str, Any]]:
                     Path(__file__).parents[2] / "migrations/096_polymorphic_patron.sql"
                 ).read_text()
             )
-        token = uuid4().hex[:12]
-        entity_ids = [
-            int(value)
-            for value in session.execute(
-                text(
-                    """
-                    INSERT INTO entities (kind, is_active)
-                    VALUES ('character', true), ('character', true),
-                           ('faction', true)
-                    RETURNING id
-                    """
-                )
-            ).scalars()
-        ]
-        actor, member, faction = entity_ids
-        place_id = int(
-            session.execute(
-                text("SELECT id FROM places ORDER BY id LIMIT 1")
-            ).scalar_one()
-        )
-        session.execute(
-            text(
-                """
-                INSERT INTO characters (name, entity_id, current_location)
-                VALUES (:actor_name, :actor, :place_id),
-                       (:member_name, :member, NULL)
-                """
-            ),
-            {
-                "actor_name": f"patron-circle-{token}-actor",
-                "actor": actor,
-                "member_name": f"patron-circle-{token}-member",
-                "member": member,
-                "place_id": place_id,
-            },
-        )
-        character_ids = tuple(
-            int(value)
-            for value in session.execute(
-                text(
-                    """
-                    SELECT id FROM characters
-                    WHERE entity_id IN (:actor, :member)
-                    ORDER BY entity_id
-                    """
-                ),
-                {"actor": actor, "member": member},
-            ).scalars()
-        )
-        actor_character, member_character = character_ids
-        session.execute(
-            text(
-                """
-                INSERT INTO character_relationships (
-                    character1_id, character2_id, relationship_type,
-                    emotional_valence, dynamic, recent_events, history
-                ) VALUES (
-                    :actor, :member, 'associate', '+1|fixture',
-                    'The member can introduce the actor to the institution.',
-                    'No persistent events.',
-                    'Created for the polymorphic patron live proof.'
-                )
-                """
-            ),
-            {"actor": actor_character, "member": member_character},
-        )
-        session.execute(
-            text(
-                """
-                INSERT INTO character_routine_anchors (
-                    character_entity_id, anchor_type, place_id,
-                    mobility_policy, source
-                ) VALUES (
-                    :actor, 'home', :place_id, 'fixed_place',
-                    'test_polymorphic_patron_live'
-                )
-                """
-            ),
-            {"actor": actor, "place_id": place_id},
-        )
-        session.execute(
-            text(
-                """
-                INSERT INTO entity_pair_tags (
-                    subject_entity_id, object_entity_id, pair_tag_id,
-                    source_kind, template_id
-                )
-                SELECT :member, :faction, pt.id, 'template',
-                       'test_polymorphic_patron_live'
-                FROM pair_tags pt
-                WHERE pt.tag = 'status:senior' AND NOT pt.deprecated
-                """
-            ),
-            {"member": member, "faction": faction},
-        )
-        chunk = int(
-            session.execute(
-                text(
-                    """
-                    SELECT chunk_id FROM chunk_metadata
-                    WHERE world_time IS NOT NULL
-                    ORDER BY chunk_id DESC LIMIT 1
-                    """
-                )
-            ).scalar_one()
-        )
-        session.flush()
         yield {
             "session": session,
             "raw": raw,
-            "actor": actor,
-            "member": member,
-            "faction": faction,
-            "chunk": chunk,
+            "actor": patron_circle_clone["actor"],
+            "member": patron_circle_clone["member"],
+            "faction": patron_circle_clone["faction"],
+            "chunk": patron_circle_clone["chunk"],
         }
     finally:
         session.close()
@@ -217,6 +191,7 @@ def _seed_mid_project_status(db: dict[str, Any], level: str) -> None:
                 f"status:{level}",
             ),
         )
+        assert cur.rowcount == 1, f"pair tag status:{level} is not seeded"
 
 
 def test_roster_start_to_status_completion_closes_institutional_circle(

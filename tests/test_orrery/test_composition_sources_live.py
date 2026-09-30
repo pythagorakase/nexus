@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Iterator
-from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -38,12 +37,23 @@ from nexus.agents.orrery.templates import (
     START_RECRUIT_ALLY,
     START_SEEK_REDEMPTION,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    seed_character,
+    seed_faction,
+    seed_pair_tag,
+    seed_place,
+    seed_relationship,
+    seed_routine_anchor,
+    seed_story_clock,
+    seed_zone,
+    sqlalchemy_url,
+)
 
 
 pytestmark = [pytest.mark.requires_postgres, pytest.mark.live_llm]
 
-LIVE_SLOT = 5
+STORY_WORLD_TIME = datetime(2073, 8, 1, 12, tzinfo=timezone.utc)
 COMPOSITION = {
     "acquaintance_source_enabled": True,
     "hostile_source_enabled": True,
@@ -90,32 +100,12 @@ ROSTER_LEGACY_TEMPLATE = Template(
 )
 
 
-def _insert_relationship(
-    session: Session, source_character_id: int, target_character_id: int
-) -> None:
-    session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
-    session.execute(
-        text(
-            """
-            INSERT INTO character_relationships (
-                character1_id, character2_id, relationship_type,
-                emotional_valence, dynamic, recent_events, history
-            ) VALUES (
-                :source_id, :target_id, 'associate', '+1|favorable',
-                'Rollback-only composition fixture.',
-                'No persistent events.',
-                'Created solely for issue 532 live coverage.'
-            )
-            """
-        ),
-        {"source_id": source_character_id, "target_id": target_character_id},
-    )
-
-
 def _insert_pair_tag(
     session: Session, subject_id: int, object_id: int, tag: str
 ) -> None:
-    session.execute(
+    """Add one in-transaction pair tag; a missing vocabulary tag fails."""
+
+    row = session.execute(
         text(
             """
             INSERT INTO entity_pair_tags (
@@ -126,27 +116,43 @@ def _insert_pair_tag(
                    'template', 'test_composition_sources_live'
             FROM pair_tags pt
             WHERE pt.tag = :tag AND NOT pt.deprecated
+            RETURNING id
             """
         ),
         {"subject_id": subject_id, "object_id": object_id, "tag": tag},
-    )
+    ).one_or_none()
+    assert row is not None, f"pair tag {tag!r} is not seeded"
 
 
-@pytest.fixture()
-def composition_db() -> Iterator[dict[str, Any]]:
-    """Create a private hostile edge and roster graph, then roll it back."""
+@pytest.fixture(scope="module")
+def composition_clone() -> Iterator[dict[str, Any]]:
+    """Own one clone seeded with a private hostile edge and roster graph.
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = Session(bind=connection)
-    try:
-        token = uuid4().hex[:12]
-        place_id = int(
-            session.execute(
-                text("SELECT id FROM places ORDER BY id LIMIT 1")
-            ).scalar_one()
+    The actor is anchored at home in the first of two places and nobody is
+    located anywhere, so both places are empty until a test moves a pair.
+    Associate edges chain actor, near, far, and beyond members; each member
+    holds a status in its own faction, and the unreachable member's faction
+    has no path from the actor. The story clock gives the acquaintance commit
+    its tick chunk and every need row its anchor.
+    """
+
+    with disposable_slot_database("qa885_composition_sources") as dbname:
+        seed_zone(
+            dbname,
+            name="Composition Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
         )
+        places = tuple(
+            seed_place(dbname, name=name, longitude=longitude)[0]
+            for name, longitude in (
+                ("Composition Hall", -73.9857),
+                ("Composition Yard", -73.9601),
+            )
+        )
+        chunk_id = seed_story_clock(dbname, world_time=STORY_WORLD_TIME)
         entities: dict[str, int] = {}
         characters: dict[str, int] = {}
         for label in (
@@ -157,100 +163,82 @@ def composition_db() -> Iterator[dict[str, Any]]:
             "beyond_member",
             "unreachable_member",
         ):
-            entity_id = int(
-                session.execute(
-                    text(
-                        """
-                        INSERT INTO entities (kind, is_active)
-                        VALUES ('character', true)
-                        RETURNING id
-                        """
-                    )
-                ).scalar_one()
-            )
-            character_id = int(
-                session.execute(
-                    text(
-                        """
-                        INSERT INTO characters (name, entity_id)
-                        VALUES (:name, :entity_id)
-                        RETURNING id
-                        """
-                    ),
-                    {
-                        "name": f"composition-{token}-{label}",
-                        "entity_id": entity_id,
-                    },
-                ).scalar_one()
-            )
-            entities[label] = entity_id
-            characters[label] = character_id
-
-        factions: dict[str, int] = {}
-        for label in ("near", "far", "beyond", "unreachable", "no_roster"):
-            factions[label] = int(
-                session.execute(
-                    text(
-                        """
-                        INSERT INTO entities (kind, is_active)
-                        VALUES ('faction', true)
-                        RETURNING id
-                        """
-                    )
-                ).scalar_one()
+            characters[label], entities[label] = seed_character(
+                dbname, name=f"composition-{label}"
             )
 
-        session.execute(
-            text(
-                """
-                INSERT INTO character_routine_anchors (
-                    character_entity_id, anchor_type, place_id,
-                    mobility_policy, source
-                ) VALUES (
-                    :actor_id, 'home', :place_id, 'fixed_place',
-                    'test_composition_sources_live'
-                )
-                """
+        factions = {
+            label: seed_faction(dbname, name=f"Composition {label}")[1]
+            for label in ("near", "far", "beyond", "unreachable", "no_roster")
+        }
+
+        seed_routine_anchor(
+            dbname,
+            character_entity_id=entities["actor"],
+            place_id=places[0],
+            source="test_composition_sources_live",
+        )
+        for source_label, target_label in (
+            ("actor", "near_member"),
+            ("near_member", "far_member"),
+            ("far_member", "beyond_member"),
+        ):
+            seed_relationship(
+                dbname,
+                subject_character_id=characters[source_label],
+                object_character_id=characters[target_label],
+                relationship_type="associate",
+                emotional_valence="+1|favorable",
+                dynamic="Composition fixture.",
+                recent_events="No persistent events.",
+                history="Created solely for issue 532 live coverage.",
+            )
+        for subject_id, object_id, tag in (
+            (entities["hostile_target"], entities["actor"], "hostile_to"),
+            (factions["near"], entities["actor"], "hostile_to"),
+            (entities["near_member"], factions["near"], "status:junior"),
+            (entities["far_member"], factions["far"], "status:senior"),
+            (entities["beyond_member"], factions["beyond"], "status:senior"),
+            (
+                entities["unreachable_member"],
+                factions["unreachable"],
+                "status:junior",
             ),
-            {"actor_id": entities["actor"], "place_id": place_id},
-        )
-        _insert_relationship(session, characters["actor"], characters["near_member"])
-        _insert_relationship(
-            session, characters["near_member"], characters["far_member"]
-        )
-        _insert_relationship(
-            session, characters["far_member"], characters["beyond_member"]
-        )
-        _insert_pair_tag(
-            session,
-            entities["hostile_target"],
-            entities["actor"],
-            "hostile_to",
-        )
-        _insert_pair_tag(session, factions["near"], entities["actor"], "hostile_to")
-        _insert_pair_tag(
-            session, entities["near_member"], factions["near"], "status:junior"
-        )
-        _insert_pair_tag(
-            session, entities["far_member"], factions["far"], "status:senior"
-        )
-        _insert_pair_tag(
-            session,
-            entities["beyond_member"],
-            factions["beyond"],
-            "status:senior",
-        )
-        _insert_pair_tag(
-            session,
-            entities["unreachable_member"],
-            factions["unreachable"],
-            "status:junior",
-        )
+        ):
+            seed_pair_tag(
+                dbname,
+                subject_entity_id=subject_id,
+                object_entity_id=object_id,
+                tag=tag,
+                template_id="test_composition_sources_live",
+            )
         yield {
-            "session": session,
+            "dbname": dbname,
             "entities": entities,
             "factions": factions,
-            "place_id": place_id,
+            "places": places,
+            "chunk_id": chunk_id,
+        }
+
+
+@pytest.fixture()
+def composition_db(
+    composition_clone: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    """Open one rolled-back transaction over the seeded composition clone."""
+
+    engine = create_engine(sqlalchemy_url(composition_clone["dbname"]), future=True)
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection)
+    try:
+        yield {
+            "session": session,
+            "entities": composition_clone["entities"],
+            "factions": composition_clone["factions"],
+            "place_id": composition_clone["places"][0],
+            "places": composition_clone["places"],
+            "chunk_id": composition_clone["chunk_id"],
         }
     finally:
         session.close()
@@ -452,8 +440,7 @@ def test_live_acquaintance_writes_mutual_contact_and_feeds_next_tick(
             """
         )
     ).scalar_one_or_none()
-    if empty_place is None:
-        pytest.skip("save_05 needs one place without active character rows")
+    assert empty_place is not None, "the clone seeds two places nobody occupies"
     session.execute(
         text(
             """
@@ -491,12 +478,11 @@ def test_live_acquaintance_writes_mutual_contact_and_feeds_next_tick(
     ) in audited
 
     raw = session.connection().connection.driver_connection
+    tick_chunk_id = int(composition_db["chunk_id"])
     result = commit_orrery_tick_sync(
         raw,
         proposal,
-        tick_chunk_id=int(
-            session.execute(text("SELECT max(id) FROM narrative_chunks")).scalar_one()
-        ),
+        tick_chunk_id=tick_chunk_id,
     )
     assert result.tag_mutation_count >= 2
     session.expire_all()
@@ -525,13 +511,13 @@ def test_live_acquaintance_writes_mutual_contact_and_feeds_next_tick(
                 """
             SELECT count(*)
             FROM world_events we
-            WHERE we.tick_chunk_id = (SELECT max(id) FROM narrative_chunks)
+            WHERE we.tick_chunk_id = :tick_chunk_id
               AND we.event_type = 'contact_made'
               AND we.actor_entity_id = :actor
               AND we.target_entity_id = :target
             """
             ),
-            expected_bindings,
+            {**expected_bindings, "tick_chunk_id": tick_chunk_id},
         ).scalar_one()
         == 1
     )
@@ -578,11 +564,12 @@ def test_live_acquaintance_rebuffs_prior_ties_and_separation(
     place_ids = [
         int(value)
         for value in session.execute(
-            text("SELECT id FROM places ORDER BY id LIMIT 2")
+            text("SELECT id FROM places ORDER BY id")
         ).scalars()
     ]
-    if len(place_ids) < 2:
-        pytest.skip("save_05 needs two places for acquaintance exclusions")
+    assert place_ids == sorted(composition_db["places"]), (
+        "the clone must hold exactly the two seeded places, " f"found {place_ids!r}"
+    )
     actor_place = place_ids[0]
     target_place = place_ids[1] if rebuff == "different_place" else actor_place
     session.execute(
