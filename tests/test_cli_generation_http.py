@@ -137,6 +137,10 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 if scenario.result == "schedule_error":
                     self._respond({"detail": "Opening generation unavailable"}, 503)
                     return
+                if scenario.result == "schedule_drop":
+                    # The gateway dies while scheduling: no answer at all.
+                    self.close_connection = True
+                    return
                 scenario.scheduled = True
                 self._respond(
                     {
@@ -210,6 +214,10 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     return
                 if scenario.result == "status_error":
                     self._respond({"detail": "Status unavailable"}, 503)
+                    return
+                if scenario.result == "status_drop" and scenario.status_reads == 2:
+                    # The gateway dies mid-wait: the second read gets no answer.
+                    self.close_connection = True
                     return
                 if scenario.result == "response_timeout":
                     # Hold the real HTTP response until the CLI's own deadline
@@ -424,6 +432,47 @@ def test_seed_bootstrap_failure_preserves_partial_work(
     assert "next_phase_intro" not in payload
     if outcome not in {"schedule_error", "missing_session"}:
         assert payload["session_id"] == SESSION_ID
+    assert (
+        sum(
+            request[:2] == ("POST", "/api/narrative/continue")
+            for request in scenario.requests
+        )
+        == 1
+    )
+
+
+@pytest.mark.parametrize("outcome", ["schedule_drop", "status_drop"])
+def test_seed_bootstrap_lost_gateway_is_unreachable_and_keeps_the_seed(
+    tmp_path: Path, outcome: str
+) -> None:
+    """A gateway lost during the opening turn exits 4 with the seed in partial."""
+
+    scenario = GenerationScenario(result=outcome)
+    code, stdout, stderr = _run_cli(scenario, tmp_path)
+    assert code == 4, (stdout, stderr)
+    assert stdout == ""
+    assert "Traceback" not in stderr
+    envelope = json.loads(stderr)
+    assert (envelope["ok"], envelope["code"]) == (False, "api_unreachable")
+    assert "Cannot connect to API server at " in envelope["error"]
+    payload = envelope["partial"]
+    assert payload["narrative_bootstrap"] is False
+    assert payload["artifact_data"] == {"title": "The Glass Orchard"}
+    assert payload["retrograde"] == {"status": "complete"}
+    assert payload["bootstrap_error"]["detail"].startswith(
+        "Cannot connect to API server at "
+    )
+    assert payload["recovery_command"] == "nexus load --slot 5"
+    assert payload["recovery_command"] in envelope["error"]
+    assert "next_phase_intro" not in payload
+    if outcome == "status_drop":
+        assert payload["bootstrap_error"]["session_id"] == SESSION_ID
+        assert payload["session_id"] == SESSION_ID
+        assert payload["generation_error"]["status"] == "unreachable"
+        assert scenario.status_reads == 2
+    else:
+        assert "session_id" not in payload
+        assert scenario.status_reads == 0
     assert (
         sum(
             request[:2] == ("POST", "/api/narrative/continue")

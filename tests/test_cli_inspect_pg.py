@@ -1,10 +1,10 @@
 """The inspect family and the shared session waiter on a factory-played clone.
 
-A disposable clone holds a story played by ``seed_played_story`` with its next
-turn pending. The real gateway serves it on lane 8017 with every provider
-routed to TEST, and the
-public CLI runs in subprocesses: ``continue --choice 1`` accepts the pending
-turn and waits on the new session through ``wait_for_session``, then the
+A disposable clone holds a story played by ``seed_played_story``. The real
+gateway serves it on lane 8017 with every provider routed to TEST, and the
+public CLI runs in subprocesses: ``inspect incubator`` reads the empty
+incubator as null, the next turn is staged as pending, ``continue --choice 1``
+accepts it and waits on the new session through ``wait_for_session``, then the
 inspect verbs read the result back through the player-plane routes.
 """
 
@@ -86,15 +86,17 @@ def test_continue_waits_then_inspect_reads_the_played_clone(
             slot=4,
         )
         faction_id, _entity = seed_faction(dbname, name="The Lamplighters")
-        seed_pending_turn(
-            dbname,
-            user_text=FIXTURE_TURN_CHOICES[0],
-            storyteller_text=PENDING_TEXT,
-            choices=list(FIXTURE_TURN_CHOICES),
-        )
 
         with gateway_lane(monkeypatch) as scheduler:
             scheduler.stop()
+            # The real incubator route's empty answer is an explicit null.
+            assert _envelope("incubator") is None
+            seed_pending_turn(
+                dbname,
+                user_text=FIXTURE_TURN_CHOICES[0],
+                storyteller_text=PENDING_TEXT,
+                choices=list(FIXTURE_TURN_CHOICES),
+            )
             _completed, turn = _nexus(
                 "continue", "--slot", "4", "--choice", "1", "--json"
             )

@@ -83,6 +83,9 @@ class Gateway:
     # Accept and record every request but answer none while the gateway serves:
     # a runtime that is up yet never answers within the CLI's request timeout.
     stall: bool = False
+    # Promise a longer body than is sent, then close the connection: a gateway
+    # that dies while sending its answer.
+    truncate: bool = False
 
 
 @contextmanager
@@ -107,9 +110,12 @@ def _serve(gateway: Gateway) -> Iterator[str]:
             body = json.dumps(payload).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
+            promised = len(body) + (4096 if gateway.truncate else 0)
+            self.send_header("Content-Length", str(promised))
             self.end_headers()
             self.wfile.write(body)
+            if gateway.truncate:
+                self.close_connection = True
 
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
             self._answer("GET")
@@ -1060,6 +1066,8 @@ def test_inspect_unusable_body_is_an_invalid_response(
         (("chunks", "--from", "9", "--to", "3"), "--from must not exceed --to"),
         (("chunk",), "the following arguments are required: chunk_id"),
         (("characters", "first"), "argument entity_id: invalid int value: 'first'"),
+        (("places", "first"), "argument entity_id: invalid int value: 'first'"),
+        (("factions", "first"), "argument entity_id: invalid int value: 'first'"),
     ],
     ids=[
         "no-range",
@@ -1068,7 +1076,9 @@ def test_inspect_unusable_body_is_an_invalid_response(
         "from-zero",
         "reversed",
         "chunk-id",
-        "entity-id",
+        "character-id",
+        "place-id",
+        "faction-id",
     ],
 )
 def test_inspect_rejects_unusable_arguments_before_any_request(
@@ -1083,6 +1093,77 @@ def test_inspect_rejects_unusable_arguments_before_any_request(
     assert envelope["code"] == "usage_error"
     assert envelope["error"] == message
     assert gateway.requests == []
+
+
+# One well-formed invocation of every inspect verb, less its --slot.
+INSPECT_VERB_ARGV: dict[str, tuple[str, ...]] = {
+    "slot": ("slot",),
+    "chunks": ("chunks", "--last", "1"),
+    "chunk": ("chunk", "12"),
+    "incubator": ("incubator",),
+    "characters": ("characters",),
+    "character": ("characters", "3"),
+    "places": ("places",),
+    "place": ("places", "2"),
+    "factions": ("factions",),
+    "faction": ("factions", "7"),
+}
+
+
+@pytest.mark.parametrize("verb", sorted(INSPECT_VERB_ARGV))
+@pytest.mark.parametrize(
+    ("slot_args", "message"),
+    [
+        (("--slot", "9"), "Slot must be between 1 and 5"),
+        ((), "the following arguments are required: --slot"),
+    ],
+    ids=["out-of-range", "missing"],
+)
+def test_inspect_verb_refuses_an_unusable_slot_before_any_request(
+    verb: str, slot_args: tuple[str, ...], message: str
+) -> None:
+    """Every inspect verb needs a slot from 1 to 5 and sends nothing without."""
+    gateway = Gateway(routes=dict(INSPECT_ROUTES))
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "inspect",
+            *INSPECT_VERB_ARGV[verb],
+            *slot_args,
+            "--json",
+            env={"NEXUS_API_URL": base_url},
+        )
+
+    assert completed.returncode == ExitCode.USAGE
+    envelope = _failure(completed)
+    assert envelope["code"] == "usage_error"
+    assert envelope["error"] == message
+    assert gateway.requests == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("chunks", "--last", "1"),
+        ("chunk", "12"),
+        ("incubator",),
+        ("characters",),
+        ("places", "2"),
+        ("factions",),
+    ],
+    ids=["chunks", "chunk", "incubator", "characters", "place", "factions"],
+)
+def test_inspect_verb_body_cut_off_mid_answer_exits_four(
+    argv: tuple[str, ...],
+) -> None:
+    """A gateway that drops the connection while sending a body is unreachable."""
+    gateway = Gateway(routes=dict(INSPECT_ROUTES), truncate=True)
+    completed = _inspect(gateway, *argv)
+
+    assert completed.returncode == ExitCode.UNREACHABLE
+    envelope = _failure(completed)
+    assert envelope["code"] == "api_unreachable"
+    assert envelope["error"].startswith("Cannot connect to API server at ")
+    assert gateway.requests
 
 
 @pytest.mark.parametrize(

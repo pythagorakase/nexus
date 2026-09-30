@@ -17,7 +17,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
-from threading import Thread
+from threading import Event, Thread
 import time
 from typing import Any, Iterator
 from urllib.parse import parse_qs, urlparse
@@ -45,6 +45,11 @@ class Session:
     drop_read: int | None = None
     # HTTP status of every status read, when the route answers with an error.
     status_code: int = 200
+    # Every status read redirects to itself, so no read ever gets an answer.
+    redirect_status: bool = False
+    # What the state read after the session finished does instead of
+    # answering: "drop" closes the connection, "stall" holds it unanswered.
+    state_failure: str | None = None
     status_reads: int = 0
     read_times: list[float] = field(default_factory=list)
     requests: list[tuple[str, str]] = field(default_factory=list)
@@ -53,6 +58,8 @@ class Session:
 @contextmanager
 def _gateway(session: Session) -> Iterator[str]:
     """Serve scheduling, durable status, and slot state for one session."""
+
+    released = Event()
 
     class Handler(BaseHTTPRequestHandler):
         def _respond(self, payload: Any, status: int = 200) -> None:
@@ -78,6 +85,12 @@ def _gateway(session: Session) -> Iterator[str]:
             session.requests.append(("GET", url.path))
             if url.path == "/api/slot/5/state":
                 has_run = session.status_reads > 0
+                if has_run and session.state_failure == "drop":
+                    self.close_connection = True
+                    return
+                if has_run and session.state_failure == "stall":
+                    released.wait()
+                    return
                 self._respond(
                     {
                         "is_empty": False,
@@ -96,6 +109,12 @@ def _gateway(session: Session) -> Iterator[str]:
                 if session.status_reads == session.drop_read:
                     # Close the connection without answering.
                     self.close_connection = True
+                    return
+                if session.redirect_status:
+                    self.send_response(302)
+                    self.send_header("Location", self.path)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
                     return
                 if session.status_code != 200:
                     self._respond({"detail": "Session gone"}, session.status_code)
@@ -122,6 +141,7 @@ def _gateway(session: Session) -> Iterator[str]:
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}"
     finally:
+        released.set()
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
@@ -248,6 +268,21 @@ def test_wait_reports_an_http_error_answer_with_its_body(api_url) -> None:
     assert "Session gone" in caught.value.detail
 
 
+def test_wait_reports_any_other_failed_read_as_a_domain_failure(api_url) -> None:
+    """A request error that is not a lost connection keeps the domain code."""
+    session = Session(redirect_status=True)
+    with _gateway(session) as base_url:
+        api_url(base_url)
+        with pytest.raises(cli.SessionWaitFailure) as caught:
+            cli.wait_for_session(SESSION, slot=5, timeout=10, interval=0.05)
+
+    assert (caught.value.status, caught.value.code) == ("http_error", "domain_failure")
+    assert caught.value.detail.startswith(
+        f"Could not read {base_url}/api/narrative/status/{SESSION}: "
+    )
+    assert "redirects" in caught.value.detail
+
+
 def test_poll_interval_is_read_from_runtime_cli(tmp_path: Path, monkeypatch) -> None:
     """The wait cadence is the [runtime.cli] poll_interval_seconds setting."""
     document: Any = tomlkit.parse((ROOT / "nexus.toml").read_text(encoding="utf-8"))
@@ -266,7 +301,9 @@ def test_poll_interval_is_read_from_runtime_cli(tmp_path: Path, monkeypatch) -> 
 # ---------------------------------------------------------------------------
 
 
-def _run(base_url: str, *argv: str) -> subprocess.CompletedProcess[str]:
+def _run(
+    base_url: str, *argv: str, config: Path = ROOT / "nexus.toml"
+) -> subprocess.CompletedProcess[str]:
     """Run ``nexus <argv> --json`` against the loopback gateway."""
     env = {
         key: value
@@ -279,7 +316,7 @@ def _run(base_url: str, *argv: str) -> subprocess.CompletedProcess[str]:
         env={
             **env,
             "NEXUS_API_URL": base_url,
-            "NEXUS_RUNTIME_CONFIG": str(ROOT / "nexus.toml"),
+            "NEXUS_RUNTIME_CONFIG": str(config),
             "NEXUS_KEYRING_DISABLE": "1",
             "PYTHONPATH": str(ROOT),
         },
@@ -287,6 +324,15 @@ def _run(base_url: str, *argv: str) -> subprocess.CompletedProcess[str]:
         text=True,
         timeout=60,
     )
+
+
+def _cli_config(tmp_path: Path, **cli_settings: float) -> Path:
+    """Write a copy of the checkout config with ``[runtime.cli]`` overrides."""
+    document: Any = tomlkit.parse((ROOT / "nexus.toml").read_text(encoding="utf-8"))
+    document["runtime"]["cli"].update(cli_settings)
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document), encoding="utf-8")
+    return config
 
 
 COMMANDS = {
@@ -362,3 +408,88 @@ def test_command_reports_a_gateway_lost_mid_wait_as_unreachable(
     assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
     assert session.status_reads == 2
     assert elapsed < 30
+
+
+@pytest.mark.parametrize("command", sorted(COMMANDS))
+def test_command_polls_at_the_configured_interval(command: str, tmp_path: Path) -> None:
+    """Each command waits [runtime.cli].poll_interval_seconds between reads."""
+    argv, _route = COMMANDS[command]
+    config = _cli_config(tmp_path, poll_interval_seconds=0.3)
+    session = Session(statuses=["initiated", "initiated", "complete"])
+    with _gateway(session) as base_url:
+        completed = _run(base_url, *argv, config=config)
+
+    assert completed.returncode == ExitCode.OK, completed.stderr
+    assert session.status_reads == 3
+    gaps = [b - a for a, b in zip(session.read_times, session.read_times[1:])]
+    # The checkout's own interval is 1.0s; these reads are 0.3s apart.
+    assert all(0.29 <= gap < 1.0 for gap in gaps), gaps
+
+
+@pytest.mark.parametrize("command", sorted(COMMANDS))
+def test_command_keeps_the_session_when_a_read_fails_otherwise(command: str) -> None:
+    """A failed status read that is not a lost connection keeps the partial.
+
+    The request error (here too many redirects) is a domain failure, not an
+    escape past the waiter that loses the scheduled session.
+    """
+    argv, _route = COMMANDS[command]
+    session = Session(redirect_status=True)
+    with _gateway(session) as base_url:
+        completed = _run(base_url, *argv)
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stderr
+    assert completed.stdout == ""
+    assert "Traceback" not in completed.stderr
+    envelope = json.loads(completed.stderr)
+    assert envelope["code"] == "domain_failure"
+    assert envelope["error"].startswith(f"Could not read {base_url}/api/narrative/")
+    assert envelope["partial"]["session_id"] == SESSION
+    assert envelope["partial"]["generation_error"]["status"] == "http_error"
+    assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
+
+
+def test_continue_reports_a_state_read_dropped_after_the_session_as_unreachable() -> (
+    None
+):
+    """The state read after a finished session can lose the gateway too."""
+    session = Session(statuses=["complete"], state_failure="drop")
+    with _gateway(session) as base_url:
+        completed = _run(base_url, *COMMANDS["continue"][0])
+
+    assert completed.returncode == ExitCode.UNREACHABLE, completed.stderr
+    assert completed.stdout == ""
+    assert "Traceback" not in completed.stderr
+    envelope = json.loads(completed.stderr)
+    assert envelope["code"] == "api_unreachable"
+    assert envelope["error"].startswith(f"Cannot connect to API server at {base_url}")
+    assert envelope["partial"]["session_id"] == SESSION
+    assert envelope["partial"]["generation_error"]["status"] == "unreachable"
+    assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
+    assert session.status_reads == 1
+
+
+def test_continue_reports_a_stalled_state_read_as_a_domain_failure(
+    tmp_path: Path,
+) -> None:
+    """A gateway that accepted the state read but answered too late is exit 1.
+
+    It did not refuse or drop the connection, so the saved-work rule makes it
+    a domain failure, as a status read that times out already is.
+    """
+    config = _cli_config(tmp_path, request_timeout_seconds=0.5)
+    session = Session(statuses=["complete"], state_failure="stall")
+    with _gateway(session) as base_url:
+        completed = _run(base_url, *COMMANDS["continue"][0], config=config)
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE, completed.stderr
+    assert completed.stdout == ""
+    assert "Traceback" not in completed.stderr
+    envelope = json.loads(completed.stderr)
+    assert envelope["code"] == "domain_failure"
+    assert envelope["error"].startswith(
+        f"Timed out waiting for API server at {base_url}"
+    )
+    assert envelope["partial"]["session_id"] == SESSION
+    assert envelope["partial"]["generation_error"]["status"] == "timeout"
+    assert envelope["partial"]["recovery_command"] == "nexus load --slot 5"
