@@ -1,6 +1,6 @@
 # Legacy Vector Dimension Inventory (#812, Order 812-S1)
 
-**Snapshot taken 2026-09-30, 12:40:03-12:40:09 America/New_York (11:40 CDT), on the owner's PostgreSQL 17.11 server (Postgres.app, localhost:5432).** This is a point-in-time snapshot of read-only SQL. It changes nothing, and any later embedding job, slot reset, or clone makes it stale. Every session ran with `PGOPTIONS='-c default_transaction_read_only=on'` (plus `-c statement_timeout=90000`), and the first statement of every session is `SHOW default_transaction_read_only`, which returned `on` in all of them. No database was written.
+**Snapshot taken 2026-09-30, 12:40:03-12:40:09 America/New_York (11:40 CDT), on the owner's PostgreSQL 17.11 server (Postgres.app, localhost:5432).** This is a point-in-time snapshot of read-only SQL. It changes nothing, and any later embedding job, slot reset, or clone makes it stale. Every per-database discovery and inventory session ran with `PGOPTIONS='-c default_transaction_read_only=on'` (the inventory runs also with `-c statement_timeout=90000`), and the first statement of each of those sessions is `SHOW default_transaction_read_only`, which returned `on` in all of them. The database listing below is the one exception: it is a plain `SELECT` on the `pg_database` catalog, run on the default maintenance database `pythagor` without that setting. No database was written.
 
 The issue's verifier amendment asks for this inventory "before dropping" legacy dimensions. This change drops nothing; it removes two unread constants (`LEGACY_EMBEDDING_DIMENSIONS`, `DIMENSION_TABLES`) and records what exists.
 
@@ -187,12 +187,12 @@ origin/main:nexus/agents/memnon/utils/embedding_tables.py:25:LEGACY_EMBEDDING_DI
 origin/main:nexus/agents/memnon/utils/embedding_tables.py:26:DIMENSION_TABLES: List[str] = [
 origin/main:nexus/agents/memnon/utils/embedding_tables.py:27:    f"chunk_embeddings_{dimensions:04d}d" for dimensions in LEGACY_EMBEDDING_DIMENSIONS
 
-$ git grep -n -E "LEGACY_EMBEDDING_DIMENSIONS|DIMENSION_TABLES"      # this branch
+$ git grep -n -E "LEGACY_EMBEDDING_DIMENSIONS|DIMENSION_TABLES" -- ':!docs/qa/812-legacy-inventory'      # this branch, at 07920ed9
 tests/test_ir_eval_v2/test_embedding_tables.py:52:    assert not hasattr(embedding_tables, "LEGACY_EMBEDDING_DIMENSIONS")
 tests/test_ir_eval_v2/test_embedding_tables.py:53:    assert not hasattr(embedding_tables, "DIMENSION_TABLES")
 ```
 
-A filesystem `grep -rn` over the worktree (tracked and untracked, `.git` and `node_modules` excluded) returns the same two test lines. The only hits on `origin/main` are the definitions themselves; `ir_eval/`, `scripts/`, `docs/`, and `tests/` hold none.
+The branch search excludes this evidence directory, `docs/qa/812-legacy-inventory`, because this file quotes both names. A filesystem `grep -rn` over the worktree (tracked and untracked, `.git`, `node_modules`, and the same evidence directory excluded) returns the same two test lines. The only hits on `origin/main` are the definitions themselves; `ir_eval/`, `scripts/`, `docs/`, and `tests/` hold none.
 
 ## How the Inventory Was Run
 
