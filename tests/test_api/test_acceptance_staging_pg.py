@@ -14,14 +14,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from nexus.config import load_settings
-from nexus.api import (
-    narrative,
-    save_slots,
-    slot_endpoints,
-    slot_mutations,
-    slot_state,
-    slot_utils,
-)
+from nexus.api import narrative, slot_endpoints
 from nexus.api.choice_recovery import recover_orphaned_choice
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.narrative_generation import write_to_incubator
@@ -32,64 +25,70 @@ from nexus.api.narrative_lease import (
 )
 from nexus.api.narrative_schemas import RegenerateNarrativeRequest
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    routed_slot_environment,
+    seed_protagonist,
+)
+from tests.scheduler_helpers import private_runtime_config
 
 pytestmark = pytest.mark.requires_postgres
+
+# The slot every test below addresses; ``acceptance_slot`` routes only it.
+ACCEPTANCE_SLOT = 5
 
 
 @pytest.fixture
 def acceptance_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[str, int, int]]:
-    """Route slot entry points to the fixture's database, retaining real SQL."""
+    """Route slot 5 to the fixture's database, retaining real SQL.
+
+    ``route_slot_to_disposable`` routes slot 5 in every loaded module and
+    refuses every other slot, and the test's monkeypatch restores the
+    resolvers at teardown.
+    """
     with disposable_slot_database("qa640_acceptance") as dbname:
-        slot_utils.VALID_DBNAMES.add(dbname)
-        for module in (
-            slot_utils,
-            slot_endpoints,
-            slot_mutations,
-            slot_state,
-            save_slots,
-        ):
-            monkeypatch.setattr(module, "slot_dbname", lambda _slot: dbname)
-        try:
-            _, actor = seed_protagonist(dbname)
-            with connect(dbname) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "INSERT INTO narrative_chunks (storyteller_text, raw_text, "
-                        "choice_text, choice_object) VALUES (%s, %s, %s, %s) RETURNING id",
-                        (
-                            "Rain falls.",
-                            "Rain falls.\n\nTake shelter.",
-                            "Take shelter.",
-                            json.dumps(
-                                {
-                                    "presented": ["Take shelter.", "Walk on."],
-                                    "selected": 1,
-                                }
-                            ),
+        route_slot_to_disposable(
+            monkeypatch.setattr, slot=ACCEPTANCE_SLOT, dbname=dbname
+        )
+        _, actor = seed_protagonist(dbname)
+        with connect(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO narrative_chunks (storyteller_text, raw_text, "
+                    "choice_text, choice_object) VALUES (%s, %s, %s, %s) RETURNING id",
+                    (
+                        "Rain falls.",
+                        "Rain falls.\n\nTake shelter.",
+                        "Take shelter.",
+                        json.dumps(
+                            {
+                                "presented": ["Take shelter.", "Walk on."],
+                                "selected": 1,
+                            }
                         ),
-                    )
-                    parent = cur.fetchone()[0]
-                    cur.execute(
-                        "INSERT INTO chunk_metadata (chunk_id, season, episode, scene, "
-                        "world_layer) VALUES (%s, 1, 1, 1, 'primary')",
-                        (parent,),
-                    )
-                    cur.execute(
-                        """
-                        INSERT INTO orrery_resolutions (
-                            tick_chunk_id, template_id, binding_hash, actor_entity_id,
-                            priority, magnitude, state_delta, brief, promotion_status
-                        ) VALUES (%s, 'qa640_acceptance', 'qa640_acceptance', %s,
-                                  50, 0.5, '{}'::jsonb, 'Rain falls.', 'promoted')
-                        RETURNING id
-                        """,
-                        (parent, actor),
-                    )
-                    resolution = cur.fetchone()[0]
-            yield dbname, parent, resolution
-        finally:
-            slot_utils.VALID_DBNAMES.discard(dbname)
+                    ),
+                )
+                parent = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO chunk_metadata (chunk_id, season, episode, scene, "
+                    "world_layer) VALUES (%s, 1, 1, 1, 'primary')",
+                    (parent,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO orrery_resolutions (
+                        tick_chunk_id, template_id, binding_hash, actor_entity_id,
+                        priority, magnitude, state_delta, brief, promotion_status
+                    ) VALUES (%s, 'qa640_acceptance', 'qa640_acceptance', %s,
+                              50, 0.5, '{}'::jsonb, 'Rain falls.', 'promoted')
+                    RETURNING id
+                    """,
+                    (parent, actor),
+                )
+                resolution = cur.fetchone()[0]
+        yield dbname, parent, resolution
 
 
 def draft(parent: int, resolution: int, session: str) -> dict:
@@ -398,9 +397,14 @@ async def test_startup_recovery_preserves_incubator_and_clears_orphan(
 
 @pytest.mark.asyncio
 async def test_incubator_cli_load_and_undo_with_no_predicted_id(
-    acceptance_slot, monkeypatch: pytest.MonkeyPatch
+    acceptance_slot, tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The public CLI reads and undoes a real draft through a gateway on an ephemeral port."""
+    """The public CLI reads and undoes a real draft through a gateway on an ephemeral port.
+
+    Each CLI child runs through ``tests.slot_routed_cli`` with the fixture's
+    route, and the closing ``nexus down`` reads a private runtime config, so
+    it stops nothing the owner started from the checkout.
+    """
     import os
     import socket
     import subprocess
@@ -413,6 +417,8 @@ async def test_incubator_cli_load_and_undo_with_no_predicted_id(
     from nexus import cli
 
     dbname, parent, resolution = acceptance_slot
+    private_runtime_config(tmp_path, monkeypatch)
+    child_env = routed_slot_environment(ACCEPTANCE_SLOT, dbname)
     with closing(connect(dbname)) as conn:
         session = own_draft(conn, parent)
         await write_to_incubator(conn, draft(parent, resolution, session))
@@ -437,7 +443,7 @@ async def test_incubator_cli_load_and_undo_with_no_predicted_id(
                 not server.started and thread.is_alive() and time.monotonic() < deadline
             ):
                 time.sleep(0.01)
-            assert server.started, "Gateway 8014 failed to start"
+            assert server.started, f"Gateway {port} failed to start"
             completed = cli._wait_for_narrative_result(5, session)
             assert completed["success"], completed
             assert completed["chunk_id"] is None
@@ -446,13 +452,13 @@ async def test_incubator_cli_load_and_undo_with_no_predicted_id(
                     [
                         sys.executable,
                         "-m",
-                        "nexus.cli",
+                        "tests.slot_routed_cli",
                         command,
                         "--slot",
                         "5",
                         "--json",
                     ],
-                    env={**os.environ, "PYTHONPATH": os.getcwd()},
+                    env={**os.environ, "PYTHONPATH": os.getcwd(), **child_env},
                     text=True,
                     capture_output=True,
                     timeout=30,
@@ -467,10 +473,10 @@ async def test_incubator_cli_load_and_undo_with_no_predicted_id(
         finally:
             server.should_exit = True
             thread.join(timeout=10)
-            assert not thread.is_alive(), "Gateway 8014 did not shut down"
+            assert not thread.is_alive(), f"Gateway {port} did not shut down"
             stopped = subprocess.run(
-                [sys.executable, "-m", "nexus.cli", "down", "--json"],
-                env={**os.environ, "PYTHONPATH": os.getcwd()},
+                [sys.executable, "-m", "tests.slot_routed_cli", "down", "--json"],
+                env={**os.environ, "PYTHONPATH": os.getcwd(), **child_env},
                 text=True,
                 capture_output=True,
                 timeout=30,

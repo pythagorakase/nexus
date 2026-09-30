@@ -18,7 +18,11 @@ from nexus.api.narrative_lease import (
     heartbeat_generation,
     read_generation_session,
 )
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slots_to_disposable,
+)
 from tests.scheduler_helpers import route_slot
 
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
@@ -80,18 +84,18 @@ def test_session_phase_heartbeat_expiry_and_slot_scope(monkeypatch):
 
 
 def test_session_routes_and_socket_hints_do_not_cross_slots(monkeypatch):
-    """Two real slot databases and two sockets remain isolated by explicit slot."""
-    from nexus.api import slot_utils
+    """Two real slot databases and two sockets remain isolated by explicit slot.
 
+    ``route_slots_to_disposable`` routes slot 4 to one clone and slot 5 to the
+    other in every loaded module, including names bound at import, and
+    refuses every other slot.
+    """
     with (
         disposable_slot_database("qa640_775_left") as left,
         disposable_slot_database("qa640_775_right") as right,
     ):
-        route_slot(monkeypatch, left)
-        monkeypatch.setattr(slot_utils, "VALID_DBNAMES", {left, right})
-        monkeypatch.setattr(
-            slot_utils, "slot_dbname", lambda slot: {4: left, 5: right}[slot]
-        )
+        route_slots_to_disposable(monkeypatch.setattr, {4: left, 5: right})
+        monkeypatch.setenv("NEXUS_SLOT", "4")
         session = str(uuid4())
         with closing(connect(left)) as conn:
             acquire_generation_lease(

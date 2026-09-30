@@ -365,7 +365,13 @@ def test_summary_truncation_is_terminal_with_attempts_remaining(
 def test_scheduler_new_queue_status_and_interactive_priority(
     acceptance_slot, monkeypatch, tmp_path, mock_openai_server
 ):
-    """A live generation keeps both plans queued across runtime and CLI status."""
+    """A live generation keeps both plans queued across runtime and CLI status.
+
+    The gateway serves on ``gateway_lane``'s lane (``NEXUS_GATEWAY_PORT``,
+    else its default).
+    """
+    import os
+
     import requests
 
     from nexus.jobs.embeddings import enqueue_embedding
@@ -374,8 +380,6 @@ def test_scheduler_new_queue_status_and_interactive_priority(
     configure_test(tmp_path, mock_openai_server, monkeypatch)
     dbname, parent, _ = acceptance_slot
     route_slot(monkeypatch, dbname)
-    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "8016")
-    monkeypatch.setenv("NEXUS_API_URL", "http://127.0.0.1:8016")
     with closing(connect(dbname)) as conn:
         session = own_draft(conn, parent)
         with conn, conn.cursor() as cur:
@@ -386,7 +390,7 @@ def test_scheduler_new_queue_status_and_interactive_priority(
         try:
             with gateway_lane(monkeypatch):
                 response = requests.get(
-                    "http://127.0.0.1:8016/runtime/status", timeout=10
+                    os.environ["NEXUS_API_URL"] + "/runtime/status", timeout=10
                 )
                 response.raise_for_status()
                 queues = response.json()["jobs"]["queues"]

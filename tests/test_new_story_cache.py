@@ -305,16 +305,31 @@ _COLUMN_COMMENT_SQL = """
 """
 
 
+# The slot the wizard cache tests address; ``_migrated_slot_clone`` routes it.
+_CLONE_SLOT = 4
+
+
 @contextmanager
 def _migrated_slot_clone(prefix: str) -> Iterator[str]:
-    """A template clone with every pending migration (132 included) applied."""
-    from scripts import migrate
-    from tests.pg_fixtures import disposable_slot_database
+    """A template clone with every pending migration (132 included) applied.
 
-    with disposable_slot_database(prefix) as dbname:
+    The clone is routed as slot 4 for the life of the context, so the cache
+    writers' ``require_slot_dbname`` admits it; every other slot raises.
+    """
+    from nexus.api import slot_utils
+    from scripts import migrate
+    from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
+
+    with (
+        disposable_slot_database(prefix) as dbname,
+        pytest.MonkeyPatch.context() as patch,
+    ):
         # The clone carries the template's stamps; apply what it lacks.
         _, failed = migrate.migrate_database(dbname, skip_locked=False)
         assert failed == 0
+        route_slot_to_disposable(patch.setattr, slot=_CLONE_SLOT, dbname=dbname)
+        assert slot_utils.require_slot_dbname(slot=_CLONE_SLOT) == dbname
+        assert slot_utils.require_slot_dbname(dbname=dbname) == dbname
         yield dbname
 
 
@@ -348,7 +363,7 @@ def test_weird_level_round_trips_and_only_a_new_wizard_clears_it() -> None:
                 assert row[0] == kind
                 assert row[1] and row[1].strip(), f"{column} has no COMMENT"
 
-        init_cache(dbname, "thread-838", 4)
+        init_cache(dbname, "thread-838", _CLONE_SLOT)
         before = read_cache(dbname)
         assert before is not None and before.weird_level is None
 
@@ -376,7 +391,7 @@ def test_weird_level_round_trips_and_only_a_new_wizard_clears_it() -> None:
 
         clear_cache(dbname)
         assert read_cache(dbname) is None
-        init_cache(dbname, "thread-838-next", 4)
+        init_cache(dbname, "thread-838-next", _CLONE_SLOT)
         fresh = read_cache(dbname)
         assert fresh is not None and fresh.weird_level is None
 

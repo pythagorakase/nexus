@@ -422,7 +422,7 @@ def test_scheduler_gateway_sigkill_resumes_inflight_experience(
         _complete_render,
         ExperienceLeaseLostError,
     )
-    from tests.pg_fixtures import disposable_slot_database
+    from tests.pg_fixtures import disposable_slot_database, routed_slot_environment
     from tests.scheduler_helpers import test_provider_config
 
     # Configure before spawning TEST so its process inherits the same file.
@@ -488,16 +488,18 @@ def test_scheduler_gateway_sigkill_resumes_inflight_experience(
                 "NEXUS_SLOT": "4",
                 "NEXUS_GATEWAY_PORT": str(port),
                 "NEXUS_API_URL": f"http://127.0.0.1:{port}",
+                **routed_slot_environment(4, dbname),
             }
+            # The child routes slot 4 to the clone from NEXUS_ROUTED_SLOT* (and
+            # refuses every other slot) before it imports the gateway.
             runner = tmp_path / "gateway_process.py"
             runner.write_text(
                 """import sys
-import pytest
 import uvicorn
-from tests.scheduler_helpers import route_slot
-route_slot(pytest.MonkeyPatch(), sys.argv[1])
+from tests.slot_routed_gateway import route_child_process
+route_child_process()
 from nexus.api.narrative import app
-uvicorn.run(app, fd=int(sys.argv[2]), log_level="info")
+uvicorn.run(app, fd=int(sys.argv[1]), log_level="info")
 """
             )
             processes = []
@@ -506,7 +508,7 @@ uvicorn.run(app, fd=int(sys.argv[2]), log_level="info")
                 log_path = tmp_path / f"gateway-{label}.log"
                 with log_path.open("w") as log:
                     process = subprocess.Popen(
-                        [sys.executable, str(runner), dbname, str(listener.fileno())],
+                        [sys.executable, str(runner), str(listener.fileno())],
                         env=env,
                         stdout=log,
                         stderr=subprocess.STDOUT,

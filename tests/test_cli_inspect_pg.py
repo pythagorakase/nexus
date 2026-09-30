@@ -30,7 +30,7 @@ from tests.pg_fixtures import (
     seed_pending_turn,
     seed_played_story,
 )
-from tests.scheduler_helpers import gateway_lane, route_slot
+from tests.scheduler_helpers import gateway_lane, route_slot, routed_child_environment
 from tests.scheduler_helpers import test_provider_config as configure_test
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
@@ -43,11 +43,15 @@ CAST = ("Mara Quill", "Oren Vale")
 
 
 def _nexus(*argv: str) -> tuple[subprocess.CompletedProcess[str], Any]:
-    """Run the public CLI against the lane and parse its JSON stdout."""
+    """Run the public CLI against the lane and parse its JSON stdout.
+
+    The child runs through ``tests.slot_routed_cli`` with the active route, so
+    it resolves slot 4 to the clone as this process does.
+    """
     completed = subprocess.run(
-        [sys.executable, "-m", "nexus.cli", *argv],
+        [sys.executable, "-m", "tests.slot_routed_cli", *argv],
         cwd=ROOT,
-        env={**os.environ, "PYTHONPATH": str(ROOT)},
+        env={**os.environ, "PYTHONPATH": str(ROOT), **routed_child_environment()},
         capture_output=True,
         text=True,
         timeout=300,
@@ -75,9 +79,6 @@ def test_continue_waits_then_inspect_reads_the_played_clone(
     monkeypatch.setenv("NEXUS_API_URL", f"http://127.0.0.1:{LANE}")
     with disposable_slot_database("qa640_815_inspect") as dbname:
         route_slot(monkeypatch, dbname)
-        from nexus.api import slot_endpoints
-
-        monkeypatch.setattr(slot_endpoints, "slot_dbname", lambda slot: dbname)
         committed = seed_played_story(
             dbname,
             turns=3,

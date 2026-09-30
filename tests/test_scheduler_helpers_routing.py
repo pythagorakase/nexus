@@ -1,0 +1,174 @@
+"""The scheduler helpers route through the shared slot contract (issue #885).
+
+``tests.scheduler_helpers.route_slot`` is the slot-4 case of
+``tests.pg_fixtures.route_slots_to_disposable``: it reaches the modules that
+bind ``slot_dbname`` at import, refuses owner names and every other slot,
+and restores all of it at teardown. ``run_cli`` hands its child the active
+route, and ``gateway_lane`` refuses to start or to close with ``nexus down``
+unless ``NEXUS_RUNTIME_CONFIG`` names a private config. None of these tests
+opens a database connection.
+"""
+
+from __future__ import annotations
+
+import importlib
+import tomllib
+from pathlib import Path
+
+import pytest
+
+from nexus.api import slot_utils
+from tests.pg_fixtures import (
+    ROUTED_SLOT_DATABASE_ENV,
+    ROUTED_SLOT_ENV,
+    active_slot_routes,
+    route_slots_to_disposable,
+)
+from tests.scheduler_helpers import (
+    RUNTIME_CONFIG_ENV,
+    gateway_lane,
+    private_runtime_config,
+    require_private_runtime_config,
+    route_slot,
+    routed_child_environment,
+    run_cli,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Modules that bind ``slot_dbname`` at import; the old six-module route_slot
+# missed all but ``narrative``.
+IMPORT_BOUND = (
+    "nexus.api.narrative",
+    "nexus.api.slot_endpoints",
+    "nexus.api.save_slots",
+    "nexus.api.wizard_chat",
+    "nexus.api.wizard_agent",
+    "nexus.api.secrets_endpoints",
+    "scripts.new_story_setup",
+)
+
+OWNER_DATABASES = (
+    "NEXUS_template",
+    *(slot_utils.slot_dbname(slot) for slot in slot_utils.all_slots()),
+)
+
+
+def test_route_slot_reaches_import_bound_resolvers_and_restores_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every import-bound resolver sees slot 4 routed and slot 5 refused."""
+
+    modules = [importlib.import_module(name) for name in IMPORT_BOUND]
+    originals = [module.slot_dbname for module in modules]
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
+    with pytest.MonkeyPatch.context() as patch:
+        route_slot(patch, "qa640_route_probe")
+        for module in modules:
+            assert module.slot_dbname(4) == "qa640_route_probe", module.__name__
+            with pytest.raises(RuntimeError, match="Slot 5 is not routed"):
+                module.slot_dbname(5)
+        assert slot_utils.VALID_DBNAMES == {"qa640_route_probe"}
+        assert dict(active_slot_routes() or {}) == {4: "qa640_route_probe"}
+        assert slot_utils.get_active_slot() == 4
+    assert [module.slot_dbname for module in modules] == originals
+    assert active_slot_routes() is None
+    assert slot_utils.slot_dbname(4) == "save_04"
+
+
+@pytest.mark.parametrize(
+    ("dbname", "message"),
+    [
+        *((owner, "routes only qa640_ clones") for owner in OWNER_DATABASES),
+        ("qa885_other_prefix", "routes only qa640_ clones"),
+    ],
+)
+def test_route_slot_refuses_before_patching(dbname: str, message: str) -> None:
+    """An owner name or a clone outside the convention patches nothing."""
+
+    resolver = slot_utils.slot_dbname
+    with pytest.MonkeyPatch.context() as patch:
+        with pytest.raises(RuntimeError, match=message):
+            route_slot(patch, dbname)
+        assert slot_utils.slot_dbname is resolver
+        assert active_slot_routes() is None
+
+
+def test_child_environment_requires_exactly_one_active_route() -> None:
+    """A child carries the one active route, and refuses none or several."""
+
+    with pytest.raises(RuntimeError, match="No slot is routed"):
+        routed_child_environment()
+    with pytest.MonkeyPatch.context() as patch:
+        route_slots_to_disposable(patch.setattr, {4: "qa640_a", 5: "qa640_b"})
+        with pytest.raises(RuntimeError, match="carries one routed slot"):
+            routed_child_environment()
+    with pytest.MonkeyPatch.context() as patch:
+        route_slot(patch, "qa640_child")
+        assert routed_child_environment() == {
+            ROUTED_SLOT_ENV: "4",
+            ROUTED_SLOT_DATABASE_ENV: "qa640_child",
+        }
+
+
+def test_unrouted_child_cli_is_refused_before_it_starts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``run_cli``'s child verbs raise when no slot is routed."""
+
+    private_runtime_config(tmp_path, monkeypatch)
+    for verb in ("continue", "status", "down"):
+        with pytest.raises(RuntimeError, match="No slot is routed"):
+            run_cli(monkeypatch, verb)
+
+
+def test_routed_child_down_reads_the_private_state_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A routed ``down`` child runs through ``tests.slot_routed_cli``.
+
+    The private state directory holds no pidfile, so the real command stops
+    nothing and says so.
+    """
+
+    private_runtime_config(tmp_path, monkeypatch)
+    route_slot(monkeypatch, "qa640_down_probe")
+    assert run_cli(monkeypatch, "down").strip() == "nothing running"
+
+
+def test_private_runtime_config_is_required(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Unset, the checkout's file, or the checkout's state_dir all raise."""
+
+    monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+    with pytest.raises(RuntimeError, match="is unset"):
+        require_private_runtime_config()
+
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(REPO_ROOT / "nexus.toml"))
+    with pytest.raises(RuntimeError, match="is the checkout's nexus.toml"):
+        require_private_runtime_config()
+
+    copy = tmp_path / "copy.toml"
+    copy.write_text((REPO_ROOT / "nexus.toml").read_text())
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(copy))
+    with pytest.raises(RuntimeError, match="keeps the checkout's state_dir"):
+        require_private_runtime_config()
+
+    doc, path = private_runtime_config(tmp_path, monkeypatch)
+    assert require_private_runtime_config() == path.resolve()
+    assert doc["runtime"]["state_dir"] == str(tmp_path / "runtime")
+    written = tomllib.loads(path.read_text())
+    assert written["runtime"]["state_dir"] == str(tmp_path / "runtime")
+
+
+def test_gateway_lane_refuses_to_start_without_a_private_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No lane binds when ``nexus down`` would reach the checkout's services."""
+
+    monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
+    monkeypatch.setenv("NEXUS_GATEWAY_PORT", "0")
+    with pytest.raises(RuntimeError, match="is unset"):
+        with gateway_lane(monkeypatch):
+            pytest.fail("gateway_lane started without a private runtime config")
