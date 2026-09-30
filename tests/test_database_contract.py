@@ -32,6 +32,7 @@ from nexus.database import (
     url_connection_kwargs,
     verify_database_url,
 )
+from tests.pg_fixtures import route_slot_to_disposable
 
 
 @pytest.fixture
@@ -429,9 +430,7 @@ def test_connection_two_clusters_pool_url_async_timezone_and_guard(
     monkeypatch.setenv("PGPORT", str(other["port"]))
     monkeypatch.setenv("PGHOST", other["host"])
     monkeypatch.setenv("PGUSER", other["user"])
-    monkeypatch.setattr(
-        slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-    )
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
     observer = psycopg2.connect(
         dbname=dbname, **{k: other[k] for k in ("host", "port", "user")}
     )

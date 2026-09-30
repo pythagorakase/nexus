@@ -23,7 +23,7 @@ import tomlkit
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from nexus.api import secrets_endpoints, slot_endpoints
+from nexus.api import slot_endpoints
 from nexus.api.secrets_endpoints import REQUIRED_SECRET_SEATS, router
 from nexus.config.loader import RUNTIME_CONFIG_ENV, load_settings
 from nexus.config.preferences import (
@@ -417,10 +417,12 @@ def test_unresolvable_seat_fails_status_and_blocks_the_write(
 
 
 @pytest.fixture
-def slot_client(offline_gate_db: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Serve the secrets and slot settings routes against the slot 4 clone."""
-    for module in (secrets_endpoints, slot_endpoints):
-        monkeypatch.setattr(module, "slot_dbname", lambda slot: offline_gate_db)
+def slot_client(offline_gate_db: str) -> TestClient:
+    """Serve the secrets and slot settings routes against the slot 4 clone.
+
+    ``offline_gate_db`` routes slot 4 in every loaded module, including the
+    import-bound resolvers of both routers, and refuses every other slot.
+    """
     app = FastAPI()
     app.include_router(router)
     app.include_router(slot_endpoints.router)

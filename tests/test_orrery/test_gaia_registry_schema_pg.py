@@ -28,14 +28,13 @@ from nexus.agents.logon.skald_wire import (
     skald_gaia_strict_text_format,
 )
 from nexus.agents.lore.logon_utility import LogonUtility
-from nexus.api import slot_utils
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.config import load_settings
 from nexus.config.story_model import StorySettings
 from scripts.api_openai import OpenAIProvider
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
+    route_slot_to_disposable,
     seed_deprecated_category_tag,
     seed_place,
     seed_protagonist,
@@ -72,6 +71,8 @@ def qa638_registry_db() -> Iterator[str]:
     dbname = f"qa638_{uuid.uuid4().hex[:12]}"
     admin = _connect("postgres")
     admin.autocommit = True
+    # Module scope cannot take the function-scoped monkeypatch.
+    routing = pytest.MonkeyPatch()
     try:
         with admin.cursor() as cur:
             cur.execute(
@@ -80,10 +81,10 @@ def qa638_registry_db() -> Iterator[str]:
                     sql.Identifier("NEXUS_template"),
                 )
             )
-        VALID_DBNAMES.add(dbname)
+        route_slot_to_disposable(routing.setattr, slot=5, dbname=dbname)
         yield dbname
     finally:
-        VALID_DBNAMES.discard(dbname)
+        routing.undo()
         with admin.cursor() as cur:
             cur.execute(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
@@ -270,9 +271,7 @@ def test_turn_grammar_offers_a_deprecated_tag_only_when_a_present_entity_has_it(
     """
 
     with disposable_slot_database("qa640_811_gaia_scene") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         seed_zone(
             dbname,
             name="Harbor Ward",

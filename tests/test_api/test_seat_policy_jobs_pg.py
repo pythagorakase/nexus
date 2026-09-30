@@ -49,9 +49,6 @@ def test_accept_repin_and_scheduler_use_literal_seat_models(
     with disposable_slot_database("qa640_814_seats") as dbname:
         print(f"Migration 126 runner target: {dbname}", flush=True)
         route_slot(monkeypatch, dbname)
-        from nexus.api import slot_endpoints
-
-        monkeypatch.setattr(slot_endpoints, "slot_dbname", lambda slot: dbname)
         # A played story whose off-screen cast has formed experience seeds and
         # whose correspondence crosses the compaction floor, with the next
         # turn staged for ``continue --choice 1``.

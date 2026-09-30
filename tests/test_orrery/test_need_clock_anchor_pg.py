@@ -31,11 +31,10 @@ from nexus.api.db_pool import close_all_pools
 from nexus.api.new_story_cache import read_cache, write_cache
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_flow import build_transition_data_from_cache
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.config import load_settings
 from nexus.config.loader import settings_path_scope
 from scripts import migrate
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, route_slot_to_disposable
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -75,7 +74,7 @@ def _transaction(dbname: str) -> Iterator[Any]:
 
 
 @pytest.fixture()
-def disposable_need_clock_db() -> Iterator[str]:
+def disposable_need_clock_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Yield a NEXUS_template clone whose name cannot collide with a save slot."""
 
     dbname = f"qa640_{uuid.uuid4().hex[:12]}"
@@ -104,11 +103,10 @@ def disposable_need_clock_db() -> Iterator[str]:
                 cur.execute(
                     (ROOT / "migrations/123_character_alias_provenance.sql").read_text()
                 )
-        VALID_DBNAMES.add(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=3, dbname=dbname)
         yield dbname
     finally:
         close_all_pools()
-        VALID_DBNAMES.discard(dbname)
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(

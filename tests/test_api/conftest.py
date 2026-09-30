@@ -7,11 +7,9 @@ import socket
 import pytest
 
 from nexus.api import conversations
-from nexus.api import new_story_flow, setup_endpoints, slot_mutations, slot_state
-from nexus.api import slot_utils
 from nexus.config import load_settings
 from nexus.util.secret_manager import get_secret
-from tests.pg_fixtures import disposable_slot_database
+from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
 
 
 @pytest.fixture
@@ -20,25 +18,12 @@ def offline_gate_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 
     The template supplies global_variables, assets.new_story_creator,
     assets.traits, narrative/incubator tables, generation leases, and Orrery
-    queues. Only this clone is written; the helper closes pools and drops it.
+    queues. ``route_slot_to_disposable`` routes slot 4 to the clone in every
+    loaded module and refuses every other slot; only this clone is written,
+    and the helper closes pools and drops it.
     """
     with disposable_slot_database("qa640_offline_gate") as dbname:
-
-        def fixture_slot_dbname(slot: int) -> str:
-            assert slot == 4, f"Unexpected slot access: {slot}"
-            return dbname
-
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
-        for module in (
-            slot_utils,
-            slot_mutations,
-            slot_state,
-            new_story_flow,
-            setup_endpoints,
-        ):
-            monkeypatch.setattr(module, "slot_dbname", fixture_slot_dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         yield dbname
 
 

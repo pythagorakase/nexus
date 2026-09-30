@@ -34,7 +34,7 @@ from nexus.api.narrative_generation import generate_narrative_async
 from nexus.config.settings_models import Settings
 from nexus.util.log_safety import quote_log_value
 from scripts import new_story_setup
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, route_slot_to_disposable
 from tests.settings_helpers import settings_with
 
 
@@ -453,11 +453,7 @@ def _install_route_boundaries(
         audit_observations.append((chunk_id, findings))
         return findings
 
-    monkeypatch.setattr(
-        slot_utils,
-        "VALID_DBNAMES",
-        {*slot_utils.VALID_DBNAMES, scratch_dbname},
-    )
+    route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=scratch_dbname)
     monkeypatch.setattr(LogonUtility, "_initialize_provider", initialize_provider)
     monkeypatch.setattr(LORE, "_load_settings", load_route_settings)
     monkeypatch.setattr(

@@ -30,6 +30,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
@@ -340,53 +341,77 @@ def require_disposable_target(dbname: str) -> str:
 # sweep below never rebinds.
 _UNROUTED_SLOT_DBNAME = slot_dbname
 
-# The active route as ``(slot, dbname)``, or ``None`` when no slot is routed.
-# ``route_slot_to_disposable`` sets it through its ``patch`` callable, so a
-# test's monkeypatch restores the previous route (usually ``None``) at
-# teardown.
-_ACTIVE_ROUTE: tuple[int, str] | None = None
+# The active routes as a read-only ``{slot: dbname}`` mapping, or ``None``
+# when no slot is routed. ``route_slots_to_disposable`` sets it through its
+# ``patch`` callable, so a test's monkeypatch restores the previous routes
+# (usually ``None``) at teardown.
+_ACTIVE_ROUTE: Mapping[int, str] | None = None
+
+
+def _describe_routes(routes: Mapping[int, str]) -> str:
+    """Name the routed slots and their clones for a refusal message."""
+
+    return ", ".join(
+        f"slot {slot} -> {dbname!r}" for slot, dbname in sorted(routes.items())
+    )
 
 
 def _routed_slot_dbname(slot_number: int) -> str:
-    """Resolve a slot through the active route, or unrouted when none is set.
+    """Resolve a slot through the active routes, or unrouted when none is set.
 
     This one function is what every routed module binds, including a module
     whose ``from nexus.api.slot_utils import slot_dbname`` first runs while a
     route is active, which ``patch`` never records and so never undoes. Such
     a binding stays correct after teardown: with ``_ACTIVE_ROUTE`` restored to
     ``None`` it resolves exactly as ``_UNROUTED_SLOT_DBNAME`` does, and a later
-    route reaches it without another sweep.
+    route reaches it without another sweep. A slot the active routes do not
+    map raises ``RuntimeError``.
     """
 
-    route = _ACTIVE_ROUTE
-    if route is None:
+    routes = _ACTIVE_ROUTE
+    if routes is None:
         return _UNROUTED_SLOT_DBNAME(slot_number)
-    slot, dbname = route
-    if slot_number != slot:
+    dbname = routes.get(slot_number)
+    if dbname is None:
         raise RuntimeError(
-            f"Slot {slot_number} is not routed: only slot {slot} reaches "
-            f"the disposable clone {dbname!r}"
+            f"Slot {slot_number} is not routed: only {_describe_routes(routes)} "
+            "reach disposable clones"
         )
     return dbname
 
 
-def route_slot_to_disposable(
-    patch: Callable[[Any, str, Any], None], *, slot: int, dbname: str
+def active_slot_routes() -> Mapping[int, str] | None:
+    """Return the active ``{slot: dbname}`` routes, or ``None`` when unrouted.
+
+    The mapping is read-only. A helper that starts a child process reads it
+    to hand the child the same route (``routed_slot_environment``).
+    """
+
+    return _ACTIVE_ROUTE
+
+
+def route_slots_to_disposable(
+    patch: Callable[[Any, str, Any], None], routes: Mapping[int, str]
 ) -> None:
-    """Route one slot number to a disposable clone in every loaded module.
+    """Route each slot in ``routes`` to its disposable clone in every loaded module.
 
     Production code resolves a slot's database through
     ``nexus.api.slot_utils.slot_dbname``, either through the module attribute
     (``require_slot_dbname``, ``get_slot_db_url``, ``connection_kwargs`` and
     every function-local import) or through a name bound at import
     (``from nexus.api.slot_utils import slot_dbname``). ``patch`` sets the
-    active route, then rebinds the module attribute and every loaded
-    module's bound name to ``_routed_slot_dbname``, which returns ``dbname``
-    for ``slot`` and raises for any other slot, and narrows ``VALID_DBNAMES``
-    to the clone, so a path this sweep missed fails loudly instead of
-    reaching an owner database. Modules imported afterward bind the same
-    resolver, which falls back to the unrouted contract once ``patch`` has
-    restored the route at teardown.
+    active routes, then rebinds the module attribute and every loaded
+    module's bound name to ``_routed_slot_dbname``, which returns the mapped
+    clone for a routed slot and raises ``RuntimeError`` for any other slot,
+    and narrows ``VALID_DBNAMES`` to the clones, so a path this sweep missed
+    fails loudly instead of reaching an owner database. Modules imported
+    afterward bind the same resolver, which falls back to the unrouted
+    contract once ``patch`` has restored the routes at teardown.
+
+    Every slot must be one ``nexus.api.slot_utils`` defines and every clone
+    must pass ``require_disposable_target``; both are checked before anything
+    is patched. A second call replaces the routes; its ``patch`` restores the
+    earlier ones at teardown.
 
     ``patch`` is ``monkeypatch.setattr`` inside a test (undone at teardown) or
     the builtin ``setattr`` in a child process that serves the gateway for
@@ -396,16 +421,55 @@ def route_slot_to_disposable(
 
     from nexus.api import slot_utils
 
-    require_disposable_target(dbname)
+    if not routes:
+        raise RuntimeError("route_slots_to_disposable needs at least one slot")
+    for slot, dbname in routes.items():
+        if slot not in all_slots():
+            raise RuntimeError(
+                f"Cannot route slot {slot!r}: slots are {list(all_slots())}"
+            )
+        require_disposable_target(dbname)
+    frozen = types.MappingProxyType(dict(routes))
 
-    patch(sys.modules[__name__], "_ACTIVE_ROUTE", (slot, dbname))
-    patch(slot_utils, "VALID_DBNAMES", {dbname})
+    patch(sys.modules[__name__], "_ACTIVE_ROUTE", frozen)
+    patch(slot_utils, "VALID_DBNAMES", set(frozen.values()))
     patch(slot_utils, "slot_dbname", _routed_slot_dbname)
     for name, module in list(sys.modules.items()):
         if module is None or not name.startswith(("nexus.", "scripts.", "tests.")):
             continue
         if vars(module).get("slot_dbname") is _UNROUTED_SLOT_DBNAME:
             patch(module, "slot_dbname", _routed_slot_dbname)
+
+
+def route_slot_to_disposable(
+    patch: Callable[[Any, str, Any], None], *, slot: int, dbname: str
+) -> None:
+    """Route one slot number to a disposable clone in every loaded module.
+
+    The one-slot case of ``route_slots_to_disposable``: ``slot`` resolves to
+    ``dbname`` and every other slot raises ``RuntimeError``.
+    """
+
+    route_slots_to_disposable(patch, {slot: dbname})
+
+
+def admit_disposable_database(
+    patch: Callable[[Any, str, Any], None], dbname: str
+) -> None:
+    """Admit ``dbname`` to ``require_slot_dbname`` without routing any slot.
+
+    Only for a test whose slot databases live on a private cluster it starts
+    itself (``test_connection_lifecycle``), where the slot names must keep
+    resolving to that cluster's own ``save_NN`` databases. ``dbname`` must pass
+    ``require_disposable_target``. Every test on the shared cluster routes a
+    slot with ``route_slot_to_disposable`` instead, which also refuses owner
+    names and unrouted slots.
+    """
+
+    from nexus.api import slot_utils
+
+    require_disposable_target(dbname)
+    patch(slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname})
 
 
 # The two variables that route a child process's slot to a clone. The routed
@@ -1780,8 +1844,9 @@ def _require_slot_routes_to(dbname: str, slot: int | None) -> None:
 
     ``slot`` is stamped on the jobs an accepted turn enqueues and handed to
     the production commit, which may resolve story state through it. Tests
-    pass a slot only while ``tests.scheduler_helpers.route_slot`` routes that
-    slot to the clone; any other routing would reach an owner database.
+    pass a slot only while ``route_slots_to_disposable`` (directly, or through
+    ``tests.scheduler_helpers.route_slot``) routes that slot to the clone; any
+    other routing would reach an owner database.
 
     ``slot=None`` is checked as the slot the commit resolves: a maturation job
     for a declared entity is labelled with ``get_active_slot()``, the ambient

@@ -94,6 +94,16 @@ def _register_disposable_keychain_root(
     secret_store_guard.set_disposable_root(tmp_path_factory.getbasetemp())
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _register_private_runtime_root(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Let the private-runtime guard admit configs under ``--basetemp``."""
+    from tests import scheduler_helpers
+
+    scheduler_helpers.register_pytest_basetemp(tmp_path_factory.getbasetemp())
+
+
 @pytest.fixture
 def in_memory_secret_store(
     monkeypatch: pytest.MonkeyPatch,

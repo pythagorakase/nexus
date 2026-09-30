@@ -17,7 +17,6 @@ from nexus.agents.lore.logon_utility import (
     LogonUtility,
     proposal_tag_names_from_payload,
 )
-from nexus.api import slot_utils
 from nexus.config.story_model import StorySettings
 from nexus.prompts.registry import PromptId, load
 from tests.pg_fixtures import (
@@ -477,9 +476,7 @@ def test_deprecated_registry_category_leaves_the_library(monkeypatch) -> None:
     """
 
     with disposable_slot_database("qa640_811_tag_library") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute(
                 """
@@ -562,9 +559,7 @@ def test_scene_shows_a_present_entitys_deprecated_tag_as_clear_only(
     """
 
     with disposable_slot_database("qa640_811_scene_clear_only") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         seed_zone(
             dbname,
             name="Harbor Ward",
@@ -631,9 +626,7 @@ def test_scene_clear_only_line_follows_the_carrying_entitys_kind(
     """
 
     with disposable_slot_database("qa640_811_scene_kind") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         seed_zone(
             dbname,
             name="Harbor Ward",
@@ -721,9 +714,7 @@ def test_full_turn_library_still_lists_scene_clear_only_tags(monkeypatch) -> Non
     """
 
     with disposable_slot_database("qa640_811_full_clear_only") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         carrying, bare = _seed_worksite_scene(dbname)
         utility = LogonUtility(
             settings_with({"apex.tag_library.contextual": False}),
@@ -775,9 +766,7 @@ def test_contextual_scene_rendering_is_pinned(monkeypatch) -> None:
     """
 
     with disposable_slot_database("qa640_811_scene_pin") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         carrying, bare = _seed_worksite_scene(dbname)
         haven = (
             "- place/place_function: `haven`: "

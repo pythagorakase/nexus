@@ -18,6 +18,7 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal
+from functools import partial
 from typing import Any, NoReturn
 
 import psycopg2
@@ -27,16 +28,23 @@ from psycopg2.extras import RealDictCursor
 from nexus.api import slot_utils
 from tests import pg_fixtures
 from tests.pg_fixtures import (
+    active_slot_routes,
+    admit_disposable_database,
     connect,
     disposable_slot_database,
     require_disposable_target,
     route_slot_to_disposable,
+    route_slots_to_disposable,
     seed_character,
     seed_entity_tag,
     seed_story_clock,
 )
+from tests.test_orrery import claim_accounts_test_support
 from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
 from tests.test_orrery.claim_accounts_test_support import (
+    _insert_chunk,
+    _insert_claim,
+    _insert_pair_tag,
     _install_valence_shadow,
     insert_transaction_chain,
     insert_transaction_character,
@@ -296,6 +304,123 @@ def test_nested_route_restores_the_outer_route() -> None:
     assert slot_utils.slot_dbname(3) == "save_03"
 
 
+def test_multi_slot_route_sweeps_bound_and_late_imported_resolvers() -> None:
+    """Each mapped slot reaches its own clone in every module; others raise.
+
+    One probe binds ``slot_dbname`` before the route (the sweep rebinds it and
+    the monkeypatch restores it), the other first binds it inside the route
+    (the monkeypatch never records it). Both resolve the mapping while routed
+    and the owner names after teardown.
+    """
+
+    bound_name = "tests._route_probe_bound_before"
+    late_name = "tests._route_probe_bound_during"
+    bound = types.ModuleType(bound_name)
+    late = types.ModuleType(late_name)
+    exec("from nexus.api.slot_utils import slot_dbname", vars(bound))
+    unrouted = bound.slot_dbname
+    sys.modules[bound_name] = bound
+    sys.modules[late_name] = late
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            route_slots_to_disposable(
+                patch.setattr, {4: "qa640_left", 5: "qa640_right"}
+            )
+            exec("from nexus.api.slot_utils import slot_dbname", vars(late))
+            for probe in (bound, late, slot_utils):
+                assert probe.slot_dbname(4) == "qa640_left"
+                assert probe.slot_dbname(5) == "qa640_right"
+                with pytest.raises(RuntimeError, match="Slot 2 is not routed"):
+                    probe.slot_dbname(2)
+            assert slot_utils.VALID_DBNAMES == {"qa640_left", "qa640_right"}
+            assert dict(active_slot_routes() or {}) == {
+                4: "qa640_left",
+                5: "qa640_right",
+            }
+        assert bound.slot_dbname is unrouted
+        for probe in (bound, late, slot_utils):
+            assert probe.slot_dbname(4) == "save_04"
+            assert probe.slot_dbname(5) == "save_05"
+        assert active_slot_routes() is None
+        assert "qa640_left" not in slot_utils.VALID_DBNAMES
+    finally:
+        sys.modules.pop(bound_name, None)
+        sys.modules.pop(late_name, None)
+
+
+def test_multi_slot_route_keeps_its_own_copy_of_the_mapping() -> None:
+    """Changing the caller's mapping after the route changes nothing."""
+
+    routes = {4: "qa640_left"}
+    with pytest.MonkeyPatch.context() as patch:
+        route_slots_to_disposable(patch.setattr, routes)
+        routes[4] = "save_04"
+        routes[5] = "save_05"
+        assert slot_utils.slot_dbname(4) == "qa640_left"
+        with pytest.raises(RuntimeError, match="Slot 5 is not routed"):
+            slot_utils.slot_dbname(5)
+
+
+def test_single_slot_route_is_the_one_slot_mapping() -> None:
+    """``route_slot_to_disposable`` installs exactly ``{slot: dbname}``."""
+
+    with pytest.MonkeyPatch.context() as patch:
+        route_slot_to_disposable(patch.setattr, slot=3, dbname="qa640_one")
+        assert dict(active_slot_routes() or {}) == {3: "qa640_one"}
+        assert slot_utils.VALID_DBNAMES == {"qa640_one"}
+
+
+@pytest.mark.parametrize(
+    ("routes", "message"),
+    [
+        ({}, "needs at least one slot"),
+        ({4: "qa640_left", 9: "qa640_right"}, "Cannot route slot 9"),
+        *(
+            ({4: "qa640_left", 5: owner}, re.escape(repr(owner)))
+            for owner in OWNER_DATABASES
+        ),
+    ],
+)
+def test_multi_slot_route_refuses_before_patching(
+    routes: dict[int, str], message: str
+) -> None:
+    """An empty mapping, an unknown slot or an owner clone patches nothing."""
+
+    resolver = slot_utils.slot_dbname
+    valid = slot_utils.VALID_DBNAMES
+    with pytest.MonkeyPatch.context() as patch:
+        with pytest.raises(RuntimeError, match=message):
+            route_slots_to_disposable(patch.setattr, routes)
+        assert slot_utils.slot_dbname is resolver
+        assert slot_utils.VALID_DBNAMES is valid
+        assert active_slot_routes() is None
+
+
+@pytest.mark.parametrize("dbname", OWNER_DATABASES)
+def test_admission_refuses_an_owner_name_before_patching(dbname: str) -> None:
+    """``admit_disposable_database`` never admits an owner database."""
+
+    valid = slot_utils.VALID_DBNAMES
+    with pytest.MonkeyPatch.context() as patch:
+        with pytest.raises(RuntimeError, match="Refusing to seed owner database"):
+            admit_disposable_database(patch.setattr, dbname)
+        assert slot_utils.VALID_DBNAMES is valid
+
+
+def test_admission_adds_one_name_and_routes_no_slot() -> None:
+    """Admission widens ``VALID_DBNAMES`` by the one name until teardown."""
+
+    valid = slot_utils.VALID_DBNAMES
+    resolver = slot_utils.slot_dbname
+    with pytest.MonkeyPatch.context() as patch:
+        admit_disposable_database(patch.setattr, "qa885_admitted")
+        assert slot_utils.VALID_DBNAMES == valid | {"qa885_admitted"}
+        assert slot_utils.require_slot_dbname("qa885_admitted") == "qa885_admitted"
+        assert slot_utils.slot_dbname is resolver
+        assert active_slot_routes() is None
+    assert slot_utils.VALID_DBNAMES is valid
+
+
 def _sessions(cur: Any, dbname: str) -> int:
     """Return how many sessions PostgreSQL has established to ``dbname``."""
 
@@ -343,7 +468,32 @@ TRANSACTION_WRITER_CALLS: dict[str, tuple[Callable[..., Any], tuple[Any, ...]]] 
     "insert_transaction_character": (insert_transaction_character, ("refused",)),
     "insert_transaction_faction": (insert_transaction_faction, ("refused",)),
     "insert_transaction_chain": (insert_transaction_chain, (2,)),
+    "_insert_chunk": (_insert_chunk, ()),
+    "_insert_pair_tag": (_insert_pair_tag, (1, 2, "ally")),
+    "_insert_claim": (
+        partial(_insert_claim, chunk_id=1, source_entity_id=1, birth_world_time=None),
+        (),
+    ),
 }
+
+
+def test_transaction_writer_calls_cover_every_writer() -> None:
+    """A new transaction-scoped writer must join ``TRANSACTION_WRITER_CALLS``.
+
+    Every function of the support module that writes rows through a caller's
+    cursor (``insert_transaction_*`` and the ``_insert_*`` row helpers) is
+    proven to refuse an owner cursor by the test below.
+    """
+
+    defined = {
+        name
+        for name, function in inspect.getmembers(
+            claim_accounts_test_support, inspect.isfunction
+        )
+        if name.startswith(("insert_transaction_", "_insert_"))
+        and function.__module__ == claim_accounts_test_support.__name__
+    }
+    assert defined == set(TRANSACTION_WRITER_CALLS)
 
 
 def _refuse_execute(*args: object, **kwargs: object) -> NoReturn:

@@ -20,7 +20,7 @@ from sqlalchemy.orm import sessionmaker
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import StorytellerResponseStandard
-from nexus.api import commit_handler_sync, slot_utils
+from nexus.api import commit_handler_sync
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
@@ -35,7 +35,12 @@ from nexus.memory.manager import (
 )
 from nexus.telemetry.usage import current_usage_context
 from scripts import stamp_lore_pass_baseline
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 from tests.settings_helpers import settings_with
 
 
@@ -54,15 +59,7 @@ def pass2_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 
     source_db = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
     with disposable_slot_database("nexus_test_pass2", source_db=source_db) as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
-        original_slot_dbname = slot_utils.slot_dbname
-        monkeypatch.setattr(
-            slot_utils,
-            "slot_dbname",
-            lambda slot: dbname if slot == 5 else original_slot_dbname(slot),
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         migration = MIGRATION.read_text()
         with _connect(dbname) as conn:
             with conn.cursor() as cur:

@@ -18,13 +18,12 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.commit_handler_sync import compact_accepted_correspondence_sync
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.config import load_settings
 from nexus.memory.correspondence import (
     load_accepted_correspondence,
     persist_staged_correspondence,
 )
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, route_slot_to_disposable
 
 
 pytestmark = [
@@ -43,7 +42,7 @@ def _connect(dbname: str) -> Any:
 
 
 @pytest.fixture()
-def disposable_live_correspondence_db() -> Iterator[str]:
+def disposable_live_correspondence_db(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     dbname = f"nexus_live_correspondence_{uuid.uuid4().hex[:12]}"
     admin = _connect("postgres")
     admin.autocommit = True
@@ -63,10 +62,9 @@ def disposable_live_correspondence_db() -> Iterator[str]:
                 cur.execute(
                     Path("migrations/099_storyteller_correspondence.sql").read_text()
                 )
-        VALID_DBNAMES.add(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         yield dbname
     finally:
-        VALID_DBNAMES.discard(dbname)
         with admin.cursor() as cur:
             cur.execute(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "

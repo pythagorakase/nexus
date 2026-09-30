@@ -8,8 +8,13 @@ from fastapi.testclient import TestClient
 from psycopg2.extras import RealDictCursor
 import pytest
 
-from nexus.api import slot_endpoints, slot_state, slot_utils
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from nexus.api import slot_endpoints
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -40,11 +45,8 @@ def test_reader_story_identity_is_stable_and_read_only(
     identities = []
     for _ in range(2):
         with disposable_slot_database("qa951_identity") as dbname:
-            monkeypatch.setattr(
-                slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-            )
+            route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
             player_id, _ = seed_protagonist(dbname)
-            monkeypatch.setattr(slot_state, "slot_dbname", lambda _slot: dbname)
             if slot_created_at == "null":
                 with closing(connect(dbname)) as conn:
                     with conn, conn.cursor() as cur:
@@ -83,10 +85,7 @@ def test_overwriting_an_occupied_slot_renews_the_story_identity(
     app = FastAPI()
     app.include_router(slot_endpoints.router)
     with disposable_slot_database("qa951_overwrite") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
-        monkeypatch.setattr(slot_state, "slot_dbname", lambda _slot: dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         first_player, _ = seed_protagonist(dbname)
         with TestClient(app) as client:
             first = client.get("/api/slot/4/state").json()["story_id"]

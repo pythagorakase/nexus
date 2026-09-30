@@ -23,7 +23,12 @@ from nexus.memory.correspondence import (
 )
 from nexus.memory.manager import empty_pass2_baseline
 from scripts.replay_state import _verify_correspondence_provenance
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -425,12 +430,9 @@ def test_accept_reject_hysteresis_and_digest_undo(
                 (accepting_chunk_id,),
             )
             assert cur.fetchone() == ("queued",)
-        from nexus.api import slot_utils
         from nexus.jobs.scheduler import SlotScheduler
 
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         from nexus.api.narrative_lease import finish_generation
 
         finish_generation(conn, session_id=session_id, status="complete")

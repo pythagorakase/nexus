@@ -13,8 +13,13 @@ from psycopg2.extras import RealDictCursor
 import pytest
 
 from nexus.agents.orrery.retrograde_persistence import _insert_character_stub
-from nexus.api import reader_endpoints, slot_utils
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from nexus.api import reader_endpoints
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -24,13 +29,9 @@ pytestmark = pytest.mark.requires_postgres
 def character_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Keep the real router and SQL while routing slot 4 to a private clone."""
     with disposable_slot_database("qa946_character") as dbname:
-        slot_utils.VALID_DBNAMES.add(dbname)
-        monkeypatch.setattr(slot_utils, "slot_dbname", lambda _slot: dbname)
-        try:
-            seed_protagonist(dbname)
-            yield dbname
-        finally:
-            slot_utils.VALID_DBNAMES.discard(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        seed_protagonist(dbname)
+        yield dbname
 
 
 @pytest.mark.parametrize("legacy", [False, True])

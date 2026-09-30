@@ -50,8 +50,11 @@ from nexus.agents.orrery.retrograde_vocabulary import (
 )
 from nexus.agents.orrery.substrate import coerce_project_policy
 from nexus.agents.orrery.templates import ADVANCE_BUILD_VENTURE
-from nexus.api.slot_utils import VALID_DBNAMES
-from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    sqlalchemy_url,
+)
 from nexus.config import load_settings
 from nexus.agents.orrery.relationship_provenance import relationship_producer
 
@@ -63,14 +66,14 @@ PROJECT_TYPES = tuple(PROJECT_FIRST_STAGES)
 @pytest.fixture(scope="module")
 def project_corpus() -> Iterator[str]:
     """Keep migration 123 and all project writes off the source save."""
-    with disposable_slot_database(
-        "qa640_projects799", source_db="save_02", include_data=True
-    ) as dbname:
-        VALID_DBNAMES.add(dbname)
-        try:
-            yield dbname
-        finally:
-            VALID_DBNAMES.discard(dbname)
+    with (
+        disposable_slot_database(
+            "qa640_projects799", source_db="save_02", include_data=True
+        ) as dbname,
+        pytest.MonkeyPatch.context() as routing,
+    ):
+        route_slot_to_disposable(routing.setattr, slot=2, dbname=dbname)
+        yield dbname
 
 
 @pytest.fixture()

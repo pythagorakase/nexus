@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from psycopg2.extras import Json
 
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
-from nexus.api import narrative, reader_endpoints, slot_utils
+from nexus.api import narrative, reader_endpoints
 from nexus.api.config_utils import get_max_choice_text_length
 from nexus.api.return_recap import (
     DraftHandle,
@@ -35,6 +35,7 @@ from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
+    route_slot_to_disposable,
     seed_committed_chunk,
     seed_protagonist,
 )
@@ -61,17 +62,13 @@ EARLIER = "2026-01-01T00:00:00+00:00"
 def recap_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[str, int]]:
     """Route slot 5 to a private clone with a canonical player."""
     with disposable_slot_database("qa832_recap") as dbname:
-        slot_utils.VALID_DBNAMES.add(dbname)
-        monkeypatch.setattr(slot_utils, "slot_dbname", lambda _slot: dbname)
-        try:
-            player_id, _ = seed_protagonist(
-                dbname,
-                name="Mara Vey",
-                summary="Archive auditor who certified Elian Rook's death.",
-            )
-            yield dbname, player_id
-        finally:
-            slot_utils.VALID_DBNAMES.discard(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        player_id, _ = seed_protagonist(
+            dbname,
+            name="Mara Vey",
+            summary="Archive auditor who certified Elian Rook's death.",
+        )
+        yield dbname, player_id
 
 
 def _last_played(dbname: str) -> Optional[datetime]:

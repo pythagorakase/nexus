@@ -1,6 +1,6 @@
 """Explicit TEST-provider/browser proof for work order 775.
 
-The gateway lane is ``NEXUS_GATEWAY_PORT`` (default 8014). Evidence files are
+The gateway lane is ``NEXUS_GATEWAY_PORT`` (default 8018). Evidence files are
 written to the test's temporary directory; set
 ``NEXUS_PROOF_EXPORT_EVIDENCE=1`` to write them into the tracked
 ``docs/qa/775-session-truth`` instead.
@@ -20,7 +20,7 @@ import requests
 import tomlkit
 import uvicorn
 
-from nexus.api import narrative, slot_endpoints
+from nexus.api import narrative
 from nexus.telemetry import usage
 from tests.pg_fixtures import connect, disposable_slot_database
 from tests.scheduler_helpers import (
@@ -31,14 +31,14 @@ from tests.scheduler_helpers import (
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
 pytestmark = pytest.mark.requires_postgres
-DEFAULT_LANE = 8014
+DEFAULT_LANE = 8018
 LANE_ENV = "NEXUS_GATEWAY_PORT"
 EXPORT_ENV = "NEXUS_PROOF_EXPORT_EVIDENCE"
 TRACKED_EVIDENCE = Path(__file__).resolve().parents[2] / "docs/qa/775-session-truth"
 
 
 def proof_lane() -> int:
-    """The gateway port this proof serves on: NEXUS_GATEWAY_PORT, else 8014."""
+    """The gateway port this proof serves on: NEXUS_GATEWAY_PORT, else 8018."""
     return int(os.environ.get(LANE_ENV) or DEFAULT_LANE)
 
 
@@ -90,9 +90,6 @@ def test_disconnected_session_browser_recovery(monkeypatch, tmp_path, request):
         "qa640_775_browser", source_db="save_04", include_data=True
     ) as dbname:
         route_slot(monkeypatch, dbname)
-        monkeypatch.setattr(
-            slot_endpoints, "slot_dbname", lambda slot: dbname if slot == 4 else None
-        )
         monkeypatch.setenv(LANE_ENV, str(lane))
         monkeypatch.setenv("NEXUS_API_URL", base)
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:

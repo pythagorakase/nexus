@@ -33,11 +33,15 @@ from nexus.api.new_story_cache import read_cache, write_cache
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_flow import build_transition_data_from_cache
 from nexus.api.db_pool import close_all_pools
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.api.trait_compiler_schemas import TraitCompileInputs
 from nexus.api.trait_input_derivation import ensure_trait_compile_inputs
 from nexus.config import load_settings
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -54,7 +58,7 @@ BASE_TIMESTAMP = "2026-05-14T10:48:00+00:00"
 
 
 @pytest.fixture()
-def disposable_dbname() -> Iterator[str]:
+def disposable_dbname(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Yield a migrated template clone with the canonical clock already set.
 
     ``disposable_slot_database`` migrates the clone through the runner, so the
@@ -67,12 +71,11 @@ def disposable_dbname() -> Iterator[str]:
 
     with disposable_slot_database("qa640_issue601") as dbname:
         seed_protagonist(dbname, base_timestamp=BASE_TIMESTAMP)
-        VALID_DBNAMES.add(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=3, dbname=dbname)
         try:
             yield dbname
         finally:
             close_all_pools()
-            VALID_DBNAMES.discard(dbname)
 
 
 def _fixture_payload() -> dict[str, Any]:

@@ -24,8 +24,8 @@ pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.fixture
-def client(offline_gate_db: str, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setattr(slot_endpoints, "slot_dbname", lambda slot: offline_gate_db)
+def client(offline_gate_db: str) -> TestClient:
+    """Serve the slot router; ``offline_gate_db`` alone routes slot 4."""
     app = FastAPI()
     app.include_router(slot_endpoints.router)
     return TestClient(app)

@@ -23,8 +23,11 @@ from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.config import load_settings
 from nexus.config.settings_models import Settings
 from nexus.memory import ContextMemoryManager
-from nexus.api.slot_utils import VALID_DBNAMES
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 from tests.settings_helpers import settings_with
 
 
@@ -340,12 +343,14 @@ def test_sync_generation_rejects_mid_turn_route_drift(
 
 
 @pytest.mark.requires_postgres
-def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
+def test_lore_keeps_logon_lazy(
+    patched_provider: Dict[str, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """LORE should construct LOGON without eagerly constructing its provider."""
 
     with disposable_slot_database("qa_lazy_logon") as dbname:
         seed_protagonist(dbname)
-        VALID_DBNAMES.add(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
         lore = None
         try:
             lore = LORE(debug=True, enable_logon=True, dbname=dbname)
@@ -359,7 +364,6 @@ def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
         finally:
             if lore is not None:
                 lore.close()
-            VALID_DBNAMES.discard(dbname)
 
 
 def test_logon_initializes_provider_on_first_generation(

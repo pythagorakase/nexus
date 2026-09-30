@@ -9,13 +9,16 @@ from uuid import uuid4
 import pytest
 
 from nexus.agents.lore.lore import LORE
-from nexus.api import slot_utils
 from nexus.config import load_settings
 from nexus.config.story_model import read_story_settings, story_context_settings
 from nexus.memory.baseline_compat import config_hash, fingerprinted_config
 from nexus.memory.manager import pass2_baseline_config_fingerprint
 from scripts.stamp_lore_pass_baseline import refresh_tail_fingerprint
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -27,9 +30,7 @@ def test_divergence_fingerprint_refresh_preserves_save4_continuation(
     with disposable_slot_database(
         "qa640_908_fingerprint", source_db="save_04", include_data=True
     ) as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SELECT max(id) FROM narrative_chunks")
             tail_id = cur.fetchone()[0]
