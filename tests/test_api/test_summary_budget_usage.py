@@ -27,7 +27,13 @@ from nexus.telemetry.attempt_manifest import (
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.usage import summarize_usage, usage_context
 from scripts.api_openai import OpenAIProvider
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    FIXTURE_TURN_CHOICES,
+    connect,
+    disposable_slot_database,
+    seed_accepted_turn,
+    seed_played_story,
+)
 from tests.scheduler_helpers import test_provider_config as configure_test
 from tests.test_logon_mock_integration import mock_openai_server  # noqa: F401
 
@@ -103,23 +109,60 @@ def test_responses_create_preserves_parse_wire_kwargs(mock_openai_server):
         provider.client.close()
 
 
+def _seed_two_episode_story(dbname: str) -> None:
+    """Play season 1 through two episodes, with episode 1 already summarized.
+
+    Episode 1 is the factory's played story; two accepted turns open and
+    continue episode 2. Episode 1's summary row is written with the summary
+    drain's own statements (``nexus.jobs.summaries``), so a season job has
+    an episode summary to read, and the episode job targets episode 2, which
+    has chunks but no summary.
+    """
+    seed_played_story(dbname, turns=3)
+    for turn, transition in enumerate(("new_episode", "continue"), start=1):
+        seed_accepted_turn(
+            dbname,
+            user_text=FIXTURE_TURN_CHOICES[0],
+            storyteller_text=(
+                f"Episode two, turn {turn}: the ferry horn sounds across the "
+                "harbor as the night shift changes."
+            ),
+            choices=list(FIXTURE_TURN_CHOICES),
+            choice_text=FIXTURE_TURN_CHOICES[0],
+            episode_transition=transition,
+        )
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT episode, count(*) FROM chunk_metadata WHERE season = 1 "
+            "GROUP BY episode ORDER BY episode"
+        )
+        assert cur.fetchall() == [(1, 3), (2, 2)]
+        cur.execute("INSERT INTO seasons (id) VALUES (1) ON CONFLICT (id) DO NOTHING")
+        cur.execute(
+            """INSERT INTO episodes (season, episode, summary, chunk_span)
+            SELECT 1, 1, %s, int8range(min(chunk_id), max(chunk_id)+1, '[)')
+            FROM chunk_metadata WHERE season=1 AND episode=1""",
+            (json.dumps({"summary": "The plaza empties as the first night falls."}),),
+        )
+        assert cur.rowcount == 1
+
+
 @pytest.mark.requires_postgres
 @pytest.mark.parametrize("mode", ["episode", "season"])
 def test_summary_budget_fails_job_before_test_provider_call(
     monkeypatch, tmp_path, mock_openai_server, mode
 ):
-    """Scheduler failure on a populated save_04 clone is terminal without spend."""
+    """Scheduler failure on a populated seeded story is terminal without spend."""
     path = configure_test(tmp_path, mock_openai_server, monkeypatch)
     config = tomlkit.parse(path.read_text())
     # Keep the registry's real TEST input capacity; reserve it down to a small
-    # positive budget so the clone's actual narrative is oversized.
+    # positive budget so the seeded story's narrative is oversized.
     config["summaries"]["window"]["response_reserve_tokens"] = 871999
     config["summaries"]["model"] = "TEST"
     config["runtime"]["scheduler"]["summaries"]["max_attempts"] = 3
     path.write_text(tomlkit.dumps(config))
-    with disposable_slot_database(
-        "qa640_937_budget", source_db="save_04", include_data=True
-    ) as dbname:
+    with disposable_slot_database("qa640_937_budget") as dbname:
+        _seed_two_episode_story(dbname)
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
             for table in (
                 "correspondence_compaction_jobs",

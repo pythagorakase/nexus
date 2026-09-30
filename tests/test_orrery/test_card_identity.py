@@ -89,7 +89,12 @@ def test_rank_retains_distinct_templates_and_habituation() -> None:
 
 @pytest.fixture()
 def card_database() -> Iterator[str]:
-    """Migrate a disposable corpus; never mutate the source save or template."""
+    """Migrate a disposable corpus; never mutate the source save or template.
+
+    Only ``requires_corpus`` tests use it: they rank and replay the owner's
+    save_04 turn (Ren Vale's cards and Gaia's saved decisions), which needs
+    that corpus's actors, relationships, and entity identities.
+    """
     with disposable_slot_database(
         "qa640_781_cards", source_db="save_04", include_data=True
     ) as dbname:
@@ -97,6 +102,7 @@ def card_database() -> Iterator[str]:
 
 
 @pytest.mark.requires_postgres
+@pytest.mark.requires_corpus
 @pytest.mark.asyncio
 @pytest.mark.parametrize("asynchronous", [False, True])
 async def test_card_exposure_rank_joint_and_backstage_parity(
@@ -421,6 +427,7 @@ def test_card_format_places_clock_and_both_seats() -> None:
 
 
 @pytest.mark.requires_postgres
+@pytest.mark.requires_corpus
 @pytest.mark.asyncio
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("replacement", [False, True])

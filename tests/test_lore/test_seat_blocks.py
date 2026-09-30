@@ -389,18 +389,19 @@ def test_seat_prompt_live_tag_library_and_order(
     from nexus.config import load_settings
     from nexus.config.story_model import read_story_settings
     from tests.pg_fixtures import (
-        connect,
         disposable_slot_database,
         route_slot_to_disposable,
+        seed_played_story,
     )
 
-    with disposable_slot_database(
-        "qa640_742_seat_test", source_db="save_04", include_data=True
-    ) as dbname:
+    # A small played story: a valid frontier, and contextual entities (the
+    # protagonist, an off-screen cast, and their places) on the template's
+    # tag vocabulary.
+    with disposable_slot_database("qa640_742_seat_test") as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
-        with connect(dbname) as conn, conn.cursor() as cur:
-            cur.execute("SELECT max(id) FROM narrative_chunks")
-            parent = cur.fetchone()[0]
+        parent = seed_played_story(
+            dbname, turns=3, cast=("Mara Quill", "Oren Vale"), slot=4
+        )[-1]
         utility = LogonUtility(
             load_settings(),
             dbname=dbname,

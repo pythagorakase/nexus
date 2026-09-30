@@ -16,8 +16,11 @@ from nexus.telemetry import usage
 from scripts.summarize_narrative import SummaryGenerator
 from tests.pg_fixtures import connect, disposable_slot_database
 
+# The paid proof summarizes the owner's save_04 corpus (a data clone), so its
+# cost and quality readings compare against that frozen narrative.
 pytestmark = [
     pytest.mark.requires_postgres,
+    pytest.mark.requires_corpus,
     pytest.mark.live_llm,
     pytest.mark.skipif(
         os.environ.get("NEXUS_800B_PAID_PROOF") != "1",

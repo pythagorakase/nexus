@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 from typing import Any, Iterator, Mapping, Sequence
@@ -53,6 +53,11 @@ from nexus.agents.orrery.templates import ADVANCE_BUILD_VENTURE
 from tests.pg_fixtures import (
     disposable_slot_database,
     route_slot_to_disposable,
+    seed_character,
+    seed_place,
+    seed_protagonist,
+    seed_story_clock,
+    seed_zone,
     sqlalchemy_url,
 )
 from nexus.config import load_settings
@@ -63,16 +68,47 @@ pytestmark = pytest.mark.requires_postgres
 PROJECT_TYPES = tuple(PROJECT_FIRST_STAGES)
 
 
+# The seeded cast, the player first: every case binds up to twelve characters
+# and two places.
+PROJECT_CAST = tuple(f"Project Fixture {index:02d}" for index in range(1, 13))
+PROJECT_WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+
 @pytest.fixture(scope="module")
 def project_corpus() -> Iterator[str]:
-    """Keep migration 123 and all project writes off the source save."""
+    """A seeded template clone that owns every project write.
+
+    What the wizard leaves behind comes first: a bounded zone, two located
+    places, and the canonical player at the first of them with the story
+    clock set (the need-clock anchor), then one committed chunk at that
+    clock and eleven more active characters, all in the production insert
+    shapes of ``tests.pg_fixtures``. Each case runs in a rolled-back
+    transaction on top of this story.
+    """
     with (
-        disposable_slot_database(
-            "qa640_projects799", source_db="save_02", include_data=True
-        ) as dbname,
+        disposable_slot_database("qa640_projects799") as dbname,
         pytest.MonkeyPatch.context() as routing,
     ):
         route_slot_to_disposable(routing.setattr, slot=2, dbname=dbname)
+        seed_zone(
+            dbname,
+            name="Project Zone",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        home, _ = seed_place(dbname, name="Project Harbor")
+        seed_place(dbname, name="Project Archive", longitude=-74.0, latitude=40.7)
+        seed_protagonist(
+            dbname,
+            name=PROJECT_CAST[0],
+            base_timestamp=PROJECT_WORLD_TIME.isoformat(),
+            current_location=home,
+        )
+        seed_story_clock(dbname, world_time=PROJECT_WORLD_TIME)
+        for name in PROJECT_CAST[1:]:
+            seed_character(dbname, name=name, current_location=home)
         yield dbname
 
 
