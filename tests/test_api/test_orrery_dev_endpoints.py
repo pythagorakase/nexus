@@ -60,10 +60,10 @@ from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
     route_slot_to_disposable,
+    seed_adjudication_rulings,
     seed_entity_tag,
     seed_pair_tag,
     seed_played_story,
-    seed_adjudication_rulings,
     seed_relationship,
     seed_routine_anchor,
 )
@@ -86,6 +86,11 @@ SEED_TIME_DELTA = timedelta(hours=6)
 # A durable tag bestowed with no world time (seed_entity_tag leaves
 # applied_at_world_time NULL): the data-quality strip's pathology.
 NULL_WORLD_TIME_TAG = "kin_protector"
+# A constraining tag on the hunted quarry: NOT(has_inbound_pair_tag(hunting))
+# closes every other package to him, and evade_pursuers requires
+# NOT(is_constrained()), so he fires nothing at any anchor. The coverage
+# report's gap_actors list therefore names him.
+GAP_ACTOR_TAG = "immobile"
 # The routine winner the worker's anchor yields; its AND gate passes through
 # NOT(has_inbound_pair_tag(hunting)), so the what-if kill test targets it.
 ROUTINE_WINNER = "routine_commute"
@@ -157,6 +162,7 @@ def _seed_audit_story(dbname: str) -> SeededAuditStory:
             relationship_type="friend",
         )
     seed_entity_tag(dbname, entity_id=characters[QUARRY][1], tag=NULL_WORLD_TIME_TAG)
+    seed_entity_tag(dbname, entity_id=characters[QUARRY][1], tag=GAP_ACTOR_TAG)
     seed_routine_anchor(
         dbname,
         character_entity_id=characters[WORKER][1],
@@ -984,6 +990,12 @@ def test_coverage_report_is_internally_consistent(
         stats = payload["templates"][template_id]
         assert stats["fired"] > 0 and stats["won"] == 0
 
+    gap_actor_ids = [gap["entity_id"] for gap in payload["gap_actors"]]
+    assert routed_story.cast_entity_ids[QUARRY] in gap_actor_ids, (
+        f"the quarry is not a gap actor ({gap_actor_ids!r}) — the gap_actors "
+        f"check is vacuous; the hunted, {GAP_ACTOR_TAG} quarry should fire "
+        "nothing at any anchor"
+    )
     for gap in payload["gap_actors"]:
         assert 0 < gap["gapped_anchors"] <= gap["seen_anchors"]
 

@@ -1687,7 +1687,7 @@ def seed_adjudication_rulings(
         _insert_adjudication_log_sync,
     )
     from nexus.agents.orrery.resolver import OrreryResolutionDraft
-    from nexus.agents.orrery.substrate import binding_hash
+    from nexus.agents.orrery.substrate import Slot, binding_hash
 
     ticks = [int(tick) for tick, _action in rulings]
     if not rulings or ticks != sorted(ticks):
@@ -1704,10 +1704,13 @@ def seed_adjudication_rulings(
         raise ValueError(
             f"seed_adjudication_rulings needs an actor binding, got {bindings!r}"
         )
+    # Key the hash input by Slot, as the resolver does; an unknown slot name
+    # raises here rather than hashing a binding no template can carry.
+    slot_bindings = {Slot(slot): value for slot, value in bindings.items()}
     draft = OrreryResolutionDraft(
         template_id=template_id,
         priority=0,
-        binding_hash=binding_hash(dict(bindings)),
+        binding_hash=binding_hash(slot_bindings),
         bindings=dict(bindings),
         branch_label="Seeded ruling",
         narrative_stub="{actor} waits on a seeded ruling.",
