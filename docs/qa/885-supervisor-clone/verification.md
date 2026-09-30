@@ -391,31 +391,38 @@ origin/main:tests/test_runtime/test_supervisor_live.py:368:    env["NEXUS_SLOT"]
 
 $ grep -rn "save_0[1-5]\|slot=[1-5]\b\|slot_dbname([1-5])\|TEST_SLOT\|NEXUS_SLOT" tests/test_runtime/ tests/slot_routed_*.py
 tests/test_runtime/test_supervisor.py:180:    pid = supervisor._spawn("echo", service, slot=5, detached=True)
-tests/test_runtime/test_remote_auth.py:237:    result = cli.run_load(Namespace(slot=5))
-tests/test_runtime/test_supervisor_live.py:9:``TEST_SLOT`` routed to one module-scoped disposable template clone: the
-tests/test_runtime/test_supervisor_live.py:62:TEST_SLOT = 5
-tests/test_runtime/test_supervisor_live.py:63:# The disposable clone serving TEST_SLOT; routed_clone sets it before each test.
-tests/test_runtime/test_supervisor_live.py:107:    """The variables that route TEST_SLOT to the clone in a child process."""
-tests/test_runtime/test_supervisor_live.py:109:    return routed_slot_environment(TEST_SLOT, ROUTED_DATABASE)
-tests/test_runtime/test_supervisor_live.py:153:    doc["runtime"]["default_slot"] = TEST_SLOT
-tests/test_runtime/test_supervisor_live.py:191:        "NEXUS_SLOT",
-tests/test_runtime/test_supervisor_live.py:221:        up = _cli("up", "--slot", str(TEST_SLOT), config=config)
-tests/test_runtime/test_supervisor_live.py:238:        assert runtime_status["slot"] == TEST_SLOT
-tests/test_runtime/test_supervisor_live.py:281:        assert full_restart["slot"] == TEST_SLOT
-tests/test_runtime/test_supervisor_live.py:287:        assert runtime_status["slot"] == TEST_SLOT
-tests/test_runtime/test_supervisor_live.py:473:    env["NEXUS_SLOT"] = str(TEST_SLOT)
 tests/test_runtime/test_readiness.py:680:    names = {1: "save_01", 2: "save_02", 3: "save_03"}
 tests/test_runtime/test_readiness.py:682:        names, existing={"save_01", "save_02"}, locked={1}
 tests/test_runtime/test_readiness.py:686:            "save_01",
 tests/test_runtime/test_readiness.py:691:            "save_02",
 tests/test_runtime/test_readiness.py:699:    assert absent == ["save_03"]
+tests/test_runtime/test_supervisor_live.py:9:``TEST_SLOT`` routed to one module-scoped disposable template clone: the
+tests/test_runtime/test_supervisor_live.py:62:TEST_SLOT = 5
+tests/test_runtime/test_supervisor_live.py:63:# A slot the routed processes refuse: the restart steps set it as NEXUS_SLOT to
+tests/test_runtime/test_supervisor_live.py:66:# The disposable clone serving TEST_SLOT; routed_clone sets it before each test.
+tests/test_runtime/test_supervisor_live.py:110:    """The variables that route TEST_SLOT to the clone in a child process."""
+tests/test_runtime/test_supervisor_live.py:112:    return routed_slot_environment(TEST_SLOT, ROUTED_DATABASE)
+tests/test_runtime/test_supervisor_live.py:156:    doc["runtime"]["default_slot"] = TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:194:        "NEXUS_SLOT",
+tests/test_runtime/test_supervisor_live.py:230:        up = _cli("up", "--slot", str(TEST_SLOT), config=config)
+tests/test_runtime/test_supervisor_live.py:247:        assert runtime_status["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:280:        # still pick TEST_SLOT. The restarts therefore run with a conflicting
+tests/test_runtime/test_supervisor_live.py:281:        # NEXUS_SLOT: a restart that resolves the slot from the environment or
+tests/test_runtime/test_supervisor_live.py:284:        conflicting_slot = {"NEXUS_SLOT": str(CONFLICTING_SLOT)}
+tests/test_runtime/test_supervisor_live.py:290:        assert restart["services"]["gateway"]["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:297:        assert status["runtime"]["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:301:        # falling back to NEXUS_SLOT or runtime.default_slot.
+tests/test_runtime/test_supervisor_live.py:304:        assert full_restart["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:310:        assert runtime_status["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:496:    env["NEXUS_SLOT"] = str(TEST_SLOT)
+tests/test_runtime/test_remote_auth.py:237:    result = cli.run_load(Namespace(slot=5))
 tests/test_runtime/test_logging_config.py:38:TEST_SLOT = 5
 tests/test_runtime/test_logging_config.py:330:    record = supervisor._start_service("probe", service, TEST_SLOT, detached=True)
 tests/slot_routed_gateway.py:11:port). ``NEXUS_SLOT`` keeps its production meaning: when it names the routed
 tests/slot_routed_uvicorn.py:19:are exactly the supervisor's. ``NEXUS_SLOT`` keeps its production meaning, as
 ```
 
-19 hits before, 23 after.
+19 hits before, 30 after (the review-round commit 08f10358 added the restart-coverage comments, the conflicting `NEXUS_SLOT` for the restart steps, and two more `slot == TEST_SLOT` assertions).
 
 | Hit (before, `origin/main`) | Class |
 | --- | --- |
@@ -429,10 +436,10 @@ tests/slot_routed_uvicorn.py:19:are exactly the supervisor's. ``NEXUS_SLOT`` kee
 
 | Hit (after, this branch) | Class |
 | --- | --- |
-| `test_supervisor_live.py:9` | Docstring. |
-| `test_supervisor_live.py:63` | Comment. |
-| `test_supervisor_live.py:62` (the constant), `:107` (`_routed_env` docstring), `:109` (`_routed_env` builds the routing variables), `:153` (`runtime.default_slot`), `:221` (`up --slot 5`), `:238`, `:281`, `:287` (`slot == 5` assertions), `:473` (`external_gateway`'s `NEXUS_SLOT=5`) | Routed slot number: resolves only to the `qa885_supervisor_*` clone in every process the module starts. |
-| `test_supervisor_live.py:191` `"NEXUS_SLOT"` | `_cli` removes the caller's `NEXUS_SLOT` from the child environment; the routed CLI then resolves `--slot 5` or `default_slot = 5`, both routed. |
+| `test_supervisor_live.py:9`, `:63`, `:66`, `:280`, `:281`, `:301` | Docstring and comments. |
+| `test_supervisor_live.py:62` (the constant), `:110` (`_routed_env` docstring), `:112` (`_routed_env` builds the routing variables), `:156` (`runtime.default_slot`), `:230` (`up --slot 5`), `:247`, `:290`, `:297`, `:304`, `:310` (the five `slot == TEST_SLOT` assertions), `:496` (`external_gateway`'s `NEXUS_SLOT=5`) | Routed slot number: resolves only to the `qa885_supervisor_*` clone in every process the module starts. |
+| `test_supervisor_live.py:194` `"NEXUS_SLOT"` | `_cli` removes the caller's `NEXUS_SLOT` from the child environment; the routed CLI then resolves `--slot 5` or `default_slot = 5`, both routed. |
+| `test_supervisor_live.py:284` `{"NEXUS_SLOT": str(CONFLICTING_SLOT)}` (with `CONFLICTING_SLOT = 3` at `:65`, which the pattern does not match) | A refused slot number, never a target: the two restart steps hand the routed CLI `NEXUS_SLOT=3` so that a restart resolving its slot from the environment or the default, instead of the recorded running slot, is refused by `route_slot_from_environment` before any connection opens (`tests/pg_fixtures.py:366`; the two pasted mutation failures below end in `RuntimeError: Slot 3 is not routed`). Unrouted, 3 would name `save_03`; no process in this module runs unrouted. |
 | `tests/slot_routed_gateway.py:11`, `tests/slot_routed_uvicorn.py:19` `NEXUS_SLOT` | Docstrings. |
 | `test_readiness.py:680`, `:682`, `:686`, `:691`, `:699` `save_01`–`save_03` | Offline: pure name-mapping input to a readiness function; no connection. |
 | `test_remote_auth.py:237` `Namespace(slot=5)` | Offline: `cli.run_load` against a loopback HTTP recorder (`NEXUS_API_URL` set to it); no database. |
