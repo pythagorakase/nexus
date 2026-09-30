@@ -222,3 +222,43 @@ def test_audit_without_the_registry_schema_names_the_migration(
         f"{dbname} has no tag_category_registry table; apply migration "
         "037_orrery_tag_category_registry (scripts/migrate.py) before auditing it"
     )
+
+
+def test_all_audit_missing_an_entity_tags_column_keeps_the_partial(
+    audited_clone, monkeypatch
+) -> None:
+    """A later database without ``entity_tags.cleared_at`` is a domain failure.
+
+    ``--all`` reads the template first; here the template is the intact clone
+    and slot 3 is a second clone with the column dropped. The preflight names
+    the migration, and the envelope's ``partial`` keeps the template's report,
+    instead of the audit statement leaking PostgreSQL's ``UndefinedColumn``.
+    """
+    dbname, entities = audited_clone
+    with disposable_slot_database("qa640_811_tags_audit_nocol") as broken:
+        with closing(connect(broken)) as conn, conn, conn.cursor() as cur:
+            cur.execute("ALTER TABLE entity_tags DROP COLUMN cleared_at CASCADE")
+        monkeypatch.setattr(deprecated_tag_audit, "TEMPLATE_DATABASE", dbname)
+        _route_slot_three(monkeypatch, broken)
+
+        with pytest.raises(
+            DeprecatedTagAuditError,
+            match="has no entity_tags.cleared_at column",
+        ):
+            audit_database(broken)
+
+        code, stdout, stderr = _run_main(
+            monkeypatch, "tags", "audit", "--all", "--json"
+        )
+
+    assert (code, stdout) == (1, "")
+    envelope = json.loads(stderr)
+    assert envelope["ok"] is False
+    assert envelope["code"] == "domain_failure"
+    assert envelope["error"] == (
+        f"{broken} has no entity_tags.cleared_at column; apply migration "
+        "023_orrery_schema (scripts/migrate.py) before auditing it"
+    )
+    (template_report,) = envelope["partial"]["databases"]
+    assert template_report["database"] == dbname
+    assert template_report["groups"] == _expected_groups(entities)

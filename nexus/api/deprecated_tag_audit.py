@@ -21,16 +21,29 @@ from nexus.database import connection_kwargs
 
 TEMPLATE_DATABASE = "NEXUS_template"
 
-# The migration that creates each object the audit reads, named when a
-# database lacks it.
+# The migration that creates each table and column the audit statements
+# read, named when a database lacks it. Keep this in step with the two
+# statements below: the preflight is what keeps a missing column a domain
+# failure instead of a PostgreSQL error.
 _REQUIRED_TABLES: Mapping[str, str] = {
     "tags": "023_orrery_schema",
     "entity_tags": "023_orrery_schema",
     "tag_category_registry": "037_orrery_tag_category_registry",
 }
-_REQUIRED_REGISTRY_COLUMNS: Mapping[str, str] = {
-    "deprecated": "043_orrery_category_refactor_phase1",
-    "replacement_categories": "043_orrery_category_refactor_phase1",
+_REQUIRED_COLUMNS: Mapping[tuple[str, str], str] = {
+    ("entity_tags", "entity_id"): "023_orrery_schema",
+    ("entity_tags", "tag_id"): "023_orrery_schema",
+    ("entity_tags", "cleared_at"): "023_orrery_schema",
+    ("tags", "id"): "023_orrery_schema",
+    ("tags", "tag"): "023_orrery_schema",
+    ("tags", "category"): "023_orrery_schema",
+    ("tag_category_registry", "category"): "037_orrery_tag_category_registry",
+    ("tag_category_registry", "entity_kind"): "037_orrery_tag_category_registry",
+    ("tag_category_registry", "deprecated"): "043_orrery_category_refactor_phase1",
+    (
+        "tag_category_registry",
+        "replacement_categories",
+    ): "043_orrery_category_refactor_phase1",
 }
 
 _DEPRECATED_REGISTRY_SQL = """
@@ -84,16 +97,17 @@ def _require_schema(cur: Any, dbname: str) -> None:
             )
     cur.execute(
         """
-        SELECT column_name
+        SELECT table_name, column_name
         FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'tag_category_registry'
-        """
+        WHERE table_schema = 'public' AND table_name = ANY(%s)
+        """,
+        (sorted(_REQUIRED_TABLES),),
     )
-    present = {str(row[0]) for row in cur.fetchall()}
-    for column, migration in _REQUIRED_REGISTRY_COLUMNS.items():
-        if column not in present:
+    present = {(str(table), str(column)) for table, column in cur.fetchall()}
+    for (table, column), migration in _REQUIRED_COLUMNS.items():
+        if (table, column) not in present:
             raise DeprecatedTagAuditError(
-                f"{dbname} has no tag_category_registry.{column} column; apply "
+                f"{dbname} has no {table}.{column} column; apply "
                 f"migration {migration} (scripts/migrate.py) before auditing it"
             )
 

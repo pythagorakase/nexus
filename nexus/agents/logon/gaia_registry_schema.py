@@ -8,9 +8,19 @@ provider boundary.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from threading import Lock
-from typing import Annotated, Any, Literal, Mapping, Optional, Union, cast
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from pydantic import Field, create_model
 from typing_extensions import TypeAliasType
@@ -31,7 +41,11 @@ from nexus.agents.logon.skald_wire import (
     SkaldGaiaWire,
     UpdatesBlock,
 )
-from nexus.agents.orrery.tag_library import _registry_digest
+from nexus.agents.orrery.tag_library import (
+    EntityRowReference,
+    _registry_digest,
+    read_current_entity_tag_names,
+)
 
 
 class GaiaRegistrySchemaError(RuntimeError):
@@ -76,8 +90,19 @@ _MODEL_CACHE: dict[
 _MODEL_CACHE_LOCK = Lock()
 
 
-def load_gaia_registry_wire_spec(dbname: str) -> GaiaRegistryWireSpec:
-    """Read one slot registry and return its digest-keyed Gaia wire model."""
+def load_gaia_registry_wire_spec(
+    dbname: str,
+    *,
+    scene_entity_refs: Sequence[EntityRowReference] = (),
+    anchor_chunk_id: Optional[int] = None,
+) -> GaiaRegistryWireSpec:
+    """Read one slot registry and return its digest-keyed Gaia wire model.
+
+    ``scene_entity_refs`` are the turn's present entities. Their active tags
+    of deprecated registry categories, and only those, form the clear-only
+    enums, so the grammar lets Gaia clear what the scene shows and nothing
+    else. Without present entities the grammar has no clear-only enums.
+    """
 
     if not dbname:
         raise GaiaRegistryReadError(
@@ -85,12 +110,22 @@ def load_gaia_registry_wire_spec(dbname: str) -> GaiaRegistryWireSpec:
         )
     try:
         vocabulary = read_storyteller_vocabulary(dbname)
+        scene_clear_only = _scene_clear_only_tags(
+            dbname,
+            vocabulary,
+            entity_refs=scene_entity_refs,
+            anchor_chunk_id=anchor_chunk_id,
+        )
     except Exception as exc:
         raise GaiaRegistryReadError(
             f"Failed to read Gaia strict-schema vocabulary from {dbname!r}"
         ) from exc
 
-    normalized = _normalize_vocabulary(vocabulary.tag_names_by_kind, vocabulary)
+    normalized = _normalize_vocabulary(
+        vocabulary.tag_names_by_kind,
+        vocabulary,
+        scene_clear_only=scene_clear_only,
+    )
     digest = _registry_digest(
         tag_names=[
             *normalized.character_tags,
@@ -154,9 +189,44 @@ def coerce_gaia_registry_wire(wire: SkaldGaiaWire) -> SkaldGaiaWire:
     return SkaldGaiaWire.model_validate(wire.model_dump(mode="python"))
 
 
+def _scene_clear_only_tags(
+    dbname: str,
+    vocabulary: StorytellerVocabulary,
+    *,
+    entity_refs: Sequence[EntityRowReference],
+    anchor_chunk_id: Optional[int],
+) -> dict[str, frozenset[str]]:
+    """Return, per kind, the clear-only tags the present entities carry.
+
+    A clear-only tag belongs to a deprecated registry category, so no prompt
+    offers it for a new application. Only the ones active on a present
+    entity of the same kind reach the grammar: the scene's own view.
+    """
+
+    refs_by_kind: dict[str, list[EntityRowReference]] = defaultdict(list)
+    for reference in entity_refs:
+        refs_by_kind[reference.kind].append(reference)
+    scene_clear_only: dict[str, frozenset[str]] = {}
+    for entity_kind, references in refs_by_kind.items():
+        clear_only = vocabulary.clearable_tags(
+            entity_kind
+        ) - vocabulary.tag_names_by_kind.get(entity_kind, frozenset())
+        if not clear_only:
+            continue
+        active = read_current_entity_tag_names(
+            dbname,
+            entity_refs=references,
+            anchor_chunk_id=anchor_chunk_id,
+        )
+        scene_clear_only[entity_kind] = frozenset(active & clear_only)
+    return scene_clear_only
+
+
 def _normalize_vocabulary(
     tag_names_by_kind: Mapping[str, object],
     vocabulary: StorytellerVocabulary,
+    *,
+    scene_clear_only: Mapping[str, frozenset[str]],
 ) -> GaiaRegistryVocabulary:
     normalized = GaiaRegistryVocabulary(
         character_tags=_normalize_names(
@@ -166,21 +236,15 @@ def _normalize_vocabulary(
         faction_tags=_normalize_names("faction tag", tag_names_by_kind.get("faction")),
         pair_tags=_normalize_names("pair tag", vocabulary.pair_tag_names),
         event_types=_normalize_names("event type", vocabulary.event_types),
-        character_clear_only_tags=_clear_only_names(vocabulary, "character"),
-        place_clear_only_tags=_clear_only_names(vocabulary, "place"),
-        faction_clear_only_tags=_clear_only_names(vocabulary, "faction"),
+        character_clear_only_tags=tuple(
+            sorted(scene_clear_only.get("character", frozenset()))
+        ),
+        place_clear_only_tags=tuple(sorted(scene_clear_only.get("place", frozenset()))),
+        faction_clear_only_tags=tuple(
+            sorted(scene_clear_only.get("faction", frozenset()))
+        ),
     )
     return normalized
-
-
-def _clear_only_names(
-    vocabulary: StorytellerVocabulary,
-    entity_kind: str,
-) -> tuple[str, ...]:
-    """Return the sorted tags a clear may name but an application may not."""
-
-    promptable = vocabulary.tag_names_by_kind.get(entity_kind, frozenset())
-    return tuple(sorted(vocabulary.clearable_tags(entity_kind) - promptable))
 
 
 def _normalize_names(label: str, values: object) -> tuple[str, ...]:
@@ -236,8 +300,8 @@ def _clear_tag_type(
     """Return the item type of ``tags_clear`` for one entity kind.
 
     A clear names a promptable tag or a tag of a deprecated registry category
-    that existing rows may still carry. The second set gets its own named enum,
-    so ``tags_add`` never offers it.
+    that a present entity still carries. The second set gets its own named
+    enum, so ``tags_add`` never offers it.
     """
 
     if not clear_only_tags:

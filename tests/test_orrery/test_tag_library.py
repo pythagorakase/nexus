@@ -16,7 +16,13 @@ import nexus.agents.orrery.tag_library as tag_library
 from nexus.agents.lore.logon_utility import proposal_tag_names_from_payload
 from nexus.api import slot_utils
 from nexus.prompts.registry import PromptId, load
-from tests.pg_fixtures import connect, disposable_slot_database
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_entity_tag,
+    seed_place,
+    seed_zone,
+)
 
 
 def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None:
@@ -29,6 +35,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
             "category_description": "Character state.",
             "prompt_order": 10,
             "category_deprecated": False,
+            "active_somewhere": False,
             "tag": "wounded",
             "is_ephemeral": True,
             "description": "Character has an acute wound.",
@@ -39,6 +46,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
             "category_description": "Functional role a place serves.",
             "prompt_order": 10,
             "category_deprecated": False,
+            "active_somewhere": False,
             "tag": "haven",
             "is_ephemeral": False,
             "description": "Place can shelter or hide someone safely.",
@@ -79,6 +87,7 @@ def test_read_tag_library_captures_reapplication_policy(monkeypatch) -> None:
             "category_description": "Recent conduct.",
             "prompt_order": 10,
             "category_deprecated": False,
+            "active_somewhere": False,
             "tag": "recently_protective",
             "is_ephemeral": True,
             "description": "Recently acted to protect someone.",
@@ -166,7 +175,7 @@ def _patch_contextual_registry(
     monkeypatch.setattr(
         tag_library,
         "read_tag_library",
-        lambda _dbname: registry_entries,
+        lambda _dbname, **_options: registry_entries,
     )
     monkeypatch.setattr(
         tag_library,
@@ -495,6 +504,101 @@ def test_deprecated_registry_category_leaves_the_library(monkeypatch) -> None:
             entry.tag for entry in tag_library.read_tag_library(dbname)
         }
         assert "place_affordance" in {
+            entry.category for entry in tag_library.read_tag_categories(dbname)
+        }
+
+
+def _scene_library(dbname: str, place_id: int) -> str:
+    """Render the contextual library with one place present.
+
+    The proposal names ``worksite`` too: a proposal never selects a
+    deprecated-category entry, only a present entity's active tag does.
+    """
+
+    return tag_library.format_contextual_tag_library(
+        dbname,
+        context=tag_library.TagLibraryContext(
+            present_entity_refs=[
+                tag_library.EntityRowReference(kind="place", row_id=place_id)
+            ],
+            proposal_tag_names={"worksite", "haven"},
+            has_pending_proposals=False,
+        ),
+    )
+
+
+def _section(rendered: str, heading: str) -> str:
+    """Return one ``###`` section of a rendered library, heading excluded."""
+
+    body = rendered.split(f"### {heading}\n", 1)[1]
+    return body.split("\n### ", 1)[0]
+
+
+@pytest.mark.requires_postgres
+def test_scene_shows_a_present_entitys_deprecated_tag_as_clear_only(
+    monkeypatch,
+) -> None:
+    """Scene-Relevant Tags list an active deprecated-category tag, marked.
+
+    ``worksite`` sits under ``place_affordance``, which the registry
+    deprecates. The first place carries it and the second does not. With the
+    first present the scene lists the tag's real entry with ``(clear only)``;
+    with only the second present it appears nowhere. The name index, the full
+    library, and the taxonomy never list it.
+    """
+
+    with disposable_slot_database("qa640_811_scene_clear_only") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        seed_zone(
+            dbname,
+            name="Harbor Ward",
+            min_longitude=-74.1,
+            min_latitude=40.6,
+            max_longitude=-73.8,
+            max_latitude=40.9,
+        )
+        carrying, carrying_entity = seed_place(dbname, name="Dry Dock Nine")
+        bare, _ = seed_place(dbname, name="Lamplighter Row", longitude=-73.95)
+        seed_entity_tag(dbname, entity_id=carrying_entity, tag="worksite")
+        (worksite,) = [
+            entry
+            for entry in tag_library.read_tag_library(
+                dbname, include_deprecated_categories=True
+            )
+            if entry.tag == "worksite"
+        ]
+        assert (worksite.category, worksite.category_deprecated) == (
+            "place_affordance",
+            True,
+        )
+        assert worksite.active_somewhere is True
+
+        present = _scene_library(dbname, carrying)
+        scene = _section(present, "Scene-Relevant Tags")
+        entry_line = (
+            f"- place/place_affordance: {tag_library._format_tag_entry(worksite)}"
+            " (clear only)"
+        )
+        assert entry_line in scene.splitlines()
+        assert [line for line in scene.splitlines() if "worksite" in line] == [
+            entry_line
+        ]
+        assert "(clear only)" not in scene.replace(entry_line, "")
+        assert "`haven`" in scene
+        assert "worksite" not in _section(present, "Complete Tag-Name Index")
+        assert "place_affordance" not in _section(present, "Category Taxonomy")
+
+        absent = _scene_library(dbname, bare)
+        assert "worksite" not in absent
+        assert "(clear only)" not in absent
+        assert "`haven`" in _section(absent, "Scene-Relevant Tags")
+
+        assert "worksite" not in {
+            entry.tag for entry in tag_library.read_tag_library(dbname)
+        }
+        assert "place_affordance" not in {
             entry.category for entry in tag_library.read_tag_categories(dbname)
         }
 

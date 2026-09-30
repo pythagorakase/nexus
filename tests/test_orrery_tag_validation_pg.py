@@ -37,6 +37,7 @@ from nexus.agents.logon.skald_wire import (
     SkaldGaiaWire,
     SkaldTurnWire,
 )
+from nexus.agents.orrery.tag_library import EntityRowReference
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal
 from nexus.api.commit_handler_sync import (
@@ -943,80 +944,136 @@ def _deprecated_category_update(
     return [{"id": entity.wire_id, "name": entity.name, field_name: [tag]}]
 
 
+def _unknown_tag_issue(wire_field: str, tag: str, entity_kind: str) -> str:
+    """The unknown-tag issue, named by the bestowal field the wire field feeds."""
+
+    field_name = {"tags_add": "applied_tags", "tags_clear": "tags_to_clear"}[wire_field]
+    return (
+        f"{field_name}: Unknown or entity-kind-incompatible tag {tag!r} "
+        f"for {entity_kind!r}"
+    )
+
+
+def _commit_activation(database: _Qa649Database, entity_id: int, tag: str) -> None:
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            _activate_tag(cur, entity_id, tag)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("array_name", "entity_attribute", "entity_kind", "tag"),
     _DEPRECATED_CATEGORY_TAGS,
 )
-def test_deprecated_category_tag_is_clearable_but_not_addable(
+async def test_deprecated_category_tag_is_clearable_only_while_a_row_is_active(
     qa649_db: _Qa649Database,
     array_name: str,
     entity_attribute: str,
     entity_kind: str,
     tag: str,
 ) -> None:
+    """The clear set follows the database's active rows, never the registry alone.
+
+    Active nowhere, the tag is unknown to both fields. While a row is active,
+    a clear validates and an application is still rejected. The real
+    validator and commit route clear the row; with no active row left, a
+    further clear is unknown again. Each case ends with no active row, as it
+    began, so the module clone stays as the other tests expect.
+    """
+
     entity = getattr(qa649_db, entity_attribute)
+
+    def issues(field_name: str) -> List[str]:
+        arrays: dict[str, Any] = {
+            array_name: _deprecated_category_update(entity, field_name, tag)
+        }
+        _normalized, collected = _normalize_and_collect(_response(**arrays), qa649_db)
+        return collected
+
+    def assert_unknown(field_name: str) -> None:
+        (issue,) = issues(field_name)
+        assert _unknown_tag_issue(field_name, tag, entity_kind) in issue
+
+    assert tag not in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags(
+        entity_kind
+    )
+    assert_unknown("tags_clear")
+    assert_unknown("tags_add")
+
+    _commit_activation(qa649_db, entity.entity_id, tag)
     vocabulary = read_storyteller_vocabulary(qa649_db.dbname)
-    assert tag not in vocabulary.tag_names_by_kind[entity_kind]
     assert tag in vocabulary.clearable_tags(entity_kind)
+    assert tag not in vocabulary.tag_names_by_kind[entity_kind]
+    assert issues("tags_clear") == []
+    assert_unknown("tags_add")
 
     clear_arrays: dict[str, Any] = {
         array_name: _deprecated_category_update(entity, "tags_clear", tag)
     }
-    add_arrays: dict[str, Any] = {
-        array_name: _deprecated_category_update(entity, "tags_add", tag)
-    }
-    clear = _response(**clear_arrays)
-    add = _response(**add_arrays)
-    _clear_normalized, clear_issues = _normalize_and_collect(clear, qa649_db)
-    _add_normalized, add_issues = _normalize_and_collect(add, qa649_db)
+    await _validate_and_apply(_response(**clear_arrays), qa649_db)
+    assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
 
-    assert clear_issues == []
-    assert len(add_issues) == 1
-    assert (
-        f"applied_tags: Unknown or entity-kind-incompatible tag {tag!r} "
-        f"for {entity_kind!r}"
-    ) in add_issues[0]
+    assert tag not in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags(
+        entity_kind
+    )
+    assert_unknown("tags_clear")
 
-    # The validated clear reaches an active row through the real writer. The
-    # transaction rolls back so the module-scoped clone stays unchanged.
-    conn = _connect(qa649_db.dbname)
-    try:
-        with conn.cursor() as cur:
-            _activate_tag(cur, entity.entity_id, tag)
-            apply_tag_bestowal(
-                cur,
-                entity_id=entity.entity_id,
-                entity_kind=entity_kind,
-                bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
-            )
-            cur.execute(
-                """
-                SELECT count(*)
-                FROM entity_tags et
-                JOIN tags t ON t.id = et.tag_id
-                WHERE et.entity_id = %s AND t.tag = %s AND et.cleared_at IS NULL
-                """,
-                (entity.entity_id, tag),
-            )
-            assert cur.fetchone()[0] == 0
-    finally:
-        conn.rollback()
-        conn.close()
+
+@pytest.mark.asyncio
+async def test_worksite_stays_clearable_until_its_last_active_row_is_cleared(
+    qa649_db: _Qa649Database,
+) -> None:
+    """Clearing one place's ``worksite`` leaves it clearable on the other."""
+
+    places = (qa649_db.place, qa649_db.no_default_place)
+    for place in places:
+        _commit_activation(qa649_db, place.entity_id, "worksite")
+
+    for index, place in enumerate(places):
+        response = _response(
+            places=_deprecated_category_update(place, "tags_clear", "worksite")
+        )
+        _normalized, issues = _normalize_and_collect(response, qa649_db)
+        assert issues == []
+        await _validate_and_apply(response, qa649_db)
+        assert (
+            _current_tag_row(qa649_db, entity_id=place.entity_id, tag="worksite")
+            is None
+        )
+        still_active = index < len(places) - 1
+        assert (
+            "worksite"
+            in read_storyteller_vocabulary(qa649_db.dbname).clearable_tags("place")
+        ) is still_active
+
+    _normalized, issues = _normalize_and_collect(
+        _response(
+            places=_deprecated_category_update(places[0], "tags_clear", "worksite")
+        ),
+        qa649_db,
+    )
+    (issue,) = issues
+    assert _unknown_tag_issue("tags_clear", "worksite", "place") in issue
 
 
 @pytest.mark.parametrize(
     ("array_name", "entity_attribute", "entity_kind", "tag"),
     _DEPRECATED_CATEGORY_TAGS,
 )
-def test_gaia_grammar_clears_but_never_adds_deprecated_category_tag(
+def test_gaia_grammar_clears_a_deprecated_category_tag_only_in_its_scene(
     qa649_db: _Qa649Database,
     array_name: str,
     entity_attribute: str,
     entity_kind: str,
     tag: str,
 ) -> None:
+    """A present entity's active deprecated-category tag is clear-only.
+
+    With the carrying entity in the scene, ``tags_clear`` accepts the tag and
+    ``tags_add`` rejects it; without a scene the grammar rejects the clear.
+    """
+
     entity = getattr(qa649_db, entity_attribute)
-    schema_model = load_gaia_registry_wire_spec(qa649_db.dbname).model
 
     def payload(field_name: str) -> dict[str, Any]:
         updates: dict[str, Any] = {
@@ -1033,13 +1090,36 @@ def test_gaia_grammar_clears_but_never_adds_deprecated_category_tag(
             "updates": updates,
         }
 
-    cleared = coerce_gaia_registry_wire(
-        schema_model.model_validate(payload("tags_clear"))
-    )
-    assert cleared.updates is not None
-    assert getattr(cleared.updates, array_name)[0].tags_clear == [tag]
-    with pytest.raises(ValidationError):
-        schema_model.model_validate(payload("tags_add"))
+    _commit_activation(qa649_db, entity.entity_id, tag)
+    try:
+        in_scene = load_gaia_registry_wire_spec(
+            qa649_db.dbname,
+            scene_entity_refs=[
+                EntityRowReference(kind=entity_kind, row_id=entity.wire_id)
+            ],
+            anchor_chunk_id=qa649_db.anchor_chunk_id,
+        ).model
+        without_scene = load_gaia_registry_wire_spec(qa649_db.dbname).model
+
+        cleared = coerce_gaia_registry_wire(
+            in_scene.model_validate(payload("tags_clear"))
+        )
+        assert cleared.updates is not None
+        assert getattr(cleared.updates, array_name)[0].tags_clear == [tag]
+        with pytest.raises(ValidationError):
+            in_scene.model_validate(payload("tags_add"))
+        with pytest.raises(ValidationError):
+            without_scene.model_validate(payload("tags_clear"))
+    finally:
+        with _connect(qa649_db.dbname) as conn:
+            with conn.cursor() as cur:
+                apply_tag_bestowal(
+                    cur,
+                    entity_id=entity.entity_id,
+                    entity_kind=entity_kind,
+                    bestowal=OrreryTagBestowal(tags_to_clear=[tag]),
+                )
+    assert _current_tag_row(qa649_db, entity_id=entity.entity_id, tag=tag) is None
 
 
 def test_migration_109_seeds_only_time_cleared_defaults(

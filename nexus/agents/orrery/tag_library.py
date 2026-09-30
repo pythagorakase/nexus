@@ -46,6 +46,10 @@ class TagLibraryEntry:
     clearance_kind: Optional[str] = None
     default_duration: Optional[timedelta] = None
     category_deprecated: bool = False
+    # Set only on a deprecated-category entry read with
+    # ``include_deprecated_categories=True``: some entity of the entry's kind
+    # still carries the tag in an uncleared ``entity_tags`` row.
+    active_somewhere: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +113,9 @@ def read_tag_library(
     deprecated and it is not a synonym. ``include_deprecated_categories``
     keeps the tags of deprecated registry categories: existing rows may still
     carry them, so a clear must be able to name them even though no prompt
-    offers them for a new application.
+    offers them for a new application. Each such entry's ``active_somewhere``
+    reports, from the same statement and so the same snapshot, whether an
+    entity of its kind still carries the tag (``cleared_at IS NULL``).
     """
 
     kind_filter = _normalize_entity_kinds(entity_kinds)
@@ -121,8 +127,20 @@ def read_tag_library(
                 "t.deprecated = FALSE",
                 "t.synonym_for IS NULL",
             ]
-            if not include_deprecated_categories:
+            if include_deprecated_categories:
+                active_column = """
+                    r.deprecated AND EXISTS (
+                        SELECT 1
+                        FROM entity_tags et
+                        JOIN entities e ON e.id = et.entity_id
+                        WHERE et.tag_id = t.id
+                          AND et.cleared_at IS NULL
+                          AND e.kind = r.entity_kind
+                    )
+                """
+            else:
                 where.insert(0, _LIVE_CATEGORY_PREDICATE)
+                active_column = "FALSE"
             if kind_filter is not None:
                 where.append("r.entity_kind = ANY(%s::entity_kind[])")
                 params.append(list(kind_filter))
@@ -139,7 +157,8 @@ def read_tag_library(
                     t.description,
                     t.reapplication_policy::text AS reapplication_policy,
                     t.clearance_kind::text AS clearance_kind,
-                    t.default_duration
+                    t.default_duration,
+                    {active_column} AS active_somewhere
                 FROM tag_category_registry r
                 JOIN tags t ON t.category = r.category
                 WHERE {' AND '.join(where)}
@@ -172,6 +191,7 @@ def read_tag_library(
                     ),
                     default_duration=row.get("default_duration"),
                     category_deprecated=bool(row["category_deprecated"]),
+                    active_somewhere=bool(row["active_somewhere"]),
                 )
                 for row in cur.fetchall()
             ]
@@ -385,9 +405,17 @@ def format_contextual_tag_library(
     *,
     context: TagLibraryContext,
 ) -> str:
-    """Render a complete name index with scene-contextual descriptions."""
+    """Render a complete name index with scene-contextual descriptions.
 
-    entries = read_tag_library(dbname)
+    The index, taxonomy, and digest carry only live registry categories. A
+    present entity may still carry a tag of a deprecated category; its entry
+    appears under Scene-Relevant Tags marked ``(clear only)``, so the
+    storyteller can see and clear it but never finds it offered for a new
+    application (issue #811).
+    """
+
+    library = read_tag_library(dbname, include_deprecated_categories=True)
+    entries = [entry for entry in library if not entry.category_deprecated]
     categories = read_tag_categories(dbname)
     pair_entries = read_pair_tag_entries(dbname)
     event_types = read_event_types(dbname)
@@ -487,6 +515,13 @@ def format_contextual_tag_library(
         for tag_name in sorted(relevant_names)
         for entry in entries_by_name.get(tag_name, [])
     ]
+    # Only a present entity's active tag selects a deprecated-category entry;
+    # a proposal never does, and neither does the index.
+    relevant_entries.extend(
+        entry
+        for entry in library
+        if entry.category_deprecated and entry.tag in active_tag_names
+    )
     lines.extend(["### Scene-Relevant Tags", ""])
     if relevant_entries:
         for entry in sorted(
@@ -498,8 +533,10 @@ def format_contextual_tag_library(
                 item.tag,
             ),
         ):
+            clear_only = " (clear only)" if entry.category_deprecated else ""
             lines.append(
-                f"- {entry.entity_kind}/{entry.category}: {_format_tag_entry(entry)}"
+                f"- {entry.entity_kind}/{entry.category}: "
+                f"{_format_tag_entry(entry)}{clear_only}"
             )
             if entry.reapplication_policy == "extend_expiry":
                 status = (

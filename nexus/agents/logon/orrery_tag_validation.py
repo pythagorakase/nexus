@@ -91,9 +91,11 @@ class StorytellerVocabulary:
     def clearable_tags(self, entity_kind: str) -> FrozenSet[str]:
         """Return the tags a clear may name for ``entity_kind``.
 
-        A clear may name every promptable tag and also the tags of deprecated
-        registry categories, because existing rows can still carry them. No
-        prompt offers those tags for a new application (issue #811).
+        A clear may name every promptable tag and also each tag of a
+        deprecated registry category that an entity of this kind still
+        carries (``cleared_at IS NULL``). No prompt offers those tags for a
+        new application, and once the last such row is cleared the tag is
+        unknown to both fields (issue #811).
         """
 
         return self.tag_names_by_kind.get(
@@ -125,26 +127,26 @@ def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
         "faction": {},
     }
     clearable_by_kind: dict[str, set[str]] = {kind: set() for kind in tags_by_kind}
-    # One read serves both sets: a tag of a deprecated registry category is
-    # clearable, because existing rows may carry it, but never promptable.
+    # One statement serves both sets, so the active rows come from the same
+    # snapshot as the library: a tag of a deprecated registry category is
+    # clearable only while an entity of its kind still carries it, and it is
+    # never promptable.
     for entry in read_tag_library(dbname, include_deprecated_categories=True):
         if entry.entity_kind not in tags_by_kind:
             continue
-        clearable_by_kind[entry.entity_kind].add(entry.tag)
-        if not entry.category_deprecated:
-            tags_by_kind[entry.entity_kind].add(entry.tag)
-            if entry.reapplication_policy is not None:
-                policies_by_kind[entry.entity_kind][
-                    entry.tag
-                ] = entry.reapplication_policy
-            if entry.clearance_kind is not None:
-                clearance_kinds_by_kind[entry.entity_kind][
-                    entry.tag
-                ] = entry.clearance_kind
-            if entry.default_duration is not None:
-                default_durations_by_kind[entry.entity_kind][
-                    entry.tag
-                ] = entry.default_duration
+        if entry.category_deprecated:
+            if entry.active_somewhere:
+                clearable_by_kind[entry.entity_kind].add(entry.tag)
+            continue
+        tags_by_kind[entry.entity_kind].add(entry.tag)
+        if entry.reapplication_policy is not None:
+            policies_by_kind[entry.entity_kind][entry.tag] = entry.reapplication_policy
+        if entry.clearance_kind is not None:
+            clearance_kinds_by_kind[entry.entity_kind][entry.tag] = entry.clearance_kind
+        if entry.default_duration is not None:
+            default_durations_by_kind[entry.entity_kind][
+                entry.tag
+            ] = entry.default_duration
     return StorytellerVocabulary(
         tag_names_by_kind={
             kind: frozenset(tag_names) for kind, tag_names in tags_by_kind.items()

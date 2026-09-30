@@ -480,3 +480,103 @@ changed Python files. flake8 and mypy report only findings that also exist on
 the HEAD copy of `nexus/presence/roster.py` (nine E501 SQL lines, and the
 mypy `arg-type` error at line 398); `retrograde_vocabulary.py` and the test
 file are clean. No gateway was started for these fixes.
+
+## Review Round (Astra)
+
+Astra's review of the PR (`CHANGES_REQUIRED`, three P2 findings) and the fixes:
+
+1. **Scene visibility.** `format_contextual_tag_library` now reads the shared
+   query once with `include_deprecated_categories=True`. The taxonomy, name
+   index, and digest keep only live categories. Under Scene-Relevant Tags it
+   also renders each deprecated-category entry whose tag is active on a
+   present entity (`read_current_entity_tag_names`), with ` (clear only)` on
+   the entry line. A proposal never selects such an entry.
+   `test_scene_shows_a_present_entitys_deprecated_tag_as_clear_only` seeds two
+   places on a template clone, one carrying `worksite`, and checks both scenes
+   plus the default-keyword library and taxonomy.
+2. **Active-row clearance set.** The shared query gains `active_somewhere`
+   (an `EXISTS` over uncleared `entity_tags` rows on entities of the entry's
+   kind), computed only with `include_deprecated_categories=True`, in the same
+   statement and so the same snapshot as the library. `read_storyteller_vocabulary`
+   adds a deprecated-category name to the clearable set only when it is
+   active; a name active nowhere is unknown to both fields. Gaia's
+   `<Kind>ClearOnlyTagName` enums now come from the turn's present entities
+   (cast, setting, player; `present_entity_refs` in `logon_utility.py`, shared
+   with the contextual library) intersected with that clearable set, so a turn
+   whose scene carries no deprecated tag has no clear-only enum at all.
+   Tests: `test_deprecated_category_tag_is_clearable_only_while_a_row_is_active`
+   (per kind: unknown, then clearable while active, cleared through the real
+   validator and commit route, then unknown),
+   `test_worksite_stays_clearable_until_its_last_active_row_is_cleared`,
+   `test_gaia_grammar_clears_a_deprecated_category_tag_only_in_its_scene`, and
+   `test_turn_grammar_offers_a_deprecated_tag_only_when_a_present_entity_has_it`
+   (LOGON's own `_gaia_schema_model` on a template clone with two places).
+   Without a scene the template grammar has 528 enum values (the 97
+   deprecated-category tags left the add/hint enums and no longer ride along as
+   clear-only), measured at 23,846 bytes / 5,806 o200k tokens, inside the
+   pinned 26,800 / 6,600 ceilings.
+3. **Audit preflight.** `_require_schema` now checks every table and column
+   the two audit statements read (`entity_tags.entity_id`, `.tag_id`,
+   `.cleared_at`; `tags.id`, `.tag`, `.category`;
+   `tag_category_registry.category`, `.entity_kind`, `.deprecated`,
+   `.replacement_categories`), each naming the migration that created it.
+   `test_all_audit_missing_an_entity_tags_column_keeps_the_partial` drops
+   `entity_tags.cleared_at` on a second clone routed as slot 3 and runs
+   `nexus tags audit --all --json` through `cli.main()`: the domain-failure
+   envelope names `023_orrery_schema` and its `partial.databases` keeps the
+   template clone's report. On the pre-fix preflight the same test fails with
+   PostgreSQL's `UndefinedColumn`.
+
+```text
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rfs tests/test_orrery/test_tag_library.py tests/test_orrery_tag_validation_pg.py tests/test_orrery/test_gaia_registry_schema_pg.py tests/test_tags_audit_pg.py tests/test_cli_contract.py tests/test_skald_wire.py tests/test_lore/test_two_pass_pipeline.py tests/test_prompt_lint.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
+SKIPPED [1] tests/test_orrery/test_tag_library.py:708: save_05 has no character whose characters.id differs from characters.entity_id; cannot exercise namespace translation
+SKIPPED [1] tests/test_orrery/test_gaia_registry_schema_pg.py:348: Set NEXUS_638_ENUM_E2E=1 for the live Gaia enum-schema gate.
+SKIPPED [1] tests/test_skald_wire.py:2061: Slot has no parent chunk with presence junction rows
+SKIPPED [1] tests/test_skald_wire.py:2094: Set NEXUS_639_PRESENCE_E2E=1 for the live writer presence gate.
+1 failed, 341 passed, 4 skipped, 5 warnings in 117.74s (0:01:57)
+$ $PY -m pytest -q tests/test_reachability.py
+38 passed in 9.22s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_orrery_tag_validation.py tests/test_orrery/test_tag_writer.py tests/test_orrery/test_retrograde_vocabulary.py tests/test_lore/test_pass2_baseline_pg.py tests/test_lore/test_assembled_prompt_fingerprint.py tests/test_lore/test_place_reference_validation.py tests/test_name_reveal_tag_validation.py tests/test_reachability.py tests/test_cli.py
+258 passed, 9 warnings in 41.66s
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/config tests/test_orrery/test_bleed.py tests/test_lore/test_turn_cycle.py tests/test_lore/test_seat_blocks.py tests/test_lore/test_historical_render.py tests/test_lore/test_window_coverage_pg.py tests/test_lore/test_seat_window.py
+204 passed, 5 warnings in 16.29s
+$ $PY -m pytest -q tests/test_lore tests/test_orrery tests/test_api
+2212 passed, 780 skipped, 7 warnings in 49.11s
+```
+
+The one failure is the #885 `save_05` exemption (slot 5 is an empty story:
+"save_05 must contain current entity tags"). The two new place-seeding tests
+each spend about 50 s in `disposable_slot_database` teardown: a bare clone and
+drop measured `clone 1.1s drop 51.6s` on this machine tonight, so the time is
+`DROP DATABASE`, not the code under test.
+
+The fleet audit after the preflight change, read-only, is unchanged:
+
+```text
+$ PYTHONPATH=$PWD $PY -m nexus.cli tags audit --all
+DATABASE        ROWS
+NEXUS_template  0
+save_01         0
+save_02         0
+save_03         4
+save_04         6
+save_05         0
+
+DATABASE  CATEGORY           TAG                    ROWS  ENTITIES  REPLACEMENTS
+save_03   orrery_signal      debt_pulse_active      1     3         state
+save_03   place_affordance   worksite               1     24        place_function,place_visibility,place_access,place_environment,place_threat
+save_03   profession_lite    black_market_operator  2     3,26      role.function
+save_04   legitimacy_status  gray_legal             1     32        legitimacy
+save_04   orrery_signal      debt_pulse_active      2     1,3       state
+save_04   place_affordance   worksite               1     24        place_function,place_visibility,place_access,place_environment,place_threat
+save_04   profession_lite    black_market_operator  2     3,26      role.function
+```
+
+Black is clean on the ten changed Python files. flake8 and mypy report only
+findings that the HEAD copies of the same files also report (flake8: E501 and
+F401 lines in `orrery_tag_validation.py`, `logon_utility.py`, and
+`test_orrery_tag_validation_pg.py`; mypy: the same 12 errors in
+`orrery_tag_validation.py` and `logon_utility.py`, compared line-number
+blind). No gateway was started and no provider was called.
