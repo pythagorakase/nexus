@@ -99,6 +99,10 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
         },
     ),
     "seed_faction": (pg_fixtures.seed_faction, {"name": "Refused Faction"}),
+    "seed_faction_membership": (
+        pg_fixtures.seed_faction_membership,
+        {"character_id": 1, "faction_id": 1, "role": "member"},
+    ),
     "seed_relationship": (
         pg_fixtures.seed_relationship,
         {

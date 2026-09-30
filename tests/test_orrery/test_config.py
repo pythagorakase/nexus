@@ -5,10 +5,12 @@ import tomllib
 from copy import deepcopy
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+from nexus.agents.orrery.resolver import coerce_resolver_settings
 from nexus.config import load_settings
 from nexus.api.new_story_schemas import Genre
 from nexus.config.settings_models import (
@@ -25,6 +27,7 @@ from nexus.config.settings_models import (
     OrreryPromoteSettings,
     OrreryRevealSettings,
     OrreryRecallSettings,
+    OrreryResolverSettings,
     OrrerySettings,
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeProjectSettings,
@@ -55,6 +58,12 @@ def test_orrery_settings_load_queue_and_resolution_defaults() -> None:
     assert settings.orrery.composition.hostile_source_enabled is True
     assert settings.orrery.composition.roster_source_enabled is True
     assert settings.orrery.composition.roster_reach == 2
+    assert settings.orrery.resolver.membership_roles == [
+        "leader",
+        "employee",
+        "member",
+        "sympathizer",
+    ]
     assert settings.orrery.contagion.dyad_tiers.trusting == timedelta(hours=24)
     assert settings.orrery.contagion.dyad_tiers.neutral == timedelta(hours=96)
     assert settings.orrery.contagion.dyad_tiers.hostile is None
@@ -281,6 +290,47 @@ def test_composition_defaults_off_and_validates_roster_reach() -> None:
         OrreryCompositionSettings(roster_reach=0)
     with pytest.raises(ValidationError, match="less than or equal to 4"):
         OrreryCompositionSettings(roster_reach=5)
+
+
+def test_resolver_membership_roles_reject_unknown_labels_at_load(
+    tmp_path: Path,
+) -> None:
+    """A membership role that is not a faction_member_role label fails loading."""
+
+    shipped = Path("nexus.toml").read_text(encoding="utf-8")
+    line = 'membership_roles = ["leader", "employee", "member", "sympathizer"]\n'
+    assert shipped.count(line) == 1
+    config = tmp_path / "nexus.toml"
+    config.write_text(
+        shipped.replace(line, 'membership_roles = ["leader", "overlord"]\n'),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match=r"not faction_member_role.*overlord"):
+        load_settings(config)
+
+
+@pytest.mark.parametrize(
+    ("roles", "message"),
+    [([], "must not be empty"), (["member", "member"], "repeats labels")],
+)
+def test_resolver_membership_roles_must_be_nonempty_and_distinct(
+    roles: list[str], message: str
+) -> None:
+    """An empty or repeated membership role list fails validation."""
+
+    with pytest.raises(ValidationError, match=message):
+        OrreryResolverSettings(membership_roles=roles)
+
+
+@pytest.mark.parametrize(
+    ("roles", "message"),
+    [(["leader", "overlord"], "overlord"), ([], "must not be empty")],
+)
+def test_resolver_settings_mapping_is_validated(roles: list[str], message: str) -> None:
+    """The dumped mapping the resolve phase passes is validated, not trusted."""
+
+    with pytest.raises(ValidationError, match=message):
+        coerce_resolver_settings({"membership_roles": roles})
 
 
 def test_mood_defaults_off_and_requires_positive_duration() -> None:
