@@ -1,4 +1,9 @@
-"""Rollback-only live coverage for Storyteller knowledge surfacing."""
+"""Rollback-only live coverage for Storyteller knowledge surfacing.
+
+The fixture builds its story inside one rolled-back transaction on a
+module-scoped disposable template clone whose story clock is seeded first, so
+no owner save slot is opened.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +23,6 @@ from sqlalchemy.orm import Session
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
-from nexus.api.slot_utils import get_slot_db_url
 from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryDisclosureSettings,
@@ -30,11 +34,12 @@ from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
 from tests.model_registry_helpers import registry_model
+from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
 from tests.settings_helpers import settings_with, table
 
 
 pytestmark = pytest.mark.requires_postgres
-LIVE_SLOT = 5
+STORY_CLOCK = datetime(2073, 8, 1, tzinfo=timezone.utc)
 
 
 def _insert_chunk(session: Session, *, world_time: datetime, token: str) -> int:
@@ -222,11 +227,20 @@ def _insert_reveal(
     )
 
 
-@pytest.fixture()
-def knowledge_db() -> Iterator[dict[str, Any]]:
-    """Build an isolated Stage A-D fixture in one slot-5 transaction."""
+@pytest.fixture(scope="module")
+def knowledge_clone() -> Iterator[str]:
+    """Seed the need-clock anchor on one clone before any fixture character."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
+    with disposable_slot_database("qa885_knowledge_surfacing") as dbname:
+        seed_story_clock(dbname, world_time=STORY_CLOCK)
+        yield dbname
+
+
+@pytest.fixture()
+def knowledge_db(knowledge_clone: str) -> Iterator[dict[str, Any]]:
+    """Build an isolated Stage A-D fixture in one rolled-back clone transaction."""
+
+    engine = create_engine(sqlalchemy_url(knowledge_clone), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     raw_connection = connection.connection.driver_connection
@@ -239,7 +253,8 @@ def knowledge_db() -> Iterator[dict[str, Any]]:
         latest = session.execute(
             text("SELECT max(world_time) FROM chunk_metadata")
         ).scalar_one()
-        base_time = latest or datetime(2073, 8, 1, tzinfo=timezone.utc)
+        assert latest == STORY_CLOCK, "the seeded story clock is the head clock"
+        base_time = latest
         chunks = [
             _insert_chunk(
                 session,

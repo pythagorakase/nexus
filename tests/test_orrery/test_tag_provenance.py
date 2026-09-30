@@ -1,7 +1,8 @@
 """Live tests for migration 064's forward-fix tag provenance.
 
-Real writers against save_02 inside always-rolled-back transactions — real
-SQL, real constraints, zero persistent writes. Pins the forward-fix
+Real writers against a seeded disposable template clone inside
+always-rolled-back transactions — real SQL, real constraints, no owner save
+slot opened. Pins the forward-fix
 guarantees from docs/orrery_audit_dashboard_notes.md step 7:
 
 1. Resolver bestowals stamp ``source_chunk_id`` and the bestowing chunk's
@@ -16,8 +17,10 @@ guarantees from docs/orrery_audit_dashboard_notes.md step 7:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from datetime import datetime, timezone
 import uuid
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 from sqlalchemy import create_engine
@@ -35,21 +38,48 @@ from nexus.agents.orrery.tag_writer import (
     clear_pair_tag,
 )
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
-from nexus.api.slot_utils import get_slot_db_url
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    seed_character,
+    seed_story_clock,
+    sqlalchemy_url,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
-WRITE_SLOT = 2
+STORY_CLOCK = datetime(2100, 1, 1, tzinfo=timezone.utc)
 
 
-def _connect() -> Any:
-    return connect(f"save_{WRITE_SLOT:02d}")
+class ProvenanceClone(NamedTuple):
+    """The module's seeded clone: the clock chunk, then actor and target."""
+
+    dbname: str
+    anchor_chunk_id: int
+    actor_entity_id: int
+    target_entity_id: int
 
 
-def _anchor_and_actors(cur: Any) -> tuple[int, int, int]:
+@pytest.fixture(scope="module")
+def provenance_clone() -> Iterator[ProvenanceClone]:
+    """Seed the story clock first, then the two characters the tests bind."""
+
+    with disposable_slot_database("qa885_tag_provenance") as dbname:
+        anchor_chunk_id = seed_story_clock(dbname, world_time=STORY_CLOCK)
+        _, actor_entity_id = seed_character(dbname, name="Provenance Actor")
+        _, target_entity_id = seed_character(dbname, name="Provenance Target")
+        yield ProvenanceClone(
+            dbname=dbname,
+            anchor_chunk_id=anchor_chunk_id,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+        )
+
+
+def _anchor_and_actors(cur: Any, clone: ProvenanceClone) -> tuple[int, int, int]:
     cur.execute("SELECT max(id) FROM narrative_chunks")
     anchor_chunk_id = cur.fetchone()[0]
+    assert anchor_chunk_id == clone.anchor_chunk_id
     cur.execute(
         """
         SELECT c.entity_id FROM characters c
@@ -59,23 +89,32 @@ def _anchor_and_actors(cur: Any) -> tuple[int, int, int]:
         """
     )
     rows = cur.fetchall()
-    assert len(rows) == 2, "save_02 is expected to hold at least two characters"
+    assert [row[0] for row in rows] == [
+        clone.actor_entity_id,
+        clone.target_entity_id,
+    ], "the clone seeds exactly the actor and target characters"
     return anchor_chunk_id, rows[0][0], rows[1][0]
 
 
-def test_resolver_commit_stamps_bestowal_provenance() -> None:
+def test_resolver_commit_stamps_bestowal_provenance(
+    provenance_clone: ProvenanceClone,
+) -> None:
     """entity_tags.add through the tick commit carries chunk + world time."""
 
-    conn = _connect()
+    conn = connect(provenance_clone.dbname)
     try:
         with conn.cursor() as cur:
-            anchor_chunk_id, actor_id, target_id = _anchor_and_actors(cur)
+            anchor_chunk_id, actor_id, target_id = _anchor_and_actors(
+                cur, provenance_clone
+            )
             cur.execute(
                 "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
                 (anchor_chunk_id,),
             )
             row = cur.fetchone()
-            chunk_world_time = row[0] if row else None
+            assert row is not None
+            chunk_world_time = row[0]
+            assert chunk_world_time == STORY_CLOCK
             # Give the target an inbound `hunting` pair tag so the draft's
             # clear_inbound delta has something real to clear and log.
             assert apply_pair_tag_bestowal(
@@ -119,7 +158,6 @@ def test_resolver_commit_stamps_bestowal_provenance() -> None:
                 resolutions=(draft,),
             ),
             tick_chunk_id=anchor_chunk_id,
-            slot=WRITE_SLOT,
         )
         assert result.resolution_count == 1
         assert result.tag_mutation_count >= 2
@@ -166,11 +204,15 @@ def test_resolver_commit_stamps_bestowal_provenance() -> None:
         conn.close()
 
 
-def test_tag_writer_clears_are_logged_and_bestowals_stamped() -> None:
-    conn = _connect()
+def test_tag_writer_clears_are_logged_and_bestowals_stamped(
+    provenance_clone: ProvenanceClone,
+) -> None:
+    conn = connect(provenance_clone.dbname)
     try:
         with conn.cursor() as cur:
-            anchor_chunk_id, actor_id, target_id = _anchor_and_actors(cur)
+            anchor_chunk_id, actor_id, target_id = _anchor_and_actors(
+                cur, provenance_clone
+            )
 
             counters = apply_tag_bestowal(
                 cur,
@@ -191,9 +233,10 @@ def test_tag_writer_clears_are_logged_and_bestowals_stamped() -> None:
                 (actor_id,),
             )
             source_chunk_id, world_time = cur.fetchone()
-            if counters["applied"]:
-                assert source_chunk_id == anchor_chunk_id
-                assert world_time is not None
+            # The seeded actor holds no off_grid tag, so the bestowal applies.
+            assert counters["applied"] == 1
+            assert source_chunk_id == anchor_chunk_id
+            assert world_time == STORY_CLOCK
 
             cleared = apply_tag_bestowal(
                 cur,
@@ -253,14 +296,16 @@ def test_tag_writer_clears_are_logged_and_bestowals_stamped() -> None:
         conn.close()
 
 
-def test_entity_context_reports_exact_provenance_tier() -> None:
+def test_entity_context_reports_exact_provenance_tier(
+    provenance_clone: ProvenanceClone,
+) -> None:
     """A 064-era bestowal shows as provenance "exact" in the hover payload."""
 
-    engine = create_engine(get_slot_db_url(slot=WRITE_SLOT))
+    engine = create_engine(sqlalchemy_url(provenance_clone.dbname))
     try:
         with Session(engine) as session:
             raw = session.connection().connection.cursor()
-            anchor_chunk_id, actor_id, _ = _anchor_and_actors(raw)
+            anchor_chunk_id, actor_id, _ = _anchor_and_actors(raw, provenance_clone)
             apply_tag_bestowal(
                 raw,
                 entity_id=actor_id,
@@ -291,15 +336,17 @@ def test_entity_context_reports_exact_provenance_tier() -> None:
         engine.dispose()
 
 
-def test_chunk_keyed_bestowal_without_metadata_leaves_world_time_null() -> None:
+def test_chunk_keyed_bestowal_without_metadata_leaves_world_time_null(
+    provenance_clone: ProvenanceClone,
+) -> None:
     """A chunk-keyed row must never borrow the global-max clock (review
     finding on #425): chunk clock or NULL, so the "exact" tier cannot carry
     a fabricated world time."""
 
-    conn = _connect()
+    conn = connect(provenance_clone.dbname)
     try:
         with conn.cursor() as cur:
-            _, actor_id, _ = _anchor_and_actors(cur)
+            _, actor_id, _ = _anchor_and_actors(cur, provenance_clone)
             cur.execute(
                 """
                 INSERT INTO narrative_chunks (raw_text)
