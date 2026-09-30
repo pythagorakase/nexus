@@ -34,7 +34,7 @@ import uuid
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 import psycopg2
 from psycopg2 import sql
@@ -802,6 +802,91 @@ def seed_character(
         )
         assert cur.fetchone()[0] > 0, "the need-state trigger seeded no need rows"
     return character_id, entity_id
+
+
+class CharacterPairSeed(NamedTuple):
+    """The IDs ``seed_character_pair`` seeded, and the clock it anchored."""
+
+    actor_entity_id: int
+    target_entity_id: int
+    actor_character_id: int
+    target_character_id: int
+    chunk_id: int
+    world_time: datetime
+
+
+def seed_character_pair(
+    dbname: str,
+    *,
+    world_time: datetime,
+    actor_name: str,
+    target_name: str,
+) -> CharacterPairSeed:
+    """Seed a clocked chunk and two active characters; return their IDs.
+
+    Replaces the "first two characters by id plus the latest clocked chunk"
+    reads that applier tests once made against an owner save. The story clock
+    comes first (``seed_story_clock``), because it is the need-clock anchor
+    that ``seed_character`` requires; the actor and the target follow. The
+    returned ``chunk_id`` is the clocked chunk, stamped exactly at
+    ``world_time``, for use as a source chunk.
+
+    A later call on the same save adds another chunk (the next scene of
+    season 1, episode 1) at ``world_time``, which must not be earlier than
+    the current head clock (``seed_story_clock``
+    refuses to move the clock backward), and two new characters. The seeded
+    rows are read back and their counts asserted.
+    """
+
+    require_disposable_target(dbname)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        # A later pair's chunk takes the next scene so its slug stays unique.
+        cur.execute(
+            "SELECT COALESCE(max(scene), 0) + 1 FROM chunk_metadata "
+            "WHERE season = 1 AND episode = 1"
+        )
+        scene = int(cur.fetchone()[0])
+    chunk_id = seed_story_clock(dbname, world_time=world_time, scene=scene)
+    actor_character_id, actor_entity_id = seed_character(dbname, name=actor_name)
+    target_character_id, target_entity_id = seed_character(dbname, name=target_name)
+    with closing(_connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT count(*)
+            FROM characters c
+            JOIN entities e ON e.id = c.entity_id
+            WHERE e.kind = 'character' AND e.is_active
+              AND (c.id, c.entity_id, c.name) IN ((%s, %s, %s), (%s, %s, %s))
+            """,
+            (
+                actor_character_id,
+                actor_entity_id,
+                actor_name,
+                target_character_id,
+                target_entity_id,
+                target_name,
+            ),
+        )
+        assert cur.fetchone()[0] == 2, (
+            f"seed_character_pair found fewer than two active characters for "
+            f"{actor_name!r} and {target_name!r}"
+        )
+        cur.execute(
+            "SELECT count(*) FROM chunk_metadata "
+            "WHERE chunk_id = %s AND world_time = %s",
+            (chunk_id, world_time),
+        )
+        assert (
+            cur.fetchone()[0] == 1
+        ), f"seed_character_pair found no chunk {chunk_id} clocked at {world_time}"
+    return CharacterPairSeed(
+        actor_entity_id=actor_entity_id,
+        target_entity_id=target_entity_id,
+        actor_character_id=actor_character_id,
+        target_character_id=target_character_id,
+        chunk_id=chunk_id,
+        world_time=world_time,
+    )
 
 
 def seed_faction(

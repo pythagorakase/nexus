@@ -66,6 +66,14 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
     ),
     "seed_place": (pg_fixtures.seed_place, {"name": "Refused Place"}),
     "seed_character": (pg_fixtures.seed_character, {"name": "Refused Character"}),
+    "seed_character_pair": (
+        pg_fixtures.seed_character_pair,
+        {
+            "world_time": datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc),
+            "actor_name": "Refused Actor",
+            "target_name": "Refused Target",
+        },
+    ),
     "seed_faction": (pg_fixtures.seed_faction, {"name": "Refused Faction"}),
     "seed_relationship": (
         pg_fixtures.seed_relationship,
