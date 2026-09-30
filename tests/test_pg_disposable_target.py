@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import inspect
 import re
+import sys
+import types
 from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime, timezone
@@ -18,7 +20,13 @@ import psycopg2
 import pytest
 
 from tests import pg_fixtures
-from tests.pg_fixtures import connect, require_disposable_target, seed_entity_tag
+from nexus.api import slot_utils
+from tests.pg_fixtures import (
+    connect,
+    require_disposable_target,
+    route_slot_to_disposable,
+    seed_entity_tag,
+)
 from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
 
 OWNER_DATABASES = (
@@ -41,6 +49,10 @@ SEED_CALLS: dict[str, tuple[Callable[..., Any], dict[str, Any]]] = {
     "seed_story_clock": (
         pg_fixtures.seed_story_clock,
         {"world_time": datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)},
+    ),
+    "seed_story_setting": (
+        pg_fixtures.seed_story_setting,
+        {"setting": {"genre": "thriller", "world_name": "Refused World"}},
     ),
     "seed_zone": (
         pg_fixtures.seed_zone,
@@ -181,6 +193,56 @@ def test_turn_factory_refuses_an_ambient_slot_routed_elsewhere(
                 }
             ],
         )
+
+
+def test_route_teardown_restores_a_module_first_imported_while_routed() -> None:
+    """A binding made while routed resolves unrouted once the route is undone.
+
+    A module whose ``from nexus.api.slot_utils import slot_dbname`` first runs
+    inside a routed window binds the routed resolver, and the test's
+    monkeypatch never records that binding. After teardown it must resolve
+    the owner names again instead of a dropped clone, and a later route must
+    reach it.
+    """
+
+    name = "tests._route_probe_first_import"
+    probe = types.ModuleType(name)
+    sys.modules[name] = probe
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            route_slot_to_disposable(patch.setattr, slot=4, dbname="qa640_probe")
+            exec("from nexus.api.slot_utils import slot_dbname", vars(probe))
+            assert probe.slot_dbname(4) == "qa640_probe"
+            with pytest.raises(RuntimeError, match="Slot 2 is not routed"):
+                probe.slot_dbname(2)
+        assert slot_utils.slot_dbname(4) == "save_04"
+        assert probe.slot_dbname(4) == "save_04"
+        assert probe.slot_dbname(2) == "save_02"
+        assert "qa640_probe" not in slot_utils.VALID_DBNAMES
+
+        with pytest.MonkeyPatch.context() as patch:
+            route_slot_to_disposable(patch.setattr, slot=2, dbname="qa640_later")
+            assert probe.slot_dbname(2) == "qa640_later"
+            with pytest.raises(RuntimeError, match="Slot 4 is not routed"):
+                probe.slot_dbname(4)
+        assert probe.slot_dbname(2) == "save_02"
+    finally:
+        sys.modules.pop(name, None)
+
+
+def test_nested_route_restores_the_outer_route() -> None:
+    """An inner route replaces the outer one and hands it back at teardown."""
+
+    with pytest.MonkeyPatch.context() as outer:
+        route_slot_to_disposable(outer.setattr, slot=4, dbname="qa640_outer")
+        with pytest.MonkeyPatch.context() as inner:
+            route_slot_to_disposable(inner.setattr, slot=3, dbname="qa640_inner")
+            assert slot_utils.slot_dbname(3) == "qa640_inner"
+            with pytest.raises(RuntimeError, match="Slot 4 is not routed"):
+                slot_utils.slot_dbname(4)
+        assert slot_utils.slot_dbname(4) == "qa640_outer"
+        assert slot_utils.VALID_DBNAMES == {"qa640_outer"}
+    assert slot_utils.slot_dbname(3) == "save_03"
 
 
 def _sessions(cur: Any, dbname: str) -> int:
