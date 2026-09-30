@@ -13,7 +13,13 @@ from typing import Dict, Any, Generator, Iterator
 from unittest.mock import MagicMock
 import sys
 
-from tests.pg_fixtures import connect, disposable_slot_database, seed_committed_chunk
+from nexus.api.slot_utils import all_slots
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slots_to_disposable,
+    seed_committed_chunk,
+)
 
 # Configure logging for tests
 logging.basicConfig(
@@ -34,17 +40,21 @@ def settings() -> Dict[str, Any]:
         return json.load(f)
 
 
-@pytest.fixture(autouse=True)
-def ensure_nexus_slot_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure NEXUS_SLOT is set for tests that rely on slot-based databases.
+@pytest.fixture
+def fake_routed_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make slot 1 active with every slot routed to a fake disposable label.
 
-    Function-scoped through ``monkeypatch``, so the default leaves with each
-    test here. A session-scoped ``os.environ`` write leaked ``NEXUS_SLOT=1``
-    into every later directory of a full run, where an unrouted gateway
-    lifespan started its scheduler on the owner's ``save_01``.
+    For offline modules whose code under test only renders the active slot's
+    database name (a prompt cache key). No database exists under these
+    labels, so a path that connects fails loudly, and no slot resolves to an
+    owner database. Opt in with ``pytest.mark.usefixtures``; there is no
+    directory-wide default slot.
     """
-    if os.environ.get("NEXUS_SLOT") is None:
-        monkeypatch.setenv("NEXUS_SLOT", "1")
+    monkeypatch.setenv("NEXUS_SLOT", "1")
+    route_slots_to_disposable(
+        monkeypatch.setattr,
+        {slot: f"qa640_fake_lore_slot_{slot}" for slot in all_slots()},
+    )
 
 
 @pytest.fixture(scope="session")

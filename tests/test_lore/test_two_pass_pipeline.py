@@ -66,6 +66,10 @@ from tests.model_registry_helpers import registry_model
 from tests.settings_helpers import settings_with
 
 
+# The code under test renders the active slot's database name; route every
+# slot to a fake disposable label (tests/test_lore/conftest.py).
+pytestmark = pytest.mark.usefixtures("fake_routed_slots")
+
 PINNED_GAIA_MODEL = next(
     model.id
     for model in load_settings().global_.model.api_models["openai"].models
@@ -582,8 +586,13 @@ def test_two_pass_system_messages_are_stable_across_consecutive_turns(
     ].encode("utf-8")
     assert first_writer["prompt"] != second_writer["prompt"]
     assert first_gaia["prompt"] != second_gaia["prompt"]
-    assert first_writer["kwargs"]["prompt_cache_key"] == ("nexus:save_03:skald_writer")
-    assert first_gaia["kwargs"]["prompt_cache_key"] == "nexus:save_03:gaia"
+    assert (
+        first_writer["kwargs"]["prompt_cache_key"]
+        == "nexus:qa640_fake_lore_slot_3:skald_writer"
+    )
+    assert (
+        first_gaia["kwargs"]["prompt_cache_key"] == "nexus:qa640_fake_lore_slot_3:gaia"
+    )
 
 
 @pytest.mark.asyncio
@@ -1336,18 +1345,22 @@ def test_two_pass_prompt_cache_keys_are_slot_and_seat_scoped() -> None:
     """Changing slots cannot reuse either storyteller seat's cache affinity."""
 
     utility, _provider = _utility("openai", [])
-    utility.dbname = "save_02"
+    utility.dbname = "qa640_fake_lore_slot_2"
     first_writer = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
     first_gaia = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
 
-    utility.dbname = "save_04"
+    utility.dbname = "qa640_fake_lore_slot_4"
     second_writer = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
     second_gaia = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
 
-    assert first_writer["prompt_cache_key"] == "nexus:save_02:skald_writer"
-    assert first_gaia["prompt_cache_key"] == "nexus:save_02:gaia"
-    assert second_writer["prompt_cache_key"] == "nexus:save_04:skald_writer"
-    assert second_gaia["prompt_cache_key"] == "nexus:save_04:gaia"
+    assert (
+        first_writer["prompt_cache_key"] == "nexus:qa640_fake_lore_slot_2:skald_writer"
+    )
+    assert first_gaia["prompt_cache_key"] == "nexus:qa640_fake_lore_slot_2:gaia"
+    assert (
+        second_writer["prompt_cache_key"] == "nexus:qa640_fake_lore_slot_4:skald_writer"
+    )
+    assert second_gaia["prompt_cache_key"] == "nexus:qa640_fake_lore_slot_4:gaia"
 
 
 def test_two_pass_gaia_schema_cache_is_registry_digest_keyed() -> None:

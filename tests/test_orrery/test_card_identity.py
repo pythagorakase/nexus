@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 from typing import Iterator
 
@@ -93,8 +94,15 @@ def card_database() -> Iterator[str]:
 
     Only ``requires_corpus`` tests use it: they rank and replay the owner's
     save_04 turn (Ren Vale's cards and Gaia's saved decisions), which needs
-    that corpus's actors, relationships, and entity identities.
+    that corpus's actors, relationships, and entity identities. The flag
+    check stops an unmarked test from cloning the owner's corpus under the
+    plain gate, whatever marker another test in this module carries.
     """
+    if os.environ.get("NEXUS_RUN_CORPUS") != "1":
+        pytest.fail(
+            "card_database needs the requires_corpus marker and NEXUS_RUN_CORPUS=1",
+            pytrace=False,
+        )
     with disposable_slot_database(
         "qa640_781_cards", source_db="save_04", include_data=True
     ) as dbname:

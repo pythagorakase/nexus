@@ -34,6 +34,11 @@ from tests.test_lore.test_two_pass_pipeline import (
 )
 
 
+# The code under test renders the active slot's database name; route every
+# slot to a fake disposable label (tests/test_lore/conftest.py).
+pytestmark = pytest.mark.usefixtures("fake_routed_slots")
+
+
 class PlaceCatalog:
     """Read-only SQL seam; production name, alias, and ID resolution runs intact."""
 

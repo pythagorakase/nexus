@@ -1,9 +1,9 @@
 """Run the deferred owner against a disposable, factory-played story.
 
 Each test plays a story on a template clone through the accepted-turn factory
-(``tests.pg_fixtures.seed_starved_story`` over ``seed_played_story``): off-screen cast, real Orrery
-resolutions, experience seeds, and a scene reset whose render jobs wait in the
-queue, all pinned to TEST by the clone default.
+(``tests.pg_fixtures.seed_starved_story`` over ``seed_played_story``):
+off-screen cast, real Orrery resolutions, experience seeds, and a scene reset
+whose render jobs wait in the queue, all pinned to TEST by the clone default.
 
 The default proof uses TEST. NEXUS_800_PAID_PROOF=1 explicitly enables one
 experience job with the configured real provider, before the TEST idle drain.
