@@ -64,12 +64,19 @@ def test_seed_eligible_vocabulary_can_include_live_tag_registry(
 ) -> None:
     """Passing a slot database folds post-migration registry rows into seeds.
 
-    The slot is a template clone routed as slot 2, with one live registry
-    tag (``grieving``) bestowed on a seeded protagonist.
+    The slot is a template clone routed as slot 2. The vocabulary is read
+    from the clone's ``tags`` and ``tag_category_registry`` rows, which the
+    template carries (``grieving`` in ``state`` for characters, ``commerce``
+    in ``place_function``, and so on); every registry assertion rests on
+    those rows. The ``grieving`` tag bestowed on a seeded protagonist only
+    shows that the tag is live and bestowable on this clone: the enumerator
+    does not read ``entity_tags``, so the vocabulary is asserted unchanged by
+    the bestowal.
     """
 
     with disposable_slot_database("qa885_retrograde_vocab") as dbname:
         route_slot_to_disposable(monkeypatch.setattr, slot=2, dbname=dbname)
+        registry_only_vocabulary = enumerate_seed_eligible_vocabulary(dbname=dbname)
         _, protagonist_entity = seed_protagonist(dbname)
         seed_entity_tag(dbname, entity_id=protagonist_entity, tag="grieving")
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
@@ -83,6 +90,10 @@ def test_seed_eligible_vocabulary_can_include_live_tag_registry(
             ], "the seeded grieving tag must be current on the protagonist"
         vocabulary = enumerate_seed_eligible_vocabulary(dbname=dbname)
 
+    assert vocabulary == registry_only_vocabulary, (
+        "the vocabulary comes from the tag registry; bestowing grieving on an "
+        "entity must not change it"
+    )
     assert "commerce" in vocabulary["single_entity_tag_anchors"]
     assert "grieving" in vocabulary["single_entity_tag_anchors"]
     assert "place_environment" in vocabulary["registered_tag_categories"]

@@ -25,6 +25,9 @@ from tests.pg_fixtures import (
 # label into the manifest's ``source``.
 LABEL_DBNAME = "fixture_character_manifest_db"
 TEST_SLOT = 2
+# A disposable name no fixture creates: the execute refusal tests route the
+# slot here so a regressed refusal cannot reach an owner database.
+REFUSAL_NEVER_CREATED_DBNAME = "qa885_refusal_never_created"
 
 # The review-required operations the seeded characters yield, by
 # ``(character name, source tag, operation type, target tag or None)``. Each
@@ -126,11 +129,21 @@ def test_character_manifest_reports_missing_target_tags() -> None:
     assert manifest["counters"]["missing_target_tag_operations"] == 1
 
 
-def test_cli_character_apply_requires_manifest_for_execute() -> None:
-    """Execute mode must consume a reviewed manifest."""
+def test_cli_character_apply_requires_manifest_for_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Execute mode must consume a reviewed manifest.
 
+    The refusal happens before any connection opens. The slot is routed to a
+    database that is never created, so a regressed guard fails on connect
+    instead of writing ready operations to an owner slot.
+    """
+
+    route_slot_to_disposable(
+        monkeypatch.setattr, slot=TEST_SLOT, dbname=REFUSAL_NEVER_CREATED_DBNAME
+    )
     result = cli.run_character_apply(
-        Namespace(slot=2, execute=True, manifest=None, source_kind="system")
+        Namespace(slot=TEST_SLOT, execute=True, manifest=None, source_kind="system")
     )
 
     assert result["success"] is False
