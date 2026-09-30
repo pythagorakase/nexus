@@ -48,13 +48,13 @@ schema comments no migration or script in the tree writes.
 | `places.type` | fixed_location, vehicle, virtual, other | Type of location (facility, vehicle, district, etc.) | facility, district |
 | `faction_character_relationships.role` | leader, employee, member, target, informant, sympathizer, defector, exile, insider_threat | Character position/function within faction (leader, member, contractor, etc.) | contractor |
 | `faction_relationships.relationship_type` | alliance, trade_partners, truce, vassalage, coalition, war, rivalry, ideological_enemy, competitor, splinter, unknown, shadow_partner | Nature of relationship (allied, hostile, neutral, trade_partner, etc.) | allied, hostile, neutral, trade_partner |
-| `faction_member_role` (type) | as above | ... The Orrery membership loader counts every row as membership whatever its role. | false after #1033 |
+| `faction_member_role` (type) | as above | Position of a character in a faction, written by the offline faction relationship analyst (scripts/faction_relationship_analyst.py) and exposed as entity_relationships_v.relationship_type with scope faction_character. The Orrery membership loader counts every row as membership whatever its role. | last sentence false after #1033 |
 
 After, with the evidence each claim rests on (code at `384634f9` unless
 noted; the full site list is in the migration header):
 
 - **`chunk_character_references.reference`**: writer `nexus/presence/roster.py:417-435` (`_write_statements`, `ON CONFLICT (chunk_id, character_id) DO UPDATE`), called from `nexus/api/commit_handler_sync.py:713`; reader `roster.py:160-166,219-234` (`present` goes to the scene cast, every other value to `referenced`); return recap `nexus/api/return_recap.py:423`.
-- **`chunk_metadata.world_layer`**: wire default `nexus/agents/logon/skald_wire.py:60,532-538`, `nexus/api/lore_adapter.py:316-321`, `nexus/api/commit_handler_sync.py:462,584`; prologue `nexus/agents/orrery/retrograde_persistence.py:2575-2580`; no default (catalog: nullable, no `pg_attrdef`); NULL read as primary by narration jobs `nexus/agents/orrery/worker.py:281,556,824` and the resolver `nexus/agents/orrery/resolver.py:1336,1342,2826-2831`; the drains compare the raw value with `primary` and so skip NULL: `drift.py:235-237`, `propagation.py:131-133`, `reveal.py:87-89`; job layer checks `worker.py:585-590`, `experiences.py:1055-1056,1581-1582`.
+- **`chunk_metadata.world_layer`**: wire default `nexus/agents/logon/skald_wire.py:60,532-538`, `nexus/api/lore_adapter.py:316-321`, `nexus/api/commit_handler_sync.py:462,584`; prologue `nexus/agents/orrery/retrograde_persistence.py:2575-2580`; no default (catalog: nullable, no `pg_attrdef`); NULL read as primary by narration jobs `nexus/agents/orrery/worker.py:281,556,824`; the drains compare the raw value with `primary` and so skip NULL: `drift.py:235-237`, `propagation.py:131-133`, `reveal.py:87-89`; job layer checks `worker.py:585-590`, `experiences.py:1055-1056,1581-1582`.
 - **`place_chunk_references.reference_type`**: writer `roster.py:438-440`; exactly one setting `roster.py:238-247` via `nexus/agents/lore/logon_utility.py:245-257` (`read_presence_baseline`); featured-place selection `nexus/agents/lore/utils/entity_queries.py:257-279` (`DISTINCT ON (place_id)` ordered by `chunk_id DESC` then setting, transit, mentioned, so each place reports its strongest role in its latest chunk; the outer `ORDER BY chunk_id DESC, place_id LIMIT` picks places by recency); setting readers `nexus/api/reader_endpoints.py:617-640`, `nexus/api/return_recap.py:302-322`, `nexus/agents/orrery/experiences.py:738,1443`, `nexus/agents/orrery/knowledge_surfacing.py:138`.
 - **`places.type`**: wizard `nexus/api/new_story_db_mapper.py:120,340,416`; stubs `nexus/api/trait_compiler.py:1850-1853`, `nexus/agents/orrery/retrograde_persistence.py:3219-3222`; maturation `nexus/agents/orrery/retrograde_maturation.py:455-457`; resolver `nexus/agents/orrery/resolver.py:558-597` (`p.type::text AS location_class`), matched by `nexus/agents/orrery/substrate.py:1140-1161`; `nexus/api/place_tag_manifest.py:375-390,441,665-667`.
 - **`faction_character_relationships.role`**: writer `scripts/faction_relationship_analyst.py:589,612-665`; view `migrations/088_valence_float_canonical.sql:184-198`; filter at `e9376065`: `resolver.py:705` (`AND fcr.role::text = ANY(:membership_roles)`), read by `substrate.py:2106-2117` (`faction_member`).
@@ -102,7 +102,7 @@ change was reverted and the module passes.
 worktree root with `PYTHONPATH=$PWD`, `NEXUS_GATEWAY_PORT` and
 `NEXUS_API_URL` unset; `nexus.__file__` resolved under the worktree.
 
-PostgreSQL tails at `effc36c1` (the review-fix commit):
+PostgreSQL tails at `3a4828f9` (the round-3 review-fix commit):
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_schema_documentation_pg.py tests/test_orrery/test_migrate.py tests/test_enum_column_comment_labels_pg.py
@@ -111,7 +111,7 @@ dbname audit: 13 targets: postgres, qa640_819_labels_*, qa640_docs_refresh_*, qa
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-124 passed in 14.28s
+124 passed in 14.01s
 ```
 
 Also run, because `tests/test_new_story_setup.py` rolls migration 135 back as
@@ -120,12 +120,12 @@ its lagging-template probe and 136 now follows it:
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:cacheprovider -p tests.dbname_audit tests/test_new_story_setup.py
 dbname audit: owner targets: none
-8 passed in 9.61s
+8 passed in 10.37s
 ```
 
 Offline (recorded for the first push, before `effc36c1`; not rerun, since
-that commit changes only comment text in the migration and the
-PostgreSQL-only test module):
+`effc36c1` and `3a4828f9` change only comment text in the migration, the
+PostgreSQL-only test module, and this file):
 
 ```
 $ $PY -m pytest -q -p no:cacheprovider tests/test_api tests/test_orrery
@@ -144,13 +144,13 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 Black, flake8, and mypy on the one changed Python file
 (`tests/test_enum_column_comment_labels_pg.py`, rerun at `effc36c1`): `1 file
 would be left unchanged`; no flake8 finding; `Success: no issues found in 1
-source file`. `scripts/check_migration_comments.py` at `effc36c1`: `OK: every
-object created after migration 129 has a comment.`
+source file`. `3a4828f9` changes no Python file. `scripts/check_migration_comments.py`
+at `3a4828f9`: `OK: every object created after migration 129 has a comment.`
 
 ## Migrated-Clone Listing
 
 Read-only `col_description` / `obj_description` on a disposable clone built
-by `disposable_slot_database("qa640_819_listing")` at `effc36c1` (the runner
+by `disposable_slot_database("qa640_819_listing")` at `3a4828f9` (the runner
 logged `Applied: 136_column_comment_corrections`; the clone was dropped
 afterward):
 
@@ -159,13 +159,13 @@ clone: qa640_819_listing_*; max(schema_migrations.version) = 136
 chunk_character_references.reference (reference_type):
   Role of the character in this accepted chunk. The commit path writes it through the presence roster (roster.write_roster), one row per character and chunk, and a rewrite of the same pair replaces the value. roster.read_rosters puts present rows in the scene cast and the remaining rows among the characters only named; return recaps read the present rows of the frontier chunk as its cast.
 chunk_metadata.world_layer (world_layer_type):
-  Timeline layer of this chunk. The commit path writes the layer the storyteller wire declares, or primary when the wire declares none; the Retrograde prologue insert writes retrograde. The column has no default; narration jobs and the Orrery resolver read NULL as primary, while the relationship drift, claim propagation, and secret reveal drains act only on a primary chunk and so skip a NULL layer. Experience and narration jobs copy the anchor chunk layer and refuse completion when it has changed.
+  Timeline layer of this chunk. The commit path writes the layer the storyteller wire declares, or primary when the wire declares none; the Retrograde prologue insert writes retrograde. The column has no default; narration jobs read NULL as primary, while the relationship drift, claim propagation, and secret reveal drains act only on a primary chunk and so skip a NULL layer. Experience and narration jobs copy the anchor chunk layer and refuse completion when it has changed.
 faction_character_relationships.role (faction_member_role):
   Position of the character in the faction, written by the offline faction relationship analyst (scripts/faction_relationship_analyst.py), which replaces it when rerun for the same pair, and exposed as entity_relationships_v.relationship_type with scope faction_character. The Orrery resolver counts the row as faction membership (orrery:faction_memberships, read by the faction_member condition) only when this role is listed in nexus.toml [orrery.resolver] membership_roles.
 faction_relationships.relationship_type (faction_relationship_type):
   Relationship between the two factions, written by the offline faction relationship analyst (scripts/faction_relationship_analyst.py), which stores each pair once with the lower faction id first and replaces the value when rerun, and exposed as entity_relationships_v.relationship_type with scope faction. Current Orrery readers of that view select only character scope; reconstruction checkpoints copy the row whole.
 place_chunk_references.reference_type (place_reference_type):
-  Role of the place in this accepted chunk, written at commit through the presence roster (roster.write_roster). The storyteller presence baseline requires exactly one setting row on the parent chunk (roster.continuation_setting); featured-place selection takes places from the most recent referencing chunks and reports the strongest role each place holds there; setting rows also give /api/current-place, the return-recap location, and the scene location that experiences and knowledge surfacing read.
+  Role of the place in this accepted chunk, written at commit through the presence roster (roster.write_roster). The storyteller presence baseline requires exactly one setting row on the parent chunk (roster.continuation_setting); featured-place selection reports, for each place, the strongest role it holds in its latest referencing chunk, and keeps the places referenced most recently; setting rows also give /api/current-place, the return-recap location, and the scene location that experiences and knowledge surfacing read.
 places.type (place_type):
   Structural category of the place. The new-story wizard writes the starting location from its place profile, trait compiler and Retrograde persistence stubs write other, and Retrograde maturation writes fixed_location. The Orrery resolver loads it as a location class beside the place location-class tags (orrery:location_classes), so in_location_class conditions match it, and place_tag_manifest turns some values into review-required place tag proposals.
 TYPE faction_member_role:
