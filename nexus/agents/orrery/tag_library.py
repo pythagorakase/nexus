@@ -89,12 +89,23 @@ class PairTagLibraryEntry:
     description: str
 
 
+# The registry row ``r`` of a live category. Both prompt-facing readers
+# filter through it, so a category ``tag_category_registry`` deprecates
+# leaves the taxonomy and takes its tags with it, even tags that are not
+# themselves deprecated (issue #811).
+_LIVE_CATEGORY_PREDICATE = "r.deprecated = FALSE"
+
+
 def read_tag_library(
     dbname: Optional[str] = None,
     *,
     entity_kinds: Optional[Sequence[str]] = None,
 ) -> list[TagLibraryEntry]:
-    """Read promptable Orrery tags from the target slot database."""
+    """Read promptable Orrery tags from the target slot database.
+
+    A tag is promptable when neither it nor its registry category is
+    deprecated and it is not a synonym.
+    """
 
     kind_filter = _normalize_entity_kinds(entity_kinds)
     conn = _connect(dbname)
@@ -102,6 +113,7 @@ def read_tag_library(
         with conn.cursor() as cur:
             params: list[object] = []
             where = [
+                _LIVE_CATEGORY_PREDICATE,
                 "t.deprecated = FALSE",
                 "t.synonym_for IS NULL",
             ]
@@ -160,20 +172,21 @@ def read_tag_library(
 
 
 def read_tag_categories(dbname: Optional[str] = None) -> list[TagCategoryEntry]:
-    """Read the complete prompt-facing category taxonomy."""
+    """Read the prompt-facing category taxonomy: every live registry category."""
 
     conn = _connect(dbname)
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 SELECT
-                    entity_kind::text AS entity_kind,
-                    category,
-                    description,
-                    prompt_order
-                FROM tag_category_registry
-                ORDER BY entity_kind::text, prompt_order, category
+                    r.entity_kind::text AS entity_kind,
+                    r.category,
+                    r.description,
+                    r.prompt_order
+                FROM tag_category_registry r
+                WHERE {_LIVE_CATEGORY_PREDICATE}
+                ORDER BY r.entity_kind::text, r.prompt_order, r.category
                 """
             )
             return [

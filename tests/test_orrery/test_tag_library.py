@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
 import os
 import re
@@ -14,7 +14,9 @@ import tiktoken
 
 import nexus.agents.orrery.tag_library as tag_library
 from nexus.agents.lore.logon_utility import proposal_tag_names_from_payload
+from nexus.api import slot_utils
 from nexus.prompts.registry import PromptId, load
+from tests.pg_fixtures import connect, disposable_slot_database
 
 
 def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None:
@@ -436,6 +438,62 @@ def test_contextual_library_digest_is_stable_and_registry_sensitive(
 
     assert _registry_digest(first) == _registry_digest(second)
     assert _registry_digest(first) != _registry_digest(expanded)
+
+
+@pytest.mark.requires_postgres
+def test_deprecated_registry_category_leaves_the_library(monkeypatch) -> None:
+    """A live tag under a deprecated category never reaches the prompts.
+
+    On a fresh template clone, ``worksite`` is itself live but sits under
+    ``place_affordance``, which migration 043 deprecated; ``haven`` sits
+    under the live ``place_function``. Reviving the category on the clone
+    brings ``worksite`` back, so the registry flag alone decides.
+    """
+
+    with disposable_slot_database("qa640_811_tag_library") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.tag, t.category, t.deprecated, r.deprecated
+                FROM tags t
+                JOIN tag_category_registry r ON r.category = t.category
+                WHERE t.tag IN ('worksite', 'haven')
+                ORDER BY t.tag
+                """
+            )
+            assert cur.fetchall() == [
+                ("haven", "place_function", False, False),
+                ("worksite", "place_affordance", False, True),
+            ]
+
+        library = {entry.tag for entry in tag_library.read_tag_library(dbname)}
+        categories = {
+            entry.category for entry in tag_library.read_tag_categories(dbname)
+        }
+        rendered = tag_library.format_tag_library_for_prompt(dbname)
+
+        assert "haven" in library
+        assert "worksite" not in library
+        assert "place_function" in categories
+        assert "place_affordance" not in categories
+        assert "`haven`" in rendered
+        assert "worksite" not in rendered
+        assert "place_affordance" not in rendered
+
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tag_category_registry SET deprecated = FALSE "
+                "WHERE category = 'place_affordance'"
+            )
+        assert "worksite" in {
+            entry.tag for entry in tag_library.read_tag_library(dbname)
+        }
+        assert "place_affordance" in {
+            entry.category for entry in tag_library.read_tag_categories(dbname)
+        }
 
 
 @pytest.mark.skipif(
