@@ -54,6 +54,8 @@ from tests.test_orrery.claim_accounts_test_support import (
     _insert_character,
     _insert_chunk,
     _insert_claim,
+    _insert_faction,
+    _insert_pair_tag,
     _insert_relationship,
     _install_valence_shadow,
     _settings,
@@ -150,38 +152,6 @@ def live_conn(propagation_clone: PropagationClone) -> Iterator[Any]:
             yield conn
         finally:
             conn.rollback()
-
-
-def _insert_faction(cur: Any, label: str) -> int:
-    cur.execute(
-        "INSERT INTO entities (kind, is_active) "
-        "VALUES ('faction', true) RETURNING id"
-    )
-    entity_id = int(cur.fetchone()["id"])
-    cur.execute("SELECT coalesce(max(id), 0) + 1 AS id FROM factions")
-    faction_id = int(cur.fetchone()["id"])
-    cur.execute(
-        "INSERT INTO factions (id, name, entity_id) VALUES (%s, %s, %s)",
-        (faction_id, f"propagation-{label}-{uuid4().hex[:10]}", entity_id),
-    )
-    return entity_id
-
-
-def _insert_pair_tag(
-    cur: Any, subject_entity_id: int, object_entity_id: int, tag: str
-) -> None:
-    cur.execute(
-        """
-        INSERT INTO entity_pair_tags (
-            subject_entity_id, object_entity_id, pair_tag_id,
-            source_kind, template_id
-        )
-        SELECT %s, %s, id, 'template', 'test_claim_propagation_live'
-        FROM pair_tags WHERE tag = %s AND NOT deprecated
-        """,
-        (subject_entity_id, object_entity_id, tag),
-    )
-    assert cur.rowcount == 1
 
 
 def _insert_culture_tag(cur: Any, entity_id: int, tag: str) -> None:

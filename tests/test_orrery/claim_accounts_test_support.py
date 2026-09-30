@@ -1,11 +1,15 @@
 """Slot-free claim fixtures shared by the rollback-only epistemics tests.
 
-The claim-accounts and valence shadows install post-090 and post-088 shapes in
-the connection's temp schema, so a test's writes to ``claims``,
-``claim_awareness``, ``backstory_secrets`` and ``character_relationships`` never
-reach the public tables. The row helpers (characters, relationship chains,
-chunks, minted claims, contagion settings) take an open cursor and name no
-database: each test module supplies a cursor on its own disposable clone.
+The claim-accounts shadows install post-090 shapes in the connection's temp
+schema, so a test's writes to ``claims``, ``claim_awareness`` and
+``backstory_secrets`` stay in ``pg_temp`` and never reach the public tables.
+The valence shadow is a ``pg_temp.character_relationships`` table with the
+post-088 ``valence_current`` column. ``_insert_relationship`` is the exception:
+it writes one attributed row to ``public.character_relationships`` (undone when
+the caller's transaction rolls back) plus that row's ``pg_temp`` twin. The row
+helpers (characters, factions, pair tags, relationship chains, chunks, minted
+claims, contagion settings) take an open cursor and name no database: each test
+module supplies a cursor on its own disposable clone.
 """
 
 from __future__ import annotations
@@ -342,6 +346,42 @@ def _insert_relationship(
             Decimal(valence.split("|", maxsplit=1)[0]) / Decimal("5.5"),
         ),
     )
+
+
+def _insert_faction(cur: Any, label: str) -> int:
+    """Insert one active faction at the next free ``factions.id``; return its entity."""
+
+    cur.execute(
+        "INSERT INTO entities (kind, is_active) "
+        "VALUES ('faction', true) RETURNING id"
+    )
+    entity_id = int(cur.fetchone()["id"])
+    cur.execute("SELECT coalesce(max(id), 0) + 1 AS id FROM factions")
+    faction_id = int(cur.fetchone()["id"])
+    cur.execute(
+        "INSERT INTO factions (id, name, entity_id) VALUES (%s, %s, %s)",
+        (faction_id, f"propagation-{label}-{uuid4().hex[:10]}", entity_id),
+    )
+    return entity_id
+
+
+def _insert_pair_tag(
+    cur: Any, subject_entity_id: int, object_entity_id: int, tag: str
+) -> None:
+    """Attach one registered pair tag from subject to object entity."""
+
+    cur.execute(
+        """
+        INSERT INTO entity_pair_tags (
+            subject_entity_id, object_entity_id, pair_tag_id,
+            source_kind, template_id
+        )
+        SELECT %s, %s, id, 'template', 'test_claim_propagation_live'
+        FROM pair_tags WHERE tag = %s AND NOT deprecated
+        """,
+        (subject_entity_id, object_entity_id, tag),
+    )
+    assert cur.rowcount == 1
 
 
 def _insert_claim(

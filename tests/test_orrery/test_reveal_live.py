@@ -53,6 +53,7 @@ DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").rea
 _SCENES = count(400)
 BASE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
 STORY_CLOCK = BASE_TIMESTAMP + timedelta(hours=6)
+REVEAL_PLACE_NAME = "Reveal Square"
 
 
 class RevealClone(NamedTuple):
@@ -117,7 +118,7 @@ def reveal_clone() -> Iterator[RevealClone]:
             max_longitude=-73.8,
             max_latitude=40.9,
         )
-        place_id, _ = seed_place(dbname, name="Reveal Square")
+        place_id, _ = seed_place(dbname, name=REVEAL_PLACE_NAME)
         _, protagonist_entity_id = seed_protagonist(
             dbname,
             base_timestamp=BASE_TIMESTAMP.isoformat(),
@@ -229,14 +230,14 @@ def _insert_character(cur: Any, label: str, place_id: int) -> int:
 def _insert_private_incident(
     cur: Any,
     *,
+    place_id: int,
     source_chunk_id: int,
     scope: str = "private",
     holder_aware: bool = True,
 ) -> tuple[int, int, tuple[int, int, int], int]:
-    cur.execute("SELECT id FROM places ORDER BY id LIMIT 1")
+    cur.execute("SELECT name FROM places WHERE id = %s", (place_id,))
     place = cur.fetchone()
-    assert place is not None, "the reveal clone seeds one place"
-    place_id = int(place["id"])
+    assert place is not None and place["name"] == REVEAL_PLACE_NAME, place
     holder = _insert_character(cur, "holder", place_id)
     first = _insert_character(cur, "first", place_id)
     second = _insert_character(cur, "second", place_id)
@@ -286,11 +287,15 @@ def _insert_private_incident(
 
 def test_authoring_rejects_non_private_and_unregistered_gate(
     live_conn: Any,
+    reveal_clone: RevealClone,
 ) -> None:
     with live_conn.cursor() as cur:
         source_chunk_id, source_world_time = _insert_chunk(cur)
         _, bounded_claim, participants, _ = _insert_private_incident(
-            cur, source_chunk_id=source_chunk_id, scope="bounded"
+            cur,
+            place_id=reveal_clone.place_id,
+            source_chunk_id=source_chunk_id,
+            scope="bounded",
         )
         with pytest.raises(ValueError, match="must be private"):
             author_backstory_secret_sync(
@@ -302,7 +307,7 @@ def test_authoring_rejects_non_private_and_unregistered_gate(
             )
 
         _, private_claim, private_participants, _ = _insert_private_incident(
-            cur, source_chunk_id=source_chunk_id
+            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
         )
         with pytest.raises(ValueError, match="Unregistered reveal gate"):
             author_backstory_secret_sync(
@@ -316,11 +321,13 @@ def test_authoring_rejects_non_private_and_unregistered_gate(
 
 def test_authoring_grants_unpossessed_holder_and_reveal_completes(
     live_conn: Any,
+    reveal_clone: RevealClone,
 ) -> None:
     with live_conn.cursor() as cur:
         source_chunk_id, source_world_time = _insert_chunk(cur)
         _, claim_id, participants, place_id = _insert_private_incident(
             cur,
+            place_id=reveal_clone.place_id,
             source_chunk_id=source_chunk_id,
             holder_aware=False,
         )
@@ -440,6 +447,20 @@ def test_async_authoring_grants_unpossessed_holder(
             assert clock["chunk_id"] == reveal_clone.clock_chunk_id
             assert clock["world_time"] == STORY_CLOCK
             assert clock["holder_entity_id"] == reveal_clone.protagonist_entity_id
+            holder_place = await conn.fetchrow(
+                """
+                SELECT pl.id, pl.name
+                FROM characters ch
+                JOIN places pl ON pl.id = ch.current_location
+                WHERE ch.entity_id = $1
+                """,
+                clock["holder_entity_id"],
+            )
+            assert holder_place is not None
+            assert dict(holder_place) == {
+                "id": reveal_clone.place_id,
+                "name": REVEAL_PLACE_NAME,
+            }
             event_id = await conn.fetchval(
                 """
                 INSERT INTO world_events (
@@ -499,11 +520,12 @@ def test_async_authoring_grants_unpossessed_holder(
 
 def test_commit_reveals_promotes_grants_once_and_redrain_is_noop(
     live_conn: Any,
+    reveal_clone: RevealClone,
 ) -> None:
     with live_conn.cursor() as cur:
         source_chunk_id, source_world_time = _insert_chunk(cur)
         _, claim_id, participants, place_id = _insert_private_incident(
-            cur, source_chunk_id=source_chunk_id
+            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
         )
         holder, first, second = participants
         sibling_id = mint_account_variant_sync(
@@ -614,13 +636,14 @@ def test_commit_reveals_promotes_grants_once_and_redrain_is_noop(
 
 def test_same_tick_reveal_waits_until_next_tick_to_propagate(
     live_conn: Any,
+    reveal_clone: RevealClone,
 ) -> None:
     """Reveal promotion misses this tick's snapshot and enters the next."""
 
     with live_conn.cursor() as cur:
         source_chunk_id, source_world_time = _insert_chunk(cur)
         incident_id, claim_id, participants, place_id = _insert_private_incident(
-            cur, source_chunk_id=source_chunk_id
+            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
         )
         holder, same_tick_recipient, _ = participants
         cur.execute(
@@ -735,11 +758,14 @@ def test_same_tick_reveal_waits_until_next_tick_to_propagate(
     assert (variant_id, same_tick_recipient) not in next_tick_awareness
 
 
-def test_unregistered_gate_in_latent_row_raises_loudly(live_conn: Any) -> None:
+def test_unregistered_gate_in_latent_row_raises_loudly(
+    live_conn: Any,
+    reveal_clone: RevealClone,
+) -> None:
     with live_conn.cursor() as cur:
         source_chunk_id, _ = _insert_chunk(cur)
         _, claim_id, participants, _ = _insert_private_incident(
-            cur, source_chunk_id=source_chunk_id
+            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
         )
         cur.execute(
             """
@@ -765,13 +791,14 @@ def test_unregistered_gate_in_latent_row_raises_loudly(live_conn: Any) -> None:
 )
 def test_world_layer_and_disabled_config_leave_secret_latent(
     live_conn: Any,
+    reveal_clone: RevealClone,
     world_layer: str,
     settings: dict[str, bool],
 ) -> None:
     with live_conn.cursor() as cur:
         source_chunk_id, _ = _insert_chunk(cur)
         _, claim_id, participants, _ = _insert_private_incident(
-            cur, source_chunk_id=source_chunk_id
+            cur, place_id=reveal_clone.place_id, source_chunk_id=source_chunk_id
         )
         secret_id = author_backstory_secret_sync(
             cur,
@@ -798,11 +825,13 @@ def test_world_layer_and_disabled_config_leave_secret_latent(
 
 def test_authored_and_revealed_secrets_replay_between_checkpoints(
     live_conn: Any,
+    reveal_clone: RevealClone,
 ) -> None:
     with live_conn.cursor() as cur:
         base_chunk, _ = _insert_chunk(cur)
         _, claim_id, participants, _ = _insert_private_incident(
             cur,
+            place_id=reveal_clone.place_id,
             source_chunk_id=base_chunk,
         )
         holder = participants[0]

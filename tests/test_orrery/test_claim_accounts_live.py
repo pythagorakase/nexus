@@ -34,7 +34,7 @@ from nexus.agents.orrery.substrate import (
 )
 from nexus.database import asyncpg_kwargs
 from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
-from tests.test_orrery.test_claim_propagation_live import (
+from tests.test_orrery.claim_accounts_test_support import (
     _insert_character,
     _insert_chunk,
     _insert_relationship,

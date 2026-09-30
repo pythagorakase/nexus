@@ -32,9 +32,6 @@ from nexus.agents.orrery.substrate import (
 )
 from tests.pg_fixtures import disposable_slot_database, seed_story_clock, sqlalchemy_url
 from tests.test_orrery.claim_accounts_test_support import (
-    install_claim_accounts_shadow_sync,
-)
-from tests.test_orrery.test_claim_propagation_live import (
     EPISTEMICS,
     _chain,
     _insert_character,
@@ -44,6 +41,7 @@ from tests.test_orrery.test_claim_propagation_live import (
     _insert_relationship,
     _install_valence_shadow,
     _settings,
+    install_claim_accounts_shadow_sync,
 )
 
 
