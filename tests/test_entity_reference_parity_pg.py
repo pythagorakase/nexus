@@ -6,7 +6,8 @@ writes the chunk junctions through ``nexus.presence.roster.write_roster``.
 The second turn references one place as both setting and transit, so one
 place holds two roles in one chunk; place references carry evidence in some
 rows and none in others. ``tests.pg_fixtures`` owns creation, seeding, and
-drop; no owner database is read or written.
+drop; no owner database is read or written. The invariant-violation test
+seeds a second clone of its own, because it changes an entity's kind.
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ class SeededStory(NamedTuple):
     dbname: str
     chunk_ids: list[int]
     plaza_entity_id: int
+    docks_entity_id: int
 
 
 # Seeded reference rows per kind: turn 1 references the player (present) and
@@ -71,7 +73,7 @@ def _seed(dbname: str) -> SeededStory:
         max_latitude=40.9,
     )
     plaza_id, plaza_entity_id = seed_place(dbname, name="Fixture Plaza")
-    docks_id, _ = seed_place(
+    docks_id, docks_entity_id = seed_place(
         dbname, name="Fixture Docks", longitude=-74.0, latitude=40.7
     )
     tower_id, _ = seed_place(
@@ -154,7 +156,7 @@ def _seed(dbname: str) -> SeededStory:
             )
         )
         user_text = FIXTURE_TURN_CHOICES[0]
-    return SeededStory(dbname, chunk_ids, plaza_entity_id)
+    return SeededStory(dbname, chunk_ids, plaza_entity_id, docks_entity_id)
 
 
 @pytest.fixture(scope="module")
@@ -221,6 +223,13 @@ def test_view_has_exact_parity_with_the_seeded_junctions(story: SeededStory) -> 
         assert block["invariant_violations"]["count"] == 0
         assert block["parity"] is True
     assert report["unattributed_target_rows"]["count"] == 0
+    assert report["unattributed"] == {
+        "expected": 0,
+        "target": 0,
+        "missing": {"count": 0, "examples": []},
+        "extra": {"count": 0, "examples": []},
+        "parity": True,
+    }
     assert report["columns"]["kind"]["carried"] is False
     assert report["columns"]["kind"]["expected_non_null"] == sum(SEEDED_ROWS.values())
 
@@ -346,11 +355,9 @@ def _unified_rows(dbname: str) -> list[tuple[Any, ...]]:
         return list(cur.fetchall())
 
 
-def test_unified_table_target_carries_every_column_and_catches_drift(
-    story: SeededStory,
-) -> None:
-    """A table of the unified shape shows parity, then each seeded drift."""
-    with closing(connect(story.dbname)) as conn, conn, conn.cursor() as cur:
+def _create_unified_table(dbname: str) -> None:
+    """Create the unified-shape target table and fill it from the junctions."""
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
             f"""
             CREATE TABLE {UNIFIED_TABLE} (
@@ -378,6 +385,13 @@ def test_unified_table_target_carries_every_column_and_catches_drift(
             JOIN entities e ON e.id = p.entity_id
             """
         )
+
+
+def test_unified_table_target_carries_every_column_and_catches_drift(
+    story: SeededStory,
+) -> None:
+    """A table of the unified shape shows parity, then each seeded drift."""
+    _create_unified_table(story.dbname)
     status, report, _ = _run_cli(story.dbname, "--target", UNIFIED_TABLE)
     assert status == 0, report
     assert report["compared_columns"] == list(parity.EXPECTED_COLUMNS)
@@ -385,9 +399,46 @@ def test_unified_table_target_carries_every_column_and_catches_drift(
     for kind, count in SEEDED_ROWS.items():
         assert report["kinds"][kind]["expected"] == count
         assert report["kinds"][kind]["target"] == count
+    # Place rows only, as on the junction.
     assert report["invariants"]["target"]["null_evidence_rows"] == (
-        sum(SEEDED_ROWS.values()) - SEEDED_EVIDENCE_ROWS
+        SEEDED_ROWS["place"] - SEEDED_EVIDENCE_ROWS
     )
+    recorded = report["invariants"]["place_chunk_references"]["recorded_not_enforced"]
+    assert report["invariants"]["target"]["recorded_not_enforced"] == recorded
+    columns = list(parity.EXPECTED_COLUMNS)
+
+    # A second copy of one row is one extra row (multiset, not set, parity),
+    # and it is neither a second role nor a second setting place.
+    plaza_first_setting = (
+        story.chunk_ids[0],
+        story.plaza_entity_id,
+        "place",
+        "setting",
+        "Lamps ring the plaza.",
+    )
+    with closing(connect(story.dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            f"INSERT INTO {UNIFIED_TABLE} VALUES (%s, %s, %s, %s, %s)",
+            plaza_first_setting,
+        )
+    status, report, _ = _run_cli(story.dbname, "--target", UNIFIED_TABLE)
+    assert status == parity.EXIT_MISMATCH
+    places = report["kinds"]["place"]
+    assert places["extra"] == {
+        "count": 1,
+        "examples": [dict(zip(columns, plaza_first_setting))],
+    }
+    assert places["missing"]["count"] == 0
+    assert places["target"] == SEEDED_ROWS["place"] + 1
+    assert report["invariants"]["target"]["recorded_not_enforced"] == recorded
+    with closing(connect(story.dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            f"DELETE FROM {UNIFIED_TABLE} WHERE ctid = (SELECT ctid FROM "
+            f"{UNIFIED_TABLE} WHERE chunk_id = %s AND entity_id = %s "
+            "AND reference_type = 'setting' LIMIT 1)",
+            plaza_first_setting[:2],
+        )
+        assert cur.rowcount == 1
 
     plaza_setting = (
         story.chunk_ids[1],
@@ -405,7 +456,7 @@ def test_unified_table_target_carries_every_column_and_catches_drift(
     )
     rows = _unified_rows(story.dbname)
     assert plaza_setting in rows and plaza_transit in rows
-    columns = list(parity.EXPECTED_COLUMNS)
+    assert rows.count(plaza_first_setting) == 1
 
     # One deleted row is one missing row, attributed to its kind.
     with closing(connect(story.dbname)) as conn, conn, conn.cursor() as cur:
@@ -476,6 +527,8 @@ def test_connection_helper_refuses_writes(story: SeededStory) -> None:
         with conn.cursor() as cur:
             cur.execute("SHOW transaction_read_only")
             assert cur.fetchone() == ("on",)
+            cur.execute("SHOW search_path")
+            assert cur.fetchone() == (parity.SEARCH_PATH,)
             with pytest.raises(psycopg2.errors.ReadOnlySqlTransaction):
                 cur.execute(
                     "DELETE FROM chunk_faction_references WHERE chunk_id = %s",
@@ -487,3 +540,93 @@ def test_connection_helper_refuses_writes(story: SeededStory) -> None:
                 cur.execute("CREATE TABLE qa836_write_probe (id int)")
         conn.rollback()
     assert _junction_counts(story.dbname) == SEEDED_ROWS
+
+
+def test_kind_mismatch_and_unattributed_rows_fail_the_run() -> None:
+    """Each invariant violation is reported once and fails the run.
+
+    No production writer gives an entity a kind that differs from its subtype
+    table, or writes a reference to an absent entity, so this test plants both
+    directly on a second clone: ``entities`` has no trigger or check on
+    ``kind``. It also shows that a plain unique index on the target stays in
+    the invariant block when another table's foreign key references it.
+    """
+    with disposable_slot_database("qa640_836_parity") as dbname:
+        seeded = _seed(dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM place_chunk_references r "
+                "JOIN places p ON p.id = r.place_id WHERE p.entity_id = %s",
+                (seeded.docks_entity_id,),
+            )
+            (docks_rows,) = cur.fetchone()
+            assert docks_rows == 1
+            cur.execute(
+                "UPDATE entities SET kind = 'faction' WHERE id = %s",
+                (seeded.docks_entity_id,),
+            )
+            assert cur.rowcount == 1
+
+        status, report, _ = _run_cli(dbname)
+
+        assert status == parity.EXIT_MISMATCH
+        assert report["parity"] is False
+        places = report["kinds"]["place"]
+        mismatch = places["invariant_violations"]["by_reason"]
+        assert mismatch["entity_kind_mismatch"]["count"] == docks_rows
+        assert mismatch["subtype_has_no_entity"]["count"] == 0
+        assert places["invariant_violations"]["count"] == docks_rows
+        assert places["parity"] is False
+        # Filed under its entity's kind on both sides: no missing or extra row.
+        assert places["expected"] == places["target"] == SEEDED_ROWS["place"] - 1
+        factions = report["kinds"]["faction"]
+        assert factions["expected"] == factions["target"] == SEEDED_ROWS["faction"] + 1
+        for kind in SEEDED_ROWS:
+            block = report["kinds"][kind]
+            assert block["missing"]["count"] == 0, kind
+            assert block["extra"]["count"] == 0, kind
+        assert report["unattributed"]["expected"] == 0
+        assert report["unattributed_target_rows"]["count"] == 0
+
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE entities SET kind = 'place' WHERE id = %s",
+                (seeded.docks_entity_id,),
+            )
+        _create_unified_table(dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                f"CREATE UNIQUE INDEX qa836_unified_key ON {UNIFIED_TABLE} "
+                "(chunk_id, entity_id, reference_type)"
+            )
+            cur.execute(
+                "CREATE TABLE qa836_referrer (chunk_id bigint, entity_id bigint, "
+                "reference_type text, FOREIGN KEY (chunk_id, entity_id, "
+                f"reference_type) REFERENCES {UNIFIED_TABLE} "
+                "(chunk_id, entity_id, reference_type))"
+            )
+        status, report, _ = _run_cli(dbname, "--target", UNIFIED_TABLE)
+        assert status == 0, report
+        assert [
+            index["name"] for index in report["invariants"]["target"]["unique_indexes"]
+        ] == ["qa836_unified_key"]
+
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT max(id) + 1000 FROM entities")
+            (absent_entity_id,) = cur.fetchone()
+            cur.execute(
+                f"INSERT INTO {UNIFIED_TABLE} VALUES (%s, %s, 'place', 'mentioned', "
+                "NULL)",
+                (seeded.chunk_ids[0], absent_entity_id),
+            )
+
+        status, report, _ = _run_cli(dbname, "--target", UNIFIED_TABLE)
+
+        assert status == parity.EXIT_MISMATCH
+        assert report["parity"] is False
+        assert report["unattributed_target_rows"]["count"] == 1
+        assert report["unattributed"]["extra"]["count"] == 1
+        assert report["unattributed"]["missing"]["count"] == 0
+        assert report["unattributed"]["parity"] is False
+        for kind in SEEDED_ROWS:
+            assert report["kinds"][kind]["parity"] is True, kind

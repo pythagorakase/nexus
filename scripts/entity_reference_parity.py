@@ -18,19 +18,24 @@ invariant violation.
 The target relation (``--target``, default the bridging view
 ``chunk_entity_references_v``) is compared with the expected rows as a
 multiset, on the expected columns the target carries (read from the catalog).
-Target rows are attributed to a kind through ``entities.kind`` of their
-``entity_id``. An expected column the target does not carry is reported with
-``"carried": false`` and the number of expected rows whose value is not NULL;
-a column that is not carried does not by itself fail the run, because the
-unified table is expected to carry ``kind`` and ``evidence`` and the view is
-not.
+Expected and target rows alike are attributed to a kind through
+``entities.kind`` of their ``entity_id``, so a kind mismatch is reported once,
+as an invariant violation, not also as a missing and an extra row. Rows whose
+``entity_id`` names no entity of the three kinds fall into an ``unattributed``
+bucket on both sides, compared the same way. An expected column the target
+does not carry is reported with ``"carried": false`` and the number of
+expected rows whose value is not NULL; a column that is not carried does not
+by itself fail the run, because the unified table is expected to carry
+``kind`` and ``evidence`` and the view is not.
 
 The report is one JSON document on stdout. The session is read-only by
 construction: ``default_transaction_read_only=on`` in a repeatable-read
-snapshot, checked before the first query.
+snapshot, checked before the first query. Its ``search_path`` is pinned to
+``pg_catalog, public``, so every unqualified name (the target included)
+resolves to the same relations the invariant block reads.
 
-Exit status: 0 when every kind has no missing row, no extra row, and no
-invariant violation, and no target row lacks an entity; 3 otherwise. Errors
+Exit status: 0 when every kind and the unattributed bucket have no missing
+row, no extra row, and no invariant violation; 3 otherwise. Errors
 raise (status 1); argument errors exit 2.
 
 Usage:
@@ -69,6 +74,8 @@ DEFAULT_LIMIT = 10
 EXPECTED_COLUMNS = ("chunk_id", "entity_id", "kind", "reference_type", "evidence")
 # Columns without which no row can be matched at all.
 REQUIRED_TARGET_COLUMNS = ("chunk_id", "entity_id")
+# The session's name resolution, set and checked in open_read_only_connection.
+SEARCH_PATH = "pg_catalog, public"
 # Compared as integers; every other expected column is compared as text.
 INTEGER_COLUMNS = frozenset({"chunk_id", "entity_id"})
 
@@ -141,9 +148,10 @@ def _one(cur: Any) -> tuple[Any, ...]:
 def open_read_only_connection(dbname: str) -> PGConnection:
     """Open a read-only, repeatable-read session on ``dbname`` or raise.
 
-    The session options make every transaction read-only; the check reads the
-    setting back inside the first transaction, so a server or pooler that
-    ignored the options fails here, before any report query runs.
+    The session options make every transaction read-only and pin
+    ``search_path``; the check reads the settings back inside the first
+    transaction, so a server or pooler that ignored the options fails here,
+    before any report query runs.
     """
     metrics_dbname(dbname)
     conn = psycopg2.connect(
@@ -151,7 +159,8 @@ def open_read_only_connection(dbname: str) -> PGConnection:
             dbname,
             options=(
                 "-c default_transaction_read_only=on "
-                "-c default_transaction_isolation=repeatable\\ read"
+                "-c default_transaction_isolation=repeatable\\ read "
+                "-c search_path=pg_catalog,\\ public"
             ),
         )
     )
@@ -159,9 +168,10 @@ def open_read_only_connection(dbname: str) -> PGConnection:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT current_setting('transaction_read_only'), "
-                "current_setting('transaction_isolation')"
+                "current_setting('transaction_isolation'), "
+                "current_setting('search_path')"
             )
-            read_only, isolation = _one(cur)
+            read_only, isolation, search_path = _one(cur)
         if read_only != "on":
             raise RuntimeError(
                 f"Read-only transaction is required on {dbname}; "
@@ -171,6 +181,11 @@ def open_read_only_connection(dbname: str) -> PGConnection:
             raise RuntimeError(
                 f"Repeatable-read isolation is required on {dbname}; "
                 f"transaction_isolation={isolation!r}"
+            )
+        if search_path != SEARCH_PATH:
+            raise RuntimeError(
+                f"search_path {SEARCH_PATH!r} is required on {dbname}; "
+                f"search_path={search_path!r}"
             )
     except BaseException:
         conn.close()
@@ -322,7 +337,11 @@ def _foreign_keys(cur: Any, oid: int) -> list[dict[str, Any]]:
 
 
 def _unique_indexes(cur: Any, oid: int) -> list[dict[str, Any]]:
-    """Return unique indexes that no primary-key or unique constraint owns."""
+    """Return unique indexes that no key constraint of the relation owns.
+
+    Only the relation's own primary-key, unique and exclusion constraints own
+    an index; a foreign key elsewhere that references the index does not.
+    """
     cur.execute(
         """
         SELECT ic.relname, pg_get_indexdef(i.indexrelid)
@@ -330,7 +349,10 @@ def _unique_indexes(cur: Any, oid: int) -> list[dict[str, Any]]:
         JOIN pg_class ic ON ic.oid = i.indexrelid
         WHERE i.indrelid = %s AND i.indisunique
           AND NOT EXISTS (
-              SELECT 1 FROM pg_constraint con WHERE con.conindid = i.indexrelid
+              SELECT 1 FROM pg_constraint con
+              WHERE con.conindid = i.indexrelid
+                AND con.conrelid = i.indrelid
+                AND con.contype IN ('p', 'u', 'x')
           )
         ORDER BY ic.relname
         """,
@@ -378,18 +400,25 @@ def relation_invariants(
     }
 
 
+def _place_row_filter(alias: str) -> sql.Composed:
+    """Match rows of a unified relation whose entity is a place."""
+    return sql.SQL(
+        "EXISTS (SELECT 1 FROM entities e "
+        "WHERE e.id = {}.entity_id AND e.kind::text = 'place')"
+    ).format(sql.Identifier(alias))
+
+
 def _place_role_records(
     cur: Any, source: sql.Composable, entity_column: str, places_only: bool
 ) -> dict[str, int]:
     """Count multi-role place pairs and multi-setting chunks (recorded only).
 
     ``places_only`` limits a unified relation to rows whose entity is a place;
-    the place junction holds nothing else.
+    the place junction holds nothing else. Both counts are of distinct roles
+    and distinct places, so a duplicated row in a keyless target is not a
+    second role or a second setting place.
     """
-    place = sql.SQL(
-        "EXISTS (SELECT 1 FROM entities e "
-        "WHERE e.id = r.entity_id AND e.kind::text = 'place')"
-    )
+    place = _place_row_filter("r")
     setting = sql.SQL("r.reference_type::text = 'setting'")
     pair_filter = sql.SQL("WHERE {}").format(place) if places_only else sql.SQL("")
     setting_filter = sql.SQL("WHERE {}").format(
@@ -399,7 +428,8 @@ def _place_role_records(
         cur,
         sql.SQL(
             "SELECT count(*) FROM (SELECT 1 FROM {source} r {filter} "
-            "GROUP BY r.chunk_id, r.{entity} HAVING count(*) > 1) pairs"
+            "GROUP BY r.chunk_id, r.{entity} "
+            "HAVING count(DISTINCT r.reference_type) > 1) pairs"
         ).format(
             source=source, filter=pair_filter, entity=sql.Identifier(entity_column)
         ),
@@ -408,8 +438,12 @@ def _place_role_records(
         cur,
         sql.SQL(
             "SELECT count(*) FROM (SELECT 1 FROM {source} r {filter} "
-            "GROUP BY r.chunk_id HAVING count(*) > 1) chunks"
-        ).format(source=source, filter=setting_filter),
+            "GROUP BY r.chunk_id HAVING count(DISTINCT r.{entity}) > 1) chunks"
+        ).format(
+            source=source,
+            filter=setting_filter,
+            entity=sql.Identifier(entity_column),
+        ),
     )
     return {
         "multi_role_place_pairs": multi_role,
@@ -441,10 +475,12 @@ def invariant_specification(
         cur, target, "reference_type" if "reference_type" in target_columns else None
     )
     if "evidence" in target_columns:
+        # Place rows only, as on the place junction: character and faction rows
+        # have no evidence by construction.
         block["null_evidence_rows"] = _count(
             cur,
-            sql.SQL("SELECT count(*) FROM {} WHERE evidence IS NULL").format(
-                target["identifier"]
+            sql.SQL("SELECT count(*) FROM {} t WHERE t.evidence IS NULL AND {}").format(
+                target["identifier"], _place_row_filter("t")
             ),
         )
     if "reference_type" in target_columns:
@@ -531,7 +567,10 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
         invariants = invariant_specification(cur, target, target_columns)
 
     kinds = [junction.kind for junction in JUNCTIONS]
+    # Both sides are grouped by entities.kind of the row's entity_id; a row
+    # whose entity is absent (or of another kind) is unattributed.
     expected_by_kind: dict[str, Counter[Row]] = {kind: Counter() for kind in kinds}
+    expected_unattributed: Counter[Row] = Counter()
     violations: dict[str, dict[str, Counter[Row]]] = {
         kind: {"subtype_has_no_entity": Counter(), "entity_kind_mismatch": Counter()}
         for kind in kinds
@@ -540,7 +579,11 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
     for row in expected_rows:
         unified = tuple(row[:5])
         junction_kind, subtype_id, entity_exists = row[5:]
-        expected_by_kind[junction_kind][_project(unified, compared_indexes)] += 1
+        compared_row = _project(unified, compared_indexes)
+        if entity_exists and unified[2] in expected_by_kind:
+            expected_by_kind[unified[2]][compared_row] += 1
+        else:
+            expected_unattributed[compared_row] += 1
         for index, name in enumerate(EXPECTED_COLUMNS):
             if unified[index] is not None:
                 non_null[name][junction_kind] += 1
@@ -561,7 +604,10 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
 
     detail_columns = [*EXPECTED_COLUMNS, "subtype_id"]
     kind_blocks: dict[str, Any] = {}
-    parity = not unattributed
+    unattributed_missing = expected_unattributed - unattributed
+    unattributed_extra = unattributed - expected_unattributed
+    unattributed_parity = not unattributed_missing and not unattributed_extra
+    parity = unattributed_parity
     for junction in JUNCTIONS:
         expected = expected_by_kind[junction.kind]
         actual = target_by_kind[junction.kind]
@@ -613,6 +659,13 @@ def build_report(conn: PGConnection, target_name: str, limit: int) -> dict[str, 
         "compared_columns": compared,
         "columns": column_blocks,
         "kinds": kind_blocks,
+        "unattributed": {
+            "expected": sum(expected_unattributed.values()),
+            "target": sum(unattributed.values()),
+            "missing": _row_block(unattributed_missing, compared, limit),
+            "extra": _row_block(unattributed_extra, compared, limit),
+            "parity": unattributed_parity,
+        },
         "unattributed_target_rows": _row_block(unattributed, compared, limit),
         "invariants": invariants,
         "parity": parity,
