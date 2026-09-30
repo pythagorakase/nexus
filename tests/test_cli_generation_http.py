@@ -98,6 +98,17 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 # The interruption case may close an in-flight status read.
                 pass
 
+        def _stall_after_headers(self, payload: dict[str, Any]) -> None:
+            """Send the headers and half the body, then hold the rest back."""
+            body = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body[: len(body) // 2])
+            scenario.release_response.wait(timeout=10)
+            self.close_connection = True
+
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             scenario.requests.append(("POST", self.path, body))
@@ -127,6 +138,14 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 )
             elif self.path == "/api/story/new/transition":
                 scenario.transition_posted = True
+                if scenario.result == "transition_drop":
+                    # The gateway dies while transitioning: no answer at all.
+                    self.close_connection = True
+                    return
+                if scenario.result == "transition_stall":
+                    # The answer stops after its headers until teardown.
+                    self._stall_after_headers({"retrograde": {"status": "complete"}})
+                    return
                 if scenario.stage_script:
                     # Hold the transition like a live Retrograde run until the
                     # CLI has read every scripted stage.
@@ -147,16 +166,8 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     self.close_connection = True
                     return
                 if scenario.result == "schedule_stall":
-                    # The gateway sends the headers and half the body, then
-                    # holds the rest until teardown.
-                    stalled = json.dumps({"session_id": SESSION_ID}).encode()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(stalled)))
-                    self.end_headers()
-                    self.wfile.write(stalled[: len(stalled) // 2])
-                    scenario.release_response.wait(timeout=10)
-                    self.close_connection = True
+                    # The answer stops after its headers until teardown.
+                    self._stall_after_headers({"session_id": SESSION_ID})
                     return
                 scenario.scheduled = True
                 self._respond(
@@ -335,12 +346,15 @@ def _run_cli(
 ) -> tuple[int, str, str]:
     """Run the actual command against this isolated gateway and config."""
 
-    config = tomlkit.parse((ROOT / "nexus.toml").read_text())
+    config: Any = tomlkit.parse((ROOT / "nexus.toml").read_text())
     config["apex"]["generation_timeout_seconds"] = (
         1 if scenario.result in {"timeout", "response_timeout"} else 5
     )
     wizard = config["orrery"]["retrograde"]["wizard"]
     wizard["status_poll_interval_seconds"] = scenario.stage_poll_seconds
+    if scenario.result == "transition_stall":
+        # The stalled answer trips a 1 s transition budget, not the shipped one.
+        wizard["transition_timeout_seconds"] = 1
     config_path = tmp_path / "nexus.toml"
     config_path.write_text(tomlkit.dumps(config))
     with _gateway(scenario) as base_url:
@@ -547,6 +561,49 @@ def test_seed_bootstrap_schedule_stalled_after_headers_keeps_the_seed(
     assert [request[:2] for request in scenario.requests] == [
         ("POST", "/api/narrative/continue")
     ]
+
+
+@pytest.mark.parametrize("outcome", ["transition_stall", "transition_drop"])
+def test_seed_transition_stalled_after_headers_keeps_the_seed(
+    tmp_path: Path, outcome: str
+) -> None:
+    """A transition answer that stalls after its headers is exit 1, seed kept.
+
+    Requests reports the stalled body as a ConnectionError wrapping urllib3's
+    ReadTimeoutError. The transition classifies it with the waiter's helper as
+    its timeout and reports the saved seed with its retry command; a
+    transition POST the gateway drops is still a lost gateway (exit 4).
+    """
+    scenario = GenerationScenario(result=outcome)
+    code, stdout, stderr = _run_cli(scenario, tmp_path)
+    assert stdout == ""
+    assert "Traceback" not in stderr
+    envelope = json.loads(stderr)
+    assert scenario.transition_posted
+    # The failed transition schedules no opening turn.
+    assert not any(
+        request[:2] == ("POST", "/api/narrative/continue")
+        for request in scenario.requests
+    )
+    if outcome == "transition_drop":
+        assert code == 4, (stdout, stderr)
+        assert (envelope["ok"], envelope["code"]) == (False, "api_unreachable")
+        assert "Cannot connect to API server at " in envelope["error"]
+    else:
+        assert code == 1, (stdout, stderr)
+        assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
+        assert envelope["error"] == (
+            "Seed artifact was saved, but the narrative transition failed. "
+            "Retry with: nexus continue --slot 5"
+        )
+        payload = envelope["partial"]
+        assert payload["artifact_type"] == "story_seed"
+        assert payload["artifact_data"] == {"title": "The Glass Orchard"}
+        assert payload["retry_command"] == "nexus continue --slot 5"
+        failure = payload["transition_error"]
+        assert (failure["status"], failure["status_code"]) == ("timeout", None)
+        assert failure["detail"].endswith("Read timed out.")
+        assert "retrograde" not in payload
 
 
 @pytest.mark.parametrize("seed", [True, False], ids=["seed", "continuation"])

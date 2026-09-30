@@ -1800,9 +1800,9 @@ def _failed_session_read(
 ) -> SessionWaitFailure:
     """Classify one failed request of a generation session.
 
-    A status read, the state load, and the POST that schedules the seed's
-    opening turn map their failures here, so they cannot drift. A read that ran
-    out of time, a body stalled after its headers included
+    A status read, the state load, and the seed's transition and opening-turn
+    POSTs map their failures here, so they cannot drift. A read that ran out
+    of time, a body stalled after its headers included
     (:func:`_is_read_timeout`), is ``timeout`` with ``timeout_detail``. A
     refused or dropped connection, a body cut off mid-answer included, is
     ``unreachable`` (``api_unreachable``). Any other failed request is
@@ -2677,11 +2677,27 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                                     json=transition_payload,
                                     timeout=_transition_timeout_seconds(),
                                 )
-                        except requests.exceptions.Timeout as exc:
+                        except (
+                            requests.exceptions.ConnectionError,
+                            requests.exceptions.ChunkedEncodingError,
+                            requests.exceptions.Timeout,
+                        ) as exc:
+                            # Classified as the wait's reads are: an answer
+                            # that ran out of time, a body stalled after its
+                            # headers included, keeps the saved seed (exit 1);
+                            # a refused or dropped connection still reaches
+                            # main() as a lost gateway (exit 4).
+                            failure = _failed_session_read(
+                                exc,
+                                transition_url,
+                                str(exc) or "Transition request timed out.",
+                            )
+                            if failure.status != "timeout":
+                                raise
                             return _seed_transition_failure(
                                 result=result,
                                 slot=args.slot,
-                                detail=str(exc) or "Transition request timed out.",
+                                detail=failure.detail,
                                 status_code=None,
                                 status="timeout",
                             )
