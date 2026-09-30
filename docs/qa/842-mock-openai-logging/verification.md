@@ -133,6 +133,8 @@ Found 2 errors in 1 file (checked 2 source files)
 
 The flake8 and mypy findings are in code this change does not touch. flake8 on the `origin/main` copy of the file reports the same three lines. The mypy lines sit above the new function, which is appended at the end of the file. They are left for the coordinator.
 
+The line numbers in this block are as of af853c50. Commit a7ff0870 added five docstring lines, so at 5c8a41d8 the same findings are flake8 E501 at 1151, 1166 and 1176 and mypy `union-attr` at 1144 and 1156 (tails in the next section).
+
 ## Review Fix: Module Usage Docstring (Commit a7ff0870)
 
 The module docstring's Usage line named `poetry run uvicorn nexus.api.mock_openai:app --port 5102`, a launch without `--log-config` that ignores `[runtime.logs]`. It now names `python -m nexus.api.mock_openai` (loopback, port from `[runtime.services.mock_openai]`, dictConfig from `[runtime.logs]`) and `nexus up` for the supervised launch. Docstring only; no code path changed.
@@ -149,7 +151,21 @@ All done! ✨ 🍰 ✨
 1 file would be left unchanged.
 ```
 
-flake8 on the file reports the same three pre-existing E501 lines as `origin/main` (now at 1151, 1166 and 1176 after the five added docstring lines).
+flake8 on the file reports the same three pre-existing E501 lines as `origin/main` (now at 1151, 1166 and 1176 after the five added docstring lines). The two pre-existing mypy `union-attr` errors moved the same way, from 1139 and 1151 to 1144 and 1156.
+
+Tails on 5c8a41d8 (the Python files are unchanged since a7ff0870):
+
+```
+$ python -m flake8 nexus/api/mock_openai.py tests/test_runtime/test_logging_config.py
+nexus/api/mock_openai.py:1151:89: E501 line too long (132 > 88 characters)
+nexus/api/mock_openai.py:1166:89: E501 line too long (103 > 88 characters)
+nexus/api/mock_openai.py:1176:89: E501 line too long (117 > 88 characters)
+
+$ python -m mypy nexus/api/mock_openai.py tests/test_runtime/test_logging_config.py
+nexus/api/mock_openai.py:1144: error: Item "None" of "APISettings | None" has no attribute "test_provider"  [union-attr]
+nexus/api/mock_openai.py:1156: error: Item "None" of "APISettings | None" has no attribute "test_provider"  [union-attr]
+Found 2 errors in 1 file (checked 2 source files)
+```
 
 ## Coordinator Note
 
