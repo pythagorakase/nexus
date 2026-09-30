@@ -823,21 +823,23 @@ def test_post_commit_compaction_failure_preserves_success_and_retries(
 ) -> None:
     """A real DB rejection leaves the accepted journal intact and retries idle."""
     from contextlib import closing
-    from nexus.api import slot_utils
     from nexus.config import load_settings
     from nexus.jobs.compaction import enqueue_compaction
     from nexus.jobs.scheduler import SlotScheduler
     from nexus.memory.correspondence import persist_staged_correspondence
-    from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+    from tests.pg_fixtures import (
+        connect,
+        disposable_slot_database,
+        route_slot_to_disposable,
+        seed_protagonist,
+    )
     from tests.scheduler_helpers import test_provider_config
     from tests.test_orrery.test_narration_job_fencing_pg import _insert_chunk
     from tests.test_api.test_scheduler_pg import wait_until
 
     test_provider_config(tmp_path, mock_openai_server, monkeypatch)
     with disposable_slot_database("qa640_compaction_retry") as dbname:
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
-        )
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         seed_protagonist(dbname)
         config = load_settings().storyteller.correspondence
         with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:

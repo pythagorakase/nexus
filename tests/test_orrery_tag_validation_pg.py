@@ -52,9 +52,8 @@ from nexus.api.commit_handler_sync import (
 )
 from nexus.api.db_pool import close_all_pools
 from nexus.api.lore_adapter import response_to_incubator
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.memory.manager import empty_pass2_baseline
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, route_slot_to_disposable
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -204,6 +203,8 @@ def qa649_db() -> Iterator[_Qa649Database]:
     dbname = f"qa649_{uuid.uuid4().hex[:12]}"
     admin = _connect("postgres")
     admin.autocommit = True
+    # Module scope cannot take the function-scoped monkeypatch.
+    routing = pytest.MonkeyPatch()
     try:
         with admin.cursor() as cur:
             cur.execute(
@@ -212,7 +213,7 @@ def qa649_db() -> Iterator[_Qa649Database]:
                     sql.Identifier("NEXUS_template"),
                 )
             )
-        VALID_DBNAMES.add(dbname)
+        route_slot_to_disposable(routing.setattr, slot=1, dbname=dbname)
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
                 migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
@@ -374,7 +375,7 @@ def qa649_db() -> Iterator[_Qa649Database]:
         )
     finally:
         close_all_pools()
-        VALID_DBNAMES.discard(dbname)
+        routing.undo()
         with admin.cursor() as cur:
             cur.execute(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "

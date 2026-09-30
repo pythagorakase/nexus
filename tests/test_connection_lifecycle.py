@@ -29,8 +29,9 @@ import tomlkit
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from nexus.api import db_pool, slot_utils
+from nexus.api import db_pool
 from nexus.database import connection_kwargs, database_url
+from tests.pg_fixtures import admit_disposable_database
 from tests.test_database_contract import two_clusters  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -258,9 +259,7 @@ def lifecycle_runtime(
     monkeypatch.setenv("PYTHONPATH", str(ROOT))
     for key, value in _cluster_params(other).items():
         monkeypatch.setenv(f"PG{key.upper()}", str(value))
-    monkeypatch.setattr(
-        slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {"mock"}
-    )
+    admit_disposable_database(monkeypatch.setattr, "mock")
     db_pool.close_all_pools()
     for dbname in ("save_04", "mock"):
         ensure_global_variables(dbname)

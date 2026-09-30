@@ -16,31 +16,32 @@ from nexus.agents.orrery.retrograde_persistence import (
     _insert_prologue_chunk,
 )
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
-from nexus.api.slot_utils import VALID_DBNAMES
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 from tests.test_commit_choice_presence_pg import _insert_staged_turn
 
 pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.fixture
-def episode_database() -> Iterator[tuple[str, int, int]]:
+def episode_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[str, int, int]]:
     """Create a fresh story's player, setting, and real Retrograde prologue."""
     with disposable_slot_database("qa947_episode") as dbname:
-        VALID_DBNAMES.add(dbname)
-        try:
-            character_id, _ = seed_protagonist(dbname)
-            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO places (name, type) "
-                    "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
-                )
-                place_id = cur.fetchone()[0]
-                prologue_id = _insert_prologue_chunk(cur)
-                _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_id)
-            yield dbname, character_id, place_id
-        finally:
-            VALID_DBNAMES.discard(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        character_id, _ = seed_protagonist(dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO places (name, type) "
+                "VALUES ('Harbor Office', 'fixed_location') RETURNING id"
+            )
+            place_id = cur.fetchone()[0]
+            prologue_id = _insert_prologue_chunk(cur)
+            _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_id)
+        yield dbname, character_id, place_id
 
 
 def _accept_turn(

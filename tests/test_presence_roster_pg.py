@@ -25,7 +25,6 @@ from nexus.api.presence_reconciliation import (
     read_character_roster_from_connection,
     reconcile_prose_mentions,
 )
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.config import load_settings
 from nexus.memory.manager import empty_pass2_baseline
 from nexus.presence.roster import read_roster, resolve_reference
@@ -33,32 +32,36 @@ from tests.test_orrery.test_knowledge_surfacing_live import (
     _insert_claim,
     _grant_awareness,
 )
-from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    sqlalchemy_url,
+)
 from tests.test_commit_choice_presence_pg import _insert_staged_turn, _reset_world
 
 pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.fixture
-def roster_database() -> Iterator[tuple[str, dict[str, int], int]]:
+def roster_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[tuple[str, dict[str, int], int]]:
     """Seed characters and one place in a disposable template clone."""
     with disposable_slot_database("qa640_roster798") as dbname:
-        VALID_DBNAMES.add(dbname)
-        try:
-            with connect(dbname) as conn:
-                with conn.cursor() as cur:
-                    ids = _reset_world(cur, ["Remote Friend"])
-                    cur.execute(
-                        "SELECT user_character FROM global_variables WHERE id = true"
-                    )
-                    ids["Test Protagonist"] = cur.fetchone()[0]
-                    cur.execute(
-                        "INSERT INTO places (name, type) VALUES ('Hall', 'fixed_location') RETURNING id"
-                    )
-                    place_id = cur.fetchone()[0]
-            yield dbname, ids, place_id
-        finally:
-            VALID_DBNAMES.discard(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        with connect(dbname) as conn:
+            with conn.cursor() as cur:
+                ids = _reset_world(cur, ["Remote Friend"])
+                cur.execute(
+                    "SELECT user_character FROM global_variables WHERE id = true"
+                )
+                ids["Test Protagonist"] = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO places (name, type) VALUES ('Hall', 'fixed_location') RETURNING id"
+                )
+                place_id = cur.fetchone()[0]
+        yield dbname, ids, place_id
 
 
 def commit_wire(dbname: str, parent_id: int, wire: SkaldTurnWire) -> int:

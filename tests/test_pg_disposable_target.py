@@ -28,9 +28,10 @@ from psycopg2.extras import RealDictCursor
 from nexus.api import slot_utils
 from tests import pg_fixtures
 from tests.pg_fixtures import (
+    active_slot_routes,
+    admit_disposable_database,
     connect,
     disposable_slot_database,
-    active_slot_routes,
     require_disposable_target,
     route_slot_to_disposable,
     route_slots_to_disposable,
@@ -38,8 +39,8 @@ from tests.pg_fixtures import (
     seed_entity_tag,
     seed_story_clock,
 )
-from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
 from tests.test_orrery import claim_accounts_test_support
+from tests.test_orrery.checkpointed_story_support import seed_checkpointed_story
 from tests.test_orrery.claim_accounts_test_support import (
     _insert_chunk,
     _insert_claim,
@@ -393,6 +394,31 @@ def test_multi_slot_route_refuses_before_patching(
         assert slot_utils.slot_dbname is resolver
         assert slot_utils.VALID_DBNAMES is valid
         assert active_slot_routes() is None
+
+
+@pytest.mark.parametrize("dbname", OWNER_DATABASES)
+def test_admission_refuses_an_owner_name_before_patching(dbname: str) -> None:
+    """``admit_disposable_database`` never admits an owner database."""
+
+    valid = slot_utils.VALID_DBNAMES
+    with pytest.MonkeyPatch.context() as patch:
+        with pytest.raises(RuntimeError, match="Refusing to seed owner database"):
+            admit_disposable_database(patch.setattr, dbname)
+        assert slot_utils.VALID_DBNAMES is valid
+
+
+def test_admission_adds_one_name_and_routes_no_slot() -> None:
+    """Admission widens ``VALID_DBNAMES`` by the one name until teardown."""
+
+    valid = slot_utils.VALID_DBNAMES
+    resolver = slot_utils.slot_dbname
+    with pytest.MonkeyPatch.context() as patch:
+        admit_disposable_database(patch.setattr, "qa885_admitted")
+        assert slot_utils.VALID_DBNAMES == valid | {"qa885_admitted"}
+        assert slot_utils.require_slot_dbname("qa885_admitted") == "qa885_admitted"
+        assert slot_utils.slot_dbname is resolver
+        assert active_slot_routes() is None
+    assert slot_utils.VALID_DBNAMES is valid
 
 
 def _sessions(cur: Any, dbname: str) -> int:

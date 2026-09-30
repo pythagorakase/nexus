@@ -13,8 +13,7 @@ from sqlalchemy import text
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
-from nexus.api.slot_utils import VALID_DBNAMES
-from tests.pg_fixtures import disposable_slot_database
+from tests.pg_fixtures import disposable_slot_database, route_slot_to_disposable
 
 KARAOKE_CHUNK_ID = 1369
 KARAOKE_DEEP_CUT_RANGE = range(743, 770)
@@ -35,10 +34,13 @@ def _strip_user_section(full_text: str) -> str:
 @pytest.fixture(scope="module")
 def lore_agent() -> Iterator[LORE]:
     """Run the corpus-backed regression on a migrated snapshot of the golden slot."""
-    with disposable_slot_database(
-        "qa_pass2_corpus", source_db="save_01", include_data=True
-    ) as dbname:
-        VALID_DBNAMES.add(dbname)
+    with (
+        disposable_slot_database(
+            "qa_pass2_corpus", source_db="save_01", include_data=True
+        ) as dbname,
+        pytest.MonkeyPatch.context() as routing,
+    ):
+        route_slot_to_disposable(routing.setattr, slot=5, dbname=dbname)
         lore = None
         try:
             lore = LORE(debug=True, enable_logon=False, dbname=dbname)
@@ -49,7 +51,6 @@ def lore_agent() -> Iterator[LORE]:
         finally:
             if lore is not None:
                 lore.close()
-            VALID_DBNAMES.discard(dbname)
 
 
 def _build_warm_slice(

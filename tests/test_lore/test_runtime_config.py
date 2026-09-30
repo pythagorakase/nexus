@@ -14,8 +14,11 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.memnon.utils.artifact_manifest import lock_file_path, read_manifest
 from nexus.config import load_settings
 from nexus.config.loader import RUNTIME_CONFIG_ENV
-from nexus.api.slot_utils import VALID_DBNAMES
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
@@ -24,15 +27,12 @@ pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.fixture()
-def runtime_database() -> Iterator[str]:
+def runtime_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Isolate LORE construction and model routing from native save slots."""
     with disposable_slot_database("qa_runtime_config") as dbname:
         seed_protagonist(dbname)
-        VALID_DBNAMES.add(dbname)
-        try:
-            yield dbname
-        finally:
-            VALID_DBNAMES.discard(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        yield dbname
 
 
 class AlternateConfig(NamedTuple):

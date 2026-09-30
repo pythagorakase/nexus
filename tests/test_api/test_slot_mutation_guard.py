@@ -11,9 +11,10 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg2 import sql
 
-from nexus.api import narrative, new_story_flow, slot_mutations, slot_utils
+from nexus.api import narrative
 from nexus.api.save_slots import is_slot_locked, lock_slot, unlock_slot
-from tests.pg_fixtures import connect
+from nexus.api.slot_utils import all_slots
+from tests.pg_fixtures import connect, route_slots_to_disposable
 
 
 BODY_MUTATIONS = [
@@ -115,11 +116,11 @@ def protected_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
                 )
                 cur.execute("CREATE VIEW incubator_view AS SELECT * FROM incubator")
         conn.close()
-        monkeypatch.setattr(
-            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        # Slot selection resolves every slot's name (its clear step is a
+        # no-op), so every slot routes to this one clone.
+        route_slots_to_disposable(
+            monkeypatch.setattr, {slot: dbname for slot in all_slots()}
         )
-        monkeypatch.setattr(slot_mutations, "slot_dbname", lambda _slot: dbname)
-        monkeypatch.setattr(new_story_flow, "slot_dbname", lambda _slot: dbname)
         monkeypatch.setattr(
             narrative,
             "get_db_connection",

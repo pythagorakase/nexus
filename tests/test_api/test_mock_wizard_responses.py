@@ -25,9 +25,8 @@ from nexus.api.new_story_schemas import (
     WildcardTrait,
     WizardResponse,
 )
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.api.wizard_agent import WizardContext, get_wizard_agent
-from tests.pg_fixtures import connect
+from tests.pg_fixtures import connect, route_slot_to_disposable
 
 FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "test_cache_wizard.json"
 
@@ -117,7 +116,7 @@ def _connect(dbname: str) -> Any:
 
 
 @pytest.fixture()
-def disposable_timestamp_dbname() -> Iterator[str]:
+def disposable_timestamp_dbname(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Yield a current-template clone and remove it after the regression."""
     dbname = f"nexus_test_issue_613_{uuid.uuid4().hex[:12]}"
     admin: Any = None
@@ -134,11 +133,10 @@ def disposable_timestamp_dbname() -> Iterator[str]:
                     sql.Identifier("NEXUS_template"),
                 )
             )
-        VALID_DBNAMES.add(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
         yield dbname
     finally:
         close_all_pools()
-        VALID_DBNAMES.discard(dbname)
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(
@@ -174,11 +172,6 @@ def test_seconds_round_trip_through_cache_resume_and_transition(
         base_timestamp=expected_timestamp.isoformat(),
         target_slot=4,
         dbname=disposable_timestamp_dbname,
-    )
-    monkeypatch.setattr(
-        new_story_flow,
-        "slot_dbname",
-        lambda _slot: disposable_timestamp_dbname,
     )
 
     resumed = new_story_flow.resume_setup(4)

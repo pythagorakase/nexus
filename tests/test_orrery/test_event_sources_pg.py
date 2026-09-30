@@ -29,51 +29,54 @@ from nexus.agents.orrery.retrograde_persistence import (
 from nexus.agents.orrery.retrograde_vocabulary import enumerate_seed_eligible_vocabulary
 from nexus.agents.orrery.substrate import Slot
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES, CONSULT_RIVAL
-from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.config import load_settings
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 from tests.pg_fixtures import sqlalchemy_url
 
 pytestmark = pytest.mark.requires_postgres
 
 
 @pytest.fixture()
-def event_source_db() -> Iterator[tuple[str, int, int, int]]:
+def event_source_db(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[tuple[str, int, int, int]]:
     """Seed one real rival pair and a canonical Retrograde history anchor."""
 
     with disposable_slot_database("test_event_sources") as dbname:
-        VALID_DBNAMES.add(dbname)
-        try:
-            actor_character, actor = seed_protagonist(dbname, name="Mara")
-            with connect(dbname) as conn:
-                with conn.cursor() as cur:
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        actor_character, actor = seed_protagonist(dbname, name="Mara")
+        with connect(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO entities (kind, is_active) "
+                    "VALUES ('character', true) RETURNING id"
+                )
+                target = int(cur.fetchone()[0])
+                cur.execute(
+                    "INSERT INTO characters (name, summary, entity_id) "
+                    "VALUES ('Vale', 'A rival.', %s) RETURNING id",
+                    (target,),
+                )
+                target_character = int(cur.fetchone()[0])
+                with relationship_producer(cur, "manual"):
                     cur.execute(
-                        "INSERT INTO entities (kind, is_active) "
-                        "VALUES ('character', true) RETURNING id"
+                        """
+                        INSERT INTO character_relationships (
+                            character1_id, character2_id, relationship_type,
+                            emotional_valence, dynamic, recent_events, history
+                        ) VALUES (%s, %s, 'rival', '+0|neutral',
+                                  'Competing interests.', '', '')
+                        """,
+                        (actor_character, target_character),
                     )
-                    target = int(cur.fetchone()[0])
-                    cur.execute(
-                        "INSERT INTO characters (name, summary, entity_id) "
-                        "VALUES ('Vale', 'A rival.', %s) RETURNING id",
-                        (target,),
-                    )
-                    target_character = int(cur.fetchone()[0])
-                    with relationship_producer(cur, "manual"):
-                        cur.execute(
-                            """
-                            INSERT INTO character_relationships (
-                                character1_id, character2_id, relationship_type,
-                                emotional_valence, dynamic, recent_events, history
-                            ) VALUES (%s, %s, 'rival', '+0|neutral',
-                                      'Competing interests.', '', '')
-                            """,
-                            (actor_character, target_character),
-                        )
-                    anchor = _insert_prologue_chunk(cur)
-                    _ensure_prologue_metadata(cur, prologue_chunk_id=anchor)
-            yield dbname, anchor, actor, target
-        finally:
-            VALID_DBNAMES.discard(dbname)
+                anchor = _insert_prologue_chunk(cur)
+                _ensure_prologue_metadata(cur, prologue_chunk_id=anchor)
+        yield dbname, anchor, actor, target
 
 
 def _history_event(event_type: str) -> RetrogradeExpansionEventPlan:

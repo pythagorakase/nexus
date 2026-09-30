@@ -453,6 +453,25 @@ def route_slot_to_disposable(
     route_slots_to_disposable(patch, {slot: dbname})
 
 
+def admit_disposable_database(
+    patch: Callable[[Any, str, Any], None], dbname: str
+) -> None:
+    """Admit ``dbname`` to ``require_slot_dbname`` without routing any slot.
+
+    Only for a test whose slot databases live on a private cluster it starts
+    itself (``test_connection_lifecycle``), where the slot names must keep
+    resolving to that cluster's own ``save_NN`` databases. ``dbname`` must pass
+    ``require_disposable_target``. Every test on the shared cluster routes a
+    slot with ``route_slot_to_disposable`` instead, which also refuses owner
+    names and unrouted slots.
+    """
+
+    from nexus.api import slot_utils
+
+    require_disposable_target(dbname)
+    patch(slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname})
+
+
 # The two variables that route a child process's slot to a clone. The routed
 # entry points (``tests.slot_routed_gateway``, ``tests.slot_routed_uvicorn``
 # and ``tests.slot_routed_cli``) read them through

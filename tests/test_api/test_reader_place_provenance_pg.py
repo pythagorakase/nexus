@@ -13,8 +13,13 @@ from psycopg2.extras import RealDictCursor
 import pytest
 
 from nexus.agents.orrery.retrograde_persistence import _insert_place_stub
-from nexus.api import reader_endpoints, slot_utils
-from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+from nexus.api import reader_endpoints
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -26,31 +31,27 @@ SECRET = "A spare valve is hidden behind the north panel."
 def place_slot(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Route the real reader and stub producer to a private active story zone."""
     with disposable_slot_database("qa950_place") as dbname:
-        slot_utils.VALID_DBNAMES.add(dbname)
-        monkeypatch.setattr(slot_utils, "slot_dbname", lambda _slot: dbname)
-        try:
-            character_id, _ = seed_protagonist(dbname)
-            with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
-                cur.execute("INSERT INTO layers DEFAULT VALUES RETURNING id")
-                layer_id = cur.fetchone()[0]
-                cur.execute(
-                    "INSERT INTO zones (name, layer) VALUES (%s, %s) RETURNING id",
-                    ("Administrative Ring", layer_id),
-                )
-                zone_id = cur.fetchone()[0]
-                cur.execute(
-                    "INSERT INTO places (name, type, zone) "
-                    "VALUES ('Council Office', 'fixed_location', %s) RETURNING id",
-                    (zone_id,),
-                )
-                place_id = cur.fetchone()[0]
-                cur.execute(
-                    "UPDATE characters SET current_location = %s WHERE id = %s",
-                    (place_id, character_id),
-                )
-            yield dbname
-        finally:
-            slot_utils.VALID_DBNAMES.discard(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        character_id, _ = seed_protagonist(dbname)
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("INSERT INTO layers DEFAULT VALUES RETURNING id")
+            layer_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO zones (name, layer) VALUES (%s, %s) RETURNING id",
+                ("Administrative Ring", layer_id),
+            )
+            zone_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO places (name, type, zone) "
+                "VALUES ('Council Office', 'fixed_location', %s) RETURNING id",
+                (zone_id,),
+            )
+            place_id = cur.fetchone()[0]
+            cur.execute(
+                "UPDATE characters SET current_location = %s WHERE id = %s",
+                (place_id, character_id),
+            )
+        yield dbname
 
 
 @pytest.mark.parametrize("legacy", [False, True])

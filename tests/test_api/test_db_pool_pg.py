@@ -12,8 +12,9 @@ from psycopg2 import sql
 import pytest
 from sqlalchemy import text
 
-from nexus.api import db_pool, slot_utils
+from nexus.api import db_pool
 from nexus.database import AmbiguousCommit, connection_kwargs, create_slot_engine
+from tests.pg_fixtures import route_slot_to_disposable
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -26,7 +27,7 @@ def database(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[str]:
     config.write_text(Path("nexus.toml").read_text())
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
     name = f"qa640_804_{uuid4().hex[:12]}"
-    monkeypatch.setattr(slot_utils, "VALID_DBNAMES", {*slot_utils.VALID_DBNAMES, name})
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=name)
     admin = psycopg2.connect(**connection_kwargs("postgres"))
     admin.autocommit = True
     try:

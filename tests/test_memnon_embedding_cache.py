@@ -29,8 +29,12 @@ from sentence_transformers import SentenceTransformer
 
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.config import load_settings_as_dict
-from nexus.api.slot_utils import VALID_DBNAMES
-from tests.pg_fixtures import disposable_slot_database, seed_protagonist, sqlalchemy_url
+from tests.pg_fixtures import (
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
+    sqlalchemy_url,
+)
 from tests.tiny_models import write_tiny_sentence_transformer
 
 
@@ -63,15 +67,12 @@ def isolated_model_cache(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture()
-def model_database() -> Iterator[str]:
+def model_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Give native MEMNON/LORE construction a migrated, disposable empty slot."""
     with disposable_slot_database("qa_model_cache") as dbname:
         seed_protagonist(dbname)
-        VALID_DBNAMES.add(dbname)
-        try:
-            yield dbname
-        finally:
-            VALID_DBNAMES.discard(dbname)
+        route_slot_to_disposable(monkeypatch.setattr, slot=5, dbname=dbname)
+        yield dbname
 
 
 @pytest.fixture()

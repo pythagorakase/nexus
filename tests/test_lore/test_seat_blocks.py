@@ -381,49 +381,47 @@ def test_prompt_window_lines_before_roles_still_validate() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_seat_prompt_live_tag_library_and_order() -> None:
+def test_seat_prompt_live_tag_library_and_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The live library stays in Gaia's measured request and leaves the writer."""
     from nexus.agents.lore.logon_utility import LogonUtility
-    from nexus.api import slot_utils
     from nexus.config import load_settings
     from nexus.config.story_model import read_story_settings
-    from tests.pg_fixtures import connect, disposable_slot_database
+    from tests.pg_fixtures import (
+        connect,
+        disposable_slot_database,
+        route_slot_to_disposable,
+    )
 
     with disposable_slot_database(
         "qa640_742_seat_test", source_db="save_04", include_data=True
     ) as dbname:
-        original_dbnames = slot_utils.VALID_DBNAMES
-        slot_utils.VALID_DBNAMES = original_dbnames | {dbname}
-        try:
-            with connect(dbname) as conn, conn.cursor() as cur:
-                cur.execute("SELECT max(id) FROM narrative_chunks")
-                parent = cur.fetchone()[0]
-            utility = LogonUtility(
-                load_settings(),
-                dbname=dbname,
-                model_override="TEST",
-                story_settings=read_story_settings(dbname),
-            )
-            payload = seat_payload()
-            payload["metadata"] = {"target_chunk_id": parent}
-            requests = utility.measure_turn_requests(payload, 75000)
-            for request in requests:
-                kinds = list(dict.fromkeys(kind for kind, _ in request.blocks))
-                prompt = "".join(value for _, value in request.blocks)
-                if request.budget.seat == "skald_writer":
-                    assert "=== ORRERY TAG LIBRARY ===" not in prompt
-                    assert kinds[-3:] == ["scene roster", "user input", "writer closer"]
-                    assert prompt.endswith(load(PromptId.WRITER_CLOSER))
-                else:
-                    assert "=== ORRERY TAG LIBRARY ===" in prompt
-                    assert (
-                        kinds[kinds.index("world knowledge") + 1]
-                        == "orrery tag library"
-                    )
-                    assert kinds[-3:] == [
-                        "user input",
-                        "gaia closer",
-                        "finished writer framing",
-                    ]
-        finally:
-            slot_utils.VALID_DBNAMES = original_dbnames
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        with connect(dbname) as conn, conn.cursor() as cur:
+            cur.execute("SELECT max(id) FROM narrative_chunks")
+            parent = cur.fetchone()[0]
+        utility = LogonUtility(
+            load_settings(),
+            dbname=dbname,
+            model_override="TEST",
+            story_settings=read_story_settings(dbname),
+        )
+        payload = seat_payload()
+        payload["metadata"] = {"target_chunk_id": parent}
+        requests = utility.measure_turn_requests(payload, 75000)
+        for request in requests:
+            kinds = list(dict.fromkeys(kind for kind, _ in request.blocks))
+            prompt = "".join(value for _, value in request.blocks)
+            if request.budget.seat == "skald_writer":
+                assert "=== ORRERY TAG LIBRARY ===" not in prompt
+                assert kinds[-3:] == ["scene roster", "user input", "writer closer"]
+                assert prompt.endswith(load(PromptId.WRITER_CLOSER))
+            else:
+                assert "=== ORRERY TAG LIBRARY ===" in prompt
+                assert kinds[kinds.index("world knowledge") + 1] == "orrery tag library"
+                assert kinds[-3:] == [
+                    "user input",
+                    "gaia closer",
+                    "finished writer framing",
+                ]
