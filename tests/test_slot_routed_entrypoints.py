@@ -384,12 +384,15 @@ def test_routed_cli_error_json_is_the_first_line_of_stderr(
     connection pool logs at INFO) before the mock provider's port, held here
     by an unmanaged listener, refuses the start and ``up`` rolls back. No log
     record may precede the envelope: stderr parses as JSON from its first
-    line.
+    line. The refused ``up`` runs under the connection spy, so the test fails
+    loudly if the CLI process stops opening the clone, which would leave no
+    INFO record to keep out of stderr.
     """
     config = _write_config(tmp_path, routed_database=entrypoint_clone)
     supervisor = Supervisor.from_config(config)
     mock_port = supervisor.runtime.services["mock_openai"].port
     env = _child_env({**routed_slot_environment(ROUTED_SLOT, entrypoint_clone)})
+    spy_log = tmp_path / "up.jsonl"
     routed_cli = [sys.executable, "-m", "tests.slot_routed_cli", "--json"]
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", mock_port))
@@ -397,7 +400,10 @@ def test_routed_cli_error_json_is_the_first_line_of_stderr(
         try:
             completed = subprocess.run(
                 [
-                    *routed_cli,
+                    sys.executable,
+                    "-c",
+                    CONNECTION_SPY,
+                    "--json",
                     "up",
                     "--slot",
                     str(ROUTED_SLOT),
@@ -407,7 +413,7 @@ def test_routed_cli_error_json_is_the_first_line_of_stderr(
                 capture_output=True,
                 text=True,
                 cwd=REPO_ROOT,
-                env=env,
+                env={**env, "SPY_LOG": str(spy_log)},
                 timeout=180,
             )
         finally:
@@ -424,6 +430,9 @@ def test_routed_cli_error_json_is_the_first_line_of_stderr(
     assert completed.stderr.splitlines()[0] == "{", completed.stderr
     envelope = json.loads(completed.stderr)
     assert "already in use by an unmanaged process" in json.dumps(envelope)
+    # The CLI process opened the clone (the INFO emitter) before the refusal.
+    opened, _ = _spied(spy_log)
+    assert entrypoint_clone in opened, opened
     # The gateway did start (and open the clone) before the refusal.
     gateway_log = supervisor.log_path("gateway")
     assert "Uvicorn running on" in gateway_log.read_text()
