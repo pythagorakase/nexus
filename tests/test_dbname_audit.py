@@ -264,9 +264,11 @@ def test_database_keyword_outranks_pgdatabase():
 # Two private clusters, each holding a database named ``save_04``: only the
 # registered one admits it, over TCP and over its socket; the owner's server
 # and the unregistered cluster refuse it before libpq is entered, and the
-# owner's server cannot be registered in any spelling.
+# owner's server cannot be registered in any spelling, nor, when a spelling
+# escapes normalization, under its own system identifier.
 CLUSTER_SESSION = """
 import asyncio
+import socket
 
 import asyncpg
 import psycopg2
@@ -280,6 +282,7 @@ from tests.test_database_contract import start_private_clusters
 Refused = dbname_audit.OwnerDatabaseConnectionRefused
 RegistrationRefused = dbname_audit.OwnerEndpointRegistrationRefused
 ON_OWNER_SERVER = "'save_04' from .* on the owner's server"
+SAME_IDENTITY = "system identifier .* is the owner's server's"
 
 
 def params(cluster):
@@ -288,11 +291,33 @@ def params(cluster):
 
 def test_owner_names_are_admitted_only_on_a_registered_cluster(tmp_path):
     owner = connection_kwargs("postgres")
-    for host in (owner["host"], "127.0.0.1", "localhost", "/tmp"):
+    for host in (
+        owner["host"],
+        "127.0.0.1",
+        "localhost",
+        "localhost.",
+        "/tmp",
+        "127.0.0.2",
+        "0.0.0.0",
+        "::",
+        "::ffff:127.0.0.1",
+        "[::1]",
+        socket.gethostname(),
+    ):
         with pytest.raises(RegistrationRefused, match="the owner's server"):
             dbname_audit.register_disposable_cluster(
                 host, owner["port"], label="owner"
             )
+    # A spelling the normalization missed still meets the identity check:
+    # with no endpoint treated as the owner's, the owner's server is refused
+    # by its pg_control_system() system identifier.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(dbname_audit, "_OWNER_ENDPOINTS", frozenset())
+        with pytest.raises(RegistrationRefused, match=SAME_IDENTITY):
+            dbname_audit.register_disposable_cluster(
+                owner["host"], owner["port"], label="owner", user=owner["user"]
+            )
+    assert dbname_audit.registrations() == ()
     with start_private_clusters(tmp_path, 2) as (registered, unregistered):
         for cluster in (registered, unregistered):
             admin = psycopg2.connect(dbname="postgres", **params(cluster))
@@ -301,7 +326,10 @@ def test_owner_names_are_admitted_only_on_a_registered_cluster(tmp_path):
                 cur.execute("CREATE DATABASE save_04")
             admin.close()
         unregister = dbname_audit.register_disposable_cluster(
-            registered["host"], registered["port"], label="private"
+            registered["host"],
+            registered["port"],
+            label="private",
+            user=registered["user"],
         )
         try:
             port = registered["port"]

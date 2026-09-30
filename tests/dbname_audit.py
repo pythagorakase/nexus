@@ -35,13 +35,19 @@ server, before libpq or asyncpg opens a connection.
 Identity is endpoint-aware. At configure time, before any fixture overrides
 settings, the plugin captures the owner's configured server (host, port, and
 socket directory, resolved through ``nexus.database.connection_kwargs``). An
-endpoint is normalized so that every socket directory and loopback host at
-one port is one local endpoint. An owner name is admitted only on a cluster a
-private-cluster fixture registered with ``register_disposable_cluster`` (the
-owner's own server can never be registered), is recorded as
+endpoint is normalized so that every socket directory and every spelling of
+this machine at one port is one local endpoint: ``localhost``, any loopback
+or unspecified address (``127.0.0.2``, ``0.0.0.0``, ``::ffff:127.0.0.1``), and
+any host name or address that resolves to one or to an address bound on this
+machine (its host name, a LAN or tailnet address). An owner name is admitted
+only on a cluster a private-cluster fixture registered with
+``register_disposable_cluster``, is recorded as
 ``name@endpoint``, and is listed with the registrations in the session
 report; on the owner's server, on any unregistered server, and wherever the
-server is not known before connecting (a libpq service), it is refused. A
+server is not known before connecting (a libpq service), it is refused. The
+owner's own server can never be registered: registration refuses the owner's
+endpoint in any spelling, then connects to the candidate and refuses it when
+its ``pg_control_system()`` system identifier is the owner server's. A
 target that merely differs from the current, mutable configuration is never
 admitted for that reason. A ``dbname`` that only a libpq service
 file supplies is known only after libpq connects; the plugin then closes that
@@ -69,14 +75,21 @@ reference scan that also searches the untracked tuples and dicts
 a holder in a module outside that set is not caught (an annotation that
 merely names the class, such as a return annotation, cannot construct one).
 The offline AST owner-target guard (``tests/test_owner_target_guard.py``)
-covers the owner literals those paths would need, including a child
-process's argument list.
+covers the spellings in test source that such a path would need: an owner
+literal in a connection call or a child process's argument list, and an
+int-literal slot passed to a clone or dump helper (``slot_clone(1)``, which
+``pg_dump``s ``save_01``) outside a ``requires_corpus`` module. A slot or name
+computed at run time, or an owner read inside a helper module outside
+``tests/``, is caught by neither.
 """
 
 from __future__ import annotations
 
+import functools
+import ipaddress
 import os
 import re
+import socket
 import sys
 import types
 import urllib.parse
@@ -119,10 +132,10 @@ class OwnerEndpointRegistrationRefused(RuntimeError):
     """A fixture tried to register the owner's server as a disposable cluster."""
 
 
-# A server endpoint. Every Unix-socket directory and loopback host at one port
-# is one endpoint, ``("local", "", port)``: they are equivalent spellings of
-# the one server listening on that port on this machine. Any other host is
-# ``("tcp", host, port)``.
+# A server endpoint. Every Unix-socket directory and every spelling of this
+# machine at one port is one endpoint, ``("local", "", port)``: they are
+# equivalent spellings of the one server listening on that port here. Any
+# other host is ``("tcp", host, port)``.
 Endpoint = tuple[str, str, int]
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 # libpq's compiled-in default port.
@@ -132,6 +145,12 @@ _DEFAULT_PORT = 5432
 # fixture overrides settings or the PG* environment); ``None`` until the
 # plugin configures.
 _OWNER_ENDPOINTS: frozenset[Endpoint] | None = None
+# The libpq keywords that reach the owner's ``postgres`` database, captured
+# with the endpoints; registration reads the owner server's identity with them.
+_OWNER_PARAMS: dict[str, Any] | None = None
+# The owner server's ``pg_control_system()`` system identifier, read on the
+# first registration.
+_OWNER_IDENTITY: int | None = None
 # Disposable clusters a private-cluster fixture registered: endpoint -> label.
 _REGISTERED: dict[Endpoint, str] = {}
 # Every registration, for the session report: (label, endpoint, node).
@@ -141,20 +160,73 @@ _REGISTRATIONS: list[tuple[str, str, str]] = []
 _CLUSTER_TARGETS: dict[str, dict[str, set[str]]] = {}
 
 
+def _is_this_machine_address(address: str, sockaddr: Any, family: int) -> bool:
+    """Whether one resolved address reaches this machine.
+
+    Loopback and unspecified addresses (IPv4-mapped ones included) do; so
+    does any address a socket can bind here, which is every address assigned
+    to one of this machine's interfaces.
+    """
+
+    try:
+        parsed = ipaddress.ip_address(address.split("%", 1)[0])
+    except ValueError:
+        return False
+    if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped:
+        parsed = parsed.ipv4_mapped
+    if parsed.is_loopback or parsed.is_unspecified:
+        return True
+    try:
+        with socket.socket(family, socket.SOCK_STREAM) as probe:
+            probe.bind(sockaddr)
+    except OSError:
+        return False
+    return True
+
+
+@functools.lru_cache(maxsize=256)
+def _is_this_machine(host: str) -> bool:
+    """Whether a lower-cased TCP host names this machine.
+
+    ``localhost`` does; any other host is resolved (a numeric address without
+    a lookup) and names this machine when any address it resolves to does.
+    A host that does not resolve names another machine.
+    """
+
+    if host in _LOOPBACK_HOSTS:
+        return True
+    try:
+        resolved = socket.getaddrinfo(host, 0, type=socket.SOCK_STREAM)
+    except (OSError, UnicodeError):
+        return False
+    return any(
+        _is_this_machine_address(str(sockaddr[0]), sockaddr, family)
+        for family, _type, _proto, _name, sockaddr in resolved
+    )
+
+
 def normalize_endpoint(host: Any, port: Any) -> Endpoint:
     """Return the endpoint a libpq ``host`` and ``port`` spelling reaches.
 
     An empty host (libpq's default socket directory), any socket directory
-    (``/...``, or ``@...`` for an abstract socket), and ``localhost``,
-    ``127.0.0.1`` and ``::1`` are one local endpoint per port; an empty port
-    is libpq's default, 5432.
+    (``/...``, or ``@...`` for an abstract socket), and any host that names
+    this machine (``localhost``, a loopback or unspecified address such as
+    ``127.0.0.2``, ``0.0.0.0`` or ``::ffff:127.0.0.1``, or a name or address
+    that resolves to one or to an address bound here) are one local endpoint
+    per port. A trailing dot and IPv6 brackets are dropped. An empty port is
+    libpq's default, 5432.
     """
 
     port_number = int(port) if port not in (None, "") else _DEFAULT_PORT
     text = str(host).strip() if host else ""
-    if not text or text.startswith(("/", "@")) or text.lower() in _LOOPBACK_HOSTS:
+    if not text or text.startswith(("/", "@")):
         return ("local", "", port_number)
-    return ("tcp", text.lower(), port_number)
+    name = text.lower().rstrip(".")
+    if name.startswith("[") and name.endswith("]"):
+        name = name[1:-1]
+    if _is_this_machine(name):
+        return ("local", "", port_number)
+    return ("tcp", name, port_number)
 
 
 def endpoint_label(endpoint: Endpoint) -> str:
@@ -209,12 +281,13 @@ def _libpq_endpoints(params: dict[str, Any]) -> tuple[Endpoint, ...] | None:
     return _host_port_endpoints(hosts, ports)
 
 
-def _configured_owner_endpoints() -> frozenset[Endpoint]:
+def _configured_owner_server() -> tuple[frozenset[Endpoint], dict[str, Any]]:
     """Resolve the owner's configured server through the runtime contract.
 
     ``nexus.database.connection_kwargs`` folds ``[api.database]`` and the PG*
     environment exactly as the runtime does; its host and port are the
-    owner's server. An unresolvable spelling is a usage error.
+    owner's server. Returns the endpoints and the keywords that reach its
+    ``postgres`` database. An unresolvable spelling is a usage error.
     """
 
     from nexus.database import connection_kwargs
@@ -226,7 +299,39 @@ def _configured_owner_endpoints() -> frozenset[Endpoint]:
             "dbname audit: cannot resolve the owner's configured server from "
             f"host={params.get('host')!r} port={params.get('port')!r}"
         )
-    return frozenset(endpoints)
+    return frozenset(endpoints), dict(params)
+
+
+def _system_identifier(params: dict[str, Any]) -> int:
+    """Read a server's ``pg_control_system()`` system identifier.
+
+    The identifier is fixed when a cluster is initialized, so two spellings
+    that reach one server read the same value and two clusters differ.
+    """
+
+    import psycopg2
+
+    conn = psycopg2.connect(**params)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT system_identifier FROM pg_control_system()")
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise RuntimeError("dbname audit: pg_control_system() returned no row")
+    return int(row[0])
+
+
+def _owner_identity() -> int:
+    """Return the owner server's system identifier, read once."""
+
+    global _OWNER_IDENTITY
+    if _OWNER_PARAMS is None:
+        raise RuntimeError("dbname audit: the owner's server is not captured yet")
+    if _OWNER_IDENTITY is None:
+        _OWNER_IDENTITY = _system_identifier(_OWNER_PARAMS)
+    return _OWNER_IDENTITY
 
 
 def owner_endpoints() -> frozenset[Endpoint] | None:
@@ -235,22 +340,29 @@ def owner_endpoints() -> frozenset[Endpoint] | None:
     return _OWNER_ENDPOINTS
 
 
-def register_disposable_cluster(host: Any, port: Any, *, label: str) -> Any:
+def register_disposable_cluster(
+    host: Any, port: Any, *, label: str, user: str | None = None
+) -> Any:
     """Admit owner-named databases on one private, disposable cluster.
 
     A fixture that starts its own PostgreSQL cluster (``two_clusters``) calls
     this once per cluster; the audit then admits a database with an owner's
     name (``save_04``) on that cluster's endpoint only, and names every
     registration in the session report. The endpoint is normalized, so the
-    cluster's socket and TCP spellings are admitted alike. Registering the
-    owner's own server, in any spelling, raises
-    ``OwnerEndpointRegistrationRefused``; so does registering one endpoint
-    twice. Returns a callable that removes the registration, which the
-    fixture calls when it stops the cluster.
+    cluster's socket and TCP spellings are admitted alike. The owner's own
+    server can never be registered: its endpoint in any spelling is refused
+    before connecting, and then the candidate's ``postgres`` database is read
+    as ``user`` and refused when its system identifier is the owner server's
+    (or when it cannot be read, since the check cannot then be made). Each
+    refusal raises ``OwnerEndpointRegistrationRefused``; so does registering
+    one endpoint twice. Returns a callable that removes the registration,
+    which the fixture calls when it stops the cluster.
 
     Without the plugin configured nothing is audited, so the registration
     only records itself.
     """
+
+    import psycopg2
 
     endpoint = normalize_endpoint(host, port)
     if _OWNER_ENDPOINTS is not None and endpoint in _OWNER_ENDPOINTS:
@@ -263,6 +375,29 @@ def register_disposable_cluster(host: Any, port: Any, *, label: str) -> Any:
             f"dbname audit: {endpoint_label(endpoint)} is already registered "
             f"as {_REGISTERED[endpoint]!r}"
         )
+    if _OWNER_ENDPOINTS is not None:
+        candidate: dict[str, Any] = {
+            "dbname": "postgres",
+            "host": host,
+            "port": port,
+            "connect_timeout": 5,
+        }
+        if user is not None:
+            candidate["user"] = user
+        try:
+            identity = _system_identifier(candidate)
+        except psycopg2.Error as error:
+            raise OwnerEndpointRegistrationRefused(
+                f"dbname audit: refused to register {label!r} at "
+                f"{endpoint_label(endpoint)}: cannot confirm it is not the "
+                f"owner's server ({error})"
+            ) from error
+        if identity == _owner_identity():
+            raise OwnerEndpointRegistrationRefused(
+                f"dbname audit: refused to register {label!r} at "
+                f"{endpoint_label(endpoint)}: its system identifier "
+                f"{identity} is the owner's server's"
+            )
     _REGISTERED[endpoint] = label
     _REGISTRATIONS.append((label, endpoint_label(endpoint), _current_node))
 
@@ -678,12 +813,12 @@ def _install_asyncpg() -> None:
 def pytest_configure(config: pytest.Config) -> None:
     """Install the driver hooks for the whole session."""
 
-    global _OWNER_ENDPOINTS
+    global _OWNER_ENDPOINTS, _OWNER_PARAMS
     if _restore:
         return
     # Captured before any fixture runs, so no fixture's settings or PG*
     # override can move the server the audit treats as the owner's.
-    _OWNER_ENDPOINTS = _configured_owner_endpoints()
+    _OWNER_ENDPOINTS, _OWNER_PARAMS = _configured_owner_server()
     _install_psycopg2()
     _install_asyncpg()
 

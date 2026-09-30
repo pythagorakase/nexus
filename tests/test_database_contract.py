@@ -371,7 +371,10 @@ def two_clusters(tmp_path: Path) -> Iterator[list[dict]]:
         for index, cluster in enumerate(clusters):
             registered.callback(
                 dbname_audit.register_disposable_cluster(
-                    cluster["host"], cluster["port"], label=f"two_clusters[{index}]"
+                    cluster["host"],
+                    cluster["port"],
+                    label=f"two_clusters[{index}]",
+                    user=cluster["user"],
                 )
             )
         yield clusters
