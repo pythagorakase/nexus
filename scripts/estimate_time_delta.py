@@ -58,14 +58,16 @@ except ImportError:
 from nexus.telemetry.prompt_window import estimator_for
 
 # Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("time_delta_processor.log"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+if __name__ == "__main__":
+    # Only a command-line run configures the root logger, never an import.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler("time_delta_processor.log"),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 logger = logging.getLogger(__name__)
 
 # Default TPM limits if settings file is not available
