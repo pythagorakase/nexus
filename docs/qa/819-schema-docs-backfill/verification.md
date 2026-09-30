@@ -14,7 +14,7 @@ with the same function identity arguments, at schema version 134.
 `tests.pg_fixtures.disposable_slot_database("qa640_819_verify")` cloned
 `NEXUS_template` into a disposable database and migrated it with
 `scripts.migrate` (log: `Applied: 135_schema_docs_backfill`, `Applied 1
-migrations to qa640_819_verify_bf63e72dd8c5`). A read-only session then read
+migrations to qa640_819_verify_420b5082be76`). A read-only session then read
 `obj_description(oid, 'pg_type')` for each enum and
 `obj_description(oid, 'pg_proc')` for each function named by a `COMMENT ON` in
 the migration, asserting exactly one catalog object per name and matching
@@ -27,7 +27,7 @@ entries: ['enum:public.tone']`, which shows the ratchet sees migration 135.
 
 ## Catalog Listing on the Migrated Clone
 
-Clone `qa640_819_verify_bf63e72dd8c5`; `schema_migrations` maximum version after migrating: **135**.
+Clone `qa640_819_verify_420b5082be76`; `schema_migrations` maximum version after migrating: **135**.
 
 | enum | obj_description(oid, 'pg_type') |
 |---|---|
@@ -35,10 +35,10 @@ Clone `qa640_819_verify_bf63e72dd8c5`; `schema_migrations` maximum version after
 | `character_experience_invalidation_status` | Replay validity of a character experience. supersede_world_event_sync sets invalidated only on seeds that are not yet rendered; seed_character_experiences_sync treats only valid rows as already representing an event. |
 | `character_need_type` | Need clocks that Orrery accrues against world time (needs.effective_debt_score, tuned in [orrery.sunhelm]). orrery_need_applies_to_tags and needs.need_applies_to_tags drop a need for bodyform or mind tags that exempt it. |
 | `entity_kind` | Subtype of a row in entities. orrery_ensure_subtype_entity_kind creates or checks the entities row for each characters, factions, or places insert, and the tag writer reads tag_category_registry by this kind to allow tag categories. |
-| `entity_tag_clearance_kind` | How an ephemeral tag clears: event when a matching event type fires (events._clear_event_tags_sync), time when expires_at_world_time passes (events._sweep_expired_entity_tags_sync), semantic only by an explicit clear. authored appears only in tag_clearance_log.mechanism, for clears by template state deltas and clear_entity_tag. |
+| `entity_tag_clearance_kind` | How an ephemeral tag clears: event when a matching event type fires (events._clear_event_tags_sync), time when expires_at_world_time passes (events._sweep_expired_entity_tags_sync), semantic only by an explicit clear. authored appears only in tag_clearance_log.mechanism, for any explicit clear by a writer (bestowal tags_to_clear, exclusive and status ladder replacement, template state deltas, clear_entity_tag). |
 | `entity_tag_reapplication_policy` | What the tag writer does when a tag is applied while it is still active: new_row (the default) keeps the active row, replace overwrites its timing and provenance, extend_expiry pushes its expiry out by the duration (semantic and event tags land without expiry). |
-| `entity_tag_source_kind` | Provenance of a tag row: skald_inline for runtime bestowals (storyteller, wizard, trait compiler), template for Orrery template effects, retrograde for Retrograde history, system for the entity tag manifest apply, authored and llm_generated for offline or CLI backfills. The Orrery tag writer rejects auto_registered. |
-| `event_role_kind` | Role of an entity in a world event. The event writers record actor and target; epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded. |
+| `entity_tag_source_kind` | Provenance of a tag row: skald_inline for runtime bestowals (storyteller, wizard, trait compiler), template for Orrery template effects, retrograde for Retrograde history, system for the entity tag and faction migration manifest applies, authored and llm_generated for offline or CLI backfills. The Orrery tag writer rejects auto_registered. |
+| `event_role_kind` | Role of an entity in a world event: resolver, propagation, and relationship-provenance writers record actor and target, and Retrograde persistence records any role its expansion assigns (observer by default). epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded. |
 | `event_severity_kind` | Registered weight of an event type, seeded with the event vocabulary. Knowledge surfacing maps it through the configured severity_scores into candidate scoring, and the cognition audit reports it. |
 | `event_source_kind` | Writer family of a world event: resolver for Orrery resolver-side writers (resolutions, propagation, relationship provenance, reveals), authored for authored backstory secrets, retrograde for Retrograde history, which Retrograde persistence and replay select by this value. No current writer uses apex, narrator, or bleed. |
 | `faction_member_role` | Position of a character in a faction, written by the offline faction relationship analyst (scripts/faction_relationship_analyst.py) and exposed as entity_relationships_v.relationship_type with scope faction_character. The Orrery membership loader counts every row as membership whatever its role. |
@@ -48,12 +48,12 @@ Clone `qa640_819_verify_bf63e72dd8c5`; `schema_migrations` maximum version after
 | `tech_level` | Technology level vocabulary of the new-story wizard setting draft; write_cache stores it in assets.new_story_creator.setting_tech_level and _row_to_cache reads it back. |
 | `tone` | Tone vocabulary of the new-story wizard setting draft; write_cache stores it in assets.new_story_creator.setting_tone and _row_to_cache reads it back. |
 | `seed_type` | Opening-situation vocabulary of the new-story wizard seed draft; write_cache stores the selected seed in assets.new_story_creator.seed_type, and its presence is part of the seed phase completion check. |
-| `layer_type` | Kind of world layer in the new-story wizard: a planet or a separate dimension. Stored in assets.new_story_creator.layer_type while drafting and in layers.type when new_story_db_mapper inserts the accepted layer. |
+| `layer_type` | World layer kind of the new-story wizard, stored in assets.new_story_creator.layer_type while drafting and in layers.type when new_story_db_mapper inserts the accepted layer. |
 | `offscreen_embedding_status` | Embedding state of an offscreen narration. The narration worker inserts rows at the pending default and no current writer moves them to embedded or failed; load_orrery_status_sync counts pending and failed rows. |
 | `orrery_job_state` | Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed (requeued as queued below the attempt cap), or stale_rejected when the source the job was frozen against changed before completion. |
-| `orrery_narration_status` | Offscreen narration progress of a resolution, set by the narration worker: none when promotion skipped it, queued when promoted or retried, succeeded with narration_chunk_id, failed on a final or stale-anchor failure. Bleed offers only succeeded rows; no current writer sets leased. |
+| `orrery_narration_status` | Offscreen narration progress of a resolution, set by the narration worker: none (the default) until promotion queues it, and it stays none when promotion skips it; queued when promoted or retried; succeeded with narration_chunk_id; failed on a final or stale-anchor failure. Bleed offers only succeeded rows; no current writer sets leased. |
 | `orrery_promotion_status` | Promotion verdict of a resolution: pending for promotable drafts until promote_pending_resolutions_sync decides, promoted (which queues narration) or skipped. Non-promotable drafts are inserted as skipped; bleed reads promoted rows. |
-| `orrery_routine_anchor_type` | Routine anchor a character travels to: home or work. Routine travel resolves the destination by this type, and works_from_home work anchors resolve through the home anchor. |
+| `orrery_routine_anchor_type` | Which routine anchor routine travel resolves (events._routine_anchor_destination_sync); a works_from_home work anchor resolves through the home anchor. |
 | `orrery_routine_mobility_policy` | How routine travel resolves a routine anchor (events._routine_anchor_destination_sync): fixed_place uses place_id, zone_resolved picks a place in zone_id, works_from_home uses the home anchor; nomadic and none yield no destination, and the resolver and substrate treat such anchors as absent. |
 | `orrery_travel_mode` | Coarse travel mode used for route selection and duration estimates. Route graph node lookup accepts mixed as the fallback for any concrete mode. |
 | `orrery_travel_risk` | Coarse travel risk. Estimated routes take the caller risk and authored edges keep their stored risk; package conditions read it through substrate.travel_risk_is. |

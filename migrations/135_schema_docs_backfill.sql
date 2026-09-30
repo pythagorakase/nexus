@@ -32,8 +32,8 @@
 -- entity_kind: migrations/023_orrery_schema.py:260,302; nexus/agents/orrery/tag_writer.py:389-398
 -- entity_tag_clearance_kind: nexus/agents/orrery/events.py:6015,7916,7932,7955,7973; nexus/agents/orrery/tag_writer.py:521-531,767,1119; nexus/agents/orrery/worker.py:498
 -- entity_tag_reapplication_policy: nexus/agents/orrery/tag_writer.py:505-506,739,783,811
--- entity_tag_source_kind: nexus/agents/orrery/tag_writer.py:5-12,38,747,790; nexus/api/entity_tag_manifest_apply.py:11,491; nexus/agents/orrery/events.py:2379; nexus/agents/orrery/retrograde_persistence.py:2458; nexus/cli.py:107
--- event_role_kind: nexus/agents/orrery/events.py:6630,6639; nexus/agents/orrery/retrograde_persistence.py:1662; nexus/agents/orrery/epistemics.py:17-18; nexus/agents/orrery/experiences.py:569-571
+-- entity_tag_source_kind: nexus/agents/orrery/tag_writer.py:5-12,38,747,790; nexus/api/entity_tag_manifest_apply.py:11,491; nexus/agents/orrery/events.py:2379; nexus/agents/orrery/retrograde_persistence.py:2458; nexus/cli.py:107; nexus/api/faction_table_audit.py:17,475
+-- event_role_kind: nexus/agents/orrery/events.py:6630,6639; nexus/agents/orrery/retrograde_persistence.py:1662,2429-2436; nexus/agents/orrery/epistemics.py:17-18; nexus/agents/orrery/experiences.py:569-571
 -- event_severity_kind: migrations/033_orrery_travel_work.py:397-404; nexus/agents/orrery/knowledge_surfacing.py:168,505,523; nexus/agents/orrery/audit.py:1949
 -- event_source_kind: nexus/agents/orrery/events.py:6610,6755; nexus/agents/orrery/propagation.py:809; nexus/agents/orrery/relationship_provenance.py:309; nexus/agents/orrery/reveal.py:508; nexus/agents/orrery/epistemics.py:535-536; nexus/agents/orrery/retrograde_persistence.py:1641,2183,2612; nexus/agents/orrery/replay.py:1525
 -- faction_member_role: scripts/faction_relationship_analyst.py:651; migrations/088_valence_float_canonical.sql:188; nexus/agents/orrery/resolver.py:668
@@ -76,16 +76,16 @@ COMMENT ON TYPE public.entity_kind IS
     'Subtype of a row in entities. orrery_ensure_subtype_entity_kind creates or checks the entities row for each characters, factions, or places insert, and the tag writer reads tag_category_registry by this kind to allow tag categories.';
 
 COMMENT ON TYPE public.entity_tag_clearance_kind IS
-    'How an ephemeral tag clears: event when a matching event type fires (events._clear_event_tags_sync), time when expires_at_world_time passes (events._sweep_expired_entity_tags_sync), semantic only by an explicit clear. authored appears only in tag_clearance_log.mechanism, for clears by template state deltas and clear_entity_tag.';
+    'How an ephemeral tag clears: event when a matching event type fires (events._clear_event_tags_sync), time when expires_at_world_time passes (events._sweep_expired_entity_tags_sync), semantic only by an explicit clear. authored appears only in tag_clearance_log.mechanism, for any explicit clear by a writer (bestowal tags_to_clear, exclusive and status ladder replacement, template state deltas, clear_entity_tag).';
 
 COMMENT ON TYPE public.entity_tag_reapplication_policy IS
     'What the tag writer does when a tag is applied while it is still active: new_row (the default) keeps the active row, replace overwrites its timing and provenance, extend_expiry pushes its expiry out by the duration (semantic and event tags land without expiry).';
 
 COMMENT ON TYPE public.entity_tag_source_kind IS
-    'Provenance of a tag row: skald_inline for runtime bestowals (storyteller, wizard, trait compiler), template for Orrery template effects, retrograde for Retrograde history, system for the entity tag manifest apply, authored and llm_generated for offline or CLI backfills. The Orrery tag writer rejects auto_registered.';
+    'Provenance of a tag row: skald_inline for runtime bestowals (storyteller, wizard, trait compiler), template for Orrery template effects, retrograde for Retrograde history, system for the entity tag and faction migration manifest applies, authored and llm_generated for offline or CLI backfills. The Orrery tag writer rejects auto_registered.';
 
 COMMENT ON TYPE public.event_role_kind IS
-    'Role of an entity in a world event. The event writers record actor and target; epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded.';
+    'Role of an entity in a world event: resolver, propagation, and relationship-provenance writers record actor and target, and Retrograde persistence records any role its expansion assigns (observer by default). epistemics.PARTICIPANT_ROLES (actor, target, beneficiary) make a character a participant and WITNESS_ROLES (observer, witness) a witness when experiences and claims are seeded.';
 
 COMMENT ON TYPE public.event_severity_kind IS
     'Registered weight of an event type, seeded with the event vocabulary. Knowledge surfacing maps it through the configured severity_scores into candidate scoring, and the cognition audit reports it.';
@@ -115,7 +115,7 @@ COMMENT ON TYPE public.seed_type IS
     'Opening-situation vocabulary of the new-story wizard seed draft; write_cache stores the selected seed in assets.new_story_creator.seed_type, and its presence is part of the seed phase completion check.';
 
 COMMENT ON TYPE public.layer_type IS
-    'Kind of world layer in the new-story wizard: a planet or a separate dimension. Stored in assets.new_story_creator.layer_type while drafting and in layers.type when new_story_db_mapper inserts the accepted layer.';
+    'World layer kind of the new-story wizard, stored in assets.new_story_creator.layer_type while drafting and in layers.type when new_story_db_mapper inserts the accepted layer.';
 
 COMMENT ON TYPE public.offscreen_embedding_status IS
     'Embedding state of an offscreen narration. The narration worker inserts rows at the pending default and no current writer moves them to embedded or failed; load_orrery_status_sync counts pending and failed rows.';
@@ -124,13 +124,13 @@ COMMENT ON TYPE public.orrery_job_state IS
     'Shared lease lifecycle of the durable job tables: queued, leased while a worker holds the lease, then succeeded, failed (requeued as queued below the attempt cap), or stale_rejected when the source the job was frozen against changed before completion.';
 
 COMMENT ON TYPE public.orrery_narration_status IS
-    'Offscreen narration progress of a resolution, set by the narration worker: none when promotion skipped it, queued when promoted or retried, succeeded with narration_chunk_id, failed on a final or stale-anchor failure. Bleed offers only succeeded rows; no current writer sets leased.';
+    'Offscreen narration progress of a resolution, set by the narration worker: none (the default) until promotion queues it, and it stays none when promotion skips it; queued when promoted or retried; succeeded with narration_chunk_id; failed on a final or stale-anchor failure. Bleed offers only succeeded rows; no current writer sets leased.';
 
 COMMENT ON TYPE public.orrery_promotion_status IS
     'Promotion verdict of a resolution: pending for promotable drafts until promote_pending_resolutions_sync decides, promoted (which queues narration) or skipped. Non-promotable drafts are inserted as skipped; bleed reads promoted rows.';
 
 COMMENT ON TYPE public.orrery_routine_anchor_type IS
-    'Routine anchor a character travels to: home or work. Routine travel resolves the destination by this type, and works_from_home work anchors resolve through the home anchor.';
+    'Which routine anchor routine travel resolves (events._routine_anchor_destination_sync); a works_from_home work anchor resolves through the home anchor.';
 
 COMMENT ON TYPE public.orrery_routine_mobility_policy IS
     'How routine travel resolves a routine anchor (events._routine_anchor_destination_sync): fixed_place uses place_id, zone_resolved picks a place in zone_id, works_from_home uses the home anchor; nomadic and none yield no destination, and the resolver and substrate treat such anchors as absent.';
