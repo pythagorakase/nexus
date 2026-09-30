@@ -16,67 +16,105 @@ The hazard was live on the day of this work: the first read of `save_05` (02:30 
 - `tests/slot_routed_uvicorn.py` (new): routes, then runs uvicorn's own `__main__` with the forwarded argv, so it replaces `uvicorn` in the supervisor's argv template `["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}", "--log-config", "{log_config}"]` with nothing else changed.
 - `tests/slot_routed_gateway.py`: now calls the shared `route_child_process`, which the two new entry points also use. It restores the root logger after importing `tests.pg_fixtures`, because `scripts/migrate.py:38` and `scripts/new_story_setup.py:33` call `logging.basicConfig` at import. Without the restore, the routed CLI wrote `INFO Created connection pool …` to stderr ahead of its JSON error and `test_override_refuses_foreign_healthy_listener_on_sibling_port` failed to parse it (seen in the first run of this branch, fixed before the first commit).
 - `tests/test_slot_routed_entrypoints.py` (new): offline refusal tests for every entry point and every owner database; PostgreSQL tests on a seeded `qa885_entrypoints` clone (see Proof below).
-- `tests/test_runtime/test_supervisor_live.py`: one module-scoped `disposable_slot_database("qa885_supervisor")` seeded with `seed_protagonist` and `seed_story_clock`. `_write_config` sets `runtime.default_slot = 5` (the routed slot), asserts the shipped gateway argv template, swaps in `tests.slot_routed_uvicorn`, and puts `NEXUS_ROUTED_SLOT=5` and `NEXUS_ROUTED_SLOT_DATABASE=<clone>` in the gateway's service environment. `_cli` runs `python -m tests.slot_routed_cli` with the same variables. `external_gateway` runs the routed launcher under a temporary config from `_write_config` (gateway port = its OS-assigned port, `NEXUS_SLOT=5`), never the repository `nexus.toml`. The two `dbname` assertions (old lines 148 and 191) now assert the clone name. Strengthened: the lifecycle test asserts the spawned command is the routed launcher, that the clone's `deferred_work_scheduler` lease is held by `gateway:<the spawned pid>:…`, that `nexus status` reports the clone, and that the captured log holds `Uvicorn running on http://127.0.0.1:<assigned port>` (the launcher runs uvicorn's own `__main__`, so the banner is unchanged); the remote-profile test asserts the external gateway serves the clone. The four port constants are placeholders (`0`); `ephemeral_ports` assigns all of them, as before. No `save_0` literal remains.
+- `tests/test_runtime/test_supervisor_live.py`: one module-scoped `disposable_slot_database("qa885_supervisor")` seeded with `seed_protagonist` and `seed_story_clock`. `_write_config` sets `runtime.default_slot = 5` (the routed slot), asserts the shipped gateway argv template, swaps in `tests.slot_routed_uvicorn`, and puts `NEXUS_ROUTED_SLOT=5` and `NEXUS_ROUTED_SLOT_DATABASE=<clone>` in the gateway's service environment. `_cli` runs `python -m tests.slot_routed_cli` with the same variables. `external_gateway` runs the routed launcher under a temporary config from `_write_config` (gateway port = its OS-assigned port, `NEXUS_SLOT=5`), never the repository `nexus.toml`. The two `dbname` assertions (old lines 148 and 191) now assert the clone name. Strengthened: the lifecycle test asserts the spawned command is the routed launcher, that the clone's `deferred_work_scheduler` lease is held by `gateway:<the spawned pid>:…`, that `nexus status` reports the clone, and that the captured log holds `Uvicorn running on http://127.0.0.1:<assigned port>` (the launcher runs uvicorn's own `__main__`, so the banner is unchanged); the remote-profile test asserts the external gateway serves the clone. The four port constants are placeholders (`0`); `ephemeral_ports` assigns all of them, as before. `test_external_profile_fails_loud_when_target_is_down` no longer attaches to the fixed `http://127.0.0.1:39999`: it binds a socket to `("127.0.0.1", 0)`, keeps it bound without `listen()` while `up` runs (so connections are refused and no other process can take the port), and builds the dead URL from that port. No `save_0` literal remains.
 
 ## Proof
 
 ### The Order's PostgreSQL Command
 
+Rerun on this branch after the review fixes (the external-down test no longer names port 39999), with the owner snapshots and the poller below around it:
+
 ```
-$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:cacheprovider \
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:cacheprovider \
     tests/test_runtime/test_supervisor_live.py tests/test_slot_routed_entrypoints.py \
     tests/test_live_gate_clones_pg.py tests/test_pg_disposable_target.py
-start 02:48:23
+start 03:16:29
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-66 passed, 7 warnings in 70.93s (0:01:10)
-end 02:49:34
+66 passed, 7 warnings in 72.13s (0:01:12)
+end 03:17:42
 ```
+
+The first proof run on this branch (code HEAD `3c113df9`, 02:48:23 to 02:49:34 UTC) also ended `66 passed, 7 warnings in 70.93s`.
 
 ### Owner Slots Before and After That Run
 
-Read-only (`SET default_transaction_read_only = on`), taken at 2026-09-30T02:48:19Z (before) and 02:49:39Z (after). The two outputs are byte-identical (`diff` exit 0), so one copy is shown. `all_public_sequences_md5` is the md5 of every `public` sequence's `last_value` (48 sequences), which covers every sequence in the slot, not only the ones listed. `deferred_work_scheduler` has a boolean singleton key and no sequence.
+Both reads are read-only (the script's first statement is `SET default_transaction_read_only = on`). `all_public_sequences_md5` is the md5 of every `public` sequence's `last_value` (48 sequences), so it covers every sequence in the slot, not only the ones listed. `deferred_work_scheduler` has a boolean singleton key and no sequence.
 
-| Database | Scheduler rows | Lease owner | `heartbeat_at` | `narrative_chunks_id_seq` | `entities_id_seq` | `characters_id_seq` | All-sequence md5 |
-| --- | ---: | --- | --- | ---: | ---: | ---: | --- |
-| `save_05` before | 1 | `gateway:17624:ea7862da…` | 2026-09-29 22:18:31.64278-04 | 2340 | 5476 | 2471 | `137c550d993d59c16699214c719541a4` |
-| `save_05` after | 1 | `gateway:17624:ea7862da…` | 2026-09-29 22:18:31.64278-04 | 2340 | 5476 | 2471 | `137c550d993d59c16699214c719541a4` |
-| `save_01` before | 1 | `gateway:15542:2ef6eee8…` | 2026-09-24 12:53:21.623368-04 | 1426 | 121 | 38 | `d070b403f95181adb49587723eddde02` |
-| `save_01` after | 1 | `gateway:15542:2ef6eee8…` | 2026-09-24 12:53:21.623368-04 | 1426 | 121 | 38 | `d070b403f95181adb49587723eddde02` |
+`owner_snapshot.sql`, run by `owner_snapshot.sh` against each owner slot:
+
+```sql
+SET default_transaction_read_only = on;
+SELECT count(*) AS scheduler_rows FROM deferred_work_scheduler;
+SELECT owner_id, lease_nonce, heartbeat_at, expires_at, current_job, last_error
+  FROM deferred_work_scheduler ORDER BY heartbeat_at DESC NULLS LAST LIMIT 1;
+SELECT sequencename, last_value FROM pg_sequences
+ WHERE schemaname = 'public'
+   AND sequencename IN ('characters_id_seq', 'chunk_metadata_id_seq', 'entities_id_seq',
+                        'generation_session_phases_id_seq', 'narrative_chunks_id_seq',
+                        'narrative_embedding_jobs_id_seq', 'narrative_summary_jobs_id_seq',
+                        'orrery_narration_jobs_id_seq', 'state_checkpoints_id_seq')
+ ORDER BY sequencename;
+SELECT md5(string_agg(sequencename || '=' || coalesce(last_value::text, 'null'), ',' ORDER BY sequencename))
+         AS all_public_sequences_md5,
+       count(*) AS sequences
+  FROM pg_sequences WHERE schemaname = 'public';
+```
+
+```bash
+#!/bin/bash
+# Read-only snapshot of both owner slots; the header carries the capture time.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+echo "captured_at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+for db in save_05 save_01; do
+  echo "### $db"
+  psql -X -q -d "$db" -v ON_ERROR_STOP=1 -f "$here/owner_snapshot.sql"
+done
+```
+
+Before (`owner_snapshot.sh > owner_before.txt`, immediately before pytest started):
 
 ```
+captured_at 2026-09-30T03:16:29Z
 ### save_05
  scheduler_rows
 ----------------
               1
+(1 row)
 
                       owner_id                      |             lease_nonce              |         heartbeat_at         |          expires_at          |        current_job        | last_error
 ----------------------------------------------------+--------------------------------------+------------------------------+------------------------------+---------------------------+------------
  gateway:17624:ea7862da-bcbc-4863-bde1-696c946b43e6 | 24ad5b1a-6abe-4804-a68c-1cf3d133d454 | 2026-09-29 22:18:31.64278-04 | 2026-09-29 22:19:31.64278-04 | character_experience_jobs |
+(1 row)
 
            sequencename           | last_value
 ----------------------------------+------------
- characters_id_seq                |       2471
+ characters_id_seq                |       2476
  chunk_metadata_id_seq            |       2234
- entities_id_seq                  |       5476
+ entities_id_seq                  |       5487
  generation_session_phases_id_seq |
  narrative_chunks_id_seq          |       2340
  narrative_embedding_jobs_id_seq  |
  narrative_summary_jobs_id_seq    |
  orrery_narration_jobs_id_seq     |
  state_checkpoints_id_seq         |        244
+(9 rows)
 
      all_public_sequences_md5     | sequences
 ----------------------------------+-----------
- 137c550d993d59c16699214c719541a4 |        48
+ f8e7b29ae00b49227bde96e6d179c3af |        48
+(1 row)
 
 ### save_01
  scheduler_rows
 ----------------
               1
+(1 row)
 
                       owner_id                      |             lease_nonce              |         heartbeat_at          |          expires_at           | current_job | last_error
 ----------------------------------------------------+--------------------------------------+-------------------------------+-------------------------------+-------------+------------
  gateway:15542:2ef6eee8-b27b-4075-b2e7-b4723efd3482 | 348ed6c0-2b6f-4e01-847c-14bcac643837 | 2026-09-24 12:53:21.623368-04 | 2026-09-24 12:54:21.623368-04 | promotion   |
+(1 row)
 
            sequencename           | last_value
 ----------------------------------+------------
@@ -89,15 +127,161 @@ Read-only (`SET default_transaction_read_only = on`), taken at 2026-09-30T02:48:
  narrative_summary_jobs_id_seq    |
  orrery_narration_jobs_id_seq     |
  state_checkpoints_id_seq         |          1
+(9 rows)
 
      all_public_sequences_md5     | sequences
 ----------------------------------+-----------
  d070b403f95181adb49587723eddde02 |        48
+(1 row)
+
 ```
 
-**No gateway lease appeared in `save_05` while test gateways were up.** A read-only poller sampled both owner slots every 0.5 s through the whole run (02:48:21.067 to 02:49:39.132 UTC, 138 samples per database). Every `save_05` sample showed the same lease (`gateway:17624:…`, heartbeat 22:18:31-04) and the same all-sequence md5 `137c550d…`; every `save_01` sample showed `gateway:15542:…` and `d070b403…`. During that window the module started ten routed gateway processes (the lifecycle stack plus its gateway restart and full restart, two in each of the two override-coexistence tests, the override instance the foreign-listener test rolls back, and the two external gateways), and the lifecycle test asserted that the first one held the clone's lease. Two earlier development runs of the two converted modules (02:34:37 to 02:38:01 UTC) sampled the same unchanged lease rows 374 times per database.
+After (`owner_snapshot.sh > owner_after.txt`, two seconds after the poller stopped):
 
-**Concurrent writers.** Between the first read (02:30) and the proof run, `save_05`'s `characters_id_seq` and `entities_id_seq` advanced from 2456 and 5461 to 2471 and 5476. That was another agent's `NEXUS_RUN_POSTGRES=1` run (pid 70422, cwd outside this worktree, about 107 `tests/…` files) of the not-yet-converted rolled-back `save_05` writers listed for later B2 slices; the proof run above started only after it exited (02:48:13), and nothing in this branch inserts characters or entities into any database but its clones.
+```
+captured_at 2026-09-30T03:17:44Z
+### save_05
+ scheduler_rows
+----------------
+              1
+(1 row)
+
+                      owner_id                      |             lease_nonce              |         heartbeat_at         |          expires_at          |        current_job        | last_error
+----------------------------------------------------+--------------------------------------+------------------------------+------------------------------+---------------------------+------------
+ gateway:17624:ea7862da-bcbc-4863-bde1-696c946b43e6 | 24ad5b1a-6abe-4804-a68c-1cf3d133d454 | 2026-09-29 22:18:31.64278-04 | 2026-09-29 22:19:31.64278-04 | character_experience_jobs |
+(1 row)
+
+           sequencename           | last_value
+----------------------------------+------------
+ characters_id_seq                |       2476
+ chunk_metadata_id_seq            |       2234
+ entities_id_seq                  |       5487
+ generation_session_phases_id_seq |
+ narrative_chunks_id_seq          |       2340
+ narrative_embedding_jobs_id_seq  |
+ narrative_summary_jobs_id_seq    |
+ orrery_narration_jobs_id_seq     |
+ state_checkpoints_id_seq         |        244
+(9 rows)
+
+     all_public_sequences_md5     | sequences
+----------------------------------+-----------
+ f8e7b29ae00b49227bde96e6d179c3af |        48
+(1 row)
+
+### save_01
+ scheduler_rows
+----------------
+              1
+(1 row)
+
+                      owner_id                      |             lease_nonce              |         heartbeat_at          |          expires_at           | current_job | last_error
+----------------------------------------------------+--------------------------------------+-------------------------------+-------------------------------+-------------+------------
+ gateway:15542:2ef6eee8-b27b-4075-b2e7-b4723efd3482 | 348ed6c0-2b6f-4e01-847c-14bcac643837 | 2026-09-24 12:53:21.623368-04 | 2026-09-24 12:54:21.623368-04 | promotion   |
+(1 row)
+
+           sequencename           | last_value
+----------------------------------+------------
+ characters_id_seq                |         38
+ chunk_metadata_id_seq            |       1426
+ entities_id_seq                  |        121
+ generation_session_phases_id_seq |
+ narrative_chunks_id_seq          |       1426
+ narrative_embedding_jobs_id_seq  |
+ narrative_summary_jobs_id_seq    |
+ orrery_narration_jobs_id_seq     |
+ state_checkpoints_id_seq         |          1
+(9 rows)
+
+     all_public_sequences_md5     | sequences
+----------------------------------+-----------
+ d070b403f95181adb49587723eddde02 |        48
+(1 row)
+
+```
+
+The two files differ only in their `captured_at` line:
+
+```
+$ diff owner_before.txt owner_after.txt
+1c1
+< captured_at 2026-09-30T03:16:29Z
+---
+> captured_at 2026-09-30T03:17:44Z
+$ echo $?
+1
+$ diff <(tail -n +2 owner_before.txt) <(tail -n +2 owner_after.txt)
+$ echo $?
+0
+```
+
+| Database | Scheduler rows | Lease owner | `heartbeat_at` | `narrative_chunks_id_seq` | `entities_id_seq` | `characters_id_seq` | All-sequence md5 |
+| --- | ---: | --- | --- | ---: | ---: | ---: | --- |
+| `save_05` before (03:16:29Z) | 1 | `gateway:17624:ea7862da…` | 2026-09-29 22:18:31.64278-04 | 2340 | 5487 | 2476 | `f8e7b29ae00b49227bde96e6d179c3af` |
+| `save_05` after (03:17:44Z) | 1 | `gateway:17624:ea7862da…` | 2026-09-29 22:18:31.64278-04 | 2340 | 5487 | 2476 | `f8e7b29ae00b49227bde96e6d179c3af` |
+| `save_01` before (03:16:29Z) | 1 | `gateway:15542:2ef6eee8…` | 2026-09-24 12:53:21.623368-04 | 1426 | 121 | 38 | `d070b403f95181adb49587723eddde02` |
+| `save_01` after (03:17:44Z) | 1 | `gateway:15542:2ef6eee8…` | 2026-09-24 12:53:21.623368-04 | 1426 | 121 | 38 | `d070b403f95181adb49587723eddde02` |
+
+### No Gateway Lease in the Owner Slots While Test Gateways Were Up
+
+`poll_owner.sh` ran as a background child of the shell that ran pytest; it started just before pytest and stopped two seconds after it ended. Every 0.5 s it writes one read-only line per owner slot (`time|db|owner_id|heartbeat_at|all-sequence md5`) and one line naming the live routed gateway pids (processes whose argv holds `tests.slot_routed_uvicorn`) and each `qa885_supervisor_*` clone's lease owner:
+
+```bash
+#!/bin/bash
+# Read-only poller: every 0.5 s, one line per owner slot, plus one line naming
+# the live routed gateway pids and each qa885_supervisor clone's lease owner.
+# Stops when the file named by $1 exists.
+set -uo pipefail
+stop=$1
+Q="SET default_transaction_read_only = on;
+SELECT coalesce((SELECT owner_id || '|' || heartbeat_at FROM deferred_work_scheduler
+                  ORDER BY heartbeat_at DESC NULLS LAST LIMIT 1), 'none|none')
+       || '|' || (SELECT md5(string_agg(sequencename || '=' || coalesce(last_value::text, 'null'),
+                                        ',' ORDER BY sequencename))
+                    FROM pg_sequences WHERE schemaname = 'public');"
+while [ ! -e "$stop" ]; do
+  ts=$(perl -MTime::HiRes=time -MPOSIX=strftime -e '$t=time; printf "%s.%03d", strftime("%H:%M:%S", gmtime($t)), ($t-int($t))*1000')
+  for db in save_05 save_01; do
+    echo "$ts|$db|$(psql -X -q -At -d "$db" -c "$Q")"
+  done
+  pids=$(pgrep -f 'tests.slot_routed_uvicorn' | tr '\n' ',' | sed 's/,$//')
+  clones=""
+  for c in $(psql -X -q -At -d postgres -c "SELECT datname FROM pg_database WHERE datname LIKE 'qa885_supervisor%'"); do
+    owner=$(psql -X -q -At -d "$c" -c "SET default_transaction_read_only = on; SELECT coalesce((SELECT owner_id FROM deferred_work_scheduler WHERE id), 'none')" 2>/dev/null)
+    clones="$clones $c=$owner"
+  done
+  echo "$ts|gateways|pids=${pids:-none}|clones:${clones:- none}"
+  sleep 0.5
+done
+```
+
+First and last sample per owner slot, and the count of distinct `(owner_id, heartbeat_at, seq_md5)` tuples over all samples:
+
+```
+03:16:29.884|save_05|gateway:17624:ea7862da-bcbc-4863-bde1-696c946b43e6|2026-09-29 22:18:31.64278-04|f8e7b29ae00b49227bde96e6d179c3af
+03:17:44.265|save_05|gateway:17624:ea7862da-bcbc-4863-bde1-696c946b43e6|2026-09-29 22:18:31.64278-04|f8e7b29ae00b49227bde96e6d179c3af
+03:16:29.884|save_01|gateway:15542:2ef6eee8-b27b-4075-b2e7-b4723efd3482|2026-09-24 12:53:21.623368-04|d070b403f95181adb49587723eddde02
+03:17:44.265|save_01|gateway:15542:2ef6eee8-b27b-4075-b2e7-b4723efd3482|2026-09-24 12:53:21.623368-04|d070b403f95181adb49587723eddde02
+```
+
+| Database | Samples (03:16:29.884 to 03:17:44.265 UTC) | Distinct `(owner_id, heartbeat_at, seq_md5)` |
+| --- | ---: | ---: |
+| `save_05` | 121 | 1 |
+| `save_01` | 121 | 1 |
+
+One sample taken while a named test gateway was up: routed gateway pid 75741 (the lifecycle test's first gateway) holds the clone's lease as `gateway:75741:…`, and in the same sample `save_05` and `save_01` still show their old leases and sequence md5s:
+
+```
+03:16:33.542|save_05|gateway:17624:ea7862da-bcbc-4863-bde1-696c946b43e6|2026-09-29 22:18:31.64278-04|f8e7b29ae00b49227bde96e6d179c3af
+03:16:33.542|save_01|gateway:15542:2ef6eee8-b27b-4075-b2e7-b4723efd3482|2026-09-24 12:53:21.623368-04|d070b403f95181adb49587723eddde02
+03:16:33.542|gateways|pids=75741|clones: qa885_supervisor_deeead4804c8=gateway:75741:b36bb2a3-8693-4fd3-ac5e-9c8e15d265ab
+```
+
+53 gateway lines (03:16:32.911 to 03:17:32.074 UTC) show at least one live routed gateway pid; 15 distinct routed gateway pids appeared (this count includes the entry-point tests' gateways, which serve `qa885_entrypoints_*` clones the poller does not read), and the `qa885_supervisor_*` clone's lease passed through eight owners, each `gateway:<one of those pids>:…` (75741, 75936, 76054, 76281, 76868, 77429, 78527, 78995). No owner slot's lease or sequences moved in any sample.
+
+A first attempt at this poller, started detached (`( … & )`), was refused by Postgres.app (`FATAL:  Postgres.app failed to verify "trust" authentication … You did not confirm the permission dialog`) most likely because the detached shell has no approved parent app; its pytest run (03:07:45 to 03:15:47, 66 passed) is not used as evidence here. The poller above ran as a direct child and had no connection errors (`grep -c error poll.txt` = 0).
+
+**Concurrent writers.** Between the first proof run (02:49Z) and this rerun, `save_05`'s `characters_id_seq` and `entities_id_seq` advanced from 2471 and 5476 to 2476 and 5487; at 03:06Z another agent's `NEXUS_RUN_POSTGRES=1` run of `tests/test_orrery` (pid 56769, cwd `.claude/worktrees/885-epistemics-clones`) was live, and this rerun started after it exited. When the rerun started, two other agents' PostgreSQL runs from other worktrees were live (pids 72499 and 75086, both `tests/test_orrery` files); the snapshots and all 121 `save_05` samples show no change during that time. Nothing in this branch inserts characters or entities into any database but its clones.
 
 ### The Routed CLI Opens Only the Clone
 
@@ -168,19 +352,81 @@ Success: no issues found in 6 source files
 
 ### Audit Grep
 
-`grep -rn "save_0[1-5]\|slot=[1-5]\b\|slot_dbname([1-5])\|TEST_SLOT\|NEXUS_SLOT" tests/test_runtime/ tests/slot_routed_*.py`: 19 hits before, 23 after.
+The B1 audit pattern, run on `origin/main` (ae2e29bc; the module is unchanged there since 813c23d9) and on this branch:
 
-| Hit (after) | Class |
+```
+$ git grep -n "save_0[1-5]\|slot=[1-5]\b\|slot_dbname([1-5])\|TEST_SLOT\|NEXUS_SLOT" origin/main -- tests/test_runtime/ 'tests/slot_routed_*.py'
+origin/main:tests/slot_routed_gateway.py:9:port). ``NEXUS_SLOT`` keeps its production meaning: when it names the routed
+origin/main:tests/test_runtime/test_logging_config.py:38:TEST_SLOT = 5
+origin/main:tests/test_runtime/test_logging_config.py:330:    record = supervisor._start_service("probe", service, TEST_SLOT, detached=True)
+origin/main:tests/test_runtime/test_readiness.py:680:    names = {1: "save_01", 2: "save_02", 3: "save_03"}
+origin/main:tests/test_runtime/test_readiness.py:682:        names, existing={"save_01", "save_02"}, locked={1}
+origin/main:tests/test_runtime/test_readiness.py:686:            "save_01",
+origin/main:tests/test_runtime/test_readiness.py:691:            "save_02",
+origin/main:tests/test_runtime/test_readiness.py:699:    assert absent == ["save_03"]
+origin/main:tests/test_runtime/test_remote_auth.py:237:    result = cli.run_load(Namespace(slot=5))
+origin/main:tests/test_runtime/test_supervisor.py:180:    pid = supervisor._spawn("echo", service, slot=5, detached=True)
+origin/main:tests/test_runtime/test_supervisor_live.py:37:TEST_SLOT = 5
+origin/main:tests/test_runtime/test_supervisor_live.py:104:        "NEXUS_SLOT",
+origin/main:tests/test_runtime/test_supervisor_live.py:133:        up = _cli("up", "--slot", str(TEST_SLOT), config=config)
+origin/main:tests/test_runtime/test_supervisor_live.py:146:        assert runtime_status["slot"] == TEST_SLOT
+origin/main:tests/test_runtime/test_supervisor_live.py:148:        assert runtime_status["database"]["dbname"] == f"save_0{TEST_SLOT}"
+origin/main:tests/test_runtime/test_supervisor_live.py:184:        assert full_restart["slot"] == TEST_SLOT
+origin/main:tests/test_runtime/test_supervisor_live.py:190:        assert runtime_status["slot"] == TEST_SLOT
+origin/main:tests/test_runtime/test_supervisor_live.py:191:        assert runtime_status["database"]["dbname"] == f"save_0{TEST_SLOT}"
+origin/main:tests/test_runtime/test_supervisor_live.py:368:    env["NEXUS_SLOT"] = str(TEST_SLOT)
+
+$ grep -rn "save_0[1-5]\|slot=[1-5]\b\|slot_dbname([1-5])\|TEST_SLOT\|NEXUS_SLOT" tests/test_runtime/ tests/slot_routed_*.py
+tests/test_runtime/test_supervisor.py:180:    pid = supervisor._spawn("echo", service, slot=5, detached=True)
+tests/test_runtime/test_remote_auth.py:237:    result = cli.run_load(Namespace(slot=5))
+tests/test_runtime/test_supervisor_live.py:9:``TEST_SLOT`` routed to one module-scoped disposable template clone: the
+tests/test_runtime/test_supervisor_live.py:62:TEST_SLOT = 5
+tests/test_runtime/test_supervisor_live.py:63:# The disposable clone serving TEST_SLOT; routed_clone sets it before each test.
+tests/test_runtime/test_supervisor_live.py:107:    """The variables that route TEST_SLOT to the clone in a child process."""
+tests/test_runtime/test_supervisor_live.py:109:    return routed_slot_environment(TEST_SLOT, ROUTED_DATABASE)
+tests/test_runtime/test_supervisor_live.py:153:    doc["runtime"]["default_slot"] = TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:191:        "NEXUS_SLOT",
+tests/test_runtime/test_supervisor_live.py:221:        up = _cli("up", "--slot", str(TEST_SLOT), config=config)
+tests/test_runtime/test_supervisor_live.py:238:        assert runtime_status["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:281:        assert full_restart["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:287:        assert runtime_status["slot"] == TEST_SLOT
+tests/test_runtime/test_supervisor_live.py:473:    env["NEXUS_SLOT"] = str(TEST_SLOT)
+tests/test_runtime/test_readiness.py:680:    names = {1: "save_01", 2: "save_02", 3: "save_03"}
+tests/test_runtime/test_readiness.py:682:        names, existing={"save_01", "save_02"}, locked={1}
+tests/test_runtime/test_readiness.py:686:            "save_01",
+tests/test_runtime/test_readiness.py:691:            "save_02",
+tests/test_runtime/test_readiness.py:699:    assert absent == ["save_03"]
+tests/test_runtime/test_logging_config.py:38:TEST_SLOT = 5
+tests/test_runtime/test_logging_config.py:330:    record = supervisor._start_service("probe", service, TEST_SLOT, detached=True)
+tests/slot_routed_gateway.py:11:port). ``NEXUS_SLOT`` keeps its production meaning: when it names the routed
+tests/slot_routed_uvicorn.py:19:are exactly the supervisor's. ``NEXUS_SLOT`` keeps its production meaning, as
+```
+
+19 hits before, 23 after.
+
+| Hit (before, `origin/main`) | Class |
 | --- | --- |
-| `test_supervisor_live.py` `TEST_SLOT` (docstring, the constant, `_routed_env`, `default_slot`, `--slot`, three `slot ==` assertions, `external_gateway`'s `NEXUS_SLOT`) | Routed slot number: resolves only to the `qa885_supervisor_*` clone in every process the module starts. |
-| `test_supervisor_live.py:191` `"NEXUS_SLOT"` | `_cli` removes the caller's `NEXUS_SLOT` from the child environment. |
-| `tests/slot_routed_gateway.py:11`, `tests/slot_routed_uvicorn.py:19` `NEXUS_SLOT` | Docstrings. |
-| `test_readiness.py:680-699` `save_01`–`save_03` | Offline: pure name-mapping input to a readiness function; no connection. |
+| `test_supervisor_live.py:148`, `:191` `f"save_0{TEST_SLOT}"` | Owner-slot dbname assertions: the gateway served `save_05`. |
+| `test_supervisor_live.py:37` (the constant), `:104` (`_cli` drops the caller's `NEXUS_SLOT`, so the unrouted `python -m nexus.cli` resolved `--slot 5`, or `default_slot = 1` when `--slot` was absent), `:133` (`up --slot 5`), `:146`, `:184`, `:190` (`slot == 5` assertions), `:368` (`external_gateway` `NEXUS_SLOT=5` under the repository `nexus.toml`) | Unrouted slot-5 uses: each resolved to an owner slot. |
+| `tests/slot_routed_gateway.py:9` `NEXUS_SLOT` | Docstring. |
+| `test_readiness.py:680`, `:682`, `:686`, `:691`, `:699` `save_01`–`save_03` | Offline: pure name-mapping input to a readiness function; no connection. |
 | `test_remote_auth.py:237` `Namespace(slot=5)` | Offline: `cli.run_load` against a loopback HTTP recorder (`NEXUS_API_URL` set to it); no database. |
 | `test_supervisor.py:180` `_spawn("echo", …, slot=5)` | Offline: an `echo` service; `NEXUS_SLOT=5` is only in its environment. |
-| `test_logging_config.py:38,330` `TEST_SLOT = 5`, `_start_service("probe", …)` | A standalone probe app; `recover_active_slot_choice` runs only for the service named `gateway` (`supervisor.py:667`). |
+| `test_logging_config.py:38`, `:330` `TEST_SLOT = 5`, `_start_service("probe", …)` | A standalone probe app; `recover_active_slot_choice` runs only for the service named `gateway` (`supervisor.py:667`). |
 
-Before, the two `save_0{TEST_SLOT}` assertions (old lines 148 and 191) and the unrouted `TEST_SLOT` uses were owner-slot hits; no `save_0` literal remains in the module.
+| Hit (after, this branch) | Class |
+| --- | --- |
+| `test_supervisor_live.py:9` | Docstring. |
+| `test_supervisor_live.py:63` | Comment. |
+| `test_supervisor_live.py:62` (the constant), `:107` (`_routed_env` docstring), `:109` (`_routed_env` builds the routing variables), `:153` (`runtime.default_slot`), `:221` (`up --slot 5`), `:238`, `:281`, `:287` (`slot == 5` assertions), `:473` (`external_gateway`'s `NEXUS_SLOT=5`) | Routed slot number: resolves only to the `qa885_supervisor_*` clone in every process the module starts. |
+| `test_supervisor_live.py:191` `"NEXUS_SLOT"` | `_cli` removes the caller's `NEXUS_SLOT` from the child environment; the routed CLI then resolves `--slot 5` or `default_slot = 5`, both routed. |
+| `tests/slot_routed_gateway.py:11`, `tests/slot_routed_uvicorn.py:19` `NEXUS_SLOT` | Docstrings. |
+| `test_readiness.py:680`, `:682`, `:686`, `:691`, `:699` `save_01`–`save_03` | Offline: pure name-mapping input to a readiness function; no connection. |
+| `test_remote_auth.py:237` `Namespace(slot=5)` | Offline: `cli.run_load` against a loopback HTTP recorder (`NEXUS_API_URL` set to it); no database. |
+| `test_supervisor.py:180` `_spawn("echo", …, slot=5)` | Offline: an `echo` service; `NEXUS_SLOT=5` is only in its environment. |
+| `test_logging_config.py:38`, `:330` `TEST_SLOT = 5`, `_start_service("probe", …)` | A standalone probe app; `recover_active_slot_choice` runs only for the service named `gateway` (`supervisor.py:667`). |
+
+No `save_0` literal remains in the module.
 
 ## #885 Ids Retired
 
