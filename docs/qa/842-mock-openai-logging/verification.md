@@ -167,6 +167,40 @@ nexus/api/mock_openai.py:1156: error: Item "None" of "APISettings | None" has no
 Found 2 errors in 1 file (checked 2 source files)
 ```
 
+## Guard Test: The `__main__` Block Calls `direct_launch_config()`
+
+The independent review of d6abdb59 found that no test pinned the `__main__` block to the helper: reverting the launch line passed every test. `test_mock_openai_main_block_launches_with_direct_launch_config` (in `tests/test_runtime/test_logging_config.py`, beside the fresh-interpreter import probe) closes that gap offline. It starts a fresh interpreter the way the import probe does (`PYTHONPATH` at the worktree, `NEXUS_RUNTIME_CONFIG` at the repository `nexus.toml`, `NEXUS_HOME` removed because it outranks that variable). The child replaces `uvicorn.run` with a recorder that prints one JSON line (the caller's `__name__` and `__spec__.name`, whether the app is the calling module's `app`, the app's type, positional and keyword arguments) and raises `SystemExit`, then runs `runpy.run_module("nexus.api.mock_openai", run_name="__main__")`. The test asserts exactly one call, caller `__main__` from module `nexus.api.mock_openai`, the module's own `FastAPI` app, no extra positional arguments, and keyword arguments (`host`, `port`, `log_config`) equal to `direct_launch_config(load_settings(REPO_CONFIG))` computed in the parent. The child also reports its new socket file descriptors (the `/dev/fd` check the import probe uses), and the test requires none.
+
+Plant: the `__main__` block reverted to the bare `uvicorn.run(app, host="0.0.0.0", port=5102)` in the working tree. The guard failed:
+
+```
+E       AssertionError: assert {'host': '0.0... 'port': 5102} == {'host': '127... 'port': 5102}
+E         Differing items:
+E         {'host': '0.0.0.0'} != {'host': '127.0.0.1'}
+E         Right contains 1 more item:
+E         {'log_config': {'disable_existing_loggers': False,
+FAILED tests/test_runtime/test_logging_config.py::test_mock_openai_main_block_launches_with_direct_launch_config
+1 failed, 54 deselected in 0.79s
+```
+
+The file was restored from a scratch copy; `git diff --stat` then showed only `tests/test_runtime/test_logging_config.py` (92 insertions).
+
+```
+$ python -m pytest -q tests/test_runtime/test_logging_config.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+55 passed, 5 warnings in 4.99s
+
+$ python -m black tests/test_runtime/test_logging_config.py
+All done! ✨ 🍰 ✨
+1 file left unchanged.
+
+$ python -m flake8 tests/test_runtime/test_logging_config.py
+(no output)
+
+$ python -m mypy tests/test_runtime/test_logging_config.py
+Success: no issues found in 1 source file
+```
+
 ## Coordinator Note
 
 Only the direct launch changes, so no restart of the owner's mock provider or gateway is owed.
