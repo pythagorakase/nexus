@@ -203,6 +203,44 @@ $ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
 
 `mypy tests/test_cli_generation_http.py` reports the same 5 errors as at `a833224b` (the `tomlkit` config indexing in `_run_cli` and the teardown's `str-bytes-safe` line), none in an added line; `flake8 nexus/cli.py` reports the same 9 E501 lines.
 
+A third follow-up, in `f66aa08a`:
+
+- **The seed's transition POST had the same stall bug.** It caught only `requests.exceptions.Timeout`, so a transition answer that stalled after its headers escaped to `main()` as a lost gateway: exit 4 with an empty `partial`, dropping the saved seed. Its connection errors, cut-off bodies, and timeouts now go through `_failed_session_read`. A timeout, a stalled body included, reports the saved seed through `_seed_transition_failure(status="timeout")` (exit 1, `retry_command` kept), its detail worded as before. A refused or dropped connection is re-raised unchanged to `main()` (exit 4). A `ConnectTimeout`, which is both a `ConnectionError` and a `Timeout` and was caught here as a timeout, is now `unreachable` (exit 4), as the helper classifies it at the other three sites. The transition budget is already `[orrery.retrograde.wizard].transition_timeout_seconds`, so the new test runs the real CLI as a subprocess with a 1 s budget and no keyword was needed. It also covers a dropped transition POST (exit 4), which had no test. The harness's stalled-answer writer is now one handler method shared with the opening-turn stall test. `_run_cli`'s config is typed `Any`, which also clears that file's four pre-existing `tomlkit` indexing errors.
+
+Before the fix (test written first; the passing case is `transition_drop`, exit 4 before and after). The failing case exited 4 with `{"code": "api_unreachable", "error": "Cannot connect to API server at http://127.0.0.1:62405: HTTPConnectionPool(host='127.0.0.1', port=62405): Read timed out.", "ok": false, "partial": {}}`:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_generation_http.py -k "transition_stalled"
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+=========================== short test summary info ============================
+FAILED tests/test_cli_generation_http.py::test_seed_transition_stalled_after_headers_keeps_the_seed[transition_stall]
+1 failed, 1 passed, 52 deselected in 3.04s
+```
+
+After:
+
+```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings tests/test_cli_generation_http.py tests/test_cli_session_wait.py tests/test_cli_contract.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+198 passed in 192.56s (0:03:12)
+$ $PY -m black --check nexus/cli.py tests/test_cli_generation_http.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
+$ $PY -m flake8 tests/test_cli_generation_http.py; echo $?
+0
+$ $PY -m mypy nexus/cli.py
+Success: no issues found in 1 source file
+$ $PY -m mypy tests/test_cli_generation_http.py
+tests/test_cli_generation_http.py:331: error: If x = b'abc' then f"{x}" or "{}".format(x) produces "b'abc'", not "abc". If this is desired behavior, use f"{x!r}" or "{!r}".format(x). Otherwise, decode the bytes  [str-bytes-safe]
+Found 1 error in 1 file (checked 1 source file)
+$ NEXUS_GATEWAY_PORT=8017 NEXUS_API_URL=http://127.0.0.1:8017 PYTHONPATH=$PWD $PY -m nexus.cli down
+nothing running
+$ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
+1
+```
+
+The one remaining `mypy` error in the test file is the pre-existing teardown line (5 at `bdf59fd3`); `flake8 nexus/cli.py` reports the same 9 E501 lines.
+
 ## CLI Transcript on the Played Clone
 
 `tests/test_cli_inspect_pg.py` at this branch's head, run with `-s`: `seed_played_story(turns=3, cast=("Mara Quill", "Oren Vale"))` and one seeded faction; the real gateway's empty incubator is read first, then a pending turn from `seed_pending_turn` is staged. The in-process gateway serves 127.0.0.1:8017 with every provider routed to TEST. Each command ran as a `python -m nexus.cli` subprocess. Verbatim stdout of that one run; only the in-process gateway's own output between commands (the fixture's schema load, model-load progress, retrieval logging, and tokenizer fork warnings) is removed:
