@@ -4,16 +4,20 @@
 ``tests.slot_routed_gateway`` route one slot to a disposable clone before the
 CLI or gateway loads. The offline tests prove that each refuses to run, before
 anything else happens, when a routing variable is missing or names an owner
-database. The PostgreSQL tests prove, on a seeded template clone, that a routed
-CLI ``up``/``status``/``down`` opens no database but the clone (and the
-``postgres`` admin database), and that the routed launcher, spawned from the
-supervisor's own argv and environment, serves the clone on the port it was
-given and refuses any other slot.
+database, and that importing the routing fixtures or the scripts they load
+leaves the root logger unconfigured (issue #1037). The PostgreSQL tests prove,
+on a seeded template clone, that a routed CLI ``up``/``status``/``down`` opens
+no database but the clone (and the ``postgres`` admin database), that a
+refused routed ``up`` prints its JSON envelope as the first line of stderr, and
+that the routed launcher, spawned from the supervisor's own argv and
+environment, serves the clone on the port it was given and refuses any other
+slot.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import subprocess
@@ -54,6 +58,25 @@ ENTRY_POINTS = (
     "tests.slot_routed_uvicorn",
     "tests.slot_routed_gateway",
 )
+# Modules every routed child imports before its entry point runs: the routing
+# fixtures and the scripts they load as libraries (issue #1037).
+ROUTING_IMPORTS = (
+    "tests.pg_fixtures",
+    "scripts.migrate",
+    "scripts.new_story_setup",
+    "scripts.utils.embedding_utils",
+)
+# Prints the root logger's handlers and level before and after importing
+# sys.argv[1] in a fresh interpreter, as one JSON line.
+ROOT_LOGGER_PROBE = """
+import importlib, json, logging, sys
+root = logging.getLogger()
+def state():
+    return {"handlers": [repr(h) for h in root.handlers], "level": root.level}
+before = state()
+importlib.import_module(sys.argv[1])
+print(json.dumps({"before": before, "after": state()}))
+"""
 # Runs a routed CLI with every libpq connection's database name appended to
 # SPY_LOG, one JSON line each, and a final line saying whether asyncpg (which
 # bypasses libpq) was ever loaded. The connections themselves are real.
@@ -238,6 +261,27 @@ def test_entry_point_refuses_before_anything_runs(
     assert not _port_open("127.0.0.1", port)
 
 
+@pytest.mark.parametrize("module", ROUTING_IMPORTS)
+def test_import_leaves_the_root_logger_unconfigured(module: str) -> None:
+    """Importing the routing fixtures or a script adds no handler or level.
+
+    Each module is imported in a fresh interpreter, so an import-time
+    ``logging.basicConfig`` anywhere in its import graph would show here.
+    """
+    completed = subprocess.run(
+        [sys.executable, "-c", ROOT_LOGGER_PROBE, module],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        env=_child_env({}),
+        timeout=120,
+    )
+    assert completed.returncode == 0, completed.stderr
+    probe = json.loads(completed.stdout.splitlines()[-1])
+    assert probe["before"] == {"handlers": [], "level": logging.WARNING}, probe
+    assert probe["after"] == probe["before"], probe
+
+
 # ---------------------------------------------------------------------------
 # PostgreSQL: the routed CLI and launcher reach only the clone
 # ---------------------------------------------------------------------------
@@ -265,10 +309,6 @@ def _spy_cli(*args: str, clone: str, spy_log: Path) -> dict:
         env=env,
         timeout=180,
     )
-    # The routed CLI logs as the production CLI does: the fixture module's
-    # import-time logging.basicConfig must not add INFO records to stderr,
-    # where the CLI prints its JSON errors.
-    assert "Created connection pool" not in completed.stderr, completed.stderr
     payload = json.loads(completed.stdout or completed.stderr)
     payload["_returncode"] = completed.returncode
     return payload
@@ -332,6 +372,62 @@ def test_routed_cli_up_status_down_never_open_an_owner_slot(
         assert set(opened[verb]) <= {entrypoint_clone, "postgres"}, (verb, opened)
         assert not set(opened[verb]) & set(OWNER_DATABASES), (verb, opened)
     assert entrypoint_clone in opened["up"], opened
+
+
+@pytest.mark.requires_postgres
+def test_routed_cli_error_json_is_the_first_line_of_stderr(
+    tmp_path: Path, entrypoint_clone: str
+) -> None:
+    """A refused routed ``up`` prints only its JSON envelope on stderr.
+
+    The gateway starts first, so the CLI process opens the clone (its
+    connection pool logs at INFO) before the mock provider's port, held here
+    by an unmanaged listener, refuses the start and ``up`` rolls back. No log
+    record may precede the envelope: stderr parses as JSON from its first
+    line.
+    """
+    config = _write_config(tmp_path, routed_database=entrypoint_clone)
+    mock_port = int(
+        tomlkit.parse(config.read_text())["runtime"]["services"]["mock_openai"]["port"]
+    )
+    env = _child_env({**routed_slot_environment(ROUTED_SLOT, entrypoint_clone)})
+    routed_cli = [sys.executable, "-m", "tests.slot_routed_cli", "--json"]
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", mock_port))
+        holder.listen()
+        try:
+            completed = subprocess.run(
+                [
+                    *routed_cli,
+                    "up",
+                    "--slot",
+                    str(ROUTED_SLOT),
+                    "--config",
+                    str(config),
+                ],
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+                env=env,
+                timeout=180,
+            )
+        finally:
+            subprocess.run(
+                [*routed_cli, "down", "--config", str(config)],
+                capture_output=True,
+                cwd=REPO_ROOT,
+                env=env,
+                timeout=180,
+                check=True,
+            )
+    assert completed.returncode == 1, completed.stderr
+    assert completed.stdout == ""
+    assert completed.stderr.splitlines()[0] == "{", completed.stderr
+    envelope = json.loads(completed.stderr)
+    assert "already in use by an unmanaged process" in json.dumps(envelope)
+    # The gateway did start (and open the clone) before the refusal.
+    gateway_log = Supervisor.from_config(config).log_path("gateway")
+    assert "Uvicorn running on" in gateway_log.read_text()
 
 
 def _spawn_routed_gateway(
