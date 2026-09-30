@@ -128,7 +128,7 @@ if __name__ == "__main__":
     log_level = getattr(logging, log_level_str.upper(), logging.INFO)
 
     # Set up handlers
-    handlers = []
+    handlers: list[logging.Handler] = []
     if log_file:
         handlers.append(logging.FileHandler(log_file))
     if log_console:

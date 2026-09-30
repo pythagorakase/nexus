@@ -387,9 +387,8 @@ def test_routed_cli_error_json_is_the_first_line_of_stderr(
     line.
     """
     config = _write_config(tmp_path, routed_database=entrypoint_clone)
-    mock_port = int(
-        tomlkit.parse(config.read_text())["runtime"]["services"]["mock_openai"]["port"]
-    )
+    supervisor = Supervisor.from_config(config)
+    mock_port = supervisor.runtime.services["mock_openai"].port
     env = _child_env({**routed_slot_environment(ROUTED_SLOT, entrypoint_clone)})
     routed_cli = [sys.executable, "-m", "tests.slot_routed_cli", "--json"]
     with socket.socket() as holder:
@@ -426,7 +425,7 @@ def test_routed_cli_error_json_is_the_first_line_of_stderr(
     envelope = json.loads(completed.stderr)
     assert "already in use by an unmanaged process" in json.dumps(envelope)
     # The gateway did start (and open the clone) before the refusal.
-    gateway_log = Supervisor.from_config(config).log_path("gateway")
+    gateway_log = supervisor.log_path("gateway")
     assert "Uvicorn running on" in gateway_log.read_text()
 
 
