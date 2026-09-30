@@ -22,7 +22,7 @@ Every write rolled back, but the owner sequences advanced (`b2_map.json` lists t
 
 Both live in `tests/pg_fixtures.py`, call `require_disposable_target` before connecting, commit one row, and join `SEED_CALLS` in `tests/test_pg_disposable_target.py` (which proves the owner refusal before any connection).
 
-- `seed_routine_anchor(dbname, *, character_entity_id, place_id, anchor_type="home", mobility_policy="fixed_place", source="test", schedule=None) -> int`: one committed `character_routine_anchors` row, returning its ID. The table's unique key `(character_entity_id, anchor_type)` and its check constraints (a `fixed_place` anchor needs `place_id`) decide validity; the helper does not second-guess them.
+- `seed_routine_anchor(dbname, *, character_entity_id, place_id, anchor_type="home", mobility_policy="fixed_place", source="test", schedule=None) -> int`: one committed `character_routine_anchors` row, returning its ID. The table's unique key `(character_entity_id, anchor_type)` and its check constraints decide validity; the helper does not second-guess them. `fixed_place` needs `place_id`; `works_from_home`, `nomadic`, and `none` need it NULL; `zone_resolved` needs a `zone_id`, which this helper does not take, so it cannot seed that policy.
 - `seed_pair_tag(dbname, *, subject_entity_id, object_entity_id, tag, source_kind="template", template_id=None, source_chunk_id=None) -> int`: one active `entity_pair_tags` row whose `pair_tag_id` is resolved from `pair_tags.tag` with `NOT deprecated`, asserting exactly one row (the `seed_entity_tag` pattern), so an unknown or deprecated tag fails by name.
 
 `tests/test_pg_anchor_pair_tag_seeds.py` (PostgreSQL) reads each row back on a fresh connection and proves the failures: a duplicate anchor raises `UniqueViolation`, a placeless fixed anchor raises `CheckViolation`, and an unknown tag and the template's deprecated `contact` tag each fail the assertion and commit nothing.
@@ -36,20 +36,35 @@ Both live in `tests/pg_fixtures.py`, call `require_disposable_target` before con
 | `test_composition_sources_live` | module clone `qa885_composition_sources`: zone, two places, story clock, six characters, five `seed_faction`, one anchor, three relationships, six pair tags. Both place skips are assertions; the in-test pair-tag insert asserts its row (`RETURNING id`); the acquaintance commit uses the seeded tick chunk instead of `max(id)`. The `live_llm` marker is unchanged. |
 | `test_recruit_ally_projects` | module clone `qa885_recruit_ally_projects`: zone, place, `seed_character_pair` (B2-3's helper; head chunk a day before the pinned `NOW`) plus a third `seed_character`; bindings come from the returned ids; the three-character skip and the owner cleanup are gone. The coverage test is `@requires_corpus` (see below). |
 | `test_projects` | module clone `qa885_project_promotion`: story clock and one character for the promotion probe. The coverage test is `@requires_corpus` (see below). |
-| `test_recruit_ally_replay` | module clone `qa885_recruit_ally_replay` from `seed_checkpointed_story`; binds `actor=protagonist`, `target=rival`, the free pair (asserted unrelated in the fixture, and again in the test body before the reconstruction check); chunk ids from the sequence (`INSERT ... RETURNING id`); `_next_world_time` requires the seeded head clock instead of falling back to 2026. |
-| `test_pursue_romance_replay` | module clone `qa885_pursue_romance_replay`, same free pair and sequence-assigned ids; the shadow schema (`event_types`, `character_project_states`, migration 085) stays. `test_court_patron_replay` and `test_seek_redemption_replay` import `_fabricate_chunk` and `_next_world_time` from it, so both are rerun in every gate below (the rerun B2-3's evidence defers to this slice). |
+| `test_recruit_ally_replay` | module clone `qa885_recruit_ally_replay` from `seed_checkpointed_story`; binds `actor=protagonist`, `target=rival`, the free pair (asserted unrelated in the fixture); chunk ids from the sequence (`INSERT ... RETURNING id`); `_next_world_time` requires the seeded head clock instead of falling back to 2026. The test is parametrized over the prior relationship, `None` and `"romantic"` (see Prior-Relationship Coverage in the Replays). |
+| `test_pursue_romance_replay` | module clone `qa885_pursue_romance_replay`, same free pair, sequence-assigned ids, and prior-relationship parametrization; the shadow schema (`event_types`, `character_project_states`, migration 085) stays. `test_court_patron_replay` and `test_seek_redemption_replay` import `_fabricate_chunk` and `_next_world_time` from it, so both are rerun in every gate below (the rerun B2-3's evidence defers to this slice). |
 
 ## The Two Corpus-Statistics Tests
 
 `test_recruit_ally_projects::test_corpus_recruitment_routes_persisted_target_without_routine_drift` (was `test_slot2_...`) and `test_projects::test_corpus_coverage_distribution_and_project_gate_payload` (was `test_slot2_...`) assert emergent resolver statistics of the played slot 2 story (35 playable anchors, surveil winners, routine-share shifts, advance winners). Each is now `@pytest.mark.requires_corpus` on a module-scoped `disposable_slot_database(..., source_db="save_02", include_data=True)` fixture that fails unless `NEXUS_RUN_CORPUS=1` (the `tests/test_lore/conftest.py` pattern). **The clone is a read of `save_02`** through `pg_dump`; nothing is written to the source. The engine comes from `sqlalchemy_url(dbname)`, the migration-074 re-run is dropped, every assertion is kept, and the off-screen recruit-target skip is now an assertion (it passes on the clone).
 
+## Prior-Relationship Coverage in the Replays
+
+On `main`, both replay tests bound the two lowest `save_02` characters, whose `1 -> 2` row is `romantic` (read-only query on `save_02`), so the branch that ran was the one asserting that the reconstruction just before completion keeps exactly one prior relationship row with its original type. Binding the free pair alone would exercise only the empty-prior branch. Each replay test is now parametrized over `prior_relationship` in `(None, "romantic")` (`PRIOR_RELATIONSHIP_CASES` in `test_pursue_romance_replay.py`, imported by `test_recruit_ally_replay.py`). In the related case, `_seed_prior_relationship` inserts the protagonist-to-rival row inside the test transaction, under a transaction-local `nexus.write_producer = 'manual'`, before the base checkpoint. Both main-branch assertions are back: `len(prior_rows) == 1` and the row's `relationship_type` equals the prior type. The test also asserts that the queried prior type equals the parameter.
+
+Replay gap 2 (`nexus/agents/orrery/replay.py`, `_unwind_relationships`) unwinds a version row with a NULL `source_chunk_id` whose `created_at` is later than the target chunk's, and drops a row whose own `created_at` is later. The fabricated chunks sit at `now()` minus 4 to 0 minutes, and an undated insert would take the transaction's `now()`. So the helper dates the row ten minutes earlier and attributes its version to the seeded head chunk (`nexus.source_chunk_id`), which precedes every fabricated chunk. It restores both settings afterward. A negative check confirmed that this dating is necessary: with the row at `now()` and the version unattributed, both `[romantic]` cases fail `assert len(prior_rows) == 1` (`assert 0 == 1`), and both `[None]` cases pass. The edit was reverted.
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rA tests/test_orrery/test_recruit_ally_replay.py tests/test_orrery/test_pursue_romance_replay.py
+PASSED tests/test_orrery/test_recruit_ally_replay.py::test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift[None]
+PASSED tests/test_orrery/test_recruit_ally_replay.py::test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift[romantic]
+PASSED tests/test_orrery/test_pursue_romance_replay.py::test_pursue_romance_lifecycle_replays_between_checkpoints_without_drift[None]
+PASSED tests/test_orrery/test_pursue_romance_replay.py::test_pursue_romance_lifecycle_replays_between_checkpoints_without_drift[romantic]
+4 passed, 5 warnings in 3.35s
+```
+
 ## Sequence Proof
 
-Read-only snapshots (`BEGIN READ ONLY ... ROLLBACK`, script `/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/snap.sh`) of `save_02` and `save_05`, taken directly before and after the fixer's rerun of the three slice runs below (PostgreSQL, live opt-in, corpus opt-in) with the review fixes applied. The corpus run's two `pg_dump` reads of `save_02` fall inside the window. `diff /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/before.txt /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/after.txt`: **identical**. `ps` before the window showed no other pytest process. The bodies below are those two files, verbatim.
+Read-only snapshots (`BEGIN READ ONLY ... ROLLBACK`, script `/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/snap.sh`) of `save_02` and `save_05`, taken directly before and after the second fixer's rerun of the three slice runs below (PostgreSQL, live opt-in, corpus opt-in) on the head that restores the prior-relationship coverage. The corpus run's two `pg_dump` reads of `save_02` fall inside the window. `diff /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4-fix/before.txt /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4-fix/after.txt`: **identical**. `ps` before the window showed no other pytest process. The bodies below are those two files, verbatim.
 
-Earlier pairs: the builder's pair at the pre-fix head (04:27:58Z to 04:29:14Z) and a pair before the rebase onto B2-2 (03:54:49Z to 03:56:01Z) were also identical. A pair at 04:10:43Z to 04:11:59Z differed: `save_02` `character_project_states_id_seq` and `orrery_resolutions_id_seq`, and seven `save_05` sequences, moved while another session's `pytest tests/test_orrery` (which still includes unconverted modules) was running. That pair is discarded, not explained away. Between the builder's 04:29:14Z snapshot and the fixer's 2026-09-30T04:45:10Z snapshot, seven sequences moved outside both windows (`save_02` `character_project_states`, `chunk_metadata`, `entity_pair_tags`, `orrery_resolutions`, `relationship_versions`, `state_checkpoints`; `save_05` `entities`) while other builders' sessions were running. Neither window moved.
+Earlier pairs, all superseded by the pair below: the first fixer's pair at `ea0987d0` (2026-09-30T04:45:10Z to 04:46:40Z), the builder's pair at the pre-fix head (04:27:58Z to 04:29:14Z), and a pair before the rebase onto B2-2 (03:54:49Z to 03:56:01Z) were each identical. A pair at 04:10:43Z to 04:11:59Z differed: `save_02` `character_project_states_id_seq` and `orrery_resolutions_id_seq`, and seven `save_05` sequences, moved while another session's `pytest tests/test_orrery` (which still includes unconverted modules) was running. That pair is discarded, not explained away. Between the 04:46:40Z snapshot and the 2026-09-30T05:02:27Z snapshot, four `save_02` sequences moved outside both windows (`orrery_adjudication_log`, `orrery_prompt_exposures`, `orrery_resolutions`, `orrery_scene_pressures`) while other sessions were running. Neither window moved.
 
-### Before (2026-09-30T04:45:10Z)
+### Before (2026-09-30T05:02:27Z)
 
 #### save_02
 
@@ -83,15 +98,15 @@ BEGIN
  public     | narrative_embedding_jobs_id_seq           |           
  public     | narrative_summary_jobs_id_seq             |           
  public     | offscreen_narrations_id_seq               |           
- public     | orrery_adjudication_log_id_seq            |        561
+ public     | orrery_adjudication_log_id_seq            |        564
  public     | orrery_maturation_jobs_id_seq             |        504
  public     | orrery_narration_jobs_id_seq              |           
- public     | orrery_prompt_exposures_id_seq            |       3230
+ public     | orrery_prompt_exposures_id_seq            |       3237
  public     | orrery_recall_trace_id_seq                |           
- public     | orrery_resolutions_id_seq                 |       7370
+ public     | orrery_resolutions_id_seq                 |       7374
  public     | orrery_route_graph_edges_id_seq           |           
  public     | orrery_route_graph_nodes_id_seq           |           
- public     | orrery_scene_pressures_id_seq             |        561
+ public     | orrery_scene_pressures_id_seq             |        564
  public     | orrery_travel_edges_id_seq                |           
  public     | pair_tags_id_seq                          |         29
  public     | places_id_seq                             |          4
@@ -193,7 +208,7 @@ BEGIN
 ROLLBACK
 ```
 
-### After (2026-09-30T04:46:40Z)
+### After (2026-09-30T05:03:43Z)
 
 #### save_02
 
@@ -227,15 +242,15 @@ BEGIN
  public     | narrative_embedding_jobs_id_seq           |           
  public     | narrative_summary_jobs_id_seq             |           
  public     | offscreen_narrations_id_seq               |           
- public     | orrery_adjudication_log_id_seq            |        561
+ public     | orrery_adjudication_log_id_seq            |        564
  public     | orrery_maturation_jobs_id_seq             |        504
  public     | orrery_narration_jobs_id_seq              |           
- public     | orrery_prompt_exposures_id_seq            |       3230
+ public     | orrery_prompt_exposures_id_seq            |       3237
  public     | orrery_recall_trace_id_seq                |           
- public     | orrery_resolutions_id_seq                 |       7370
+ public     | orrery_resolutions_id_seq                 |       7374
  public     | orrery_route_graph_edges_id_seq           |           
  public     | orrery_route_graph_nodes_id_seq           |           
- public     | orrery_scene_pressures_id_seq             |        561
+ public     | orrery_scene_pressures_id_seq             |        564
  public     | orrery_travel_edges_id_seq                |           
  public     | pair_tags_id_seq                          |         29
  public     | places_id_seq                             |          4
@@ -339,11 +354,11 @@ ROLLBACK
 
 ## Slice Gates
 
-Gateway variables unset (`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL`). Each run loads the scratch `dbname_audit` plugin, not committed, at `/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/dbname_audit.py`, through `PYTHONPATH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4`. The plugin wraps `psycopg2.connect` and `asyncpg.connect`, resolves each target's `dbname` (keyword or DSN through `parse_dsn`), and prints every name reached plus any matching `save_0` or `NEXUS_template`. SQLAlchemy engines connect through `psycopg2.connect`, so they are covered; `pg_dump` is a subprocess and is not. Each tail is the complete, unfiltered output file named above it.
+Gateway variables unset (`env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL`). These are the second fixer's runs, on the head that restores the prior-relationship coverage; the two added `[romantic]` replay cases account for the two extra passes in each of the first two runs. Each run loads the scratch `dbname_audit` plugin, not committed, at `/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/dbname_audit.py`, through `PYTHONPATH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4`. The plugin wraps `psycopg2.connect` and `asyncpg.connect`, resolves each target's `dbname` (keyword or DSN through `parse_dsn`), and prints every name reached plus any matching `save_0` or `NEXUS_template`. SQLAlchemy engines connect through `psycopg2.connect`, so they are covered; `pg_dump` is a subprocess and is not. Each tail is the complete, unfiltered output file named above it.
 
 ### PostgreSQL
 
-`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/slice_pg.txt`:
+`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4-fix/slice_pg.txt`:
 
 ```
 $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4 $PY -m pytest -q -rs -p dbname_audit \
@@ -353,8 +368,8 @@ $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=/private/tmp/claude-501/-Users-pythagor-nexus/
     tests/test_orrery/test_pursue_romance_replay.py tests/test_orrery/test_court_patron_replay.py \
     tests/test_orrery/test_seek_redemption_replay.py tests/test_pg_disposable_target.py \
     tests/test_pg_anchor_pair_tag_seeds.py
-.........ssssssss.......................s............s.................. [ 72%]
-...........................                                              [100%]
+.........ssssssss.......................s............s.................. [ 71%]
+.............................                                            [100%]
 =============================== warnings summary ===============================
 <frozen abc>:106
 <frozen abc>:106
@@ -370,27 +385,27 @@ $ NEXUS_RUN_POSTGRES=1 PYTHONPATH=/private/tmp/claude-501/-Users-pythagor-nexus/
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-dbname-audit: postgres, qa885_anchor_pair_seeds_2a09d4a0be4e, qa885_court_patron_b9e4a9413f43, qa885_faction_contexts_5e96f3ec40a3, qa885_patron_circle_897acd67d1e4, qa885_project_promotion_e41f836388f2, qa885_pursue_romance_replay_46df2f7f372f, qa885_recruit_ally_projects_3eef0e961976, qa885_recruit_ally_replay_d1accf7d47e4, qa885_seek_redemption_13d36d16ff09, qa885_transaction_writer_4532cc7e9763
+dbname-audit: postgres, qa885_anchor_pair_seeds_55c83ed2bb07, qa885_court_patron_4c051ab137c8, qa885_faction_contexts_fbf8ea787d13, qa885_patron_circle_fcac1a19a3e0, qa885_project_promotion_3c5fc546f63e, qa885_pursue_romance_replay_e7830bc9514a, qa885_recruit_ally_projects_c725539258d8, qa885_recruit_ally_replay_7ff422f03147, qa885_seek_redemption_1b2aabe503d4, qa885_transaction_writer_a068c5ad7a82
 dbname-audit owner targets: []
 =========================== short test summary info ============================
 SKIPPED [4] tests/test_orrery/test_composition_sources_live.py: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
 SKIPPED [4] tests/test_orrery/test_composition_sources_live.py:546: Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.
 SKIPPED [1] tests/test_orrery/test_recruit_ally_projects.py:808: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
 SKIPPED [1] tests/test_orrery/test_projects.py:609: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
-89 passed, 10 skipped, 5 warnings in 15.74s
+91 passed, 10 skipped, 5 warnings in 14.76s
 ```
 
 ### PostgreSQL with the Live Opt-In
 
 `test_composition_sources_live` runs only under `NEXUS_RUN_LIVE_LLM=1`; it makes no inference call and its clone is TEST-pinned. Under that flag the guard's summary reads `nexus-api: read-only (live LLM)` instead of `denied`: `describe()` picks that word from `LIVE_LLM_OPT_IN` (`tests/secret_store_guard.py:691`), and `docs/agent_workflow.md:24-25` notes that `nexus-api: denied` requires `NEXUS_RUN_LIVE_LLM` to be unset. This run adds the live-opt-in coverage only. The gate that carries `secret-store guard: active; nexus-api: denied` is the plain PostgreSQL run above, over the same eleven modules.
 
-`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/slice_live.txt`:
+`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4-fix/slice_live.txt`:
 
 ```
 $ NEXUS_RUN_POSTGRES=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_TEST_PROVIDER_ONLY=1 PYTHONPATH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4 \
     $PY -m pytest -q -rs -p dbname_audit <the same eleven modules>
-........................................s............s.................. [ 72%]
-...........................                                              [100%]
+........................................s............s.................. [ 71%]
+.............................                                            [100%]
 =============================== warnings summary ===============================
 <frozen abc>:106
 <frozen abc>:106
@@ -406,17 +421,17 @@ $ NEXUS_RUN_POSTGRES=1 NEXUS_RUN_LIVE_LLM=1 NEXUS_TEST_PROVIDER_ONLY=1 PYTHONPAT
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: read-only (live LLM); disposable keychain: denied
-dbname-audit: postgres, qa885_anchor_pair_seeds_13b64909a280, qa885_composition_sources_cdf0fd8d3cc8, qa885_court_patron_8a8740e1ab9d, qa885_faction_contexts_3dc3891c9623, qa885_patron_circle_51e847d5e533, qa885_project_promotion_9d30d4789c3e, qa885_pursue_romance_replay_02494d19317d, qa885_recruit_ally_projects_a91c67d0187c, qa885_recruit_ally_replay_e58d1b52dd1e, qa885_seek_redemption_00ae91b23c39, qa885_transaction_writer_fe5c602b2c63
+dbname-audit: postgres, qa885_anchor_pair_seeds_90c379222e46, qa885_composition_sources_308bd772df8c, qa885_court_patron_eb4f40e840f2, qa885_faction_contexts_c70d70792810, qa885_patron_circle_3903f1cce5a1, qa885_project_promotion_cdd25859ed49, qa885_pursue_romance_replay_e74795ad6829, qa885_recruit_ally_projects_71ba45ed7172, qa885_recruit_ally_replay_7188fe10a46f, qa885_seek_redemption_a81762793a86, qa885_transaction_writer_8b6f448b3d4b
 dbname-audit owner targets: []
 =========================== short test summary info ============================
 SKIPPED [1] tests/test_orrery/test_recruit_ally_projects.py:808: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
 SKIPPED [1] tests/test_orrery/test_projects.py:609: Set NEXUS_RUN_CORPUS=1 to run owner-corpus probes on disposable clones.
-97 passed, 2 skipped, 5 warnings in 17.62s
+99 passed, 2 skipped, 5 warnings in 16.65s
 ```
 
 ### The Two `@requires_corpus` Tests Under Their Opt-In
 
-`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/slice_corpus.txt`:
+`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4-fix/slice_corpus.txt`:
 
 ```
 $ NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 PYTHONPATH=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4 $PY -m pytest -q -rs -p dbname_audit \
@@ -438,16 +453,16 @@ $ NEXUS_RUN_POSTGRES=1 NEXUS_RUN_CORPUS=1 PYTHONPATH=/private/tmp/claude-501/-Us
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-dbname-audit: postgres, qa885_projects_corpus_e6e2cde72349, qa885_recruit_ally_corpus_3437a7609e0d
+dbname-audit: postgres, qa885_projects_corpus_69225d708a6c, qa885_recruit_ally_corpus_f21801548717
 dbname-audit owner targets: []
-2 passed, 5 warnings in 47.19s
+2 passed, 5 warnings in 44.30s
 ```
 
 ## Full Orrery PostgreSQL Run
 
-Rerun by the fixer on the fix head after the snapshot window, in two halves for the shell time limit. This run includes unconverted modules of later slices, which still roll back writes on the owner slots. Each tail runs from the `FAILURES` header to the end of the raw file, unfiltered; the progress lines above it hold only dots and `s`/`F` marks.
+Rerun by the second fixer on the head that restores the prior-relationship coverage, after the snapshot window, in two halves for the shell time limit. This run includes unconverted modules of later slices, which still roll back writes on the owner slots. Each tail runs from the `FAILURES` header to the end of the raw file, unfiltered; the progress lines above it hold only dots and `s`/`F` marks.
 
-`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/orrery_ao.txt`:
+`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4-fix/orrery_ao.txt`:
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rfE tests/test_orrery/test_[a-o]*.py
@@ -530,10 +545,10 @@ secret-store guard: active; nexus-api: denied; disposable keychain: denied
 =========================== short test summary info ============================
 FAILED tests/test_orrery/test_adjudication_history.py::test_history_is_non_vacuous_on_audited_slots
 FAILED tests/test_orrery/test_evidence.py::test_slot_backed_explain_carries_evidence_end_to_end
-2 failed, 805 passed, 29 skipped, 7 warnings in 165.76s (0:02:45)
+2 failed, 805 passed, 29 skipped, 7 warnings in 158.53s (0:02:38)
 ```
 
-`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4/orrery_pz.txt`:
+`/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/885-B2-4-fix/orrery_pz.txt`:
 
 ```
 $ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rfE tests/test_orrery/test_[p-z]*.py
@@ -620,7 +635,7 @@ tests/test_orrery/test_tag_library.py:869: AssertionError
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
 =========================== short test summary info ============================
 FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_completeness_and_size
-1 failed, 824 passed, 12 skipped, 7 warnings in 127.29s (0:02:07)
+1 failed, 826 passed, 12 skipped, 7 warnings in 128.54s (0:02:08)
 ```
 
 | Failure | Count | Cause in this run | Class |
@@ -629,11 +644,11 @@ FAILED tests/test_orrery/test_tag_library.py::test_contextual_library_save_05_co
 | `test_evidence::test_slot_backed_explain_carries_evidence_end_to_end` | 1 | `LIVE_SLOT = 5` (:111); `save_05` holds 0 characters, so `explain_dry_run` binds no actors | later slice B2-7; pre-existing on main |
 | `test_tag_library::test_contextual_library_save_05_completeness_and_size` | 1 | reads `save_05`, which holds 0 `entity_tags_current` rows | later slice B2-7; pre-existing on main |
 
-No failure is new. Against B2-3's recorded run (`docs/qa/885-project-applier-clones/verification.md`), the eight `test_faction_project_contexts_live` errors and the `test_polymorphic_patron_live` error are gone (this slice), the nine `test_reveal_live` failures are gone (B2-2), and the second half has two more skips: the two `@requires_corpus` tests, which now run only under `NEXUS_RUN_CORPUS=1`.
+No failure is new. Against B2-3's recorded run (`docs/qa/885-project-applier-clones/verification.md`), the eight `test_faction_project_contexts_live` errors and the `test_polymorphic_patron_live` error are gone (this slice), the nine `test_reveal_live` failures are gone (B2-2), and the second half has two more skips: the two `@requires_corpus` tests, which now run only under `NEXUS_RUN_CORPUS=1`. The second half's two extra passes over the first fixer's run are the two `[romantic]` replay cases.
 
 ## Offline Gates
 
-Run on the rebased head, before the review fixes. The fixes change only PostgreSQL-gated assertions in three test files, so the fixer reran those files offline (the last two lines of pytest output shown) and rechecked the ten changed files:
+Run on the rebased head, before the review fixes. The fixes change only PostgreSQL-gated assertions in three test files, so the first fixer reran those files offline (the last two lines of pytest output shown) and rechecked the ten changed files:
 
 ```
 $ $PY -m pytest -q tests/test_orrery/test_recruit_ally_replay.py tests/test_orrery/test_pursue_romance_replay.py tests/test_orrery/test_composition_sources_live.py
@@ -643,6 +658,20 @@ $ $PY -m black --check <ten files>
 10 files would be left unchanged.
 $ $PY -m flake8 <ten files>
 flake8 exit 0
+```
+
+The second fixer's change touches `tests/pg_fixtures.py` (docstring only) and the two replay modules. It reran the affected modules offline (the last two lines of pytest output shown) and ran Black, flake8, and mypy on the three files:
+
+```
+$ $PY -m pytest -q tests/test_orrery/test_recruit_ally_replay.py tests/test_orrery/test_pursue_romance_replay.py tests/test_pg_anchor_pair_tag_seeds.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+10 skipped, 5 warnings in 0.24s
+$ $PY -m black --check tests/pg_fixtures.py tests/test_orrery/test_recruit_ally_replay.py tests/test_orrery/test_pursue_romance_replay.py
+3 files would be left unchanged.
+$ $PY -m flake8 <the same three files>
+flake8 exit 0
+$ $PY -m mypy --explicit-package-bases --follow-imports=silent <the same three files>
+Success: no issues found in 3 source files
 ```
 
 The builder's runs on the rebased head:

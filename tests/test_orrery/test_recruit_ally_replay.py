@@ -27,6 +27,10 @@ from tests.test_orrery.checkpointed_story_support import (
     CheckpointedStory,
     seed_checkpointed_story,
 )
+from tests.test_orrery.test_pursue_romance_replay import (
+    PRIOR_RELATIONSHIP_CASES,
+    _seed_prior_relationship,
+)
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -84,6 +88,7 @@ def replay_project_db(
             "conn": conn,
             "actor": story.protagonist_entity_id,
             "target": story.rival_entity_id,
+            "head_chunk": story.head_chunk_id,
         }
     finally:
         conn.rollback()
@@ -175,8 +180,10 @@ def _project_row(
     return matching[0]
 
 
+@pytest.mark.parametrize("prior_relationship", PRIOR_RELATIONSHIP_CASES)
 def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
     replay_project_db: dict[str, Any],
+    prior_relationship: Optional[str],
 ) -> None:
     db = replay_project_db
     actor = int(db["actor"])
@@ -184,6 +191,24 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
 
     with db["conn"].cursor() as cur:
         base_time = _next_world_time(cur)
+        if prior_relationship is not None:
+            cur.execute(
+                """
+                SELECT actor.id, target.id
+                FROM characters actor
+                JOIN characters target ON target.entity_id = %s
+                WHERE actor.entity_id = %s
+                """,
+                (target, actor),
+            )
+            pair_character_ids = cur.fetchone()
+            _seed_prior_relationship(
+                cur,
+                character1_id=int(pair_character_ids[0]),
+                character2_id=int(pair_character_ids[1]),
+                relationship_type=prior_relationship,
+                attributed_chunk_id=int(db["head_chunk"]),
+            )
         cur.execute(
             """
             SELECT actor.id, target.id, relationship.relationship_type
@@ -288,8 +313,12 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
             if row["character1_id"] == actor_character_id
             and row["character2_id"] == target_character_id
         ]
-        assert prior_relationship_type is None, "the replay binds the seeded free pair"
-        assert prior_rows == []
+        assert prior_relationship_type == prior_relationship
+        if prior_relationship_type is None:
+            assert prior_rows == []
+        else:
+            assert len(prior_rows) == 1
+            assert prior_rows[0]["relationship_type"] == prior_relationship_type
 
         cur.execute("SELECT id FROM pair_tags WHERE tag = 'ally'")
         ally_tag_id = int(cur.fetchone()[0])

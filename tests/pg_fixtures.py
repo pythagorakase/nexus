@@ -1094,8 +1094,10 @@ def seed_routine_anchor(
     ``(character_entity_id, anchor_type)``, so a second anchor of the same
     type for the same character fails on that unique key. The table's check
     constraints tie ``mobility_policy`` to its location: ``fixed_place`` needs
-    ``place_id``, and the placeless policies need it NULL. The resolver reads
-    these rows as actor sources and as ``at_routine_anchor`` evidence.
+    ``place_id``; ``works_from_home``, ``nomadic``, and ``none`` need it NULL;
+    ``zone_resolved`` needs a ``zone_id``, which this helper does not take, so
+    it cannot seed that policy. The resolver reads these rows as actor sources
+    and as ``at_routine_anchor`` evidence.
     """
 
     require_disposable_target(dbname)

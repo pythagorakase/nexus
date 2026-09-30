@@ -152,10 +152,66 @@ def replay_project_db(
             "conn": conn,
             "actor": story.protagonist_entity_id,
             "target": story.rival_entity_id,
+            "head_chunk": story.head_chunk_id,
         }
     finally:
         conn.rollback()
         conn.close()
+
+
+PRIOR_RELATIONSHIP_CASES = (None, "romantic")
+
+
+def _seed_prior_relationship(
+    cur: Any,
+    *,
+    character1_id: int,
+    character2_id: int,
+    relationship_type: str,
+    attributed_chunk_id: int,
+) -> None:
+    """Relate the bound pair inside the test transaction, before the window.
+
+    Replay gap 2 unwinds a relationship version with no source chunk whose
+    ``created_at`` is later than the reconstruction target, and drops a row
+    whose own ``created_at`` is later. The fabricated chunks sit a few minutes
+    either side of the transaction's ``now()``, so this row is dated ten
+    minutes earlier and its version is attributed to the seeded head chunk,
+    which precedes every fabricated chunk. Both transaction-local settings are
+    restored afterward.
+    """
+
+    cur.execute(
+        "SELECT current_setting('nexus.write_producer', true), "
+        "current_setting('nexus.source_chunk_id', true)"
+    )
+    previous_producer, previous_chunk = cur.fetchone()
+    cur.execute("SELECT set_config('nexus.write_producer', 'manual', true)")
+    cur.execute(
+        "SELECT set_config('nexus.source_chunk_id', %s, true)",
+        (str(attributed_chunk_id),),
+    )
+    cur.execute(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history, extra_data,
+            created_at, updated_at
+        ) VALUES (
+            %s, %s, %s, '+4|admiring', 'Prior relationship.', 'None.',
+            'Related before the replay window.', '{}'::jsonb,
+            now() - interval '10 minutes', now() - interval '10 minutes'
+        )
+        RETURNING character1_id
+        """,
+        (character1_id, character2_id, relationship_type),
+    )
+    assert cur.fetchone() is not None and cur.rowcount == 1
+    cur.execute(
+        "SELECT set_config('nexus.write_producer', %s, true), "
+        "set_config('nexus.source_chunk_id', %s, true)",
+        (previous_producer or "", previous_chunk or ""),
+    )
 
 
 def _next_world_time(cur: Any) -> datetime:
@@ -243,8 +299,10 @@ def _project_row(
     return matching[0]
 
 
+@pytest.mark.parametrize("prior_relationship", PRIOR_RELATIONSHIP_CASES)
 def test_pursue_romance_lifecycle_replays_between_checkpoints_without_drift(
     replay_project_db: dict[str, Any],
+    prior_relationship: Optional[str],
 ) -> None:
     db = replay_project_db
     actor = int(db["actor"])
@@ -252,6 +310,24 @@ def test_pursue_romance_lifecycle_replays_between_checkpoints_without_drift(
 
     with db["conn"].cursor() as cur:
         base_time = _next_world_time(cur)
+        if prior_relationship is not None:
+            cur.execute(
+                """
+                SELECT actor.id, target.id
+                FROM characters actor
+                JOIN characters target ON target.entity_id = %s
+                WHERE actor.entity_id = %s
+                """,
+                (target, actor),
+            )
+            pair_character_ids = cur.fetchone()
+            _seed_prior_relationship(
+                cur,
+                character1_id=int(pair_character_ids[0]),
+                character2_id=int(pair_character_ids[1]),
+                relationship_type=prior_relationship,
+                attributed_chunk_id=int(db["head_chunk"]),
+            )
         cur.execute(
             """
             SELECT actor.id, target.id, relationship.relationship_type
@@ -356,8 +432,12 @@ def test_pursue_romance_lifecycle_replays_between_checkpoints_without_drift(
             if row["character1_id"] == actor_character_id
             and row["character2_id"] == target_character_id
         ]
-        assert prior_relationship_type is None, "the replay binds the seeded free pair"
-        assert prior_rows == []
+        assert prior_relationship_type == prior_relationship
+        if prior_relationship_type is None:
+            assert prior_rows == []
+        else:
+            assert len(prior_rows) == 1
+            assert prior_rows[0]["relationship_type"] == prior_relationship_type
 
         cur.execute("SELECT id FROM pair_tags WHERE tag = 'contact:intimate'")
         ally_tag_id = int(cur.fetchone()[0])
