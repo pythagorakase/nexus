@@ -1,13 +1,13 @@
 # CLI Session Waiter and Inspect Family: Verification
 
-Work order 815-A. Issue #815. Base: `origin/main` at 3ca248df. No migration. Gateway lane 8017, TEST provider only, no paid calls.
+Work order 815-A. Issue #815. Base: `origin/main` at 696ccf29. No migration. Gateway lane 8017, TEST provider only, no paid calls.
 
 **Write safety.** The PostgreSQL proof writes only a disposable `qa640_815_inspect_*` clone created and dropped by `tests.pg_fixtures.disposable_slot_database`; slot 4 is routed to the clone in process (`tests.scheduler_helpers.route_slot`). No `save_NN` or `NEXUS_template` was written. No `qa640_815*` database remains after the runs (`psql -d postgres -Atc "select datname from pg_database where datname like 'qa640_815%'"` printed nothing).
 
 ## What Changed
 
 - `nexus/cli.py`: `wait_for_session(session_id, *, slot, timeout, interval)` is the one waiter. `_wait_for_narrative_result` composes it with the slot-state load and serves `continue`, `retry`, `regenerate`, and the seed's opening turn. `regenerate`'s own loop is deleted.
-- `nexus/cli.py`: `nexus inspect chunks|chunk|incubator|characters|places|factions`, each reading player-plane GET routes and passing their bodies through under `data`.
+- `nexus/cli.py`: `nexus inspect chunks|chunk|incubator|characters|places|factions`, each reading player-plane GET routes and putting each route's own payload, unchanged, under `data` (`inspect chunks` lists them oldest first; `inspect incubator` reports the empty answer as `null`).
 - `nexus/cli_contract.py`: the six verbs are `http` transport and `ENVELOPE_COMMANDS`; the docstring states how a saved-work failure reports a lost gateway.
 - `nexus/config/settings_models.py`, `nexus.toml`: `[runtime.cli] poll_interval_seconds = 1.0`.
 - `docs/cli.md`: the inspect table and a Waiting on a Generation section.
@@ -28,24 +28,26 @@ Work order 815-A. Issue #815. Base: `origin/main` at 3ca248df. No migration. Gat
 - Human `inspect` output prints `_INSPECT_EMPTY[verb]` directly; the unreachable `"Nothing to show."` default is gone. The help epilog's incubator example has its two-space column gap.
 - New tests: a self-redirecting status route (in process, and `continue`/`regenerate` keeping the partial, exit 1); a dropped and a stalled slot-state read (`continue`, exit 4 and exit 1); `continue`/`regenerate` polling at a configured 0.3s interval; the seed's opening turn losing the gateway on the schedule POST and on the second status read (exit 4, seed kept in `partial`); every inspect verb with a truncated body (exit 4); every inspect verb with `--slot 9` and with no `--slot` (exit 2, no request); non-integer `places`/`factions` ids; and the PostgreSQL proof reads the real gateway's empty incubator as `null` before the pending turn is staged.
 
+## Second Review Fix Round
+
+- `inspect chunks --from A` without `--to` is now a usage error (exit 2, no request): `--from needs --to, so a range cannot walk the whole story`. `--to B` alone still starts at the first chunk. `docs/cli.md` and the `--last`/`--from` help state the cost: one sequential request per chunk. No cap was added.
+- `docs/cli.md` now says `wait_for_session` returns the terminal status, that `[apex].generation_timeout_seconds` bounds the status polling only, and that `_wait_for_narrative_result` then loads the turn from `/api/slot/{slot}/state` under `[runtime.cli].request_timeout_seconds`.
+- `docs/cli.md` and the `run_inspect` docstring now say each record is the route's own payload, unchanged; `inspect chunks` lists them oldest first and `inspect incubator` reports the empty answer as `null`.
+- `SessionWaitFailure.__init__` is annotated `-> None`.
+- The base commit above is corrected to the branch's real merge base, and the transcript below is one run at this branch's head.
+
 ## CLI Transcript on the Played Clone
 
-The fix round added one read before the pending turn is staged: the real gateway's empty incubator, verbatim from `$PY -m pytest -q -s tests/test_cli_inspect_pg.py` (PostgreSQL enabled):
+`tests/test_cli_inspect_pg.py` at this branch's head, run with `-s`: `seed_played_story(turns=3, cast=("Mara Quill", "Oren Vale"))` and one seeded faction; the real gateway's empty incubator is read first, then a pending turn from `seed_pending_turn` is staged. The in-process gateway serves 127.0.0.1:8017 with every provider routed to TEST. Each command ran as a `python -m nexus.cli` subprocess. Verbatim stdout of that one run; only the in-process gateway's own output between commands (the fixture's schema load, model-load progress, retrieval logging, and tokenizer fork warnings) is removed:
 
 ```
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -s -p no:warnings tests/test_cli_inspect_pg.py
 $ nexus inspect incubator --slot 4 --json
 {
   "data": null,
   "ok": true
 }
-```
 
-The transcript below is the first round's run, unchanged.
-
-`tests/test_cli_inspect_pg.py`, run with `-s`: `seed_played_story(turns=3, cast=("Mara Quill", "Oren Vale"))`, one seeded faction, and a pending turn from `seed_pending_turn`, served by the in-process gateway on 127.0.0.1:8017 with every provider routed to TEST. Each command ran as a `python -m nexus.cli` subprocess. Verbatim stdout (tokenizer fork warnings removed):
-
-```
-$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -s -p no:warnings tests/test_cli_inspect_pg.py
 $ nexus continue --slot 4 --choice 1 --json
 {
   "choices": [
@@ -55,7 +57,7 @@ $ nexus continue --slot 4 --choice 1 --json
   ],
   "chunk_id": null,
   "message": "[TEST MODE] The scene advances under deterministic mock control. Orrery pressure is acknowledged structurally, while the prose remains simple enough for integration tests to inspect.",
-  "session_id": "d94d1054-b1b6-4b4c-91c0-ffa1d02c5074",
+  "session_id": "b907fd1b-0be6-455f-b235-6ebf38d371ad",
   "success": true
 }
 
@@ -69,16 +71,16 @@ $ nexus inspect chunks --last 2 --slot 4 --json
           "Wait and watch the street.",
           "Ask the nearest stranger for directions."
         ],
-        "selected": 1
+        "selected": null
       },
-      "choiceText": "Press on toward the lit doorway.",
-      "createdAt": "2026-09-29T23:47:05.417539Z",
+      "choiceText": null,
+      "createdAt": "2026-09-30T00:30:05.628630Z",
       "hasInlineSceneMarkup": false,
       "id": 3,
       "metadata": {
         "chunkId": 3,
         "episode": 1,
-        "generationDate": "2026-09-29T23:47:05.426491",
+        "generationDate": "2026-09-30T00:30:05.637969",
         "id": 3,
         "scene": 3,
         "season": 1,
@@ -88,7 +90,7 @@ $ nexus inspect chunks --last 2 --slot 4 --json
         "worldTime": "2100-01-01T04:00:00+00:00",
         "worldTimeFace": "1 Jan 2100 \u00b7 04:00"
       },
-      "rawText": "Fixture turn 3: Fixture Player crosses Fixture Plaza as the evening crowd thins. Across town at Fixture Docks, Mara Quill and Oren Vale keep to their own business.\n\nPress on toward the lit doorway.",
+      "rawText": "Fixture turn 3: Fixture Player crosses Fixture Plaza as the evening crowd thins. Across town at Fixture Docks, Mara Quill and Oren Vale keep to their own business.",
       "storytellerText": "Fixture turn 3: Fixture Player crosses Fixture Plaza as the evening crowd thins. Across town at Fixture Docks, Mara Quill and Oren Vale keep to their own business."
     },
     {
@@ -101,13 +103,13 @@ $ nexus inspect chunks --last 2 --slot 4 --json
         "selected": 1
       },
       "choiceText": "Press on toward the lit doorway.",
-      "createdAt": "2026-09-29T23:47:06.338548Z",
+      "createdAt": "2026-09-30T00:30:07.058982Z",
       "hasInlineSceneMarkup": false,
       "id": 4,
       "metadata": {
         "chunkId": 4,
         "episode": 1,
-        "generationDate": "2026-09-29T23:47:06.349332",
+        "generationDate": "2026-09-30T00:30:07.069209",
         "id": 4,
         "scene": 4,
         "season": 1,
@@ -137,13 +139,13 @@ $ nexus inspect chunks --from 1 --to 2 --slot 4 --json
         "selected": 1
       },
       "choiceText": "Press on toward the lit doorway.",
-      "createdAt": "2026-09-29T23:47:05.100604Z",
+      "createdAt": "2026-09-30T00:30:05.312206Z",
       "hasInlineSceneMarkup": false,
       "id": 1,
       "metadata": {
         "chunkId": 1,
         "episode": 1,
-        "generationDate": "2026-09-29T23:47:05.109560",
+        "generationDate": "2026-09-30T00:30:05.321403",
         "id": 1,
         "scene": 1,
         "season": 1,
@@ -166,13 +168,13 @@ $ nexus inspect chunks --from 1 --to 2 --slot 4 --json
         "selected": 1
       },
       "choiceText": "Press on toward the lit doorway.",
-      "createdAt": "2026-09-29T23:47:05.244014Z",
+      "createdAt": "2026-09-30T00:30:05.452117Z",
       "hasInlineSceneMarkup": false,
       "id": 2,
       "metadata": {
         "chunkId": 2,
         "episode": 1,
-        "generationDate": "2026-09-29T23:47:05.253059",
+        "generationDate": "2026-09-30T00:30:05.461594",
         "id": 2,
         "scene": 2,
         "season": 1,
@@ -201,13 +203,13 @@ $ nexus inspect chunk 2 --slot 4 --json
       "selected": 1
     },
     "choiceText": "Press on toward the lit doorway.",
-    "createdAt": "2026-09-29T23:47:05.244014Z",
+    "createdAt": "2026-09-30T00:30:05.452117Z",
     "hasInlineSceneMarkup": false,
     "id": 2,
     "metadata": {
       "chunkId": 2,
       "episode": 1,
-      "generationDate": "2026-09-29T23:47:05.253059",
+      "generationDate": "2026-09-30T00:30:05.461594",
       "id": 2,
       "scene": 2,
       "season": 1,
@@ -237,7 +239,7 @@ $ nexus inspect incubator --slot 4 --json
     },
     "choice_text": null,
     "chunk_id": null,
-    "created_at": "2026-09-29T23:47:06.461349+00:00",
+    "created_at": "2026-09-30T00:30:07.178506+00:00",
     "entity_changes": {
       "characters": [],
       "factions": [],
@@ -281,7 +283,7 @@ $ nexus inspect incubator --slot 4 --json
         ],
         "enabled": true
       },
-      "generated_at": "2026-09-29T23:47:12.106670+00:00",
+      "generated_at": "2026-09-30T00:30:12.834621+00:00",
       "joint_beats": [],
       "rendered_cards": [
         {
@@ -377,7 +379,7 @@ $ nexus inspect incubator --slot 4 --json
         }
       ]
     },
-    "session_id": "d94d1054-b1b6-4b4c-91c0-ffa1d02c5074",
+    "session_id": "b907fd1b-0be6-455f-b235-6ebf38d371ad",
     "status": "provisional",
     "storyteller_text": "[TEST MODE] The scene advances under deterministic mock control. Orrery pressure is acknowledged structurally, while the prose remains simple enough for integration tests to inspect.",
     "time_delta": null,
@@ -393,7 +395,7 @@ $ nexus inspect characters --slot 4 --json
     {
       "appearance": null,
       "background": "unknown",
-      "createdAt": "2026-09-29T23:47:04.936195Z",
+      "createdAt": "2026-09-30T00:30:05.137258Z",
       "currentActivity": null,
       "currentLocation": "1",
       "currentLocationName": "Fixture Plaza",
@@ -404,12 +406,12 @@ $ nexus inspect characters --slot 4 --json
       "personality": null,
       "portraitPath": null,
       "summary": "Canonical player for PostgreSQL coverage.",
-      "updatedAt": "2026-09-29T23:47:04.936195Z"
+      "updatedAt": "2026-09-30T00:30:05.137258Z"
     },
     {
       "appearance": null,
       "background": "unknown",
-      "createdAt": "2026-09-29T23:47:04.989777Z",
+      "createdAt": "2026-09-30T00:30:05.196946Z",
       "currentActivity": "tidying their own space",
       "currentLocation": "2",
       "currentLocationName": "Fixture Docks",
@@ -420,12 +422,12 @@ $ nexus inspect characters --slot 4 --json
       "personality": null,
       "portraitPath": null,
       "summary": "Mara Quill works the night shift at Fixture Docks.",
-      "updatedAt": "2026-09-29T23:47:06.338548Z"
+      "updatedAt": "2026-09-30T00:30:07.058982Z"
     },
     {
       "appearance": null,
       "background": "unknown",
-      "createdAt": "2026-09-29T23:47:05.010013Z",
+      "createdAt": "2026-09-30T00:30:05.218489Z",
       "currentActivity": "watching the world go by",
       "currentLocation": "2",
       "currentLocationName": "Fixture Docks",
@@ -436,7 +438,7 @@ $ nexus inspect characters --slot 4 --json
       "personality": null,
       "portraitPath": null,
       "summary": "Oren Vale works the night shift at Fixture Docks.",
-      "updatedAt": "2026-09-29T23:47:06.338548Z"
+      "updatedAt": "2026-09-30T00:30:07.058982Z"
     }
   ],
   "ok": true
@@ -447,7 +449,7 @@ $ nexus inspect characters 2 --slot 4 --json
   "data": {
     "appearance": null,
     "background": "unknown",
-    "createdAt": "2026-09-29T23:47:04.989777Z",
+    "createdAt": "2026-09-30T00:30:05.196946Z",
     "currentActivity": "tidying their own space",
     "currentLocation": "2",
     "currentLocationName": "Fixture Docks",
@@ -458,7 +460,7 @@ $ nexus inspect characters 2 --slot 4 --json
     "personality": null,
     "portraitPath": null,
     "summary": "Mara Quill works the night shift at Fixture Docks.",
-    "updatedAt": "2026-09-29T23:47:06.338548Z"
+    "updatedAt": "2026-09-30T00:30:07.058982Z"
   },
   "ok": true
 }
@@ -467,7 +469,7 @@ $ nexus inspect places --slot 4 --json
 {
   "data": [
     {
-      "createdAt": "2026-09-29T23:47:04.900849Z",
+      "createdAt": "2026-09-30T00:30:05.102111Z",
       "currentStatus": null,
       "extraData": null,
       "geometry": {
@@ -484,11 +486,11 @@ $ nexus inspect places --slot 4 --json
       "name": "Fixture Plaza",
       "summary": "Fixture place.",
       "type": "fixed_location",
-      "updatedAt": "2026-09-29T23:47:04.900849Z",
+      "updatedAt": "2026-09-30T00:30:05.102111Z",
       "zone": 1
     },
     {
-      "createdAt": "2026-09-29T23:47:04.958432Z",
+      "createdAt": "2026-09-30T00:30:05.162666Z",
       "currentStatus": null,
       "extraData": null,
       "geometry": {
@@ -505,7 +507,7 @@ $ nexus inspect places --slot 4 --json
       "name": "Fixture Docks",
       "summary": "Fixture place.",
       "type": "fixed_location",
-      "updatedAt": "2026-09-29T23:47:04.958432Z",
+      "updatedAt": "2026-09-30T00:30:05.162666Z",
       "zone": 1
     }
   ],
@@ -515,7 +517,7 @@ $ nexus inspect places --slot 4 --json
 $ nexus inspect places 2 --slot 4 --json
 {
   "data": {
-    "createdAt": "2026-09-29T23:47:04.958432Z",
+    "createdAt": "2026-09-30T00:30:05.162666Z",
     "currentStatus": null,
     "extraData": null,
     "geometry": {
@@ -532,7 +534,7 @@ $ nexus inspect places 2 --slot 4 --json
     "name": "Fixture Docks",
     "summary": "Fixture place.",
     "type": "fixed_location",
-    "updatedAt": "2026-09-29T23:47:04.958432Z",
+    "updatedAt": "2026-09-30T00:30:05.162666Z",
     "zone": 1
   },
   "ok": true
@@ -542,13 +544,13 @@ $ nexus inspect factions --slot 4 --json
 {
   "data": [
     {
-      "createdAt": "2026-09-29T23:47:05.470143Z",
+      "createdAt": "2026-09-30T00:30:05.682376Z",
       "extraData": null,
       "id": 1,
       "name": "The Lamplighters",
       "primaryLocation": null,
       "summary": "Fixture faction.",
-      "updatedAt": "2026-09-29T23:47:05.470143Z"
+      "updatedAt": "2026-09-30T00:30:05.682376Z"
     }
   ],
   "ok": true
@@ -557,13 +559,13 @@ $ nexus inspect factions --slot 4 --json
 $ nexus inspect factions 1 --slot 4 --json
 {
   "data": {
-    "createdAt": "2026-09-29T23:47:05.470143Z",
+    "createdAt": "2026-09-30T00:30:05.682376Z",
     "extraData": null,
     "id": 1,
     "name": "The Lamplighters",
     "primaryLocation": null,
     "summary": "Fixture faction.",
-    "updatedAt": "2026-09-29T23:47:05.470143Z"
+    "updatedAt": "2026-09-30T00:30:05.682376Z"
   },
   "ok": true
 }
@@ -573,7 +575,7 @@ nothing running
 
 .
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1 passed in 17.03s
+1 passed in 17.30s
 ```
 
 `nexus down` on the lane after the run:
@@ -589,13 +591,18 @@ $ lsof -nP -iTCP:8017 -sTCP:LISTEN; echo $?
 
 `$PY` is `/Users/pythagor/nexus/.venv/bin/python`; every run is from the worktree root with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset. `PYTHONPATH=$PWD $PY -c 'import nexus;print(nexus.__file__)'` printed the worktree's `nexus/__init__.py`.
 
-Order PostgreSQL gate (rerun after the review fix round):
+Order PostgreSQL gate (rerun after the second review fix round), and the waiter's own suites:
 
 ```
 $ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:warnings tests/test_cli_contract.py tests/test_cli.py tests/test_cli_inspect_pg.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-189 passed in 96.11s (0:01:36)
+190 passed in 94.84s (0:01:34)
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p no:warnings tests/test_cli_session_wait.py tests/test_cli_generation_http.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+71 passed in 107.77s (0:01:47)
 ```
+
+The runs below are from the first review fix round; the second round changed only `inspect chunks` argument validation, docstrings, one annotation, and docs.
 
 Reachability and every other CLI, `continue`, and `regenerate` test (PostgreSQL enabled, no skips):
 

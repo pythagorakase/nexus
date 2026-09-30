@@ -1407,7 +1407,10 @@ def _inspect_chunks(args: argparse.Namespace) -> Any:
     ``--last N`` reads GET /api/narrative/latest-chunk, then walks
     GET /api/narrative/chunks/{id}/adjacent backwards. ``--from``/``--to``
     walk the same route forwards from the first committed chunk at or after
-    ``--from``. Every chunk is the route's own payload.
+    ``--from`` (default: the first chunk) through ``--to``, which is required
+    whenever ``--from`` is given. Each chunk costs one sequential request, so
+    a wide range or a large N sends that many requests. Every chunk is the
+    route's own payload.
     """
     slot = args.slot
     chunks: List[Dict[str, Any]] = []
@@ -1511,9 +1514,12 @@ def run_inspect(args: argparse.Namespace) -> Dict[str, Any]:
     """Run one read-only ``nexus inspect`` command over the player-plane API.
 
     Each verb reads GET routes nexus/api/route_capabilities.py declares on the
-    player plane and returns their bodies unchanged under ``data``; nothing is
-    written. A request that cannot connect, is dropped, or times out reaches
-    main(), which reports it as ``api_unreachable`` (exit 4).
+    player plane and puts what they answer under ``data``: each record is the
+    route's own payload, unchanged. ``inspect chunks`` lists those payloads
+    oldest first, and ``inspect incubator`` reports the route's empty answer
+    as ``None`` (JSON ``null``). Nothing is written. A request that cannot
+    connect, is dropped, or times out reaches main(), which reports it as
+    ``api_unreachable`` (exit 4).
     """
     reader = _INSPECT_READERS.get(args.inspect_command)
     if reader is None:
@@ -1740,7 +1746,9 @@ class SessionWaitFailure(Exception):
     the stable CLI error code the failure is reported under.
     """
 
-    def __init__(self, status: str, detail: str, *, code: str = "domain_failure"):
+    def __init__(
+        self, status: str, detail: str, *, code: str = "domain_failure"
+    ) -> None:
         super().__init__(detail)
         self.status = status
         self.detail = detail
@@ -4851,13 +4859,18 @@ Examples:
         "chunks", "Read committed chunks: the last N, or an id range"
     )
     inspect_chunks_parser.add_argument(
-        "--last", type=int, help="The newest N committed chunks"
+        "--last",
+        type=int,
+        help="The newest N committed chunks (one request per chunk)",
     )
     inspect_chunks_parser.add_argument(
         "--from",
         dest="from_id",
         type=int,
-        help="First chunk id of the range (default: the first chunk)",
+        help=(
+            "First chunk id of the range (default: the first chunk); needs --to."
+            " One request per chunk in the range"
+        ),
     )
     inspect_chunks_parser.add_argument(
         "--to",
@@ -5496,6 +5509,8 @@ def _inspect_chunks_usage_error(args: argparse.Namespace) -> Optional[str]:
     ):
         if value is not None and value < 1:
             return f"{flag} must be a positive integer"
+    if args.from_id is not None and args.to_id is None:
+        return "--from needs --to, so a range cannot walk the whole story"
     if (
         args.from_id is not None
         and args.to_id is not None

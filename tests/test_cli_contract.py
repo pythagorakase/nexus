@@ -774,6 +774,7 @@ INSPECT_ROUTES: dict[tuple[str, str], tuple[int, Any]] = dict(
     [
         (("GET", "/api/narrative/latest-chunk"), (200, _chunk(12))),
         (("GET", "/api/narrative/chunks/12"), (200, _chunk(12))),
+        _adjacent(0, None, 10),
         _adjacent(9, None, 10),
         _adjacent(10, None, 11),
         _adjacent(11, 10, 12),
@@ -815,13 +816,13 @@ INSPECT_CASES: dict[str, tuple[tuple[str, ...], Any, list[tuple[str, dict]]]] = 
             ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
         ],
     ),
-    "chunks-from-to-latest": (
-        ("chunks", "--from", "11"),
-        [_chunk(11), _chunk(12)],
+    "chunks-first-to": (
+        ("chunks", "--to", "11"),
+        [_chunk(10), _chunk(11)],
         [
+            ("/api/narrative/chunks/0/adjacent", SLOT_QUERY),
             ("/api/narrative/chunks/10/adjacent", SLOT_QUERY),
             ("/api/narrative/chunks/11/adjacent", SLOT_QUERY),
-            ("/api/narrative/chunks/12/adjacent", SLOT_QUERY),
         ],
     ),
     "chunk": (
@@ -1063,6 +1064,10 @@ def test_inspect_unusable_body_is_an_invalid_response(
         ),
         (("chunks", "--last", "0"), "--last must be a positive integer"),
         (("chunks", "--from", "0"), "--from must be a positive integer"),
+        (
+            ("chunks", "--from", "11"),
+            "--from needs --to, so a range cannot walk the whole story",
+        ),
         (("chunks", "--from", "9", "--to", "3"), "--from must not exceed --to"),
         (("chunk",), "the following arguments are required: chunk_id"),
         (("characters", "first"), "argument entity_id: invalid int value: 'first'"),
@@ -1074,6 +1079,7 @@ def test_inspect_unusable_body_is_an_invalid_response(
         "last-and-range",
         "last-zero",
         "from-zero",
+        "from-open",
         "reversed",
         "chunk-id",
         "character-id",

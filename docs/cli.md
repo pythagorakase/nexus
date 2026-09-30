@@ -152,10 +152,14 @@ helper, `nexus.cli.wait_for_session`:
 
 - It reads `GET /api/narrative/status/{session_id}?slot=N` every
   `[runtime.cli].poll_interval_seconds` until the session reports a terminal
-  status, then loads the new turn from the slot's state.
-- `[apex].generation_timeout_seconds` bounds the whole wait. A single status
-  read may take the remaining budget, since a turn generating inside the
-  gateway can hold the read until it finishes.
+  status, and returns that terminal status payload.
+- `[apex].generation_timeout_seconds` bounds the status polling. A single
+  status read may take the remaining budget, since a turn generating inside
+  the gateway can hold the read until it finishes.
+- After the helper returns, its caller (`_wait_for_narrative_result`) loads
+  the new turn with one more read, `GET /api/slot/{slot}/state`, under its own
+  `[runtime.cli].request_timeout_seconds` budget. The generation budget does
+  not bound that load.
 - A session the API reports as failed is a domain failure (exit 1) whose
   `error` is the API's own message.
 - A session still running when the budget ends, a read that times out, an
@@ -174,15 +178,17 @@ Every failed wait keeps the scheduled work in `partial`: `session_id`,
 ### `inspect` — Read Story Records as JSON
 
 Each verb reads GET routes that `nexus/api/route_capabilities.py` declares on
-the player plane and returns their bodies unchanged under `data`. Nothing is
-written. Each request's timeout is `[runtime.cli].inspect_timeout_seconds`.
+the player plane and puts what they answer under `data`. Each record is the
+route's own payload, unchanged. `inspect chunks` lists those payloads oldest
+first, and `inspect incubator` reports the route's empty answer as `null`.
+Nothing is written. Each request's timeout is `[runtime.cli].inspect_timeout_seconds`.
 `--slot` is required.
 
 | Verb | Routes | `data` |
 | --- | --- | --- |
 | `inspect slot` | `/api/slot/{slot}/state` | The slot state |
-| `inspect chunks --last N` | `/api/narrative/latest-chunk`, then `/api/narrative/chunks/{id}/adjacent` backwards | The newest N committed chunks, oldest first; `[]` for an unplayed story |
-| `inspect chunks --from A --to B` | `/api/narrative/chunks/{id}/adjacent` forwards from A | The committed chunks with ids A through B; either bound may be left out |
+| `inspect chunks --last N` | `/api/narrative/latest-chunk`, then `/api/narrative/chunks/{id}/adjacent` backwards | The newest N committed chunks, oldest first; `[]` for an unplayed story. One sequential request per chunk |
+| `inspect chunks --from A --to B` | `/api/narrative/chunks/{id}/adjacent` forwards from A | The committed chunks with ids A through B. `--from` may be left out (it starts at the first chunk); `--from` without `--to` is a usage error. One sequential request per chunk in the range |
 | `inspect chunk ID` | `/api/narrative/chunks/{id}` | One committed chunk |
 | `inspect incubator` | `/api/narrative/incubator` | The pending draft, or `null` when none waits |
 | `inspect characters [ID]` | `/api/characters` (with `startId`/`endId` for one) | The list, or the one character |
