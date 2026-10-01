@@ -4139,6 +4139,7 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
                     else "-"
                 ),
                 "ok" if health.get("ok") else ("fail" if health else "-"),
+                proc.get("log_writer", "-"),
             )
         )
     if not rows:
@@ -4152,6 +4153,7 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
                     str(health.get("port", "-")),
                     "-",
                     "ok" if health.get("ok") else "fail",
+                    "-",
                 )
             )
     database = runtime.get("database") or {}
@@ -4167,9 +4169,10 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
                 if database.get("ok")
                 else f"fail ({database.get('error', 'unknown')})"
             ),
+            "-",
         )
     )
-    header = ("SERVICE", "STATE", "PID", "PORT", "UPTIME", "HEALTH")
+    header = ("SERVICE", "STATE", "PID", "PORT", "UPTIME", "HEALTH", "WRITER")
     widths = [
         max(len(str(row[i])) for row in [header] + rows) for i in range(len(header))
     ]

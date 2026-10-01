@@ -251,23 +251,45 @@ def spawn_captured(
 # ---------------------------------------------------------------------------
 
 
+class WriterProbeError(RuntimeError):
+    """The identity probe of a log writer could not run; it certifies nothing."""
+
+
+def _child_state(pid: int) -> Optional[bool]:
+    """Reap ``pid`` when it is an exited child of this process (POSIX).
+
+    Returns None when ``pid`` is not a child of this process (only its parent
+    can reap it), True when it is a running child, and False when it was an
+    exited child, now collected.
+    """
+    if os.name != "posix":  # pragma: no cover - Windows host path
+        return None
+    try:
+        reaped, _status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        return None
+    return reaped == 0
+
+
 def _reap(pid: int) -> bool:
     """Collect ``pid`` when it is an exited child of this process (POSIX).
 
-    Returns whether ``pid`` is a child of this process: only then can this
+    Returns whether ``pid`` was a child of this process: only then can this
     process reap it.
     """
-    if os.name != "posix":  # pragma: no cover - Windows host path
-        return False
-    try:
-        os.waitpid(pid, os.WNOHANG)
-    except ChildProcessError:
-        return False
-    return True
+    return _child_state(pid) is not None
 
 
 def _is_writer_for(pid: int, log_path: Path, timeout_seconds: float) -> bool:
-    """True when ``pid``'s command line is the writer of ``log_path``."""
+    """True when ``pid``'s command line is the writer of ``log_path``.
+
+    Only a probe that ran certifies anything. A ``ps`` that cannot be started,
+    that exits non-zero while the pid is still alive, or that outlasts
+    ``timeout_seconds`` raises ``WriterProbeError``: an unanswered probe never
+    counts as "not the writer". A non-zero exit for a pid that has meanwhile
+    gone is the probe's answer that no such process exists.
+    """
+    failure = f"Cannot tell whether pid {pid} is the log writer of {log_path}"
     try:
         result = subprocess.run(
             ["ps", "-ww", "-p", str(pid), "-o", "command="],
@@ -276,14 +298,41 @@ def _is_writer_for(pid: int, log_path: Path, timeout_seconds: float) -> bool:
             text=True,
             timeout=timeout_seconds,
         )
-    except (OSError, subprocess.SubprocessError):
-        return False
+    except FileNotFoundError as exc:
+        raise WriterProbeError(f"{failure}: ps could not be started ({exc}).") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise WriterProbeError(
+            f"{failure}: ps did not answer within {timeout_seconds}s."
+        ) from exc
+    except OSError as exc:
+        raise WriterProbeError(f"{failure}: ps could not be run ({exc}).") from exc
+    if result.returncode != 0:
+        if not pid_alive(pid):
+            return False
+        raise WriterProbeError(
+            f"{failure}: ps exited {result.returncode} while the pid is alive."
+        )
     command = result.stdout.strip()
-    return (
-        result.returncode == 0
-        and WRITER_MODULE in command
-        and f"--path {log_path} " in command
-    )
+    return WRITER_MODULE in command and f"--path {log_path} " in command
+
+
+def writer_alive(pid: int, log_path: Path, timeout_seconds: float) -> bool:
+    """Whether ``pid`` is still the live log writer of ``log_path``.
+
+    An exited child of this process is reaped first and counts as dead. A
+    running child of this process still holds its pid (no unreaped pid is
+    ever recycled), so it is the recorded writer. Any other live pid is the
+    writer only when its command line names this file; a probe that cannot
+    run raises ``WriterProbeError``. On Windows, liveness alone decides.
+    """
+    own = _child_state(pid)
+    if own is not None:
+        return own
+    if not pid_alive(pid):
+        return False
+    if os.name != "posix":  # pragma: no cover - Windows host path
+        return True
+    return _is_writer_for(pid, log_path, timeout_seconds)
 
 
 def wait_for_writer(
@@ -295,7 +344,9 @@ def wait_for_writer(
     live process has not reaped yet), or at once when the pid is not this
     file's writer (a recycled pid is never waited on and never signalled).
     Returns False when the writer is still alive after ``timeout_seconds``:
-    something still holds the captured process's output.
+    something still holds the captured process's output. Raises
+    ``WriterProbeError`` when the identity probe cannot run: a probe that
+    cannot answer never certifies that the writer is gone.
     """
     own_child = _reap(pid)
     if not pid_alive(pid):
@@ -326,7 +377,11 @@ def wait_for_writer(
 
 
 def kill_writer(pid: int) -> None:
-    """Kill one writer that ``wait_for_writer`` confirmed and that outlived it."""
+    """Kill one writer that ``wait_for_writer`` confirmed and that outlived it.
+
+    Never call this after ``WriterProbeError``: an unconfirmed pid is never
+    signalled.
+    """
     kill_sig = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
     try:
         os.kill(pid, kill_sig)

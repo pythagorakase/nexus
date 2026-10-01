@@ -857,8 +857,13 @@ def _llama_gguf(path: Path) -> Path:
     return path
 
 
-@pytest.fixture()
-def capture_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def _write_capture_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    llama_command: str | None = None,
+    stop_grace_seconds: float | None = None,
+) -> Path:
     """A real runtime config: tiny rotation limits, a stub llama-server."""
     port = _free_port()
     document: Any = tomlkit.parse((REPO_ROOT / "nexus.toml").read_text())
@@ -872,8 +877,10 @@ def capture_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     llama = runtime["services"]["llama_server"]
     llama["port"] = port
     command = [str(part) for part in llama["command"]]
-    command[0] = str(_llama_server_stub(tmp_path / "bin"))
+    command[0] = llama_command or str(_llama_server_stub(tmp_path / "bin"))
     llama["command"] = command
+    if stop_grace_seconds is not None:
+        runtime["health"]["stop_grace_seconds"] = stop_grace_seconds
     config = tmp_path / "nexus.toml"
     config.write_text(tomlkit.dumps(document))
     for name in ("NEXUS_HOME", "NEXUS_GATEWAY_PORT", "NEXUS_API_URL"):
@@ -881,6 +888,12 @@ def capture_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
     (tmp_path / "state").mkdir()
     return config
+
+
+@pytest.fixture()
+def capture_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A real runtime config: tiny rotation limits, a stub llama-server."""
+    return _write_capture_config(tmp_path, monkeypatch)
 
 
 def _kill_group(pid: int) -> None:
@@ -1014,5 +1027,144 @@ def test_download_status_ignores_a_reused_writer_pid(
         assert time.monotonic() - started < 2
         assert sleeper.poll() is None
     finally:
+        sleeper.kill()
+        sleeper.wait()
+
+
+# ---------------------------------------------------------------------------
+# Every record goes only after its writer (#842, after the independent review)
+# ---------------------------------------------------------------------------
+
+# A child that leaves a grandchild holding its stdout for 30 s, prints the
+# grandchild's pid, and exits: its writer outlives it.
+HOLDING_SCRIPT = (
+    "import subprocess, sys\n"
+    "grandchild = subprocess.Popen(\n"
+    "    [sys.executable, '-c', 'import time; time.sleep(30)'],\n"
+    "    start_new_session=True,\n"
+    ")\n"
+    "print(grandchild.pid, flush=True)"
+)
+
+
+def _held_writer(log_path: Path) -> tuple[int, int, int]:
+    """Spawn the holding child under a real writer; return child, writer, grandchild."""
+    settings = load_settings()
+    assert settings.runtime is not None
+    captured = local_inference.log_capture.spawn_captured(
+        [sys.executable, "-c", HOLDING_SCRIPT],
+        log_path=log_path,
+        logs=settings.runtime.logs,
+    )
+    os.waitpid(captured.pid, 0)
+    deadline = time.monotonic() + 10
+    while not _capture_holds(log_path, "\n"):
+        assert time.monotonic() < deadline, "the holding child never printed"
+        time.sleep(0.05)
+    grandchild = int(log_path.read_text().split()[0])
+    return captured.pid, captured.writer_pid, grandchild
+
+
+def _assert_killed(pid: int) -> None:
+    _, status = os.waitpid(pid, 0)
+    assert os.WIFSIGNALED(status) and os.WTERMSIG(status) == signal.SIGKILL
+
+
+def _kill_pid(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def test_failed_activation_releases_its_record_only_after_the_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed record's held writer is killed before the record goes."""
+    _write_capture_config(
+        tmp_path,
+        monkeypatch,
+        llama_command=str(tmp_path / "missing" / "llama-server"),
+        stop_grace_seconds=1,
+    )
+    settings = load_settings()
+    log_path = local_inference._logs_dir(settings) / local_inference.LOG_FILENAME
+    state_path = local_inference._state_path(settings)
+    gguf = _llama_gguf(tmp_path / "model.gguf")
+    child, writer_pid, grandchild = _held_writer(log_path)
+    try:
+        state_path.write_text(
+            json.dumps(
+                {
+                    "pid": child,
+                    "gguf_path": str(gguf),
+                    "port": 1,
+                    "started_at": "2026-10-01T00:00:00+00:00",
+                    "ready_observed": False,
+                    "failed": True,
+                    "error": "llama-server exited before becoming ready",
+                    "log_writer_pid": writer_pid,
+                }
+            )
+        )
+
+        with pytest.raises(
+            local_inference.LocalInferenceError, match=f"Log writer pid {writer_pid}"
+        ):
+            local_inference.activate(str(gguf))
+        _assert_killed(writer_pid)
+        assert state_path.exists()
+
+        with pytest.raises(local_inference.LocalInferenceError, match="does not exist"):
+            local_inference.activate(str(gguf))
+        assert not state_path.exists()
+    finally:
+        _kill_pid(grandchild)
+
+
+def test_cancel_releases_a_lost_download_record_only_after_the_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ownership-lost cancel branch waits for the writer before the record."""
+    _write_capture_config(tmp_path, monkeypatch, stop_grace_seconds=1)
+    settings = load_settings()
+    log_path = (
+        local_inference._logs_dir(settings) / local_inference.DOWNLOAD_LOG_FILENAME
+    )
+    record_path = local_inference._download_path(settings)
+    sleeper = subprocess.Popen(["sleep", "30"])
+    child, writer_pid, grandchild = _held_writer(log_path)
+    try:
+        record_path.write_text(
+            json.dumps(
+                {
+                    "pid": sleeper.pid,
+                    "family": "qa842",
+                    "quant": "Q4_K_M",
+                    "repo_id": "qa842/none",
+                    "local_dir": str(tmp_path / "models"),
+                    "files": ["none.gguf"],
+                    "total_bytes": 100,
+                    "started_at": "2026-10-01T00:00:00+00:00",
+                    "log_writer_pid": writer_pid,
+                }
+            )
+        )
+
+        with pytest.raises(
+            local_inference.LocalInferenceError, match=f"Log writer pid {writer_pid}"
+        ):
+            local_inference.cancel_download()
+        _assert_killed(writer_pid)
+        assert record_path.exists()
+
+        assert local_inference.cancel_download() == {
+            "cancelled": False,
+            "reason": "no active download",
+        }
+        assert not record_path.exists()
+        assert sleeper.poll() is None
+    finally:
+        _kill_pid(grandchild)
         sleeper.kill()
         sleeper.wait()

@@ -347,15 +347,33 @@ def _await_capture_writer(
         raise LocalInferenceError("[runtime] is required for shutdown settings")
     health = settings.runtime.health
     grace = health.stop_grace_seconds
-    if log_capture.wait_for_writer(
-        writer_pid, log_path, grace, health.poll_interval_seconds
-    ):
+    try:
+        gone = log_capture.wait_for_writer(
+            writer_pid, log_path, grace, health.poll_interval_seconds
+        )
+    except log_capture.WriterProbeError as exc:
+        # The writer may still be alive: the record that names it stays.
+        raise LocalInferenceError(str(exc)) from exc
+    if gone:
         return
     log_capture.kill_writer(writer_pid)
     raise LocalInferenceError(
         f"Log writer pid {writer_pid} for {log_path} outlived its process by "
         f"{grace}s; a process still holds the captured output. Killed the writer."
     )
+
+
+def _release_record(settings: Settings, path: Path, log_path: Path) -> None:
+    """Unlink a local-model record only once its recorded log writer is gone.
+
+    Every unlink of ``local-model.pid.json`` and ``local-model.download.json``
+    goes through here, on success and failure paths alike: a record that
+    left while its writer lived would let the next spawn open a second writer
+    on the same capture. A writer that outlives the grace is killed and this
+    raises with the record still in place.
+    """
+    _await_capture_writer(settings, _record_writer_pid(_read_json(path)), log_path)
+    path.unlink(missing_ok=True)
 
 
 def _read_active(settings: Settings) -> dict[str, Any] | None:
@@ -378,12 +396,9 @@ def _read_active(settings: Settings) -> dict[str, Any] | None:
         }
     if not _pid_alive(pid):
         if record.get("ready_observed") is True:
-            # The record names the capture's writer: it goes only once that
-            # writer is gone, so the next activate never opens a second one.
-            _await_capture_writer(
-                settings, _record_writer_pid(record), _logs_dir(settings) / LOG_FILENAME
+            _release_record(
+                settings, _state_path(settings), _logs_dir(settings) / LOG_FILENAME
             )
-            _state_path(settings).unlink(missing_ok=True)
             return None
         record["failed"] = True
         record["failed_at"] = datetime.now(timezone.utc).isoformat()
@@ -400,10 +415,9 @@ def _read_active(settings: Settings) -> dict[str, Any] | None:
             "error": record["error"],
         }
     if not _process_is_ours(settings, pid, gguf_path):
-        _await_capture_writer(
-            settings, _record_writer_pid(record), _logs_dir(settings) / LOG_FILENAME
+        _release_record(
+            settings, _state_path(settings), _logs_dir(settings) / LOG_FILENAME
         )
-        _state_path(settings).unlink(missing_ok=True)
         return None
     host, _, _ = _endpoint(settings)
     is_ready = _health_ok(settings, host, port)
@@ -439,23 +453,20 @@ def _signal_process_group(pid: int, sig: int) -> None:
 
 def _deactivate_locked(settings: Settings) -> dict[str, Any]:
     """Stop the recorded process while the lifecycle lock is held."""
-    writer_pid = _record_writer_pid(_read_json(_state_path(settings)))
+    state_path = _state_path(settings)
     capture = _logs_dir(settings) / LOG_FILENAME
     current = _read_active(settings)
     # Every path waits for the recorded writer before the record goes.
     if current is None:
-        _await_capture_writer(settings, writer_pid, capture)
-        _state_path(settings).unlink(missing_ok=True)
+        _release_record(settings, state_path, capture)
         return {"stopped": False}
     if current.get("failed") is True:
-        _await_capture_writer(settings, writer_pid, capture)
-        _state_path(settings).unlink(missing_ok=True)
+        _release_record(settings, state_path, capture)
         return {"stopped": False, "failed_cleared": True}
     pid = int(current["pid"])
     gguf_path = str(current["gguf_path"])
     if not _process_is_ours(settings, pid, gguf_path):
-        _await_capture_writer(settings, writer_pid, capture)
-        _state_path(settings).unlink(missing_ok=True)
+        _release_record(settings, state_path, capture)
         return {"stopped": False, "ownership_lost": True}
     try:
         _signal_process_group(pid, signal.SIGTERM)
@@ -477,14 +488,13 @@ def _deactivate_locked(settings: Settings) -> dict[str, Any]:
             _signal_process_group(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    _state_path(settings).unlink(missing_ok=True)
-    # Teardown is not finished until the listener is gone: the record is
-    # already unlinked, so a follow-up activate (EJECT then APPLY) would
-    # otherwise fast-probe the port, meet this server's lingering socket,
-    # and reject with a spurious foreign-occupancy 409.
+    # Teardown is not finished until the listener is gone: a follow-up
+    # activate (EJECT then APPLY) would otherwise fast-probe the port, meet
+    # this server's lingering socket, and reject with a spurious
+    # foreign-occupancy 409. The record goes last, once its writer is gone.
     host, port, _ = _endpoint(settings)
     _await_port_release(settings, host, port)
-    _await_capture_writer(settings, writer_pid, capture)
+    _release_record(settings, state_path, capture)
     return {"stopped": True, "pid": pid}
 
 
@@ -504,6 +514,7 @@ def activate(gguf_path: str) -> dict[str, Any]:
     with _lifecycle_lock:
         settings = load_settings()
         host, port, alias = _endpoint(settings)
+        log_path = _logs_dir(settings) / LOG_FILENAME
         # Read before _read_active or a teardown can unlink the record.
         previous_writer = _record_writer_pid(_read_json(_state_path(settings)))
         current = _read_active(settings)
@@ -514,7 +525,9 @@ def activate(gguf_path: str) -> dict[str, Any]:
             # probe below only ever sees genuinely foreign occupancy.
             _deactivate_locked(settings)
         elif current is not None:
-            _state_path(settings).unlink(missing_ok=True)
+            # A failed record goes only once its writer is gone, before any
+            # validation below can raise and strand a live writer unrecorded.
+            _release_record(settings, _state_path(settings), log_path)
         if _port_open(settings, host, port):
             raise LocalInferenceError(
                 f"Port {port} is already in use by a process this manager does "
@@ -535,7 +548,6 @@ def activate(gguf_path: str) -> dict[str, Any]:
             str(port),
             *extra_flags,
         ]
-        log_path = _logs_dir(settings) / LOG_FILENAME
         # One writer per file: the previous capture's writer must be gone.
         _await_capture_writer(settings, previous_writer, log_path)
         if settings.runtime is None:
@@ -784,8 +796,9 @@ def cancel_download() -> dict[str, Any]:
         if record is None or not _pid_alive(record["pid"]):
             return {"cancelled": False, "reason": "no active download"}
         pid = record["pid"]
+        download_log = _logs_dir(settings) / DOWNLOAD_LOG_FILENAME
         if not _download_process_is_ours(settings, pid, record["repo_id"]):
-            _download_path(settings).unlink(missing_ok=True)
+            _release_record(settings, _download_path(settings), download_log)
             return {"cancelled": False, "reason": "no active download"}
         try:
             _signal_process_group(pid, signal.SIGTERM)
@@ -808,12 +821,7 @@ def cancel_download() -> dict[str, Any]:
                 _signal_process_group(pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-        _await_capture_writer(
-            settings,
-            record["log_writer_pid"],
-            _logs_dir(settings) / DOWNLOAD_LOG_FILENAME,
-        )
-        _download_path(settings).unlink(missing_ok=True)
+        _release_record(settings, _download_path(settings), download_log)
         return {"cancelled": True}
 
 

@@ -239,9 +239,24 @@ in `docs/cli.md`).
   after its service stopped means another process still holds the output:
   the writer is killed and the command fails, naming its pid. A recycled pid
   that is no longer the file's writer is never waited on or signalled.
+- A writer counts as gone only when it has exited or when a `ps` probe ran
+  and its command line does not name the file. A probe that cannot run (no
+  `ps` on `PATH`, a non-zero exit while the pid is alive, or no answer within
+  `stop_grace_seconds`) fails the command, names the pid and the file, and
+  leaves the pidfile and the writer untouched.
+- A live service whose writer has died writes into a broken pipe. The
+  foreground supervisor stops such a service and fails, naming both pids.
+  `nexus status` shows each service's writer (`WRITER`: `alive`, `dead`, or
+  `-` for a pidfile written before writers existed), and `nexus doctor`'s
+  `runtime.log_writers` check fails on a dead writer under a live service:
+  restart that service by name (`nexus restart <service>`).
 - `nexus logs -n N` continues into the rotated segments when the current
   file is shorter than `N`, reading at most `max_tail_bytes` of log text in
-  all, and `-f` follows across every rotation.
+  all, and `-f` follows across every rotation. `--since MARK` reads a
+  snapshot of the segment chain and waits out a rotation in progress for at
+  most `stop_grace_seconds`, whether a segment is missing or the segments
+  keep changing identity; the empty mark `0:0:0` is refused when that
+  snapshot holds `<service>.log.<backup_count>`.
 - `{log_config}` expands to `<state_dir>/logging.json`, a
   `logging.config.dictConfig` document the supervisor writes from
   `[runtime.logs]` before spawning. The gateway and the mock OpenAI server
@@ -285,7 +300,9 @@ in `docs/cli.md`).
   `NEXUS_GATEWAY_PORT` says; read them with `nexus logs local-model` (or
   `local-model.download`) in a shell without that variable. Deactivation,
   a cancelled or failed download, and the next activation or download wait
-  for the previous writer the same way the supervisor does.
+  for the previous writer the same way the supervisor does. Every removal of
+  `local-model.pid.json` or `local-model.download.json`, on failure paths
+  too, waits for the writer the record names first.
 
 ## CLI Surface
 
@@ -341,6 +358,7 @@ is the second.
 | `tools.pg_dump` | owner-host | `config.valid` | `pg_dump` resolves on `PATH` or `[api.database].tool_search_paths` |
 | `ui.bundle` | owner-host | — | `ui/dist/public/index.html` exists |
 | `secrets.seat_providers` | owner-host | `config.valid` | every key the model seats in use read is present (Required Keys and Headless Hosts); each account is listed as present, missing, or unreadable, and an unreadable store (a locked or unresponsive Keychain, or no `security` on `PATH`) fails the check with that store's remediation |
+| `runtime.log_writers` | owner-host | `config.valid` | no live supervised service runs without the log writer its pidfile records; a dead writer names `nexus restart <service>` (restart the service by name) |
 | `gateway.reachable` | owner-client | `config.valid` | the profile's gateway answers `/runtime/status` with the runtime's auth headers |
 | `gateway.version` | owner-client | `gateway.reachable` | client and runtime report the same `nexus` version |
 | `reachability.gate` | ci-runner | `config.valid` | `python -S scripts/check_reachability.py` passes |

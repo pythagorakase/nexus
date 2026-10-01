@@ -17,10 +17,18 @@ import tomlkit
 
 from nexus import cli
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
-from nexus.runtime.log_capture import wait_for_writer, writer_error_path
+from nexus.runtime import supervisor as supervisor_module
+from nexus.runtime.log_capture import (
+    WriterProbeError,
+    spawn_captured,
+    wait_for_writer,
+    writer_error_path,
+)
+from nexus.runtime.readiness import REGISTRY, ReadinessContext, run_readiness
 from nexus.runtime.supervisor import (
     RuntimeError_,
     _LogFollower,
+    _open_segments,
     _tail_lines,
     rotated_segment,
 )
@@ -186,6 +194,8 @@ def _logging_supervisor(
     command: list[str] | None = None,
     max_tail_bytes: int | None = None,
     stop_grace_seconds: float | None = None,
+    poll_interval_seconds: float | None = None,
+    gateway_port: int | None = None,
 ) -> Supervisor:
     """A real supervisor with an 'echo' service and tiny rotation limits."""
     document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
@@ -197,6 +207,10 @@ def _logging_supervisor(
         runtime["logs"]["max_tail_bytes"] = max_tail_bytes
     if stop_grace_seconds is not None:
         runtime["health"]["stop_grace_seconds"] = stop_grace_seconds
+    if poll_interval_seconds is not None:
+        runtime["health"]["poll_interval_seconds"] = poll_interval_seconds
+    if gateway_port is not None:
+        runtime["services"]["gateway"]["port"] = gateway_port
     echo = tomlkit.table()
     echo["command"] = command or ECHO_COMMAND
     echo["port"] = 1
@@ -858,3 +872,289 @@ def test_start_waits_for_a_stale_records_writer(tmp_path: Path) -> None:
         _assert_killed(writer_pid)
     finally:
         _kill_quietly(grandchild)
+
+
+# ---------------------------------------------------------------------------
+# After the independent review (#842): probes, dead writers, snapshot bounds
+# ---------------------------------------------------------------------------
+
+SLEEPER_COMMAND = ["{python}", "-c", "import time; time.sleep(30)"]
+
+
+def _free_port() -> int:
+    """An OS-assigned loopback port nothing listens on once this returns."""
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _ps_directory(tmp_path: Path, kind: str) -> Path:
+    """A PATH directory whose ps is missing, exits 1, or never answers."""
+    directory = tmp_path / f"ps-{kind}"
+    directory.mkdir()
+    if kind == "exits-1":
+        script = "#!/bin/sh\nexit 1\n"
+    elif kind == "sleeps":
+        script = "#!/bin/sh\nexec /bin/sleep 30\n"
+    else:
+        return directory
+    stub = directory / "ps"
+    stub.write_text(script)
+    stub.chmod(0o755)
+    return directory
+
+
+def _reap_quietly(pid: int) -> None:
+    try:
+        os.waitpid(pid, 0)
+    except ChildProcessError:
+        pass
+
+
+@pytest.mark.parametrize("kind", ["missing", "exits-1", "sleeps"])
+def test_wait_for_writer_raises_when_the_probe_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """A ps that cannot answer is an error, never "the writer is gone"."""
+    capture = tmp_path / "logs" / "held.log"
+    captured = spawn_captured(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        log_path=capture,
+        logs=Supervisor.from_config(_write_config(tmp_path)).runtime.logs,
+    )
+    try:
+        monkeypatch.setenv("PATH", str(_ps_directory(tmp_path, kind)))
+        with pytest.raises(WriterProbeError) as raised:
+            wait_for_writer(captured.writer_pid, capture, 0.5, 0.1)
+        assert f"pid {captured.writer_pid}" in str(raised.value)
+        assert str(capture) in str(raised.value)
+        assert os.waitpid(captured.writer_pid, os.WNOHANG) == (0, 0)
+        assert os.waitpid(captured.pid, os.WNOHANG) == (0, 0)
+    finally:
+        _kill_quietly(captured.pid)
+        _reap_quietly(captured.pid)
+        _reap_quietly(captured.writer_pid)
+
+
+def test_stop_keeps_the_record_when_the_writer_probe_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_stop_service raises and keeps the pidfile; the live writer is untouched."""
+    supervisor = _logging_supervisor(
+        tmp_path,
+        max_bytes=1000,
+        backup_count=2,
+        command=HOLDING_CHILD,
+        stop_grace_seconds=1,
+    )
+    pid, writer_pid, grandchild = _spawn_holding_child(supervisor)
+    try:
+        supervisor._write_pidfile(
+            "echo",
+            {"pid": pid, "service": "echo", "port": 1, "log_writer_pid": writer_pid},
+        )
+        monkeypatch.setenv("PATH", str(_ps_directory(tmp_path, "missing")))
+        with pytest.raises(RuntimeError_, match=f"pid {writer_pid}"):
+            supervisor._stop_service("echo")
+        assert supervisor._pidfile("echo").exists()
+        assert os.waitpid(writer_pid, os.WNOHANG) == (0, 0)
+    finally:
+        _kill_quietly(grandchild)
+        _reap_quietly(writer_pid)
+
+
+def _spawn_sleeper_record(
+    supervisor: Supervisor, *, detached: bool, with_writer: bool = True
+) -> tuple[int, int]:
+    """Spawn the 30 s sleeper as 'echo' and write its pidfile; return both pids."""
+    service = supervisor.runtime.services["echo"]
+    service.command = list(SLEEPER_COMMAND)
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=detached)
+    record: dict[str, Any] = {
+        "pid": pid,
+        "service": "echo",
+        "port": 1,
+        "host": "127.0.0.1",
+        "slot": 5,
+        "started_at": "2026-10-01T00:00:00+00:00",
+    }
+    if with_writer:
+        record["log_writer_pid"] = writer_pid
+    supervisor._write_pidfile("echo", record)
+    return pid, writer_pid
+
+
+def test_check_children_stops_a_service_whose_writer_died(tmp_path: Path) -> None:
+    """A live foreground service without its writer is stopped, loudly."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, stop_grace_seconds=1
+    )
+    pid, writer_pid = _spawn_sleeper_record(supervisor, detached=False)
+    try:
+        os.kill(writer_pid, signal.SIGKILL)
+        _reap_quietly(writer_pid)
+        services = {"echo": supervisor.runtime.services["echo"]}
+        expected = (
+            f"Log writer for 'echo' (pid {writer_pid}) died while the service "
+            f"(pid {pid}) was running; its output had nowhere to go. Stopped the "
+            "service."
+        )
+        with pytest.raises(RuntimeError_) as raised:
+            supervisor._check_children(services, 5, {}, echo=False)
+        assert str(raised.value) == expected
+        _, status = os.waitpid(pid, 0)
+        assert os.WIFSIGNALED(status)
+        assert not supervisor._pidfile("echo").exists()
+    finally:
+        _kill_quietly(pid)
+        _reap_quietly(pid)
+
+
+def _json_status(
+    supervisor: Supervisor,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> dict[str, Any]:
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(supervisor.config_path))
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+    monkeypatch.setattr(sys, "argv", ["nexus", "--json", "status"])
+    assert cli.main() == 0
+    return cast(dict[str, Any], json.loads(capsys.readouterr().out))
+
+
+def test_status_reports_each_services_log_writer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """nexus status shows alive, then dead after a kill, and - for a legacy record."""
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, gateway_port=_free_port()
+    )
+    pid, writer_pid = _spawn_sleeper_record(supervisor, detached=True)
+    try:
+        echo = _json_status(supervisor, monkeypatch, capsys)["processes"]["echo"]
+        assert (echo["state"], echo["log_writer"]) == ("running", "alive")
+
+        os.kill(writer_pid, signal.SIGKILL)
+        echo = _json_status(supervisor, monkeypatch, capsys)["processes"]["echo"]
+        assert (echo["state"], echo["log_writer"]) == ("running", "dead")
+
+        record = supervisor._read_pidfile("echo")
+        assert record is not None
+        del record["log_writer_pid"]
+        supervisor._write_pidfile("echo", record)
+        echo = _json_status(supervisor, monkeypatch, capsys)["processes"]["echo"]
+        assert (echo["state"], echo["log_writer"]) == ("running", "-")
+    finally:
+        _kill_quietly(pid)
+        _reap_quietly(pid)
+        _reap_quietly(writer_pid)
+
+
+def test_doctor_fails_a_live_service_without_its_writer(tmp_path: Path) -> None:
+    """runtime.log_writers names the service and says to restart it by name."""
+    supervisor = _logging_supervisor(tmp_path, max_bytes=1000, backup_count=2)
+    registry = [
+        spec for spec in REGISTRY if spec.id in {"config.valid", "runtime.log_writers"}
+    ]
+
+    def check() -> Any:
+        report = run_readiness(
+            "owner-host",
+            ReadinessContext(config_path=supervisor.config_path),
+            registry=registry,
+        )
+        return {result.id: result for result in report.checks}["runtime.log_writers"]
+
+    pid, writer_pid = _spawn_sleeper_record(supervisor, detached=True)
+    try:
+        assert check().status == "pass"
+        os.kill(writer_pid, signal.SIGKILL)
+        failed = check()
+        assert failed.status == "fail"
+        assert failed.observed == (
+            f"echo (pid {pid}) runs without its log writer (pid {writer_pid})"
+        )
+        assert failed.remediation == "Restart the service by name: nexus restart echo"
+    finally:
+        _kill_quietly(pid)
+        _reap_quietly(pid)
+        _reap_quietly(writer_pid)
+
+
+def test_logs_since_empty_mark_rechecks_retention_after_the_wait(
+    tmp_path: Path,
+) -> None:
+    """Retention filled during the snapshot's wait raises, not three lines."""
+    supervisor = _logging_supervisor(
+        tmp_path,
+        max_bytes=1000,
+        backup_count=2,
+        stop_grace_seconds=10,
+        poll_interval_seconds=0.05,
+    )
+    log_path = supervisor.log_path("echo")
+    # The writer just renamed the current file: .1 holds lines 1-2, no .2.
+    _write_lines(rotated_segment(log_path, 1), ["line-1", "line-2"])
+
+    def rotate_twice() -> None:
+        # Two more rotations push lines 1-2 out of retention.
+        time.sleep(0.4)
+        for target, line in (
+            (rotated_segment(log_path, 2), "line-3"),
+            (rotated_segment(log_path, 1), "line-4"),
+            (log_path, "line-5"),
+        ):
+            staged = log_path.with_name("staged.tmp")
+            staged.write_text(f"{line}\n", encoding="utf-8")
+            staged.replace(target)
+
+    rotation = threading.Thread(target=rotate_twice)
+    rotation.start()
+    try:
+        with pytest.raises(RuntimeError_, match="Log mark 0:0:0 names no capture"):
+            supervisor.logs_since("echo", "0:0:0")
+    finally:
+        rotation.join()
+
+
+def test_open_segments_deadline_bounds_identity_churn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Segments that keep changing identity raise within the grace plus a poll."""
+    log_path = tmp_path / "churn.log"
+    _write_lines(log_path, ["first"])
+    real_open = open
+
+    def churning_open(path: Any, *args: Any, **kwargs: Any) -> Any:
+        handle = real_open(path, *args, **kwargs)
+        if Path(path) == log_path:
+            staged = tmp_path / "churn.tmp"
+            staged.write_text("replaced\n", encoding="utf-8")
+            staged.replace(log_path)
+        return handle
+
+    monkeypatch.setattr(supervisor_module, "open", churning_open, raising=False)
+    grace, poll = 1.0, 0.1
+    outcome: dict[str, Any] = {}
+
+    def snapshot() -> None:
+        started = time.monotonic()
+        try:
+            outcome["handles"] = _open_segments(log_path, 2, grace, poll)
+        except RuntimeError_ as exc:
+            outcome["error"] = exc
+        outcome["elapsed"] = time.monotonic() - started
+
+    worker = threading.Thread(target=snapshot, daemon=True)
+    worker.start()
+    worker.join(timeout=grace + poll + 5)
+    assert not worker.is_alive(), "the snapshot retried past its deadline"
+    for handle in outcome.get("handles", []):
+        handle.close()
+    assert outcome["elapsed"] <= grace + poll + 0.5
+    assert "kept changing identity" in str(outcome["error"])
+    assert str(log_path) in str(outcome["error"])

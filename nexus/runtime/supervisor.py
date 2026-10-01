@@ -49,11 +49,13 @@ from nexus.runtime.home import (
     resolve_runtime_home,
 )
 from nexus.runtime.log_capture import (
+    WriterProbeError,
     kill_writer,
     pid_alive as _pid_alive,
     rotated_segment,
     spawn_captured,
     wait_for_writer,
+    writer_alive,
 )
 from nexus.runtime.logging_config import build_logging_config
 from nexus.runtime.remote_auth import build_runtime_request_auth
@@ -252,7 +254,9 @@ def _open_segments(
     (``.1`` absent while ``.2`` exists, or the current file absent while
     ``.1`` exists), so the snapshot is retaken every ``poll_seconds`` until
     the opened identities agree with the paths and no segment exists past the
-    first missing one. A gap that lasts ``timeout_seconds`` raises.
+    first missing one. One deadline of ``timeout_seconds`` bounds the whole
+    wait, whatever the reason to retry: past it, a lasting gap or segments
+    that keep changing identity (churn) raise.
     """
     paths = [path] + [rotated_segment(path, i) for i in range(1, backup_count + 1)]
     deadline = time.monotonic() + timeout_seconds
@@ -265,22 +269,27 @@ def _open_segments(
                 break
         beyond = [segment for segment in paths[len(handles) :] if segment.exists()]
         try:
-            stable = not beyond
-            for segment, handle in zip(paths, handles):
-                stable = stable and (
-                    os.stat(segment).st_ino == os.fstat(handle.fileno()).st_ino
-                )
+            churned = any(
+                os.stat(segment).st_ino != os.fstat(handle.fileno()).st_ino
+                for segment, handle in zip(paths, handles)
+            )
         except FileNotFoundError:
-            stable = False
-        if stable:
+            churned = True
+        if not beyond and not churned:
             return handles
         for handle in handles:
             handle.close()
-        if beyond and time.monotonic() >= deadline:
+        if time.monotonic() >= deadline:
+            if beyond:
+                raise RuntimeError_(
+                    f"{paths[len(handles)]} is missing while {beyond[0]} exists, "
+                    f"and the gap outlasted {timeout_seconds}s: the capture's "
+                    "segment chain is broken."
+                )
             raise RuntimeError_(
-                f"{paths[len(handles)]} is missing while {beyond[0]} exists, "
-                f"and the gap outlasted {timeout_seconds}s: the capture's "
-                "segment chain is broken."
+                f"The segments of {path} kept changing identity between opens "
+                f"for {timeout_seconds}s (churn): no stable snapshot of the "
+                "capture's segment chain."
             )
         time.sleep(poll_seconds)
 
@@ -594,9 +603,14 @@ class Supervisor:
         """
         health = self.runtime.health
         grace = health.stop_grace_seconds
-        if wait_for_writer(
-            writer_pid, self.log_path(name), grace, health.poll_interval_seconds
-        ):
+        try:
+            gone = wait_for_writer(
+                writer_pid, self.log_path(name), grace, health.poll_interval_seconds
+            )
+        except WriterProbeError as exc:
+            # The writer may still be alive: the record that names it stays.
+            raise RuntimeError_(str(exc)) from exc
+        if gone:
             return
         kill_writer(writer_pid)
         raise RuntimeError_(
@@ -604,6 +618,49 @@ class Supervisor:
             f"{grace}s; a process still holds the service's output. Killed the "
             "writer."
         )
+
+    def _writer_alive(self, name: str, writer_pid: int) -> bool:
+        """Whether a service's recorded log writer is alive (see ``writer_alive``).
+
+        An identity probe that cannot run raises: it never certifies either
+        answer.
+        """
+        try:
+            return writer_alive(
+                writer_pid,
+                self.log_path(name),
+                self.runtime.health.stop_grace_seconds,
+            )
+        except WriterProbeError as exc:
+            raise RuntimeError_(str(exc)) from exc
+
+    def writer_state(self, name: str) -> str:
+        """``alive`` or ``dead`` for a pidfile's log writer; ``-`` without one.
+
+        A record written before the log writer existed has no writer pid.
+        """
+        record = self._read_pidfile(name)
+        if record is None or record.get("log_writer_pid") is None:
+            return "-"
+        alive = self._writer_alive(name, int(record["log_writer_pid"]))
+        return "alive" if alive else "dead"
+
+    def dead_writers(self) -> Dict[str, Tuple[int, int]]:
+        """Live services whose recorded log writer is dead: name -> (pid, writer).
+
+        Their output has nowhere to go; restarting the service by name gives
+        it a new writer.
+        """
+        dead: Dict[str, Tuple[int, int]] = {}
+        for name in self.runtime.services:
+            record = self._read_pidfile(name)
+            if record is None or record.get("log_writer_pid") is None:
+                continue
+            pid = int(record["pid"])
+            writer_pid = int(record["log_writer_pid"])
+            if _pid_alive(pid) and not self._writer_alive(name, writer_pid):
+                dead[name] = (pid, writer_pid)
+        return dead
 
     def _startup_excerpt(self, name: str) -> str:
         """The last lines a service wrote during a failed start (current file)."""
@@ -987,9 +1044,14 @@ class Supervisor:
                         "port": record["port"],
                         "slot": record.get("slot"),
                         "uptime_seconds": round(uptime, 1),
+                        "log_writer": self.writer_state(name),
                     }
                 else:
-                    processes[name] = {"state": "stopped", "port": service.port}
+                    processes[name] = {
+                        "state": "stopped",
+                        "port": service.port,
+                        "log_writer": self.writer_state(name),
+                    }
             result["processes"] = processes
         result["runtime"] = self._fetch_runtime_status()
         return result
@@ -1096,24 +1158,29 @@ class Supervisor:
         self._require_local_logs()
         inode, offset, crc = _parse_mark(mark)
         log_path = self.log_path(service)
-        if mark == EMPTY_MARK:
-            # Once .backup_count exists it stays, so this check needs no
-            # snapshot of the chain.
-            oldest = rotated_segment(log_path, self.runtime.logs.backup_count)
-            if oldest.exists():
-                raise RuntimeError_(
-                    f"Log mark {mark} names no capture, and {oldest} exists: "
-                    "lines written after the mark may have left retention."
-                )
+        backup_count = self.runtime.logs.backup_count
+        oldest = rotated_segment(log_path, backup_count)
+        retention_lost = RuntimeError_(
+            f"Log mark {mark} names no capture, and {oldest} exists: "
+            "lines written after the mark may have left retention."
+        )
+        # A fast path only: a rotation during the snapshot's wait can still
+        # fill retention, so the guard is the check on the snapshot below.
+        if mark == EMPTY_MARK and oldest.exists():
+            raise retention_lost
         health = self.runtime.health
         segments = _open_segments(
             log_path,
-            self.runtime.logs.backup_count,
+            backup_count,
             health.stop_grace_seconds,
             health.poll_interval_seconds,
         )
         try:
             if mark == EMPTY_MARK:
+                # The snapshot holds .backup_count: once it exists it stays,
+                # and the lines it pushed out are gone.
+                if len(segments) == backup_count + 1:
+                    raise retention_lost
                 start, start_offset = len(segments) - 1, 0
             else:
                 matches = [
@@ -1199,9 +1266,24 @@ class Supervisor:
         echo: bool,
     ) -> None:
         exited: list[tuple[str, RuntimeServiceSettings, Dict[str, Any]]] = []
+        failures: list[str] = []
         for name, service in services.items():
             record = self._read_pidfile(name)
-            if record is None or _pid_alive(int(record["pid"])):
+            if record is None:
+                continue
+            pid = int(record["pid"])
+            if _pid_alive(pid):
+                # A live service whose writer died writes into a broken pipe
+                # (a logging handler swallows the errors): a capture failure.
+                writer = record.get("log_writer_pid")
+                if writer is not None and not self._writer_alive(name, int(writer)):
+                    self._stop_pid(pid)
+                    self._pidfile(name).unlink(missing_ok=True)
+                    failures.append(
+                        f"Log writer for '{name}' (pid {writer}) died while the "
+                        f"service (pid {pid}) was running; its output had nowhere "
+                        "to go. Stopped the service."
+                    )
                 continue
             # Wait out the writer before the record that names it goes, on
             # every path: a later spawn must never start a second writer on
@@ -1211,7 +1293,6 @@ class Supervisor:
             self._pidfile(name).unlink(missing_ok=True)
             exited.append((name, service, record))
 
-        failures: list[str] = []
         for name, service, record in exited:
             if service.autorestart != "on-failure":
                 failures.append(
