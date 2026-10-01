@@ -89,15 +89,13 @@ def create_assets_tables(dbname: Optional[str] = None) -> None:
 
 
 def _get_default_slot_model() -> str:
-    """Get default model for new slots from config."""
-    try:
-        from nexus.config.loader import load_settings
+    """Get default model for new slots from config.
 
-        settings = load_settings()
-        return settings.global_.model.default_slot_model
-    except Exception:
-        # Fallback if config not available
-        return "TEST"
+    A configuration that fails to load or validate raises.
+    """
+    from nexus.config.loader import load_settings
+
+    return load_settings().global_.model.default_slot_model
 
 
 def ensure_global_variables(dbname: str) -> None:

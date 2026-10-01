@@ -1,7 +1,9 @@
 """Schema and routing coverage for TEST-mode Responses API wizard calls."""
 
 import json
+import socket
 import uuid
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Tuple
@@ -26,7 +28,12 @@ from nexus.api.new_story_schemas import (
     WizardResponse,
 )
 from nexus.api.wizard_agent import WizardContext, get_wizard_agent
-from tests.pg_fixtures import connect, route_slot_to_disposable
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
+from tests.settings_helpers import renamed_test_model_config
 
 FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "test_cache_wizard.json"
 
@@ -188,6 +195,51 @@ def test_seconds_round_trip_through_cache_resume_and_transition(
         transition.base_timestamp.astimezone(timezone.utc).isoformat()
         == "2087-11-03T22:47:30+00:00"
     )
+
+
+@pytest.mark.requires_postgres
+def test_renamed_test_provider_model_skips_derivation_and_retrograde(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A renamed TEST entry keeps the transition hermetic.
+
+    TEST identity is the registry provider, so a slot pinned to the renamed
+    entry skips trait derivation and Retrograde. The renamed provider points at
+    a port nothing listens on, so a regression fails on a refused connection
+    and never reaches a running mock provider.
+    """
+    from nexus.api.save_slots import upsert_slot
+    from tests.test_orrery.test_retrograde_wizard_live import (
+        ROUTED_SLOT,
+        stage_fixture_world,
+    )
+
+    assert ROUTED_SLOT == 4
+    with disposable_slot_database("qa640_renamed_test_model") as clone:
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=clone)
+        monkeypatch.setenv("NEXUS_SLOT", "4")
+        monkeypatch.delenv("NEXUS_RETROGRADE_WIZARD_MODEL", raising=False)
+        transition_data = stage_fixture_world(clone)
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        config = renamed_test_model_config(tmp_path, "TEMPTEST", port=port)
+        monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+        upsert_slot(4, model="TEMPTEST", dbname=clone)
+
+        result = new_story_flow.perform_transition_with_retrograde(
+            4, transition_data, weird_level="high"
+        )
+
+        assert result["retrograde"] == {
+            "enabled": False,
+            "skip_reason": "mock_wizard_model",
+        }
+        assert result["trait_inputs"] == {"derived": False}
+        with closing(_connect(clone)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM world_events WHERE source = 'retrograde'")
+            assert cur.fetchone() == (0,)
 
 
 def test_canned_artifact_arguments_validate_against_current_schemas() -> None:
