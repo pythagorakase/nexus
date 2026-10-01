@@ -1,7 +1,8 @@
 # Deterministic Retrieval Subtraction
 
-This records the code-only slices of issue #813 (brainstorm C077), not
-completion of its schema cleanup scope.
+This records the code slices of issue #813 (brainstorm C077) and the guarded
+table/enum retirement in migration 143. The six legacy vector-helper functions
+remain deferred to #812; this is not completion of the entire issue.
 
 ## Removed Surface and Reachability Evidence
 
@@ -89,18 +90,65 @@ configuration.
 The retry-wrapper rows in `docs/qa/804-connection-preflight/verification.md`
 remain a dated audit of the modules as they stood then.
 
-### Remaining Guarded Schema Manifest
+### Guarded Table and Enum Retirement (2026-10-01)
 
-The following drops still need PostgreSQL preflights after #810 and #812. Each
-must count rows and inspect `pg_depend`, views, and function bodies on
-`NEXUS_template` and every restored slot. The guarded migration must abort, not
-discard, when it finds unexpected rows or dependents.
+Migration `143_drop_dead_schema_strata.sql` retires exactly `public.items` and
+`public.ai_notebook`, their owned `public.items_id_seq` and
+`public.ai_notebook_id_seq`, and these nine enums:
 
-| Object | Current Evidence | Coupled Changes |
-| --- | --- | --- |
-| `public.items` and `items_id_seq` | The issue verifier found zero rows in all three inspected databases. No code reads the table after this slice. | Remove `DELETE FROM items` and `ALTER SEQUENCE items_id_seq RESTART WITH 1` from the new-story reset in `nexus/api/new_story_db_mapper.py`, plus the table note in `nexus/agents/logon/apex_schema.py`, in the same change. |
-| `public.ai_notebook` | Zero rows per the issue verifier. No code reader or writer remains. | Retire its five baselined columns (`id`, `agent`, `level`, `log_entry`, `"timestamp"`) from `config/schema_docs_baseline.json` in the same change. |
-| Obsolete retrieval function overloads | These cannot be enumerated offline. | List them from `pg_proc` on a template clone and prove that no code, view, or trigger calls each signature before its drop. |
+- `public.agent_type` and `public.log_level_type`, after their notebook columns.
+- `public.emotional_valence`, `public.entity_type`, `public.item_type`,
+  `public.relationship_type`, `public.threat_domain_type`,
+  `public.threat_lifecycle_type`, and `public.trait` (813-Q2: all seven).
 
-Psychology, episode, season, and legacy-vector data stay outside this cleanup
-pending separate rulings.
+Full-data read-only `pg_dump` clones of `NEXUS_template` and `save_01` through
+`save_05` agreed on emptiness, target definitions and dependency identities.
+The frozen fixture and manifest under `tests/fixtures/813_pre143_*` record all
+16 columns, nine enum label sets, four named constraints and four internal FK
+triggers, the item update trigger, row types/arrays, owned sequences and TOAST
+objects: 66 explicit catalog addresses and 62 dependency edges. Slot 2 is used
+for schema and emptiness evidence only, not chronology evidence.
+
+Both tables are locked before counting rows. Identity, ownership, frozen
+columns/defaults/constraints, exact closure and outgoing edges, and catalog-aware
+SQL/PLpgSQL body checks precede every restrictive drop. Unexpected data or use
+refuses the migration and the normal runner rolls back the comment and stamp as
+well as the schema. The shared `set_updated_at()` body and character/place
+triggers survive; its comment now names only the two surviving triggers.
+
+The new-story mapper loses only its two `items` reset statements. The obsolete
+chunk-schema table notes and unused Python `EntityType` class/source-list bullet
+are removed. Only the five notebook-column and nine enum debt entries are
+retired; the six function entries and the documentation ratchet stay intact.
+See `docs/qa/813-drop-dead-strata/verification.md` for source/clone identities,
+preflight SQL, refusal outcomes, preservation assertions and command tails.
+Fleet application is the coordinator's landing action, not an implementer write.
+
+### Deferred Vector-Helper Function Manifest
+
+813-Q1 binds: “The guarded drop of the dead tables and enums no longer waits for
+#810 and #812. The six vector-helper functions wait for #812's legacy inventory.”
+Migration 143 leaves all six definitions unchanged and permits a real
+`hybrid_search` caller. Their fully qualified catalog identities, with the exact
+`pg_get_function_identity_arguments` text frozen from all six clones, are:
+
+- `public.hybrid_search(query_text text, query_embedding bytea, vector_weight double precision, text_weight double precision, k integer, model_name text)`.
+- `public.hybrid_search(query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text)`.
+- `public.hybrid_search(query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text, alias_terms_input text[])`.
+- `public.migrate_embeddings()`.
+- `public.pad_vector_384_to_1024(v vector)`.
+- `public.pad_vector_to_1024(v vector)`.
+
+The complete `pg_get_functiondef` definitions and original comments are committed
+in `tests/fixtures/813_pre143_manifest.json` (`deferred_functions`), not inferred
+from names. Current retrieval delegates to the multi-model scorer in
+`nexus/agents/memnon/utils/db_access.py`; that does not authorize these drops.
+#810 already removed the obsolete MEMNON setup methods and hybrid-search
+Markdown document; migration 143 neither recreates nor edits them.
+
+The runner's fleet is `NEXUS_template` plus five save slots. Deprecated `NEXUS`,
+mock databases, backups and rehearsals are outside that fleet. Psychology,
+episodes, seasons and legacy-vector tables/data remain outside this cleanup.
+813-Q3 retains the documented unused labels; the separate 813-Q5 MEMNON SQL
+subtraction is unchanged. This slice completes no deferred 813-R5 function drop
+and adds or reopens no owner question.

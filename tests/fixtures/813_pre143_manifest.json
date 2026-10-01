@@ -1,0 +1,1185 @@
+{
+  "columns": [
+    [
+      "ai_notebook",
+      "id",
+      "bigint",
+      true,
+      "nextval('public.ai_notebook_id_seq'::regclass)",
+      null
+    ],
+    [
+      "ai_notebook",
+      "timestamp",
+      "timestamp with time zone",
+      true,
+      "now()",
+      null
+    ],
+    [
+      "ai_notebook",
+      "log_entry",
+      "text",
+      true,
+      null,
+      null
+    ],
+    [
+      "ai_notebook",
+      "agent",
+      "public.agent_type",
+      true,
+      null,
+      null
+    ],
+    [
+      "ai_notebook",
+      "level",
+      "public.log_level_type",
+      true,
+      "'INFO'::public.log_level_type",
+      null
+    ],
+    [
+      "items",
+      "id",
+      "bigint",
+      true,
+      "nextval('public.items_id_seq'::regclass)",
+      "Unique item identifier"
+    ],
+    [
+      "items",
+      "type",
+      "character varying(100)",
+      true,
+      null,
+      "Category or classification of item (weapon, data, artifact, etc.)"
+    ],
+    [
+      "items",
+      "quantity",
+      "integer",
+      true,
+      "1",
+      "Number of units if stackable/countable"
+    ],
+    [
+      "items",
+      "summary",
+      "character varying(500)",
+      true,
+      null,
+      "Brief description of the item"
+    ],
+    [
+      "items",
+      "name",
+      "character varying(50)",
+      true,
+      null,
+      "Item name or designation"
+    ],
+    [
+      "items",
+      "owner_id",
+      "bigint",
+      false,
+      null,
+      "Foreign key to characters.id - current owner/possessor"
+    ],
+    [
+      "items",
+      "history",
+      "text",
+      false,
+      null,
+      "Provenance and past ownership/usage of the item"
+    ],
+    [
+      "items",
+      "status",
+      "character varying(50)",
+      true,
+      "'functional'::character varying",
+      "Current condition (intact, damaged, active, depleted, etc.)"
+    ],
+    [
+      "items",
+      "extra_data",
+      "jsonb",
+      false,
+      null,
+      "JSONB for item-specific properties, abilities, or metadata"
+    ],
+    [
+      "items",
+      "created_at",
+      "timestamp with time zone",
+      true,
+      "now()",
+      "When item record was created"
+    ],
+    [
+      "items",
+      "updated_at",
+      "timestamp with time zone",
+      true,
+      "now()",
+      "Last modification to item record"
+    ]
+  ],
+  "constraints": [
+    [
+      "ai_notebook_pkey",
+      "public.ai_notebook",
+      "PRIMARY KEY (id)",
+      null
+    ],
+    [
+      "items_name_key",
+      "public.items",
+      "UNIQUE (name)",
+      null
+    ],
+    [
+      "items_owner_id_fkey1",
+      "public.items",
+      "FOREIGN KEY (owner_id) REFERENCES public.characters(id) ON DELETE SET NULL",
+      null
+    ],
+    [
+      "items_pkey",
+      "public.items",
+      "PRIMARY KEY (id)",
+      null
+    ]
+  ],
+  "indexes": [
+    [
+      "ai_notebook_pkey",
+      "CREATE UNIQUE INDEX ai_notebook_pkey ON public.ai_notebook USING btree (id)",
+      null
+    ],
+    [
+      "items_name_key",
+      "CREATE UNIQUE INDEX items_name_key ON public.items USING btree (name)",
+      null
+    ],
+    [
+      "items_pkey",
+      "CREATE UNIQUE INDEX items_pkey ON public.items USING btree (id)",
+      null
+    ]
+  ],
+  "sequences": [
+    [
+      "ai_notebook_id_seq",
+      "bigint",
+      1,
+      1,
+      9223372036854775807,
+      1,
+      1,
+      false,
+      null
+    ],
+    [
+      "items_id_seq",
+      "bigint",
+      1,
+      1,
+      9223372036854775807,
+      1,
+      1,
+      false,
+      null
+    ]
+  ],
+  "closure_objects": [
+    [
+      "pg_attrdef",
+      "default value for column created_at of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column id of table public.ai_notebook"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column id of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column level of table public.ai_notebook"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column quantity of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column status of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column timestamp of table public.ai_notebook"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column updated_at of table public.items"
+    ],
+    [
+      "pg_class",
+      "column agent of table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "column created_at of table public.items"
+    ],
+    [
+      "pg_class",
+      "column extra_data of table public.items"
+    ],
+    [
+      "pg_class",
+      "column history of table public.items"
+    ],
+    [
+      "pg_class",
+      "column id of table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "column id of table public.items"
+    ],
+    [
+      "pg_class",
+      "column level of table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "column log_entry of table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "column name of table public.items"
+    ],
+    [
+      "pg_class",
+      "column owner_id of table public.items"
+    ],
+    [
+      "pg_class",
+      "column quantity of table public.items"
+    ],
+    [
+      "pg_class",
+      "column status of table public.items"
+    ],
+    [
+      "pg_class",
+      "column summary of table public.items"
+    ],
+    [
+      "pg_class",
+      "column timestamp of table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "column type of table public.items"
+    ],
+    [
+      "pg_class",
+      "column updated_at of table public.items"
+    ],
+    [
+      "pg_class",
+      "index pg_toast.pg_toast_TABLEOID_index"
+    ],
+    [
+      "pg_class",
+      "index pg_toast.pg_toast_TABLEOID_index"
+    ],
+    [
+      "pg_class",
+      "index public.ai_notebook_pkey"
+    ],
+    [
+      "pg_class",
+      "index public.items_name_key"
+    ],
+    [
+      "pg_class",
+      "index public.items_pkey"
+    ],
+    [
+      "pg_class",
+      "sequence public.ai_notebook_id_seq"
+    ],
+    [
+      "pg_class",
+      "sequence public.items_id_seq"
+    ],
+    [
+      "pg_class",
+      "table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "table public.items"
+    ],
+    [
+      "pg_class",
+      "toast table pg_toast.pg_toast_TABLEOID"
+    ],
+    [
+      "pg_class",
+      "toast table pg_toast.pg_toast_TABLEOID"
+    ],
+    [
+      "pg_constraint",
+      "constraint ai_notebook_pkey on table public.ai_notebook"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_name_key on table public.items"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_owner_id_fkey1 on table public.items"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_pkey on table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_a_OID on table public.characters"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_a_OID on table public.characters"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_c_OID on table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_c_OID on table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger trg_items_set_updated on table public.items"
+    ],
+    [
+      "pg_type",
+      "type public.agent_type"
+    ],
+    [
+      "pg_type",
+      "type public.agent_type[]"
+    ],
+    [
+      "pg_type",
+      "type public.ai_notebook"
+    ],
+    [
+      "pg_type",
+      "type public.ai_notebook[]"
+    ],
+    [
+      "pg_type",
+      "type public.emotional_valence"
+    ],
+    [
+      "pg_type",
+      "type public.emotional_valence[]"
+    ],
+    [
+      "pg_type",
+      "type public.entity_type"
+    ],
+    [
+      "pg_type",
+      "type public.entity_type[]"
+    ],
+    [
+      "pg_type",
+      "type public.item_type"
+    ],
+    [
+      "pg_type",
+      "type public.item_type[]"
+    ],
+    [
+      "pg_type",
+      "type public.items"
+    ],
+    [
+      "pg_type",
+      "type public.items[]"
+    ],
+    [
+      "pg_type",
+      "type public.log_level_type"
+    ],
+    [
+      "pg_type",
+      "type public.log_level_type[]"
+    ],
+    [
+      "pg_type",
+      "type public.relationship_type"
+    ],
+    [
+      "pg_type",
+      "type public.relationship_type[]"
+    ],
+    [
+      "pg_type",
+      "type public.threat_domain_type"
+    ],
+    [
+      "pg_type",
+      "type public.threat_domain_type[]"
+    ],
+    [
+      "pg_type",
+      "type public.threat_lifecycle_type"
+    ],
+    [
+      "pg_type",
+      "type public.threat_lifecycle_type[]"
+    ],
+    [
+      "pg_type",
+      "type public.trait"
+    ],
+    [
+      "pg_type",
+      "type public.trait[]"
+    ]
+  ],
+  "internal_triggers": [
+    [
+      "public.characters",
+      "\"RI_FKey_noaction_upd\"()",
+      17,
+      "O",
+      "public.items",
+      false,
+      false,
+      "",
+      "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_OID\" AFTER UPDATE ON public.characters FROM public.items NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    ],
+    [
+      "public.characters",
+      "\"RI_FKey_setnull_del\"()",
+      9,
+      "O",
+      "public.items",
+      false,
+      false,
+      "",
+      "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_OID\" AFTER DELETE ON public.characters FROM public.items NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_setnull_del\"()"
+    ],
+    [
+      "public.items",
+      "\"RI_FKey_check_ins\"()",
+      5,
+      "O",
+      "public.characters",
+      false,
+      false,
+      "",
+      "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_OID\" AFTER INSERT ON public.items FROM public.characters NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    ],
+    [
+      "public.items",
+      "\"RI_FKey_check_upd\"()",
+      17,
+      "O",
+      "public.characters",
+      false,
+      false,
+      "",
+      "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_OID\" AFTER UPDATE ON public.items FROM public.characters NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    ]
+  ],
+  "enums": [
+    [
+      "public",
+      "agent_type",
+      "e",
+      [
+        "LOGON",
+        "LORE",
+        "GAIA",
+        "PSYCHE",
+        "MEMNON",
+        "MAESTRO",
+        "NEMESIS"
+      ],
+      null
+    ],
+    [
+      "public",
+      "emotional_valence",
+      "e",
+      [
+        "+5|devoted",
+        "+4|admiring",
+        "+3|trusting",
+        "+2|friendly",
+        "+1|favorable",
+        "0|neutral",
+        "-1|wary",
+        "-2|disapproving",
+        "-3|resentful",
+        "-4|hostile",
+        "-5|hateful"
+      ],
+      null
+    ],
+    [
+      "public",
+      "entity_type",
+      "e",
+      [
+        "character",
+        "faction",
+        "place",
+        "item"
+      ],
+      null
+    ],
+    [
+      "public",
+      "item_type",
+      "e",
+      [
+        "currency",
+        "weapon",
+        "cybernetic",
+        "tech",
+        "wearable",
+        "consumable",
+        "tool",
+        "data",
+        "artifact"
+      ],
+      null
+    ],
+    [
+      "public",
+      "log_level_type",
+      "e",
+      [
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL"
+      ],
+      null
+    ],
+    [
+      "public",
+      "relationship_type",
+      "e",
+      [
+        "family",
+        "romantic",
+        "friend",
+        "companion",
+        "ally",
+        "contact",
+        "pedagogical",
+        "professional",
+        "authority",
+        "rival",
+        "enemy",
+        "acquaintance",
+        "stranger",
+        "complex",
+        "chosen_kin",
+        "comrade",
+        "handler",
+        "asset",
+        "ward",
+        "guardian",
+        "captor",
+        "mentor",
+        "patron"
+      ],
+      null
+    ],
+    [
+      "public",
+      "threat_domain_type",
+      "e",
+      [
+        "physical",
+        "psychological",
+        "social",
+        "environmental"
+      ],
+      null
+    ],
+    [
+      "public",
+      "threat_lifecycle_type",
+      "e",
+      [
+        "inception",
+        "gestation",
+        "manifestation",
+        "escalation",
+        "culmination",
+        "resolution",
+        "aftermath"
+      ],
+      null
+    ],
+    [
+      "public",
+      "trait",
+      "e",
+      [
+        "allies",
+        "contacts",
+        "patron",
+        "dependents",
+        "status",
+        "reputation",
+        "resources",
+        "domain",
+        "enemies",
+        "obligations"
+      ],
+      null
+    ]
+  ],
+  "table_comments": [
+    [
+      "public.ai_notebook",
+      "Stores log entries from any internal agent (LORE, GAIA, etc.) for debugging or historical review."
+    ],
+    [
+      "public.items",
+      "Physical and digital objects, artifacts, weapons, and significant items tracked in the narrative"
+    ]
+  ],
+  "shared_comment": "BEFORE UPDATE trigger on characters, items, and places (trg_characters_set_updated, trg_items_set_updated, trg_places_set_updated): stamps updated_at with now(), the transaction start time.",
+  "shared_body": "CREATE OR REPLACE FUNCTION public.set_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  NEW.updated_at = now();\n  RETURN NEW;\nEND;\n$function$\n",
+  "deferred_functions": [
+    [
+      "public",
+      "hybrid_search",
+      "query_text text, query_embedding bytea, vector_weight double precision, text_weight double precision, k integer, model_name text",
+      "CREATE OR REPLACE FUNCTION public.hybrid_search(query_text text, query_embedding bytea, vector_weight double precision, text_weight double precision, k integer, model_name text)\n RETURNS TABLE(id bigint, text text, vector_score double precision, text_score double precision, combined_score double precision, season integer, episode integer, scene integer)\n LANGUAGE plpgsql\nAS $function$\n                    BEGIN\n                        RETURN QUERY\n                        WITH vector_results AS (\n                            -- Vector search\n                            SELECT \n                                nc.id,\n                                nc.raw_text AS text,\n                                1 - (ce.embedding <=> query_embedding::vector) AS raw_score,\n                                (1 - (ce.embedding <=> query_embedding::vector)) * vector_weight AS vector_score,\n                                cm.season,\n                                cm.episode,\n                                cm.scene\n                            FROM \n                                narrative_chunks nc\n                            JOIN \n                                chunk_embeddings ce ON nc.id = ce.chunk_id\n                            LEFT JOIN\n                                chunk_metadata cm ON nc.id = cm.chunk_id\n                            WHERE\n                                ce.model = model_name\n                            ORDER BY \n                                ce.embedding <=> query_embedding::vector\n                            LIMIT \n                                k * 2\n                        ),\n                        text_results AS (\n                            -- Text search\n                            SELECT \n                                nc.id,\n                                nc.raw_text AS text,\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) AS raw_score,\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) * text_weight AS text_score,\n                                cm.season,\n                                cm.episode,\n                                cm.scene\n                            FROM \n                                narrative_chunks nc\n                            LEFT JOIN\n                                chunk_metadata cm ON nc.id = cm.chunk_id\n                            WHERE \n                                to_tsvector('english', nc.raw_text) @@ plainto_tsquery('english', query_text)\n                            ORDER BY\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) DESC\n                            LIMIT \n                                k * 2\n                        ),\n                        combined_results AS (\n                            -- Combine and deduplicate results\n                            SELECT \n                                COALESCE(v.id, t.id) AS id,\n                                COALESCE(v.text, t.text) AS text,\n                                COALESCE(v.vector_score, 0) AS vector_score,\n                                COALESCE(t.text_score, 0) AS text_score,\n                                COALESCE(v.vector_score, 0) + COALESCE(t.text_score, 0) AS combined_score,\n                                COALESCE(v.season, t.season) AS season,\n                                COALESCE(v.episode, t.episode) AS episode,\n                                COALESCE(v.scene, t.scene) AS scene\n                            FROM \n                                vector_results v\n                            FULL OUTER JOIN \n                                text_results t ON v.id = t.id\n                        )\n                        SELECT *\n                        FROM combined_results\n                        ORDER BY combined_score DESC\n                        LIMIT k;\n                    END;\n                    $function$\n",
+      null,
+      null
+    ],
+    [
+      "public",
+      "hybrid_search",
+      "query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text",
+      "CREATE OR REPLACE FUNCTION public.hybrid_search(query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text)\n RETURNS TABLE(id bigint, text text, vector_score double precision, text_score double precision, combined_score double precision, season integer, episode integer, scene integer)\n LANGUAGE plpgsql\nAS $function$\n                    BEGIN\n                        RETURN QUERY\n                        WITH vector_results AS (\n                            -- Vector search\n                            SELECT \n                                nc.id,\n                                nc.raw_text AS text,\n                                1 - (ce.embedding <=> query_embedding) AS raw_score,\n                                (1 - (ce.embedding <=> query_embedding)) * vector_weight AS vector_score,\n                                cm.season,\n                                cm.episode,\n                                cm.scene\n                            FROM \n                                narrative_chunks nc\n                            JOIN \n                                chunk_embeddings ce ON nc.id = ce.chunk_id\n                            LEFT JOIN\n                                chunk_metadata cm ON nc.id = cm.chunk_id\n                            WHERE\n                                ce.model = model_name\n                            ORDER BY \n                                ce.embedding <=> query_embedding::vector\n                            LIMIT \n                                k * 2\n                        ),\n                        text_results AS (\n                            -- Text search\n                            SELECT \n                                nc.id,\n                                nc.raw_text AS text,\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) AS raw_score,\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) * text_weight AS text_score,\n                                cm.season,\n                                cm.episode,\n                                cm.scene\n                            FROM \n                                narrative_chunks nc\n                            LEFT JOIN\n                                chunk_metadata cm ON nc.id = cm.chunk_id\n                            WHERE \n                                to_tsvector('english', nc.raw_text) @@ plainto_tsquery('english', query_text)\n                            ORDER BY\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) DESC\n                            LIMIT \n                                k * 2\n                        ),\n                        combined_results AS (\n                            -- Combine and deduplicate results\n                            SELECT \n                                COALESCE(v.id, t.id) AS id,\n                                COALESCE(v.text, t.text) AS text,\n                                COALESCE(v.vector_score, 0) AS vector_score,\n                                COALESCE(t.text_score, 0) AS text_score,\n                                CASE \n                                    -- When vector weight is 0, use only text score\n                                    WHEN vector_weight = 0 THEN COALESCE(t.text_score, 0)\n                                    -- When text weight is 0, use only vector score\n                                    WHEN text_weight = 0 THEN COALESCE(v.vector_score, 0)\n                                    -- Otherwise add them together\n                                    ELSE COALESCE(v.vector_score, 0) + COALESCE(t.text_score, 0)\n                                END AS combined_score,\n                                COALESCE(v.season, t.season) AS season,\n                                COALESCE(v.episode, t.episode) AS episode,\n                                COALESCE(v.scene, t.scene) AS scene\n                            FROM \n                                vector_results v\n                            FULL OUTER JOIN \n                                text_results t ON v.id = t.id\n                        )\n                        SELECT *\n                        FROM combined_results\n                        ORDER BY combined_score DESC\n                        LIMIT k;\n                    END;\n                    $function$\n",
+      null,
+      null
+    ],
+    [
+      "public",
+      "hybrid_search",
+      "query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text, alias_terms_input text[]",
+      "CREATE OR REPLACE FUNCTION public.hybrid_search(query_text text, query_embedding vector, vector_weight double precision, text_weight double precision, k integer, model_name text, alias_terms_input text[] DEFAULT ARRAY[]::text[])\n RETURNS TABLE(id bigint, text text, vector_score double precision, text_score double precision, combined_score double precision, season integer, episode integer, scene integer)\n LANGUAGE plpgsql\nAS $function$\n                    DECLARE\n                        alias_boost_factor FLOAT := 1.2; -- Use boost factor from settings\n                    BEGIN\n                        RETURN QUERY\n                        WITH vector_results AS (\n                            -- Vector search\n                            SELECT \n                                nc.id,\n                                nc.raw_text AS text,\n                                1 - (ce.embedding <=> query_embedding) AS raw_score,\n                                (1 - (ce.embedding <=> query_embedding)) * vector_weight AS vector_score,\n                                cm.season,\n                                cm.episode,\n                                cm.scene\n                            FROM \n                                narrative_chunks nc\n                            JOIN \n                                chunk_embeddings ce ON nc.id = ce.chunk_id\n                            LEFT JOIN\n                                chunk_metadata cm ON nc.id = cm.chunk_id\n                            WHERE\n                                ce.model = model_name\n                            ORDER BY \n                                ce.embedding <=> query_embedding::vector\n                            LIMIT \n                                k * 2 -- Fetch more to allow for re-ranking/filtering\n                        ),\n                        text_results AS (\n                            -- Text search\n                            SELECT \n                                nc.id,\n                                nc.raw_text AS text,\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) AS raw_score,\n                                ts_rank(to_tsvector('english', nc.raw_text), \n                                      plainto_tsquery('english', query_text)) * text_weight AS text_score,\n                                cm.season,\n                                cm.episode,\n                                cm.scene\n                            FROM \n                                narrative_chunks nc\n                            LEFT JOIN\n                                chunk_metadata cm ON nc.id = cm.chunk_id\n                            WHERE \n                                to_tsvector('english', nc.raw_text) @@ plainto_tsquery('english', query_text)\n                            ORDER BY\n                                raw_score DESC\n                            LIMIT \n                                k * 2 -- Fetch more\n                        ),\n                        combined_results AS (\n                            -- Combine and deduplicate results\n                            SELECT \n                                COALESCE(v.id, t.id) AS id,\n                                COALESCE(v.text, t.text) AS text,\n                                COALESCE(v.vector_score, 0) AS vector_score,\n                                COALESCE(t.text_score, 0) AS text_score,\n                                -- Calculate base combined score\n                                CASE \n                                    WHEN vector_weight = 0 THEN COALESCE(t.text_score, 0)\n                                    WHEN text_weight = 0 THEN COALESCE(v.vector_score, 0)\n                                    ELSE COALESCE(v.vector_score, 0) + COALESCE(t.text_score, 0)\n                                END AS base_score,\n                                -- Check if any alias term matches the text (case-insensitive)\n                                CASE\n                                    WHEN cardinality(alias_terms_input) > 0 AND EXISTS (\n                                        SELECT 1\n                                        FROM unnest(alias_terms_input) AS term\n                                        WHERE COALESCE(v.text, t.text) ILIKE '%' || term || '%'\n                                    ) THEN true\n                                    ELSE false\n                                END as alias_match,\n                                COALESCE(v.season, t.season) AS season,\n                                COALESCE(v.episode, t.episode) AS episode,\n                                COALESCE(v.scene, t.scene) AS scene\n                            FROM \n                                vector_results v\n                            FULL OUTER JOIN \n                                text_results t ON v.id = t.id\n                        )\n                        SELECT \n                            combined_results.id,\n                            combined_results.text,\n                            combined_results.vector_score,\n                            combined_results.text_score,\n                            -- Apply boost if alias matched\n                            combined_results.base_score * (CASE WHEN combined_results.alias_match THEN alias_boost_factor ELSE 1.0 END) AS combined_score,\n                            combined_results.season,\n                            combined_results.episode,\n                            combined_results.scene\n                        FROM combined_results\n                        ORDER BY combined_score DESC\n                        LIMIT k; -- Apply final limit\n                    END;\n                    $function$\n",
+      null,
+      null
+    ],
+    [
+      "public",
+      "migrate_embeddings",
+      "",
+      "CREATE OR REPLACE FUNCTION public.migrate_embeddings()\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\n    DECLARE\n        r RECORD;\n        count_processed INTEGER := 0;\n    BEGIN\n        -- Add dimensions column if it doesn't exist\n        IF NOT EXISTS (\n            SELECT 1 FROM information_schema.columns \n            WHERE table_name = 'chunk_embeddings' AND column_name = 'dimensions'\n        ) THEN\n            ALTER TABLE chunk_embeddings ADD COLUMN dimensions INTEGER DEFAULT 1024;\n            UPDATE chunk_embeddings SET dimensions = 1024;\n        END IF;\n\n        -- Process each embedding from chunk_embeddings_small\n        FOR r IN SELECT chunk_id, model, embedding, created_at FROM chunk_embeddings_small\n        LOOP\n            -- Insert into chunk_embeddings\n            BEGIN\n                INSERT INTO chunk_embeddings (chunk_id, model, embedding, dimensions, created_at)\n                VALUES (r.chunk_id, r.model, r.embedding, 384, r.created_at)\n                ON CONFLICT (chunk_id, model) DO UPDATE\n                SET dimensions = 384, created_at = r.created_at;\n                \n                count_processed := count_processed + 1;\n                \n                -- Log progress every 100 embeddings\n                IF count_processed % 100 = 0 THEN\n                    RAISE NOTICE 'Processed % embeddings', count_processed;\n                END IF;\n            EXCEPTION\n                WHEN OTHERS THEN\n                    RAISE NOTICE 'Error processing chunk %: %', r.chunk_id, SQLERRM;\n            END;\n        END LOOP;\n        \n        RAISE NOTICE 'Successfully processed % embeddings', count_processed;\n    END;\n    $function$\n",
+      null,
+      null
+    ],
+    [
+      "public",
+      "pad_vector_384_to_1024",
+      "v vector",
+      "CREATE OR REPLACE FUNCTION public.pad_vector_384_to_1024(v vector)\n RETURNS double precision[]\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    result float8[] := '{0}'::float8[];\n    v_array float8[] := v::float8[];\n    i integer;\nBEGIN\n    -- Resize array to 1024 (starts with a single zero)\n    FOR i IN 2..1024 LOOP\n        result := array_append(result, 0::float8);\n    END LOOP;\n    \n    -- Copy first 384 elements from input vector\n    FOR i IN 1..384 LOOP\n        result[i] := v_array[i];\n    END LOOP;\n    \n    RETURN result;\nEND;\n$function$\n",
+      null,
+      null
+    ],
+    [
+      "public",
+      "pad_vector_to_1024",
+      "v vector",
+      "CREATE OR REPLACE FUNCTION public.pad_vector_to_1024(v vector)\n RETURNS vector\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    padded vector(1024);\n    v_array float8[];\n    i integer;\nBEGIN\n    -- Convert the vector to an array\n    v_array := array(SELECT unnest(v::float8[]));\n    \n    -- Create a zero vector of 1024 dimensions\n    padded := '{0}'::float8[]::vector(1024);\n    \n    -- Copy the 384 values from v into the first 384 positions of padded\n    FOR i IN 1..384 LOOP\n        -- Use array indexing to set values\n        padded[i] := v_array[i];\n    END LOOP;\n    \n    RETURN padded;\nEND;\n$function$\n",
+      null,
+      null
+    ]
+  ],
+  "closure_edges": [
+    [
+      "pg_attrdef",
+      "default value for column created_at of table public.items",
+      "a",
+      "column created_at of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column id of table public.ai_notebook",
+      "a",
+      "column id of table public.ai_notebook"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column id of table public.ai_notebook",
+      "n",
+      "sequence public.ai_notebook_id_seq"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column id of table public.items",
+      "a",
+      "column id of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column id of table public.items",
+      "n",
+      "sequence public.items_id_seq"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column level of table public.ai_notebook",
+      "a",
+      "column level of table public.ai_notebook"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column level of table public.ai_notebook",
+      "n",
+      "type public.log_level_type"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column quantity of table public.items",
+      "a",
+      "column quantity of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column status of table public.items",
+      "a",
+      "column status of table public.items"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column timestamp of table public.ai_notebook",
+      "a",
+      "column timestamp of table public.ai_notebook"
+    ],
+    [
+      "pg_attrdef",
+      "default value for column updated_at of table public.items",
+      "a",
+      "column updated_at of table public.items"
+    ],
+    [
+      "pg_class",
+      "column agent of table public.ai_notebook",
+      "n",
+      "type public.agent_type"
+    ],
+    [
+      "pg_class",
+      "column created_at of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column extra_data of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column history of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column id of table public.ai_notebook",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column id of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column level of table public.ai_notebook",
+      "n",
+      "type public.log_level_type"
+    ],
+    [
+      "pg_class",
+      "column log_entry of table public.ai_notebook",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column name of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column owner_id of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column quantity of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column status of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column summary of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column timestamp of table public.ai_notebook",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column type of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "column updated_at of table public.items",
+      null,
+      null
+    ],
+    [
+      "pg_class",
+      "index pg_toast.pg_toast_TABLEOID_index",
+      "a",
+      "column chunk_id of toast table pg_toast.pg_toast_TABLEOID"
+    ],
+    [
+      "pg_class",
+      "index pg_toast.pg_toast_TABLEOID_index",
+      "a",
+      "column chunk_seq of toast table pg_toast.pg_toast_TABLEOID"
+    ],
+    [
+      "pg_class",
+      "index pg_toast.pg_toast_TABLEOID_index",
+      "a",
+      "column chunk_id of toast table pg_toast.pg_toast_TABLEOID"
+    ],
+    [
+      "pg_class",
+      "index pg_toast.pg_toast_TABLEOID_index",
+      "a",
+      "column chunk_seq of toast table pg_toast.pg_toast_TABLEOID"
+    ],
+    [
+      "pg_class",
+      "index public.ai_notebook_pkey",
+      "i",
+      "constraint ai_notebook_pkey on table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "index public.items_name_key",
+      "i",
+      "constraint items_name_key on table public.items"
+    ],
+    [
+      "pg_class",
+      "index public.items_pkey",
+      "i",
+      "constraint items_pkey on table public.items"
+    ],
+    [
+      "pg_class",
+      "sequence public.ai_notebook_id_seq",
+      "a",
+      "column id of table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "sequence public.ai_notebook_id_seq",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_class",
+      "sequence public.items_id_seq",
+      "a",
+      "column id of table public.items"
+    ],
+    [
+      "pg_class",
+      "sequence public.items_id_seq",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_class",
+      "table public.ai_notebook",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_class",
+      "table public.items",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_class",
+      "toast table pg_toast.pg_toast_TABLEOID",
+      "i",
+      "table public.ai_notebook"
+    ],
+    [
+      "pg_class",
+      "toast table pg_toast.pg_toast_TABLEOID",
+      "i",
+      "table public.items"
+    ],
+    [
+      "pg_constraint",
+      "constraint ai_notebook_pkey on table public.ai_notebook",
+      "a",
+      "column id of table public.ai_notebook"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_name_key on table public.items",
+      "a",
+      "column name of table public.items"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_owner_id_fkey1 on table public.items",
+      "a",
+      "column owner_id of table public.items"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_owner_id_fkey1 on table public.items",
+      "n",
+      "column id of table public.characters"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_owner_id_fkey1 on table public.items",
+      "n",
+      "index public.characters_pkey"
+    ],
+    [
+      "pg_constraint",
+      "constraint items_pkey on table public.items",
+      "a",
+      "column id of table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_a_OID on table public.characters",
+      "i",
+      "constraint items_owner_id_fkey1 on table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_a_OID on table public.characters",
+      "i",
+      "constraint items_owner_id_fkey1 on table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_c_OID on table public.items",
+      "i",
+      "constraint items_owner_id_fkey1 on table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger RI_ConstraintTrigger_c_OID on table public.items",
+      "i",
+      "constraint items_owner_id_fkey1 on table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger trg_items_set_updated on table public.items",
+      "a",
+      "table public.items"
+    ],
+    [
+      "pg_trigger",
+      "trigger trg_items_set_updated on table public.items",
+      "n",
+      "function public.set_updated_at()"
+    ],
+    [
+      "pg_type",
+      "type public.agent_type",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.agent_type[]",
+      "i",
+      "type public.agent_type"
+    ],
+    [
+      "pg_type",
+      "type public.ai_notebook",
+      "i",
+      "table public.ai_notebook"
+    ],
+    [
+      "pg_type",
+      "type public.ai_notebook[]",
+      "i",
+      "type public.ai_notebook"
+    ],
+    [
+      "pg_type",
+      "type public.emotional_valence",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.emotional_valence[]",
+      "i",
+      "type public.emotional_valence"
+    ],
+    [
+      "pg_type",
+      "type public.entity_type",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.entity_type[]",
+      "i",
+      "type public.entity_type"
+    ],
+    [
+      "pg_type",
+      "type public.item_type",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.item_type[]",
+      "i",
+      "type public.item_type"
+    ],
+    [
+      "pg_type",
+      "type public.items",
+      "i",
+      "table public.items"
+    ],
+    [
+      "pg_type",
+      "type public.items[]",
+      "i",
+      "type public.items"
+    ],
+    [
+      "pg_type",
+      "type public.log_level_type",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.log_level_type[]",
+      "i",
+      "type public.log_level_type"
+    ],
+    [
+      "pg_type",
+      "type public.relationship_type",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.relationship_type[]",
+      "i",
+      "type public.relationship_type"
+    ],
+    [
+      "pg_type",
+      "type public.threat_domain_type",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.threat_domain_type[]",
+      "i",
+      "type public.threat_domain_type"
+    ],
+    [
+      "pg_type",
+      "type public.threat_lifecycle_type",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.threat_lifecycle_type[]",
+      "i",
+      "type public.threat_lifecycle_type"
+    ],
+    [
+      "pg_type",
+      "type public.trait",
+      "n",
+      "schema public"
+    ],
+    [
+      "pg_type",
+      "type public.trait[]",
+      "i",
+      "type public.trait"
+    ]
+  ]
+}
