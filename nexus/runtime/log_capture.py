@@ -251,14 +251,19 @@ def spawn_captured(
 # ---------------------------------------------------------------------------
 
 
-def _reap(pid: int) -> None:
-    """Collect ``pid`` when it is an exited child of this process (POSIX)."""
+def _reap(pid: int) -> bool:
+    """Collect ``pid`` when it is an exited child of this process (POSIX).
+
+    Returns whether ``pid`` is a child of this process: only then can this
+    process reap it.
+    """
     if os.name != "posix":  # pragma: no cover - Windows host path
-        return
+        return False
     try:
         os.waitpid(pid, os.WNOHANG)
     except ChildProcessError:
-        pass
+        return False
+    return True
 
 
 def _is_writer_for(pid: int, log_path: Path, timeout_seconds: float) -> bool:
@@ -299,13 +304,17 @@ def wait_for_writer(
         return True
     deadline = time.monotonic() + timeout_seconds
     while True:
-        _reap(pid)
+        own_child = _reap(pid)
         if not pid_alive(pid):
             return True
         # Only the writer's parent can reap it. When that parent is another
         # live process, the exited writer stays a zombie that answers
         # kill(pid, 0); its command line no longer names this file.
-        if os.name == "posix" and not _is_writer_for(pid, log_path, timeout_seconds):
+        if (
+            os.name == "posix"
+            and not own_child
+            and not _is_writer_for(pid, log_path, timeout_seconds)
+        ):
             return True
         if time.monotonic() >= deadline:
             return False
