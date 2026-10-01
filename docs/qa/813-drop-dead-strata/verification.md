@@ -4165,3 +4165,93 @@ dbname audit: owner targets: none
 
 `scripts/check_migration_comments.py`: OK. Black and flake8 on the test module:
 clean. The full module and the whole-tree gate run at the final head below.
+
+## After the Sixth Independent Review (Coordinator Fix)
+
+Date 2026-10-01. The sixth pass (Astra, frozen at `23bf8aa9`) found one P2:
+the `check_function_bodies` re-assertion is an unqualified `set_config` call,
+so a routine whose declared path names `pg_catalog` after another schema
+(`SET search_path = public, pg_catalog`) resolves that call through a
+surviving `public.set_config(text,text,boolean)` instead of the builtin. The
+finding generalizes: every unqualified builtin function or operator the
+scanner's `pg_temp` helpers call while a routine's effective path is in force,
+and every unqualified builtin the migration itself calls under the maintenance
+session's path, resolves the same way. The fix is one rule at three points,
+not a qualification of the lexer:
+
+- `pg_temp.dead143_path_first()` returns the first non-temporary schema of
+  `pg_catalog.current_schemas(true)` (the effective order, implicit
+  `pg_catalog` included; no path string is parsed). Every call inside it is
+  schema-qualified, including the operator, because it runs under the path it
+  judges.
+- Session: a `DO` block immediately after `SET LOCAL lock_timeout` refuses the
+  migration when that schema is not `pg_catalog`, naming the path
+  (`...; migration refused`).
+- Scanner: after a routine's effective path is applied and before anything
+  else resolves under it (the `dead143_body` arguments included), the same
+  test refuses the routine (`...; unresolved context`).
+- Validator: every `proconfig` entry is parsed under the session path first,
+  then applied with `pg_catalog.set_config`; the same test refuses the routine
+  before `check_function_bodies` is re-asserted.
+- The migration's own GUC calls (`current_setting`, `set_config`, `unnest`,
+  `array_append`, `array_length`) are `pg_catalog.`-qualified.
+
+Sol drafted the regression (`test_migration_143_round6_search_path`, seven
+cases × `post`) before its run was aborted by the provider's content
+classifier; the coordinator completed the migration change. Cases: a surviving
+`public.set_config(text,text,boolean)` whose body is
+`SELECT pg_catalog.set_config('check_function_bodies','off',true)`, plus a
+routine with `SET search_path = public, pg_catalog` and either the round-5
+broken body or `SELECT 1` (both refuse on the path, naming the routine, the
+path and `unresolved context`); a database default
+`ALTER DATABASE ... SET search_path = public, pg_catalog` (the session check
+refuses before any scan, `migration refused`, no routine named);
+`SET search_path = pg_catalog, public` with the broken body (refuses on the
+body: `post-drop`, `missing_column`) and with `SELECT 1` (applies);
+`SET search_path = public` (implicit `pg_catalog` first; applies); the round-4
+`SET search_path = "a=b", public` (applies). Every case asserts the session's
+`search_path` is unchanged afterwards and the catalog, snapshot and stamps are
+preserved.
+
+### Red Against the Previous Migration (`23bf8aa9`)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$S/old143.sql PYTHONPATH=$PWD:$S /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k "round6"
+```
+
+```text
+OLD DESTRUCTIVE VERDICT: shadow-broken targets: (None, None)
+OLD DESTRUCTIVE VERDICT: shadow-broken targets: (None, None)
+OLD DESTRUCTIVE VERDICT: shadow-healthy targets: (None, None)
+OLD DESTRUCTIVE VERDICT: shadow-healthy targets: (None, None)
+OLD DESTRUCTIVE VERDICT: session-path targets: (None, None)
+OLD DESTRUCTIVE VERDICT: session-path targets: (None, None)
+dbname audit: owner targets: none
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-broken-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-broken-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-healthy-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-healthy-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[session-path-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[session-path-True]
+6 failed, 8 passed, 318 deselected in 41.00s
+```
+
+Under the previous migration the six path cases applied destructively (the
+drop targets are gone although the broken body was never validated); the
+eight remaining cases already had their intended outcome.
+
+### Green With the Fix
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k "round6 or round5 or round4 or drops_only_manifest_on_each_fleet_clone or validation_refuses_without_scanner"
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+44 passed, 288 deselected in 154.82s (0:02:34)
+```
+
+`scripts/check_migration_comments.py`: OK. Black and flake8 on the test
+module: clean. The full module, the runner and schema-documentation suites and
+the whole-tree gate run at this head below.

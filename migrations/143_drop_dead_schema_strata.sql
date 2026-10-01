@@ -44,7 +44,9 @@
 -- fresh permission-checked assignments under a temporarily changed role.
 -- check_function_bodies is re-asserted on after the routine's own SET clauses,
 -- so a routine declared with SET check_function_bodies=off is still validated
--- (one place this guard is stricter than CREATE FUNCTION).
+-- (one place this guard is stricter than CREATE FUNCTION). Declared or session
+-- search paths that place a schema ahead of pg_catalog refuse, because the
+-- guard's own unqualified builtins would resolve through them.
 -- That is the check CREATE FUNCTION performs, against the
 -- post-drop catalog, with no DDL: nothing is re-created, so OIDs, ownership, ACLs
 -- and comments are untouched and a named failure rolls the transaction back.
@@ -59,6 +61,27 @@
 -- the runner's same atomic transaction. No persistent helper/debt remains.
 
 SET LOCAL lock_timeout = '5s';
+
+-- Builtin resolution must be deterministic wherever this migration or its
+-- helpers call an unqualified function or operator: pg_catalog must be the
+-- first schema searched (implicitly, or named first). A search path that puts
+-- any schema ahead of pg_catalog refuses at the session, per scanned routine
+-- and per validated routine. current_schemas(true) reports the effective order,
+-- so no path string is parsed. Every call below is qualified because the check
+-- itself runs under the path it judges.
+CREATE FUNCTION pg_temp.dead143_path_first() RETURNS text
+LANGUAGE sql AS $first$
+    SELECT s FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) WITH ORDINALITY AS t(s,n)
+    WHERE pg_catalog.left(s,7) OPERATOR(pg_catalog.<>) 'pg_temp' ORDER BY n LIMIT 1
+$first$;
+COMMENT ON FUNCTION pg_temp.dead143_path_first() IS 'Migration 143 transaction-local helper: the first non-temporary schema in the effective search order, which must be pg_catalog before any unqualified builtin is trusted; removed before stamping.';
+DO $session$
+BEGIN
+    IF pg_temp.dead143_path_first() IS DISTINCT FROM 'pg_catalog' THEN
+        RAISE EXCEPTION 'search_path places a schema before pg_catalog (%): builtin resolution is not deterministic; migration refused',pg_catalog.current_setting('search_path');
+    END IF;
+END
+$session$;
 
 CREATE FUNCTION pg_temp.dead143_tokens(body text) RETURNS jsonb
 LANGUAGE plpgsql AS $lexer$
@@ -882,12 +905,12 @@ $manifest$;
     offender record;
     f record;
     item jsonb;
-    saved_path text := current_setting('search_path');
+    saved_path text := pg_catalog.current_setting('search_path');
     effective_path text;
     key text;
     edge_key text;
 BEGIN
-    PERFORM set_config('search_path','pg_catalog',true);
+    PERFORM pg_catalog.set_config('search_path','pg_catalog',true);
     FOREACH target_name IN ARRAY ARRAY['items','ai_notebook'] LOOP
         SELECT c.oid,c.relowner INTO object_oid,owner_oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relname=target_name AND c.relkind='r';
@@ -1068,13 +1091,16 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
             END IF;
             IF f.lanname NOT IN ('sql','plpgsql') THEN RAISE EXCEPTION 'unsupported application body language %',f.lanname; END IF;
             SELECT (pg_temp.dead143_setting(setting))[2] INTO effective_path FROM unnest(f.proconfig) setting WHERE setting LIKE 'search_path=%';
-            PERFORM set_config('search_path',coalesce(effective_path,saved_path),true);
+            PERFORM pg_catalog.set_config('search_path',coalesce(effective_path,saved_path),true);
+            IF pg_temp.dead143_path_first() IS DISTINCT FROM 'pg_catalog' THEN
+                RAISE EXCEPTION 'search_path places a schema before pg_catalog (%): builtin resolution is not deterministic; unresolved context',pg_catalog.current_setting('search_path');
+            END IF;
             PERFORM pg_temp.dead143_body(CASE WHEN f.prosqlbody IS NULL THEN f.prosrc ELSE pg_get_functiondef(f.oid) END,f.oid,targets,tables || ARRAY[to_regclass('public.items_id_seq')::oid,to_regclass('public.ai_notebook_id_seq')::oid],names);
         EXCEPTION WHEN OTHERS THEN
             RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: function/procedure % refuses: %',f.identity,SQLERRM;
         END;
     END LOOP;
-    PERFORM set_config('search_path',saved_path,true);
+    PERFORM pg_catalog.set_config('search_path',saved_path,true);
 END
 $guard$;
 
@@ -1105,6 +1131,9 @@ DECLARE
     f record;
     setting text;
     parsed_setting text[];
+    setting_names text[];
+    setting_values text[];
+    i integer;
 BEGIN
     FOR f IN SELECT p.oid,p.proconfig,l.lanname,
         format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
@@ -1113,14 +1142,25 @@ BEGIN
         AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e')
         ORDER BY p.oid
     LOOP
+        -- Parse every SET clause under the session path, before any is applied:
+        -- once a routine's own path is in force, only qualified calls are trusted.
+        setting_names := ARRAY[]::text[];
+        setting_values := ARRAY[]::text[];
+        FOR setting IN SELECT pg_catalog.unnest(f.proconfig) LOOP
+            parsed_setting := pg_temp.dead143_setting(setting);
+            setting_names := pg_catalog.array_append(setting_names,parsed_setting[1]);
+            setting_values := pg_catalog.array_append(setting_values,parsed_setting[2]);
+        END LOOP;
         BEGIN
-            FOR setting IN SELECT unnest(f.proconfig) LOOP
-                parsed_setting := pg_temp.dead143_setting(setting);
-                PERFORM set_config(parsed_setting[1],parsed_setting[2],true);
+            FOR i IN 1..COALESCE(pg_catalog.array_length(setting_names,1),0) LOOP
+                PERFORM pg_catalog.set_config(setting_names[i],setting_values[i],true);
             END LOOP;
+            IF pg_temp.dead143_path_first() IS DISTINCT FROM 'pg_catalog' THEN
+                RAISE EXCEPTION 'search_path places a schema before pg_catalog (%): builtin resolution is not deterministic; unresolved context',pg_catalog.current_setting('search_path');
+            END IF;
             -- A routine's own SET check_function_bodies=off would switch the
             -- validator off; the second line validates every routine regardless.
-            PERFORM set_config('check_function_bodies','on',true);
+            PERFORM pg_catalog.set_config('check_function_bodies','on',true);
             CASE f.lanname
                 WHEN 'sql' THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
                 WHEN 'plpgsql' THEN PERFORM pg_catalog.plpgsql_validator(f.oid);
@@ -1143,3 +1183,4 @@ COMMENT ON FUNCTION public.set_updated_at() IS 'BEFORE UPDATE trigger on charact
 DROP FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], integer);
 DROP FUNCTION pg_temp.dead143_tokens(text);
 DROP FUNCTION pg_temp.dead143_setting(text);
+DROP FUNCTION pg_temp.dead143_path_first();

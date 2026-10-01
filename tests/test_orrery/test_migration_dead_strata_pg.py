@@ -422,6 +422,110 @@ def test_migration_143_drops_only_manifest_on_each_fleet_clone(
         assert _snapshot(dbname, surviving=True) == before
 
 
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize(
+    "case",
+    (
+        "shadow-broken",
+        "shadow-healthy",
+        "session-path",
+        "catalog-first-broken",
+        "catalog-first-healthy",
+        "implicit-first",
+        "quoted-equals",
+    ),
+)
+def test_migration_143_round6_search_path(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+    post: bool,
+) -> None:
+    """Refuse builtin-shadowing paths before scanning or validating routines."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        broken = case.endswith("broken")
+        refuses_path = case.startswith("shadow") or case == "session-path"
+        refuses = refuses_path or broken
+        path = (
+            "public, pg_catalog"
+            if refuses_path
+            else (
+                "pg_catalog, public"
+                if case.startswith("catalog-first")
+                else ('"a=b", public' if case == "quoted-equals" else "public")
+            )
+        )
+        if case == "quoted-equals":
+            _sql(dbname, 'CREATE SCHEMA "a=b"')
+        # The shadowing function itself has a healthy, explicitly qualified body.
+        # It survives the scanner and disables the old unqualified re-assertion.
+        if case != "session-path":
+            _sql(
+                dbname,
+                "CREATE FUNCTION public.set_config(text,text,boolean) RETURNS text "
+                "LANGUAGE sql AS $$SELECT "
+                "pg_catalog.set_config('check_function_bodies','off',true)$$; "
+                "COMMENT ON FUNCTION public.set_config(text,text,boolean) "
+                "IS '813 builtin-shadowing regression'",
+            )
+        _sql(
+            dbname,
+            "SET LOCAL check_function_bodies=off; "
+            "CREATE FUNCTION public.probe813_path() RETURNS integer LANGUAGE sql "
+            f"SET search_path={path} AS $$"
+            + ("SELECT missing_column FROM public.characters" if broken else "SELECT 1")
+            + "$$; COMMENT ON FUNCTION public.probe813_path() "
+            "IS '813 effective-path regression'",
+        )
+        if case == "session-path":
+            _sql(dbname, f'ALTER DATABASE "{dbname}" SET search_path=public,pg_catalog')
+        before = _snapshot(dbname, surviving=not refuses)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT pg_catalog.current_setting('search_path')")
+            original_path = cur.fetchone()
+            cur.execute(
+                "SELECT s FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) s "
+                "WHERE s OPERATOR(pg_catalog.!~) '^pg_temp'"
+            )
+            assert (cur.fetchall()[0][0] == "pg_catalog") is (case != "session-path")
+            applied = migrate.apply_migration(
+                conn, "143", "drop_dead_schema_strata", MIGRATION
+            )
+            if applied and refuses:
+                cur.execute(
+                    "SELECT pg_catalog.to_regclass('public.items'),"
+                    "pg_catalog.to_regtype('public.item_type')"
+                )
+                print("OLD DESTRUCTIVE VERDICT:", case, "targets:", cur.fetchone())
+            assert applied is not refuses, caplog.text
+            cur.execute("SELECT pg_catalog.current_setting('search_path')")
+            assert cur.fetchone() == original_path
+            if not refuses:
+                _post_state(cur)
+                cur.execute("SELECT public.probe813_path()")
+                assert cur.fetchone() == (1,)
+        if refuses:
+            if refuses_path:
+                assert "search_path places a schema before pg_catalog" in caplog.text
+                assert "public, pg_catalog" in caplog.text
+                if case == "session-path":
+                    assert "migration refused" in caplog.text
+                    assert "function/procedure" not in caplog.text
+                else:
+                    assert "probe813_path" in caplog.text
+                    assert "unresolved context" in caplog.text
+            else:
+                assert "probe813_path" in caplog.text
+                assert "post-drop" in caplog.text and "missing_column" in caplog.text
+            assert _stamps(dbname) == stamps
+        assert _snapshot(dbname, surviving=not refuses) == before
+        assert _function_catalog(dbname) == functions
+
+
 NONEMPTY = {
     "items": "INSERT INTO items(type,summary,name) VALUES ('tool','probe','813 probe')",
     "ai_notebook": "INSERT INTO ai_notebook(log_entry,agent) VALUES ('probe','LORE')",
