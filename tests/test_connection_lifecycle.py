@@ -156,6 +156,7 @@ def lifecycle_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[RuntimeFixture]:
     """Restore actual schema and start only local deterministic services."""
+    from scripts import migrate
     from scripts.new_story_setup import (
         TEMPLATE_SEED_TABLES,
         _initialize_empty_idf_corpora,
@@ -201,26 +202,27 @@ def lifecycle_runtime(
                         input=schema + "\n" + seeds,
                     )
                     # The fleet template intentionally waits for land-time migrations.
-                    # Upgrade only this fixture's private databases for branch proofs.
-                    with (
-                        closing(
-                            psycopg2.connect(dbname=dbname, **_cluster_params(cluster))
-                        ) as conn,
-                        conn,
-                        conn.cursor() as cur,
-                    ):
-                        cur.execute(
-                            "SELECT 1 FROM information_schema.columns "
-                            "WHERE table_schema = 'public' AND table_name = 'character_aliases' "
-                            "AND column_name = 'provenance'"
-                        )
-                        if cur.fetchone() is None:
-                            cur.execute(
-                                (
-                                    ROOT
-                                    / "migrations/123_character_alias_provenance.sql"
-                                ).read_text()
+                    # Upgrade only this fixture's private databases for branch proofs:
+                    # the runner's own helpers apply every migration this tree holds
+                    # beyond the template's stamps, so a branch migration's schema is
+                    # live here before it lands.
+                    with closing(
+                        psycopg2.connect(dbname=dbname, **_cluster_params(cluster))
+                    ) as conn:
+                        applied = migrate.get_applied_migrations(conn)
+                        pending = [
+                            entry
+                            for entry in migrate.discover_migrations(
+                                ROOT / "migrations"
                             )
+                            if entry[0] not in applied
+                        ]
+                        for version, name, path in pending:
+                            if not migrate.apply_migration(conn, version, name, path):
+                                raise RuntimeError(
+                                    f"Migration {version}_{name} failed on the "
+                                    f"private {dbname}; the runner log names the error"
+                                )
         finally:
             admin.close()
 

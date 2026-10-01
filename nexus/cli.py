@@ -4521,6 +4521,7 @@ def _print_window_replay(replay: Dict[str, Any]) -> None:
         "TRIMMABLE",
         "FEASIBLE",
         "FREED",
+        "REMOVED",
     )
     values = [
         (
@@ -4536,6 +4537,11 @@ def _print_window_replay(replay: Dict[str, Any]) -> None:
             row["trimmable_tokens"],
             "yes" if row["feasible"] else "no",
             row["freed_tokens"],
+            (
+                row["removed_tokens_total"]
+                if row["removed_tokens_total"] is not None
+                else "unknown"
+            ),
         )
         for row in replay["rows"]
     ]
@@ -4544,9 +4550,11 @@ def _print_window_replay(replay: Dict[str, Any]) -> None:
         for index in range(len(header))
     ]
     print(f"Run {replay['run']} (UTC day {replay['day']})")
-    for row in [header] + values:
+    for index, row in enumerate([header] + values):
         cells = (str(cell).ljust(widths[i]) for i, cell in enumerate(row))
         print("  ".join(cells).rstrip())
+        if index:
+            _print_removed_tokens(replay["rows"][index - 1])
 
 
 def run_inspect_turn(args: argparse.Namespace) -> Dict[str, Any]:
@@ -4844,6 +4852,18 @@ def _print_usage(payload: Dict[str, Any]) -> None:
         print(f"  {'BLOCK':36} TOKENS")
         for kind, tokens in record["block_tokens"].items():
             print(f"  {kind:36} {tokens}")
+        _print_removed_tokens(record)
+
+
+def _print_removed_tokens(record: Dict[str, Any]) -> None:
+    """Print a recorded assembly removal snapshot separately from kept tokens."""
+    removed = record.get("removed_block_tokens")
+    if removed:
+        print(f"  removed {sum(removed.values())}")
+        for kind, tokens in removed.items():
+            print(f"    {kind:36} {tokens}")
+    else:
+        print("  removed unknown")
 
 
 def _print_jobs(payload: Dict[str, Any]) -> None:

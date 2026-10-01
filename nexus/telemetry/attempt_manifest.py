@@ -101,6 +101,7 @@ def start_attempt(
             include={
                 "block_tokens",
                 "influence_tokens",
+                "removed_block_tokens",
                 "input_tokens",
                 "effective_ceiling",
                 "policy_headroom",

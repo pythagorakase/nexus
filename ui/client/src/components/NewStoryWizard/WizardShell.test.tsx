@@ -146,7 +146,10 @@ describe("automatic wizard resume", () => {
                 initial_location: { name: "The gate", summary: "An ancient arch" },
             })))
             .mockResolvedValueOnce(new Response(JSON.stringify({
-                slot: 5, run: null, stage: "idle", stages: [], status_poll_interval_seconds: 1,
+                slot: 5, run: null, run_status: null, error: null, stage: "idle", stages: [], status_poll_interval_seconds: 1,
+            })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                slot: 5, run: null, run_status: null, error: null, stage: "idle", stages: [], status_poll_interval_seconds: 1,
             })))
             .mockReturnValueOnce(new Promise(() => {}));
         vi.stubGlobal("fetch", fetch);
@@ -154,15 +157,15 @@ describe("automatic wizard resume", () => {
 
         expect(await screen.findByText("The missing key")).toBeInTheDocument();
         expect(screen.getByText("An ancient arch")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
-        expect(fetch).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled());
+        expect(fetch).toHaveBeenCalledTimes(2);
         fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
         // The stage waiter reads the run and poll interval on the player
         // plane before the transition starts.
-        await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+        await waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
         expect(fetch.mock.calls[1][0]).toBe("/api/story/new/retrograde/status?slot=5");
-        expect(fetch.mock.calls[2][0]).toBe("/api/story/new/transition");
-        expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({ slot: 5 });
+        expect(fetch.mock.calls[3][0]).toBe("/api/story/new/transition");
+        expect(JSON.parse(fetch.mock.calls[3][1].body)).toEqual({ slot: 5 });
     });
 
     it("ignores a resume response after leaving the wizard", async () => {

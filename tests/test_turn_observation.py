@@ -596,6 +596,8 @@ def test_observation_joins_each_attempt_with_its_provider_usage(
     assert (writer["outcome"], writer["provider_outcome"]) == ("accepted", "accepted")
     assert writer["window"] == {
         "provenance": "attempt_manifest",
+        "removed_block_tokens": UNKNOWN,
+        "removed_tokens_total": UNKNOWN,
         "input_tokens": 20777,
         "estimated_input_tokens": 20412,
         "reported_input_tokens": 20777,
@@ -1615,7 +1617,8 @@ def test_summary_renders_one_concise_read_of_the_turn(
         "  roles voice_source 18,611 · player_language 26 · "
         "canonical_evidence 2,194 · authorial_plan -54"
     )
-    assert lines[writer + 3] == (
+    assert lines[writer + 3] == "  removed unknown"
+    assert lines[writer + 4] == (
         "  usage in 20,777 · cached 12,288 · cache write unknown · out 2,100 · "
         "reasoning 800 · effort high · max out 8,000 · completed "
         f"{ledger_clock.yesterday}T23:59:59.500000Z [provider_usage_ledger ×1]"
@@ -1629,8 +1632,8 @@ def test_summary_renders_one_concise_read_of_the_turn(
         "(active-extend-expiry, scene-reset-crossings) [attempt_manifest]"
     ) in lines
     timed_out = lines.index("gaia #1 gaia-model · outcome accepted · provider error")
-    assert lines[timed_out + 2] == "  usage unknown"
-    assert lines[writer + 5 :] == [
+    assert lines[timed_out + 3] == "  usage unknown"
+    assert lines[writer + 6 :] == [
         "Critical path in 26,877 · cached 38,288 · cache write unknown · out "
         "3,950 · reasoning unknown · events 3 · attempts without usage 1",
         "correspondence_compaction #2 compaction-model · succeeded",
@@ -1743,3 +1746,63 @@ def test_inspect_turn_accepts_the_summary_flag() -> None:
 
     assert parser.parse_args(base).summary is False
     assert parser.parse_args([*base, "--summary"]).summary is True
+
+
+@pytest.mark.parametrize(
+    "source", ["manifest", "ledger", "conflicting", "legacy", "zero", "none"]
+)
+def test_removed_tokens_follow_manifest_precedence_and_preserve_unknown(
+    ledger_clock: _LedgerClock,
+    source: str,
+) -> None:
+    """The authoritative window distinguishes missing accounting from recorded zero."""
+    from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
+
+    session = str(uuid4())
+    record = _window(session, "skald_writer", 1, "TEST", WRITER_BLOCKS)
+    removed: dict[str, int] = dict(zip(TRIMMABLE_BLOCKS, (7, 11, 13)))
+    if source == "zero":
+        removed = {str(kind): 0 for kind in TRIMMABLE_BLOCKS}
+    record.removed_block_tokens = removed if source != "legacy" else {}
+    if source != "none":
+        record_prompt_window(record)
+    manifests = []
+    if source in {"manifest", "conflicting", "legacy", "zero"}:
+        manifest = _manifest(record, provider_outcome="accepted")
+        if source in {"manifest", "zero"}:
+            manifest["window_record"]["removed_block_tokens"] = removed
+        manifests.append(manifest)
+    if source == "none":
+        record_usage_event(
+            _event(
+                session,
+                ledger_clock.now.isoformat(),
+                "skald_writer",
+                1,
+                "TEST",
+                input_tokens=100,
+                outcome="accepted",
+            )
+        )
+    inspection = {
+        "session": {"session_id": session, "terminal_outcome": "accepted"},
+        "phases": [{"phase": "complete", "recorded_at": ledger_clock.now.isoformat()}],
+        "manifests": manifests,
+        "jobs": [],
+    }
+    observation = observe_turn(inspection, slot=4, read_at=ledger_clock.read_at)
+    window = observation["attempts"][0]["window"]
+    known = source in {"manifest", "ledger", "zero"}
+    assert window["removed_block_tokens"] == (removed if known else UNKNOWN)
+    assert window["removed_tokens_total"] == (
+        sum(removed.values()) if known else UNKNOWN
+    )
+    if source != "none":
+        assert window["block_tokens_total"] == window["input_tokens"]
+    assert json.loads(json.dumps(observation))["attempts"][0]["window"] == window
+    summary = format_turn_summary(observation)
+    assert (
+        f"removed {sum(removed.values())}" if known else "removed unknown"
+    ) in summary
+    if known:
+        assert all(f"{kind} {tokens}" in summary for kind, tokens in removed.items())

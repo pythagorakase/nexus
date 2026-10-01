@@ -24,6 +24,8 @@ import type {
   GenerationSession,
   GenerationSettings,
   IncubatorPayload,
+  ReaderFeedOptions,
+  ReaderFeedResponse,
   SlotState,
 } from "@/types/narrative";
 import { parseNarrativePhase } from "@/types/narrative";
@@ -70,6 +72,19 @@ export function getEpisodeChunks(
   return getJson(
     `/api/narrative/chunks/${seasonId}/${episodeId}?limit=${limit}&slot=${slot}`,
   );
+}
+
+/** Read a keyset page; invalid selectors and missing anchors throw. */
+export function getReaderFeed(
+  slot: number,
+  options: ReaderFeedOptions = {},
+  signal?: AbortSignal,
+): Promise<ReaderFeedResponse> {
+  const query = new URLSearchParams({ slot: String(slot) });
+  for (const key of ["anchor", "before", "after", "limit"] as const) {
+    if (options[key] !== undefined) query.set(key, String(options[key]));
+  }
+  return getJson(`/api/narrative/feed?${query}`, signal);
 }
 
 export function getChunkContext(chunkId: number, slot: number): Promise<ChunkContext> {
@@ -289,10 +304,11 @@ export interface RetrogradeStageRecord {
 
 interface RetrogradeStatusRecord {
   /**
-   * The transition run that owns this record; null before any run in this
-   * gateway process. Each run starts a record under a new identity.
+   * The transition run that owns this record; null before the slot's first run.
    */
   run: string | null;
+  run_status: "running" | "failed" | "done" | null;
+  error: string | null;
   stages: RetrogradeStageRecord[];
   /** nexus.toml [orrery.retrograde.wizard] status_poll_interval_seconds. */
   status_poll_interval_seconds: number;
@@ -335,7 +351,10 @@ export async function getRetrogradeStatus(
   if (
     !RETROGRADE_STATUS_STAGES.includes(status?.stage) ||
     !Array.isArray(status.stages) ||
-    !(typeof status.run === "string" || status.run === null)
+    !(typeof status.run === "string" || status.run === null) ||
+    !["running", "failed", "done", null].includes(status.run_status) ||
+    (status.run === null) !== (status.run_status === null) ||
+    (status.run_status === "failed" ? typeof status.error !== "string" : status.error !== null)
   ) {
     throw new Error(`Unrecognized Retrograde status: ${JSON.stringify(status)}`);
   }

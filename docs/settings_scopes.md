@@ -147,6 +147,15 @@ keeping the counts measured with the recorded model's tokenizer. Unregistered
 models and allowances above a model's maximum fail exactly as they would at
 runtime.
 
+The recorded `removed_block_tokens` map attributes cached assembly estimates to
+recent narrative, historical context, and recalled scenes, including removed
+headings. `removed_tokens_total` sums that map; absent or empty legacy accounting
+is unknown (`null` in replay JSON), while a complete three-key zero map records
+zero. Candidate changes preserve these per-attempt snapshots. Retries repeat
+assembly accounting rather than adding removals; do not sum them as new removals
+or provider usage. `freed_tokens` remains candidate headroom, a separate quantity.
+Kept block sums still reconcile to actual dispatch input.
+
 Per attempt, the report gives the ceiling delta, whether the recorded spend
 was capped by the model's maximum input (a zero delta on a capped attempt can
 hide capacity the candidate frees; pass `--window` to see it), the overflow
