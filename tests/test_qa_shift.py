@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 
+from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
+import runpy
+import sys
 from pathlib import Path
 import subprocess
 import tomllib
 from typing import Any, Mapping, cast
 
+import psycopg2
 from pydantic import ValidationError
 import pytest
 import tomlkit
@@ -20,9 +24,16 @@ import tomlkit
 from nexus.config.settings_models import BoundaryCatchupSettings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.contract import HOME_ENV
-from scripts.qa_shift import qa_shift
+from scripts.qa_shift import clock_contract, qa_shift
 from scripts.qa_shift.boundary_catchup import (
     load_config as load_boundary_catchup_config,
+)
+from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+    seed_protagonist,
 )
 
 
@@ -1620,6 +1631,183 @@ def test_pending_check_exit_code_contract(
     assert json.loads(capsys.readouterr().out) == {"status": "pending"}
 
 
+CLOCK_FIELDS = {
+    "chunks",
+    "disagreements",
+    "primary_regressions",
+    "missing_base",
+    "nonprimary_contributions",
+    "bootstrap_nonzero",
+}
+
+
+@pytest.fixture()
+def clock_contract_db() -> Any:
+    """Own a fresh template clone with a base seeded before any metadata."""
+    with disposable_slot_database("qa640_778s6a_family") as dbname:
+        seed_protagonist(dbname, base_timestamp=NOW.isoformat())
+        yield dbname
+
+
+def _clock_contract_chunk(
+    cur: Any, scene: int, layer: str, delta: timedelta | None
+) -> int:
+    """Insert valid clock metadata using the production writer."""
+    cur.execute(
+        "INSERT INTO narrative_chunks (raw_text) VALUES (%s) RETURNING id",
+        (f"Clock family probe {scene}",),
+    )
+    chunk_id = int(cur.fetchone()[0])
+    insert_chunk_metadata_sync(
+        cur,
+        chunk_id=chunk_id,
+        season=1,
+        episode=1,
+        scene=scene,
+        world_layer=layer,
+        time_delta=delta,
+        generation_date=NOW,
+        slug=f"S01E01_{scene:03d}",
+        generation_model="TEST",
+        scene_weather=None,
+    )
+    return chunk_id
+
+
+def _clock_contract_read(dbname: str) -> dict[str, Any]:
+    """Call the real measurement under an enforced repeatable-read transaction."""
+    with closing(connect(dbname)) as conn:
+        conn.set_session(isolation_level="REPEATABLE READ", readonly=True)
+        return clock_contract.measure_connection(conn)
+
+
+def _clock_contract_cli(monkeypatch: pytest.MonkeyPatch) -> int:
+    """Run the actual family CLI after routing its selected slot."""
+    monkeypatch.setattr(sys, "argv", ["clock_contract.py", "--slot", "4"])
+    with pytest.raises(SystemExit) as exited:
+        runpy.run_module("scripts.qa_shift.clock_contract", run_name="__main__")
+    return int(cast(Any, exited.value.code) or 0)
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize(
+    "violation",
+    [
+        "primary_regressions",
+        "missing_base",
+        "nonprimary_contributions",
+        "bootstrap_nonzero",
+        "disagreements",
+    ],
+)
+def test_clock_contract_reports_all_violation_counts(
+    clock_contract_db: str,
+    violation: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Plant each impossible writer defect independently on a disposable clone."""
+    dbname = clock_contract_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        first = _clock_contract_chunk(cur, 1, "primary", timedelta(0))
+        second = _clock_contract_chunk(cur, 2, "primary", timedelta(minutes=7))
+        third = _clock_contract_chunk(cur, 3, "flashback", timedelta(minutes=3))
+        if violation == "primary_regressions":
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+                (NOW - timedelta(minutes=1), second),
+            )
+        elif violation == "missing_base":
+            cur.execute("ALTER TABLE global_variables DISABLE TRIGGER USER")
+            cur.execute("UPDATE global_variables SET base_timestamp = NULL WHERE id")
+        elif violation == "nonprimary_contributions":
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = world_time + "
+                "interval '1 minute' WHERE chunk_id = %s",
+                (third,),
+            )
+        elif violation == "bootstrap_nonzero":
+            cur.execute("ALTER TABLE chunk_metadata DISABLE TRIGGER USER")
+            cur.execute(
+                "UPDATE chunk_metadata SET time_delta = interval '1 minute' "
+                "WHERE chunk_id = %s",
+                (first,),
+            )
+        else:
+            cur.execute(
+                "UPDATE chunk_metadata SET world_time = NULL WHERE chunk_id = %s",
+                (second,),
+            )
+    report = _clock_contract_read(dbname)
+    assert set(report) == CLOCK_FIELDS
+    assert report["chunks"] == 3
+    assert report[violation] > 0
+    assert _clock_contract_cli(monkeypatch) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"family": "clock_contract", "slots": [{"slot": 4, **report}]}
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_empty_and_null_deltas(
+    clock_contract_db: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Empty metadata, NULL bootstrap, and zero/NULL primary deltas stay clean."""
+    dbname = clock_contract_db
+    route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+    empty = dict.fromkeys(CLOCK_FIELDS, 0)
+    assert _clock_contract_read(dbname) == empty
+    assert _clock_contract_cli(monkeypatch) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "family": "clock_contract",
+        "slots": [{"slot": 4, **empty}],
+    }
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        _clock_contract_chunk(cur, 1, "primary", None)
+        _clock_contract_chunk(cur, 2, "primary", timedelta(0))
+        _clock_contract_chunk(cur, 3, "primary", None)
+        cur.execute("SELECT world_time FROM chunk_metadata ORDER BY chunk_id")
+        assert cur.fetchall() == [(NOW,)] * 3
+    assert _clock_contract_read(dbname) == {**empty, "chunks": 3}
+    assert _clock_contract_cli(monkeypatch) == 0
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_refuses_writable_connection(clock_contract_db: str) -> None:
+    """The guard fails before reading clock data on a real writable connection."""
+    with closing(connect(clock_contract_db)) as conn:
+        with pytest.raises(RuntimeError, match="clock_contract requires a read-only"):
+            clock_contract.measure_connection(conn)
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_connection_rejects_writes(clock_contract_db: str) -> None:
+    """PostgreSQL itself refuses an INSERT on the measurement connection."""
+    with closing(connect(clock_contract_db)) as conn:
+        conn.set_session(isolation_level="REPEATABLE READ", readonly=True)
+        assert clock_contract.measure_connection(conn)["chunks"] == 0
+        with conn.cursor() as cur:
+            cur.execute("SAVEPOINT attempted_write")
+            with pytest.raises(psycopg2.errors.ReadOnlySqlTransaction):
+                cur.execute(
+                    "INSERT INTO narrative_chunks (raw_text) VALUES ('Forbidden')"
+                )
+            cur.execute("ROLLBACK TO SAVEPOINT attempted_write")
+            cur.execute("SELECT current_setting('transaction_isolation')")
+            assert cur.fetchone()[0] == "repeatable read"
+
+
+@pytest.mark.requires_postgres
+def test_clock_contract_missing_singleton_raises(clock_contract_db: str) -> None:
+    """An absent singleton raises even when metadata is empty."""
+    with closing(connect(clock_contract_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM global_variables")
+    with pytest.raises(RuntimeError, match="Missing global_variables singleton"):
+        _clock_contract_read(clock_contract_db)
+
+
 # 778-S4a: all PostgreSQL state belongs to qa640_778s4a_* clones. Requires
 # global_variables, narrative_chunks, chunk_metadata, orrery_resolutions, and
 # the production commit path's event/adjudication tables. Clones are dropped.
@@ -2032,3 +2220,488 @@ def test_cooldown_invalid_clock_and_target_fail_loudly(
             cur.execute("DELETE FROM chunk_metadata WHERE chunk_id <> %s", (ids[0],))
     with pytest.raises(ValueError, match="NULL|reversed|Fewer than two"):
         corpus_report(dbname)
+
+
+# Sanitized recorder rows: usage-2026-07-30.jsonl and windows-2026-09-24.jsonl.
+# Source digests and the consistent correlation-id replacement are in
+# docs/qa/759-envelope/measurement.md. Counts and transport are retained here.
+ENVELOPE_USAGE: dict[str, Any] = {
+    "aggregate": True,
+    "attempt": 1,
+    "cache_creation_tokens": 0,
+    "cached_input_tokens": 0,
+    "input_tokens": 14030,
+    "model": "gpt-5.6-terra",  # pin: sanitized historical recorder fixture
+    "outcome": "aggregate",
+    "output_tokens": 110,
+    "provider": "openai",
+    "quota_day": "2026-07-30",
+    "reasoning_tokens": 19,
+    "request_id": None,
+    "requests": 1,
+    "run_id": "envelope-wizard",
+    "seat": "wizard",
+    "service_tier": None,
+    "slot": 4,
+    "total_tokens": 14140,
+    "transport": "pydantic_ai",
+    "ts": "2026-07-30T04:49:27.892870Z",
+}
+ENVELOPE_WINDOW: dict[str, Any] = {
+    "attempt": 1,
+    "block_tokens": {
+        "bootstrap context": 4358,
+        "historical context": 8,
+        "instructions": 30,
+        "orrery tag library": 8264,
+        "recent narrative": 7,
+        "request framing": -28,
+        "system": 5677,
+        "user input": 6,
+    },
+    "effective_ceiling": 71000,
+    "generation_session": "envelope-fixture",
+    "headroom": 52678,
+    "input_tokens": 18322,
+    "model": "TEST",
+    "policy_headroom": 4000,
+    "seat": "skald_single_pass",
+    "trimming": {},
+}
+
+
+def _envelope_event(**changes: Any) -> dict[str, Any]:
+    return {
+        **ENVELOPE_USAGE,
+        "model": "TEST",
+        "run_id": "envelope-fixture",
+        "seat": "skald_single_pass",
+        "aggregate": False,
+        "outcome": "accepted",
+        **changes,
+    }
+
+
+def _envelope_files(
+    root: Path,
+    events: list[dict[str, Any]],
+    windows: list[dict[str, Any]],
+    day: str = "2026-07-30",
+) -> None:
+    root.mkdir(exist_ok=True)
+    for kind, rows in (("usage", events), ("windows", windows)):
+        (root / f"{kind}-{day}.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in rows)
+        )
+
+
+def _envelope_database(
+    manifests: list[dict[str, Any]],
+    *,
+    run: str = "envelope-fixture",
+    slot: int = 4,
+    jobs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "slot": slot,
+        "dbname": "offline-inspection-fixture",
+        "inspections": [
+            {
+                "session": run,
+                "inspection": {
+                    "session": {"session_id": run, "terminal_outcome": None},
+                    "phases": [],
+                    "manifests": manifests,
+                    "jobs": jobs or [],
+                },
+            }
+        ],
+    }
+
+
+def _envelope_manifest(
+    estimate: int | None,
+    reported: int | None,
+    *,
+    attempt: int = 1,
+    run: str = "envelope-fixture",
+) -> dict[str, Any]:
+    window = {**ENVELOPE_WINDOW, "generation_session": run, "attempt": attempt}
+    if estimate is not None:
+        window["estimated_input_tokens"] = estimate
+    if reported is not None:
+        window["reported_input_tokens"] = reported
+    return {
+        "generation_session_id": run,
+        "seat": window["seat"],
+        "attempt": attempt,
+        "model_id": "TEST",
+        "window_record": window,
+        "validation": [],
+        "outcome": None,
+        "provider_outcome": "accepted",
+        "created_at": "2026-07-30T04:00:00Z",
+        "updated_at": "2026-07-30T05:00:00Z",
+    }
+
+
+def _envelope_report(
+    root: Path, databases: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    from datetime import date
+
+    from scripts.qa_shift.envelope_measure import read_snapshot, reconcile
+
+    snapshot = read_snapshot(root, date(2026, 7, 30), date(2026, 7, 30))
+    return reconcile(snapshot, databases or [])
+
+
+def test_envelope_folds_window_revisions_and_keeps_attempts_separate(
+    tmp_path: Path,
+) -> None:
+    """Revisions fold, while retries, slots and equal ids in two queues do not."""
+    events = [_envelope_event(), _envelope_event(attempt=2)]
+    events += [_envelope_event(slot=3, run_id="other-slot")]
+    events += [
+        _envelope_event(run_id="17", seat=seat)
+        for seat in ("experience_renderer", "correspondence_compaction")
+    ]
+    windows = [
+        ENVELOPE_WINDOW,
+        {**ENVELOPE_WINDOW, "input_tokens": 19000},
+        {**ENVELOPE_WINDOW, "attempt": 2},
+    ]
+    jobs = [
+        {
+            "queue": queue,
+            "id": 17,
+            "state": "succeeded",
+            "created_at": "2026-07-30T04:00:00Z",
+            "updated_at": "2026-07-30T05:00:00Z",
+        }
+        for queue in ("experience_render", "correspondence_compaction")
+    ]
+    _envelope_files(tmp_path, events, windows)
+    report = _envelope_report(tmp_path, [_envelope_database([], jobs=jobs)])
+    assert report["coverage"]["window_revisions_folded"] == 1
+    assert report["coverage"]["attributed_attempts"] == 5
+    assert len(report["attempts"]) == 5
+    revised = next(a for a in report["attempts"] if a["sources"]["window"])
+    assert revised["rendered_window_vs_reported"]["estimated"] == 19000
+    assert len(revised["sources"]["window_revisions"]) == 2
+    assert {a["queue"] for a in report["attempts"] if a["run"] == "17"} == {
+        "experience_render",
+        "correspondence_compaction",
+    }
+    assert {a["slot"] for a in report["attempts"]} == {3, 4}
+
+
+def test_envelope_distinguishes_projected_estimates_from_rendered_counts(
+    tmp_path: Path,
+) -> None:
+    """Production observation supplies normalized projection, never rendered input."""
+    events = [
+        _envelope_event(
+            transport="anthropic_messages",
+            provider="anthropic",
+            input_tokens=300,
+            cached_input_tokens=13000,
+            cache_creation_tokens=50,
+        ),
+        _envelope_event(attempt=2),
+    ]
+    _envelope_files(
+        tmp_path, events, [ENVELOPE_WINDOW, {**ENVELOPE_WINDOW, "attempt": 2}]
+    )
+    report = _envelope_report(
+        tmp_path, [_envelope_database([_envelope_manifest(900, 13350)])]
+    )
+    first, second = report["attempts"]
+    assert first["estimate_vs_reported"]["signed_error"] == -12450
+    assert first["estimate_vs_reported"]["reported"] == 13350
+    assert first["rendered_window_vs_reported"]["signed_error"] == 18322 - 13350
+    assert second["estimate_vs_reported"]["estimated"] == "unknown"
+    assert second["rendered_window_vs_reported"]["estimated"] == 18322
+    assert report["estimate_vs_reported"]["overall"]["signed_absolute"]["eligible"] == 1
+
+
+def test_envelope_membership_uses_selected_ledger_prefixes(tmp_path: Path) -> None:
+    """Database-only attempts never enter measurement, even in selected sessions."""
+    _envelope_files(tmp_path, [_envelope_event(attempt=2)], [ENVELOPE_WINDOW])
+    _envelope_files(
+        tmp_path,
+        [_envelope_event(attempt=3, ts="2026-07-31T04:00:00Z", quota_day="2026-07-31")],
+        [{**ENVELOPE_WINDOW, "attempt": 3}],
+        "2026-07-31",
+    )
+    database = _envelope_database([_envelope_manifest(8, 9, attempt=3)])
+    database["inspections"] += _envelope_database(
+        [_envelope_manifest(1, 2, run="outside")], run="outside"
+    )["inspections"]
+    report = _envelope_report(tmp_path, [database])
+    assert {a["attempt"] for a in report["attempts"]} == {1, 2}
+    assert report["coverage"]["usage_events"] == 1
+    assert report["concurrency"]["missing_start_events"] == 1
+    assert report["databases"][0]["database_only_attempt_count"] == 2
+    assert {a["run"] for a in report["databases"][0]["database_only_attempts"]} == {
+        "envelope-fixture",
+        "outside",
+    }
+    assert report["estimate_vs_reported"]["overall"]["signed_absolute"]["excluded"] == 2
+    assert (
+        report["rendered_window_vs_reported"]["overall"]["signed_absolute"]["eligible"]
+        == 0
+    )
+    assert len(report["snapshot"]["files"]) == 2
+    assert all(
+        f["sha256"] == hashlib.sha256(Path(f["path"]).read_bytes()).hexdigest()
+        for f in report["snapshot"]["files"]
+    )
+
+
+def test_envelope_counts_unattributed_and_aggregate_calls(tmp_path: Path) -> None:
+    """All seats and every duplicate stay in inventory; aggregates are not requests."""
+    events = [
+        ENVELOPE_USAGE,
+        _envelope_event(run_id=None),
+        _envelope_event(seat="genesis", run_id="genesis-run"),
+        _envelope_event(seat="experience_renderer", run_id="17"),
+        _envelope_event(),
+        _envelope_event(),
+    ]
+    _envelope_files(tmp_path, events, [ENVELOPE_WINDOW])
+    report = _envelope_report(tmp_path)
+    coverage = report["coverage"]
+    assert coverage["usage_events"] == 6
+    assert len(coverage["event_inventory"]) == 6
+    assert coverage["aggregate_events"] == 1
+    assert coverage["duplicate_usage_events"] == 1
+    assert coverage["multiple_event_attempts"] == 1
+    assert coverage["unattributed_reasons"] == {
+        "usage:missing_run": 1,
+        "usage:unmatched_job": 1,
+    }
+    assert set(coverage["by_seat"]) == {
+        "wizard",
+        "genesis",
+        "experience_renderer",
+        "skald_single_pass",
+    }
+    assert report["concurrency"]["aggregate_timing_events"] == 1
+    for comparison in ("estimate_vs_reported", "rendered_window_vs_reported"):
+        population = report[comparison]["overall"]["signed_absolute"]
+        assert population["eligible"] == 0
+        assert population["exclusion_reasons"] == {
+            "aggregate": 1,
+            "missing_counts": 1,
+            "multiple_events": 1,
+        }
+
+
+def test_envelope_concurrency_is_unknown_without_dispatch_times(tmp_path: Path) -> None:
+    """Completions, manifest insertion and unmatched windows imply no interval."""
+    _envelope_files(
+        tmp_path,
+        [_envelope_event()],
+        [ENVELOPE_WINDOW, {**ENVELOPE_WINDOW, "attempt": 2}],
+    )
+    report = _envelope_report(
+        tmp_path, [_envelope_database([_envelope_manifest(100, 90)])]
+    )
+    concurrency = report["concurrency"]
+    assert concurrency["measurable_intervals"] == 0
+    assert concurrency["peak_concurrent_calls"] == "unknown"
+    assert concurrency["overlap_distribution"] == "unknown"
+    assert concurrency["missing_start_events"] == 1
+    assert concurrency["missing_completion_events"] == 0
+    assert concurrency["windows_without_completion"] == 1
+
+
+def test_envelope_statistics_keep_zero_and_missing_distinct(tmp_path: Path) -> None:
+    """Both populations retain zero, missing, signs and nearest-rank percentiles."""
+    pairs = [(10, 0), (20, 10), (5, 10), (8, None)]
+    events, windows, manifests = [], [], []
+    for attempt, (estimate, reported) in enumerate(pairs, 1):
+        events.append(_envelope_event(attempt=attempt, input_tokens=reported))
+        windows.append(
+            {**ENVELOPE_WINDOW, "attempt": attempt, "input_tokens": estimate}
+        )
+        manifests.append(_envelope_manifest(estimate, reported, attempt=attempt))
+    _envelope_files(tmp_path, events, windows)
+    report = _envelope_report(tmp_path, [_envelope_database(manifests)])
+    for comparison in ("estimate_vs_reported", "rendered_window_vs_reported"):
+        population = report[comparison]["overall"]
+        signed, relative = population["signed_absolute"], population["relative"]
+        assert signed == {
+            "eligible": 3,
+            "excluded": 1,
+            "exclusion_reasons": {"missing_counts": 1},
+            "mean_signed_error": 5.0,
+            "mean_absolute_error": 25 / 3,
+            "absolute_error": {"count": 3, "min": 5, "p50": 10, "p95": 10, "max": 10},
+        }
+        assert relative == {
+            "eligible": 2,
+            "excluded": 2,
+            "exclusion_reasons": {"missing_counts": 1, "zero_reported": 1},
+            "relative_error": {
+                "count": 2,
+                "min": -0.5,
+                "p50": -0.5,
+                "p95": 1.0,
+                "max": 1.0,
+            },
+        }
+        for dimension in ("slot", "seat", "model", "provider", "transport"):
+            assert report[comparison]["by"][dimension][0]["signed_absolute"] == signed
+        assert report["attempts"][0][comparison]["relative_error"] == "unknown"
+    json.dumps(report, allow_nan=False)
+    _envelope_files(tmp_path, [], [])
+    empty = _envelope_report(tmp_path)
+    for comparison in ("estimate_vs_reported", "rendered_window_vs_reported"):
+        population = empty[comparison]["overall"]
+        assert population["signed_absolute"]["eligible"] == 0
+        assert population["signed_absolute"]["mean_signed_error"] == "unknown"
+        assert population["relative"]["relative_error"]["p95"] == "unknown"
+    # An absent cache count is unknown in the historical Anthropic comparison.
+    _envelope_files(
+        tmp_path,
+        [_envelope_event(transport="anthropic_messages", cached_input_tokens=None)],
+        [ENVELOPE_WINDOW],
+    )
+    assert (
+        _envelope_report(tmp_path)["attempts"][0]["rendered_window_vs_reported"][
+            "reported"
+        ]
+        == "unknown"
+    )
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "json",
+        "partial",
+        "missing_ts",
+        "naive_ts",
+        "day",
+        "window_model",
+        "usage_model",
+        "provider",
+    ],
+)
+def test_envelope_snapshot_rejects_invalid_rows(tmp_path: Path, variant: str) -> None:
+    """Invalid source evidence raises; default timestamps and conflicting ids fail."""
+    event = _envelope_event()
+    windows = [ENVELOPE_WINDOW]
+    events = [event]
+    if variant == "missing_ts":
+        del event["ts"]
+    elif variant == "naive_ts":
+        event["ts"] = "2026-07-30T04:49:27"
+    elif variant == "day":
+        event["quota_day"] = "2026-07-31"
+    elif variant == "window_model":
+        windows.append({**ENVELOPE_WINDOW, "model": "conflicting"})
+    elif variant == "usage_model":
+        events.append({**event, "model": "conflicting"})
+    elif variant == "provider":
+        events.append({**event, "provider": "conflicting"})
+    _envelope_files(tmp_path, events, windows)
+    path = tmp_path / "usage-2026-07-30.jsonl"
+    if variant == "json":
+        path.write_text("{broken}\n")
+    elif variant == "partial":
+        path.write_text(path.read_text().rstrip("\n"))
+    with pytest.raises(ValueError):
+        _envelope_report(tmp_path)
+
+
+@pytest.mark.requires_postgres
+def test_envelope_projects_counts_and_enforces_read_only_pg(tmp_path: Path) -> None:
+    """Two real manifest sessions retain projections across idle, read-only reads."""
+    from contextlib import closing
+    from datetime import date
+    from uuid import uuid4
+
+    import psycopg2
+
+    from nexus.telemetry.attempt_manifest import manifest_scope, start_attempt
+    from nexus.telemetry.prompt_window import PromptWindowRecord
+    from nexus.telemetry.usage import (
+        record_prompt_window,
+        record_token_estimate,
+        record_usage_event,
+        UsageEvent,
+    )
+    from scripts.qa_shift.envelope_measure import build_report, read_connection
+    from tests.pg_fixtures import connect, disposable_slot_database
+
+    with disposable_slot_database("qa640_759_measure") as dbname:
+        sessions = [str(uuid4()), str(uuid4())]
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            for session in sessions:
+                cur.execute(
+                    "INSERT INTO narrative_generation_sessions "
+                    "(session_id, operation, status) "
+                    "VALUES (%s,'continue','initiated')",
+                    (session,),
+                )
+        for index, session in enumerate(sessions):
+            record = PromptWindowRecord.model_validate(
+                {**ENVELOPE_WINDOW, "generation_session": session}
+            )
+            with manifest_scope(lambda: connect(dbname)):
+                start_attempt(
+                    record,
+                    blocks=[],
+                    system_prompt="",
+                    prompt="",
+                    settings={},
+                    wire_schema={},
+                )
+                record_prompt_window(record)
+                event = UsageEvent.model_validate(
+                    _envelope_event(
+                        run_id=session,
+                        provider="test",
+                        input_tokens=100 + index,
+                        ts=datetime.now(timezone.utc).isoformat(),
+                    )
+                )
+                record_usage_event(event)
+                record_token_estimate(event, 110 + index)
+        today = datetime.now(timezone.utc).date()
+        assert today >= date(2026, 7, 30)
+        report = build_report(tmp_path / "usage", {4: dbname}, today, today)
+        assert len(report["attempts"]) == 2
+        assert {a["estimate_vs_reported"]["estimated"] for a in report["attempts"]} == {
+            110,
+            111,
+        }
+        assert {a["estimate_vs_reported"]["reported"] for a in report["attempts"]} == {
+            100,
+            101,
+        }
+        assert all(
+            a["estimate_vs_reported"]["signed_error"] == 10 for a in report["attempts"]
+        )
+        database = report["databases"][0]
+        enumeration = database["enumeration"]
+        assert enumeration["read_only"] == "on"
+        assert enumeration["isolation"] == "repeatable read"
+        assert enumeration["session_count"] == enumeration["manifest_count"] == 2
+        assert enumeration["phase_count"] == 2
+        assert enumeration["ended_by"] == "rollback"
+        assert {i["session"] for i in database["inspections"]} == set(sessions)
+        previous = enumeration["ended_at"]
+        for inspection in database["inspections"]:
+            assert inspection["idle_before"] and inspection["idle_after"]
+            assert previous <= inspection["started_at"] <= inspection["ended_at"]
+            assert inspection["verification"]["read_only"] == "on"
+            previous = inspection["ended_at"]
+        with closing(read_connection(dbname)) as conn:
+            with conn.cursor() as cur:
+                with pytest.raises(psycopg2.errors.ReadOnlySqlTransaction):
+                    cur.execute("CREATE TABLE forbidden_measurement_write (id integer)")
+            conn.rollback()

@@ -17,10 +17,8 @@ from nexus.agents.orrery.retrograde_orchestrator import (
     RetrogradeStageTiming,
     build_wizard_history_surface,
     generate_retrograde_history,
-    get_retrograde_progress,
     persist_retrograde_history,
     record_retrograde_progress,
-    reset_retrograde_progress,
 )
 from nexus.agents.orrery.retrograde_packet import build_retrograde_dry_run_packet
 from nexus.api.trait_compiler_schemas import TraitCompileInputs
@@ -37,97 +35,11 @@ from test_orrery.test_retrograde_persistence import (
 )
 
 
-def test_progress_registry_round_trip() -> None:
-    """Progress entries accumulate under their run and reset cleanly."""
-
-    run = reset_retrograde_progress(4)
-    progress = get_retrograde_progress(4)
-    assert progress is not None
-    assert (progress["run"], progress["stage"], progress["stages"]) == (
-        run,
-        "idle",
-        [],
-    )
-
-    record_retrograde_progress(4, "packet", {})
-    record_retrograde_progress(4, "seed_candidates", {"weird": "medium"})
-    progress = get_retrograde_progress(4)
-    assert progress is not None
-    assert progress["run"] == run
-    assert progress["stage"] == "seed_candidates"
-    assert progress["detail"] == {"weird": "medium"}
-    assert [item["stage"] for item in progress["stages"]] == [
-        "packet",
-        "seed_candidates",
-    ]
-
-    reset_retrograde_progress(4)
-    progress = get_retrograde_progress(4)
-    assert progress is not None
-    assert (progress["stage"], progress["stages"]) == ("idle", [])
-
-
-def test_each_reset_starts_a_run_with_a_new_identity() -> None:
-    """A waiter tells this run's terminal record from the previous run's.
-
-    The identity is the only distinction between two runs' "failed" records,
-    so every reset mints one no earlier run of the slot carried.
-    """
-
-    runs = []
-    for _ in range(3):
-        runs.append(reset_retrograde_progress(4))
-        record_retrograde_progress(4, "failed", {"stage": "persistence"})
-        progress = get_retrograde_progress(4)
-        assert progress is not None
-        assert progress["run"] == runs[-1]
-        assert progress["stage"] == "failed"
-    assert len(set(runs)) == len(runs)
-    assert all(isinstance(run, str) and run for run in runs)
-
-
-def test_stage_without_a_started_run_fails_loudly() -> None:
-    """Every stage belongs to a run; one recorded before any reset is a bug."""
-
-    # No test starts a run for this slot.
-    slot = 99
-    with pytest.raises(RuntimeError, match="No Retrograde run has started"):
-        record_retrograde_progress(slot, "packet", {})
-    assert get_retrograde_progress(slot) is None
-
-
-def test_transition_run_reports_idle_before_its_first_fallible_step(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
-) -> None:
-    """A retry never re-reports the previous attempt's terminal stage.
-
-    The run replaces the previous attempt's "failed" record with its own idle
-    record, under a new identity, before trait derivation or its first stage
-    can fail.
-    """
-
-    from nexus.api.new_story_flow import perform_transition_with_retrograde
-    from nexus.api.new_story_schemas import TransitionData
-
-    previous_run = reset_retrograde_progress(5)
-    record_retrograde_progress(5, "failed", {"stage": "persistence"})
-    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(tmp_path / "unreadable.toml"))
-    try:
-        with pytest.raises(FileNotFoundError, match="unreadable.toml"):
-            perform_transition_with_retrograde(5, TransitionData.model_construct())
-        progress = get_retrograde_progress(5)
-        assert progress is not None
-        assert progress["stage"] == "idle"
-        assert progress["run"] != previous_run
-    finally:
-        reset_retrograde_progress(5)
-
-
 def test_progress_registry_rejects_unknown_stage() -> None:
     """Stage names outside the published vocabulary fail loudly."""
 
     with pytest.raises(ValueError, match="Unknown Retrograde wizard stage"):
-        record_retrograde_progress(4, "weaving_intensifies", {})
+        record_retrograde_progress(4, "unknown-run", "weaving_intensifies", {})
 
 
 def test_generate_retrograde_history_composes_stage_outputs(
@@ -171,6 +83,7 @@ def test_generate_retrograde_history_composes_stage_outputs(
     )
 
     stages: list[str] = []
+    outputs: list[tuple[str, dict[str, Any]]] = []
     bundle = generate_retrograde_history(
         slot=5,
         dbname="save_05",
@@ -178,9 +91,15 @@ def test_generate_retrograde_history_composes_stage_outputs(
         settings=load_settings(),
         model_name="test-model",
         progress=lambda stage, detail: stages.append(stage),
+        on_stage_output=lambda stage, output: outputs.append((stage, output)),
     )
 
     assert stages == ["packet", "seed_candidates", "expansion"]
+    assert outputs == [
+        ("packet", packet),
+        ("seed_candidates", seed_response),
+        ("expansion", expansion),
+    ]
     assert bundle.slot == 5
     assert bundle.model == "test-model"
     assert bundle.weird["level"] == "medium"

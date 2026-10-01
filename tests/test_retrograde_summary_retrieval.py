@@ -35,25 +35,20 @@ def test_retrograde_summary_embedding_table_names_are_dimension_specific() -> No
     )
 
 
+@pytest.mark.requires_postgres
 def test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor() -> None:
-    """The shared DDL helper serves the pooled psycopg write path."""
+    """A real pooled-path cursor creates the fully documented 384d contract."""
+    from contextlib import closing
 
-    class RecordingCursor:
-        def __init__(self) -> None:
-            self.statements: list[str] = []
+    from nexus.agents.memnon.utils.source_embeddings import RETROGRADE_SUMMARY_SOURCE
+    from tests.pg_fixtures import connect, disposable_slot_database
+    from tests.test_embedding_table_ownership_pg import assert_corpus_contract
 
-        def execute(self, statement: str) -> None:
-            self.statements.append(statement)
-
-    cursor = RecordingCursor()
-    table_name = ensure_retrograde_summary_embedding_table(cursor, 384)
-
-    assert table_name == "retrograde_summary_embeddings_0384d"
-    assert len(cursor.statements) == 2
-    assert "CREATE TABLE IF NOT EXISTS retrograde_summary_embeddings_0384d" in (
-        cursor.statements[0]
-    )
-    assert "CREATE INDEX IF NOT EXISTS" in cursor.statements[1]
+    with disposable_slot_database("qa640_810s2_summary384") as dbname:
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            table_name = ensure_retrograde_summary_embedding_table(cur, 384)
+            assert table_name == "retrograde_summary_embeddings_0384d"
+            assert_corpus_contract(cur, RETROGRADE_SUMMARY_SOURCE, 384)
 
 
 def test_retrograde_summary_result_keeps_typed_identity() -> None:

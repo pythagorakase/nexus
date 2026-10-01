@@ -14,7 +14,7 @@ const ORCHESTRATOR = resolve(
 );
 
 // Every gateway answer names the run owning the record and the poll interval.
-const RECORD = { slot: 5, run: "run-of-this-transition", status_poll_interval_seconds: 1 };
+const RECORD = { slot: 5, run_status: "running", error: null, run: "run-of-this-transition", status_poll_interval_seconds: 1 };
 
 function serve(body: unknown, status = 200) {
   const fetch = vi.fn(async () => new Response(JSON.stringify(body), { status }));
@@ -49,13 +49,13 @@ describe("Retrograde status client", () => {
   });
 
   it("places a failed run at the stage named in its detail", async () => {
-    serve({ ...RECORD, stage: "failed", detail: { stage: "embedding" }, stages: [] });
+    serve({ ...RECORD, run_status: "failed", error: "Failed", stage: "failed", detail: { stage: "embedding" }, stages: [] });
     expect(retrogradeStageOf(await getRetrogradeStatus(5))).toBe("embedding");
   });
 
   it.each([
-    [{ ...RECORD, run: null, stage: "idle", stages: [] }],
-    [{ ...RECORD, stage: "done", detail: { embedded_summaries: 2 }, stages: [] }],
+    [{ ...RECORD, run: null, run_status: null, stage: "idle", stages: [] }],
+    [{ ...RECORD, run_status: "done", stage: "done", detail: { embedded_summaries: 2 }, stages: [] }],
   ])("places an idle or finished run at no stage (%j)", async (body) => {
     serve(body);
     expect(retrogradeStageOf(await getRetrogradeStatus(5))).toBeNull();
@@ -73,11 +73,28 @@ describe("Retrograde status client", () => {
     [{ ...RECORD, stage: "packet", detail: {} }, "Unrecognized Retrograde status"],
     [{ slot: 5, status_poll_interval_seconds: 1, stage: "packet", detail: {}, stages: [] }, "Unrecognized Retrograde status"],
     [{ ...RECORD, run: 7, stage: "packet", detail: {}, stages: [] }, "Unrecognized Retrograde status"],
-    [{ ...RECORD, stage: "failed", detail: {}, stages: [] }, "Retrograde failure names no known stage"],
-    [{ ...RECORD, stage: "failed", detail: { stage: "done" }, stages: [] }, "Retrograde failure names no known stage"],
+    [{ ...RECORD, run_status: "failed", error: "Failed", stage: "failed", detail: {}, stages: [] }, "Retrograde failure names no known stage"],
+    [{ ...RECORD, run_status: "failed", error: "Failed", stage: "failed", detail: { stage: "done" }, stages: [] }, "Retrograde failure names no known stage"],
   ])("rejects a malformed status %j", async (body, message) => {
     serve(body);
     await expect(getRetrogradeStatus(5)).rejects.toThrow(message);
+  });
+
+  it("rejects a record missing run_status", async () => {
+    const { run_status: _status, ...record } = RECORD;
+    serve({ ...record, stage: "packet", detail: {}, stages: [] });
+    await expect(getRetrogradeStatus(5)).rejects.toThrow("Unrecognized Retrograde status");
+  });
+
+  it.each([
+    { ...RECORD, run: null },
+    { ...RECORD, run_status: null },
+    { ...RECORD, error: "unexpected" },
+    { ...RECORD, run_status: "failed", error: null },
+    { ...RECORD, run_status: "unknown" },
+  ])("rejects inconsistent run metadata %j", async (record) => {
+    serve({ ...record, stage: "idle", stages: [] });
+    await expect(getRetrogradeStatus(5)).rejects.toThrow("Unrecognized Retrograde status");
   });
 
   it("surfaces an HTTP failure", async () => {

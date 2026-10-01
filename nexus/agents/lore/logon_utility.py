@@ -2057,6 +2057,13 @@ class LogonUtility:
             )
             tokens = count(active_prompt)
             counts, _ = measure_blocks(active_blocks, local_count, exact_total=tokens)
+            trimming = payload.get("window_trimming", {})
+            removed_block_tokens = {}
+            if "removed_block_tokens" in trimming:
+                assembly_seat = "skald_writer" if seat == "skald_single_pass" else seat
+                removed_block_tokens = dict(
+                    trimming["seats"][assembly_seat]["removed_block_tokens"]
+                )
             attempt_record = PromptWindowRecord(
                 generation_session=generation_session,
                 seat=seat,
@@ -2064,6 +2071,7 @@ class LogonUtility:
                 model=provider.model,
                 block_tokens=counts,
                 influence_tokens=influence_token_totals(counts),
+                removed_block_tokens=removed_block_tokens,
                 input_tokens=tokens,
                 effective_ceiling=budget.input_ceiling,
                 policy_headroom=budget.policy_headroom,

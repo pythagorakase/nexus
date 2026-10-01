@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import closing
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
-from typing import Any, Iterator, Literal
+from typing import Any
 
 from pydantic import ValidationError
 import pytest
@@ -20,6 +20,12 @@ from nexus.agents.logon.skald_wire import (
     SceneReset,
     SkaldTurnWire,
     hydrate_skald_turn,
+)
+from nexus.agents.memnon.utils.embedding_manager import EmbeddingManager
+from nexus.agents.memnon.utils.source_embeddings import (
+    CHARACTER_EXPERIENCE_SOURCE,
+    active_memnon_embedding_model_dimensions,
+    load_memnon_settings,
 )
 from nexus.agents.orrery import experience_embedding
 from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
@@ -36,6 +42,12 @@ from nexus.config import load_settings
 from nexus.config.settings_models import OrreryExperienceSettings
 from nexus.memory.manager import empty_pass2_baseline
 from nexus.prompts.registry import PromptId, load
+from tests.pg_fixtures import (
+    connect,
+    disposable_slot_database,
+    route_slot_to_disposable,
+)
+from tests.test_embedding_table_ownership_pg import assert_corpus_contract, seed_source
 
 
 ROOT = Path(__file__).parents[2]
@@ -610,90 +622,63 @@ def test_renderer_validator_isolates_content_errors_within_batch() -> None:
     assert "Selene" in validation.rejected[42]
 
 
-class _EmbeddingCursor:
-    def __init__(self, *, read: bool) -> None:
-        self.read = read
-        self.executions: list[tuple[str, Any]] = []
-        self._rows: list[dict[str, Any]] = []
-
-    def __enter__(self) -> "_EmbeddingCursor":
-        return self
-
-    def __exit__(self, *_args: Any) -> Literal[False]:
-        return False
-
-    def execute(self, statement: str, params: Any = None) -> None:
-        normalized = " ".join(statement.split())
-        self.executions.append((normalized, params))
-        if self.read:
-            self._rows = [
-                {"id": 11, "experience_text": "I remembered eleven."},
-                {"id": 22, "experience_text": "I remembered twenty-two."},
-            ]
-        elif normalized.startswith("UPDATE character_experiences"):
-            stamp = datetime(2196, 1, 1, tzinfo=timezone.utc)
-            self._rows = [
-                {"id": 11, "embedding_generated_at": stamp},
-                {"id": 22, "embedding_generated_at": stamp},
-            ]
-        else:
-            self._rows = []
-
-    def fetchall(self) -> list[dict[str, Any]]:
-        return self._rows
-
-
-class _EmbeddingConnection:
-    def __init__(self, cursor: _EmbeddingCursor) -> None:
-        self._cursor = cursor
-
-    def cursor(self) -> _EmbeddingCursor:
-        return self._cursor
-
-
+@pytest.mark.requires_postgres
 def test_embedding_upsert_binds_each_correct_experience_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression for the stale-loop-id bug class fixed in PR #671."""
-    read_cursor = _EmbeddingCursor(read=True)
-    write_cursor = _EmbeddingCursor(read=False)
-    connections = iter(
-        [_EmbeddingConnection(read_cursor), _EmbeddingConnection(write_cursor)]
-    )
+    """Real vectors retain each experience identity and the wrapper result shape.
 
-    @contextmanager
-    def fake_connection(*_args: Any, **_kwargs: Any) -> Iterator[Any]:
-        yield next(connections)
+    Depends on character_experiences and its lazy dimension embedding tables.
+    The disposable TEST-pinned clone owns all writes and is dropped afterward.
+    """
+    spec = CHARACTER_EXPERIENCE_SOURCE
+    with disposable_slot_database("qa640_810s2_experience_ids") as dbname:
+        route_slot_to_disposable(monkeypatch.setattr, slot=4, dbname=dbname)
+        texts = ["I remembered eleven.", "I remembered twenty-two."]
+        ids = [seed_source(dbname, spec, text) for text in texts]
+        manager = EmbeddingManager(settings=load_memnon_settings())
+        models = manager.get_available_models()
+        dimensions = active_memnon_embedding_model_dimensions()
+        expected = {
+            (row_id, model): manager.generate_embedding(text, model)
+            for row_id, text in zip(ids, texts)
+            for model in models
+        }
+        for model in models:
+            assert expected[ids[0], model] != expected[ids[1], model]
 
-    class FakeManager:
-        def __init__(self, **_kwargs: Any) -> None:
-            pass
-
-        def get_available_models(self) -> list[str]:
-            return ["test-embed"]
-
-        def generate_embedding(self, text: str, _model: str) -> list[float]:
-            return [float(len(text)), 1.0]
-
-    monkeypatch.setattr(
-        "nexus.api.db_pool.get_connection",
-        fake_connection,
-    )
-    monkeypatch.setattr(
-        "nexus.agents.memnon.utils.embedding_manager.EmbeddingManager",
-        FakeManager,
-    )
-    monkeypatch.setattr(
-        "nexus.agents.memnon.utils.source_embeddings.load_memnon_settings",
-        lambda: {"models": {"test-embed": {"is_active": True, "dimensions": 2}}},
-    )
-
-    result = experience_embedding.embed_character_experiences("qa677", [11, 22])
-
-    inserts = [
-        params
-        for sql, params in write_cursor.executions
-        if sql.startswith("INSERT INTO character_experience_embeddings_0002d")
-    ]
-    assert [params[0] for params in inserts] == [11, 22]
-    assert [row["experience_id"] for row in result] == [11, 22]
+        # Reverse caller order to distinguish identity binding from row ordering.
+        requested = list(reversed(ids))
+        result = experience_embedding.embed_character_experiences(dbname, requested)
+        assert [row["experience_id"] for row in result] == requested
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, embedding_generated_at FROM character_experiences "
+                "WHERE id = ANY(%s)",
+                (ids,),
+            )
+            stamps = dict(cur.fetchall())
+            assert len(set(stamps.values())) == 1
+            assert all(stamps.values())
+            assert result == [
+                {
+                    "experience_id": row_id,
+                    "models": models,
+                    "dimensions": sorted(set(dimensions.values())),
+                    "embedding_generated_at": stamps[row_id].isoformat(),
+                }
+                for row_id in requested
+            ]
+            for model, dimension in dimensions.items():
+                assert_corpus_contract(cur, spec, dimension)
+                table = spec.table_name_for_dimensions(dimension)
+                cur.execute(
+                    f"SELECT experience_id, embedding::text FROM {table} "
+                    "WHERE experience_id = ANY(%s) AND model = %s "
+                    "ORDER BY experience_id",
+                    (ids, model),
+                )
+                vectors = cur.fetchall()
+                assert [row[0] for row in vectors] == sorted(ids)
+                for row_id, vector in vectors:
+                    assert json.loads(vector) == pytest.approx(expected[row_id, model])

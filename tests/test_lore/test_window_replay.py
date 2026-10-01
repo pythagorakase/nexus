@@ -385,9 +385,18 @@ def test_cli_window_replay_json_and_table(
         "TRIMMABLE",
         "FEASIBLE",
         "FREED",
+        "REMOVED",
     ]
     assert table[2].split()[:2] == ["skald_writer", "1"]
-    assert table[2].split()[6:] == ["yes", "-15000", "14500", "34000", "yes", "0"]
+    assert table[2].split()[6:] == [
+        "yes",
+        "-15000",
+        "14500",
+        "34000",
+        "yes",
+        "0",
+        "unknown",
+    ]
 
 
 def test_cli_window_replay_refuses_an_unapplied_candidate_window(
@@ -440,3 +449,102 @@ def test_cli_window_replay_input_errors_are_concise(
     assert captured.out == ""
     assert json.loads(captured.err)["error"].startswith(message)
     assert "Traceback" not in captured.err
+
+
+def test_legacy_window_fixture_parses_and_replays_without_removal_claims() -> None:
+    """The two verbatim owner-ledger rows retain old arithmetic and unknown removal."""
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures/prompt_windows/756-legacy-2026-09-30.jsonl"
+    )
+    settings = load_settings()
+    records = [
+        PromptWindowRecord.model_validate_json(line)
+        for line in fixture.read_text().splitlines()
+    ]
+    assert [record.input_tokens for record in records] == [7553, 13490]
+    for record in records:
+        assert record.removed_block_tokens == {}
+        row = replay_record(record, settings, baseline=settings)
+        assert row.removed_block_tokens == {} and row.removed_tokens_total is None
+        assert row.candidate_ceiling == record.effective_ceiling
+        assert row.freed_tokens == record.headroom
+        assert row.overflow_tokens == 0 and row.feasible
+        assert row.trimmable_tokens == sum(
+            record.block_tokens.get(kind, 0) for kind in TRIMMABLE
+        )
+
+
+def test_recorded_removals_survive_candidate_replay_and_usage_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """JSONL, usage, and replay preserve positive and recorded-zero maps."""
+    settings = load_settings()
+    budget = _frontier_budget(settings)
+    for attempt, removed in enumerate(
+        (dict(TRIMMABLE), dict.fromkeys(TRIMMABLE, 0)), 1
+    ):
+        record = _record(budget, input_tokens=60000, session=f"removals-{attempt}")
+        record.removed_block_tokens = removed
+        record.attempt = 2
+        record_prompt_window(record)
+        for row in (
+            replay_record(record, settings, baseline=settings),
+            replay_record(
+                record, settings, baseline=settings, model="TEST", window=90000
+            ),
+        ):
+            assert row.removed_block_tokens == removed
+            assert row.removed_tokens_total == sum(removed.values())
+            assert row.freed_tokens == max(
+                0, row.candidate_ceiling - record.input_tokens
+            )
+        for command in ("usage", "window-replay"):
+            argv = [
+                "nexus",
+                command,
+                "--run",
+                record.generation_session,
+                "--day",
+                LEDGER_DAY,
+            ]
+            if command == "window-replay":
+                argv += ["--model", "TEST", "--window", "90000"]
+            monkeypatch.setattr(sys, "argv", [*argv, "--json"])
+            assert cli.main() == 0
+            payload = json.loads(capsys.readouterr().out)
+            rows = (
+                payload["windows"]
+                if command == "usage"
+                else payload["window_replay"]["rows"]
+            )
+            assert rows[-1]["removed_block_tokens"] == removed
+            if command == "window-replay":
+                assert rows[-1]["removed_tokens_total"] == sum(removed.values())
+                assert rows[0]["removed_tokens_total"] is None
+            monkeypatch.setattr(sys, "argv", argv)
+            assert cli.main() == 0
+            output = capsys.readouterr().out
+            assert f"removed {sum(removed.values())}" in output
+            assert "removed unknown" in output
+            assert all(kind in output for kind in removed)
+            if command == "window-replay":
+                assert "FREED" in output and "REMOVED" in output
+
+
+def test_negative_removed_token_values_are_rejected() -> None:
+    """Both additive record schemas reject impossible cached removal counts."""
+    from pydantic import ValidationError
+
+    settings = load_settings()
+    record = _record(_frontier_budget(settings), input_tokens=60000)
+    row = replay_record(record, settings, baseline=settings)
+    for instance in (record, row):
+        with pytest.raises(ValidationError, match="greater than or equal to 0"):
+            type(instance).model_validate(
+                {
+                    **instance.model_dump(),
+                    "removed_block_tokens": {"recent narrative": -1},
+                }
+            )

@@ -4200,6 +4200,22 @@ class UIRecapSettings(BaseModel):
     )
 
 
+class UIReaderSettings(BaseModel):
+    """Required chunk-count bounds for the playable reader feed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_page_size: int = Field(..., strict=True, ge=1)
+    max_page_size: int = Field(..., strict=True, ge=1)
+
+    @model_validator(mode="after")
+    def validate_page_bounds(self) -> "UIReaderSettings":
+        """Require the default page to fit inside the maximum."""
+        if self.default_page_size > self.max_page_size:
+            raise ValueError("default_page_size must be <= max_page_size")
+        return self
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
@@ -4228,6 +4244,9 @@ class UISettings(BaseModel):
     recap: UIRecapSettings = Field(
         ...,
         description="Hiatus and roster bounds for the reader's return recap",
+    )
+    reader: UIReaderSettings = Field(
+        ..., description="Chunk-count bounds for the playable reader feed"
     )
 
 
