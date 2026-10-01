@@ -491,14 +491,18 @@ def _abandon_spawn(
     health = settings.runtime.health
     try:
         _signal_process_group(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (
+        ProcessLookupError
+    ):  # nexus-exception-disposition: safe-continuation; reason=ESRCH; safety=gone
         pass
     grace = health.stop_grace_seconds
     poll = health.poll_interval_seconds
     if not _await_exit(process.pid, grace, poll):
         try:
             _signal_process_group(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (
+            ProcessLookupError
+        ):  # nexus-exception-disposition: safe-continuation; reason=ESRCH; safety=gone
             pass
         _await_exit(process.pid, grace, poll)
     if not log_capture.wait_for_writer(process.writer_pid, log_path, grace, poll):

@@ -84,9 +84,13 @@ def pid_alive(pid: int) -> bool:
             kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
+    except (
+        ProcessLookupError
+    ):  # nexus-exception-disposition: safe-continuation; reason=ESRCH; safety=gone
         return False
-    except PermissionError:
+    except (
+        PermissionError
+    ):  # nexus-exception-disposition: safe-continuation; reason=EPERM; safety=alive
         return True
     return True
 
@@ -302,7 +306,9 @@ def _child_state(pid: int) -> Optional[bool]:
         return None
     try:
         reaped, _status = os.waitpid(pid, os.WNOHANG)
-    except ChildProcessError:
+    except (
+        ChildProcessError
+    ):  # nexus-exception-disposition: safe-continuation; reason=not child; safety=probe
         return None
     return reaped == 0
 
@@ -434,7 +440,9 @@ def kill_writer(pid: int) -> None:
     kill_sig = signal.SIGKILL if os.name == "posix" else signal.SIGTERM
     try:
         os.kill(pid, kill_sig)
-    except ProcessLookupError:
+    except (
+        ProcessLookupError
+    ):  # nexus-exception-disposition: safe-continuation; reason=ESRCH; safety=gone
         pass
 
 

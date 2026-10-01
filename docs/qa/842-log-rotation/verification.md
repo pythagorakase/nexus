@@ -1871,3 +1871,94 @@ commit. Static-check results therefore remain applicable without repetition.
 Only evidence changes after these tests.
 
 No scratch-path log writer or gateway process remains (real `/bin/ps` inspection).
+
+
+## Exception-disposition lint
+
+PR #1065 / 842-B follow-up to the exception-disposition checker landing.
+`--inventory` found ten non-exempt, unmarked handlers outside the baseline.
+The three additional CLI/readiness handlers also belong to this branch and
+must be marked for the whole-tree gate. Only handler headers/comments changed;
+no handler bodies changed. Every marker sits on the header's colon line within
+88 columns.
+
+| Handler | Caught exception / path | Kind | Contract |
+| --- | --- | --- | --- |
+| `Supervisor.log_mark` | `FileNotFoundError` | `retry` | Rotation gaps retry until the deadline, then raise; no capture returns the documented empty mark. |
+| `log_capture.pid_alive` | `ProcessLookupError` | `safe-continuation` | ESRCH establishes that the process is gone. |
+| `log_capture.pid_alive` | `PermissionError` | `safe-continuation` | EPERM establishes a live process; it is never certified dead. |
+| `log_capture._child_state` | `ChildProcessError` | `safe-continuation` | A non-child cannot be reaped here; callers continue with liveness/identity probes. |
+| `log_capture.kill_writer` | `ProcessLookupError` | `safe-continuation` | The writer already exited, satisfying termination. |
+| `local_inference._abandon_spawn` | `ProcessLookupError`, SIGTERM | `safe-continuation` | The process group is gone; cleanup continues and the caller's original failure surfaces. |
+| `local_inference._abandon_spawn` | `ProcessLookupError`, SIGKILL | `safe-continuation` | The process group exited before escalation; cleanup continues. |
+| `cli._run_log_mark` | `RuntimeError_`, `FileNotFoundError` | `fail` | Returns a terminal `success=False` error record. |
+| `readiness._check_log_writers` | `RuntimeError_`, supervisor construction | `fail` | Returns a failed readiness outcome with remediation. |
+| `readiness._check_log_writers` | `RuntimeError_`, writer probe | `fail` | Returns a failed readiness outcome with remediation. |
+
+No examined handler was refused a marker. No further stale baseline entries
+were reported; the coordinator's six deletions remain unchanged.
+
+Validation uses `PY=/Users/pythagor/nexus/.venv/bin/python` from this worktree.
+`PYTHONPATH=$PWD $PY -c 'import nexus; print(nexus.__file__)'` resolved to this
+worktree's `nexus/__init__.py`. No paid calls or database operations were needed.
+
+`$PY -m black --check nexus/runtime/supervisor.py nexus/runtime/log_capture.py nexus/api/local_inference.py nexus/cli.py nexus/runtime/readiness.py`:
+
+```text
+All done! ✨ 🍰 ✨
+5 files would be left unchanged.
+```
+
+The same five paths were checked with `$PY -m flake8`; the four files that
+exist on `origin/main` were extracted with `git show origin/main:<path>` to
+`scratchpad/842-B/lint-main/<path>` and checked with the same flake8 command.
+`log_capture.py` is new on this branch and has no diagnostics.
+Both flake8 runs exit 1 with exactly nine matching pre-existing CLI E501
+messages (modulo line shifts), all on untouched lines. No new diagnostics.
+Branch output:
+
+```text
+nexus/cli.py:976:89: E501 line too long (92 > 88 characters)
+nexus/cli.py:4330:89: E501 line too long (93 > 88 characters)
+nexus/cli.py:4688:89: E501 line too long (113 > 88 characters)
+nexus/cli.py:4717:89: E501 line too long (118 > 88 characters)
+nexus/cli.py:4757:89: E501 line too long (90 > 88 characters)
+nexus/cli.py:4842:89: E501 line too long (151 > 88 characters)
+nexus/cli.py:4856:89: E501 line too long (94 > 88 characters)
+nexus/cli.py:4857:89: E501 line too long (103 > 88 characters)
+nexus/cli.py:4876:89: E501 line too long (101 > 88 characters)
+```
+
+Main output:
+
+```text
+scratchpad/842-B/lint-main/nexus/cli.py:976:89: E501 line too long (92 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4327:89: E501 line too long (93 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4651:89: E501 line too long (113 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4680:89: E501 line too long (118 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4720:89: E501 line too long (90 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4805:89: E501 line too long (151 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4819:89: E501 line too long (94 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4820:89: E501 line too long (103 > 88 characters)
+scratchpad/842-B/lint-main/nexus/cli.py:4839:89: E501 line too long (101 > 88 characters)
+```
+
+`$PY -m pytest -q tests/test_runtime/test_supervisor.py tests/test_api/test_local_inference.py`
+ran with `PYTHONPATH=$PWD` and `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL`,
+`NEXUS_SLOT`, `NEXUS_RUN_LIVE_LLM`, and `NEXUS_RUN_POSTGRES` unset, under a
+570-second subprocess timeout (exit 0):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+105 passed, 7 warnings in 53.22s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+Both `PYTHONPATH=$PWD $PY -S scripts/check_exception_dispositions.py --baseline-base-ref origin/main`
+and `PYTHONPATH=$PWD $PY -S scripts/check_exception_dispositions.py` exit 0:
+
+```text
+OK: exception disposition coverage and shrink-only baseline verified.
+```
+
+`git diff --check` exits 0 with no output.

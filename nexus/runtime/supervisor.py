@@ -1237,7 +1237,9 @@ class Supervisor:
                 with open(log_path, "rb") as handle:
                     stat = os.fstat(handle.fileno())
                     prefix = handle.read(min(stat.st_size, MARK_PREFIX_BYTES))
-            except FileNotFoundError:
+            except (
+                FileNotFoundError
+            ):  # nexus-exception-disposition: retry; reason=rotation; safety=deadline
                 newest = rotated_segment(log_path, 1)
                 if not newest.exists():
                     return EMPTY_MARK

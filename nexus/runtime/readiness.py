@@ -940,11 +940,15 @@ def _check_log_writers(ctx: ReadinessContext) -> Outcome:
         supervisor = Supervisor(
             settings.model_copy(deep=True), ctx.require_home().config_path
         )
-    except RuntimeError_ as exc:
+    except (
+        RuntimeError_
+    ) as exc:  # nexus-exception-disposition: fail; reason=config; safety=failed check
         return _failed(one_line(exc), "Correct [runtime] in nexus.toml.")
     try:
         dead = supervisor.dead_writers()
-    except RuntimeError_ as exc:
+    except (
+        RuntimeError_
+    ) as exc:  # nexus-exception-disposition: fail; reason=probe; safety=failed check
         return _failed(
             one_line(exc),
             "Make ps runnable on PATH, then run nexus doctor again.",

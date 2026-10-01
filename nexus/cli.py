@@ -4413,7 +4413,10 @@ def _run_log_mark(args: argparse.Namespace) -> Dict[str, Any]:
         for line in lines:
             print(line)
         return {"success": True}
-    except (RuntimeError_, FileNotFoundError) as exc:
+    except (
+        RuntimeError_,
+        FileNotFoundError,
+    ) as exc:  # nexus-exception-disposition: fail; reason=logs; safety=error result
         return {"success": False, "error": str(exc)}
 
 
