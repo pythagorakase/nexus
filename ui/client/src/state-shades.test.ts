@@ -157,7 +157,7 @@ function background(value: string, p: Palette, under?: Triple): Triple {
 const settingsSource = readFileSync(resolve(import.meta.dirname, "components/nexus/SettingsPane.tsx"), "utf8");
 const localSource = readFileSync(resolve(import.meta.dirname, "components/nexus/LocalModelRows.tsx"), "utf8");
 const productionTags = new Map<string, string>();
-function jsxAncestors(source: string, marker: string, tag = false): string[][] {
+function jsxAncestors(source: string, marker: string, tag = false, full = false): string[][] {
   const ast = ts.createSourceFile("surface.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let target: ts.Node | undefined;
   function classes(node: ts.Node): string[] {
@@ -201,10 +201,12 @@ function jsxAncestors(source: string, marker: string, tag = false): string[][] {
       for (let n: ts.Node | undefined = child.parent; n; n = n.parent) {
         const names = classes(n);
         if (names.length) result.push(names);
+        else if (full && ts.isJsxElement(n) && /^[a-z]/.test(n.openingElement.tagName.getText(slotAst))) result.push([`proof-tag-${n.openingElement.tagName.getText(slotAst)}`]);
       }
     } else {
       const names = classes(node);
       if (names.length) result.push(names);
+      else if (full && ts.isJsxElement(node) && /^[a-z]/.test(node.openingElement.tagName.getText(ast))) result.push([`proof-tag-${node.openingElement.tagName.getText(ast)}`]);
     }
   }
   return result;
@@ -213,33 +215,50 @@ function jsxAncestors(source: string, marker: string, tag = false): string[][] {
 // measured interaction. Unsupported contexts fail closed before cascade lookup.
 const shellSource = readFileSync(resolve(import.meta.dirname, "components/nexus/NexusLayout.tsx"), "utf8");
 const topbarSource = readFileSync(resolve(import.meta.dirname, "components/nexus/TopBar.tsx"), "utf8");
-const keyAncestors = [...jsxAncestors(settingsSource, "key-row"), ...jsxAncestors(settingsSource, "KeysSection", true), ...jsxAncestors(shellSource, "SettingsPane", true)];
-const deleteAncestors = [...jsxAncestors(localSource, "lm-quant"), ...jsxAncestors(settingsSource, "LocalModelRows", true), ...jsxAncestors(settingsSource, "ModelSection", true), ...jsxAncestors(shellSource, "SettingsPane", true)];
-const mapOuter = jsxAncestors(shellSource, "MapPane", true);
-const sidebarAncestors = [...jsxAncestors(mapSource, "map-place-dot"), ...mapOuter];
-const canvasAncestors = [...jsxAncestors(mapSource, "mappane-svg"), ...mapOuter];
-const memoryAncestors = [...jsxAncestors(topbarSource, "mem-fill"), ...jsxAncestors(topbarSource, "MemoryMeter", true), ...jsxAncestors(shellSource, "TopBar", true)];
+const keyAncestors = [...jsxAncestors(settingsSource, "key-row", false, true), ...jsxAncestors(settingsSource, "KeysSection", true, true), ...jsxAncestors(shellSource, "SettingsPane", true, true)];
+const deleteAncestors = [...jsxAncestors(localSource, "lm-quant", false, true), ...jsxAncestors(settingsSource, "LocalModelRows", true, true), ...jsxAncestors(settingsSource, "ModelSection", true, true), ...jsxAncestors(shellSource, "SettingsPane", true, true)];
+const mapOuter = jsxAncestors(shellSource, "MapPane", true, true);
+const sidebarAncestors = [...jsxAncestors(mapSource, "map-place-dot", false, true), ...mapOuter];
+const canvasAncestors = [...jsxAncestors(mapSource, "mappane-svg", false, true), ...mapOuter];
+const memoryAncestors = [...jsxAncestors(topbarSource, "mem-fill", false, true), ...jsxAncestors(topbarSource, "MemoryMeter", true, true), ...jsxAncestors(shellSource, "TopBar", true, true)];
+const warningAncestors = [...jsxAncestors(topbarSource, "mem-over-glyph", false, true), ...jsxAncestors(topbarSource, "MemoryMeter", true, true), ...jsxAncestors(shellSource, "TopBar", true, true)];
+const pinAncestors = [...jsxAncestors(mapSource, "map-pin", false, true), ...mapOuter];
+const leaderAncestors = [...jsxAncestors(mapSource, "map-pin-leader", false, true), ...mapOuter];
 const cssRules = [postcss.parse(shippedCss, { from: resolve(import.meta.dirname, "index.css") }), postcss.parse(layoutCss, { from: resolve(import.meta.dirname, "components/nexus/nexus-layout.css") })].flatMap(ast => {
   const rules: postcss.Rule[] = []; ast.walkRules(rule => { rules.push(rule); }); return rules;
 });
-const modeledClasses = new Set([...keyAncestors, ...deleteAncestors, ...sidebarAncestors, ...canvasAncestors, ...memoryAncestors].flat().concat([
+const modeledClasses = new Set([...keyAncestors, ...deleteAncestors, ...sidebarAncestors, ...canvasAncestors, ...memoryAncestors, ...warningAncestors, ...pinAncestors, ...leaderAncestors].flat().concat([
   "dark", "theme-veil", "theme-gilded", "theme-vector", "key-row", "optional", "missing", "present", "verified", "key-status",
   "lm-quant", "ready", "exceeds", "blocked", "staged", "dl", "active", "loading", "required", "lm-action", "lm-trash", "armed", "mem-fill", "over", "mem-over-glyph",
   "map-pin", "map-state-glyph", "map-state-fill", "map-state-ring", "map-pin-leader", "map-place-dot", "on", "here", "animate-pulse",
   ...Object.keys(MAPPINGS.key).map(state => `key-glyph-${state}`),
 ]));
+// Additional source stylesheets cannot silently add an unmeasured override.
+// Their bundler order is outside this resolver's two-file model, so any rule
+// that can affect these elements must be explicitly modeled before acceptance.
+const unorderedRules = new Set<postcss.Rule>();
+function otherStyles(dir: string): void {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = resolve(dir, entry.name);
+    if (entry.isDirectory()) { otherStyles(path); continue; }
+    if (!path.endsWith(".css") || [resolve(import.meta.dirname, "index.css"), resolve(import.meta.dirname, "components/nexus/nexus-layout.css")].includes(path)) continue;
+    postcss.parse(readFileSync(path, "utf8"), { from: path }).walkRules(rule => { unorderedRules.add(rule); cssRules.push(rule); });
+  }
+}
+otherStyles(import.meta.dirname);
 let themeForm = "compound";
 function model(ancestors: string[][], theme: Theme, interaction = "rest", form = themeForm): HTMLElement[] {
   const root = document.createElement("html");
   root.className = `proof-root ${form === "compound" ? "dark " : ""}theme-${theme.toLowerCase()}`;
-  let parent: HTMLElement = root;
-  if (form === "descendant") {
-    parent = document.createElement("div"); parent.className = "dark"; root.appendChild(parent);
-  }
+  const body = document.createElement("body"); root.appendChild(body);
+  const appRoot = document.createElement("div"); appRoot.id = "root"; body.appendChild(appRoot);
+  // main.tsx mounts App/NexusLayout into #root. Context providers add no box.
+  let parent: HTMLElement = appRoot;
+  if (form === "descendant") parent.className = "dark";
   const nodes: HTMLElement[] = [];
   for (const classes of [...ancestors].reverse()) {
-    const shape = classes.find(c => c.startsWith("proof-shape-"))?.slice("proof-shape-".length);
-    const tags: Record<string, string> = { "lm-trash": "button", "lm-action": "span", "lm-quant": "li", "key-status": "span", "key-row": "li", "map-pin": "g", "map-state-glyph": "g", "mem-fill": "div", "map-place-dot": "svg" };
+    const shape = classes.find(c => c.startsWith("proof-shape-"))?.slice("proof-shape-".length) ?? classes.find(c => c.startsWith("proof-tag-"))?.slice("proof-tag-".length) ?? (classes.some(c => c.startsWith("key-glyph-")) ? "svg" : undefined);
+    const tags: Record<string, string> = { "lm-trash": "button", "lm-action": "span", "lm-quant": "li", "key-status": "span", "key-row": "li", "map-pin": "g", "map-state-glyph": "g", "mem-fill": "span", "mem-over-glyph": "svg", "map-pin-leader": "line", "map-place-dot": "svg" };
     const node = document.createElement(shape ?? classes.map(c => tags[c] ?? productionTags.get(c)).find(t => t && t !== "ambiguous") ?? "div"); node.className = classes.join(" ");
     if (interaction === "hover") node.classList.add("proof-hover");
     if (interaction === "focus") node.classList.add("proof-focus-within");
@@ -272,8 +291,8 @@ function cascade(nodes: HTMLElement[], index: number, property: string): Paint |
       if (!potential) continue;
       const label = `${rule.source?.input.file ?? "shipped CSS"}: ${rule.selector} { ${declarations.map(d => d.toString()).join("; ")} }`;
       function unsupported(reason: string): never { throw new Error(`Unmodeled ${reason}: ${label}`); }
-      if (/[#+~]/.test(selector)) unsupported("ancestor or sibling context");
       const identity = subjectClasses.some(c => !generic.has(c) && node.classList.contains(c));
+      if (identity && /[#>+~]/.test(selector)) unsupported("ancestor, child or sibling context");
       const classes = [...selector.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)].map(m => m[1]);
       if (identity && classes.some(c => !modeledClasses.has(c))) unsupported("ancestor or compound class");
       // Remove unsupported pseudo/attribute conditions only to establish
@@ -281,9 +300,10 @@ function cascade(nodes: HTMLElement[], index: number, property: string): Paint |
       // The real selector is never resolved through this relaxed skeleton.
       const skeleton = selector.replace(/:[a-z-]+\([^)]*\)/g, "").replace(/::?[a-z-]+/g, "").replace(/\[[^\]]*\]/g, "");
       try { if (skeleton.trim() && !node.matches(skeleton)) continue; } catch { /* Unsupported grammar is rejected below. */ }
-      if (/[#+~[\]]/.test(selector) || /::|:(?!root\b|hover\b|focus-within\b|disabled\b)/.test(selector)) unsupported("selector context");
+      if (/[#>+~[\]]/.test(selector) || /::|:(?!root\b|hover\b|focus-within\b|disabled\b)/.test(selector)) unsupported("selector context");
       const evaluated = selector.replace(/:root\b/g, ".proof-root").replace(/:hover\b/g, ".proof-hover").replace(/:focus-within\b/g, ".proof-focus-within");
       if (!node.matches(evaluated)) continue;
+      if (unorderedRules.has(rule)) unsupported("stylesheet ordering");
       if (rule.parent?.type !== "root") unsupported(`at-rule context ${rule.parent?.type === "atrule" ? "@" + rule.parent.name + " " + rule.parent.params : rule.parent?.type}`);
       if (declarations.some(d => d.important)) unsupported("!important conflict");
       const residue = selector.replace(/[.#][a-zA-Z_-][a-zA-Z0-9_-]*/g, "").replace(/:(?:root|hover|focus-within|disabled)\b/g, "").replace(/\bhtml\b|[\s>*]/g, "");
@@ -324,7 +344,7 @@ function contexts(): Context[] {
     else if (surface === "delete") path = [["lm-trash", ...(state === "armed" ? ["armed"] : [])], ["lm-action"], ["lm-quant", "ready"], ...deleteAncestors];
     else if (surface === "key") path = [["key-status", ...(state === "present" || state === "verified" ? [state] : [])], ["key-row", ...(state === "required-missing" ? ["missing"] : state === "optional-absent" || requiredness === "optional" ? ["optional"] : [])], ...keyAncestors];
     else {
-      path = [[part === "ring" && state !== "rest" ? "map-state-ring" : "map-state-fill", `proof-shape-${state === "selected" ? "rect" : state === "hovered" ? "polygon" : "circle"}`], ["map-state-glyph"], ...(sidebar ? [["map-place-dot"], ...sidebarAncestors] : [["map-pin"], ["mappane-svg"], ...canvasAncestors])];
+      path = [[part === "ring" && state !== "rest" ? "map-state-ring" : "map-state-fill", `proof-shape-${state === "selected" ? "rect" : state === "hovered" ? "polygon" : "circle"}`], ["map-state-glyph"], ...(sidebar ? [["map-place-dot"], ...sidebarAncestors] : [["map-pin"], ...pinAncestors])];
       property = part === "ring" && state !== "rest" ? "stroke" : "fill"; fallback = `var(${MAPPINGS.map[state]})`;
     }
     const value = resolved(path, property, theme, interaction, fallback);
@@ -549,13 +569,13 @@ describe("777-S2 state shades", () => {
         expect(measures(theme, palette(shippedCss, theme), false), `${theme}: compound and descendant theme contexts`).toEqual(compound);
       }
       for (const theme of THEMES) for (const form of ["compound", "descendant"]) {
-        model([["mem-over-glyph"], ...memoryAncestors], theme, "rest", form);
+        model([["mem-over-glyph"], ...warningAncestors], theme, "rest", form);
         for (const state of Object.keys(MAPPINGS.key)) model([[`key-glyph-${state}`], ["key-status"], ["key-row"], ...keyAncestors], theme, "rest", form);
-        model([["map-pin-leader"], ["mappane-svg"], ...canvasAncestors], theme, "rest", form);
+        model([["map-pin-leader"], ...leaderAncestors], theme, "rest", form);
       }
       const properties = new Set<string>([...ROOTS, ...measuredRoots, "--map-sea", "--map-land"]);
       for (const rule of cssRules) rule.walkDecls(decl => {
-        if (/^(?:color|fill|stroke|background(?:$|-)|opacity$)/.test(decl.prop)) properties.add(decl.prop);
+        if (/^(?:color|fill|stroke|background(?:$|-)|border(?:$|-.*color$)|outline(?:$|-color$)|box-shadow$|text-shadow$|filter$|opacity$)/.test(decl.prop)) properties.add(decl.prop);
       });
       for (const nodes of modeledPaths.values()) for (let i = 0; i < nodes.length; i++) {
         for (const property of properties) {
