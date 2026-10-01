@@ -461,6 +461,7 @@ def test_relationship_ids_above_int4_max() -> None:
             "depend on it",
         ),
     ],
+    ids=["summary_drift", "unknown_dependent"],
 )
 def test_migration_139_refuses_drift(
     case: str, expected_error: str, caplog: pytest.LogCaptureFixture

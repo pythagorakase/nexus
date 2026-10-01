@@ -81,10 +81,15 @@
 --
 -- Locks: ALTER TABLE ... TYPE rewrites character_relationships under an
 -- ACCESS EXCLUSIVE lock, and DROP VIEW takes ACCESS EXCLUSIVE on each view,
--- until the transaction commits. The table holds at most 84 rows on the
+-- until the transaction commits. The type change also drops and re-creates
+-- the two foreign keys to characters(id); removing and re-adding their RI
+-- triggers takes ACCESS EXCLUSIVE on public.characters until commit as well
+-- (characters is not rewritten). The table holds at most 84 rows on the
 -- fleet (save_01 and save_02), so the rewrite lasts milliseconds once the
--- lock is granted; the lock waits for any open transaction that read the
--- table or the views. Apply it with no turn in flight.
+-- locks are granted; the migration waits for any open transaction that
+-- touched characters, character_relationships or the three views, and while
+-- it waits in the lock queue it blocks every new reader of characters. Apply
+-- it with no turn in flight and no idle-in-transaction session on characters.
 
 CREATE TEMP TABLE m139_view_snapshot ON COMMIT DROP AS
 SELECT c.relname::text AS relname,
