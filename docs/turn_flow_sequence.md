@@ -22,7 +22,12 @@ sources:
   - nexus/api/commit_handler_sync.py
   - nexus/agents/orrery/events.py
   - nexus/api/summary_triggers.py
-  - nexus/jobs/
+  - nexus/jobs/scheduler.py
+  - nexus/jobs/gate.py
+  - nexus/jobs/compaction.py
+  - nexus/jobs/summaries.py
+  - nexus/jobs/embeddings.py
+  - nexus/jobs/narrative_jobs.py
   - nexus/agents/orrery/worker.py
   - nexus/agents/orrery/experience_embedding.py
   - nexus.toml
