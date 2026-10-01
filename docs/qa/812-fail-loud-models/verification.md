@@ -17,8 +17,9 @@ git grep -n "except Exception" -- nexus/agents/memnon/utils/cross_encoder.py \
   nexus/agents/lore/utils/turn_cycle.py nexus/agents/lore/lore.py nexus/memory/incremental.py
 ```
 
-47 hits. None sits on the path from `query_memory`, `rerank_results` or
-`generate_embedding` to a turn and swallows the error:
+47 hits. Apart from `memnon.py:1553` (see Open Questions), none sits on the
+path from `query_memory`, `rerank_results` or `generate_embedding` to a turn
+and swallows the error:
 
 | Hit | Function | Why it is not a swallow on the turn's retrieval path |
 |---|---|---|
@@ -38,7 +39,7 @@ git grep -n "except Exception" -- nexus/agents/memnon/utils/cross_encoder.py \
 | `memnon.py:1356` | `_test_hybrid_search` | Legacy diagnostic (order: Out of Scope). |
 | `memnon.py:1419` | `get_chunk_by_id` | Fetches one chunk by id with SQL, no model. Its turn caller is the warm-analysis handler `turn_cycle.py:376` (Out of Scope); `retrieve_context` turns its `None` into a raised `ValueError`. |
 | `memnon.py:1489` | `get_recent_chunks` | Logs and re-raises as `RuntimeError("FATAL: Failed to retrieve recent chunks ...")`. |
-| `memnon.py:1553` | `_get_chunk_by_id` | Reached from `query_memory` only for a literal `chunk_id:<n>` query; a direct SQL lookup by id, no embedder, reranker or search. Turn queries are raw chunk text and player input. Listed as an open question below. |
+| `memnon.py:1553` | `_get_chunk_by_id` | A direct SQL lookup by id, with no embedder, reranker or search, reached from `query_memory` (`memnon.py:1596`) when the query starts with `chunk_id:`. It logs a SQL error and returns `results: []`. A turn can reach it: Pass 2 sends the raw player input to `query_memory` verbatim (`incremental.py:136`, `145`), so input that starts with `chunk_id:` takes this branch. See Open Questions. |
 | `db_access.py:200` | `check_vector_extension` | Schema setup (`db_schema.py`), not retrieval. |
 | `db_access.py:355` | `execute_vector_search` | No caller under `nexus/` (order: Out of Scope). |
 | `db_access.py:467`, `493`, `540`, `559`, `566`, `576` | `setup_database_indexes` | Index setup (`db_schema.py`), not retrieval (order: expected survivor). |
@@ -55,6 +56,18 @@ git grep -n "except Exception" -- nexus/agents/memnon/utils/cross_encoder.py \
 | `lore.py:478` | `retrieve_context` | Logs and re-raises (`raise`). |
 | `lore.py:877` | `main` | The module's command-line entry point. |
 | `incremental.py:190` | `expand_warm_slice` | Warm-slice handler, named 202 in the order (Out of Scope). |
+
+## Open Questions
+
+- `_get_chunk_by_id`'s handler (`memnon.py:1553`) is reachable from a turn:
+  `retrieve_from_raw_input` passes the stripped player input to
+  `query_memory` unchanged (`incremental.py:136`, `145`), and `query_memory`
+  routes any query that starts with `chunk_id:` followed by an integer to
+  `_get_chunk_by_id` (`memnon.py:1596-1599`), whose handler logs a SQL error
+  and returns `results: []`. The error it swallows is a SQL error on a lookup
+  by id, not an embedder, reranker or search error, and the order does not
+  name it under Required Changes or Out of Scope. Does 812-Q8 cover it
+  (delete the handler), or does it stay out of scope for this slice?
 
 ## Red Run Against `main`
 
@@ -172,3 +185,57 @@ pre-existing E501 lines falls in `db_access.py` and `search.py`). mypy
 reports no new error in the nine product files against the base and four fewer
 (65 to 61): the four `dict[str, list[float] | None]` argument errors that the
 `None` embeddings caused. The new PostgreSQL test file is clean.
+
+## Review Fixes (Tails at `cb34f9d0`)
+
+Fixes made after review: `LORE._process_single_directive` drops a query that
+sanitizes to nothing, so a directive of `???` sends no `""` to `query_memory`;
+`test_sql_layer_propagates_a_query_error` asserts the raised error has no
+`__context__`; the artifact tests' fixture (now `isolated_model_caches`)
+isolates both caches and covers `test_score_pair_raises_for_an_over_long_pair`.
+The item-14 table above is unchanged at 47 hits (the `lore.py` fix replaced one
+line with one line).
+
+Red check: the new `test_retrieve_context_skips_a_directive_that_sanitizes_to_nothing`
+against the previous `lore.py` (`6d66762a`):
+
+```
+E       AssertionError: assert [''] == []
+FAILED tests/test_lore/test_lore_retrieve_context.py::test_retrieve_context_skips_a_directive_that_sanitizes_to_nothing
+1 failed, 3 passed, 5 warnings in 0.41s
+```
+
+Mutation check: a catch-and-retry wrapper appended to
+`continuous_temporal_search.py` (on any error, call
+`db_access.execute_multi_model_hybrid_search` with the same arguments), then
+reverted:
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit "tests/test_memnon_model_failures_pg.py::test_sql_layer_propagates_a_query_error"
+
+E       assert UndefinedColumn('column "missing_column" does not exist\nLINE 20:                      AND cm.season = missing_column\n ...') is None
+dbname audit: owner targets: none
+1 failed, 1 passed in 5.57s
+```
+
+The `time_aware` parameter fails and the `hybrid` parameter passes.
+
+```
+NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -rs -p tests.dbname_audit tests/test_memnon_model_failures_pg.py
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 14 targets: postgres, qa_model_failures_* x13
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+13 passed, 9 warnings in 26.16s
+
+$PY -m pytest -q tests/test_memnon_cross_encoder.py tests/test_memnon_cross_encoder_artifact.py tests/test_memnon_cross_encoder_dependencies.py tests/test_api/test_import_side_effects.py tests/test_lore/test_turn_cycle.py tests/test_lore/test_memory_manager.py tests/test_lore/test_lore_retrieve_context.py tests/test_memnon tests/test_doc_front_matter.py
+
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+177 passed, 4 skipped, 8 warnings in 19.72s
+```
+
+The four skips are the same four named above. Black reports the four changed
+Python files unchanged; flake8 reports nothing new; mypy reports no new error
+in the changed files.
