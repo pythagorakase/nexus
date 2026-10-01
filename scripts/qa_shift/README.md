@@ -301,3 +301,33 @@ reports numbers only:
 PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49
 PYTHONPATH=$PWD "$PY" scripts/qa_shift/routine_delta_grammar_probe.py --dbname save_04 --anchor-chunk 49 --markdown
 ```
+
+## Cooldown Calibration
+
+The report adopts no policy: individual gate classifications are analytical
+proposals under the settled rule, “Refractories to hours, staggering stays on
+ticks.” It prints stored resolution counts and reference-cadence equivalents.
+Every script-issued SQL statement is a SELECT; the connection enforces and
+verifies read-only, repeatable-read isolation and database identity, preserving
+ambient PGOPTIONS before appending the protective options. Slot 2 is refused.
+
+```sh
+PYTHONPATH=$PWD $PY scripts/qa_shift/cooldown_calibration.py --dbname ref_codex_bakeoff_2026_07 --format markdown
+```
+
+The reference stays at migration 114 and retains inherited all-layer clock
+contamination. The slots are already repaired by migration 140; the following
+TEST-pinned save_04 clone has primary-only stored clocks. The shared fixture
+snapshots the source read-only, migrates only the disposable clone, and drops it
+on exit. Use `--format json` for the same fields in machine-readable form.
+
+```sh
+PYTHONPATH=$PWD $PY - <<'PY'
+import sys
+from tests.pg_fixtures import disposable_slot_database
+from scripts.qa_shift.cooldown_calibration import main
+with disposable_slot_database("qa640_778s4a_evidence", source_db="save_04", include_data=True) as dbname:
+    sys.argv = ["cooldown_calibration", "--dbname", dbname, "--format", "markdown"]
+    main()
+PY
+```
