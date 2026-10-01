@@ -701,8 +701,15 @@ def commit_orrery_tick_sync(
     drift_settings: Optional[Any] = None,
     reveal_settings: Optional[Any] = None,
     reveal_state: Optional[WorldState] = None,
+    occurrence_time: Optional[datetime] = None,
 ) -> CommitOrreryTickResult:
-    """Materialize a preview proposal inside the accepted-chunk transaction."""
+    """Materialize a preview proposal inside the accepted-chunk transaction.
+
+    An aware occurrence_time overrides the clock for every deed and detected
+    signal emitted by this commit. Otherwise each draft uses its tick chunk.
+    """
+
+    _validate_occurrence_time(occurrence_time)
 
     signal_detection = coerce_signal_detection(ecology_settings)
     project_policy = coerce_project_policy(project_settings)
@@ -923,6 +930,7 @@ def commit_orrery_tick_sync(
                 epistemics_settings=epistemics_policy,
                 entity_names=entity_names,
                 entity_kinds=entity_kinds,
+                occurrence_time=occurrence_time,
             )
             if event_id is not None:
                 event_count += 1
@@ -990,8 +998,15 @@ async def commit_orrery_tick_async(
     drift_settings: Optional[Any] = None,
     reveal_settings: Optional[Any] = None,
     reveal_state: Optional[WorldState] = None,
+    occurrence_time: Optional[datetime] = None,
 ) -> CommitOrreryTickResult:
-    """Async parity wrapper for tests and non-production commit callers."""
+    """Async parity wrapper for tests and non-production commit callers.
+
+    An aware occurrence_time overrides the clock for every deed and detected
+    signal emitted by this commit. Otherwise each draft uses its tick chunk.
+    """
+
+    _validate_occurrence_time(occurrence_time)
 
     signal_detection = coerce_signal_detection(ecology_settings)
     project_policy = coerce_project_policy(project_settings)
@@ -1210,6 +1225,7 @@ async def commit_orrery_tick_async(
             epistemics_settings=epistemics_policy,
             entity_names=entity_names,
             entity_kinds=entity_kinds,
+            occurrence_time=occurrence_time,
         )
         if event_id is not None:
             event_count += 1
@@ -6556,6 +6572,12 @@ async def _update_resolution_epistemics_applied_async(
     )
 
 
+def _validate_occurrence_time(occurrence_time: Optional[datetime]) -> None:
+    """Reject an explicit occurrence without a timezone-defined instant."""
+    if occurrence_time is not None and occurrence_time.utcoffset() is None:
+        raise ValueError("occurrence_time must be a timezone-aware instant")
+
+
 def _emit_world_event_sync(
     cur: Any,
     draft: OrreryResolutionDraft,
@@ -6569,9 +6591,20 @@ def _emit_world_event_sync(
     epistemics_settings: Optional[Any],
     entity_names: Mapping[int, str],
     entity_kinds: Mapping[int, str],
+    occurrence_time: Optional[datetime] = None,
 ) -> Optional[int]:
+    """Emit a deed and detected signal at the same exact occurrence instant."""
     if not draft.event_type:
         return None
+
+    _validate_occurrence_time(occurrence_time)
+    resolved_time = occurrence_time
+    if resolved_time is None:
+        resolved_time = _chunk_world_time_sync(cur, tick_chunk_id)
+    if resolved_time is None:
+        raise OrreryWorldClockUnavailableError(
+            f"Orrery event occurrence clock unavailable for tick chunk {tick_chunk_id}"
+        )
 
     _ensure_event_type_sync(cur, draft.event_type)
     detection_outcome: Optional[dict[str, Any]] = None
@@ -6602,8 +6635,8 @@ def _emit_world_event_sync(
         INSERT INTO world_events (
             event_type, tick_chunk_id, actor_entity_id, target_entity_id, location_id,
             world_layer, source, changed_fields, magnitude, resolution_id,
-            payload
-        ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb)
+            payload, world_time
+        ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb, %s)
         RETURNING id
         """,
         (
@@ -6617,6 +6650,7 @@ def _emit_world_event_sync(
             draft.magnitude,
             resolution_id,
             json.dumps(payload),
+            resolved_time,
         ),
     )
     event_id = _row_get(cur.fetchone(), "id", 0)
@@ -6661,8 +6695,8 @@ def _emit_world_event_sync(
             INSERT INTO world_events (
                 event_type, tick_chunk_id, actor_entity_id, target_entity_id,
                 location_id, world_layer, source, changed_fields, magnitude,
-                resolution_id, payload
-            ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb)
+                resolution_id, payload, world_time
+            ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb, %s)
             RETURNING id
             """,
             (
@@ -6676,6 +6710,7 @@ def _emit_world_event_sync(
                 draft.magnitude,
                 resolution_id,
                 json.dumps({**payload, "signal_of": draft.event_type}),
+                resolved_time,
             ),
         )
         signal_event_id = int(_row_get(cur.fetchone(), "id", 0))
@@ -6715,9 +6750,20 @@ async def _emit_world_event_async(
     epistemics_settings: Optional[Any],
     entity_names: Mapping[int, str],
     entity_kinds: Mapping[int, str],
+    occurrence_time: Optional[datetime] = None,
 ) -> Optional[int]:
+    """Emit a deed and detected signal at the same exact occurrence instant."""
     if not draft.event_type:
         return None
+
+    _validate_occurrence_time(occurrence_time)
+    resolved_time = occurrence_time
+    if resolved_time is None:
+        resolved_time = await _chunk_world_time_async(conn, tick_chunk_id)
+    if resolved_time is None:
+        raise OrreryWorldClockUnavailableError(
+            f"Orrery event occurrence clock unavailable for tick chunk {tick_chunk_id}"
+        )
 
     await _ensure_event_type_async(conn, draft.event_type)
     detection_outcome: Optional[dict[str, Any]] = None
@@ -6746,10 +6792,10 @@ async def _emit_world_event_async(
         INSERT INTO world_events (
             event_type, tick_chunk_id, actor_entity_id, target_entity_id, location_id,
             world_layer, source, changed_fields, magnitude, resolution_id,
-            payload
+            payload, world_time
         ) VALUES (
             $1, $2, $3, $4, $5, $6::world_layer_type, 'resolver',
-            $7::text[], $8, $9, $10::jsonb
+            $7::text[], $8, $9, $10::jsonb, $11::timestamptz
         )
         RETURNING id
         """,
@@ -6763,6 +6809,7 @@ async def _emit_world_event_async(
         draft.magnitude,
         resolution_id,
         json.dumps(payload),
+        resolved_time,
     )
     if actor_entity_id is not None:
         await conn.execute(
@@ -6806,10 +6853,10 @@ async def _emit_world_event_async(
             INSERT INTO world_events (
                 event_type, tick_chunk_id, actor_entity_id, target_entity_id,
                 location_id, world_layer, source, changed_fields, magnitude,
-                resolution_id, payload
+                resolution_id, payload, world_time
             ) VALUES (
                 $1, $2, $3, $4, $5, $6::world_layer_type, 'resolver',
-                $7::text[], $8, $9, $10::jsonb
+                $7::text[], $8, $9, $10::jsonb, $11::timestamptz
             )
             RETURNING id
             """,
@@ -6823,6 +6870,7 @@ async def _emit_world_event_async(
             draft.magnitude,
             resolution_id,
             json.dumps({**payload, "signal_of": draft.event_type}),
+            resolved_time,
         )
         signal_mint_result = await _mint_live_event_claim_async(
             conn,
