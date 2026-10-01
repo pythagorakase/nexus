@@ -161,3 +161,47 @@ failed (`test_three_day_skip_orders_by_instant_then_precedence`,
 `test_target_horizon_reaches_abandonment`, `test_family_is_read_only`, and
 the offline `test_crossings_order_by_instant_then_precedence`), and the file
 was restored from the index.
+
+## Review Fixes (Commit `c715ab45`)
+
+Three confirmed review findings, applied at `c715ab45`; the tails below ran
+on that commit.
+
+- `CrossedBoundary.detail` is declared `field(default_factory=dict,
+  hash=False)`: a crossing hashes on producer, subject, instant, class,
+  precedence and owner issue, and equality still compares `detail`
+  (`test_crossing_is_hashable_and_detail_still_compares` asserts
+  `len({c, c}) == 1`). Before the fix, `hash()` raised `TypeError` on every
+  crossing because the read-only `MappingProxyType` took part in the hash.
+- `tests/test_orrery/test_boundary_contract.py` now defines two independent
+  producer classes, `DeterministicFixture` and `AdjudicableFixture`, each
+  declaring name, class, precedence and owner issue as class attributes and
+  returning its own crossings from `scan()`. The name and precedence clashes
+  are small subclasses; the stamping-mismatch cases use their own
+  `MisstampedFixture`.
+- The stale fixture tag in `test_boundary_enumeration_pg.py` is applied at
+  T0−70m and expires at T0−10m, so the zero-time
+  `at_or_before_previous["tag_expiry"] == 1` rests on a tag that really
+  lapsed and is still uncleared.
+
+```
+$ NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery/test_boundary_enumeration_pg.py tests/test_world_clock_contract_pg.py tests/test_prose_metrics_pg.py tests/test_owner_target_guard.py tests/test_pg_disposable_target.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 6 targets: postgres, qa640_780_boundaries_*, qa640_780_storm_*, qa640_clock_*, qa640_prose_metrics_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+150 passed, 2 warnings in 15.40s
+
+$ $PY -m pytest -q tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1199 passed, 512 skipped, 7 warnings in 9.01s
+
+$ $PY -m pytest -q tests/test_orrery/test_boundary_contract.py tests/test_reachability.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+74 passed, 5 warnings in 9.87s
+```
+
+Black, flake8 and `mypy --explicit-package-bases` are clean on the three
+changed files. The calibration is unchanged: the storm clone does not use the
+stale tag.
