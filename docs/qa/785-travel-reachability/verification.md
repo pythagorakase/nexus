@@ -19,6 +19,12 @@ The work order cited these at 41783c1d. None of the cited files changed between 
 
 The order's slot table was rechecked read-only on 2026-09-30 (`PGOPTIONS='-c default_transaction_read_only=on' psql -d <db>`): `save_02|35|35|77|0|35|0|0|138`, `save_03|17|10|5|0|0|0|75|138`, `save_04|23|10|7|0|0|0|103|138` (active characters, with `current_location`, places, routine anchors, travel rows, `plan_relocation` projects, Orrery resolutions, newest migration). The premise holds.
 
+The remaining slot facts the PR body cites were rechecked read-only on 2026-10-01 against branch head d198b32d (`PGOPTIONS='-c default_transaction_read_only=on' psql -d <db>`, `transaction_read_only` reported `on`, session time zone `America/New_York`):
+
+- Orrery resolutions by `template_id` (`select template_id, count(*) from orrery_resolutions group by 1`): `save_02` none; `save_03` 75 (stroll 24, upkeep 20, recreate 15, make_acquaintance 7, surveil 6, check_on_dependent 2, hide 1); `save_04` 103 (stroll 31, upkeep 27, recreate 23, make_acquaintance 7, drink 6, surveil 6, check_on_dependent 2, hide 1).
+- Current place tags (`entity_tags_current` joined to `places`): `save_02` 0, `save_03` 10, `save_04` 10; the probe's social-class place count is 0 in all three.
+- Stored socialize debt (`character_need_states` where `need_type = 'socialize'`: max `debt_score`, min and max `last_evaluated_at`) against `max(world_time)` from `narrative_view`: `save_02` 0.00, 35 rows, `last_evaluated_at` 09:04 for every row, latest `world_time` 09:04 (2073-10-31); `save_03` 0.00, 17 rows, `last_evaluated_at` 15:15 to 17:55, latest `world_time` 18:07 (2189-10-17); `save_04` 0.00, 23 rows, `last_evaluated_at` 15:15 to 18:37, latest `world_time` 18:37 (2189-10-17).
+
 ## Probe Output
 
 `PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD $PY scripts/qa_shift/travel_reachability.py --dbname save_02 --dbname save_03 --dbname save_04` (exit 0; stderr carried only the three `INFO Probing <db> at anchor chunk <id>` lines). The anchor world times print in UTC: `save_03` and `save_04` end at 18:07 and 18:37 Eastern, as the order states. No statement raised a read-only violation, so hydration and roster composition issued no write.
