@@ -316,9 +316,6 @@ def _history_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = {
         key: value for key, value in os.environ.items() if not key.startswith("GIT_")
     }
-    # Ask git to skip optional index writes. git 2.49 still refreshes the index
-    # after a working-tree `git diff` (its refresh ignores this variable).
-    env["GIT_OPTIONAL_LOCKS"] = "0"
     return subprocess.run(
         ["git", "-C", str(root), *args],
         env=env,

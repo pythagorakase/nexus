@@ -264,15 +264,6 @@ FAILED tests/test_doc_front_matter.py::test_inherited_git_environment_is_ignored
 1 failed, 1 passed, 40 deselected, 5 warnings in 0.61s
 ```
 
-`GIT_OPTIONAL_LOCKS=0` does not keep the working-tree `git diff` from
-refreshing the index on git 2.49.0. In a scratch repository with a
-stat-dirty tracked file, `.git/index` changed after
-`GIT_OPTIONAL_LOCKS=0 git diff --name-only HEAD` and did not change after
-`GIT_OPTIONAL_LOCKS=0 git status --porcelain`; `-c diff.autoRefreshIndex=false`
-avoids the write but lists the stat-dirty, unchanged file as changed. The
-variable stays (it costs nothing and covers optional-lock commands), and the
-index refresh after the diff remains.
-
 Tails at `08546633`, `origin/main` still at `41783c1d`:
 
 ```
