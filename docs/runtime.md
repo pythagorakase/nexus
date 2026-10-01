@@ -285,7 +285,8 @@ commands; `docs/cli.md` lists each command's transport.
 `nexus doctor` answers "is this machine ready for its role?" with one
 registry of read-only checks in `nexus/runtime/readiness.py` (issue #803).
 It never creates, migrates, locks, or writes anything: database sessions are
-read-only, and secrets are reported present or missing, never printed. It
+read-only, and secrets are reported present, missing, or unreadable, never
+printed. It
 exits 1 when any check fails and 0 otherwise. Text output is one line per
 check; `--json` prints the machine-readable report. Liveness (`/health`),
 readiness, and slot playability are three separate answers; this is the
@@ -303,7 +304,7 @@ second.
 | `slots.idf_analyzer_current` | owner-host | `template.present` | the same for every probed slot that exists, naming `python scripts/rebuild_memory_idf.py --slot N` (plus `--write-locked-slot` for a locked slot); an absent slot is reported, not failed |
 | `tools.pg_dump` | owner-host | `config.valid` | `pg_dump` resolves on `PATH` or `[api.database].tool_search_paths` |
 | `ui.bundle` | owner-host | — | `ui/dist/public/index.html` exists |
-| `secrets.seat_providers` | owner-host | `config.valid` | every key the model seats in use read is present (Required Keys and Headless Hosts) |
+| `secrets.seat_providers` | owner-host | `config.valid` | every key the model seats in use read is present (Required Keys and Headless Hosts); each account is listed as present, missing, or unreadable, and an unreadable store (a locked or unresponsive Keychain, or no `security` on `PATH`) fails the check with that store's remediation |
 | `gateway.reachable` | owner-client | `config.valid` | the profile's gateway answers `/runtime/status` with the runtime's auth headers |
 | `gateway.version` | owner-client | `gateway.reachable` | client and runtime report the same `nexus` version |
 | `reachability.gate` | ci-runner | `config.valid` | `python -S scripts/check_reachability.py` passes |
@@ -509,9 +510,14 @@ seat while `[orrery.retrograde.maturation] enabled = false`, and keyless
 providers never require a key. The API KEYS card lists required keys first,
 marks a missing one with the warning state, dims the rest, shows a status
 failure inside the card (so the Model card stays usable to repair a retired
-pin), and re-reads the rows after the Model card changes a story pin.
-Verification remains an explicit click that is never stored and is cleared
-when the key is replaced.
+pin), and re-reads the rows after the Model card changes a story pin. Status
+and verification re-read the store on every request, past the gateway's
+per-process key cache, so a key rotated outside the app shows at once; the
+card asks for status again each time the pane opens. A store that is locked or
+cannot be reached fails the card with its remediation (status and `PUT` answer
+503) instead of reporting the key absent. Verification remains an explicit
+click that is never stored; any status refresh, including a key replacement,
+clears the Verified mark.
 
 A host without a browser uses the same card through an SSH tunnel to its
 loopback gateway (port 8002 by default), not another entry path:
