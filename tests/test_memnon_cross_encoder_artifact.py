@@ -24,8 +24,6 @@ import pytest
 import torch
 from pydantic import ValidationError
 from sentence_transformers import CrossEncoder
-from transformers.models.bert.configuration_bert import BertConfig
-from transformers.models.bert.modeling_bert import BertForSequenceClassification
 from transformers.models.bert.tokenization_bert_fast import BertTokenizerFast
 from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
 from transformers.models.qwen3.modeling_qwen3 import Qwen3ForCausalLM
@@ -44,8 +42,14 @@ from nexus.agents.memnon.utils.cross_encoder import (
 )
 from nexus.config import load_settings
 from nexus.config.settings_models import CrossEncoderReranking
+from tests.tiny_models import write_tiny_cross_encoder
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Pairs for the tiny cross-encoder, whose BERT has 32 positions: ``SHORT``
+# scores, while ``LONG`` (over 32 tokens with the query, under the
+# sliding-window threshold) makes ``predict`` raise a size mismatch.
+SHORT = "needle"
+LONG = " ".join(["needle"] * 40)
 # The production reranker folder name, so the decoys below sit exactly where a
 # same-named folder inside the checkout would.
 PRODUCTION_BASENAME = Path(
@@ -53,27 +57,6 @@ PRODUCTION_BASENAME = Path(
         "cross_encoder_reranking"
     ]["model_path"]
 ).name
-
-
-def _write_cross_encoder(root: Path, hidden_size: int) -> Path:
-    """Save a tiny randomly initialised BERT cross-encoder to ``root``."""
-
-    root.mkdir(parents=True)
-    vocab_file = root / "vocab.txt"
-    vocab_file.write_text("[PAD]\n[UNK]\n[CLS]\n[SEP]\n[MASK]\nneedle\nhay\n")
-    BertTokenizerFast(vocab_file=str(vocab_file)).save_pretrained(root)
-    torch.manual_seed(0)
-    config = BertConfig(
-        vocab_size=7,
-        hidden_size=hidden_size,
-        num_hidden_layers=1,
-        num_attention_heads=1,
-        intermediate_size=16,
-        max_position_embeddings=32,
-        num_labels=1,
-    )
-    BertForSequenceClassification(config).save_pretrained(root)
-    return root
 
 
 def _checkout_with_decoys(tmp_path: Path) -> Tuple[ModuleType, List[Path]]:
@@ -95,7 +78,7 @@ def _checkout_with_decoys(tmp_path: Path) -> Tuple[ModuleType, List[Path]]:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     decoys = [
-        _write_cross_encoder(folder / PRODUCTION_BASENAME, hidden_size=4)
+        write_tiny_cross_encoder(folder / PRODUCTION_BASENAME, hidden_size=4)
         for folder in (checkout / "models", checkout / "nexus" / "models")
     ]
     return module, decoys
@@ -113,7 +96,7 @@ def test_loads_the_configured_folder_not_a_same_named_checkout_folder(
     """The folder nexus models verify checks is the folder that loads."""
 
     module, decoys = _checkout_with_decoys(tmp_path)
-    configured = _write_cross_encoder(
+    configured = write_tiny_cross_encoder(
         tmp_path / "artifacts" / PRODUCTION_BASENAME, hidden_size=8
     )
 
@@ -181,7 +164,7 @@ def test_configured_path_that_is_a_file_raises(tmp_path: Path) -> None:
 def test_half_copied_folder_raises_with_the_underlying_error(tmp_path: Path) -> None:
     """A folder missing its weights fails loudly, chained to the load error."""
 
-    half_copied = _write_cross_encoder(tmp_path / "artifacts" / "reranker", 8)
+    half_copied = write_tiny_cross_encoder(tmp_path / "artifacts" / "reranker", 8)
     (half_copied / "model.safetensors").unlink()
 
     with pytest.raises(RuntimeError) as raised:
@@ -304,16 +287,27 @@ def test_qwen3_half_copied_folder_raises_with_the_underlying_error(
     assert isinstance(raised.value.__cause__, OSError)
 
 
+@pytest.fixture()
+def isolated_reranker_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the process-wide reranker cache empty and scoped to one test."""
+
+    monkeypatch.setattr(cross_encoder, "_RERANKER_CACHE", {})
+
+
 def test_qwen3_install_command_reaches_the_reranker_from_rerank_results(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, isolated_reranker_cache: None
 ) -> None:
-    """The repository MEMNON derives reaches the Qwen3 remedy, not only CE's."""
+    """The repository MEMNON derives reaches the Qwen3 remedy, not only CE's.
+
+    A missing reranker fails the call (issue #812, 812-Q1): the error carries
+    the exact install command instead of returning the unreranked results.
+    """
 
     missing = tmp_path / "artifacts" / "Qwen3-Reranker-4B"
     results = [{"text": "needle", "score": 0.5}]
 
-    with caplog.at_level("ERROR", logger="nexus.memnon.cross_encoder"):
-        ranked = cross_encoder.rerank_results(
+    with pytest.raises(RuntimeError) as raised:
+        cross_encoder.rerank_results(
             query="needle",
             results=results,
             model_path=str(missing),
@@ -322,12 +316,40 @@ def test_qwen3_install_command_reaches_the_reranker_from_rerank_results(
             repo_id="example-org/probe-qwen3",
         )
 
-    # The reranker-failure policy (issue #812, still open) keeps the original
-    # results; the logged error must still carry the exact install command.
-    assert ranked == results
-    assert f"`hf download example-org/probe-qwen3 --local-dir {missing}`" in (
-        caplog.text
+    assert f"`hf download example-org/probe-qwen3 --local-dir {missing}`" in str(
+        raised.value
     )
+    assert cross_encoder._RERANKER_CACHE == {}
+
+
+@pytest.mark.parametrize("use_sliding_window", [True, False])
+def test_rerank_results_raises_when_the_cross_encoder_cannot_score(
+    tmp_path: Path, isolated_reranker_cache: None, use_sliding_window: bool
+) -> None:
+    """A real scoring error propagates instead of returning unreranked results."""
+
+    folder = write_tiny_cross_encoder(tmp_path / "artifacts" / "reranker")
+    results = [{"text": LONG, "score": 0.5}, {"text": SHORT, "score": 0.4}]
+
+    with pytest.raises(RuntimeError, match="size of tensor a"):
+        cross_encoder.rerank_results(
+            query=SHORT,
+            results=results,
+            model_path=str(folder),
+            device="cpu",
+            use_sliding_window=use_sliding_window,
+        )
+
+
+def test_score_pair_raises_for_an_over_long_pair(tmp_path: Path) -> None:
+    """score_pair raises the model's error instead of scoring the pair 0.0."""
+
+    folder = write_tiny_cross_encoder(tmp_path / "artifacts" / "reranker")
+    reranker = CrossEncoderReranker(str(folder), device="cpu")
+
+    assert 0.0 <= reranker.score_pair(SHORT, SHORT) <= 1.0
+    with pytest.raises(RuntimeError, match="size of tensor a"):
+        reranker.score_pair(SHORT, LONG)
 
 
 def test_every_cross_encoder_keyword_is_accepted_by_the_installed_library() -> None:
