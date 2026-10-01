@@ -266,3 +266,21 @@ state in one read-only, repeatable-read session per database:
 ```sh
 PGOPTIONS='-c default_transaction_read_only=on' PYTHONPATH=$PWD "$PY" scripts/qa_shift/travel_reachability.py --dbname save_02 --dbname save_03 --dbname save_04
 ```
+
+## Rearm Grammar Weight
+
+The rearm grammar weight report (issue 781, decision 781-Q2) builds throwaway
+wire variants that add one `rearm` field to the Orrery adjudication and prints
+the bytes and local token estimates of each seat, surface, and variant, with
+deltas against the baseline. It puts nothing on any wire and calls no
+provider. The registry seat reads one slot registry in a session that
+`default_transaction_read_only=on` makes read-only; `--skip-registry` opens no
+database:
+
+```sh
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/rearm_grammar_weight.py --skip-registry
+PYTHONPATH=$PWD "$PY" scripts/qa_shift/rearm_grammar_weight.py --registry-dbname save_04
+```
+
+`--format json` prints the same header and rows as JSON. Token counts are the
+configured models' local estimates, not billed counts.

@@ -856,6 +856,45 @@ def test_cli_poll_interval_must_be_finite_and_positive(
     assert "runtime.cli.poll_interval_seconds" in str(loaded.value)
 
 
+@pytest.mark.parametrize(
+    "value",
+    [float("inf"), float("nan"), 0, -1.0],
+    ids=["inf", "nan", "zero", "negative"],
+)
+def test_cli_turn_request_timeout_must_be_finite_and_positive(
+    value: float, tmp_path: Path
+) -> None:
+    """A nonfinite or nonpositive turn-request budget fails validation by name.
+
+    It bounds the wizard chat, trait toggle and phase introduction POSTs and
+    the POSTs that schedule continue, retry, regenerate and the seed's
+    opening turn; the checkout ships the 120 s those requests once hardcoded.
+    """
+    assert load_settings("nexus.toml").runtime.cli.turn_request_timeout_seconds == (
+        120.0
+    )
+
+    loc = ("runtime", "cli", "turn_request_timeout_seconds")
+    with pytest.raises(ValidationError) as direct:
+        RuntimeCliSettings(turn_request_timeout_seconds=value)
+    assert [error["loc"] for error in direct.value.errors()] == [loc[-1:]]
+
+    raw = _nexus_toml_dict()
+    raw["runtime"]["cli"]["turn_request_timeout_seconds"] = value
+    with pytest.raises(ValidationError) as full:
+        Settings.model_validate(raw)
+    assert [error["loc"] for error in full.value.errors()] == [loc]
+
+    document: Any = tomlkit.parse(Path("nexus.toml").read_text())
+    document["runtime"]["cli"]["turn_request_timeout_seconds"] = value
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document))
+    with pytest.raises(ValidationError) as loaded:
+        load_settings(config)
+    assert [error["loc"] for error in loaded.value.errors()] == [loc]
+    assert "runtime.cli.turn_request_timeout_seconds" in str(loaded.value)
+
+
 def test_gateway_cors_origins_parse_and_accessor_returns_default() -> None:
     """The shipped gateway allowlist is typed and exposed by its accessor."""
     expected = [

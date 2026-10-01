@@ -13,6 +13,7 @@ The architecture has been refactored to use modular utility classes:
 - QueryAnalyzer: Analyzes user queries to determine optimal search approach
 - DatabaseManager: Provides database connection and schema management
 - ContentProcessor: Manages content chunking, processing, and storage
+- Cross-encoder reranker: loaded once per process at MEMNON construction when [memnon.retrieval.cross_encoder_reranking].enabled
 """
 
 import re
@@ -196,6 +197,10 @@ class MEMNON:
             debug: Enable debug logging
             settings_overrides: Validated per-instance MEMNON evaluation overrides.
             **kwargs: Additional arguments
+
+        Raises:
+            RuntimeError: Reranking is enabled and the reranker folder is missing or fails to load.
+            ValueError: Reranking is enabled and api_type is not 'cross_encoder' or 'qwen3_lm'.
         """
         from nexus.config.loader import load_settings
         from nexus.config.settings_models import MEMNONSettings
@@ -240,6 +245,23 @@ class MEMNON:
         from .utils.embedding_manager import EmbeddingManager
 
         self.embedding_manager = EmbeddingManager(settings=self.settings)
+
+        # Load the reranker now, so a missing or broken folder fails here and
+        # not mid-turn; query_memory's rerank_results reuses this cache entry.
+        reranker_config = self.settings["retrieval"]["cross_encoder_reranking"]
+        if reranker_config["enabled"]:
+            from .utils.cross_encoder import get_or_create_reranker, reranker_repo_id
+
+            self.reranker = get_or_create_reranker(
+                model_path=reranker_config["model_path"],
+                api_type=reranker_config["api_type"],
+                device=None,
+                repo_id=reranker_repo_id(
+                    reranker_config["model_path"], reranker_config["candidates"]
+                ),
+            )
+        else:
+            self.reranker = None
 
         # Initialize IDF dictionary
         logger.info("Initializing IDF dictionary for term weighting...")
@@ -554,166 +576,147 @@ class MEMNON:
         if top_k is None:
             top_k = self.retrieval_settings.get("default_top_k", 10)
 
-        try:
-            # Get hybrid search settings
-            hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
-            if not hybrid_config.get("enabled", False):
-                logger.warning("Hybrid search is disabled in settings")
-                return []
-
-            # Determine query type for weight adjustment
-            query_info = self.query_analyzer.analyze_query(query_text)
-            query_type = query_info.get("type", "general")
-            logger.debug(f"Query classified as type: {query_type}")
-
-            # Get weights based on query type or use defaults
-            if hybrid_config.get(
-                "use_query_type_weights", False
-            ) and query_type in hybrid_config.get("weights_by_query_type", {}):
-                weights = hybrid_config["weights_by_query_type"][query_type]
-                vector_weight = weights.get("vector", 0.6)
-                text_weight = weights.get("text", 0.4)
-            else:
-                vector_weight = hybrid_config.get("vector_weight_default", 0.6)
-                text_weight = hybrid_config.get("text_weight_default", 0.4)
-
-            # Normalize weights to ensure they sum to 1.0
-            total_weight = vector_weight + text_weight
-            if total_weight != 1.0:
-                vector_weight = vector_weight / total_weight
-                text_weight = text_weight / total_weight
-
-            logger.debug(f"Using weights: vector={vector_weight}, text={text_weight}")
-
-            # Gather all active models and their weights
-            active_models = {}
-            model_weights = {}
-
-            for model_key, model_config in self.embedding_manager.models.items():
-                if model_key in self.retrieval_settings["model_weights"]:
-                    # Get the weight from the retrieval settings
-                    model_weights[model_key] = self.retrieval_settings["model_weights"][
-                        model_key
-                    ]
-                    active_models[model_key] = self.embedding_manager.models[model_key]
-
-            if not active_models:
-                logger.error("No active embedding models found.")
-                return []
-
-            # Normalize model weights to sum to 1.0
-            total_model_weight = sum(model_weights.values())
-            if total_model_weight > 0:
-                model_weights = {
-                    k: w / total_model_weight for k, w in model_weights.items()
-                }
-
-            logger.info(
-                f"Using {len(active_models)} active models with weights: {model_weights}"
-            )
-
-            # Generate embeddings for all active models
-            query_embeddings = {}
-            for model_key in active_models:
-                try:
-                    query_embeddings[model_key] = (
-                        self.embedding_manager.generate_embedding(query_text, model_key)
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error generating embedding for model {model_key}: {e}"
-                    )
-
-            if not query_embeddings:
-                logger.error("Failed to generate embeddings for any active model.")
-                return []
-
-            # Analyze the query's temporal intent on a continuous scale
-            query_temporal_intent = analyze_temporal_intent(query_text)
-
-            # Get default temporal boost factor from settings
-            temporal_boost_factor = hybrid_config.get("temporal_boost_factor", 0.3)
-
-            # Check if we should use query-type-specific temporal boost factors
-            use_query_type_temporal_factors = hybrid_config.get(
-                "use_query_type_temporal_factors", False
-            )
-
-            # If enabled, get query-type-specific temporal boost factor
-            if use_query_type_temporal_factors and query_type in hybrid_config.get(
-                "temporal_boost_factors", {}
-            ):
-                query_temporal_factor = hybrid_config["temporal_boost_factors"][
-                    query_type
-                ]
-                logger.debug(
-                    f"Using query-type-specific temporal boost factor for '{query_type}': {query_temporal_factor}"
-                )
-                temporal_boost_factor = query_temporal_factor
-
-            # Determine if this is a temporal query based on how far from neutral (0.5) the intent is
-            is_temporal_query = abs(query_temporal_intent - 0.5) > 0.1
-
-            # Determine if temporal boosting should be applied based on settings and query intent
-            apply_temporal_boosting = temporal_boost_factor > 0.0 and is_temporal_query
-
-            # If query has temporal aspects and boosting is enabled, use multi-model time-aware search
-            if apply_temporal_boosting:
-                logger.info(
-                    f"Using multi-model time-aware search for temporal query (intent: {query_temporal_intent:.2f}, boost factor: {temporal_boost_factor})"
-                )
-
-                # Import multi-model time-aware search
-                from .utils.continuous_temporal_search import (
-                    execute_multi_model_time_aware_search,
-                )
-
-                # Execute multi-model time-aware search
-                results = execute_multi_model_time_aware_search(
-                    db_url=self.db_url,
-                    query_text=query_text,
-                    query_embeddings=query_embeddings,
-                    model_weights=model_weights,
-                    vector_weight=vector_weight,
-                    text_weight=text_weight,
-                    temporal_boost_factor=temporal_boost_factor,
-                    filters=filters,
-                    top_k=top_k,
-                    idf_dict=self.idf_dictionary,
-                )
-            else:
-                # Use standard multi-model hybrid search for non-temporal queries
-                logger.debug(
-                    "Using standard multi-model hybrid search for non-temporal query"
-                )
-
-                # Import multi-model hybrid search
-                from .utils.db_access import execute_multi_model_hybrid_search
-
-                # Execute multi-model hybrid search
-                results = execute_multi_model_hybrid_search(
-                    db_url=self.db_url,
-                    query_text=query_text,
-                    query_embeddings=query_embeddings,
-                    model_weights=model_weights,
-                    vector_weight=vector_weight,
-                    text_weight=text_weight,
-                    filters=filters,
-                    top_k=top_k,
-                    idf_dict=self.idf_dictionary,
-                )
-
-            logger.info(f"Multi-model hybrid search returned {len(results)} results")
-            return results
-
-        except IDFStateError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in hybrid search: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+        # Get hybrid search settings
+        hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
+        if not hybrid_config.get("enabled", False):
+            logger.warning("Hybrid search is disabled in settings")
             return []
+
+        # Determine query type for weight adjustment
+        query_info = self.query_analyzer.analyze_query(query_text)
+        query_type = query_info.get("type", "general")
+        logger.debug(f"Query classified as type: {query_type}")
+
+        # Get weights based on query type or use defaults
+        if hybrid_config.get(
+            "use_query_type_weights", False
+        ) and query_type in hybrid_config.get("weights_by_query_type", {}):
+            weights = hybrid_config["weights_by_query_type"][query_type]
+            vector_weight = weights.get("vector", 0.6)
+            text_weight = weights.get("text", 0.4)
+        else:
+            vector_weight = hybrid_config.get("vector_weight_default", 0.6)
+            text_weight = hybrid_config.get("text_weight_default", 0.4)
+
+        # Normalize weights to ensure they sum to 1.0
+        total_weight = vector_weight + text_weight
+        if total_weight != 1.0:
+            vector_weight = vector_weight / total_weight
+            text_weight = text_weight / total_weight
+
+        logger.debug(f"Using weights: vector={vector_weight}, text={text_weight}")
+
+        # Gather all active models and their weights
+        active_models = {}
+        model_weights = {}
+
+        for model_key, model_config in self.embedding_manager.models.items():
+            if model_key in self.retrieval_settings["model_weights"]:
+                # Get the weight from the retrieval settings
+                model_weights[model_key] = self.retrieval_settings["model_weights"][
+                    model_key
+                ]
+                active_models[model_key] = self.embedding_manager.models[model_key]
+
+        if not active_models:
+            raise RuntimeError(
+                "No active embedding models found. Loaded models: "
+                f"{self.embedding_manager.get_available_models()}"
+            )
+
+        # Normalize model weights to sum to 1.0
+        total_model_weight = sum(model_weights.values())
+        if total_model_weight > 0:
+            model_weights = {
+                k: w / total_model_weight for k, w in model_weights.items()
+            }
+
+        logger.info(
+            f"Using {len(active_models)} active models with weights: {model_weights}"
+        )
+
+        # Generate embeddings for all active models
+        query_embeddings = {}
+        for model_key in active_models:
+            query_embeddings[model_key] = self.embedding_manager.generate_embedding(
+                query_text, model_key
+            )
+
+        # Analyze the query's temporal intent on a continuous scale
+        query_temporal_intent = analyze_temporal_intent(query_text)
+
+        # Get default temporal boost factor from settings
+        temporal_boost_factor = hybrid_config.get("temporal_boost_factor", 0.3)
+
+        # Check if we should use query-type-specific temporal boost factors
+        use_query_type_temporal_factors = hybrid_config.get(
+            "use_query_type_temporal_factors", False
+        )
+
+        # If enabled, get query-type-specific temporal boost factor
+        if use_query_type_temporal_factors and query_type in hybrid_config.get(
+            "temporal_boost_factors", {}
+        ):
+            query_temporal_factor = hybrid_config["temporal_boost_factors"][query_type]
+            logger.debug(
+                f"Using query-type-specific temporal boost factor for '{query_type}': {query_temporal_factor}"
+            )
+            temporal_boost_factor = query_temporal_factor
+
+        # Determine if this is a temporal query based on how far from neutral (0.5) the intent is
+        is_temporal_query = abs(query_temporal_intent - 0.5) > 0.1
+
+        # Determine if temporal boosting should be applied based on settings and query intent
+        apply_temporal_boosting = temporal_boost_factor > 0.0 and is_temporal_query
+
+        # If query has temporal aspects and boosting is enabled, use multi-model time-aware search
+        if apply_temporal_boosting:
+            logger.info(
+                f"Using multi-model time-aware search for temporal query (intent: {query_temporal_intent:.2f}, boost factor: {temporal_boost_factor})"
+            )
+
+            # Import multi-model time-aware search
+            from .utils.continuous_temporal_search import (
+                execute_multi_model_time_aware_search,
+            )
+
+            # Execute multi-model time-aware search
+            results = execute_multi_model_time_aware_search(
+                db_url=self.db_url,
+                query_text=query_text,
+                query_embeddings=query_embeddings,
+                model_weights=model_weights,
+                vector_weight=vector_weight,
+                text_weight=text_weight,
+                temporal_boost_factor=temporal_boost_factor,
+                filters=filters,
+                top_k=top_k,
+                idf_dict=self.idf_dictionary,
+            )
+        else:
+            # Use standard multi-model hybrid search for non-temporal queries
+            logger.debug(
+                "Using standard multi-model hybrid search for non-temporal query"
+            )
+
+            # Import multi-model hybrid search
+            from .utils.db_access import execute_multi_model_hybrid_search
+
+            # Execute multi-model hybrid search
+            results = execute_multi_model_hybrid_search(
+                db_url=self.db_url,
+                query_text=query_text,
+                query_embeddings=query_embeddings,
+                model_weights=model_weights,
+                vector_weight=vector_weight,
+                text_weight=text_weight,
+                filters=filters,
+                top_k=top_k,
+                idf_dict=self.idf_dictionary,
+            )
+
+        logger.info(f"Multi-model hybrid search returned {len(results)} results")
+        return results
 
     def _query_vector_search(
         self,
@@ -738,76 +741,59 @@ class MEMNON:
         if top_k is None:
             top_k = self.retrieval_settings["default_top_k"]
 
-        try:
-            # Gather all active models and their weights
-            active_models = {}
-            model_weights = {}
+        # Gather all active models and their weights
+        active_models = {}
+        model_weights = {}
 
-            for model_key, model in self.embedding_manager.models.items():
-                if model_key in self.retrieval_settings["model_weights"]:
-                    # Get the weight from the retrieval settings
-                    model_weights[model_key] = self.retrieval_settings["model_weights"][
-                        model_key
-                    ]
-                    active_models[model_key] = model
+        for model_key, model in self.embedding_manager.models.items():
+            if model_key in self.retrieval_settings["model_weights"]:
+                # Get the weight from the retrieval settings
+                model_weights[model_key] = self.retrieval_settings["model_weights"][
+                    model_key
+                ]
+                active_models[model_key] = model
 
-            if not active_models:
-                logger.error("No active embedding models found.")
-                return []
-
-            # Normalize model weights to sum to 1.0
-            total_model_weight = sum(model_weights.values())
-            if total_model_weight > 0:
-                model_weights = {
-                    k: w / total_model_weight for k, w in model_weights.items()
-                }
-
-            logger.info(
-                f"Using {len(active_models)} active models with weights: {model_weights}"
+        if not active_models:
+            raise RuntimeError(
+                "No active embedding models found. Loaded models: "
+                f"{self.embedding_manager.get_available_models()}"
             )
 
-            # Generate embeddings for all active models
-            query_embeddings = {}
-            for model_key in active_models:
-                try:
-                    query_embeddings[model_key] = (
-                        self.embedding_manager.generate_embedding(query_text, model_key)
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error generating embedding for model {model_key}: {e}"
-                    )
+        # Normalize model weights to sum to 1.0
+        total_model_weight = sum(model_weights.values())
+        if total_model_weight > 0:
+            model_weights = {
+                k: w / total_model_weight for k, w in model_weights.items()
+            }
 
-            if not query_embeddings:
-                logger.error("Failed to generate embeddings for any active model.")
-                return []
+        logger.info(
+            f"Using {len(active_models)} active models with weights: {model_weights}"
+        )
 
-            # Use the multi-model hybrid search with 100% vector weight to effectively perform vector-only search
-            from .utils.db_access import execute_multi_model_hybrid_search
-
-            results = execute_multi_model_hybrid_search(
-                db_url=self.db_url,
-                query_text=query_text,
-                query_embeddings=query_embeddings,
-                model_weights=model_weights,
-                vector_weight=1.0,  # Use 100% vector weight for pure vector search
-                text_weight=0.0,  # No text search weight
-                filters=filters,
-                top_k=top_k,
-                idf_dict=self.idf_dictionary,
+        # Generate embeddings for all active models
+        query_embeddings = {}
+        for model_key in active_models:
+            query_embeddings[model_key] = self.embedding_manager.generate_embedding(
+                query_text, model_key
             )
 
-            logger.info(f"Multi-model vector search returned {len(results)} results")
-            return results
+        # Use the multi-model hybrid search with 100% vector weight to effectively perform vector-only search
+        from .utils.db_access import execute_multi_model_hybrid_search
 
-        except IDFStateError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in vector search: {e}")
-            import traceback
+        results = execute_multi_model_hybrid_search(
+            db_url=self.db_url,
+            query_text=query_text,
+            query_embeddings=query_embeddings,
+            model_weights=model_weights,
+            vector_weight=1.0,  # Use 100% vector weight for pure vector search
+            text_weight=0.0,  # No text search weight
+            filters=filters,
+            top_k=top_k,
+            idf_dict=self.idf_dictionary,
+        )
 
-            logger.error(traceback.format_exc())
-            return []
+        logger.info(f"Multi-model vector search returned {len(results)} results")
+        return results
 
     def _query_structured_data(
         self,
@@ -1516,66 +1502,53 @@ class MEMNON:
         Returns:
             Dictionary containing the chunk data and metadata
         """
-        try:
-            with self.Session() as session:
-                query = text(
-                    """
-                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
-                           cm.world_layer
-                    FROM narrative_chunks nc
-                    LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
-                    WHERE nc.id = :chunk_id
+        with self.Session() as session:
+            query = text(
                 """
-                )
+                SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
+                       cm.world_layer
+                FROM narrative_chunks nc
+                LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
+                WHERE nc.id = :chunk_id
+            """
+            )
 
-                result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
+            result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
 
-                if result:
-                    return {
-                        "query": f"chunk_id:{chunk_id}",
-                        "query_type": "direct_id",
-                        "results": [
-                            {
-                                "id": result.id,
-                                "text": result.raw_text,
-                                "metadata": {
-                                    "season": result.season,
-                                    "episode": result.episode,
-                                    "scene_number": result.scene_number,
-                                    "world_layer": result.world_layer,
-                                },
-                                "score": 1.0,  # Perfect match for ID query
-                                "source": "direct_id_lookup",
-                            }
-                        ],
-                        "metadata": {
-                            "search_strategies": ["direct_id_lookup"],
-                            "result_count": 1,
-                        },
-                    }
-                else:
-                    return {
-                        "query": f"chunk_id:{chunk_id}",
-                        "query_type": "direct_id",
-                        "results": [],
-                        "metadata": {
-                            "search_strategies": ["direct_id_lookup"],
-                            "result_count": 0,
-                            "error": f"Chunk with ID {chunk_id} not found",
-                        },
-                    }
-        except Exception as e:
-            logger.error(f"Error retrieving chunk by ID {chunk_id}: {e}")
-            return {
-                "query": f"chunk_id:{chunk_id}",
-                "query_type": "direct_id",
-                "results": [],
-                "metadata": {
-                    "search_strategies": ["direct_id_lookup"],
-                    "result_count": 0,
-                    "error": str(e),
-                },
-            }
+            if result:
+                return {
+                    "query": f"chunk_id:{chunk_id}",
+                    "query_type": "direct_id",
+                    "results": [
+                        {
+                            "id": result.id,
+                            "text": result.raw_text,
+                            "metadata": {
+                                "season": result.season,
+                                "episode": result.episode,
+                                "scene_number": result.scene_number,
+                                "world_layer": result.world_layer,
+                            },
+                            "score": 1.0,  # Perfect match for ID query
+                            "source": "direct_id_lookup",
+                        }
+                    ],
+                    "metadata": {
+                        "search_strategies": ["direct_id_lookup"],
+                        "result_count": 1,
+                    },
+                }
+            else:
+                return {
+                    "query": f"chunk_id:{chunk_id}",
+                    "query_type": "direct_id",
+                    "results": [],
+                    "metadata": {
+                        "search_strategies": ["direct_id_lookup"],
+                        "result_count": 0,
+                        "error": f"Chunk with ID {chunk_id} not found",
+                    },
+                }
 
     def query_memory(
         self,
@@ -1680,38 +1653,29 @@ class MEMNON:
         for strategy in strategies:
             strategy_type = strategy["type"]
 
-            try:
-                if strategy_type == "hybrid_search":
-                    # Execute hybrid search using SearchManager
-                    results = self.search_manager.perform_hybrid_search(
-                        query_text=strategy["query"],
-                        filters=strategy.get("filters"),
-                        top_k=strategy.get("limit", k),
-                        present_character_ids=present_character_ids,
-                        query_embeddings=query_embeddings,
-                    )
-                    all_results.extend(results)
+            if strategy_type == "hybrid_search":
+                # Execute hybrid search using SearchManager
+                results = self.search_manager.perform_hybrid_search(
+                    query_text=strategy["query"],
+                    filters=strategy.get("filters"),
+                    top_k=strategy.get("limit", k),
+                    present_character_ids=present_character_ids,
+                    query_embeddings=query_embeddings,
+                )
+                all_results.extend(results)
 
-                elif strategy_type == "vector_search":
-                    # Execute vector search using SearchManager
-                    results = self.search_manager.query_vector_search(
-                        query_text=strategy["query"],
-                        collections=["narrative_chunks", "retrograde_summaries"],
-                        filters=strategy.get("filters"),
-                        top_k=strategy.get("limit", k),
-                    )
-                    all_results.extend(results)
+            elif strategy_type == "vector_search":
+                # Execute vector search using SearchManager
+                results = self.search_manager.query_vector_search(
+                    query_text=strategy["query"],
+                    collections=["narrative_chunks", "retrograde_summaries"],
+                    filters=strategy.get("filters"),
+                    top_k=strategy.get("limit", k),
+                )
+                all_results.extend(results)
 
-                else:
-                    logger.warning(f"Unknown search strategy: {strategy_type}")
-
-            except IDFStateError:
-                raise
-            except Exception as e:
-                logger.error(f"Error in {strategy_type}: {e}")
-                import traceback
-
-                logger.error(traceback.format_exc())
+            else:
+                logger.warning(f"Unknown search strategy: {strategy_type}")
 
         # Final results selection - Deduplicate by ID and sort by score
         seen_ids = set()
@@ -1741,68 +1705,53 @@ class MEMNON:
         ):
             from .utils.cross_encoder import rerank_results, reranker_repo_id
 
-            try:
-                logger.info("Applying cross-encoder reranking")
-                search_metadata["strategies_used"].append("cross_encoder_reranking")
+            logger.info("Applying cross-encoder reranking")
+            search_metadata["strategies_used"].append("cross_encoder_reranking")
 
-                # Get query type specific weight if available
-                alpha = cross_encoder_config.get("blend_weight", 0.3)
-                if cross_encoder_config.get("use_query_type_weights", False):
-                    if query_type in cross_encoder_config.get(
-                        "weights_by_query_type", {}
-                    ):
-                        alpha = cross_encoder_config["weights_by_query_type"][
-                            query_type
-                        ]
-                        logger.debug(
-                            f"Using query-type-specific weight for '{query_type}': {alpha}"
-                        )
+            # Get query type specific weight if available
+            alpha = cross_encoder_config.get("blend_weight", 0.3)
+            if cross_encoder_config.get("use_query_type_weights", False):
+                if query_type in cross_encoder_config.get("weights_by_query_type", {}):
+                    alpha = cross_encoder_config["weights_by_query_type"][query_type]
+                    logger.debug(
+                        f"Using query-type-specific weight for '{query_type}': {alpha}"
+                    )
 
-                # Determine other parameters
-                top_k_rerank = min(
-                    cross_encoder_config.get("top_k", 10), len(search_results_initial)
-                )
-                batch_size = cross_encoder_config.get("batch_size", 8)
-                use_sliding_window = cross_encoder_config.get(
-                    "use_sliding_window", True
-                )
-                model_path = cross_encoder_config["model_path"]
-                # api_type must accompany model_path so that swapping production
-                # to a Qwen3-Reranker checkpoint doesn't silently load it as a
-                # SequenceClassification CrossEncoder.
-                api_type = cross_encoder_config.get("api_type", "cross_encoder")
+            # Determine other parameters
+            top_k_rerank = min(
+                cross_encoder_config.get("top_k", 10), len(search_results_initial)
+            )
+            batch_size = cross_encoder_config.get("batch_size", 8)
+            use_sliding_window = cross_encoder_config.get("use_sliding_window", True)
+            model_path = cross_encoder_config["model_path"]
+            # api_type must accompany model_path so that swapping production
+            # to a Qwen3-Reranker checkpoint doesn't silently load it as a
+            # SequenceClassification CrossEncoder.
+            api_type = cross_encoder_config.get("api_type", "cross_encoder")
 
-                rerank_start_time = time.time()
+            rerank_start_time = time.time()
 
-                # Apply reranking
-                final_results = rerank_results(
-                    query=query,
-                    results=search_results_initial,
-                    top_k=top_k_rerank,
-                    alpha=alpha,
-                    batch_size=batch_size,
-                    use_sliding_window=use_sliding_window,
-                    model_path=model_path,
-                    api_type=api_type,
-                    repo_id=reranker_repo_id(
-                        model_path, cross_encoder_config["candidates"]
-                    ),
-                )
+            # Apply reranking
+            final_results = rerank_results(
+                query=query,
+                results=search_results_initial,
+                top_k=top_k_rerank,
+                alpha=alpha,
+                batch_size=batch_size,
+                use_sliding_window=use_sliding_window,
+                model_path=model_path,
+                api_type=api_type,
+                repo_id=reranker_repo_id(
+                    model_path, cross_encoder_config["candidates"]
+                ),
+            )
 
-                rerank_time = time.time() - rerank_start_time
-                search_metadata["rerank_time"] = rerank_time
-                logger.info(
-                    f"Cross-encoder reranking completed in {rerank_time:.3f} seconds"
-                )
+            rerank_time = time.time() - rerank_start_time
+            search_metadata["rerank_time"] = rerank_time
+            logger.info(
+                f"Cross-encoder reranking completed in {rerank_time:.3f} seconds"
+            )
 
-            except Exception as e:
-                logger.error(f"Error in cross-encoder reranking: {e}")
-                import traceback
-
-                logger.error(traceback.format_exc())
-                # Fall back to initial results if reranking fails
-                final_results = search_results_initial
-                logger.warning("Using initial search results due to reranking failure")
         else:
             # Use initial results if reranking is disabled
             final_results = search_results_initial
