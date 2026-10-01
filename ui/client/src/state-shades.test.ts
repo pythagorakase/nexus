@@ -229,12 +229,15 @@ function jointSearch(theme: Theme) {
   ];
   type Entry = { minimum: number; ix: number[]; changed: number };
   const tables: Map<string, Entry[]>[] = [];
+  const coverage: { roots: string[]; visited: number; unique: number; expected: number }[] = [];
   for (const group of groups) {
     const table = new Map<string, Entry[]>();
     const ctxs = CONTEXTS.filter(c => group.surfaces.includes(c.surface));
     // Cache the composited Lab per context/state/relevant candidate subset.
     const labs = new Map<string, Triple>();
     const ix: number[] = Array(7).fill(0);
+    let visited = 0;
+    const assignments = new Set<string>();
     const visit = (depth: number) => {
       if (depth < group.roots.length) {
         const root = group.roots[depth];
@@ -243,6 +246,8 @@ function jointSearch(theme: Theme) {
         }
         return;
       }
+      visited++;
+      assignments.add(group.roots.map(r => ix[r]).join(","));
       let minimum = Infinity;
       for (const ctx of ctxs) {
         const colors = new Map<string, Triple>();
@@ -272,6 +277,8 @@ function jointSearch(theme: Theme) {
     visit(0);
     tables.push(table);
     const count = group.roots.reduce((n, r) => n * domains[r].length, 1);
+    if (visited !== count || assignments.size !== count) throw new Error(`${theme} ${group.name}: incomplete exhaustive factor search`);
+    coverage.push({ roots: group.roots.map(r => ROOTS[r]), visited, unique: assignments.size, expected: count });
     for (const [key, entry] of maxima) if (group.surfaces.some(s => key.startsWith(`${s}/`))) entry.count = count;
   }
   let best = -Infinity, feasible = 0;
@@ -297,7 +304,7 @@ function jointSearch(theme: Theme) {
   }
   const assignment = Object.fromEntries(ROOTS.map((r, i) => [r, domains[i][witness[i]].value]));
   const shipped = { ...palette(shippedCss, theme), ...Object.fromEntries(ROOTS.map((r, i) => [r, domains[i][witness[i]].rgb])) };
-  return { theme, sizes: domains.map(d => d.length), count: domains.reduce((n, d) => n * d.length, 1), feasible, best, changes, assignment, maxima: Object.fromEntries(maxima), measurements: measures(theme, shipped, false) };
+  return { theme, sizes: domains.map(d => d.length), count: domains.reduce((n, d) => n * d.length, 1), feasible, best, changes, assignment, coverage, maxima: Object.fromEntries(maxima), measurements: measures(theme, shipped, false) };
 }
 let searches: ReturnType<typeof jointSearch>[] | undefined;
 const searchAll = () => searches ??= THEMES.map(jointSearch);

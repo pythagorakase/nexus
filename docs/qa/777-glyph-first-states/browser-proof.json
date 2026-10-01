@@ -297,7 +297,7 @@
   ],
   "errors": [],
   "apiRequests": [],
-  "source_commit": "a3d67189 (component layout formatting follows this commit; source SHA256 pins exact rendered files)",
+  "source_commit": "8ace1995205291d9a31837d6ef1a0dbd894a973b",
   "sources": {
     "ui/client/src/index.css": "a916ed35eef181ae03d89bdc123cb5ade6eaa647eab7cc1e160e9c7ad392f6ff",
     "ui/client/src/components/nexus/TopBar.tsx": "35540ae9a28dcd329d497bc070e6208af873c0ec21052e410cb1c8d5edbbe6e0",

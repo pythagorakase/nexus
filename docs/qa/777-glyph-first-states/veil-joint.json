@@ -22,6 +22,39 @@
     "--fg-dim": "hsl(42 20% 30%)",
     "--destructive": "hsl(0 80% 50%)"
   },
+  "coverage": [
+    {
+      "roots": [
+        "--brass",
+        "--bronze",
+        "--brass-bright",
+        "--map-hovered"
+      ],
+      "visited": 3375,
+      "unique": 3375,
+      "expected": 3375
+    },
+    {
+      "roots": [
+        "--brass",
+        "--bronze",
+        "--fg-muted",
+        "--fg-dim"
+      ],
+      "visited": 4050,
+      "unique": 4050,
+      "expected": 4050
+    },
+    {
+      "roots": [
+        "--fg-muted",
+        "--destructive"
+      ],
+      "visited": 216,
+      "unique": 216,
+      "expected": 216
+    }
+  ],
   "maxima": {
     "memory/fill/normal/over": {
       "maximum": 31.77890102995034,
