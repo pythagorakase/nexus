@@ -44,9 +44,9 @@
 -- fresh permission-checked assignments under a temporarily changed role.
 -- check_function_bodies is re-asserted on after the routine's own SET clauses,
 -- so a routine declared with SET check_function_bodies=off is still validated
--- (one place this guard is stricter than CREATE FUNCTION). Declared or session
--- search paths that place a schema ahead of pg_catalog refuse, because the
--- guard's own unqualified builtins would resolve through them.
+-- (one place this guard is stricter than CREATE FUNCTION). The guard's own
+-- builtins never resolve under a routine's or the session's declared path:
+-- see the single-schema path rule at the top of this file.
 -- That is the check CREATE FUNCTION performs, against the
 -- post-drop catalog, with no DDL: nothing is re-created, so OIDs, ownership, ACLs
 -- and comments are untouched and a named failure rolls the transaction back.
@@ -60,31 +60,20 @@
 -- All catalog/scanner guards precede DROP. Post-drop validation remains within
 -- the runner's same atomic transaction. No persistent helper/debt remains.
 
+-- The migration's own code resolves unqualified functions, operators and
+-- types under a single-schema path, pg_catalog alone, for its whole run: this
+-- SET LOCAL comes first, every pg_temp helper pins the same path, and the only
+-- code that ever runs under a routine's declared path is (a) a prebuilt,
+-- fully qualified catalog lookup inside pg_temp.dead143_resolve and (b) the
+-- post-drop validator call, whose statements are all pg_catalog-qualified.
+-- Precedence rules ("pg_catalog first") are not enough: PostgreSQL ranks every
+-- candidate signature across the path, so a more specific overload in a later
+-- schema can win over a variadic or polymorphic builtin.
+SET LOCAL search_path = pg_catalog;
 SET LOCAL lock_timeout = '5s';
 
--- Builtin resolution must be deterministic wherever this migration or its
--- helpers call an unqualified function or operator: pg_catalog must be the
--- first schema searched (implicitly, or named first). A search path that puts
--- any schema ahead of pg_catalog refuses at the session, per scanned routine
--- and per validated routine. current_schemas(true) reports the effective order,
--- so no path string is parsed. Every call below is qualified because the check
--- itself runs under the path it judges.
-CREATE FUNCTION pg_temp.dead143_path_first() RETURNS text
-LANGUAGE sql AS $first$
-    SELECT s FROM pg_catalog.unnest(pg_catalog.current_schemas(true)) WITH ORDINALITY AS t(s,n)
-    WHERE pg_catalog.left(s,7) OPERATOR(pg_catalog.<>) 'pg_temp' ORDER BY n LIMIT 1
-$first$;
-COMMENT ON FUNCTION pg_temp.dead143_path_first() IS 'Migration 143 transaction-local helper: the first non-temporary schema in the effective search order, which must be pg_catalog before any unqualified builtin is trusted; removed before stamping.';
-DO $session$
-BEGIN
-    IF pg_temp.dead143_path_first() IS DISTINCT FROM 'pg_catalog' THEN
-        RAISE EXCEPTION 'search_path places a schema before pg_catalog (%): builtin resolution is not deterministic; migration refused',pg_catalog.current_setting('search_path');
-    END IF;
-END
-$session$;
-
 CREATE FUNCTION pg_temp.dead143_tokens(body text) RETURNS jsonb
-LANGUAGE plpgsql AS $lexer$
+LANGUAGE plpgsql SET search_path = pg_catalog AS $lexer$
 DECLARE
     i integer := 1;
     start_at integer;
@@ -192,14 +181,37 @@ $lexer$;
 COMMENT ON FUNCTION pg_temp.dead143_tokens(text) IS 'Migration 143 transaction-local SQL lexer: distinguish identifiers from comments and diagnostic literals; removed before stamping.';
 
 CREATE FUNCTION pg_temp.dead143_setting(setting text) RETURNS text[]
-LANGUAGE sql IMMUTABLE AS $setting$
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $setting$
     SELECT ARRAY[substr(setting,1,strpos(setting,'=')-1),
                  substr(setting,strpos(setting,'=')+1)]
 $setting$;
 COMMENT ON FUNCTION pg_temp.dead143_setting(text) IS 'Migration 143 transaction-local proconfig parser: name before first equals, complete value after it, shared by scanner and validator; removed before stamping.';
 
-CREATE FUNCTION pg_temp.dead143_body(body text, function_oid oid, targets oid[], relation_targets oid[], names text[], nesting integer DEFAULT 0) RETURNS void
-LANGUAGE plpgsql AS $scanner$
+CREATE FUNCTION pg_temp.dead143_resolve(statement text, routine_path text) RETURNS oid
+LANGUAGE plpgsql SET search_path = pg_catalog AS $resolve$
+-- Runs one prebuilt, fully qualified catalog lookup under the scanned routine's
+-- effective search_path, so an unqualified name in its body resolves exactly as
+-- PostgreSQL would resolve it for that routine, then returns to pg_catalog.
+-- The statement is built by the caller under pg_catalog; nothing here resolves
+-- an unqualified function or operator while the routine's path is in force.
+DECLARE
+    result oid;
+BEGIN
+    PERFORM pg_catalog.set_config('search_path',routine_path,true);
+    BEGIN
+        EXECUTE statement INTO result;
+    EXCEPTION WHEN OTHERS THEN
+        PERFORM pg_catalog.set_config('search_path','pg_catalog',true);
+        RAISE;
+    END;
+    PERFORM pg_catalog.set_config('search_path','pg_catalog',true);
+    RETURN result;
+END
+$resolve$;
+COMMENT ON FUNCTION pg_temp.dead143_resolve(text, text) IS 'Migration 143 transaction-local catalog lookup under a scanned routine''s effective search_path, for one prebuilt qualified statement; removed before stamping.';
+
+CREATE FUNCTION pg_temp.dead143_body(body text, function_oid oid, targets oid[], relation_targets oid[], names text[], routine_path text, nesting integer DEFAULT 0) RETURNS void
+LANGUAGE plpgsql SET search_path = pg_catalog AS $scanner$
 DECLARE
     tokens jsonb := pg_temp.dead143_tokens(body);
     i integer := 0;
@@ -270,7 +282,7 @@ BEGIN
             IF expression = '' THEN RAISE EXCEPTION 'unresolved empty EXECUTE'; END IF;
             EXECUTE 'SELECT (' || expression || ')::text' INTO folded;
             IF folded IS NULL THEN RAISE EXCEPTION 'unresolved NULL EXECUTE'; END IF;
-            PERFORM pg_temp.dead143_body(folded,function_oid,targets,relation_targets,names,nesting+1);
+            PERFORM pg_temp.dead143_body(folded,function_oid,targets,relation_targets,names,routine_path,nesting+1);
             i := j; CONTINUE;
         END IF;
         -- Catalog casts are inspected from their operator, not from a literal:
@@ -358,9 +370,10 @@ BEGIN
             folded := tokens->expression_left->>'v';
             relation_oid := NULL; type_oid := NULL;
             BEGIN
-                EXECUTE 'SELECT '||quote_literal(folded)||'::pg_catalog.'||
-                    quote_ident(CASE WHEN catalog_kind='regtypeoid' THEN 'regtype' ELSE catalog_kind END)||'::oid'
-                    INTO relation_oid;
+                relation_oid := pg_temp.dead143_resolve(
+                    'SELECT '||quote_literal(folded)||'::pg_catalog.'||
+                    quote_ident(CASE WHEN catalog_kind='regtypeoid' THEN 'regtype' ELSE catalog_kind END)||'::pg_catalog.oid',
+                    routine_path);
             EXCEPTION WHEN OTHERS THEN
                 RAISE EXCEPTION 'unresolved catalog literal % for %: %',folded,catalog_kind,SQLERRM;
             END;
@@ -427,7 +440,7 @@ BEGIN
                             END IF;
                             -- A relation name itself is never a column exemption.
                             IF i BETWEEN j+1 AND relation_at THEN CONTINUE; END IF;
-                            relation_oid := to_regclass(relation_name);
+                            relation_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regclass('||quote_literal(relation_name)||')::pg_catalog.oid',routine_path);
                             alias_name := tokens->(relation_at+1)->>'v';
                             IF alias_name='as' THEN alias_name := tokens->(relation_at+2)->>'v'; END IF;
                             IF qualifier IS NULL OR qualifier IN (alias_name,tokens->relation_at->>'v') THEN
@@ -440,7 +453,8 @@ BEGIN
                     END LOOP;
                 END IF;
                 IF found_column THEN i := i+1; CONTINUE; END IF;
-                type_oid := to_regtype(qualified); relation_oid := to_regclass(qualified);
+                type_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regtype('||quote_literal(qualified)||')::pg_catalog.oid',routine_path);
+                relation_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regclass('||quote_literal(qualified)||')::pg_catalog.oid',routine_path);
                 IF type_oid = ANY(targets) OR relation_oid = ANY(relation_targets) THEN
                     RAISE EXCEPTION 'target %: hidden body identifier reference',qualified;
                 END IF;
@@ -450,7 +464,7 @@ BEGIN
                     IF i>=4 AND tokens->(i-3)->>'v'='.' AND tokens->(i-4)->>'k'='id' THEN
                         relation_name := quote_ident(tokens->(i-4)->>'v')||'.'||relation_name;
                     END IF;
-                    relation_oid := to_regclass(relation_name);
+                    relation_oid := pg_temp.dead143_resolve('SELECT pg_catalog.to_regclass('||quote_literal(relation_name)||')::pg_catalog.oid',routine_path);
                     SELECT atttypid INTO column_type FROM pg_attribute
                     WHERE attrelid=relation_oid AND attname=name AND attnum>0 AND NOT attisdropped;
                     IF column_type IS NOT NULL AND NOT column_type = ANY(targets) THEN
@@ -466,7 +480,7 @@ BEGIN
     END LOOP;
 END
 $scanner$;
-COMMENT ON FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], integer) IS 'Migration 143 transaction-local catalog-aware body guard, including constant dynamic SQL folding; removed before stamping.';
+COMMENT ON FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], text, integer) IS 'Migration 143 transaction-local catalog-aware body guard, including constant dynamic SQL folding; removed before stamping.';
 
 DO $guard$
 DECLARE
@@ -905,7 +919,9 @@ $manifest$;
     offender record;
     f record;
     item jsonb;
-    saved_path text := pg_catalog.current_setting('search_path');
+    -- The path the session started with (reset_val, not the SET LOCAL above):
+    -- the proxy for a routine that declares no search_path of its own.
+    saved_path text := (SELECT reset_val FROM pg_catalog.pg_settings WHERE name='search_path');
     effective_path text;
     key text;
     edge_key text;
@@ -1091,16 +1107,11 @@ $manifest$::jsonb THEN RAISE EXCEPTION 'target public.items: internal FK trigger
             END IF;
             IF f.lanname NOT IN ('sql','plpgsql') THEN RAISE EXCEPTION 'unsupported application body language %',f.lanname; END IF;
             SELECT (pg_temp.dead143_setting(setting))[2] INTO effective_path FROM unnest(f.proconfig) setting WHERE setting LIKE 'search_path=%';
-            PERFORM pg_catalog.set_config('search_path',coalesce(effective_path,saved_path),true);
-            IF pg_temp.dead143_path_first() IS DISTINCT FROM 'pg_catalog' THEN
-                RAISE EXCEPTION 'search_path places a schema before pg_catalog (%): builtin resolution is not deterministic; unresolved context',pg_catalog.current_setting('search_path');
-            END IF;
-            PERFORM pg_temp.dead143_body(CASE WHEN f.prosqlbody IS NULL THEN f.prosrc ELSE pg_get_functiondef(f.oid) END,f.oid,targets,tables || ARRAY[to_regclass('public.items_id_seq')::oid,to_regclass('public.ai_notebook_id_seq')::oid],names);
+            PERFORM pg_temp.dead143_body(CASE WHEN f.prosqlbody IS NULL THEN f.prosrc ELSE pg_get_functiondef(f.oid) END,f.oid,targets,tables || ARRAY[to_regclass('public.items_id_seq')::oid,to_regclass('public.ai_notebook_id_seq')::oid],names,coalesce(effective_path,saved_path));
         EXCEPTION WHEN OTHERS THEN
             RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: function/procedure % refuses: %',f.identity,SQLERRM;
         END;
     END LOOP;
-    PERFORM pg_catalog.set_config('search_path',saved_path,true);
 END
 $guard$;
 
@@ -1133,7 +1144,12 @@ DECLARE
     parsed_setting text[];
     setting_names text[];
     setting_values text[];
+    validator_is_sql boolean;
     i integer;
+    -- The environment a routine executes in: the session's startup path
+    -- (reset_val, not the SET LOCAL at the top of this file), then its own
+    -- SET clauses on top, exactly as CREATE FUNCTION validates it.
+    saved_path text := (SELECT reset_val FROM pg_catalog.pg_settings WHERE name='search_path');
 BEGIN
     FOR f IN SELECT p.oid,p.proconfig,l.lanname,
         format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
@@ -1142,8 +1158,13 @@ BEGIN
         AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e')
         ORDER BY p.oid
     LOOP
-        -- Parse every SET clause under the session path, before any is applied:
-        -- once a routine's own path is in force, only qualified calls are trusted.
+        -- Parse every SET clause and choose the validator under pg_catalog, before
+        -- any setting is applied: once a routine's own environment is in force,
+        -- only prebuilt, qualified statements run.
+        validator_is_sql := CASE f.lanname WHEN 'sql' THEN true WHEN 'plpgsql' THEN false END;
+        IF validator_is_sql IS NULL THEN
+            RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: unsupported application body language %',f.identity,f.lanname;
+        END IF;
         setting_names := ARRAY[]::text[];
         setting_values := ARRAY[]::text[];
         FOR setting IN SELECT pg_catalog.unnest(f.proconfig) LOOP
@@ -1152,20 +1173,15 @@ BEGIN
             setting_values := pg_catalog.array_append(setting_values,parsed_setting[2]);
         END LOOP;
         BEGIN
+            PERFORM pg_catalog.set_config('search_path',saved_path,true);
             FOR i IN 1..COALESCE(pg_catalog.array_length(setting_names,1),0) LOOP
                 PERFORM pg_catalog.set_config(setting_names[i],setting_values[i],true);
             END LOOP;
-            IF pg_temp.dead143_path_first() IS DISTINCT FROM 'pg_catalog' THEN
-                RAISE EXCEPTION 'search_path places a schema before pg_catalog (%): builtin resolution is not deterministic; unresolved context',pg_catalog.current_setting('search_path');
-            END IF;
             -- A routine's own SET check_function_bodies=off would switch the
             -- validator off; the second line validates every routine regardless.
             PERFORM pg_catalog.set_config('check_function_bodies','on',true);
-            CASE f.lanname
-                WHEN 'sql' THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
-                WHEN 'plpgsql' THEN PERFORM pg_catalog.plpgsql_validator(f.oid);
-                ELSE RAISE EXCEPTION 'unsupported application body language %',f.lanname;
-            END CASE;
+            IF validator_is_sql THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
+            ELSE PERFORM pg_catalog.plpgsql_validator(f.oid); END IF;
             -- Abort even on success: PostgreSQL unwinds the entire GUC stack.
             RAISE SQLSTATE 'D1430' USING MESSAGE='dead143 validation complete';
         EXCEPTION
@@ -1180,7 +1196,10 @@ BEGIN
 END
 $validate$;
 COMMENT ON FUNCTION public.set_updated_at() IS 'BEFORE UPDATE trigger on characters and places (trg_characters_set_updated, trg_places_set_updated): stamps updated_at with now(), the transaction start time.';
-DROP FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], integer);
+DROP FUNCTION pg_temp.dead143_body(text, oid, oid[], oid[], text[], text, integer);
+DROP FUNCTION pg_temp.dead143_resolve(text, text);
 DROP FUNCTION pg_temp.dead143_tokens(text);
 DROP FUNCTION pg_temp.dead143_setting(text);
-DROP FUNCTION pg_temp.dead143_path_first();
+-- Hand the session's startup path back for the rest of the runner's transaction
+-- (its own stamp statement names schema_migrations unqualified).
+SET LOCAL search_path TO DEFAULT;

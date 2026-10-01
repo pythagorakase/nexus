@@ -4255,3 +4255,110 @@ dbname audit: owner targets: none
 `scripts/check_migration_comments.py`: OK. Black and flake8 on the test
 module: clean. The full module, the runner and schema-documentation suites and
 the whole-tree gate run at this head below.
+
+## After the Seventh Independent Review (Coordinator Fix)
+
+Date 2026-10-01. The seventh pass (Astra, frozen at `bbabe984`) found two P2
+that together retire the path-precedence rule introduced in round 6:
+
+- PostgreSQL function resolution ranks every candidate signature across the
+  whole search path, so "pg_catalog first" does not make an unqualified
+  builtin call deterministic: a surviving `public.jsonb_build_array(jsonb)`
+  outranks the catalog's variadic overload for a single `jsonb` argument even
+  under `search_path = pg_catalog, public`, the lexer's token array becomes
+  empty, and a routine holding `EXECUTE 'SELECT 1 FROM public.items'` is never
+  scanned (the red run below shows the drop proceeding).
+- `IS DISTINCT FROM` resolves an `=` operator, so the round-6 path check was
+  itself subject to the path it judged.
+
+Only two things make a builtin call deterministic: schema qualification, or a
+search path containing `pg_catalog` alone. The migration now runs under the
+second for its entire body and uses the first wherever a routine's path must be
+in force:
+
+- `SET LOCAL search_path = pg_catalog` is the migration's first statement;
+  `SET LOCAL search_path TO DEFAULT` is its last, handing the session's startup
+  path back for the runner's own stamp statement.
+- Every `pg_temp` helper pins `SET search_path = pg_catalog`.
+- The scanner never switches the session to a routine's path. The routine's
+  effective path (its declared `search_path`, else the session's startup path
+  from `pg_settings.reset_val`) is passed to `dead143_body` as `routine_path`,
+  and every name lookup that depends on it (`to_regclass`, `to_regtype`, the
+  catalog-literal cast) goes through `pg_temp.dead143_resolve(statement,
+  routine_path)`: a pinned helper that applies the routine's path, executes
+  one statement prebuilt by its caller under `pg_catalog` with every function
+  and type qualified, and returns to `pg_catalog` (on error too). So an
+  unqualified name in a routine body resolves exactly as PostgreSQL resolves
+  it for that routine, and nothing else resolves under that path.
+- The validator sub-block applies the session's startup path, then the
+  routine's own SET clauses, re-asserts `check_function_bodies`, and calls the
+  validator chosen *before* the sub-block (a boolean, no `CASE … WHEN` operator
+  lookup inside); every statement under the routine's environment is
+  `pg_catalog`-qualified. The base path matters: a fleet routine with no
+  declared path (`public.orrery_active_character_tag_names`, which names
+  `entity_tags` unqualified) is validated under the session's startup path,
+  as `CREATE FUNCTION` validated it, not under `pg_catalog` alone.
+- The round-6 helper `dead143_path_first`, the session/scanner/validator path
+  checks and the `search_path places a schema before pg_catalog` refusals are
+  removed: declared paths are no longer refused, because the guard no longer
+  depends on them.
+
+`test_migration_143_round6_search_path` is rewritten for the design (eight
+cases × `post`): the `public.set_config` stand-in under `public, pg_catalog`
+with a broken body refuses on the body (`post-drop`, `missing_column`) and
+with a healthy body applies; a database default `public, pg_catalog` applies;
+the new `overload-broken` case (the reviewer's `public.jsonb_build_array(jsonb)`
+plus a PL/pgSQL routine holding `EXECUTE 'SELECT 1 FROM public.items'` under
+`pg_catalog, public`) refuses on the folded dynamic reference naming the
+routine and `public.items`; `pg_catalog, public`, `public` and `"a=b", public`
+keep their outcomes; every case asserts the session path is unchanged
+afterwards and no `search_path places a schema` message appears.
+
+### Red Against the Previous Migration (`bbabe984`)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 OLD_MIGRATION=$S/old143.sql PYTHONPATH=$PWD:$S /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider -p old_scanner tests/test_orrery/test_migration_dead_strata_pg.py -k "round6"
+```
+
+```text
+OLD DESTRUCTIVE VERDICT: overload-broken targets: (None, None)
+OLD DESTRUCTIVE VERDICT: overload-broken targets: (None, None)
+dbname audit: owner targets: none
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-broken-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-broken-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-healthy-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[shadow-healthy-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[session-path-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[session-path-True]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[overload-broken-False]
+FAILED tests/test_orrery/test_migration_dead_strata_pg.py::test_migration_143_round6_search_path[overload-broken-True]
+8 failed, 8 passed, 318 deselected in 45.91s
+```
+
+Under `bbabe984` the overload case applied destructively (the drop targets are
+gone; the reference was never seen); the stand-in and session-path cases were
+refused on their paths rather than decided on their bodies.
+
+### Green With the Fix
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit -p no:cacheprovider tests/test_orrery/test_migration_dead_strata_pg.py -k "round6 or round5 or round4 or round3 or drops_only_manifest_on_each_fleet_clone or validation_refuses_without_scanner"
+```
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: owner targets: none
+72 passed, 262 deselected in 218.70s (0:03:38)
+```
+
+Two intermediate failures during this fix are recorded because each is a
+contract: with the session pinned to `pg_catalog` and no base path applied,
+every fleet clone refused on `public.orrery_active_character_tag_names`
+(`relation "entity_tags" does not exist`), which is why the validator applies
+the session's startup path first; and without the closing
+`SET LOCAL search_path TO DEFAULT`, the runner's stamp failed with
+`relation "schema_migrations" does not exist`. `scripts/check_migration_comments.py`:
+OK (an `EXECUTE` of a prebuilt validator call was replaced by a precomputed
+boolean dispatch because the lint refuses run-time `EXECUTE` in top-level
+blocks regardless of statement kind). The full module and the whole-tree gate
+run at this head below.
