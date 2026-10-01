@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from contextlib import closing
 import json
-import os
 from typing import Any, Iterator
 
 import pytest
@@ -18,6 +17,7 @@ from nexus.agents.logon.gaia_registry_schema import load_gaia_registry_wire_spec
 from nexus.agents.logon.skald_wire import skald_gaia_strict_text_format
 from nexus.config import load_settings
 from nexus.config.story_model import resolve_seat
+from nexus.database import connection_kwargs
 from nexus.telemetry.prompt_window import estimator_for
 from scripts.measure_place_scale_grammar import (
     SCALE_TAG_NAMES,
@@ -91,7 +91,11 @@ def test_main_prints_one_read_only_report(
         assert main(["--dbname", scale_clone]) == 0
 
         report = json.loads(capsys.readouterr().out)
-        assert "default_transaction_read_only=on" in os.environ["PGOPTIONS"]
+        # The ambient PGOPTIONS is read through the sanctioned resolver
+        # (tests/test_pg_target_contract.py forbids reading PG* directly).
+        assert "default_transaction_read_only=on" in (
+            connection_kwargs(scale_clone)["options"]
+        )
         # Every connection opened with the ambient options main installed
         # reads in a read-only transaction.
         with closing(connect(scale_clone)) as connection:
