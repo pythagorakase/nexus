@@ -1,6 +1,7 @@
 # Read-Only Crossed-Boundary Enumerator: Verification (#780, 780-S1)
 
-Branch `claude/780-boundary-enumerator`, cut from `origin/main` at `4a063652`.
+Branch `claude/780-boundary-enumerator`, cut from `origin/main` at `4a063652`
+and rebased onto `56c884e7` (migration 139) before the final gate runs.
 No migration, no fleet application, no gateway, no paid call. Every family run
 below reads one repeatable-read session whose transactions are read-only; the
 only writes were the PostgreSQL tests' writes to their own `qa640_780_*`
@@ -130,23 +131,19 @@ dbname audit: 6 targets: postgres, qa640_780_boundaries_*, qa640_780_storm_*, qa
 dbname audit: owner server: local:5432
 dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
 dbname audit: owner targets: none
-150 passed, 2 warnings in 17.51s
+150 passed, 2 warnings in 17.12s
 ```
 
-Offline suites:
+Offline suites (after the rebase):
 
 ```
 $ $PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-2668 passed, 423 skipped, 8 warnings in 395.55s (0:06:35)
+2668 passed, 428 skipped, 8 warnings in 393.42s (0:06:33)
 
-$ $PY -m pytest -q tests/test_api tests/test_orrery
+$ $PY -m pytest -q tests/test_api tests/test_orrery tests/test_reachability.py tests/test_qa_shift.py
 secret-store guard: active; nexus-api: denied; disposable keychain: denied
-1838 passed, 750 skipped, 7 warnings in 37.06s
-
-$ $PY -m pytest -q tests/test_reachability.py
-secret-store guard: active; nexus-api: denied; disposable keychain: denied
-54 passed, 5 warnings in 9.64s
+1940 passed, 750 skipped, 7 warnings in 52.02s
 ```
 
 The skips are the PostgreSQL-backed tests, which the offline runs leave out.
