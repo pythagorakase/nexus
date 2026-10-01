@@ -954,6 +954,90 @@ def run(cur) -> None:
     ]
 
 
+def test_select_into_is_found_past_comments_parentheses_and_cte_names(
+    tmp_path: Path,
+) -> None:
+    """SELECT INTO still fails where it is not the literal's or statement's head.
+
+    A Python literal may open with a comment or another statement; a statement
+    may open with parentheses, and PostgreSQL then still creates the table; a
+    CTE may be named ``delete`` or ``update``, which is not the verb. A real
+    DELETE after a CTE, a SELECT without INTO, and PL/pgSQL SELECT INTO in a DO
+    body (migrations 077 and 109) stay silent.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_hidden.sql",
+        """
+(SELECT 1
+ INTO t);
+(SELECT 1
+ INTO t) UNION ALL SELECT 2;
+WITH delete AS (SELECT 1 AS id)
+SELECT id
+INTO snapshot
+FROM delete;
+WITH RECURSIVE update (n) AS (SELECT 1)
+SELECT n
+INTO snapshot2
+FROM update;
+WITH delete AS (SELECT 1 AS id) DELETE FROM t WHERE id IN (SELECT id FROM delete);
+SELECT 1 FROM (SELECT 2) AS sub;
+DO $$
+DECLARE
+    invalid_tags text;
+    completed_target_constraints text[];
+BEGIN
+    WITH expected(tag) AS (
+        VALUES
+            ('intoxicated:stimulant'),
+            ('intoxicated:depressant')
+    )
+    SELECT string_agg(expected.tag, ', ' ORDER BY expected.tag)
+    INTO invalid_tags
+    FROM expected;
+    SELECT array_agg(conname ORDER BY conname)
+    INTO completed_target_constraints
+    FROM pg_constraint
+    WHERE conrelid = 'character_project_states'::regclass;
+END
+$$;
+COMMENT ON TABLE t IS 'Parenthesized snapshot.';
+COMMENT ON TABLE snapshot IS 'Snapshot after a CTE named delete.';
+COMMENT ON TABLE snapshot2 IS 'Snapshot after a recursive CTE named update.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_hidden.py",
+        '''
+COMMENTED = """-- snapshot
+SELECT 1 INTO t;"""
+WRAPPED = "BEGIN; SELECT 1 INTO t2; COMMIT;"
+DOCS = """
+COMMENT ON TABLE t IS 'Commented snapshot.';
+COMMENT ON TABLE t2 IS 'Wrapped snapshot.';
+"""
+
+
+def run(cur) -> None:
+    cur.execute(COMMENTED)
+    cur.execute(WRAPPED)
+    cur.execute(DOCS)
+''',
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_hidden.sql:2: SELECT INTO public.t {no_columns}",
+        f"{NEXT}_hidden.sql:4: SELECT INTO public.t {no_columns}",
+        f"{NEXT}_hidden.sql:7: SELECT INTO public.snapshot {no_columns}",
+        f"{NEXT}_hidden.sql:11: SELECT INTO public.snapshot2 {no_columns}",
+        f"{WATERMARK + 2:03d}_hidden.py:2: SELECT INTO public.t {no_columns}",
+        f"{WATERMARK + 2:03d}_hidden.py:3: SELECT INTO public.t2 {no_columns}",
+    ]
+
+
 def test_watermark_is_pinned() -> None:
     """Raising the watermark exempts new migrations, so it must change in review."""
     assert WATERMARK == 129

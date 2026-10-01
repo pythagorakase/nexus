@@ -111,8 +111,11 @@ _SELECT_INTO_TARGET = re.compile(
     _I,
 )
 # Words that decide whether a statement is a SELECT INTO: the first of them at
-# parenthesis depth 0 names the command, and a later depth-0 INTO its target.
+# the statement's base depth (after its leading parentheses and any WITH list)
+# names the command, and a later INTO at that depth names its target.
 _DML_VERBS = frozenset({"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"})
+# A statement's leading parentheses, as in ``(SELECT 1 INTO t) UNION ...``.
+_LEADING_PARENS = re.compile(r"[\s(]*")
 _IMPORT_FOREIGN_SCHEMA = re.compile(r"\bIMPORT\s+FOREIGN\s+SCHEMA\b", _I)
 _ALTER_TABLE = re.compile(
     r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?!ALL\s+IN\b)", _I
@@ -197,7 +200,7 @@ _PY_SQL_HINT = re.compile(
     r"|\bDO\s+(?:LANGUAGE\s+\w+\s+)?(?:\$|E?')"
     r"|\bEXECUTE\s+(?:format\s*\(\s*)?(?:\$|E?')"
     r"|\bIMPORT\s+FOREIGN\s+SCHEMA\b"
-    r"|\A\s*(?:WITH\b[\s\S]*\bSELECT|SELECT)\b[\s\S]*\bINTO\b",
+    r"|\bSELECT\b[\s\S]*?\bINTO\b",
     _I,
 )
 # A placeholder before DDL words ("{} TABLE t") marks SQL only alongside a DDL
@@ -685,28 +688,83 @@ def _quoted_end(text: str, index: int) -> int:
         close += 2
 
 
-def _top_level_words(text: str) -> Iterator[tuple[int, str]]:
-    """Yield (offset, upper-cased word) for each unquoted word at depth 0.
+def _depth_tokens(text: str) -> Iterator[tuple[int, str, int]]:
+    """Yield (offset, token, depth) for each word, quoted name, bracket, and comma.
 
-    Words inside parentheses or brackets and quoted identifiers are skipped.
+    Unquoted words are upper-cased; a quoted identifier keeps its quotes and
+    spelling. A word, quoted identifier, or comma reports the depth it sits
+    at; an opening bracket the depth before it and a closing bracket the depth
+    after it, so both brackets of a group report the depth around the group.
     """
     depth, index = 0, 0
     while index < len(text):
         char = text[index]
         if char == '"':
-            index = _quoted_end(text, index)
+            end = _quoted_end(text, index)
+            yield index, text[index:end], depth
+            index = end
             continue
         if char in "([":
+            yield index, char, depth
             depth += 1
         elif char in ")]":
             depth -= 1
-        elif depth == 0 and (index == 0 or not _IDENT_CHAR.match(text[index - 1])):
+            yield index, char, depth
+        elif char == ",":
+            yield index, char, depth
+        elif index == 0 or not _IDENT_CHAR.match(text[index - 1]):
             word = _WORD.match(text, index)
             if word:
-                yield index, word.group().upper()
+                yield index, word.group().upper(), depth
                 index = word.end()
                 continue
         index += 1
+
+
+def _base_depth_tokens(statement: str) -> list[tuple[int, str]]:
+    """Return (offset, token) for each token at a statement's base depth.
+
+    The base depth is the depth after the statement's leading parentheses, so
+    ``(SELECT 1 INTO t)`` reads as ``SELECT 1 INTO t`` does. Tokens deeper than
+    the base are skipped, and the first token shallower than the base ends the
+    list: in ``(SELECT 1 INTO t) UNION ALL SELECT 2`` nothing after the ``)``
+    is read.
+    """
+    lead = _LEADING_PARENS.match(statement)
+    assert lead is not None  # the pattern matches the empty string
+    base = lead.group().count("(")
+    tokens: list[tuple[int, str]] = []
+    for offset, token, depth in _depth_tokens(statement):
+        if offset < lead.end():
+            continue
+        if depth < base:
+            break
+        if depth == base:
+            tokens.append((offset, token))
+    return tokens
+
+
+def _after_with_list(tokens: list[tuple[int, str]]) -> int | None:
+    """Return the index of the main statement's first token after a WITH list.
+
+    tokens are base-depth tokens that start with WITH. Every token up to the
+    first closing parenthesis belongs to the first CTE (RECURSIVE, its name,
+    AS, MATERIALIZED). After each group that closes, a ``,`` starts the next
+    CTE, AS follows a CTE's column list, and any other token starts the main
+    statement. A CTE may be named ``delete`` or ``update``, which would
+    otherwise read as the statement's verb.
+    """
+    index = 1
+    while index < len(tokens):
+        if tokens[index][1] != ")":
+            index += 1
+            continue
+        index += 1
+        if index < len(tokens) and tokens[index][1] in (",", "AS"):
+            index += 1
+            continue
+        return index if index < len(tokens) else None
+    return None
 
 
 def _argument_words(text: str) -> list[str]:
@@ -1085,14 +1143,24 @@ class _SqlScanner:
         """Report SELECT INTO, which creates a table without a column list.
 
         A statement is a SELECT INTO when the first SELECT, INSERT, UPDATE,
-        DELETE, or MERGE at parenthesis depth 0 is SELECT and a later depth-0
-        INTO follows it. A temporary target is exempt, as CREATE TEMP TABLE
-        is. In a DO body (``plpgsql``) SELECT INTO assigns a variable and
-        creates nothing, so the rule does not apply there.
+        DELETE, or MERGE at its base depth (_base_depth_tokens), after any WITH
+        list (_after_with_list), is SELECT and a later INTO at that depth
+        follows it. A temporary target is exempt, as CREATE TEMP TABLE is. In a
+        DO body (``plpgsql``) SELECT INTO assigns a variable and creates
+        nothing, so the rule does not apply there.
         """
         if self.plpgsql:
             return
-        words = _top_level_words(statement)
+        tokens = _base_depth_tokens(statement)
+        main = 0
+        if tokens and tokens[0][1] == "WITH":
+            found = _after_with_list(tokens)
+            if found is None:
+                return
+            main = found
+        words = (
+            (offset, token) for offset, token in tokens[main:] if _WORD.match(token)
+        )
         for _, word in words:
             if word in _DML_VERBS:
                 if word != "SELECT":
