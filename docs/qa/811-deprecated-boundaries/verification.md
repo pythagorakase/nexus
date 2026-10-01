@@ -46,7 +46,9 @@ E           ValueError: Orrery tag 'gray_legal' has category 'legitimacy_status'
 
 The scratch worktree was removed afterward (`git worktree remove`).
 
-## The Order's Proof Set (Branch)
+## The Order's Proof Set (Branch, Before the Review Fixes)
+
+This run predates the review fixes below, which renamed the two `qa811_*` clone prefixes to `qa640_811_*` and added two cases; the rerun at `8d132555` is under Review Fixes.
 
 `env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_orrery_tag_validation_pg.py tests/test_orrery_tag_validation.py tests/test_commit_handler_sync.py tests/test_orrery/test_tag_writer.py tests/test_orrery/test_retrograde_maturation.py tests/test_api/test_wizard_confirmation_pg.py tests/test_entity_tag_manifest_apply.py tests/test_faction_table_audit.py tests/test_prompt_tag_vocabulary_pg.py tests/test_pg_legacy_faction_tag_seed.py tests/test_tags_audit_pg.py tests/test_connection_lifecycle.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py`
 
@@ -62,6 +64,38 @@ dbname audit: owner targets: none
 ```
 
 `tests/test_connection_lifecycle.py` transitions the trimmed golden-path fixture through `continue --accept-fate` inside this run.
+
+## Owner Caches
+
+The order's What Is Wrong list cites a read-only query of `assets.new_story_creator.character_orrery_tags`. Reproduced on 2026-09-30 inside `BEGIN READ ONLY` ... `ROLLBACK`, once per slot with `psql -d save_NN -XAt -F'|' -f owner_caches.sql`:
+
+```sql
+BEGIN READ ONLY;
+SELECT current_database() AS db,
+       count(*) AS cache_rows,
+       count(character_orrery_tags) AS rows_with_tags,
+       (SELECT count(*)
+          FROM assets.new_story_creator c
+          CROSS JOIN LATERAL jsonb_path_query(c.character_orrery_tags, 'strict $.**') AS v(value)
+          JOIN tags t
+            ON jsonb_typeof(v.value) = 'string' AND t.tag = v.value #>> '{}'
+          JOIN tag_category_registry r
+            ON r.category = t.category
+           AND r.entity_kind = 'character'::entity_kind
+           AND r.deprecated) AS deprecated_category_tags
+FROM assets.new_story_creator;
+ROLLBACK;
+```
+
+```
+save_01|0|0|0
+save_02|0|0|0
+save_03|0|0|0
+save_04|0|0|0
+save_05|1|0|0
+```
+
+No slot holds a deprecated-category tag in its wizard cache: `save_01` to `save_04` have no cache row, and `save_05`'s one row has `character_orrery_tags` NULL. The same join, run read-only on `NEXUS_template` against the literal `{"applied_tags": ["fixer", "capable"], "tags_to_clear": []}`, counts 1, so the query does find a deprecated-category tag when one is present.
 
 ## 811-S7: The Three Modules
 
@@ -147,3 +181,41 @@ $ $PY -m pytest -q tests/test_reachability.py
 ```
 
 Each printed the secret-store guard line. Black: `17 files would be left unchanged`. flake8 on the 17 changed Python files reports the same count per file as `origin/main` (no new finding). mypy on the four product files: `Success: no issues found in 4 source files`; the changed test files raise no mypy error on a line this branch adds.
+
+## Review Fixes (Commit `8d132555`)
+
+The PR review asked for four test changes; all tails below ran on `8d132555`.
+
+- Two new cases in `tests/test_orrery_tag_validation_pg.py`: `test_registry_free_tag_validation_rejects_deprecated_category_application` (Gaia's registry-free path: `collect_orrery_tag_issues(response, cur)` with no vocabulary, `black_market_operator` in a character's `tags_add`) and `test_async_exclusive_bestowal_rejects_deprecated_category_application` (`apply_exclusive_tag_bestowal_async` over asyncpg on the qa649 clone). Both expect the item-2 message.
+- `test_writer_clears_active_deprecated_category_tag_with_ledger` and `test_staged_draft_with_deprecated_category_application_fails` now clear any active row of their tag on their entity with plain SQL (`UPDATE entity_tags ... SET cleared_at = now() ... AND cleared_at IS NULL`, not the writer under test) in a `finally` block.
+- The two new template clones use the disposable prefix: `qa640_811_prompt_vocab`, `qa640_811_entity_manifest`.
+
+Red run of the two new cases at the merge base `41783c1d` (detached scratch worktree with the branch's test file, since removed):
+
+```
+E       assert [] == ['updates.cha...le.function)']
+E           Failed: DID NOT RAISE <class 'ValueError'>
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa649_*
+dbname audit: owner targets: none
+FAILED tests/test_orrery_tag_validation_pg.py::test_registry_free_tag_validation_rejects_deprecated_category_application
+FAILED tests/test_orrery_tag_validation_pg.py::test_async_exclusive_bestowal_rejects_deprecated_category_application
+2 failed in 1.02s
+```
+
+On `main` the async exclusive bestowal wrote the row; the new `finally` cleared it.
+
+The order's proof set (same 14-file command as above) at `8d132555`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 36 targets: mock, postgres, qa640_811_entity_manifest_*, qa640_811_prompt_vocab_*, qa640_811_tags_audit_* x5, qa640_811_tags_audit_nocol_*, qa640_compaction_retry_*, qa640_maturation799_*, qa640_offline_gate_* x17, qa649_*, qa885_faction_audit_*, qa885_legacy_tag_* x4, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:52961 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle; two_clusters[1] at local:52968 from tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
+dbname audit: owner names admitted on registered clusters: save_04@local:52961 (psycopg2), save_04@local:52968 (psycopg2)
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+371 passed, 5 warnings in 123.49s (0:02:03)
+```
+
+Offline, the three changed test files: `8 passed, 54 skipped, 5 warnings in 1.50s` with the guard line. Black: `3 files would be left unchanged`. flake8 on the three files reports the same count per file as `dd30e010` (3, 0, 0; the three are pre-existing E501 lines in the qa649 fixture).
