@@ -46,6 +46,9 @@ reason = "Read-only reference-corpus metrics CLI documented in scripts/qa_shift/
 target = "scripts/qa_shift/world_clock.py:main"
 reason = "Read-only clock identity QA family documented in scripts/qa_shift/README.md; issue 778."
 [[operators]]
+target = "scripts/qa_shift/travel_reachability.py:main"
+reason = "Read-only travel reachability probe for issue 785; session-enforced default_transaction_read_only."
+[[operators]]
 target = "scripts/qa_shift/long_absence_probe.py:main"
 reason = "Clone-only long-absence probe launcher from issue 909; writes only to a qa640_* clone."
 [[operators]]
@@ -337,6 +340,7 @@ paths = [
     { path = "scripts/qa_shift/qa_shift.py", class = "operator", reason = "operator root scripts/qa_shift/qa_shift.py:main" },
     { path = "scripts/qa_shift/qa_shift.toml", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
     { path = "scripts/qa_shift/reference_corpora.toml", class = "operator", reason = "Asset of the scripts/qa_shift operator kit." },
+    { path = "scripts/qa_shift/travel_reachability.py", class = "operator", reason = "operator root scripts/qa_shift/travel_reachability.py:main" },
     { path = "scripts/qa_shift/world_clock.py", class = "operator", reason = "operator root scripts/qa_shift/world_clock.py:main" },
     { path = "scripts/query_narratives.py", class = "dead", reason = "No root reaches it; no tracked document names it." },
     { path = "scripts/query_narratives_simple.py", class = "dead", reason = "No root reaches it; no tracked document names it." },

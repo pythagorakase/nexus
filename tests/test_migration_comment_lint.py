@@ -747,6 +747,517 @@ COMMENT ON TABLE mood_full IS 'Copies source comments.';
     ]
 
 
+def test_foreign_tables_follow_create_table_rules(tmp_path: Path) -> None:
+    """A foreign table needs COMMENT ON FOREIGN TABLE and every column comment.
+
+    PostgreSQL rejects COMMENT ON TABLE for a foreign table ("is not a
+    table"), so that form documents nothing. PARTITION OF and LIKE behave as
+    they do for a plain table, under the CREATE FOREIGN TABLE label.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_remote.sql",
+        """
+CREATE FOREIGN TABLE remote_moods (
+    id int OPTIONS (column_name 'mood_id') NOT NULL,
+    mood text
+) SERVER mood_server OPTIONS (table_name 'moods');
+COMMENT ON FOREIGN TABLE remote_moods IS 'Moods kept on another server.';
+COMMENT ON COLUMN remote_moods.id IS 'Remote row key.';
+COMMENT ON COLUMN remote_moods.mood IS 'Remote mood.';
+CREATE FOREIGN TABLE IF NOT EXISTS remote_notes (id int, note text) SERVER s;
+COMMENT ON TABLE remote_notes IS 'PostgreSQL rejects this for a foreign table.';
+COMMENT ON COLUMN remote_notes.id IS 'Remote row key.';
+CREATE FOREIGN TABLE remote_calm PARTITION OF scene_moods
+    FOR VALUES IN ('calm') SERVER mood_server;
+COMMENT ON FOREIGN TABLE remote_calm IS 'Remote partition.';
+CREATE FOREIGN TABLE remote_like (LIKE scene_moods) SERVER mood_server;
+COMMENT ON FOREIGN TABLE remote_like IS 'Copied shape.';
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_remote.sql:8: column public.remote_notes.note has no COMMENT ON "
+        "COLUMN",
+        f"{NEXT}_remote.sql:8: foreign table public.remote_notes has no COMMENT ON "
+        "FOREIGN TABLE",
+        f"{NEXT}_remote.sql:11: CREATE FOREIGN TABLE public.remote_calm declares no "
+        "column list; its columns cannot be verified",
+        f"{NEXT}_remote.sql:14: CREATE FOREIGN TABLE public.remote_like copies "
+        "columns with LIKE but without INCLUDING COMMENTS; they cannot be verified",
+    ]
+
+
+def test_run_time_foreign_kind_fails(tmp_path: Path) -> None:
+    """FOREIGN is a CREATE modifier, so a kind filled in after it is reported."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_remote_kinds.sql",
+        """
+DO $$
+BEGIN
+    EXECUTE 'CREATE FOREIGN ' || v_kind || ' t (id int) SERVER s';
+    EXECUTE 'CREATE FOREIGN TABLE ' || v_name || ' (id int) SERVER s';
+END
+$$;
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_remote_kinds.sql:3: CREATE object kind '{{}}' is filled in at run "
+        "time; its schema changes cannot be verified",
+        f"{NEXT}_remote_kinds.sql:4: CREATE FOREIGN TABLE names '{{}}', which is not "
+        "a literal identifier; name the object literally so its COMMENT can be "
+        "verified",
+    ]
+
+
+def test_import_foreign_schema_fails_as_unsupported(tmp_path: Path) -> None:
+    """IMPORT FOREIGN SCHEMA creates tables it does not name, wherever it runs."""
+    _migration(
+        tmp_path,
+        f"{NEXT}_import.sql",
+        """
+IMPORT FOREIGN SCHEMA remote FROM SERVER mood_server INTO public;
+DO $$
+BEGIN
+    IMPORT FOREIGN SCHEMA remote LIMIT TO (moods)
+        FROM SERVER mood_server INTO public;
+END
+$$;
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_import.py",
+        """
+IMPORT = "IMPORT FOREIGN SCHEMA remote FROM SERVER mood_server INTO public"
+
+
+def run(cur) -> None:
+    cur.execute("IMPORT FOREIGN SCHEMA archive FROM SERVER mood_server INTO public")
+    cur.execute(IMPORT)
+""",
+    )
+
+    unsupported = (
+        "IMPORT FOREIGN SCHEMA creates foreign tables it does not name; their "
+        "columns cannot be verified"
+    )
+    assert _findings(tmp_path) == [
+        f"{NEXT}_import.sql:1: {unsupported}",
+        f"{NEXT}_import.sql:4: {unsupported}",
+        f"{WATERMARK + 2:03d}_import.py:1: {unsupported}",
+        f"{WATERMARK + 2:03d}_import.py:5: {unsupported}",
+    ]
+
+
+def test_select_into_fails_like_ctas(tmp_path: Path) -> None:
+    """SELECT INTO creates a table without a column list, outside PL/pgSQL.
+
+    In a DO body SELECT INTO assigns a variable, as in migrations 077 and 109,
+    so it passes there; a temporary target and INSERT INTO pass everywhere.
+    An EXECUTE command in a DO body is still scanned as SQL, so its SELECT INTO
+    is reported, and a target built at run time is unresolvable.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_snapshots.sql",
+        """
+SELECT id, mood
+INTO mood_snapshot
+FROM scene_moods;
+WITH recent AS (SELECT id, mood FROM scene_moods WHERE id > 10)
+SELECT id, mood
+INTO recent_moods
+FROM recent;
+SELECT id
+INTO UNLOGGED TABLE mood_ids
+FROM scene_moods;
+SELECT id INTO TEMP mood_scratch FROM scene_moods;
+SELECT id INTO LOCAL TEMP mood_scratch_local FROM scene_moods;
+INSERT INTO mood_archive SELECT id, mood FROM scene_moods;
+DO $migration$
+DECLARE
+    invalid_tags text;
+    completed_target_constraints text[];
+BEGIN
+    WITH expected(tag) AS (
+        VALUES
+            ('intoxicated:stimulant'),
+            ('intoxicated:depressant')
+    )
+    SELECT string_agg(expected.tag, ', ' ORDER BY expected.tag)
+    INTO invalid_tags
+    FROM expected
+    LEFT JOIN tags AS registry USING (tag)
+    WHERE registry.id IS NULL;
+    SELECT array_agg(conname ORDER BY conname)
+    INTO completed_target_constraints
+    FROM pg_constraint
+    WHERE conrelid = 'character_project_states'::regclass
+      AND contype = 'c';
+END
+$migration$;
+COMMENT ON TABLE mood_snapshot IS 'Snapshot.';
+COMMENT ON TABLE recent_moods IS 'Recent moods.';
+COMMENT ON TABLE mood_ids IS 'Mood ids.';
+DO $$
+DECLARE
+    v_name text := 'mood_copy';
+BEGIN
+    EXECUTE 'SELECT 1 AS id INTO ' || v_name || ' FROM scene_moods';
+END
+$$;
+WITH a AS (SELECT 1)
+(SELECT 1
+ INTO with_paren_main);
+WITH a AS (SELECT 1)
+(SELECT 1
+ INTO with_paren_union) UNION ALL SELECT 2;
+COMMENT ON TABLE with_paren_main IS 'Parenthesized main statement.';
+COMMENT ON TABLE with_paren_union IS 'Parenthesized first branch.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_snapshots.py",
+        '''
+SNAPSHOT = """
+SELECT id, mood
+INTO py_snapshot
+FROM scene_moods
+"""
+RECENT = """
+WITH recent AS (SELECT id FROM scene_moods)
+SELECT id
+INTO py_recent
+FROM recent
+"""
+DOCS = """
+COMMENT ON TABLE py_snapshot IS 'Snapshot.';
+COMMENT ON TABLE py_recent IS 'Recent.';
+"""
+
+
+def run(cur) -> None:
+    cur.execute(SNAPSHOT)
+    cur.execute(RECENT)
+    cur.execute(DOCS)
+''',
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_snapshots.sql:2: SELECT INTO public.mood_snapshot {no_columns}",
+        f"{NEXT}_snapshots.sql:6: SELECT INTO public.recent_moods {no_columns}",
+        f"{NEXT}_snapshots.sql:9: SELECT INTO public.mood_ids {no_columns}",
+        f"{NEXT}_snapshots.sql:43: SELECT INTO names '{{}}', which is not a "
+        "literal identifier; name the object literally so its COMMENT can be "
+        "verified",
+        f"{NEXT}_snapshots.sql:48: SELECT INTO public.with_paren_main {no_columns}",
+        f"{NEXT}_snapshots.sql:51: SELECT INTO public.with_paren_union {no_columns}",
+        f"{WATERMARK + 2:03d}_snapshots.py:3: SELECT INTO public.py_snapshot "
+        f"{no_columns}",
+        f"{WATERMARK + 2:03d}_snapshots.py:9: SELECT INTO public.py_recent "
+        f"{no_columns}",
+    ]
+
+
+def test_select_into_is_found_past_comments_parentheses_and_cte_names(
+    tmp_path: Path,
+) -> None:
+    """SELECT INTO still fails where it is not the literal's or statement's head.
+
+    A Python literal may open with a comment or another statement; a statement
+    may open with parentheses, and PostgreSQL then still creates the table; a
+    CTE may be named ``delete`` or ``update``, which is not the verb. A real
+    DELETE after a CTE, a SELECT without INTO, and PL/pgSQL SELECT INTO in a DO
+    body (migrations 077 and 109) stay silent.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_hidden.sql",
+        """
+(SELECT 1
+ INTO t);
+(SELECT 1
+ INTO t) UNION ALL SELECT 2;
+WITH delete AS (SELECT 1 AS id)
+SELECT id
+INTO snapshot
+FROM delete;
+WITH RECURSIVE update (n) AS (SELECT 1)
+SELECT n
+INTO snapshot2
+FROM update;
+WITH delete AS (SELECT 1 AS id) DELETE FROM t WHERE id IN (SELECT id FROM delete);
+SELECT 1 FROM (SELECT 2) AS sub;
+DO $$
+DECLARE
+    invalid_tags text;
+    completed_target_constraints text[];
+BEGIN
+    WITH expected(tag) AS (
+        VALUES
+            ('intoxicated:stimulant'),
+            ('intoxicated:depressant')
+    )
+    SELECT string_agg(expected.tag, ', ' ORDER BY expected.tag)
+    INTO invalid_tags
+    FROM expected;
+    SELECT array_agg(conname ORDER BY conname)
+    INTO completed_target_constraints
+    FROM pg_constraint
+    WHERE conrelid = 'character_project_states'::regclass;
+END
+$$;
+COMMENT ON TABLE t IS 'Parenthesized snapshot.';
+COMMENT ON TABLE snapshot IS 'Snapshot after a CTE named delete.';
+COMMENT ON TABLE snapshot2 IS 'Snapshot after a recursive CTE named update.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_hidden.py",
+        '''
+COMMENTED = """-- snapshot
+SELECT 1 INTO t;"""
+WRAPPED = "BEGIN; SELECT 1 INTO t2; COMMIT;"
+DOCS = """
+COMMENT ON TABLE t IS 'Commented snapshot.';
+COMMENT ON TABLE t2 IS 'Wrapped snapshot.';
+"""
+
+
+def run(cur) -> None:
+    cur.execute(COMMENTED)
+    cur.execute(WRAPPED)
+    cur.execute(DOCS)
+''',
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_hidden.sql:2: SELECT INTO public.t {no_columns}",
+        f"{NEXT}_hidden.sql:4: SELECT INTO public.t {no_columns}",
+        f"{NEXT}_hidden.sql:7: SELECT INTO public.snapshot {no_columns}",
+        f"{NEXT}_hidden.sql:11: SELECT INTO public.snapshot2 {no_columns}",
+        f"{WATERMARK + 2:03d}_hidden.py:2: SELECT INTO public.t {no_columns}",
+        f"{WATERMARK + 2:03d}_hidden.py:3: SELECT INTO public.t2 {no_columns}",
+    ]
+
+
+def test_select_into_is_found_past_search_cycle_and_explain(tmp_path: Path) -> None:
+    """SEARCH and CYCLE words are not the verb; SELECT INTO behind EXPLAIN fails.
+
+    A recursive CTE's SEARCH or CYCLE clause may name a column ``update`` or
+    ``delete``, and a CTE named ``delete`` may follow it. EXPLAIN and its
+    options are stripped without being read, so a plain, parenthesized, or
+    CTE-led SELECT INTO behind EXPLAIN is reported, whether or not that
+    EXPLAIN executes it: plain EXPLAIN, EXPLAIN VERBOSE, ANALYZE false, and
+    quoted or repeated options included. ``EXPLAIN (SELECT ...)`` passes: the
+    lint always reads ``EXPLAIN (`` as an option list (PostgreSQL reads it as a
+    parenthesized statement), and with no ANALYZE that form cannot execute.
+    PREPARE is reported, because an EXECUTE of the prepared statement creates
+    the table.
+    A real DELETE after SEARCH and CYCLE stays silent.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_clauses.sql",
+        """
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3)
+CYCLE n SET update USING path
+SELECT n INTO cycled FROM r;
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3)
+SEARCH DEPTH FIRST BY n SET ord, delete AS (SELECT 1 AS id)
+SELECT n INTO searched FROM r, delete;
+WITH RECURSIVE r(delete) AS (
+    SELECT 1 UNION ALL SELECT delete + 1 FROM r WHERE delete < 3
+) SEARCH BREADTH FIRST BY delete SET ord
+SELECT 1 INTO searched_by_delete FROM r;
+EXPLAIN ANALYZE SELECT 1 INTO explained;
+EXPLAIN ANALYZE (SELECT 1 INTO explained_paren);
+EXPLAIN (ANALYZE) WITH delete AS (SELECT 1 AS id)
+SELECT id INTO explained_cte FROM delete;
+EXPLAIN ANALYZE VERBOSE WITH a AS (SELECT 1) (SELECT 1 INTO explained_both);
+PREPARE p AS SELECT 1 INTO prepared;
+EXPLAIN SELECT 1 INTO planned;
+EXPLAIN VERBOSE SELECT 1 INTO planned_verbose;
+EXPLAIN (ANALYZE false, VERBOSE) SELECT 1 INTO planned_off;
+EXPLAIN ("analyze") SELECT 1 INTO quoted_option;
+EXPLAIN (ANALYZE true, ANALYZE false) SELECT 1 INTO repeated_option;
+EXPLAIN (ANALYZE "false") SELECT 1 INTO quoted_value;
+EXPLAIN (SELECT 1 INTO planned_paren);
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3)
+SEARCH DEPTH FIRST BY n SET ord
+CYCLE n SET delete TO true DEFAULT false USING update
+DELETE FROM t WHERE id IN (SELECT n FROM r);
+COMMENT ON TABLE cycled IS 'After a CYCLE clause.';
+COMMENT ON TABLE searched IS 'After a SEARCH clause and a CTE named delete.';
+COMMENT ON TABLE searched_by_delete IS 'After SEARCH BY a column named delete.';
+COMMENT ON TABLE explained IS 'Behind EXPLAIN ANALYZE.';
+COMMENT ON TABLE explained_paren IS 'Parenthesized, behind EXPLAIN ANALYZE.';
+COMMENT ON TABLE explained_cte IS 'After a CTE, behind EXPLAIN (ANALYZE).';
+COMMENT ON TABLE explained_both IS 'After a CTE and a parenthesis.';
+COMMENT ON TABLE prepared IS 'Prepared for a later EXECUTE.';
+COMMENT ON TABLE planned IS 'Behind plain EXPLAIN.';
+COMMENT ON TABLE planned_verbose IS 'Behind EXPLAIN VERBOSE.';
+COMMENT ON TABLE planned_off IS 'Behind EXPLAIN (ANALYZE false).';
+COMMENT ON TABLE quoted_option IS 'Behind a quoted option name.';
+COMMENT ON TABLE repeated_option IS 'Behind a repeated option.';
+COMMENT ON TABLE quoted_value IS 'Behind a quoted option value.';
+""",
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_clauses.sql:3: SELECT INTO public.cycled {no_columns}",
+        f"{NEXT}_clauses.sql:6: SELECT INTO public.searched {no_columns}",
+        f"{NEXT}_clauses.sql:10: SELECT INTO public.searched_by_delete {no_columns}",
+        f"{NEXT}_clauses.sql:11: SELECT INTO public.explained {no_columns}",
+        f"{NEXT}_clauses.sql:12: SELECT INTO public.explained_paren {no_columns}",
+        f"{NEXT}_clauses.sql:14: SELECT INTO public.explained_cte {no_columns}",
+        f"{NEXT}_clauses.sql:15: SELECT INTO public.explained_both {no_columns}",
+        f"{NEXT}_clauses.sql:16: SELECT INTO public.prepared {no_columns}",
+        f"{NEXT}_clauses.sql:17: SELECT INTO public.planned {no_columns}",
+        f"{NEXT}_clauses.sql:18: SELECT INTO public.planned_verbose {no_columns}",
+        f"{NEXT}_clauses.sql:19: SELECT INTO public.planned_off {no_columns}",
+        f"{NEXT}_clauses.sql:20: SELECT INTO public.quoted_option {no_columns}",
+        f"{NEXT}_clauses.sql:21: SELECT INTO public.repeated_option {no_columns}",
+        f"{NEXT}_clauses.sql:22: SELECT INTO public.quoted_value {no_columns}",
+    ]
+
+
+def test_select_into_reading_is_bounded(tmp_path: Path) -> None:
+    """Deep or malformed statements finish, with no recursion and no exception.
+
+    A long chain of EXPLAIN ANALYZE prefixes that never closes its parenthesis,
+    a bare parenthesis, and an empty statement are malformed and pass, as they
+    did before the rule looked past parentheses. A SELECT INTO under 1,100
+    parentheses is found. The rule reads through up to 64 WITH lists whose
+    main statements open with a parenthesis, so a SELECT INTO behind two
+    nested set operations or 64 WITH lists is found; one wrapped in 70 or
+    1,100 WITH lists is reported as SQL the lint cannot parse, never passed.
+    """
+    depth = 1100
+    explains = "EXPLAIN ANALYZE " * depth + "("
+    nest = "(" * depth + "SELECT 1 INTO deep" + ")" * depth
+    wrapped = "WITH a AS (SELECT 1) (" * depth + "SELECT 1 INTO wrapped" + ")" * depth
+    at_limit = "(WITH x AS (SELECT 1) " * 64 + "SELECT 1 INTO at_limit" + ")" * 64
+    past_limit = "(WITH x AS (SELECT 1) " * 70 + "SELECT 1 INTO past_limit" + ")" * 70
+    _migration(
+        tmp_path,
+        f"{NEXT}_bounded.sql",
+        f"""
+{explains};
+{nest};
+(;
+;
+{wrapped};
+WITH a AS (SELECT 1) (WITH b AS (SELECT 2) (SELECT 1 INTO escaped)
+UNION ALL SELECT 2) UNION ALL SELECT 3;
+{at_limit};
+{past_limit};
+COMMENT ON TABLE deep IS 'Under many parentheses.';
+COMMENT ON TABLE escaped IS 'Behind two nested set operations.';
+COMMENT ON TABLE at_limit IS 'Behind 64 WITH lists.';
+""",
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    unparsed = "cannot parse SQL: a statement nests more than 64 WITH lists"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_bounded.sql:2: SELECT INTO public.deep {no_columns}",
+        f"{NEXT}_bounded.sql:5: {unparsed}",
+        f"{NEXT}_bounded.sql:6: SELECT INTO public.escaped {no_columns}",
+        f"{NEXT}_bounded.sql:8: SELECT INTO public.at_limit {no_columns}",
+        f"{NEXT}_bounded.sql:9: {unparsed}",
+    ]
+
+
+def test_into_after_a_dot_or_as_is_a_name(tmp_path: Path) -> None:
+    """``into`` after ``.`` is an attribute and after AS an output alias.
+
+    Neither starts the SELECT INTO clause, so the INTO after them is found and
+    a statement with no other INTO creates nothing. A ``.`` that ends a
+    numeric literal, digit separators included (``1_000.``, PostgreSQL 16 and
+    later), does not make the next INTO a name.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_into_names.sql",
+        """
+SELECT src.into temp INTO escaped FROM (VALUES (1)) AS src("into");
+SELECT src.into FROM (VALUES (1)) AS src("into");
+SELECT 1 AS into;
+SELECT src . into AS into INTO spaced FROM (VALUES (1)) AS src("into");
+SELECT 1. INTO numbered;
+SELECT 1_000. INTO separated;
+COMMENT ON TABLE escaped IS 'Past an attribute named into.';
+COMMENT ON TABLE spaced IS 'Past a spaced attribute and an alias named into.';
+COMMENT ON TABLE numbered IS 'After a numeric literal ending in a dot.';
+COMMENT ON TABLE separated IS 'After a separated numeric literal ending in a dot.';
+""",
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_into_names.sql:1: SELECT INTO public.escaped {no_columns}",
+        f"{NEXT}_into_names.sql:4: SELECT INTO public.spaced {no_columns}",
+        f"{NEXT}_into_names.sql:5: SELECT INTO public.numbered {no_columns}",
+        f"{NEXT}_into_names.sql:6: SELECT INTO public.separated {no_columns}",
+    ]
+
+
+def test_select_into_target_named_temp(tmp_path: Path) -> None:
+    """TEMP, TEMPORARY, UNLOGGED, GLOBAL, and LOCAL name the target unless a name
+    follows them.
+
+    ``SELECT 1 INTO temp FROM ...`` creates a persistent table named ``temp``,
+    and so does ``INTO TABLE temp``; ``INTO TEMP t`` and ``INTO LOCAL TEMP t``
+    create temporary tables and pass, inside parentheses as well. An
+    interpolated name after TEMP is still a name.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_temp_names.sql",
+        """
+SELECT 1 INTO temp FROM (VALUES (1)) AS v(n);
+SELECT 1 INTO temporary FROM (VALUES (1)) AS v(n);
+SELECT 1 INTO TABLE temp FROM (VALUES (1)) AS v(n);
+SELECT 1 INTO unlogged;
+(SELECT 1 INTO temp);
+SELECT 1 INTO TEMP t;
+SELECT 1 INTO LOCAL TEMP t;
+(SELECT 1 INTO TEMP t);
+SELECT 1 INTO TEMP TABLE t WHERE true;
+SELECT 1 INTO GLOBAL TEMPORARY "t" FROM (VALUES (1)) AS v(n);
+COMMENT ON TABLE temp IS 'A persistent table named temp.';
+COMMENT ON TABLE temporary IS 'A persistent table named temporary.';
+COMMENT ON TABLE unlogged IS 'A persistent table named unlogged.';
+""",
+    )
+    _migration(
+        tmp_path,
+        f"{WATERMARK + 2:03d}_temp_names.py",
+        """
+def run(cur, name) -> None:
+    cur.execute(f"SELECT 1 INTO TEMP {name} FROM (VALUES (1)) AS v(n)")
+""",
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_temp_names.sql:1: SELECT INTO public.temp {no_columns}",
+        f"{NEXT}_temp_names.sql:2: SELECT INTO public.temporary {no_columns}",
+        f"{NEXT}_temp_names.sql:3: SELECT INTO public.temp {no_columns}",
+        f"{NEXT}_temp_names.sql:4: SELECT INTO public.unlogged {no_columns}",
+        f"{NEXT}_temp_names.sql:5: SELECT INTO public.temp {no_columns}",
+    ]
+
+
 def test_watermark_is_pinned() -> None:
     """Raising the watermark exempts new migrations, so it must change in review."""
     assert WATERMARK == 129
@@ -775,6 +1286,15 @@ def test_every_historical_migration_parses() -> None:
         "public.character_experience_basis has no COMMENT ON TYPE"
     ) in findings
     assert not [line for line in findings if line.startswith("migrations/114_")]
+    # PL/pgSQL SELECT INTO in DO bodies (022, 077, 100, 109, 110, 134, 138)
+    # assigns a variable.
+    assert not [
+        line
+        for line in findings
+        if "SELECT INTO" in line
+        or "IMPORT FOREIGN SCHEMA" in line
+        or "foreign table" in line.lower()
+    ]
 
 
 def test_command_line_reports_findings(tmp_path: Path) -> None:

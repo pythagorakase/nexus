@@ -188,7 +188,7 @@ enable_streaming = true
 # sheet reaches the wizard -> narrative transition without TraitCompileInputs,
 # one structured Skald call derives them so the M5 compilers can write
 # mechanical state (relationship rows, pair-tags, stub entities) instead of
-# leaving every trait a prose-only remainder. Skipped for the mock TEST model.
+# leaving every trait a prose-only remainder. Skipped for models of the TEST provider.
 derive_at_transition = true
 max_tokens = 4096
 
