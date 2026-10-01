@@ -39,14 +39,19 @@ the turn has none. No job is guessed for it, so a summary job from before the
 change reads ``"unknown"`` usage and counts in ``jobs_without_usage`` while its
 spend appears in the legacy block.
 
-Token counts are renderer or provider truth only: nothing is estimated and
-nothing is priced (Decision 9, #858). Each section names its ``provenance``.
-A value no source recorded reads ``"unknown"``; this includes list-typed fields
-(``repair_codes``, ``rejection_codes``, ``outcomes``, ``seats``, and a
-``block_tokens`` or ``influence_tokens`` mapping), so a JSON consumer must not
-assume they are always arrays or objects. ``null`` means the source records
-that the thing has not happened (no terminal outcome yet, no later phase) or
-was not sent (no reasoning effort on the request).
+Token counts are renderer, local-estimate or provider counts, and each section
+names its ``provenance``; nothing is priced (Decision 9, #858). A window's
+``estimated_input_tokens`` is the local estimate of the whole request, and its
+``reported_input_tokens`` is the provider's input for that attempt, which for
+the ``anthropic_messages`` transport adds cache reads and writes so that it
+counts what OpenAI's ``input_tokens`` counts; ``record_token_estimate`` stored
+both in the attempt manifest. A value no source recorded reads ``"unknown"``;
+this includes list-typed fields (``repair_codes``, ``rejection_codes``,
+``outcomes``, ``seats``, and a ``block_tokens`` or ``influence_tokens``
+mapping), so a JSON consumer must not assume they are always arrays or objects.
+``null`` means the source records that the thing has not happened (no terminal
+outcome yet, no later phase) or was not sent (no reasoning effort on the
+request).
 
 Seats without a manifest or window record restart attempt numbers at 1 for each
 request, so such a row can sum several provider calls that share one attempt
@@ -73,12 +78,23 @@ day, conflicting models or providers on one attempt, a timestamp without a UTC
 offset, phases recorded out of order, and an event under a listed job's id and
 slot whose seat no provider-backed queue records.
 
-Schema version 1 has these top-level keys: ``schema_version``,
-``generation_session``, ``read_at`` (UTC), ``ledger_days_read`` (every UTC day
-read: the turn's, from its first observed phase through the later of its last
-phase and ``read_at``, and each provider-backed job's), ``terminal_outcome``,
-``wall_time``, ``phases``, ``attempts``, ``usage_totals`` and ``jobs``
-(``total``, state counts ``by_queue``, and ``entries``).
+Choice readiness is the server's ``complete`` phase row, which
+``finish_generation`` writes in the transaction that stages the draft:
+``choice_ready_at`` is its time and ``seconds_to_choice_ready`` the seconds from
+the first observed phase. Both are null when phases were observed and none is
+``complete`` (a failed or unfinished session), and ``"unknown"`` when no phase
+was observed. An attempt's ``usage.provider_completed_at`` is the time of its
+latest usage event, when the provider's response arrived; it is not readiness.
+
+Schema version 2 adds choice readiness, provider completion and the two window
+counts to version 1 and removes nothing. Its top-level keys are:
+``schema_version``, ``generation_session``, ``read_at`` (UTC),
+``ledger_days_read`` (every UTC day read: the turn's, from its first observed
+phase through the later of its last phase and ``read_at``, and each
+provider-backed job's), ``terminal_outcome``, ``wall_time``,
+``choice_ready_at``, ``seconds_to_choice_ready``, ``phases``, ``attempts``,
+``usage_totals`` and ``jobs`` (``total``, state counts ``by_queue``, and
+``entries``).
 """
 
 from __future__ import annotations
@@ -92,7 +108,7 @@ from nexus.telemetry.attempt_manifest import PROVIDER_JOB_SEATS, validation_meta
 from nexus.telemetry.prompt_window import PromptWindowRecord
 from nexus.telemetry.usage import UsageEvent, read_prompt_windows, summarize_usage
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 UNKNOWN = "unknown"
 MANIFEST = "attempt_manifest"
 WINDOW_LEDGER = "prompt_window_ledger"
@@ -315,7 +331,9 @@ def derive_turn_observation(
     ]
     job_days = job_ledger_days(inspection, read_at=read_at)
     entries = _job_entries(inspection["jobs"], job_events, job_days, slot=slot)
-    phases, wall_time = _phase_spans(session_id, _observed_phases(inspection))
+    observed = _observed_phases(inspection)
+    phases, wall_time = _phase_spans(session_id, observed)
+    choice_ready_at, seconds_to_choice_ready = _choice_readiness(session_id, observed)
     critical_path = _critical_path_totals(attempts)
     background = _background_totals(entries, legacy)
     return {
@@ -327,6 +345,8 @@ def derive_turn_observation(
         ),
         "terminal_outcome": inspection["session"]["terminal_outcome"],
         "wall_time": wall_time,
+        "choice_ready_at": choice_ready_at,
+        "seconds_to_choice_ready": seconds_to_choice_ready,
         "phases": phases,
         "attempts": attempts,
         "usage_totals": {
@@ -384,6 +404,8 @@ def _window(
             **dict.fromkeys(
                 (
                     "input_tokens",
+                    "estimated_input_tokens",
+                    "reported_input_tokens",
                     "effective_ceiling",
                     "policy_headroom",
                     "headroom",
@@ -400,6 +422,10 @@ def _window(
     return {
         "provenance": provenance,
         "input_tokens": values["input_tokens"],
+        # The local estimate and the provider's normalised input, as
+        # record_token_estimate merged them; a window-ledger record has neither.
+        "estimated_input_tokens": values.get("estimated_input_tokens", UNKNOWN),
+        "reported_input_tokens": values.get("reported_input_tokens", UNKNOWN),
         "effective_ceiling": values["effective_ceiling"],
         "policy_headroom": values["policy_headroom"],
         "headroom": values["headroom"],
@@ -480,6 +506,7 @@ def _usage(
                     "provider",
                     "transport",
                     "outcomes",
+                    "provider_completed_at",
                     *USAGE_TOKEN_FIELDS,
                     "reasoning_effort",
                     "max_output_tokens",
@@ -495,6 +522,8 @@ def _usage(
         ),
         "transport": _profile({event.transport for event in events}),
         "outcomes": [event.outcome for event in events],
+        # When the latest response arrived: an event is built after it returns.
+        "provider_completed_at": _iso(max(_utc(event.ts) for event in events)),
     }
     for field in USAGE_TOKEN_FIELDS:
         result[field] = _sum_reported(getattr(event, field) for event in events)
@@ -736,6 +765,33 @@ def _phase_spans(
     return spans, wall_time
 
 
+def _choice_readiness(
+    session_id: str, observed: list[tuple[str, datetime]]
+) -> tuple[Optional[str], Union[float, str, None]]:
+    """Return when the server staged the draft's choices, from its phase rows.
+
+    Readiness is the ``complete`` row ``finish_generation`` writes while it
+    stages the draft. No observed phase reads ``"unknown"``; observed phases
+    without a ``complete`` row read null (failed or still generating).
+    """
+    if not observed:
+        return UNKNOWN, UNKNOWN
+    ready = [moment for phase, moment in observed if phase == "complete"]
+    if len(ready) > 1:
+        raise ValueError(
+            f"Generation session {session_id} records {len(ready)} 'complete' "
+            "phases; choice readiness is ambiguous"
+        )
+    if not ready:
+        return None, None
+    (moment,) = ready
+    first_phase, first_moment = observed[0]
+    seconds: Union[float, str] = (
+        UNKNOWN if first_phase == "complete" else _seconds(moment - first_moment)
+    )
+    return _iso(moment), seconds
+
+
 def _job_work(
     jobs: Iterable[Mapping[str, Any]], entries: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -767,7 +823,7 @@ def _setting(value: Any) -> str:
     return "-" if value is None else _tokens(value)
 
 
-def _usage_line(usage: Mapping[str, Any]) -> str:
+def _usage_line(usage: Mapping[str, Any], *, completed: Optional[str] = None) -> str:
     """Render one attempt's or job's usage; unrecorded usage reads unknown."""
     if usage["provenance"] == UNKNOWN:
         return f"  usage {UNKNOWN}"
@@ -778,8 +834,9 @@ def _usage_line(usage: Mapping[str, Any]) -> str:
         f"{_tokens(usage['output_tokens'])} · reasoning "
         f"{_tokens(usage['reasoning_tokens'])} · effort "
         f"{_setting(usage['reasoning_effort'])} · max out "
-        f"{_setting(usage['max_output_tokens'])} "
-        f"[{usage['provenance']} ×{usage['events']}]"
+        f"{_setting(usage['max_output_tokens'])}"
+        + ("" if completed is None else f" · completed {completed}")
+        + f" [{usage['provenance']} ×{usage['events']}]"
     )
 
 
@@ -797,7 +854,9 @@ def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
         lines.append(
             f"  window {_tokens(window['input_tokens'])} / "
             f"{_tokens(window['effective_ceiling'])} · headroom "
-            f"{_tokens(window['headroom'])} [{window['provenance']}]"
+            f"{_tokens(window['headroom'])} · estimated "
+            f"{_tokens(window['estimated_input_tokens'])} · reported "
+            f"{_tokens(window['reported_input_tokens'])} [{window['provenance']}]"
         )
         influence = window["influence_tokens"]
         if isinstance(influence, dict):
@@ -807,7 +866,8 @@ def _attempt_lines(attempt: Mapping[str, Any]) -> list[str]:
                     f"{role} {_tokens(tokens)}" for role, tokens in influence.items()
                 )
             )
-    lines.append(_usage_line(attempt["usage"]))
+    usage = attempt["usage"]
+    lines.append(_usage_line(usage, completed=usage["provider_completed_at"]))
     if validation["provenance"] == UNKNOWN:
         lines.append(f"  validation {UNKNOWN}")
     else:
@@ -853,6 +913,16 @@ def _ledger_days(days: Sequence[str]) -> str:
     return ", ".join(days)
 
 
+def _readiness_text(observation: Mapping[str, Any]) -> str:
+    """Say whether the server has staged the turn's choices, and how soon."""
+    ready_at = observation["choice_ready_at"]
+    if ready_at is None:
+        return " · choices not ready"
+    if ready_at == UNKNOWN:
+        return f" · choices {UNKNOWN}"
+    return f" · choices ready {_duration(observation['seconds_to_choice_ready'])}"
+
+
 def format_turn_summary(observation: Mapping[str, Any]) -> str:
     """Render the observation as a few concise lines of text, in tokens."""
     lines = [
@@ -869,7 +939,8 @@ def format_turn_summary(observation: Mapping[str, Any]) -> str:
                 for span in observation["phases"]
             )
             or "no phases observed"
-        ),
+        )
+        + _readiness_text(observation),
     ]
     for attempt in observation["attempts"]:
         lines.extend(_attempt_lines(attempt))

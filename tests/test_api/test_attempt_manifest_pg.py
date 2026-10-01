@@ -1,7 +1,7 @@
 """Real PostgreSQL and TEST-provider proof of attempt correlation and retention."""
 
 from contextlib import closing
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from uuid import uuid4
@@ -20,6 +20,12 @@ from nexus.telemetry.attempt_manifest import (
     update_validation,
 )
 from nexus.telemetry.prompt_window import PromptWindowRecord
+from nexus.telemetry.turn_observation import observe_turn
+from nexus.telemetry.usage import (
+    UsageEvent,
+    record_token_estimate,
+    record_usage_event,
+)
 from tests.pg_fixtures import (
     FIXTURE_TURN_CHOICES,
     connect,
@@ -41,6 +47,11 @@ pytestmark = pytest.mark.requires_postgres
 FIXTURE_CAST = ("Mara Quill", "Oren Vale")
 # Hours between turns let the cast's needs come due, so the Orrery resolves.
 FIXTURE_TURN_GAP = timedelta(hours=6)
+
+
+def _utc(value):
+    """Parse an observation time; ``_iso`` drops a zero fraction, never compare text."""
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
 def _stage_pending_turn(dbname):
@@ -282,7 +293,7 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                     "--json",
                 )
             )["observation"]
-            assert observed["schema_version"] == 1
+            assert observed["schema_version"] == 2
             assert observed["generation_session"] == session
             assert observed["ledger_days_read"]
             joined = {
@@ -302,6 +313,26 @@ def test_manifest_real_test_turn_and_child_job_correlation(
                 assert usage["provenance"] == "provider_usage_ledger"
                 assert (usage["input_tokens"], usage["output_tokens"]) == (1000, 800)
                 assert usage["cached_input_tokens"] == "unknown"
+                # record_token_estimate stored the request estimate and the
+                # provider's input beside the rendered window (#802).
+                assert window["reported_input_tokens"] == usage["input_tokens"] == 1000
+                assert isinstance(window["estimated_input_tokens"], int)
+                assert window["estimated_input_tokens"] > 0
+            # Readiness is the server's complete phase row, in the staging
+            # transaction; each seat's response arrived before it.
+            (complete,) = [
+                row for row in result["phases"] if row["phase"] == "complete"
+            ]
+            ready_at = _utc(observed["choice_ready_at"])
+            assert ready_at == datetime.fromisoformat(
+                complete["recorded_at"]
+            ).astimezone(timezone.utc)
+            assert observed["seconds_to_choice_ready"] > 0
+            writer_done = _utc(
+                joined[("skald_writer", 1)]["usage"]["provider_completed_at"]
+            )
+            gaia_done = _utc(joined[("gaia", 1)]["usage"]["provider_completed_at"])
+            assert writer_done < gaia_done <= ready_at
             assert observed["phases"][-1]["phase"] == "complete"
             assert observed["wall_time"]["seconds"] > 0
             assert observed["jobs"]["total"] == len(result["jobs"])
@@ -325,6 +356,10 @@ def test_manifest_real_test_turn_and_child_job_correlation(
             assert summary.startswith(f"Turn {session} (")
             assert "skald_writer #1 TEST" in summary
             assert "Session\tPhase" not in summary
+            (tmp_path / "turn-observation.json").write_text(
+                json.dumps(observed, indent=2)
+            )
+            (tmp_path / "turn-summary.txt").write_text(summary)
             chunk_output = run_cli(
                 monkeypatch,
                 "inspect-turn",
@@ -525,3 +560,67 @@ def test_inspect_turn_pre_session_chunk_and_duplicate_sessions(monkeypatch, caps
             ValueError, match="Expected one generation session; found 2"
         ):
             cli.main()
+
+
+def test_observation_projects_normalised_reported_input():
+    """The window keeps the provider's normalised input, not the raw ledger value."""
+    with disposable_slot_database("qa640_802_reported") as dbname:
+        session = str(uuid4())
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO narrative_generation_sessions "
+                "(session_id, operation, status) VALUES (%s,'continue','initiated')",
+                (session,),
+            )
+        record = PromptWindowRecord(
+            generation_session=session,
+            seat="gaia",
+            attempt=1,
+            model="TEST",
+            block_tokens={"story": 10},
+            input_tokens=10,
+            effective_ceiling=100,
+            policy_headroom=0,
+            headroom=90,
+        )
+        # record_token_counts writes only inside a manifest scope.
+        with manifest_scope(lambda: connect(dbname)):
+            start_attempt(
+                record,
+                blocks=[],
+                system_prompt="",
+                prompt="private canon",
+                settings={},
+                wire_schema={},
+            )
+            event = UsageEvent(
+                provider="anthropic",
+                model="TEST",
+                seat="gaia",
+                slot=4,
+                run_id=session,
+                attempt=1,
+                outcome="accepted",
+                transport="anthropic_messages",
+                input_tokens=300,
+                output_tokens=200,
+                total_tokens=500,
+                cached_input_tokens=13000,
+                cache_creation_tokens=50,
+            )
+            record_usage_event(event)
+            record_token_estimate(event, 900)
+        with closing(connect(dbname)) as conn:
+            inspection = inspect_turn(conn, session=session)
+        observation = observe_turn(inspection, slot=4)
+        (attempt,) = observation["attempts"]
+        window, usage = attempt["window"], attempt["usage"]
+        assert window["provenance"] == "attempt_manifest"
+        # 300 + 13,000 cache reads + 50 cache writes.
+        assert window["reported_input_tokens"] == 13350
+        assert window["estimated_input_tokens"] == 900
+        assert usage["input_tokens"] == 300
+        # One retrieval row from the insert, and no complete row.
+        assert [row["phase"] for row in inspection["phases"]] == ["retrieval"]
+        assert observation["choice_ready_at"] is None
+        assert observation["seconds_to_choice_ready"] is None
