@@ -15,7 +15,14 @@ from scripts.check_reachability import (
     REPO_ROOT,
     analyze_repository,
     baseline_findings,
+    classification_findings,
     explain_reachability,
+)
+
+CLASSIFICATION_LISTS = (
+    "unclassified_paths",
+    "classified_paths_not_in_repository",
+    "class_graph_mismatches",
 )
 
 
@@ -665,9 +672,195 @@ def test_ignored_files_are_not_source_in_a_git_checkout(static_repo) -> None:
     assert any(edge["source"] == "tests/test_example.py" for edge in report["edges"])
 
 
+def _classify(
+    config: dict[str, Any],
+    classes: dict[str, str],
+    held: tuple[str, ...] = (),
+) -> None:
+    """Install a sorted [classification] table on a fixture config."""
+    config["classification"] = {
+        "scope": ["scripts"],
+        "held_classes": list(held),
+        "paths": [
+            {"path": path, "class": cls, "reason": f"Fixture reason for {path}."}
+            for path, cls in sorted(classes.items())
+        ],
+    }
+
+
+def _classification(root: Path, config: dict[str, Any]) -> dict[str, Any]:
+    return classification_findings(root, config, analyze_repository(root, config))
+
+
+def test_classification_requires_one_entry_per_scoped_path(static_repo) -> None:
+    """Every scoped file, Python or not, needs exactly one well-formed entry."""
+    root, config = static_repo
+    _write(root, "scripts/data.json", "{}\n")
+    _write(root, "scripts/run.sh", "#!/bin/sh\n")
+    full = {
+        "scripts/data.json": "dead",
+        "scripts/migrate.py": "operator",
+        "scripts/run.sh": "operator",
+    }
+    _classify(config, full)
+    findings = _classification(root, config)
+    assert {key: findings[key] for key in CLASSIFICATION_LISTS} == {
+        key: [] for key in CLASSIFICATION_LISTS
+    }
+    assert findings["classification_counts"] == {"dead": 1, "operator": 2}
+
+    _classify(config, {k: v for k, v in full.items() if k != "scripts/run.sh"})
+    assert _classification(root, config)["unclassified_paths"] == ["scripts/run.sh"]
+
+    _classify(config, {**full, "scripts/gone.py": "dead"})
+    findings = _classification(root, config)
+    assert findings["classified_paths_not_in_repository"] == ["scripts/gone.py"]
+    assert findings["unclassified_paths"] == []
+    assert findings["classification_counts"] == {"dead": 2, "operator": 2}
+
+    _classify(config, full)
+    paths = config["classification"]["paths"]
+    config["classification"]["paths"] = [paths[0], dict(paths[0]), *paths[1:]]
+    with pytest.raises(ValueError, match="more than one"):
+        _classification(root, config)
+
+    _classify(config, {**full, "scripts/run.sh": "fixture"})
+    with pytest.raises(ValueError, match="'fixture'"):
+        _classification(root, config)
+
+    _classify(config, full)
+    config["classification"]["paths"][1]["reason"] = "   "
+    with pytest.raises(ValueError, match="non-blank reason"):
+        _classification(root, config)
+
+    _classify(config, full, held=("runtime",))
+    with pytest.raises(ValueError, match="equals a graph class"):
+        _classification(root, config)
+
+    _classify(config, full)
+    paths = config["classification"]["paths"]
+    config["classification"]["paths"] = [paths[1], paths[0], paths[2]]
+    with pytest.raises(ValueError, match="sorted"):
+        _classification(root, config)
+
+    del config["classification"]
+    with pytest.raises(ValueError, match=r"Missing \[classification\]"):
+        _classification(root, config)
+
+
+def _graph_repo(root: Path, config: dict[str, Any]) -> None:
+    """Give each graph class one fixture path under scripts/."""
+    _write(
+        root,
+        "pkg/cli.py",
+        "def main():\n    from . import helper\n"
+        "    import scripts.shared\n    import scripts.migrate\n",
+    )
+    _write(root, "scripts/shared.py", "value = 1\n")
+    _write(
+        root, "scripts/tool.py", "import scripts.tool_helper\ndef main():\n    pass\n"
+    )
+    _write(root, "scripts/tool_helper.py", "value = 1\n")
+    _write(
+        root,
+        "tests/test_example.py",
+        "def test_example():\n    import pkg.helper\n    import scripts.tested\n",
+    )
+    _write(root, "scripts/tested.py", "value = 1\n")
+    _write(root, "scripts/orphan.py", "value = 1\n")
+    config["operators"] = [
+        {"target": "scripts/tool.py:main", "reason": "Declared fixture operator"}
+    ]
+
+
+GRAPH_FIXTURE_CLASSES = {
+    "scripts/migrate.py": "runtime",
+    "scripts/orphan.py": "documented",
+    "scripts/shared.py": "runtime",
+    "scripts/tested.py": "test-only",
+    "scripts/tool.py": "operator",
+    "scripts/tool_helper.py": "operator",
+}
+
+
+@pytest.mark.parametrize(
+    "graph,overrides,expected",
+    [
+        (True, {}, []),
+        (True, {"scripts/orphan.py": "dead"}, []),
+        (True, {"scripts/shared.py": "operator"}, ["runtime"]),
+        (True, {"scripts/migrate.py": "operator"}, ["runtime"]),
+        (True, {"scripts/tool.py": "dead"}, ["operator"]),
+        (True, {"scripts/tool_helper.py": "test-only"}, ["operator"]),
+        (True, {"scripts/tested.py": "operator"}, ["test-only"]),
+        (True, {"scripts/orphan.py": "runtime"}, ["documented|dead"]),
+        (False, {"scripts/migrate.py": "dead"}, ["operator"]),
+        (False, {"scripts/migrate.py": "operator"}, []),
+    ],
+)
+def test_classification_graph_classes_follow_reachability(
+    static_repo, graph, overrides, expected
+) -> None:
+    """Production beats operator and migration, which beat test, which beats none."""
+    root, config = static_repo
+    if graph:
+        _graph_repo(root, config)
+        classes = {**GRAPH_FIXTURE_CLASSES, **overrides}
+    else:
+        classes = dict(overrides)
+    _classify(config, classes)
+    findings = _classification(root, config)
+    assert findings["unclassified_paths"] == []
+    assert findings["class_graph_mismatches"] == [
+        {"path": path, "class": classes[path], "expected": want}
+        for path, want in zip(overrides, expected)
+    ]
+
+
+def test_held_classes_override_the_graph(static_repo) -> None:
+    """A held class records a pending decision and skips the graph check."""
+    root, config = static_repo
+    _graph_repo(root, config)
+    classes = {**GRAPH_FIXTURE_CLASSES, "scripts/shared.py": "pending-ruling:811-Q4"}
+    _classify(config, classes, held=("pending-ruling:811-Q4",))
+    findings = _classification(root, config)
+    assert findings["class_graph_mismatches"] == []
+    assert findings["classification_counts"]["pending-ruling:811-Q4"] == 1
+    _classify(config, classes)
+    with pytest.raises(ValueError, match="pending-ruling:811-Q4"):
+        _classification(root, config)
+
+
+def test_classification_view_follows_git_ignore_rules(static_repo) -> None:
+    """An ignored file needs no entry in a git checkout, but does without .git."""
+    root, config = static_repo
+    _write(root, ".gitignore", "/scripts/logs/\n")
+    _write(root, "scripts/logs/run.log", "noise\n")
+    _classify(config, {"scripts/migrate.py": "operator"})
+    assert _classification(root, config)["unclassified_paths"] == [
+        "scripts/logs/run.log"
+    ]
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    findings = _classification(root, config)
+    assert {key: findings[key] for key in CLASSIFICATION_LISTS} == {
+        key: [] for key in CLASSIFICATION_LISTS
+    }
+    _classify(
+        config,
+        {"scripts/logs/run.log": "dead", "scripts/migrate.py": "operator"},
+    )
+    assert _classification(root, config)["classified_paths_not_in_repository"] == [
+        "scripts/logs/run.log"
+    ]
+
+
+def _repository_config() -> dict[str, Any]:
+    return tomllib.loads((REPO_ROOT / "config/reachability.toml").read_text())
+
+
 def test_repository_reachability_ratchet() -> None:
     """The ordinary pytest gate enforces the checked-in repository baseline."""
-    config = tomllib.loads((REPO_ROOT / "config/reachability.toml").read_text())
+    config = _repository_config()
     report = analyze_repository(REPO_ROOT, config)
     baseline = json.loads((REPO_ROOT / config["baseline"]).read_text())
     assert not any(baseline_findings(report, baseline).values())
@@ -677,6 +870,32 @@ def test_repository_reachability_ratchet() -> None:
     assert all(
         site["registered_discovery_root"] for site in report["dynamic_import_sites"]
     )
+    findings = classification_findings(REPO_ROOT, config, report)
+    assert {key: findings[key] for key in CLASSIFICATION_LISTS} == {
+        key: [] for key in CLASSIFICATION_LISTS
+    }
+
+
+def test_repository_classification_applies_811_decisions() -> None:
+    """Paths decided on #811 keep the class those decisions gave them."""
+    classification = _repository_config()["classification"]
+    by_class: dict[str, set[str]] = {}
+    for entry in classification["paths"]:
+        by_class.setdefault(entry["class"], set()).add(entry["path"])
+    assert by_class["pending-ruling:811-Q4"] == {
+        "scripts/api_anthropic.py",
+        "scripts/api_openai.py",
+    }
+    assert by_class["openrouter-shim"] == {"scripts/api_openrouter.py"}
+    assert by_class["pending-ruling:811-Q1"] == {
+        "scripts/apply_slot2_semantic_tags.py",
+        "scripts/backfill_routine_anchors.py",
+        "scripts/seed_slot2_routine_anchors.py",
+    }
+    assert "ir_eval/ir_eval.py" in by_class["pending-ruling:811-Q5"]
+    assert "ir_eval/ir_eval.db" in by_class["pending-ruling:811-Q3"]
+    graph_classes = {"runtime", "operator", "test-only", "documented", "dead"}
+    assert set(by_class) - graph_classes <= set(classification["held_classes"])
 
 
 def test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app(
@@ -698,7 +917,16 @@ def test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app(
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    summary = json.loads(result.stdout)
+    for key in CLASSIFICATION_LISTS:
+        assert summary[key] == []
+    assert sum(summary["classification_counts"].values()) == len(
+        _repository_config()["classification"]["paths"]
+    )
     report = json.loads(report_path.read_text())
+    assert report["classification"]["classification_counts"] == (
+        summary["classification_counts"]
+    )
     assert report["route_reachability"]["status"] == "not_proven"
     assert any(
         item["path"] == "nexus/cli.py" and item["symbol"] == "main"

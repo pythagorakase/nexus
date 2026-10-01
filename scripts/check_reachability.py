@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Report and ratchet static Python import reachability without importing NEXUS."""
+"""Report and ratchet static Python import reachability without importing NEXUS.
+
+The gate also checks the path classification in ``[classification]``: every file
+under the scoped directories needs exactly one entry, no entry may name a path
+that is not there, and each Python path whose class is a graph class must carry
+the class its import reachability implies. Held classes record a pending owner
+question or a separately recorded decision and are exempt from the graph check.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +25,7 @@ import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = "config/reachability.toml"
+GRAPH_CLASSES = ("runtime", "operator", "test-only", "documented", "dead")
 
 
 @dataclass(frozen=True)
@@ -772,6 +780,107 @@ def baseline_findings(
     }
 
 
+def _expected_graph_class(report: dict[str, Any], path: str) -> str:
+    """Return the graph class that a maintained module's reachability implies."""
+    reachable = report["reachable_by_kind"]
+    if path in reachable["production"]:
+        return "runtime"
+    # Migrations run only through the scripts/migrate.py operator and runtime.
+    if path in reachable["operator"] or path in reachable["migration"]:
+        return "operator"
+    if path in reachable["test"]:
+        return "test-only"
+    return "documented|dead"
+
+
+def classification_findings(
+    root: Path, config: dict[str, Any], report: dict[str, Any]
+) -> dict[str, Any]:
+    """Check the ``[classification]`` table against the tree and the import graph.
+
+    Raises ValueError for a malformed table. Returns the paths in scope that have
+    no entry, the entries whose path is not in scope, the graph-class entries
+    whose class disagrees with reachability, and the count of entries per class.
+    """
+    classification = config.get("classification")
+    if not isinstance(classification, dict):
+        raise ValueError("Missing [classification] table in the reachability config")
+    scope = classification.get("scope")
+    if (
+        not isinstance(scope, list)
+        or not scope
+        or not all(isinstance(item, str) and item.strip("/") for item in scope)
+    ):
+        raise ValueError("[classification] scope must list one or more directories")
+    held = classification.get("held_classes", [])
+    if not isinstance(held, list) or not all(isinstance(item, str) for item in held):
+        raise ValueError("[classification] held_classes must be a list of strings")
+    for item in held:
+        if item in GRAPH_CLASSES:
+            raise ValueError(
+                f"Held class {item!r} equals a graph class; graph classes are not held"
+            )
+    entries = classification.get("paths")
+    if not isinstance(entries, list):
+        raise ValueError("[classification] paths must be an array of entries")
+    seen: set[str] = set()
+    ordered: list[str] = []
+    counts: dict[str, int] = defaultdict(int)
+    for entry in entries:
+        path = entry.get("path") if isinstance(entry, dict) else None
+        if not isinstance(path, str) or not path:
+            raise ValueError(f"Classification entry without a path: {entry!r}")
+        cls = entry.get("class")
+        if cls not in GRAPH_CLASSES and cls not in held:
+            raise ValueError(
+                f"Classification of {path} uses class {cls!r}, which is neither a "
+                f"graph class {GRAPH_CLASSES} nor a held class {tuple(held)}"
+            )
+        reason = entry.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(f"Classification of {path} needs a non-blank reason")
+        if path in seen:
+            raise ValueError(f"Path {path} has more than one classification entry")
+        seen.add(path)
+        ordered.append(path)
+        counts[cls] += 1
+    if ordered != sorted(ordered):
+        first = next(
+            later for earlier, later in zip(ordered, ordered[1:]) if later < earlier
+        )
+        raise ValueError(
+            f"[classification] paths must be sorted by path; {first} is out of order"
+        )
+
+    prefixes = tuple(item.strip("/") + "/" for item in scope)
+    tracked = repository_files(root)
+    if tracked is None:
+        view = {
+            path.relative_to(root).as_posix()
+            for prefix in prefixes
+            for path in (root / prefix).rglob("*")
+            if path.is_file()
+        }
+    else:
+        view = {path for path in tracked if path.startswith(prefixes)}
+
+    maintained = set(report["maintained_modules"])
+    mismatches = []
+    for entry in entries:
+        path, cls = entry["path"], entry["class"]
+        if path not in maintained or cls in held:
+            continue
+        expected = _expected_graph_class(report, path)
+        if cls not in expected.split("|"):
+            mismatches.append({"path": path, "class": cls, "expected": expected})
+    return {
+        "unclassified_paths": sorted(view - seen),
+        "classified_paths_not_in_repository": sorted(seen - view),
+        "class_graph_mismatches": sorted(mismatches, key=lambda item: item["path"]),
+        "classification_counts": dict(sorted(counts.items())),
+    }
+
+
 def explain_reachability(
     report: dict[str, Any], path: str, kind: str
 ) -> dict[str, Any]:
@@ -825,6 +934,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     config = tomllib.loads((args.root / args.config).read_text())
     report = analyze_repository(args.root, config)
+    classification = classification_findings(args.root, config, report)
+    report["classification"] = classification
     baseline_path = args.root / config["baseline"]
     if args.write_baseline:
         if not args.reason:
@@ -863,6 +974,7 @@ def main(argv: list[str] | None = None) -> int:
         "tombstone_violations": report["tombstone_violations"],
         "unresolved_internal_imports": report["unresolved_internal_imports"],
         "unregistered_dynamic_import_sites": unregistered_dynamic,
+        **classification,
         "route_reachability": "not_proven",
     }
     if args.explain:
@@ -875,6 +987,9 @@ def main(argv: list[str] | None = None) -> int:
             or report["tombstone_violations"]
             or report["unresolved_internal_imports"]
             or unregistered_dynamic
+            or classification["unclassified_paths"]
+            or classification["classified_paths_not_in_repository"]
+            or classification["class_graph_mismatches"]
         )
     )
 
