@@ -350,6 +350,45 @@ async def test_successful_tool_captures_metadata_inside_its_commit(
 
 
 @pytest.mark.asyncio
+async def test_wildcard_with_deprecated_category_tag_gets_model_retry(
+    saved_character: str,
+) -> None:
+    """A deprecated-category tag earns a retry before anything persists (#811-Q7)."""
+    from nexus.api import wizard_agent
+    from nexus.api.wizard_agent import WizardContext
+    from pydantic_ai import ModelRetry
+    from tests.test_wizard_agent import DummyRunContext, sample_wildcard
+    from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+
+    with closing(connect(saved_character)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11"
+        )
+    before = read_cache(saved_character)
+    assert before is not None and before.thread_id is not None
+    context = WizardContext(
+        slot=4,
+        cache=before,
+        phase="character",
+        thread_id=before.thread_id,
+        model="TEST",
+        context_data={"character_state": before.get_character_state_dict()},
+    )
+    wildcard = sample_wildcard().model_copy(
+        update={
+            "orrery_tags": OrreryTagBestowal(
+                applied_tags=["informant_handler"], tags_to_clear=[]
+            )
+        }
+    )
+    with pytest.raises(ModelRetry) as caught:
+        await wizard_agent.submit_wildcard_trait(DummyRunContext(context), wildcard)
+    assert "'informant_handler'" in caught.value.message
+    assert "deprecates" in caught.value.message
+    assert read_cache(saved_character) == before
+
+
+@pytest.mark.asyncio
 async def test_stale_client_trait_submission_preserves_revised_concept(
     saved_character: str, monkeypatch
 ) -> None:

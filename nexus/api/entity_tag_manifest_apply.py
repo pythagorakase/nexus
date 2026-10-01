@@ -98,6 +98,7 @@ def apply_entity_tag_manifest(
             cur,
             tag=target["tag"],
             category=target["category"],
+            entity_kind=entity_kind,
         )
         tag_id = int(_row_value(tag_row, "id"))
         entity_id = int(target["entity_id"])
@@ -390,21 +391,31 @@ def _load_current_world_time(cur: Any) -> Any:
     return world_time
 
 
-def _lookup_apply_tag(cur: Any, *, tag: str, category: str) -> Mapping[str, Any]:
+def _lookup_apply_tag(
+    cur: Any, *, tag: str, category: str, entity_kind: str
+) -> Mapping[str, Any]:
     cur.execute(
         """
-        SELECT id, tag, category
-        FROM tags
-        WHERE tag = %s
-          AND category = %s
-          AND NOT deprecated
-          AND synonym_for IS NULL
+        SELECT t.id, t.tag, t.category, r.deprecated AS category_deprecated
+        FROM tags t
+        LEFT JOIN tag_category_registry r
+          ON r.category = t.category
+         AND r.entity_kind = %s::entity_kind
+        WHERE t.tag = %s
+          AND t.category = %s
+          AND NOT t.deprecated
+          AND t.synonym_for IS NULL
         """,
-        (tag, category),
+        (entity_kind, tag, category),
     )
     row = cur.fetchone()
     if row is None:
         raise ValueError(f"Unknown or deprecated tag {category}:{tag} in manifest")
+    if _row_value(row, "category_deprecated") is True:
+        raise ValueError(
+            f"Tag {category}:{tag} in manifest is in a category "
+            f"tag_category_registry deprecates for {entity_kind}"
+        )
     return row
 
 

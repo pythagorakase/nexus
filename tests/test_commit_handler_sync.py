@@ -241,7 +241,8 @@ class CommitCursor:
             identities = getattr(self.connection, table).values()
             self.result = (params[0],) if params[0] in identities else None
         elif "FROM tag_category_registry" in normalized:
-            self.rows = [("state",)]
+            # Registry rows are not deprecated by default.
+            self.rows = [("state", False, None)]
         elif "FROM tags WHERE tag = %s" in normalized:
             self.result = (1, "state", False, "refresh", "manual", None)
         elif "SELECT entity_id FROM characters WHERE id" in normalized:
