@@ -52,6 +52,7 @@ from nexus.runtime.log_capture import (
     WriterProbeError,
     kill_writer,
     pid_alive as _pid_alive,
+    process_running,
     rotated_segment,
     spawn_captured,
     wait_for_writer,
@@ -589,6 +590,7 @@ class Supervisor:
             argv,
             log_path=self.log_path(name),
             logs=self.runtime.logs,
+            health=self.runtime.health,
             env=self._service_env(service, slot),
             cwd=self.root,
             popen_kwargs=popen_kwargs,
@@ -679,13 +681,21 @@ class Supervisor:
         pid: int,
         writer_pid: int,
     ) -> None:
+        """Wait for a just-spawned service's health check.
+
+        On either failure the record goes only after ``_await_writer``
+        returned (the writer drained, or was killed after the grace); when
+        that wait raises, the record that names the writer stays.
+        """
         health = self.runtime.health
         url = f"http://{service.host}:{service.port}{service.health_path}"
         deadline = time.monotonic() + health.startup_deadline_seconds
         while True:
-            if not _pid_alive(pid):
+            # An exited child answers kill(pid, 0) until it is reaped.
+            if not process_running(pid):
                 # The excerpt holds the last lines only once the writer drained.
                 self._await_writer(name, writer_pid)
+                self._pidfile(name).unlink(missing_ok=True)
                 excerpt = self._startup_excerpt(name)
                 raise RuntimeError_(
                     f"Service '{name}' exited during startup. Last log lines:\n"
@@ -699,6 +709,7 @@ class Supervisor:
             if time.monotonic() > deadline:
                 self._stop_pid(pid)
                 self._await_writer(name, writer_pid)
+                self._pidfile(name).unlink(missing_ok=True)
                 excerpt = self._startup_excerpt(name)
                 raise RuntimeError_(
                     f"Service '{name}' failed to become healthy at {url} within "
@@ -771,7 +782,9 @@ class Supervisor:
 
             recover_active_slot_choice(slot)
         pid, writer_pid = self._spawn(name, service, slot, detached=detached)
-        self._await_healthy(name, service, pid, writer_pid)
+        # The record exists before the health wait: a startup failure whose
+        # writer cannot be waited out leaves the record that names it, so the
+        # next start waits for that writer instead of spawning a second one.
         record = {
             "pid": pid,
             "service": name,
@@ -784,6 +797,7 @@ class Supervisor:
             "log_writer_pid": writer_pid,
         }
         self._write_pidfile(name, record)
+        self._await_healthy(name, service, pid, writer_pid)
         return record
 
     # ------------------------------------------------------------------
@@ -816,8 +830,13 @@ class Supervisor:
             )
 
         started: Dict[str, Any] = {}
+        enabled = self.enabled_services()
+        # Records that predate this call belong to an earlier run (a running
+        # stack refused as "already running", or a stale record whose writer
+        # could not be waited out); the teardown below never stops those.
+        earlier = {name: self._read_pidfile(name) for name in enabled}
         try:
-            for name, service in self.enabled_services().items():
+            for name, service in enabled.items():
                 record = self._start_service(
                     name, service, resolved_slot, detached=not foreground
                 )
@@ -834,10 +853,19 @@ class Supervisor:
                         f"started {name} (pid {record['pid']}) on "
                         f"http://{service.host}:{service.port}"
                     )
-        except Exception:
-            # Partial starts are torn down so up() is all-or-nothing.
-            for name in started:
-                self._stop_service(name)
+        except Exception as exc:
+            # Partial starts are torn down so up() is all-or-nothing: every
+            # enabled service this call left a record for, including one whose
+            # failed start kept its record because its writer outlived the
+            # wait. A teardown failure is attached to the original error.
+            for name in enabled:
+                leftover = self._read_pidfile(name)
+                if leftover is None or leftover == earlier[name]:
+                    continue
+                try:
+                    self._stop_service(name)
+                except Exception as teardown_exc:
+                    exc.add_note(f"Teardown of '{name}' also failed: {teardown_exc}")
             raise
 
         gateway = self.runtime.services.get("gateway")
@@ -1272,7 +1300,11 @@ class Supervisor:
             if record is None:
                 continue
             pid = int(record["pid"])
-            if _pid_alive(pid):
+            # Reap first: a foreground service is this process's child, and an
+            # exited child answers kill(pid, 0) until it is reaped. Only a
+            # running child, or a pid that is not ours and still answers, is
+            # a live service.
+            if process_running(pid):
                 # A live service whose writer died writes into a broken pipe
                 # (a logging handler swallows the errors): a capture failure.
                 writer = record.get("log_writer_pid")

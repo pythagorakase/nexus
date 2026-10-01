@@ -239,6 +239,17 @@ in `docs/cli.md`).
   after its service stopped means another process still holds the output:
   the writer is killed and the command fails, naming its pid. A recycled pid
   that is no longer the file's writer is never waited on or signalled.
+- A service's pidfile is written as soon as it is spawned, before the health
+  wait. A failed start removes it only once its writer is gone, so a start
+  whose writer cannot be waited out leaves the record, and the next start
+  waits for that writer instead of starting a second one. The rollback of a
+  failed `nexus up` stops every service that call left a pidfile for; a
+  rollback failure is attached to the original error as a note. When a
+  service cannot be started at all, its writer is waited for (and killed
+  after the grace) before the error is reported.
+- The foreground supervisor reaps an exited service before it decides
+  whether the service is live, so an ordinary exit reaches `autorestart`
+  rather than reading as a live service that lost its writer.
 - A writer counts as gone only when it has exited or when a `ps` probe ran
   and its command line does not name the file. A probe that cannot run (no
   `ps` on `PATH`, a non-zero exit while the pid is alive, or no answer within
@@ -300,7 +311,11 @@ in `docs/cli.md`).
   `NEXUS_GATEWAY_PORT` says; read them with `nexus logs local-model` (or
   `local-model.download`) in a shell without that variable. Deactivation,
   a cancelled or failed download, and the next activation or download wait
-  for the previous writer the same way the supervisor does. Every removal of
+  for the previous writer the same way the supervisor does. When the record
+  of a just-spawned server or download cannot be written, its process group
+  gets SIGTERM, then SIGKILL after `stop_grace_seconds`, and its writer is
+  waited for (killed after the same grace) before the write error is
+  reported. Every removal of
   `local-model.pid.json` or `local-model.download.json`, on failure paths
   too, waits for the writer the record names first. A record is released as
   "no longer ours" only when a `ps` probe of its pid ran and its command line

@@ -473,6 +473,53 @@ def _signal_process_group(pid: int, sig: int) -> None:
         os.kill(pid, sig)
 
 
+def _abandon_spawn(
+    settings: Settings, process: log_capture.CapturedProcess, log_path: Path
+) -> None:
+    """Stop a just-spawned process whose record could not be written.
+
+    No record names the process or its writer, so neither may outlive this
+    call: a retry would otherwise start a second server or download, and a
+    second writer on the same capture. The process group gets SIGTERM, then
+    SIGKILL when the process is still running after ``stop_grace_seconds``;
+    the writer is then waited for under the same bounds and killed when it
+    outlives them. A writer probe that cannot run raises ``WriterProbeError``.
+    The caller re-raises its original error.
+    """
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for shutdown settings")
+    health = settings.runtime.health
+    try:
+        _signal_process_group(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    grace = health.stop_grace_seconds
+    poll = health.poll_interval_seconds
+    if not _await_exit(process.pid, grace, poll):
+        try:
+            _signal_process_group(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        _await_exit(process.pid, grace, poll)
+    if not log_capture.wait_for_writer(process.writer_pid, log_path, grace, poll):
+        log_capture.kill_writer(process.writer_pid)
+        _await_exit(process.writer_pid, grace, poll)
+
+
+def _await_exit(pid: int, timeout_seconds: float, poll_seconds: float) -> bool:
+    """Wait until ``pid`` has exited; True once gone, False at the timeout.
+
+    The gateway is the parent of the processes it spawns, and an exited child
+    answers ``kill(pid, 0)`` until it is reaped: ``process_running`` reaps it.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while log_capture.process_running(pid):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(poll_seconds)
+    return True
+
+
 def _deactivate_locked(settings: Settings) -> dict[str, Any]:
     """Stop the recorded process while the lifecycle lock is held."""
     state_path = _state_path(settings)
@@ -579,6 +626,7 @@ def activate(gguf_path: str) -> dict[str, Any]:
                 command,
                 log_path=log_path,
                 logs=settings.runtime.logs,
+                health=settings.runtime.health,
                 popen_kwargs={"close_fds": True, "start_new_session": True},
             )
         except OSError as exc:
@@ -595,10 +643,7 @@ def activate(gguf_path: str) -> dict[str, Any]:
         try:
             _write_json(_state_path(settings), record)
         except LocalInferenceError:
-            try:
-                _signal_process_group(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+            _abandon_spawn(settings, process, log_path)
             raise
         return {
             "gguf_path": str(candidate),
@@ -690,6 +735,7 @@ def start_download(
                 command,
                 log_path=log_path,
                 logs=settings.runtime.logs,
+                health=settings.runtime.health,
                 env=worker_env,
                 popen_kwargs={"close_fds": True, "start_new_session": True},
             )
@@ -712,10 +758,7 @@ def start_download(
         try:
             _write_json(_download_path(settings), record)
         except LocalInferenceError:
-            try:
-                _signal_process_group(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+            _abandon_spawn(settings, process, log_path)
             raise
         return record
 

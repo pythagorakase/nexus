@@ -1058,6 +1058,7 @@ def _held_writer(log_path: Path) -> tuple[int, int, int]:
         [sys.executable, "-c", HOLDING_SCRIPT],
         log_path=log_path,
         logs=settings.runtime.logs,
+        health=settings.runtime.health,
     )
     os.waitpid(captured.pid, 0)
     deadline = time.monotonic() + 10
@@ -1268,6 +1269,7 @@ def test_download_status_raises_when_the_ownership_probe_goes_unanswered(
         ],
         log_path=log_path,
         logs=settings.runtime.logs,
+        health=settings.runtime.health,
         popen_kwargs={"start_new_session": True},
     )
     try:
@@ -1309,3 +1311,145 @@ def test_download_status_raises_when_the_ownership_probe_goes_unanswered(
         _kill_group(worker.pid)
         os.waitpid(worker.pid, 0)
         os.waitpid(worker.writer_pid, 0)
+
+
+# ---------------------------------------------------------------------------
+# A spawn whose record cannot be written is abandoned (#842, second review)
+# ---------------------------------------------------------------------------
+
+
+def _sleeper_stub(directory: Path) -> Path:
+    """An executable named llama-server that prints one line, then sleeps."""
+    directory.mkdir(parents=True, exist_ok=True)
+    stub = directory / "llama-server"
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import time\n"
+        "print('sleeper', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    stub.chmod(0o755)
+    return stub
+
+
+def _own_children() -> set[int]:
+    """This process's children, running or unreaped, probed without subprocess.
+
+    Each new subprocess.Popen first reaps the exited children of discarded
+    Popen objects (spawn_captured discards both of its own), so a probe made
+    through subprocess would collect a zombie this test must see.
+    """
+    read_fd, write_fd = os.pipe()
+    try:
+        probe = os.posix_spawn(
+            "/bin/ps",
+            ["ps", "-ax", "-o", "pid=,ppid="],
+            os.environ,
+            file_actions=[
+                (os.POSIX_SPAWN_DUP2, write_fd, 1),
+                (os.POSIX_SPAWN_CLOSE, read_fd),
+            ],
+        )
+    finally:
+        os.close(write_fd)
+    with os.fdopen(read_fd, "rb") as handle:
+        output = handle.read().decode()
+    os.waitpid(probe, 0)
+    me = os.getpid()
+    children = set()
+    for line in output.splitlines():
+        pid, ppid = (int(field) for field in line.split())
+        if ppid == me and pid != probe:
+            children.add(pid)
+    return children
+
+
+def _live_writers(log_path: Path) -> list[int]:
+    """Pids of live (non-zombie) log writers of ``log_path``, from the real ps."""
+    listing = subprocess.run(
+        ["/bin/ps", "-ax", "-ww", "-o", "pid=,stat=,command="],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    writers = []
+    for line in listing.splitlines():
+        pid, stat, command = line.split(None, 2)
+        if stat.startswith("Z"):
+            continue
+        if "nexus.runtime.log_capture" in command and f"--path {log_path} " in command:
+            writers.append(int(pid))
+    return writers
+
+
+def _read_only_state(state_dir: Path, *captures: str) -> None:
+    """Make the record write fail for real: the state directory is read-only.
+
+    The captures live in the same directory, so they and their writer-error
+    files exist beforehand; the writer only appends to them.
+    """
+    for name in captures:
+        (state_dir / name).write_bytes(b"")
+        (state_dir / f"{name}.writer-error").write_bytes(b"")
+    state_dir.chmod(0o555)
+
+
+def test_activation_abandons_a_spawn_whose_record_cannot_be_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server and its writer are gone, and no record exists, after the raise."""
+    _write_capture_config(
+        tmp_path,
+        monkeypatch,
+        llama_command=str(_sleeper_stub(tmp_path / "bin")),
+        stop_grace_seconds=2,
+    )
+    state_dir = tmp_path / "state"
+    log_path = state_dir / local_inference.LOG_FILENAME
+    gguf = _llama_gguf(tmp_path / "model.gguf")
+    before = _own_children()
+    _read_only_state(state_dir, local_inference.LOG_FILENAME)
+    try:
+        with pytest.raises(
+            local_inference.LocalInferenceError, match="Cannot write local model state"
+        ):
+            local_inference.activate(str(gguf))
+        left = _own_children() - before
+    finally:
+        state_dir.chmod(0o755)
+
+    assert left == set(), f"activation left children behind: {sorted(left)}"
+    assert _live_writers(log_path) == []
+    assert not (state_dir / local_inference.STATE_FILENAME).exists()
+    assert not list(state_dir.glob("*.tmp"))
+
+
+def test_download_abandons_a_spawn_whose_record_cannot_be_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The worker and its writer are gone, and no record exists, after the raise."""
+    _write_capture_config(tmp_path, monkeypatch, stop_grace_seconds=2)
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    state_dir = tmp_path / "state"
+    log_path = state_dir / local_inference.DOWNLOAD_LOG_FILENAME
+    before = _own_children()
+    _read_only_state(state_dir, local_inference.DOWNLOAD_LOG_FILENAME)
+    try:
+        with pytest.raises(
+            local_inference.LocalInferenceError, match="Cannot write local model state"
+        ):
+            local_inference.start_download(
+                family="qa842",
+                quant="Q4_K_M",
+                repo_id="qa842/none",
+                local_dir=str(tmp_path / "models"),
+                files=["none.gguf"],
+                total_bytes=100,
+            )
+        left = _own_children() - before
+    finally:
+        state_dir.chmod(0o755)
+
+    assert left == set(), f"the download left children behind: {sorted(left)}"
+    assert _live_writers(log_path) == []
+    assert not (state_dir / local_inference.DOWNLOAD_FILENAME).exists()

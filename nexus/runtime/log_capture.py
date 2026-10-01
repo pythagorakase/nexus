@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Dict, List, Mapping, Optional, Sequence
 
-from nexus.config.settings_models import RuntimeLogsSettings
+from nexus.config.settings_models import RuntimeHealthSettings, RuntimeLogsSettings
 from nexus.runtime.home import repo_root
 
 WRITER_MODULE = "nexus.runtime.log_capture"
@@ -196,6 +196,7 @@ def spawn_captured(
     *,
     log_path: Path,
     logs: RuntimeLogsSettings,
+    health: RuntimeHealthSettings,
     env: Optional[Mapping[str, str]] = None,
     cwd: Optional[Path] = None,
     popen_kwargs: Optional[Dict[str, Any]] = None,
@@ -207,7 +208,11 @@ def spawn_captured(
     child then gets the writer's stdin pipe as stdout and stderr, and the
     caller's end of the pipe is closed, so the writer reaches EOF when the
     child (and anything it left holding the pipe) exits. If the child cannot
-    be started, the writer reaches EOF at once and the error is re-raised.
+    be started, the writer reaches EOF at once and is waited for under
+    ``health`` (killed when it outlives ``stop_grace_seconds``) before the
+    spawn error is re-raised, so an immediate retry never starts a second
+    writer on the same capture. A writer identity probe that cannot run
+    raises ``WriterProbeError`` from the spawn error.
     """
     log_path.parent.mkdir(parents=True, exist_ok=True)
     root = repo_root()
@@ -241,9 +246,40 @@ def spawn_captured(
             cwd=cwd,
             **(popen_kwargs or {}),
         )
+    except BaseException as spawn_error:
+        writer.stdin.close()
+        _abandon_writer(writer, log_path, health, spawn_error)
+        raise
     finally:
         writer.stdin.close()
     return CapturedProcess(pid=child.pid, writer_pid=writer.pid)
+
+
+def _abandon_writer(
+    writer: "subprocess.Popen[bytes]",
+    log_path: Path,
+    health: RuntimeHealthSettings,
+    spawn_error: BaseException,
+) -> None:
+    """Wait out the writer of a child that never started (bounded by ``health``).
+
+    The writer has reached EOF; it exits once it has opened (and perhaps
+    rotated) the capture. One still alive after ``stop_grace_seconds`` is
+    killed and collected. A probe that cannot run raises ``WriterProbeError``
+    from the spawn error, so both texts reach the caller.
+    """
+    try:
+        gone = wait_for_writer(
+            writer.pid,
+            log_path,
+            health.stop_grace_seconds,
+            health.poll_interval_seconds,
+        )
+    except WriterProbeError as probe_error:
+        raise probe_error from spawn_error
+    if not gone:
+        kill_writer(writer.pid)
+        writer.wait(timeout=health.stop_grace_seconds)
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +305,19 @@ def _child_state(pid: int) -> Optional[bool]:
     except ChildProcessError:
         return None
     return reaped == 0
+
+
+def process_running(pid: int) -> bool:
+    """Whether ``pid`` is a running process; an exited child is reaped first.
+
+    An exited child of this process still answers ``kill(pid, 0)`` until it is
+    reaped, so it is collected and counts as gone. A running child is running.
+    A pid that is not a child of this process is decided by ``pid_alive``.
+    """
+    own = _child_state(pid)
+    if own is not None:
+        return own
+    return pid_alive(pid)
 
 
 def _reap(pid: int) -> bool:

@@ -561,12 +561,16 @@ def test_spawn_captured_releases_the_callers_stderr(tmp_path: Path) -> None:
     script = (
         "import sys\n"
         "from pathlib import Path\n"
-        "from nexus.config.settings_models import RuntimeLogsSettings\n"
+        "from nexus.config.settings_models import (\n"
+        "    RuntimeHealthSettings,\n"
+        "    RuntimeLogsSettings,\n"
+        ")\n"
         "from nexus.runtime.log_capture import spawn_captured\n"
         "captured = spawn_captured(\n"
         "    [sys.executable, '-c', 'import time; time.sleep(30)'],\n"
         "    log_path=Path(sys.argv[1]),\n"
         "    logs=RuntimeLogsSettings(),\n"
+        "    health=RuntimeHealthSettings(),\n"
         "    popen_kwargs={'start_new_session': True},\n"
         ")\n"
         "Path(sys.argv[2]).write_text(f'{captured.pid} {captured.writer_pid}')\n"
@@ -749,12 +753,16 @@ def test_wait_for_writer_returns_for_another_parents_exited_writer(
     script = (
         "import sys, time\n"
         "from pathlib import Path\n"
-        "from nexus.config.settings_models import RuntimeLogsSettings\n"
+        "from nexus.config.settings_models import (\n"
+        "    RuntimeHealthSettings,\n"
+        "    RuntimeLogsSettings,\n"
+        ")\n"
         "from nexus.runtime.log_capture import spawn_captured\n"
         "captured = spawn_captured(\n"
         "    [sys.executable, '-c', 'import time; time.sleep(1)'],\n"
         "    log_path=Path(sys.argv[1]),\n"
         "    logs=RuntimeLogsSettings(),\n"
+        "    health=RuntimeHealthSettings(),\n"
         ")\n"
         "Path(sys.argv[2]).write_text(f'{captured.pid} {captured.writer_pid}')\n"
         "time.sleep(30)\n"
@@ -919,10 +927,12 @@ def test_wait_for_writer_raises_when_the_probe_cannot_run(
 ) -> None:
     """A ps that cannot answer is an error, never "the writer is gone"."""
     capture = tmp_path / "logs" / "held.log"
+    runtime = Supervisor.from_config(_write_config(tmp_path)).runtime
     captured = spawn_captured(
         [sys.executable, "-c", "import time; time.sleep(30)"],
         log_path=capture,
-        logs=Supervisor.from_config(_write_config(tmp_path)).runtime.logs,
+        logs=runtime.logs,
+        health=runtime.health,
     )
     try:
         monkeypatch.setenv("PATH", str(_ps_directory(tmp_path, kind)))
@@ -1158,3 +1168,265 @@ def test_open_segments_deadline_bounds_identity_churn(
     assert outcome["elapsed"] <= grace + poll + 0.5
     assert "kept changing identity" in str(outcome["error"])
     assert str(log_path) in str(outcome["error"])
+
+
+# ---------------------------------------------------------------------------
+# After the second independent review (#842): reaping, records, failed spawns
+# ---------------------------------------------------------------------------
+
+# Prints one line. Without its marker file it creates the marker and exits 0;
+# with the marker it serves 200 on GET at the {port} argument until stopped.
+ONE_LINE_CHILD = [
+    "{python}",
+    "-c",
+    "import http.server, os, pathlib, sys\n"
+    "print('one-line', flush=True)\n"
+    "marker = pathlib.Path(os.environ['ECHO_MARKER'])\n"
+    "if not marker.exists():\n"
+    "    marker.touch()\n"
+    "    sys.exit(0)\n"
+    "class Health(http.server.BaseHTTPRequestHandler):\n"
+    "    def do_GET(self):\n"
+    "        self.send_response(200)\n"
+    "        self.end_headers()\n"
+    "    def log_message(self, *args):\n"
+    "        pass\n"
+    "http.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), Health)"
+    ".serve_forever()\n",
+    "{port}",
+]
+EXITS_AT_ONCE = ["{python}", "-c", "raise SystemExit(3)"]
+
+
+def _ps_state(pid: int) -> str:
+    """The ps state of ``pid``, probed without the subprocess module.
+
+    Each new subprocess.Popen first reaps the exited children of discarded
+    Popen objects (spawn_captured discards both of its own), so a probe made
+    through subprocess would collect the very zombie this test needs.
+    """
+    read_fd, write_fd = os.pipe()
+    try:
+        probe = os.posix_spawn(
+            "/bin/ps",
+            ["ps", "-p", str(pid), "-o", "stat="],
+            os.environ,
+            file_actions=[
+                (os.POSIX_SPAWN_DUP2, write_fd, 1),
+                (os.POSIX_SPAWN_CLOSE, read_fd),
+            ],
+        )
+    finally:
+        os.close(write_fd)
+    with os.fdopen(read_fd, "rb") as handle:
+        output = handle.read()
+    os.waitpid(probe, 0)
+    return output.decode().strip()
+
+
+def _wait_for_zombie(pid: int) -> None:
+    """Wait until an unreaped child of this process has exited, without reaping."""
+    deadline = time.monotonic() + 10
+    while True:
+        state = _ps_state(pid)
+        if state.startswith("Z"):
+            return
+        assert time.monotonic() < deadline, f"pid {pid} never exited: {state!r}"
+        time.sleep(0.05)
+
+
+def _live_writers(log_path: Path) -> list[int]:
+    """Pids of live (non-zombie) log writers of ``log_path``, from the real ps."""
+    listing = subprocess.run(
+        ["/bin/ps", "-ax", "-ww", "-o", "pid=,stat=,command="],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    writers = []
+    for line in listing.splitlines():
+        pid, stat, command = line.split(None, 2)
+        if stat.startswith("Z"):
+            continue
+        if "nexus.runtime.log_capture" in command and f"--path {log_path} " in command:
+            writers.append(int(pid))
+    return writers
+
+
+def _one_line_supervisor(tmp_path: Path) -> Supervisor:
+    """A supervisor whose 'echo' is the one-line child, restartable once."""
+    supervisor = _logging_supervisor(
+        tmp_path,
+        max_bytes=1000,
+        backup_count=2,
+        command=ONE_LINE_CHILD,
+        stop_grace_seconds=1,
+    )
+    service = supervisor.runtime.services["echo"]
+    service.port = _free_port()
+    service.autorestart = "on-failure"
+    service.autorestart_max_retries = 1
+    service.env["ECHO_MARKER"] = str(tmp_path / "marker")
+    return supervisor
+
+
+def _write_spawn_record(supervisor: Supervisor, pid: int, writer_pid: int) -> None:
+    supervisor._write_pidfile(
+        "echo",
+        {
+            "pid": pid,
+            "service": "echo",
+            "port": supervisor.runtime.services["echo"].port,
+            "host": "127.0.0.1",
+            "slot": 5,
+            "started_at": "2026-10-01T00:00:00+00:00",
+            "log_writer_pid": writer_pid,
+        },
+    )
+
+
+def test_check_children_restarts_an_unreaped_service_exit(tmp_path: Path) -> None:
+    """An exited foreground child is reaped first and autorestarts, silently."""
+    supervisor = _one_line_supervisor(tmp_path)
+    service = supervisor.runtime.services["echo"]
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=False)
+    _write_spawn_record(supervisor, pid, writer_pid)
+    restarted: dict[str, Any] | None = None
+    try:
+        # Both have exited and neither is reaped: the child still answers
+        # kill(pid, 0), and its writer drained and exited normally.
+        _wait_for_zombie(pid)
+        _wait_for_zombie(writer_pid)
+        restarts: dict[str, int] = {}
+
+        supervisor._check_children({"echo": service}, 5, restarts, echo=False)
+
+        assert restarts == {"echo": 1}
+        restarted = supervisor._read_pidfile("echo")
+        assert restarted is not None
+        assert restarted["pid"] != pid
+        log_path = supervisor.log_path("echo")
+        deadline = time.monotonic() + 10
+        while log_path.read_text(encoding="utf-8") != "one-line\none-line\n":
+            assert time.monotonic() < deadline, log_path.read_text(encoding="utf-8")
+            time.sleep(0.05)
+    finally:
+        _reap_quietly(pid)
+        _reap_quietly(writer_pid)
+        if restarted is not None:
+            supervisor._stop_service("echo")
+            _reap_quietly(int(restarted["pid"]))
+
+
+def test_check_children_still_fails_a_live_child_without_its_writer(
+    tmp_path: Path,
+) -> None:
+    """The same child, running, with its writer killed, is a capture failure."""
+    supervisor = _one_line_supervisor(tmp_path)
+    (tmp_path / "marker").touch()
+    service = supervisor.runtime.services["echo"]
+    pid, writer_pid = supervisor._spawn("echo", service, slot=5, detached=False)
+    _write_spawn_record(supervisor, pid, writer_pid)
+    try:
+        os.kill(writer_pid, signal.SIGKILL)
+        _reap_quietly(writer_pid)
+        expected = (
+            f"Log writer for 'echo' (pid {writer_pid}) died while the service "
+            f"(pid {pid}) was running; its output had nowhere to go. Stopped the "
+            "service."
+        )
+        with pytest.raises(RuntimeError_) as raised:
+            supervisor._check_children({"echo": service}, 5, {}, echo=False)
+        assert str(raised.value) == expected
+        assert not supervisor._pidfile("echo").exists()
+    finally:
+        _kill_quietly(pid)
+        _reap_quietly(pid)
+
+
+def _only_echo_enabled(supervisor: Supervisor, command: list[str]) -> None:
+    for name, service in supervisor.runtime.services.items():
+        service.enabled = "always" if name == "echo" else "never"
+    supervisor.runtime.services["echo"].command = list(command)
+
+
+def test_up_leaves_no_record_and_no_writer_when_a_service_exits_at_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A start that fails cleanly unlinks its record once the writer drained."""
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, stop_grace_seconds=1
+    )
+    _only_echo_enabled(supervisor, EXITS_AT_ONCE)
+
+    with pytest.raises(RuntimeError_, match="'echo' exited during startup"):
+        supervisor.up(echo=False)
+
+    assert not supervisor._pidfile("echo").exists()
+    assert _live_writers(supervisor.log_path("echo")) == []
+
+
+def test_failed_start_keeps_the_record_when_the_writer_probe_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record outlives an unanswered probe; a second start spawns nothing."""
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
+    supervisor = _logging_supervisor(
+        tmp_path, max_bytes=1000, backup_count=2, stop_grace_seconds=1
+    )
+    _only_echo_enabled(supervisor, HOLDING_CHILD)
+    log_path = supervisor.log_path("echo")
+    real_path = os.environ["PATH"]
+    grandchild: int | None = None
+    writer_pid: int | None = None
+    try:
+        monkeypatch.setenv("PATH", str(_ps_directory(tmp_path, "missing")))
+        with pytest.raises(RuntimeError_, match="Cannot tell whether pid") as raised:
+            supervisor.up(echo=False)
+        record = supervisor._read_pidfile("echo")
+        assert record is not None
+        writer_pid = int(record["log_writer_pid"])
+        assert f"pid {writer_pid}" in str(raised.value)
+        assert any(
+            note.startswith("Teardown of 'echo' also failed: Cannot tell")
+            for note in getattr(raised.value, "__notes__", [])
+        )
+        deadline = time.monotonic() + 10
+        while not log_path.read_text(encoding="utf-8").endswith("\n"):
+            assert time.monotonic() < deadline, "the holding child never printed"
+            time.sleep(0.05)
+        grandchild = int(log_path.read_text(encoding="utf-8").split()[0])
+
+        service = supervisor.runtime.services["echo"]
+        with pytest.raises(
+            RuntimeError_, match=f"Cannot tell whether pid {writer_pid}"
+        ):
+            supervisor._start_service("echo", service, slot=5, detached=True)
+
+        monkeypatch.setenv("PATH", real_path)
+        assert _live_writers(log_path) == [writer_pid]
+        assert supervisor._read_pidfile("echo") == record
+    finally:
+        monkeypatch.setenv("PATH", real_path)
+        if grandchild is not None:
+            _kill_quietly(grandchild)
+        if writer_pid is not None:
+            _reap_quietly(writer_pid)
+
+
+def test_failed_child_spawn_waits_out_its_writer(tmp_path: Path) -> None:
+    """A child that cannot start leaves no writer behind, and no writer error."""
+    runtime = Supervisor.from_config(_write_config(tmp_path)).runtime
+    capture = tmp_path / "logs" / "missing.log"
+
+    with pytest.raises(FileNotFoundError):
+        spawn_captured(
+            [str(tmp_path / "no-such-executable")],
+            log_path=capture,
+            logs=runtime.logs,
+            health=runtime.health,
+        )
+
+    assert _live_writers(capture) == []
+    assert writer_error_path(capture).read_bytes() == b""
