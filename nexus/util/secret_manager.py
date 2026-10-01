@@ -5,7 +5,7 @@ funnel through :func:`set_secret`. The platform secret store is the canonical
 source of truth: macOS uses the login Keychain through the system ``security``
 CLI, while other platforms use the ``keyring`` library.
 
-Lookup order in :func:`get_secret`:
+Lookup order in :func:`get_secret` (and :func:`get_secret_uncached`):
 
 1. ``NEXUS_KEYRING_DISABLE=1`` → consult environment variables only.
 2. The active :class:`SecretBackend` (the platform-native store by default):
@@ -15,6 +15,13 @@ Lookup order in :func:`get_secret`:
 
 3. Environment variable ``<PROVIDER>_API_KEY`` (case-insensitive provider).
 4. Raise :class:`MissingSecretError` with actionable remediation.
+
+A store that answers "no such item" falls through to step 3. A store that
+cannot be read at all (a locked login Keychain, a ``security`` call that times
+out, no ``security`` executable on ``PATH``) raises
+:class:`SecretStoreAccessError` at step 2 instead, naming the failure and its
+remedy; it never falls back to the environment variable and is never reported
+as a missing key.
 
 Backends
 --------
@@ -36,11 +43,16 @@ any item's partition-list grant -- so the same read triggers a GUI prompt
 that blocks unattended runs. Subprocessing to ``security`` is the
 documented workaround.
 
-The result of a successful lookup is cached for the lifetime of the process
-(``functools.lru_cache``). :func:`set_secret` clears that cache after every
-successful write so rotations are visible immediately, and entering or
-leaving :func:`use_secret_backend` clears it so no value crosses backends.
-Tests that need an unconditional fresh read can also call
+The result of a successful :func:`get_secret` lookup is cached for the
+lifetime of the process (``functools.lru_cache``); errors are not cached.
+:func:`set_secret` clears that cache after every successful write so rotations
+are visible immediately, and entering or leaving :func:`use_secret_backend`
+clears it so no value crosses backends. A key rotated outside this process
+stays hidden from :func:`get_secret` until one of those happens.
+:func:`get_secret_uncached` follows the same lookup order and raises the same
+errors without reading or clearing the cache; the API KEYS card's status and
+verification read through it so they always see the store as it is now. Tests
+that need an unconditional fresh read can also call
 ``get_secret.cache_clear()``.
 """
 
@@ -53,7 +65,7 @@ import platform
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 SERVICE_NAME = "nexus-api"
 
@@ -72,6 +84,76 @@ _SECURITY_CALL_TIMEOUT_SEC = 5.0
 
 class MissingSecretError(RuntimeError):
     """Raised when no API key can be located for the requested provider."""
+
+
+SecretStoreAccessReason = Literal["locked", "timeout", "no_security_cli"]
+
+
+class SecretStoreAccessError(RuntimeError):
+    """Raised when the secret store could not be read at all.
+
+    A sibling of :class:`MissingSecretError`, never its subclass: an access
+    failure says nothing about whether the key exists, so no caller may treat
+    it as absence. ``failure`` is one sentence naming what went wrong and
+    ``remediation`` one sentence naming the fix; ``str(exc)`` joins them for
+    the HTTP and CLI surfaces. No field carries the ``security`` CLI's stderr
+    or stdout, or any key material.
+    """
+
+    def __init__(
+        self,
+        account: str,
+        reason: SecretStoreAccessReason,
+        failure: str,
+        remediation: str,
+    ) -> None:
+        super().__init__(f"{failure} {remediation}")
+        self.account = account
+        self.reason = reason
+        self.failure = failure
+        self.remediation = remediation
+
+
+_UNLOCK_KEYCHAIN = (
+    "Unlock the login keychain (Keychain Access, or security unlock-keychain)"
+)
+
+
+def keychain_read_error(
+    account: str,
+    exc: FileNotFoundError | subprocess.CalledProcessError | subprocess.TimeoutExpired,
+) -> SecretStoreAccessError:
+    """Translate a failed ``security`` read of ``account`` into an access error.
+
+    A non-44 exit (36 ``errSecAuthFailed`` is a locked keychain) is
+    ``locked``, a call that outlived ``_SECURITY_CALL_TIMEOUT_SEC`` is
+    ``timeout``, and a missing executable is ``no_security_cli``. Only the
+    exit code is kept from ``exc``; its stderr, stdout and argv are dropped.
+    """
+    if isinstance(exc, subprocess.CalledProcessError):
+        return SecretStoreAccessError(
+            account,
+            "locked",
+            f"The login keychain refused to read account '{account}' "
+            f"(security exit {exc.returncode}).",
+            f"{_UNLOCK_KEYCHAIN} and retry.",
+        )
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return SecretStoreAccessError(
+            account,
+            "timeout",
+            f"The login keychain did not answer a read of account '{account}' "
+            f"within {_SECURITY_CALL_TIMEOUT_SEC}s.",
+            f"{_UNLOCK_KEYCHAIN}, then retry.",
+        )
+    return SecretStoreAccessError(
+        account,
+        "no_security_cli",
+        f"The security executable is not on this process's PATH, so account "
+        f"'{account}' could not be read.",
+        "Put /usr/bin (where macOS ships security) back on this process's PATH "
+        "and retry.",
+    )
 
 
 class SecretBackend(Protocol):
@@ -120,9 +202,11 @@ class MacOSKeychainBackend:
         absent (``errSecItemNotFound`` / exit 44) so the caller can try the
         env-var fallback.
 
-        Raises :class:`MissingSecretError` for any other failure (locked
-        keychain, timeout, corrupted store). Per project policy these surface
-        visibly rather than silently degrading to "no key".
+        Raises :class:`SecretStoreAccessError` (through
+        :func:`keychain_read_error`) when the Keychain cannot be read: any
+        other exit code (a locked keychain), a timeout, or no ``security``
+        executable on ``PATH``. Per project policy these surface visibly
+        rather than silently degrading to "no key".
         """
         try:
             result = subprocess.run(
@@ -132,23 +216,14 @@ class MacOSKeychainBackend:
                 check=True,
                 timeout=_SECURITY_CALL_TIMEOUT_SEC,
             )
-        except FileNotFoundError:
-            return None
+        except FileNotFoundError as exc:
+            raise keychain_read_error(account, exc) from exc
         except subprocess.CalledProcessError as exc:
             if exc.returncode == _ERRSEC_ITEM_NOT_FOUND:
                 return None
-            raise MissingSecretError(
-                f"Keychain read failed for provider '{account}' "
-                f"(security exit {exc.returncode}). "
-                f"If your login keychain is locked, unlock it and retry.\n"
-                f"stderr: {(exc.stderr or '').strip()}"
-            ) from exc
+            raise keychain_read_error(account, exc) from exc
         except subprocess.TimeoutExpired as exc:
-            raise MissingSecretError(
-                f"Keychain read timed out for provider '{account}' after "
-                f"{_SECURITY_CALL_TIMEOUT_SEC}s. The login keychain may be "
-                f"locked or in a degraded state."
-            ) from exc
+            raise keychain_read_error(account, exc) from exc
 
         value = result.stdout.strip()
         return value or None
@@ -357,9 +432,23 @@ def use_secret_backend(backend: SecretBackend) -> Iterator[SecretBackend]:
 def get_secret(provider: str) -> str:
     """Retrieve the API key for ``provider`` (e.g. ``"openai"``).
 
-    Raises :class:`MissingSecretError` if no key is available. The result
-    is cached per process; see module docstring for caching rationale.
-    Exceptions are not cached.
+    Raises :class:`MissingSecretError` if no key is available, and
+    :class:`SecretStoreAccessError` if the store cannot be read (no
+    environment fallback follows an access error). The result is cached per
+    process; see module docstring for caching rationale. Exceptions are not
+    cached. :func:`get_secret_uncached` is the same lookup without the cache.
+    """
+    return get_secret_uncached(provider)
+
+
+def get_secret_uncached(provider: str) -> str:
+    """Read the API key for ``provider`` from its source now, bypassing the cache.
+
+    Same lookup order and errors as :func:`get_secret`: the environment alone
+    under ``NEXUS_KEYRING_DISABLE=1``, otherwise the active store, then
+    ``<PROVIDER>_API_KEY``. Raises :class:`MissingSecretError` when no key is
+    available and :class:`SecretStoreAccessError` when the store cannot be
+    read. It neither reads nor clears :func:`get_secret`'s cache.
     """
     provider = provider.lower()
     env_var = f"{provider.upper()}_API_KEY"
