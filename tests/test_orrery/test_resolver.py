@@ -1656,6 +1656,15 @@ def test_hydrate_world_state_loads_travel_states() -> None:
                     "progress_ratio": "0.42",
                     "estimated_distance_m": "13000",
                     "estimated_duration_minutes": "18.6",
+                    "started_at_world_time": datetime(
+                        2073, 10, 31, 18, 0, tzinfo=timezone.utc
+                    ),
+                    "updated_at_world_time": datetime(
+                        2073, 10, 31, 18, 5, tzinfo=timezone.utc
+                    ),
+                    "eta_world_time": datetime(
+                        2073, 10, 31, 18, 18, 36, tzinfo=timezone.utc
+                    ),
                 }
             ]
         ),
@@ -1673,6 +1682,15 @@ def test_hydrate_world_state_loads_travel_states() -> None:
     assert travel.progress_ratio == pytest.approx(0.42)
     assert travel.estimated_distance_m == pytest.approx(13000)
     assert travel.estimated_duration_minutes == pytest.approx(18.6)
+    assert travel.started_at_world_time == datetime(
+        2073, 10, 31, 18, 0, tzinfo=timezone.utc
+    )
+    assert travel.updated_at_world_time == datetime(
+        2073, 10, 31, 18, 5, tzinfo=timezone.utc
+    )
+    assert travel.eta_world_time == datetime(
+        2073, 10, 31, 18, 18, 36, tzinfo=timezone.utc
+    )
 
 
 def test_hydrate_world_state_retains_project_with_inactive_target() -> None:
@@ -1823,6 +1841,9 @@ def test_resolve_dry_run_fires_travel_departure_from_planned_destination() -> No
                     "progress_ratio": 0,
                     "estimated_distance_m": None,
                     "estimated_duration_minutes": None,
+                    "started_at_world_time": None,
+                    "updated_at_world_time": None,
+                    "eta_world_time": None,
                 }
             ],
         ),
@@ -1857,6 +1878,9 @@ def test_resolve_dry_run_fires_travel_arrival_at_high_progress() -> None:
                     "progress_ratio": 0.96,
                     "estimated_distance_m": 5000,
                     "estimated_duration_minutes": 20,
+                    "started_at_world_time": None,
+                    "updated_at_world_time": None,
+                    "eta_world_time": None,
                 }
             ],
         ),
@@ -1890,6 +1914,9 @@ def test_resolve_dry_run_fires_social_travel_arrival_by_purpose() -> None:
                     "estimated_distance_m": 5000,
                     "estimated_duration_minutes": 20,
                     "route_purpose": "Socialize",
+                    "started_at_world_time": None,
+                    "updated_at_world_time": None,
+                    "eta_world_time": None,
                 }
             ],
         ),
