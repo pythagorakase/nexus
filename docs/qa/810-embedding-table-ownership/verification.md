@@ -1,3 +1,339 @@
+# STOP-REPORT: 810-S2 Amendment 1 (2026-10-01)
+
+## Required Guard Exemptions Are Stale
+
+Resumed from accepted checkpoint `92d6fb706dca3cf41a872bfc248908d933cc1281`.
+`origin/main` was fetched and rebased before editing; that fetch observed
+`2e70e9cb2c566f6f48e70ea84874670a719055f9`, and Git reported the branch
+already up to date. During the gates the shared remote-tracking ref advanced
+to `67256d15` through another session; this stopped branch has not yet been
+rebased onto that commit. A fresh fetch/rebase remains required before any push. The checkpoint remains an ancestor; no history was rewritten.
+All commands ran from the assigned worktree. Python import verification again
+printed this worktree's `nexus/__init__.py`.
+
+The amended writer proof and three fixture collisions are resolved. The required
+remaining proof gate now fails at
+`tests/test_owner_target_guard.py::test_every_allowlist_and_exemption_entry_is_live`.
+The deleted setup tests used two `database_url("save_04")` probes; the converted
+source test used one `database.connect("save_05", dict_cursor=True)` probe.
+Their exemptions remain in the unchanged `tests/test_owner_target_guard.py`
+(lines 159-173). The stale-exemption assertion is at line 521. This is a new
+consequence of the ordered test removal/conversion, not an exempt #885 failure
+and not an embedding product failure.
+
+The working rules explicitly say: "Any other failure in a file you did not
+change: report the exact test id and the failure tail, do not fix it, do not
+skip it; the coordinator triages." The proof gate is not green. The guard and
+its exemptions are untouched; no fake owner probes were restored. STOP pending
+coordinator authorization for the guard's affected exemptions and synthetic
+exemption-use test (lines 525-544). No push or PR was made.
+
+## Amended Work and Current Evidence
+
+- `tests/test_embedding_table_ownership_pg.py:72-86` reads the next available scene
+  before each shared seed, eliminating the duplicate `S01E01_001` preparation
+  failures in all three converted source cases. All five converted cases passed.
+- `tests/test_embedding_table_ownership_pg.py:428-471` uses the embedding job's
+  `_NARRATIVE_CHUNKS` specification and the actual configured local
+  `EmbeddingManager` through `generate_source_vectors` and `upsert_source_vectors`.
+  It does not run the durable queue itself. The helper's `RuntimeError` class and
+  exact message propagate unchanged. The caller rolls back a prior 3d lazy table,
+  vector insert and narrative edit; original text, NULL stamp, malformed marker
+  row and catalog remain unchanged. The logged exception is:
+
+  `chunk_embeddings_2560d.chunk_id type/nullability: expected ('bigint', True); observed None`
+
+- `tests/test_embedding_table_ownership_pg.py:474-499` exercises the real legacy
+  `_generate_chunk_embeddings` method with a real SQLAlchemy session and local
+  embedder, avoiding the metadata INSERT. Its ensure error propagates and its
+  catalog remains unchanged. `tests/test_memnon_db_access.py:32-79` independently
+  checks the SQL alias, six constructors, narrative parameters and bare re-raise.
+- Constructor catalog invariance and missing-extension refusal passed (lines
+  398-425); all nine corpus/adapter contract cases, three idempotence/ANN cases,
+  27 malformed-object cases and three caller rollback cases passed. Catalog
+  definitions, exact comments and foreign-key cascade are asserted independently
+  at lines 145-228; malformed-object state is checked before and after caller
+  rollback at lines 304-370. The successful captured output contains the
+  object-specific expected/observed errors for every malformed case.
+- The 384d real DBAPI proof passed on rerun. Adoption, database-contract,
+  migration/setup, schema-documentation, regenerator truncate, Retrograde,
+  explicit ANN and disposable-target proofs passed. The separate owner guard
+  liveness failure is the only remaining failure in those proof groups.
+- The legacy importer defect remains deferred to
+  [issue #1091](https://github.com/pythagorakase/nexus/issues/1091), per the supplied
+  amendment. No `store_narrative_chunk` clone call was made on this resumed run,
+  and no metadata schema or importer repair was made. No fresh corpus result or
+  #964 disposition is claimed.
+
+The first resumed proof run had an instrumentation-only failure: the scratch
+clone recorder replaced its own saved fixture function, causing recursion in
+the lazily imported 384d test. The recorder was corrected to exclude itself;
+the failed test rerun passed. The other 65 tests passed in that first run.
+This is distinct from the prior slug preparation failures and #1091.
+
+## Exact Commands and Verbatim Tails
+
+Every gate used the foreground scratch `run_gate.py` wrapper, with a 590-second
+limit and a 120-second silence limit. None timed out. TMPDIR and pytest base temp
+were under the assigned scratch directory. The commands below are the exact
+child argv rendered as shell commands. The clone-recorder plugin performs real
+read-only queries, not mock database responses. Every proof run reports the
+secret-store guard and `owner targets: none`. All inference remained local;
+TEST story pins and the provider-only guard were retained.
+
+### amended-ownership (Exit 1)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --capture=tee-sys --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-ownership -p tests.dbname_audit -p clone_manifest_810s2 tests/test_embedding_table_ownership_pg.py tests/test_memnon_db_access.py tests/test_memnon/test_source_embeddings.py tests/test_retrograde_summary_retrieval.py
+```
+
+```text
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:137: in __enter__
+    return next(self.gen)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/clone_manifest_810s2.py:14: in recorded
+    with original(*args, **kwargs) as dbname:
+../../../../.pyenv/versions/3.11.12/lib/python3.11/contextlib.py:137: in __enter__
+    return next(self.gen)
+/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/clone_manifest_810s2.py:14: in recorded
+    with original(*args, **kwargs) as dbname:
+E   RecursionError: maximum recursion depth exceeded
+!!! Recursion detected (same locals & position)
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 52 targets: postgres, qa640_810s2_contract_* x46, qa640_810s2_source_* x5
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_retrograde_summary_retrieval.py::test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor
+1 failed, 65 passed in 78.02s (0:01:18)
+```
+
+### summary384-rerun (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-summary384 -p tests.dbname_audit -p clone_manifest_810s2 tests/test_retrograde_summary_retrieval.py::test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor
+```
+
+```text
+.                                                                        [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 2 targets: postgres, qa640_810s2_summary384_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+1 passed in 3.20s
+```
+
+### pg-contract-migrations (Exit 0)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-contract-migrations -p tests.dbname_audit -p clone_manifest_810s2 tests/test_database_contract.py tests/test_unowned_index_adoption_pg.py tests/test_orrery/test_migrate.py tests/test_new_story_setup.py
+```
+
+```text
+........................................................................ [ 62%]
+............................................                             [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 23 targets: nexus_m10_fresh_test_96863, nexus_m10_template_test_96863, postgres, qa640_810_adopt_drift_*, qa640_810_adopt_noop_*, qa640_810_adopt_recreate_*, qa640_810_clone_*, qa640_810_dataclone_*, qa640_810_fail_*, qa640_810_firstpass_*, qa640_810_no_create_all_*, qa640_810_noconn_*, qa640_810_restore_*, qa640_810_template_*, qa640_connection_contract, qa640_grieving_migration_*, qa640_raw_url_contract, qa640_vocab_migration_* x6
+dbname audit: owner server: local:5432
+dbname audit: registered disposable clusters: two_clusters[0] at local:55203 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[1] at local:55204 from tests/test_database_contract.py::test_connection_raw_url_and_asyncpg_session_policy; two_clusters[0] at local:55211 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard; two_clusters[1] at local:55212 from tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard
+dbname audit: owner names admitted on registered clusters: none
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+116 passed in 33.63s
+```
+
+### pg-schema-writers (Exit 1)
+
+```sh
+env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_RUN_POSTGRES=1 PYTHONPATH=/Users/pythagor/nexus/.claude/worktrees/810-embedding-table-ownership:/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2 /Users/pythagor/nexus/.venv/bin/python -m pytest -q --basetemp=/private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/810-S2/pytest-schema-writers -p tests.dbname_audit -p clone_manifest_810s2 tests/test_schema_documentation_pg.py tests/test_regenerate_embeddings_truncate_pg.py tests/test_orrery/test_retrograde_embedding_pg.py tests/test_memnon/test_ann_gate.py::test_ann_candidate_index_build_drop tests/test_memnon/test_ann_gate.py::test_ann_alias_candidates_and_database_errors tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+```
+
+```text
+......................................                                   [100%]
+=================================== FAILURES ===================================
+_______________ test_every_allowlist_and_exemption_entry_is_live _______________
+
+    def test_every_allowlist_and_exemption_entry_is_live() -> None:
+        """A stale allowlisted file or exemption is removed, not kept."""
+
+        for relative, reason in ALLOWLISTED_FILES.items():
+            assert (TESTS_ROOT / relative).is_file(), relative
+            assert reason.strip(), relative
+        found = Counter(
+            (finding.path, finding.rule, finding.source) for finding in tree_findings()
+        )
+        listed = Counter(item.key for item in EXEMPTIONS)
+        for item in EXEMPTIONS:
+            assert item.reason.strip(), item
+        stale = {key: count for key, count in listed.items() if found[key] < count}
+>       assert stale == {}, f"stale exemptions (listed more than found): {stale}"
+E       AssertionError: stale exemptions (listed more than found): {('test_memnon_db_access.py', 'connection-owner-literal', 'database_url("save_04")'): 2, ('test_memnon/test_source_embeddings.py', 'connection-owner-literal', 'database.connect("save_05", dict_cursor=True)'): 1}
+E       assert {('test_memno...ave_04")'): 2} == {}
+E
+E         Left contains 2 more items:
+E         {('test_memnon/test_source_embeddings.py', 'connection-owner-literal', 'database.connect("save_05", dict_cursor=True)'): 1,
+E          ('test_memnon_db_access.py', 'connection-owner-literal', 'database_url("save_04")'): 2}
+E         Use -v to get more diff
+
+tests/test_owner_target_guard.py:521: AssertionError
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 10 targets: postgres, qa640_766_schema_*, qa640_docs_refresh_*, qa640_regen_truncate_* x2, qa640_schema_docs_* x3, qa665_*, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+=========================== short test summary info ============================
+FAILED tests/test_owner_target_guard.py::test_every_allowlist_and_exemption_entry_is_live
+1 failed, 181 passed in 25.01s
+```
+
+Formatting:
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m black tests/test_embedding_table_ownership_pg.py tests/test_memnon_db_access.py
+```
+
+```text
+reformatted tests/test_memnon_db_access.py
+reformatted tests/test_embedding_table_ownership_pg.py
+
+All done! ✨ 🍰 ✨
+2 files reformatted.
+```
+
+`rg -n 'setup_database_indexes|_setup_hybrid_search' nexus scripts ir_eval`
+produced no output (exit 1). `git diff --check` produced no output (exit 0).
+
+The offline suites, reachability and final Black/flake8/mypy comparison gates
+remain unrun at this new STOP. No static success or baseline classification is
+claimed. Their sanctioned invocation remains `mypy --explicit-package-bases`
+with origin/main versions in the assigned scratch directory and no new
+branch diagnostics. The coordinator's whole-tree PostgreSQL gate is unrun.
+
+## Disposable Clone Migration Manifest
+
+Read-only instrumentation is at the assigned scratch directory's
+`clone_manifest_810s2.py`; full raw records are in `clone-manifest.jsonl`.
+After the instrumentation fix it recorded 22 real helper clones, including
+starting migration versions and names, immediately before yielding. The initial
+65-success run did not produce recorder records; its ownership fixture directly
+printed all 46 ownership clone version lists, preserved below. The five converted
+source clones did not export their per-clone stamps; that evidence is incomplete
+at STOP. Separate private-cluster/database fixtures retain their own gates and
+audits; no complete manifest is claimed.
+
+### Stamp Set 1
+
+```text
+[["001", "baseline"], ["002", "add_choice_columns"], ["003", "add_layer_zone_drafts"], ["004", "fix_global_variables_fk"], ["005", "add_incubator_choice_object"], ["006", "add_save_slots_model"], ["007", "normalize_new_story_creator"], ["009", "remove_assets_save_slots"], ["010", "add_traits_table"], ["011", "add_traits_confirmed"], ["012", "add_wizard_choice_object"], ["014", "add_2560d_4096d_embeddings"], ["015", "add_ir_eval_v2_tables"], ["016", "add_ir_eval_v1_query_tables"], ["017", "add_judgment_justification"], ["018", "narrative_chunks_column_comments"], ["019", "add_incubator_choice_text"], ["020", "drop_chunk_embeddings_0384d"], ["021", "dedup_embedded_state"], ["022", "compound_embedding_pk_lazy_tables"], ["023", "orrery_schema"], ["024", "orrery_commit_pipeline"], ["025", "orrery_package_library_vocab"], ["026", "relationship_valence_magnitude"], ["027", "orrery_package_library_round2_vocab"], ["028", "orrery_sunhelm_needs"], ["029", "orrery_need_state_init_trigger"], ["030", "orrery_place_affordance_vocab"], ["031", "orrery_slot2_semantic_tag_vocab"], ["032", "orrery_interpersonal_needs"], ["033", "orrery_travel_work"], ["034", "orrery_concealment_surveillance_vocab"], ["035", "orrery_osm_route_graph"], ["036", "skald_inline_tag_runtime"], ["037", "orrery_tag_category_registry"], ["038", "orrery_tag_baseline_reconciliation"], ["039", "new_story_character_orrery_tags"], ["040", "storyteller_authorial_directives"], ["041", "orrery_authority_model"], ["042", "orrery_entity_pair_tags"], ["043", "orrery_category_refactor_phase1"], ["044", "disambiguate_status_reputation_traits"], ["045", "trait_compiler_substrate"], ["046", "canonical_grieving_state"], ["047", "kind_qualified_contact_pair_tags"], ["048", "orrery_hunting_pair_tag"], ["049", "orrery_entity_tag_expiry_substrate"], ["050", "orrery_state_clearance_event_types"], ["051", "orrery_time_tag_clearance_kind"], ["052", "orrery_faction_tag_vocab"], ["053", "retire_faction_legacy_write_defaults"], ["054", "orrery_completed_tag_vocab"], ["055", "orrery_character_tag_vocab"], ["056", "orrery_routine_anchors"], ["057", "orrery_need_bodyform_applicability"], ["058", "retire_faction_legacy_columns"], ["059", "orrery_social_travel_event"], ["060", "retrograde_persistence_sources"], ["061", "trait_compiler_sponsors_pair_tag"], ["062", "retrograde_maturation_jobs"], ["063", "orrery_adjudication_history"], ["064", "tag_provenance_forward_fix"], ["065", "reconstructability"], ["066", "signal_event_vocab"], ["067", "rename_orrery_templates"], ["068", "mundane_band_event_vocab"], ["069", "ecology_event_vocab"], ["070", "need_state_chunk_stamp"], ["071", "retrograde_world_layer"], ["072", "retrograde_layer_backfill"], ["073", "rename_dream_to_atemporal"], ["074", "plan_relocation_projects"], ["075", "retrieval_coverage_log"], ["076", "claims_awareness"], ["077", "recruit_ally_projects"], ["078", "retrograde_summary_storage"], ["079", "need_state_chunk_provenance_comment"], ["080", "epistemics_knowers"], ["081", "faction_project_contexts"], ["082", "generation_model_provenance"], ["083", "claim_propagation_ledger"], ["084", "build_venture_projects"], ["085", "pursue_romance_projects"], ["086", "court_patron_projects"], ["087", "seek_redemption_projects"], ["088", "valence_float_canonical"], ["089", "relationship_drift_milestone"], ["090", "claim_accounts"], ["091", "backstory_secrets"], ["092", "claim_distortion_depth"], ["093", "claim_awareness_knower_index"], ["094", "scene_weather_override"], ["095", "mood_vocabulary"], ["096", "polymorphic_patron"], ["097", "trait_cold_start_relationship_constraints"], ["098", "narrative_generation_lease"], ["099", "storyteller_correspondence"], ["100", "orrery_need_clock_anchor"], ["101", "delete_project_start_summary_orphans"], ["102", "narration_job_fencing"], ["103", "bleed_uptake"], ["104", "character_experiences"], ["105", "interaction_threads"], ["106", "recall_trace"], ["107", "lore_pass_baselines"], ["108", "strip_retired_observations_from_drafts"], ["109", "extend_expiry_default_durations"], ["110", "experience_formation_sweep"], ["111", "experience_job_enqueue_gin_fence"], ["112", "character_experience_recall_eligibility"], ["113", "acquisition_formation_indexes"], ["114", "slot_scoped_idf"], ["115", "relationship_write_provenance"], ["116", "acceptance_chunk_identity"], ["117", "story_settings"], ["118", "world_clock_identity"], ["120", "deferred_work_owner"], ["121", "generation_session_truth"], ["122", "orrery_card_identity"], ["123", "character_alias_provenance"], ["124", "attempt_manifests"], ["125", "embedding_summary_jobs"], ["126", "seat_policies"], ["127", "schema_documentation"], ["128", "character_identity_rulings"], ["129", "wizard_confirmation"], ["130", "retire_psychology_endpoint_comments"], ["131", "regeneration_lineage"], ["132", "genesis_weird_level"], ["133", "idf_rebuild_command"], ["134", "drop_chunk_lifecycle_columns"], ["135", "schema_docs_backfill"], ["136", "column_comment_corrections"], ["137", "view_comments"], ["138", "adopt_unowned_fleet_indexes"], ["139", "character_relationship_bigint_ids"], ["140", "world_clock_primary_layer"]]
+```
+
+| Clone | Test |
+| --- | --- |
+| `qa640_810s2_summary384_f5a26eb12be5` | `tests/test_retrograde_summary_retrieval.py::test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor` |
+| `qa640_810_adopt_recreate_fa73dbc431af` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_recreates_the_indexes_and_column_it_owns` |
+| `qa640_810_adopt_noop_4079eb16ca67` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_changes_nothing_on_a_complete_database` |
+| `qa640_810_adopt_drift_90732f622e86` | `tests/test_unowned_index_adoption_pg.py::test_migration_138_refuses_a_same_named_index_with_another_definition` |
+| `qa640_810_no_create_all_bbe9db67e3fe` | `tests/test_unowned_index_adoption_pg.py::test_database_manager_construction_creates_no_table` |
+| `qa640_vocab_migration_bf7364628482` | `tests/test_orrery/test_migrate.py::test_character_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_35a8893fe4b8` | `tests/test_orrery/test_migrate.py::test_completed_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_1c8be94ae09e` | `tests/test_orrery/test_migrate.py::test_entity_tag_expiry_substrate_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_dde2b4a5035f` | `tests/test_orrery/test_migrate.py::test_faction_tag_vocab_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_d1604941c2ed` | `tests/test_orrery/test_migrate.py::test_state_clearance_event_type_migration_executes_against_slot_db` |
+| `qa640_vocab_migration_195fc9330222` | `tests/test_orrery/test_migrate.py::test_kind_qualified_contact_migration_executes_against_slot_db` |
+| `qa640_grieving_migration_3c087a5f30c9` | `tests/test_orrery/test_migrate.py::test_canonical_grieving_migration_executes_against_slot_db` |
+| `qa640_810_template_12ccddb1a892` | `tests/test_new_story_setup.py::test_template_clone_replays_no_migration` |
+| `qa640_810_clone_0a55c487792d` | `tests/test_new_story_setup.py::test_template_clone_replays_no_migration` |
+| `qa640_810_fail_78d830ad8566` | `tests/test_new_story_setup.py::test_failing_migration_is_unapplied_and_initialization_raises` |
+| `qa640_schema_docs_686af1a3196d` | `tests/test_schema_documentation_pg.py::test_schema_documentation_coverage` |
+| `qa640_docs_refresh_326d9abab1dc` | `tests/test_schema_documentation_pg.py::test_story_setup_and_runner_preserve_comments` |
+| `qa640_regen_truncate_4dea11c54e6d` | `tests/test_regenerate_embeddings_truncate_pg.py::test_truncate_table_keeps_rows_when_the_model_artifact_is_missing` |
+| `qa640_regen_truncate_97773295ff38` | `tests/test_regenerate_embeddings_truncate_pg.py::test_chunk_keeps_its_row_when_the_model_artifact_is_missing` |
+| `qa665_6190bfa2a05f` | `tests/test_orrery/test_retrograde_embedding_pg.py::test_batch_embedding_writes_every_summary_model_pair` |
+| `qa640_766_schema_95d83dbbf3e6` | `tests/test_memnon/test_ann_gate.py::test_ann_candidate_index_build_drop` |
+| `qa885_transaction_writer_d5109e7be6c8` | `tests/test_pg_disposable_target.py::test_transaction_relationship_writer_writes_on_a_clone` |
+
+### Initial Ownership Clone Version Evidence
+
+All 46 clones printed this exact starting version list:
+
+```text
+[('001',), ('002',), ('003',), ('004',), ('005',), ('006',), ('007',), ('009',), ('010',), ('011',), ('012',), ('014',), ('015',), ('016',), ('017',), ('018',), ('019',), ('020',), ('021',), ('022',), ('023',), ('024',), ('025',), ('026',), ('027',), ('028',), ('029',), ('030',), ('031',), ('032',), ('033',), ('034',), ('035',), ('036',), ('037',), ('038',), ('039',), ('040',), ('041',), ('042',), ('043',), ('044',), ('045',), ('046',), ('047',), ('048',), ('049',), ('050',), ('051',), ('052',), ('053',), ('054',), ('055',), ('056',), ('057',), ('058',), ('059',), ('060',), ('061',), ('062',), ('063',), ('064',), ('065',), ('066',), ('067',), ('068',), ('069',), ('070',), ('071',), ('072',), ('073',), ('074',), ('075',), ('076',), ('077',), ('078',), ('079',), ('080',), ('081',), ('082',), ('083',), ('084',), ('085',), ('086',), ('087',), ('088',), ('089',), ('090',), ('091',), ('092',), ('093',), ('094',), ('095',), ('096',), ('097',), ('098',), ('099',), ('100',), ('101',), ('102',), ('103',), ('104',), ('105',), ('106',), ('107',), ('108',), ('109',), ('110',), ('111',), ('112',), ('113',), ('114',), ('115',), ('116',), ('117',), ('118',), ('120',), ('121',), ('122',), ('123',), ('124',), ('125',), ('126',), ('127',), ('128',), ('129',), ('130',), ('131',), ('132',), ('133',), ('134',), ('135',), ('136',), ('137',), ('138',), ('139',), ('140',)]
+```
+
+- `qa640_810s2_contract_6c73a1894d7e`
+- `qa640_810s2_contract_6ef82dfecb06`
+- `qa640_810s2_contract_505209811cca`
+- `qa640_810s2_contract_4501df5d1bda`
+- `qa640_810s2_contract_f6018af7475c`
+- `qa640_810s2_contract_72af2a42f079`
+- `qa640_810s2_contract_01c23d1a10fe`
+- `qa640_810s2_contract_b399ba8944a4`
+- `qa640_810s2_contract_7ad319919482`
+- `qa640_810s2_contract_38c075ed5298`
+- `qa640_810s2_contract_92f0d3f1d48f`
+- `qa640_810s2_contract_36425408d520`
+- `qa640_810s2_contract_9b57835cb5bf`
+- `qa640_810s2_contract_da40798fb4d1`
+- `qa640_810s2_contract_04c4b74e1d71`
+- `qa640_810s2_contract_bc18bd9f8097`
+- `qa640_810s2_contract_eebe83919d06`
+- `qa640_810s2_contract_9b6b89b8a214`
+- `qa640_810s2_contract_f806fcd28a00`
+- `qa640_810s2_contract_7f9e8f430861`
+- `qa640_810s2_contract_f261b3641338`
+- `qa640_810s2_contract_2d23b4414068`
+- `qa640_810s2_contract_e6a3bd898fef`
+- `qa640_810s2_contract_dbce1f69f337`
+- `qa640_810s2_contract_4b3a2160ef6e`
+- `qa640_810s2_contract_87ba46f73216`
+- `qa640_810s2_contract_7c4cc3d9e8a1`
+- `qa640_810s2_contract_3ba0b8869e68`
+- `qa640_810s2_contract_a9f862fffd17`
+- `qa640_810s2_contract_3ac48b1c996c`
+- `qa640_810s2_contract_ca2e8efc1c45`
+- `qa640_810s2_contract_6d96b1752e4e`
+- `qa640_810s2_contract_2c2668f84f04`
+- `qa640_810s2_contract_f6b9a0a14630`
+- `qa640_810s2_contract_d57a393dc520`
+- `qa640_810s2_contract_f55e5322956b`
+- `qa640_810s2_contract_66925c0f665f`
+- `qa640_810s2_contract_39a74f1280cf`
+- `qa640_810s2_contract_315347f56103`
+- `qa640_810s2_contract_15eb9da015c0`
+- `qa640_810s2_contract_8f3cdfc3c2d1`
+- `qa640_810s2_contract_77194d76293a`
+- `qa640_810s2_contract_257c5092a7d2`
+- `qa640_810s2_contract_8fe3711510f9`
+- `qa640_810s2_contract_dc05a138ef7a`
+- `qa640_810s2_contract_45bf951e8972`
+
+The manifest and captured fixture output record real database names rather than
+collapsed audit prefixes.
+The fixtures drop their clones in their `finally` blocks. No owner save or
+template was written. No gateway was started, stopped or restarted. Audit gaps
+remain the documented fixture subprocess template reads and the unaudited
+ReplicationConnection class; no stronger coverage is claimed.
+
+## Open Questions and Landing Notes
+
+1. Authorize removing the three stale owner-literal exemption entries and
+   updating the synthetic exemption-use test to exercise a remaining live
+   exemption, or have the coordinator make that prerequisite change?
+2. Resume this checkpoint after that scope decision to run the remaining offline,
+   reachability and no-new-diagnostics gates, then rebase, push and open the PR?
+
+No new migration number, fleet migration application, client bundle change or UI
+rebuild. Migration 022's lazy ownership and migration 138's fixed ownership
+remain. If this work later lands, the coordinator runs `nexus restart gateway`
+by name and owns the whole-tree PostgreSQL gate. Do not merge this checkpoint.
+
+Codex — GPT-6.
+
+---
+
+## Accepted Original Stop-Report (2026-10-01, Checkpoint 92d6fb70)
+
 # STOP-REPORT: 810-S2
 
 ## False Premise and Required Disposition
@@ -114,8 +450,8 @@ E                                                                    ^
 E       sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column "perspective" of relation "chunk_metadata" does not exist
 E       LINE 3: ...                chunk_id, season, episode, scene, perspectiv...
 E                                                                    ^
-E       
-E       [SQL: 
+E
+E       [SQL:
 E                           INSERT INTO chunk_metadata (
 E                               chunk_id, season, episode, scene, perspective, location, time_code, world_layer, keywords, characters
 E                           ) VALUES (

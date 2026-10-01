@@ -28,6 +28,7 @@ from nexus.agents.memnon.utils.source_embeddings import (
 )
 from nexus.agents.orrery.experiences import _insert_experience
 from nexus.database import database_url
+from nexus.jobs.embeddings import _NARRATIVE_CHUNKS
 from tests.pg_fixtures import (
     connect,
     disposable_slot_database,
@@ -69,12 +70,17 @@ def seed_source(
     dbname: str, spec: EmbeddingSource, text: str = "The ledger survived."
 ) -> int:
     """Use shared seeds and production experience insertion; render without inference."""
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT coalesce(max(scene), 0) + 1 FROM chunk_metadata")
+        scene = int(cur.fetchone()[0])
     if spec is CHUNK_SOURCE:
-        return seed_committed_chunk(dbname, raw_text=text)
+        return seed_committed_chunk(dbname, raw_text=text, scene=scene)
     summary_id = _insert_retrograde_summaries(dbname, [text])[0]
     if spec is RETROGRADE_SUMMARY_SOURCE:
         return summary_id
-    seed_story_clock(dbname, world_time=datetime(2196, 1, 1, tzinfo=timezone.utc))
+    seed_story_clock(
+        dbname, world_time=datetime(2196, 1, 1, tzinfo=timezone.utc), scene=scene
+    )
     _, entity_id = seed_character(dbname, name=f"Witness {summary_id}")
     with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
         cur.execute(
@@ -419,33 +425,75 @@ def test_constructor_refuses_missing_vector_extension(ownership_db: str) -> None
         DatabaseManager(database_url(ownership_db))
 
 
-def test_content_processor_propagates_ensure_failure(ownership_db: str) -> None:
+def test_embedding_job_source_path_propagates_ensure_failure(ownership_db: str) -> None:
+    """The job's real source upsert propagates drift and rolls back prior writes."""
+    settings = load_memnon_settings()
+    embedder = EmbeddingManager(settings=settings)
+    dimensions = next(iter(active_memnon_embedding_model_dimensions().values()))
+    spec = _NARRATIVE_CHUNKS
+    row_id = seed_source(ownership_db, CHUNK_SOURCE)
+    name = spec.table_name_for_dimensions(dimensions)
+    with closing(connect(ownership_db)) as conn, conn, conn.cursor() as cur:
+        cur.execute(f"CREATE TABLE {name} (marker text)")
+        cur.execute(f"INSERT INTO {name} VALUES ('preserved')")
+        before = catalog_snapshot(cur)
+        with pytest.raises(RuntimeError) as direct_error:
+            spec.ensure_table(cur, dimensions)
+    generated = generate_source_vectors(
+        spec,
+        {row_id: "The clerk carried the ledger across the empty hall."},
+        embedder.get_available_models(),
+        embedder.generate_embedding,
+    )
+    # A prior vector and its lazy table must disappear when the active table fails.
+    generated[row_id].insert(0, ("rollback-proof", [1.0, 2.0, 3.0]))
+    with closing(connect(ownership_db)) as conn:
+        with pytest.raises(RuntimeError, match=name + r".*expected.*observed") as error:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE narrative_chunks SET raw_text='uncommitted' WHERE id=%s",
+                    (row_id,),
+                )
+                upsert_source_vectors(cur, spec, generated)
+        assert type(error.value) is type(direct_error.value)
+        assert str(error.value) == str(direct_error.value)
+        print(f"job source failure propagated unchanged: {error.value}")
+        with conn.cursor() as cur:
+            assert catalog_snapshot(cur) == before
+            cur.execute(
+                "SELECT raw_text, embedding_generated_at FROM narrative_chunks WHERE id=%s",
+                (row_id,),
+            )
+            assert cur.fetchone() == ("The ledger survived.", None)
+            cur.execute("SELECT to_regclass('chunk_embeddings_0003d')")
+            assert cur.fetchone() == (None,)
+            cur.execute(f"SELECT * FROM {name}")
+            assert cur.fetchall() == [("preserved",)]
+
+
+def test_content_processor_embedding_method_propagates_ensure_failure(
+    ownership_db: str,
+) -> None:
+    """Exercise the legacy embedding method without the #1091 metadata INSERT."""
     settings = load_memnon_settings()
     embedder = EmbeddingManager(settings=settings)
     dimensions = next(iter(active_memnon_embedding_model_dimensions().values()))
     name = CHUNK_SOURCE.table_name_for_dimensions(dimensions)
+    row_id = seed_source(ownership_db, CHUNK_SOURCE)
     with closing(connect(ownership_db)) as conn, conn, conn.cursor() as cur:
         cur.execute(f"CREATE TABLE {name} (marker text)")
         before = catalog_snapshot(cur)
-        cur.execute("SELECT count(*) FROM narrative_chunks")
-        chunks_before = cur.fetchone()
-        cur.execute("SELECT count(*) FROM chunk_metadata")
-        metadata_before = cur.fetchone()
     manager = DatabaseManager(database_url(ownership_db))
     try:
         processor = ContentProcessor(manager, embedder, settings)
         with pytest.raises(RuntimeError, match=name + r".*expected.*observed"):
-            processor.store_narrative_chunk(
-                "The clerk carried the ledger across the empty hall.",
-                {"season": 1, "episode": 1, "scene": 1, "world_layer": "primary"},
-            )
+            with manager.Session.begin() as session:
+                processor._generate_chunk_embeddings(
+                    session, row_id, "The ledger survived."
+                )
     finally:
         manager.close()
     with closing(connect(ownership_db)) as conn, conn.cursor() as cur:
         assert catalog_snapshot(cur) == before
-        cur.execute("SELECT count(*) FROM narrative_chunks")
-        assert cur.fetchone() == chunks_before
-        cur.execute("SELECT count(*) FROM chunk_metadata")
-        assert cur.fetchone() == metadata_before
         cur.execute(f"SELECT count(*) FROM {name}")
         assert cur.fetchone() == (0,)
