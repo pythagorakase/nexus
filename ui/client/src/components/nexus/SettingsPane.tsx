@@ -443,13 +443,22 @@ function requiredByTitle(row: SecretStatus): string | undefined {
 }
 
 function KeysSection({ slot }: { slot: number | null }) {
-  const { data: providers, error } = useSecretsQuery(slot);
+  const { data: providers, error, dataUpdatedAt } = useSecretsQuery(slot);
   const setSecret = useSetSecret(slot);
   const verifySecret = useVerifySecret();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [verified, setVerified] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
+  const revisionRef = useRef(dataUpdatedAt);
+
+  // A Verified mark lasts until the next status refresh (a GET or a PUT's
+  // answer), whatever the refreshed rows say: two keys can share a suffix.
+  // A verification belongs to the revision it started under (see verify).
+  useEffect(() => {
+    revisionRef.current = dataUpdatedAt;
+    setVerified((current) => (current.size === 0 ? current : new Set()));
+  }, [dataUpdatedAt]);
 
   if (actionError) throw actionError;
 
@@ -494,8 +503,12 @@ function KeysSection({ slot }: { slot: number | null }) {
 
   const verify = async (provider: string) => {
     markBusy(provider, true);
+    const startedAt = revisionRef.current;
     try {
       const result = await verifySecret(provider);
+      // A refresh since the request started already told the truth about the
+      // row; a success for the earlier revision would mark a key never verified.
+      if (result.verified && revisionRef.current !== startedAt) return;
       setVerified((current) => {
         const next = new Set(current);
         if (result.verified) next.add(provider);

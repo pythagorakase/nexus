@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Iterator, Literal, NamedTuple
@@ -74,8 +74,8 @@ DISABLED = {**EPISTEMICS, "enabled": False}
 PAIR_ROLES: tuple[Literal["actor", "target"], ...] = ("actor", "target")
 
 
-BASE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
-STORY_CLOCK = BASE_TIMESTAMP + timedelta(hours=12)
+# The first story-clock instant: base_timestamp and the bootstrap chunk's clock.
+STORY_CLOCK = datetime(2100, 1, 1, 12, tzinfo=timezone.utc)
 # Seeded in character-id order: the protagonist first, then three characters.
 CAST = (
     "Epistemics Protagonist",
@@ -101,14 +101,15 @@ class EpistemicsClone(NamedTuple):
 def epistemics_clone() -> Iterator[EpistemicsClone]:
     """Seed the need-clock anchor, four characters, one faction, then the clock.
 
-    The protagonist's ``base_timestamp`` anchors every need clock before any
-    character insert; the story-clock chunk seeded last is the head chunk, so
-    it carries ``chunk_metadata.world_time`` and anchors every tick.
+    The protagonist's ``base_timestamp`` (``STORY_CLOCK``) anchors every need
+    clock before any character insert; the story-clock chunk seeded last is
+    the bootstrap and head chunk at that same instant, so it carries
+    ``chunk_metadata.world_time`` and anchors every tick.
     """
 
     with disposable_slot_database("qa885_epistemics") as dbname:
         protagonist = seed_protagonist(
-            dbname, name=CAST[0], base_timestamp=BASE_TIMESTAMP.isoformat()
+            dbname, name=CAST[0], base_timestamp=STORY_CLOCK.isoformat()
         )
         seeded = [protagonist] + [
             seed_character(dbname, name=name) for name in CAST[1:]

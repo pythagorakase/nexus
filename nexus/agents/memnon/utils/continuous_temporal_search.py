@@ -491,123 +491,25 @@ def execute_multi_model_time_aware_search(
     import psycopg2
     from . import db_access
 
-    try:
-        # Use continuous temporal intent analysis instead of categorical classification
-        query_temporal_intent = analyze_temporal_intent(query_text)
+    # Use continuous temporal intent analysis instead of categorical classification
+    query_temporal_intent = analyze_temporal_intent(query_text)
 
-        # Log the query's temporal intent
-        logger.info(
-            f"Query temporal intent: {query_temporal_intent:.2f} (0=early, 0.5=neutral, 1=recent)"
+    # Log the query's temporal intent
+    logger.info(
+        f"Query temporal intent: {query_temporal_intent:.2f} (0=early, 0.5=neutral, 1=recent)"
+    )
+
+    # If query is temporally neutral (close to 0.5), apply minimal boosting
+    is_temporal_query = abs(query_temporal_intent - 0.5) > 0.1
+    effective_boost_factor = (
+        temporal_boost_factor if is_temporal_query else temporal_boost_factor * 0.5
+    )
+
+    # If the query is essentially non-temporal, use standard multi-model search
+    if abs(query_temporal_intent - 0.5) < 0.05 or effective_boost_factor < 0.01:
+        logger.debug(
+            f"Query is temporally neutral, using standard multi-model hybrid search: {query_text}"
         )
-
-        # If query is temporally neutral (close to 0.5), apply minimal boosting
-        is_temporal_query = abs(query_temporal_intent - 0.5) > 0.1
-        effective_boost_factor = (
-            temporal_boost_factor if is_temporal_query else temporal_boost_factor * 0.5
-        )
-
-        # If the query is essentially non-temporal, use standard multi-model search
-        if abs(query_temporal_intent - 0.5) < 0.05 or effective_boost_factor < 0.01:
-            logger.debug(
-                f"Query is temporally neutral, using standard multi-model hybrid search: {query_text}"
-            )
-            return db_access.execute_multi_model_hybrid_search(
-                db_url=db_url,
-                query_text=query_text,
-                query_embeddings=query_embeddings,
-                model_weights=model_weights,
-                vector_weight=vector_weight,
-                text_weight=text_weight,
-                filters=filters,
-                top_k=top_k,
-                idf_dict=idf_dict,
-                present_character_ids=present_character_ids,
-                presence_boost_factor=presence_boost_factor,
-            )
-
-        # For temporal queries, perform multi-model hybrid search but apply temporal boosting
-        logger.info(
-            f"Performing multi-model time-aware search with intent score: {query_temporal_intent:.2f}"
-        )
-
-        conn = psycopg2.connect(**url_connection_kwargs(db_url))
-        conn.set_session(readonly=True)
-
-        # Get total number of chunks for normalization
-        try:
-            total_chunks = get_total_chunks(conn)
-        finally:
-            conn.close()
-        logger.debug(f"Total chunks for temporal normalization: {total_chunks}")
-
-        # Execute standard multi-model hybrid search but with increased result count
-        original_results = db_access.execute_multi_model_hybrid_search(
-            db_url=db_url,
-            query_text=query_text,
-            query_embeddings=query_embeddings,
-            model_weights=model_weights,
-            vector_weight=vector_weight,
-            text_weight=text_weight,
-            filters=filters,
-            top_k=top_k * 2,  # Get more results for reranking
-            idf_dict=idf_dict,
-            present_character_ids=present_character_ids,
-            presence_boost_factor=presence_boost_factor,
-        )
-
-        # Apply temporal boosting to each result using the continuous approach
-        time_boosted_results = []
-        for result in original_results:
-            anchor_id = result_temporal_anchor(result)
-            temporal_position = (
-                calculate_temporal_position(anchor_id, total_chunks)
-                if anchor_id is not None
-                else 0.5
-            )
-
-            # Get original score
-            original_score = result["score"]
-
-            # Apply continuous temporal boosting
-            adjusted_score = apply_continuous_temporal_boost(
-                original_score,
-                temporal_position,
-                query_temporal_intent,
-                effective_boost_factor,
-            )
-
-            # Create a copy of the result with adjusted score
-            boosted_result = result.copy()
-            boosted_result["score"] = adjusted_score
-            boosted_result["original_score"] = (
-                original_score  # Keep original for reference
-            )
-            boosted_result["temporal_position"] = (
-                temporal_position  # Store for debugging
-            )
-            boosted_result["temporal_intent"] = (
-                query_temporal_intent  # Store for debugging
-            )
-            boosted_result["source"] = "multi_model_time_aware_search"  # Update source
-
-            time_boosted_results.append(boosted_result)
-
-        # Sort results by the new adjusted score
-        time_boosted_results.sort(key=lambda x: x["score"], reverse=True)
-
-        # Return only the requested number of results
-        return time_boosted_results[:top_k]
-
-    except IDFStateError:
-        raise
-    except Exception as e:
-        logger.error(f"Error in multi-model time-aware search: {e}")
-        import traceback
-
-        logger.error(traceback.format_exc())
-
-        # Fall back to standard multi-model hybrid search
-        logger.info("Falling back to standard multi-model hybrid search after error")
         return db_access.execute_multi_model_hybrid_search(
             db_url=db_url,
             query_text=query_text,
@@ -621,3 +523,70 @@ def execute_multi_model_time_aware_search(
             present_character_ids=present_character_ids,
             presence_boost_factor=presence_boost_factor,
         )
+
+    # For temporal queries, perform multi-model hybrid search but apply temporal boosting
+    logger.info(
+        f"Performing multi-model time-aware search with intent score: {query_temporal_intent:.2f}"
+    )
+
+    conn = psycopg2.connect(**url_connection_kwargs(db_url))
+    conn.set_session(readonly=True)
+
+    # Get total number of chunks for normalization
+    try:
+        total_chunks = get_total_chunks(conn)
+    finally:
+        conn.close()
+    logger.debug(f"Total chunks for temporal normalization: {total_chunks}")
+
+    # Execute standard multi-model hybrid search but with increased result count
+    original_results = db_access.execute_multi_model_hybrid_search(
+        db_url=db_url,
+        query_text=query_text,
+        query_embeddings=query_embeddings,
+        model_weights=model_weights,
+        vector_weight=vector_weight,
+        text_weight=text_weight,
+        filters=filters,
+        top_k=top_k * 2,  # Get more results for reranking
+        idf_dict=idf_dict,
+        present_character_ids=present_character_ids,
+        presence_boost_factor=presence_boost_factor,
+    )
+
+    # Apply temporal boosting to each result using the continuous approach
+    time_boosted_results = []
+    for result in original_results:
+        anchor_id = result_temporal_anchor(result)
+        temporal_position = (
+            calculate_temporal_position(anchor_id, total_chunks)
+            if anchor_id is not None
+            else 0.5
+        )
+
+        # Get original score
+        original_score = result["score"]
+
+        # Apply continuous temporal boosting
+        adjusted_score = apply_continuous_temporal_boost(
+            original_score,
+            temporal_position,
+            query_temporal_intent,
+            effective_boost_factor,
+        )
+
+        # Create a copy of the result with adjusted score
+        boosted_result = result.copy()
+        boosted_result["score"] = adjusted_score
+        boosted_result["original_score"] = original_score  # Keep original for reference
+        boosted_result["temporal_position"] = temporal_position  # Store for debugging
+        boosted_result["temporal_intent"] = query_temporal_intent  # Store for debugging
+        boosted_result["source"] = "multi_model_time_aware_search"  # Update source
+
+        time_boosted_results.append(boosted_result)
+
+    # Sort results by the new adjusted score
+    time_boosted_results.sort(key=lambda x: x["score"], reverse=True)
+
+    # Return only the requested number of results
+    return time_boosted_results[:top_k]

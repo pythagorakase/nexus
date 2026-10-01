@@ -55,8 +55,8 @@ MIGRATION_SQL = Path("migrations/091_backstory_secrets.sql").read_text()
 ACCOUNT_MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
 DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
 _SCENES = count(400)
-BASE_TIMESTAMP = datetime(2100, 1, 1, tzinfo=timezone.utc)
-STORY_CLOCK = BASE_TIMESTAMP + timedelta(hours=6)
+# The first story-clock instant: base_timestamp and the bootstrap chunk's clock.
+STORY_CLOCK = datetime(2100, 1, 1, 6, tzinfo=timezone.utc)
 REVEAL_PLACE_NAME = "Reveal Square"
 # One committed incident cast per incident a test builds; the parametrized
 # world-layer test reuses its cast, since each case rolls back.
@@ -145,7 +145,7 @@ def reveal_clone() -> Iterator[RevealClone]:
         place_id, _ = seed_place(dbname, name=REVEAL_PLACE_NAME)
         _, protagonist_entity_id = seed_protagonist(
             dbname,
-            base_timestamp=BASE_TIMESTAMP.isoformat(),
+            base_timestamp=STORY_CLOCK.isoformat(),
             current_location=place_id,
         )
         clock_chunk_id = seed_story_clock(dbname, world_time=STORY_CLOCK)

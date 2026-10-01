@@ -450,7 +450,13 @@ def test_seed_bootstrap_failure_preserves_partial_work(
     assert stdout == ""
     assert "Traceback" not in stderr
     envelope = json.loads(stderr)
-    assert (envelope["ok"], envelope["code"]) == (False, "domain_failure")
+    # A non-2xx answer while scheduling, waiting or loading is api_error.
+    code = (
+        "api_error"
+        if outcome in {"schedule_error", "status_error", "load_error"}
+        else "domain_failure"
+    )
+    assert (envelope["ok"], envelope["code"]) == (False, code)
     payload = envelope["partial"]
     assert payload["narrative_bootstrap"] is False
     assert payload["artifact_data"] == {"title": "The Glass Orchard"}
