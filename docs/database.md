@@ -182,7 +182,9 @@ text, columns a statement does not list (`AS` without a column list,
 `PARTITION OF`, `INHERITS`, or `LIKE` unless its options, applied left to right,
 include `COMMENTS`), `IMPORT FOREIGN SCHEMA`, and `SELECT ... INTO` outside a DO
 body (as a PL/pgSQL statement in a DO body it assigns a variable; an `EXECUTE`
-command is still checked). Not covered: domains, composite types,
+command is still checked; `EXPLAIN ANALYZE` runs it and is checked, plain
+`EXPLAIN` only plans it and passes, and `PREPARE` of it is reported because a
+later `EXECUTE` runs it). Not covered: domains, composite types,
 triggers, indexes, sequences, `ALTER FOREIGN TABLE ... ADD COLUMN`, DDL inside a
 function body, even when the migration calls
 that function, and SQL a Python migration does not spell as a string literal in

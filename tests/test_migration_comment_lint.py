@@ -909,6 +909,14 @@ BEGIN
     EXECUTE 'SELECT 1 AS id INTO ' || v_name || ' FROM scene_moods';
 END
 $$;
+WITH a AS (SELECT 1)
+(SELECT 1
+ INTO with_paren_main);
+WITH a AS (SELECT 1)
+(SELECT 1
+ INTO with_paren_union) UNION ALL SELECT 2;
+COMMENT ON TABLE with_paren_main IS 'Parenthesized main statement.';
+COMMENT ON TABLE with_paren_union IS 'Parenthesized first branch.';
 """,
     )
     _migration(
@@ -947,6 +955,8 @@ def run(cur) -> None:
         f"{NEXT}_snapshots.sql:43: SELECT INTO names '{{}}', which is not a "
         "literal identifier; name the object literally so its COMMENT can be "
         "verified",
+        f"{NEXT}_snapshots.sql:48: SELECT INTO public.with_paren_main {no_columns}",
+        f"{NEXT}_snapshots.sql:51: SELECT INTO public.with_paren_union {no_columns}",
         f"{WATERMARK + 2:03d}_snapshots.py:3: SELECT INTO public.py_snapshot "
         f"{no_columns}",
         f"{WATERMARK + 2:03d}_snapshots.py:9: SELECT INTO public.py_recent "
@@ -1035,6 +1045,71 @@ def run(cur) -> None:
         f"{NEXT}_hidden.sql:11: SELECT INTO public.snapshot2 {no_columns}",
         f"{WATERMARK + 2:03d}_hidden.py:2: SELECT INTO public.t {no_columns}",
         f"{WATERMARK + 2:03d}_hidden.py:3: SELECT INTO public.t2 {no_columns}",
+    ]
+
+
+def test_select_into_is_found_past_search_cycle_and_explain_analyze(
+    tmp_path: Path,
+) -> None:
+    """SEARCH and CYCLE words are not the verb; EXPLAIN ANALYZE runs SELECT INTO.
+
+    A recursive CTE's SEARCH or CYCLE clause may name a column ``update`` or
+    ``delete``, and a CTE named ``delete`` may follow it. EXPLAIN ANALYZE
+    executes its statement, so a parenthesized or CTE-led SELECT INTO behind it
+    creates its table. Plain EXPLAIN, EXPLAIN VERBOSE, and ANALYZE false only
+    plan the statement and pass. PREPARE is reported, because an EXECUTE of
+    the prepared statement creates the table. A real DELETE after SEARCH and
+    CYCLE stays silent.
+    """
+    _migration(
+        tmp_path,
+        f"{NEXT}_clauses.sql",
+        """
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3)
+CYCLE n SET update USING path
+SELECT n INTO cycled FROM r;
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3)
+SEARCH DEPTH FIRST BY n SET ord, delete AS (SELECT 1 AS id)
+SELECT n INTO searched FROM r, delete;
+WITH RECURSIVE r(delete) AS (
+    SELECT 1 UNION ALL SELECT delete + 1 FROM r WHERE delete < 3
+) SEARCH BREADTH FIRST BY delete SET ord
+SELECT 1 INTO searched_by_delete FROM r;
+EXPLAIN ANALYZE SELECT 1 INTO explained;
+EXPLAIN ANALYZE (SELECT 1 INTO explained_paren);
+EXPLAIN (ANALYZE) WITH delete AS (SELECT 1 AS id)
+SELECT id INTO explained_cte FROM delete;
+EXPLAIN ANALYZE VERBOSE WITH a AS (SELECT 1) (SELECT 1 INTO explained_both);
+PREPARE p AS SELECT 1 INTO prepared;
+EXPLAIN SELECT 1 INTO planned;
+EXPLAIN VERBOSE SELECT 1 INTO planned_verbose;
+EXPLAIN (ANALYZE false, VERBOSE) SELECT 1 INTO planned_off;
+EXPLAIN (SELECT 1 INTO planned_paren);
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3)
+SEARCH DEPTH FIRST BY n SET ord
+CYCLE n SET delete TO true DEFAULT false USING update
+DELETE FROM t WHERE id IN (SELECT n FROM r);
+COMMENT ON TABLE cycled IS 'After a CYCLE clause.';
+COMMENT ON TABLE searched IS 'After a SEARCH clause and a CTE named delete.';
+COMMENT ON TABLE searched_by_delete IS 'After SEARCH BY a column named delete.';
+COMMENT ON TABLE explained IS 'Behind EXPLAIN ANALYZE.';
+COMMENT ON TABLE explained_paren IS 'Parenthesized, behind EXPLAIN ANALYZE.';
+COMMENT ON TABLE explained_cte IS 'After a CTE, behind EXPLAIN (ANALYZE).';
+COMMENT ON TABLE explained_both IS 'After a CTE and a parenthesis.';
+COMMENT ON TABLE prepared IS 'Prepared for a later EXECUTE.';
+""",
+    )
+
+    no_columns = "declares no column list; its columns cannot be verified"
+    assert _findings(tmp_path) == [
+        f"{NEXT}_clauses.sql:3: SELECT INTO public.cycled {no_columns}",
+        f"{NEXT}_clauses.sql:6: SELECT INTO public.searched {no_columns}",
+        f"{NEXT}_clauses.sql:10: SELECT INTO public.searched_by_delete {no_columns}",
+        f"{NEXT}_clauses.sql:11: SELECT INTO public.explained {no_columns}",
+        f"{NEXT}_clauses.sql:12: SELECT INTO public.explained_paren {no_columns}",
+        f"{NEXT}_clauses.sql:14: SELECT INTO public.explained_cte {no_columns}",
+        f"{NEXT}_clauses.sql:15: SELECT INTO public.explained_both {no_columns}",
+        f"{NEXT}_clauses.sql:16: SELECT INTO public.prepared {no_columns}",
     ]
 
 
