@@ -525,3 +525,43 @@ All done! ✨ 🍰 ✨
 3 files left unchanged.
 Success: no issues found in 3 source files
 ```
+
+## After Rebasing on `origin/main` at `9ac0caf6`
+
+The branch was rebased over #1074 (784-S1) and #1075 (781-S1); the only
+conflict was adjacent README sections, kept both. The gates were rerun:
+
+PostgreSQL proof command (same as above):
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 5 targets: postgres, qa638_*, qa640_783_probe_*, qa640_811_gaia_scene_*, qa885_entrypoints_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+120 passed, 1 skipped, 2 warnings in 39.68s
+```
+
+`$PY -m pytest -q tests --ignore=tests/test_api --ignore=tests/test_orrery`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2676 passed, 448 skipped, 8 warnings in 421.09s (0:07:01)
+```
+
+`$PY -m pytest -q tests/test_api tests/test_orrery`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1829 passed, 746 skipped, 7 warnings in 36.39s
+```
+
+`$PY -m pytest -q tests/test_reachability.py`:
+
+```text
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+54 passed, 5 warnings in 10.28s
+```
+
+The probe's JSON on `save_04` at chunk 49 after the rebase is byte-identical
+to run 1 above (`cmp` reports no difference).
