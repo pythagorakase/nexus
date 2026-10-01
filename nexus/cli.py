@@ -2288,7 +2288,7 @@ def _apply_traits_to_wildcard_transition(
         intro_failed(str(exc), None)
         return
 
-    if not intro_response.ok:
+    if not 200 <= intro_response.status_code < 300:
         detail = intro_response.text.strip() or (
             f"Wildcard intro request failed with HTTP {intro_response.status_code}."
         )
@@ -2543,7 +2543,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         setup_response = _api_post(
             setup_url, json=setup_payload, timeout=_request_timeout_seconds()
         )
-        if not setup_response.ok:
+        if not 200 <= setup_response.status_code < 300:
             return {
                 "success": False,
                 "code": _answer_failure_code(setup_response),
@@ -2656,7 +2656,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     json=transition_payload,
                     timeout=_transition_timeout_seconds(),
                 )
-            if not transition_response.ok:
+            if not 200 <= transition_response.status_code < 300:
                 return {
                     "success": False,
                     "code": _answer_failure_code(transition_response),

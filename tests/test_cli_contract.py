@@ -767,6 +767,57 @@ def test_access_rejection_is_a_config_error(
     ]
 
 
+@pytest.mark.parametrize(
+    ("state", "route", "prefix"),
+    [
+        (
+            {"is_empty": True},
+            ("POST", "/api/story/new/setup/start"),
+            "Failed to initialize wizard: ",
+        ),
+        (
+            {"is_wizard_mode": True, "phase": "ready"},
+            ("POST", "/api/story/new/transition"),
+            "Transition failed: ",
+        ),
+    ],
+    ids=["wizard-setup", "transition"],
+)
+def test_own_wording_step_keeps_its_text_for_a_redirect(
+    state: dict[str, Any], route: tuple[str, str], prefix: str
+) -> None:
+    """Wizard setup and the transition keep their own text for an Access redirect.
+
+    A 3xx is not 2xx, so the step reports the answer's body under its own
+    wording with the code ``config_error``, and names no Access setting.
+    """
+    gateway = Gateway(
+        routes={
+            ("GET", "/api/slot/5/state"): (200, state),
+            route: (302, Raw("redirected", headers={"Location": _ACCESS_LOGIN})),
+        }
+    )
+    with _serve(gateway) as base_url:
+        completed = _run(
+            "continue",
+            "--slot",
+            "5",
+            "--json",
+            env={"NEXUS_API_URL": base_url, "NEXUS_AUTH": "815-token"},
+        )
+
+    assert completed.returncode == ExitCode.DOMAIN_FAILURE
+    envelope = _failure(completed)
+    assert envelope["code"] == "config_error"
+    assert envelope["error"] == f"{prefix}redirected"
+    assert "[runtime.remote.cloudflare_access]" not in envelope["error"]
+    assert envelope["partial"] == {}
+    assert [request[:2] for request in gateway.requests] == [
+        ("GET", "/api/slot/5/state"),
+        route,
+    ]
+
+
 def test_followed_redirect_loop_is_a_domain_failure() -> None:
     """A request that gets no usable answer is a domain failure, not a traceback.
 

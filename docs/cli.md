@@ -95,13 +95,17 @@ The play and slot commands (`load`, `continue`, `retry`, `undo`,
   `[runtime.remote.cloudflare_access]`.
 - The steps that keep their own wording report the same code with their own
   message and `partial`, and name no Access setting: wizard setup and the
-  transition to narrative (the answer's body), the wizard's `--weird` and
+  transition to narrative (the answer's body, for a 401, a 403, a redirect,
+  or any other answer outside 2xx), the wizard's `--weird` and
   character-revision requests (the body, with `partial.status_code`), the
   wizard's artifact confirmations and phase introductions (the body, with a
   recovery command), the seed transition (the status in
   `transition_error.status_code`), the opening turn (`bootstrap_error`), and
   the generation wait (`generation_error`); the last two name the URL and the
   status in their detail.
+- After trait confirmation, a failed wildcard introduction keeps the saved
+  traits. The command succeeds (exit 0), and `intro_error` gives the detail
+  and the status, with `intro_recovery_command`.
 - The `inspect` verbs report a 404 as `not_found`, before either rule above.
 - Any other failed request, one that got no usable answer (a followed
   redirect loop, a body whose content encoding is broken), is a domain

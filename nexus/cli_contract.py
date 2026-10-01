@@ -44,13 +44,17 @@ refused, 4 API unreachable. Every ``--json`` failure prints
 included (``nexus.cli.CliArgumentParser``): ``ok`` false, a stable ``code``
 from :data:`ERROR_CODES`, the ``error`` message string earlier releases
 printed, and ``partial``, every non-empty field of the failed result. A
-refused connection, a timeout, an unusable API URL, a missing or refused
-runtime credential, and an API answer the command cannot use propagate from
-the HTTP handlers to ``nexus.cli.main()``, so every HTTP command reports them
-alike: a non-2xx answer is ``api_error``, a 401, 403 or redirect that is not
-followed is ``config_error`` (the gateway itself answers none of them, so an
-edge in front of it such as Cloudflare Access rejected the request), and a
-2xx body that is not a JSON object is ``invalid_response``. ``model`` reports
+refused connection, a timeout, an unusable API URL, and a missing or refused
+runtime credential propagate from the HTTP handlers to ``nexus.cli.main()``,
+so every HTTP command reports them alike. An API answer the command cannot
+use propagates to ``main()`` from the play and slot handlers (``load``,
+``continue``, ``retry``, ``undo``, ``regenerate``, ``clear``, ``lock``,
+``unlock``, ``model --set``/``--clear``) and the ``inspect`` verbs, which
+report it alike: a non-2xx answer is ``api_error`` (``inspect`` reports a 404
+as ``not_found``), a 401, 403 or redirect that is not followed is
+``config_error`` (the gateway itself answers none of them, so an edge in front
+of it such as Cloudflare Access rejected the request), and a 2xx body that is
+not a JSON object is ``invalid_response``. ``model`` reports
 a slot database it cannot read as ``database_error``. Only a command that
 already saved work (a confirmed artifact, a saved seed, a scheduled turn)
 reports a later failed request itself, with a ``partial`` that keeps that
