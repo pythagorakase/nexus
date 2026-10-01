@@ -1048,18 +1048,18 @@ def run(cur) -> None:
     ]
 
 
-def test_select_into_is_found_past_search_cycle_and_explain_analyze(
-    tmp_path: Path,
-) -> None:
-    """SEARCH and CYCLE words are not the verb; EXPLAIN ANALYZE runs SELECT INTO.
+def test_select_into_is_found_past_search_cycle_and_explain(tmp_path: Path) -> None:
+    """SEARCH and CYCLE words are not the verb; SELECT INTO behind EXPLAIN fails.
 
     A recursive CTE's SEARCH or CYCLE clause may name a column ``update`` or
-    ``delete``, and a CTE named ``delete`` may follow it. EXPLAIN ANALYZE
-    executes its statement, so a parenthesized or CTE-led SELECT INTO behind it
-    creates its table. Plain EXPLAIN, EXPLAIN VERBOSE, and ANALYZE false only
-    plan the statement and pass. PREPARE is reported, because an EXECUTE of
-    the prepared statement creates the table. A real DELETE after SEARCH and
-    CYCLE stays silent.
+    ``delete``, and a CTE named ``delete`` may follow it. EXPLAIN and its
+    options are stripped without being read, so a plain, parenthesized, or
+    CTE-led SELECT INTO behind any EXPLAIN is reported, whether or not that
+    EXPLAIN executes it: plain EXPLAIN, EXPLAIN VERBOSE, ANALYZE false, and
+    quoted or repeated options included. ``EXPLAIN (SELECT ...)`` is read as an
+    option list, as PostgreSQL's grammar reads it, and passes. PREPARE is
+    reported, because an EXECUTE of the prepared statement creates the table.
+    A real DELETE after SEARCH and CYCLE stays silent.
     """
     _migration(
         tmp_path,
@@ -1084,6 +1084,9 @@ PREPARE p AS SELECT 1 INTO prepared;
 EXPLAIN SELECT 1 INTO planned;
 EXPLAIN VERBOSE SELECT 1 INTO planned_verbose;
 EXPLAIN (ANALYZE false, VERBOSE) SELECT 1 INTO planned_off;
+EXPLAIN ("analyze") SELECT 1 INTO quoted_option;
+EXPLAIN (ANALYZE true, ANALYZE false) SELECT 1 INTO repeated_option;
+EXPLAIN (ANALYZE "false") SELECT 1 INTO quoted_value;
 EXPLAIN (SELECT 1 INTO planned_paren);
 WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3)
 SEARCH DEPTH FIRST BY n SET ord
@@ -1097,6 +1100,12 @@ COMMENT ON TABLE explained_paren IS 'Parenthesized, behind EXPLAIN ANALYZE.';
 COMMENT ON TABLE explained_cte IS 'After a CTE, behind EXPLAIN (ANALYZE).';
 COMMENT ON TABLE explained_both IS 'After a CTE and a parenthesis.';
 COMMENT ON TABLE prepared IS 'Prepared for a later EXECUTE.';
+COMMENT ON TABLE planned IS 'Behind plain EXPLAIN.';
+COMMENT ON TABLE planned_verbose IS 'Behind EXPLAIN VERBOSE.';
+COMMENT ON TABLE planned_off IS 'Behind EXPLAIN (ANALYZE false).';
+COMMENT ON TABLE quoted_option IS 'Behind a quoted option name.';
+COMMENT ON TABLE repeated_option IS 'Behind a repeated option.';
+COMMENT ON TABLE quoted_value IS 'Behind a quoted option value.';
 """,
     )
 
@@ -1110,6 +1119,44 @@ COMMENT ON TABLE prepared IS 'Prepared for a later EXECUTE.';
         f"{NEXT}_clauses.sql:14: SELECT INTO public.explained_cte {no_columns}",
         f"{NEXT}_clauses.sql:15: SELECT INTO public.explained_both {no_columns}",
         f"{NEXT}_clauses.sql:16: SELECT INTO public.prepared {no_columns}",
+        f"{NEXT}_clauses.sql:17: SELECT INTO public.planned {no_columns}",
+        f"{NEXT}_clauses.sql:18: SELECT INTO public.planned_verbose {no_columns}",
+        f"{NEXT}_clauses.sql:19: SELECT INTO public.planned_off {no_columns}",
+        f"{NEXT}_clauses.sql:20: SELECT INTO public.quoted_option {no_columns}",
+        f"{NEXT}_clauses.sql:21: SELECT INTO public.repeated_option {no_columns}",
+        f"{NEXT}_clauses.sql:22: SELECT INTO public.quoted_value {no_columns}",
+    ]
+
+
+def test_select_into_reading_is_bounded(tmp_path: Path) -> None:
+    """Deep or malformed statements finish, with no recursion and no exception.
+
+    A long chain of EXPLAIN ANALYZE prefixes that never closes its parenthesis,
+    a bare parenthesis, and an empty statement are malformed and pass, as they
+    did before the rule looked past parentheses. A SELECT INTO under 1,100
+    parentheses is found. The rule reads at most two WITH lists, so one
+    wrapped in 1,100 WITH lists is not read and passes.
+    """
+    depth = 1100
+    explains = "EXPLAIN ANALYZE " * depth + "("
+    nest = "(" * depth + "SELECT 1 INTO deep" + ")" * depth
+    wrapped = "WITH a AS (SELECT 1) (" * depth + "SELECT 1 INTO wrapped" + ")" * depth
+    _migration(
+        tmp_path,
+        f"{NEXT}_bounded.sql",
+        f"""
+{explains};
+{nest};
+(;
+;
+{wrapped};
+COMMENT ON TABLE deep IS 'Under many parentheses.';
+""",
+    )
+
+    assert _findings(tmp_path) == [
+        f"{NEXT}_bounded.sql:2: SELECT INTO public.deep declares no column list; "
+        "its columns cannot be verified",
     ]
 
 

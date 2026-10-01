@@ -54,11 +54,13 @@ command assembled at run time; columns a statement does not declare
 (CREATE TABLE ... AS without a column list, PARTITION OF, OF type, INHERITS,
 or LIKE whose options, applied left to right, do not include COMMENTS);
 IMPORT FOREIGN SCHEMA; and SELECT ... INTO outside PL/pgSQL, including one in
-parentheses, after a WITH list, or behind EXPLAIN ANALYZE, which executes it.
-SELECT ... INTO written as a PL/pgSQL statement in a DO body assigns a
-variable, creates nothing, and is not checked; one inside an EXECUTE command is
-still reported (PostgreSQL refuses EXECUTE of SELECT ... INTO at run time).
-EXPLAIN without ANALYZE only plans a SELECT ... INTO and passes; PREPARE ... AS
+parentheses, after a WITH list, or behind EXPLAIN. SELECT ... INTO written as a
+PL/pgSQL statement in a DO body assigns a variable, creates nothing, and is not
+checked; one inside an EXECUTE command is still reported (PostgreSQL refuses
+EXECUTE of SELECT ... INTO at run time). EXPLAIN of a SELECT ... INTO, with or
+without ANALYZE, is reported although a plain EXPLAIN creates nothing: the lint
+strips EXPLAIN and its options without reading them, does not model which
+EXPLAIN forms execute, and no migration should EXPLAIN. PREPARE ... AS
 SELECT ... INTO is reported although it creates nothing by itself, because an
 EXECUTE of the prepared statement runs it. A COMMENT that is NULL or blank is
 reported as removed documentation.
@@ -800,64 +802,83 @@ def _after_with_list(tokens: list[tuple[int, str]]) -> int | None:
     return None
 
 
-def _explain_runs(option: str) -> bool:
-    """Whether one parenthesized EXPLAIN option executes the statement.
+def _balanced(statement: str) -> bool:
+    """Whether every bracket in statement closes, and none closes unopened."""
+    after = 0
+    for _, token, depth in _depth_tokens(statement):
+        # An opening bracket reports the depth before it.
+        after = depth + 1 if token in ("(", "[") else depth
+        if after < 0:
+            return False
+    return after == 0
 
-    ``ANALYZE`` (or ``ANALYSE``) alone, or with any value but false, off, or 0,
-    runs it. A string value is blanked in masked text and reads as true.
+
+def _after_explain(tokens: list[tuple[int, str]]) -> int | None:
+    """Return the offset just past an EXPLAIN prefix, or None if nothing follows.
+
+    tokens are base-depth tokens that start with EXPLAIN. The prefix is
+    EXPLAIN with either one parenthesized option list or the keywords
+    ``ANALYZE`` (or ``ANALYSE``) and ``VERBOSE``, as PostgreSQL's grammar
+    spells it. The options are stripped, never read: the lint does not model
+    which EXPLAIN forms execute their statement, so a SELECT INTO behind any
+    EXPLAIN is reported.
     """
-    words = option.split()
-    if not words or words[0].upper() not in ("ANALYZE", "ANALYSE"):
-        return False
-    return len(words) < 2 or words[1].lower() not in ("false", "off", "0")
-
-
-def _explained(statement: str, tokens: list[tuple[int, str]]) -> int | None:
-    """Return the offset of the statement an EXPLAIN executes, or None.
-
-    tokens are base-depth tokens that start with EXPLAIN. ``EXPLAIN ANALYZE
-    [VERBOSE]`` and ``EXPLAIN (ANALYZE ...)`` execute the statement, so a
-    SELECT INTO behind them creates its table. Plain ``EXPLAIN``,
-    ``EXPLAIN VERBOSE``, and an option list without ANALYZE only plan it.
-    """
-    if len(tokens) < 2:
-        return None
-    offset, token = tokens[1]
-    if token == "(":
-        close = _matching_paren(statement, offset)
-        if close is None:
-            return None
-        options = _split_top_level(statement[offset + 1 : close])
-        if not any(_explain_runs(option) for _, option in options):
-            return None
-        return close + 1
-    if token not in ("ANALYZE", "ANALYSE"):
-        return None
-    index = 3 if len(tokens) > 2 and tokens[2][1] == "VERBOSE" else 2
+    index = 1
+    if index < len(tokens) and tokens[index][1] == "(":
+        # Inner brackets are deeper than the base, so the next base-depth
+        # ``)`` closes the option list.
+        close = next(
+            (offset for offset, token in tokens[index + 1 :] if token == ")"),
+            None,
+        )
+        return None if close is None else close + 1
+    if index < len(tokens) and tokens[index][1] in ("ANALYZE", "ANALYSE"):
+        index += 1
+    if index < len(tokens) and tokens[index][1] == "VERBOSE":
+        index += 1
     return tokens[index][0] if index < len(tokens) else None
 
 
-def _query_tokens(statement: str, begin: int = 0) -> list[tuple[int, str]]:
-    """Return the base-depth tokens of the command a query at begin runs.
+def _query_tokens(statement: str) -> list[tuple[int, str]]:
+    """Return the base-depth tokens of the command a statement runs.
 
-    Leading parentheses set the base depth (_base_depth_tokens). An EXPLAIN
-    that executes its statement is read through to that statement, and one
-    that only plans it yields nothing (_explained). A WITH list is skipped
-    (_after_with_list); a main statement that opens with a parenthesis is read
-    as a query of its own, as in ``WITH a AS (...) (SELECT 1 INTO t)``.
+    One bounded pass, with no recursion: strip at most one EXPLAIN prefix
+    (_after_explain), read the rest past its leading parentheses
+    (_base_depth_tokens), and skip at most one WITH list (_after_with_list).
+    A main statement that opens with a parenthesis, as in ``WITH a AS (...)
+    (SELECT 1 INTO t)``, is read once more past its own leading parentheses
+    and at most one more WITH list; a further parenthesized main statement
+    and a WITH list with no main command yield nothing. A statement whose
+    brackets do not balance, which PostgreSQL rejects, is read by its tokens
+    at depth 0, as the rule read every statement before it looked past
+    parentheses.
     """
-    tokens = _base_depth_tokens(statement, begin)
+    if not _balanced(statement):
+        return [
+            (offset, token)
+            for offset, token, depth in _depth_tokens(statement)
+            if depth == 0
+        ]
+    tokens = _base_depth_tokens(statement)
     if tokens and tokens[0][1] == "EXPLAIN":
-        explained = _explained(statement, tokens)
-        return [] if explained is None else _query_tokens(statement, explained)
-    if tokens and tokens[0][1] == "WITH":
-        main = _after_with_list(tokens)
-        if main is None:
+        begin = _after_explain(tokens)
+        if begin is None:
             return []
-        if tokens[main][1] == "(":
-            return _query_tokens(statement, tokens[main][0])
+        tokens = _base_depth_tokens(statement, begin)
+    if not tokens or tokens[0][1] != "WITH":
+        return tokens
+    main = _after_with_list(tokens)
+    if main is None:
+        return []
+    if tokens[main][1] != "(":
         return tokens[main:]
-    return tokens
+    tokens = _base_depth_tokens(statement, tokens[main][0])
+    if not tokens or tokens[0][1] != "WITH":
+        return tokens
+    main = _after_with_list(tokens)
+    if main is None or tokens[main][1] == "(":
+        return []
+    return tokens[main:]
 
 
 def _argument_words(text: str) -> list[str]:
@@ -1237,7 +1258,7 @@ class _SqlScanner:
 
         A statement is a SELECT INTO when the first SELECT, INSERT, UPDATE,
         DELETE, or MERGE at the base depth of the command it runs
-        (_query_tokens: past leading parentheses, an executing EXPLAIN, and any
+        (_query_tokens: past an EXPLAIN prefix, leading parentheses, and any
         WITH list) is SELECT and a later INTO at that depth follows it. A
         temporary target is exempt, as CREATE TEMP TABLE is. In a DO body
         (``plpgsql``) SELECT INTO assigns a variable and creates nothing, so the
