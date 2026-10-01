@@ -18,6 +18,7 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
+import psycopg2
 import pytest
 
 from nexus.api.db_pool import close_all_pools
@@ -1108,4 +1109,224 @@ def test_pre143_fixture_refuses_partial_or_drifted_clone(
         with pytest.raises(Exception):
             _load_fixture(dbname)
         assert _snapshot(dbname, surviving=False) == before
+        assert _stamps(dbname) == stamps
+
+
+ROUND3_LITERALS = {
+    "continued-cr-items": (
+        "BEGIN RETURN 'public.it' -- diagnostic\r 'ems'::regclass::oid; END",
+        "public.items",
+    ),
+    "continued-chain-items": (
+        "BEGIN RETURN 'public.it' -- first\r\n -- second\r -- "
+        "third\n 'ems'::regclass::oid; END",
+        "public.items",
+    ),
+    "continued-vtab-items": (
+        "BEGIN RETURN 'public.it'\v -- diagnostic\n 'ems'::regclass::oid; END",
+        "public.items",
+    ),
+    "continued-escape-items": (
+        "BEGIN RETURN E'public.\\x69t' -- diagnostic\n 'ems'::regclass::oid; END",
+        "public.items",
+    ),
+    "cr-items": (
+        "BEGIN -- diagnostic\r RETURN 'public.items'::regclass::oid; END",
+        "public.items",
+    ),
+    "cr-item-type": (
+        "BEGIN -- diagnostic\r RETURN 'public.item_type'::regtype::oid; END",
+        "public.item_type",
+    ),
+    "continued-items": (
+        "BEGIN RETURN 'public.it' -- diagnostic\n 'ems'::regclass::oid; END",
+        "public.items",
+    ),
+    "continued-item-type": (
+        "BEGIN RETURN 'public.it' -- diagnostic\n 'em_type'::regtype::oid; END",
+        "public.item_type",
+    ),
+    "cr-survivor": (
+        "BEGIN -- diagnostic\r RETURN 'public.ems'::regclass::oid; END",
+        "public.ems",
+    ),
+    "continued-survivor": (
+        "BEGIN RETURN 'public.e' -- diagnostic\n 'ms'::regclass::oid; END",
+        "public.ems",
+    ),
+    "block-separated": (
+        "BEGIN RETURN length('public.it' /* diagnostic\n */ || 'ems')::oid; END",
+        None,
+    ),
+}
+
+
+def _round3_prepare(dbname: str, post: bool) -> None:
+    """Load the frozen closure, optionally reconstructing after real retirement."""
+    _load_fixture(dbname)
+    if post:
+        before, stamps = _snapshot(dbname, surviving=True), _stamps(dbname)
+        assert _apply(dbname)
+        _load_fixture(dbname)
+        assert _snapshot(dbname, surviving=True) == before
+        assert _stamps(dbname) == stamps
+
+
+@pytest.mark.parametrize("post", (False, True))
+@pytest.mark.parametrize("case", ROUND3_LITERALS)
+def test_migration_143_round3_literal_grammar(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+    post: bool,
+) -> None:
+    """Real PLpgSQL references agree with PostgreSQL's CR/comment continuation."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        body, reference = ROUND3_LITERALS[case]
+        _sql(
+            dbname,
+            "CREATE TABLE public.ems(id integer); "
+            "COMMENT ON TABLE public.ems IS '813 surviving suffix relation'; "
+            "COMMENT ON COLUMN public.ems.id IS '813 surviving probe identity'; "
+            "CREATE TYPE public.em_type AS ENUM ('probe'); "
+            "COMMENT ON TYPE public.em_type IS '813 surviving suffix type'; "
+            "CREATE FUNCTION public.probe813() RETURNS oid LANGUAGE plpgsql "
+            f"AS $probe${body}$probe$; "
+            "COMMENT ON FUNCTION public.probe813() IS '813 round-three lexer probe'",
+        )
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            if reference is None:
+                # The scanner sees two strings and ||, with no catalog cast.
+                # The resulting text is diagnostic data, not a regclass use.
+                cur.execute("SELECT public.probe813()")
+                assert cur.fetchone() == (len("public.items"),)
+                with pytest.raises(psycopg2.errors.SyntaxError):
+                    cur.execute("SELECT 'public.it' /* diagnostic\n */ 'ems'")
+            else:
+                catalog_type = "regtype" if "type" in reference else "regclass"
+                cur.execute(
+                    f"SELECT public.probe813(), %s::{catalog_type}::oid", (reference,)
+                )
+                actual, expected = cur.fetchone()
+                assert actual == expected
+        refuses = reference in ("public.items", "public.item_type")
+        before = _snapshot(dbname, surviving=not refuses)
+        functions, stamps = _function_catalog(dbname), _stamps(dbname)
+        caplog.clear()
+        applied = _apply(dbname)
+        # Record the actual destructive verdict before asserting the fixed rule.
+        if applied and refuses:
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT to_regclass('public.items'),to_regtype('public.item_type')"
+                )
+                print(
+                    "OLD DESTRUCTIVE VERDICT:",
+                    case,
+                    "applied; targets:",
+                    cur.fetchone(),
+                )
+        assert applied is not refuses, caplog.text
+        if refuses:
+            assert reference is not None
+            assert "probe813" in caplog.text and reference in caplog.text, caplog.text
+            assert _stamps(dbname) == stamps
+        else:
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                _post_state(cur)
+                cur.execute(
+                    "SELECT to_regclass('public.ems'),to_regtype('public.em_type')"
+                )
+                assert all(cur.fetchone())
+        assert _snapshot(dbname, surviving=not refuses) == before
+        assert _function_catalog(dbname) == functions
+
+
+@pytest.mark.parametrize("post", (False, True))
+def test_migration_143_round3_validator_settings(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    post: bool,
+) -> None:
+    """DateStyle and all SET entries apply then restore in the runner session."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        require_disposable_target(dbname)
+        with closing(connect(dbname)) as conn:
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute(f"ALTER DATABASE \"{dbname}\" SET DateStyle = 'ISO, MDY'")
+        _sql(
+            dbname,
+            "CREATE FUNCTION public.probe813_date() RETURNS date LANGUAGE sql "
+            "SET DateStyle='ISO, DMY' SET search_path=public,pg_catalog "
+            "SET probe813.note='a=b' AS $$SELECT DATE '31/12/2026'$$; "
+            "COMMENT ON FUNCTION public.probe813_date() IS '813 DMY "
+            "validation environment'; "
+            "REVOKE ALL ON FUNCTION public.probe813_date() FROM PUBLIC; "
+            "GRANT EXECUTE ON FUNCTION public.probe813_date() TO CURRENT_USER; "
+            "CREATE FUNCTION public.probe813_next() RETURNS date LANGUAGE sql "
+            "AS $$SELECT DATE '12/31/2026'$$; "
+            "COMMENT ON FUNCTION public.probe813_next() IS '813 MDY "
+            "validation after DMY'",
+        )
+        before, functions = _snapshot(dbname, surviving=True), _function_catalog(dbname)
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT current_setting('DateStyle'),current_setting('search_path')"
+            )
+            settings = cur.fetchone()
+            assert settings[0] == "ISO, MDY"
+            cur.execute("SELECT set_config('probe813.note','maintenance',false)")
+            conn.commit()
+            assert migrate.apply_migration(
+                conn, "143", "drop_dead_schema_strata", MIGRATION
+            )
+            cur.execute(
+                "SELECT current_setting('DateStyle'),current_setting('search_path')"
+            )
+            assert cur.fetchone() == settings
+            cur.execute("SELECT current_setting('probe813.note')")
+            assert cur.fetchone() == ("maintenance",)
+        assert _snapshot(dbname, surviving=True) == before
+        assert _function_catalog(dbname) == functions
+
+
+@pytest.mark.parametrize("post", (False, True))
+def test_migration_143_round3_invalid_setting_refuses(
+    archives: dict[str, Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    post: bool,
+) -> None:
+    """A vanished text-search SET target refuses with its routine named."""
+    with _clone(archives, tmp_path) as dbname:
+        _round3_prepare(dbname, post)
+        _sql(
+            dbname,
+            "CREATE TEXT SEARCH CONFIGURATION "
+            "public.probe813_config (COPY=pg_catalog.english); "
+            "COMMENT ON TEXT SEARCH CONFIGURATION "
+            "public.probe813_config IS '813 SET dependency'; "
+            "CREATE FUNCTION public.probe813_setting() RETURNS integer LANGUAGE sql "
+            "SET default_text_search_config='public.probe813_config' AS $$SELECT 1$$; "
+            "COMMENT ON FUNCTION public.probe813_setting() IS '813 "
+            "vanished SET target'; "
+            "DROP TEXT SEARCH CONFIGURATION public.probe813_config RESTRICT",
+        )
+        before, functions, stamps = (
+            _snapshot(dbname, surviving=False),
+            _function_catalog(dbname),
+            _stamps(dbname),
+        )
+        caplog.clear()
+        assert not _apply(dbname), caplog.text
+        assert (
+            "post-drop" in caplog.text and "probe813_setting" in caplog.text
+        ), caplog.text
+        assert "probe813_config" in caplog.text, caplog.text
+        assert _snapshot(dbname, surviving=False) == before
+        assert _function_catalog(dbname) == functions
         assert _stamps(dbname) == stamps

@@ -13,8 +13,8 @@
 -- First line of defense: the catalog-aware scanner covers SQL/PLpgSQL relation
 -- and type names, casts, declarations, %TYPE/%ROWTYPE, arrays and constant EXECUTE.
 -- Ordinary, E, U& (optional UESCAPE), B, X, N, dollar/tagged literals and newline
--- literal concatenation are single string tokens. Unknown prefixes/malformed
--- literals refuse. PostgreSQL decodes only validated literal grammar, never a
+-- literal concatenation (including -- comments, CR/LF) are single string tokens.
+-- Unknown prefixes/malformed literals refuse. PostgreSQL decodes only validated literal grammar, never a
 -- computed operand. Diagnostic strings and comments are not identifier uses.
 -- Typed literals, ::, CAST AS and declarations are type contexts. Columns in
 -- SELECT/WHERE/HAVING/ON/GROUP BY/ORDER BY/RETURNING, arguments and UPDATE SET
@@ -34,12 +34,15 @@
 -- Second line of defense: after restrictive drops, before comments/stamping,
 -- run PostgreSQL's own language validators (fmgr_sql_validator, plpgsql_validator)
 -- over EVERY surviving application function/procedure with check_function_bodies=on
--- and its effective path. That is the check CREATE FUNCTION performs, against the
+-- under every routine SET clause, applied/restored as CREATE FUNCTION applies it.
+-- That is the check CREATE FUNCTION performs, against the
 -- post-drop catalog, with no DDL: nothing is re-created, so OIDs, ownership, ACLs
 -- and comments are untouched and a named failure rolls the transaction back.
--- SQL bodies are parsed/analyzed against the post-drop catalog; PLpgSQL syntax
--- and declared types are validated. Neither defense completely covers PLpgSQL
--- expression-level references: that is the residual risk of this text guard.
+-- Residual risk: polymorphic SQL bodies (any polymorphic argument or return type)
+-- receive only a syntax check from fmgr_sql_validator, shared by re-creation.
+-- Other SQL bodies are parsed/analyzed; PLpgSQL syntax/declared types are validated.
+-- Neither defense completely covers late-bound PLpgSQL expression-level references.
+-- The SET-clause environment is applied as CREATE FUNCTION applies it.
 -- All catalog/scanner guards precede DROP. Post-drop validation remains within
 -- the runner's same atomic transaction. No persistent helper/debt remains.
 
@@ -65,7 +68,7 @@ BEGIN
         ch := substr(body, i, 1);
         IF ch ~ '\s' THEN i := i + 1; CONTINUE; END IF;
         IF substr(body, i, 2) = '--' THEN
-            WHILE i <= length(body) AND substr(body, i, 1) <> E'\n' LOOP i := i + 1; END LOOP;
+            WHILE i <= length(body) AND substr(body, i, 1) NOT IN (E'\n',E'\r') LOOP i := i + 1; END LOOP;
             CONTINUE;
         END IF;
         IF substr(body, i, 2) = '/*' THEN
@@ -99,8 +102,10 @@ BEGIN
                     ELSE
                         -- SQL newline concatenation is one literal, including
                         -- escape semantics inherited from its first segment.
-                        suffix := substring(substr(body,i) FROM '^([[:space:]]+)''');
-                        IF suffix IS NOT NULL AND suffix ~ E'[\n\r]' THEN
+                        -- scan.l quotecontinue: line comments belong to the
+                        -- whitespace grammar; block comments never do.
+                        suffix := substring(substr(body,i) FROM E'^(([ \\t\\f\\v]|--[^\\n\\r]*)*[\\n\\r]([ \\t\\n\\r\\f\\v]+|--[^\\n\\r]*[\\n\\r])*)''');
+                        IF suffix IS NOT NULL THEN
                             i := i + length(suffix) + 1;
                         ELSE EXIT; END IF;
                     END IF;
@@ -1082,8 +1087,10 @@ SET LOCAL check_function_bodies = on;
 DO $validate$
 DECLARE
     f record;
-    saved_path text := current_setting('search_path');
-    effective_path text;
+    setting text;
+    setting_name text;
+    setting_value text;
+    saved_settings jsonb;
 BEGIN
     FOR f IN SELECT p.oid,p.proconfig,l.lanname,
         format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)) AS identity
@@ -1093,18 +1100,26 @@ BEGIN
         ORDER BY p.oid
     LOOP
         BEGIN
-            SELECT split_part(setting,'=',2) INTO effective_path FROM unnest(f.proconfig) setting WHERE setting LIKE 'search_path=%';
-            PERFORM set_config('search_path',coalesce(effective_path,saved_path),true);
+            saved_settings := '{}';
+            FOR setting IN SELECT unnest(f.proconfig) LOOP
+                -- GUC values may themselves contain '='; split only at the first.
+                setting_name := substr(setting,1,strpos(setting,'=')-1);
+                setting_value := substr(setting,strpos(setting,'=')+1);
+                saved_settings := saved_settings || jsonb_build_object(setting_name,current_setting(setting_name,true));
+                PERFORM set_config(setting_name,setting_value,true);
+            END LOOP;
             CASE f.lanname
                 WHEN 'sql' THEN PERFORM pg_catalog.fmgr_sql_validator(f.oid);
                 WHEN 'plpgsql' THEN PERFORM pg_catalog.plpgsql_validator(f.oid);
                 ELSE RAISE EXCEPTION 'unsupported application body language %',f.lanname;
             END CASE;
+            FOR setting_name,setting_value IN SELECT key,value FROM jsonb_each_text(saved_settings) LOOP
+                PERFORM set_config(setting_name,setting_value,true);
+            END LOOP;
         EXCEPTION WHEN OTHERS THEN
             RAISE EXCEPTION 'target public.items/public.ai_notebook/nine enums: post-drop function/procedure % validation refuses: %',f.identity,SQLERRM;
         END;
     END LOOP;
-    PERFORM set_config('search_path',saved_path,true);
 END
 $validate$;
 COMMENT ON FUNCTION public.set_updated_at() IS 'BEFORE UPDATE trigger on characters and places (trg_characters_set_updated, trg_places_set_updated): stamps updated_at with now(), the transaction start time.';
