@@ -95,6 +95,9 @@ reason = ".pre-commit-config.yaml config validation."
 target = "scripts/check_migration_comments.py:main"
 reason = ".pre-commit-config.yaml and .github/workflows/migration-comment-check.yml migration COMMENT ON lint."
 [[operators]]
+target = "scripts/check_exception_dispositions.py:main"
+reason = ".pre-commit-config.yaml and .github/workflows/exception-disposition-check.yml swallowing-handler disposition lint (806-S4)."
+[[operators]]
 target = "scripts/check_model_drift.py:main"
 reason = ".github/workflows/model-drift-check.yml and config validation."
 [[operators]]
@@ -268,6 +271,7 @@ paths = [
     { path = "scripts/character_context_1.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/character_context_26.json", class = "pending-ruling:811-Q3", reason = "811-Q3: unique historical material; the owner rules where it goes (#811, 2026-09-30)." },
     { path = "scripts/character_identity_census.py", class = "operator", reason = "operator root scripts/character_identity_census.py:main" },
+    { path = "scripts/check_exception_dispositions.py", class = "operator", reason = "operator root scripts/check_exception_dispositions.py:main" },
     { path = "scripts/check_migration_comments.py", class = "operator", reason = "operator root scripts/check_migration_comments.py:main" },
     { path = "scripts/check_model_drift.py", class = "operator", reason = "operator root scripts/check_model_drift.py:main" },
     { path = "scripts/check_reachability.py", class = "operator", reason = "operator root scripts/check_reachability.py:main" },
