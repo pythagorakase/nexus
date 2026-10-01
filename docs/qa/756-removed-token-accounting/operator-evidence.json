@@ -1,0 +1,152 @@
+{
+  "method": "Recorded 1A assembly replay; real TEST renderer; no generation or ranking intervention",
+  "database": "qa640_911_d8f870198a1d",
+  "frontier_sql": "SELECT count(*), max(id) FROM narrative_chunks",
+  "source_before": [
+    [
+      46,
+      49
+    ]
+  ],
+  "source_payload": "docs/qa/909-long-absence-probe/live/79b4e65e-39ab-4e90-a28d-86756688ac02-skald_writer-prompt.json",
+  "clone_frontier": [
+    [
+      46,
+      49
+    ]
+  ],
+  "archive_relationships_hydrated": 10,
+  "archive_relationships_hydration_reason": "The archive predates the renderer's relationship-name requirement.",
+  "replay_type_restoration": "Relationship valence strings restored to Decimal",
+  "passage_sql": "SELECT id, raw_text, storyteller_text FROM narrative_chunks ORDER BY id",
+  "frontier_input_note": "Chunk 49 storyteller text verified; archived 1A player input retained instead of the source pending choice. All other retrieved texts match exactly.",
+  "verified_retrieval_ids": [
+    49,
+    48,
+    36,
+    47,
+    28,
+    37,
+    46,
+    27,
+    35,
+    42,
+    26,
+    21,
+    24,
+    25,
+    22
+  ],
+  "user_input": "I step to the dispatch-box doorway and catch sight of Niko Rell on the loading arcade. I raise an open hand rather than call across the floor. \"Niko. Can we talk here a moment? I want to hear what you have to say.\"",
+  "runs": [
+    {
+      "cap": 5,
+      "removed_block_tokens": {
+        "recent narrative": 0,
+        "historical context": 0,
+        "recalled scenes": 0
+      },
+      "provider_model": "TEST",
+      "printed_ids": [
+        36,
+        28,
+        37,
+        27,
+        35
+      ],
+      "historical_tokens_before_trim": 4941,
+      "historical_tokens_after_trim": 4941,
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 32049,
+          "tokens_before": 32049,
+          "tokens_recovered": 0,
+          "removed_block_tokens": {
+            "recent narrative": 0,
+            "historical context": 0,
+            "recalled scenes": 0
+          },
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 32873,
+          "tokens_before": 32873,
+          "tokens_recovered": 0,
+          "removed_block_tokens": {
+            "recent narrative": 0,
+            "historical context": 0,
+            "recalled scenes": 0
+          },
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      },
+      "dropped_ids": []
+    },
+    {
+      "cap": 15,
+      "removed_block_tokens": {
+        "recent narrative": 0,
+        "historical context": 0,
+        "recalled scenes": 0
+      },
+      "provider_model": "TEST",
+      "printed_ids": [
+        36,
+        28,
+        37,
+        27,
+        35,
+        26,
+        21,
+        24,
+        25
+      ],
+      "historical_tokens_before_trim": 8578,
+      "historical_tokens_after_trim": 8578,
+      "seats": {
+        "skald_writer": {
+          "input_tokens": 35686,
+          "tokens_before": 35686,
+          "tokens_recovered": 0,
+          "removed_block_tokens": {
+            "recent narrative": 0,
+            "historical context": 0,
+            "recalled scenes": 0
+          },
+          "input_ceiling": 71000,
+          "trim_target": 71000,
+          "reserved_writer_output": 0,
+          "token_count_safety_margin": 0
+        },
+        "gaia": {
+          "input_tokens": 36510,
+          "tokens_before": 36510,
+          "tokens_recovered": 0,
+          "removed_block_tokens": {
+            "recent narrative": 0,
+            "historical context": 0,
+            "recalled scenes": 0
+          },
+          "input_ceiling": 71000,
+          "trim_target": 46000,
+          "reserved_writer_output": 25000,
+          "token_count_safety_margin": 0
+        }
+      },
+      "dropped_ids": []
+    }
+  ],
+  "source_after": [
+    [
+      46,
+      49
+    ]
+  ],
+  "clone_dropped": true
+}

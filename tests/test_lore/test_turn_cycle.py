@@ -963,3 +963,201 @@ def test_payload_token_count_stringifies_database_values() -> None:
     }
 
     assert _context_component_token_count(payload) > 0
+
+
+def _cached_removals(request):
+    """Compute the proof oracle from original indices, never the new property."""
+    from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
+
+    return {
+        kind: sum(
+            request.sizes[i] for i in request.removed if request.blocks[i][0] == kind
+        )
+        for kind in TRIMMABLE_BLOCKS
+    }
+
+
+def _distinct_removal_requests():
+    """Use two real production tokenizers over the same Japanese appearance."""
+    from nexus.config.seat_window import resolve_seat_window
+    from nexus.telemetry.prompt_window import (
+        AssemblyRequest,
+        LocalRequestCounter,
+        local_text_counter,
+    )
+
+    settings = load_settings()
+    chunk = {"chunk_id": 7, "text": "お誕生日おめでとう"}
+    blocks = [("recent narrative", chunk["text"]), ("user input", "Continue.")]
+    requests = []
+    for seat, encoding in (("skald_writer", "cl100k_base"), ("gaia", "o200k_base")):
+        entry = settings.model_entry("TEST").model_copy(
+            update={"tokenizer_encoding": encoding}
+        )
+        request = AssemblyRequest(
+            resolve_seat_window(settings.model_dump(), "TEST", seat=seat, window=75000),
+            blocks,
+            {0: id(chunk)},
+            LocalRequestCounter(local_text_counter(entry), 0),
+        )
+        requests.append(request)
+    assert requests[0].sizes != requests[1].sizes
+    for request in requests:
+        request.drop(chunk, "recent narrative")
+    return requests
+
+
+def test_removed_block_tokens_equal_cached_dropped_appearances() -> None:
+    """All three lanes charge actual cached appearances, separately for each seat."""
+    manager, ctx = _rendered_trim_case(
+        [
+            {"chunk_id": 1, "text": "Old scene. " * 9000},
+            {"chunk_id": 2, "text": "Recall. " * 1100, "is_recalled": True},
+            {"chunk_id": 3, "text": "Parent.", "is_target": True},
+        ],
+        [{"chunk_id": 4, "text": "Historical passage. " * 3100}],
+        0,
+    )
+    manager._enforce_context_payload_budget(ctx)
+    trimming = ctx.context_payload["window_trimming"]
+    for request in manager.lore.logon._assembly_window_requests:
+        expected = _cached_removals(request)
+        seat = trimming["seats"][request.budget.seat]
+        assert all(value > 0 for value in expected.values())
+        assert request.removed_block_tokens == seat["removed_block_tokens"] == expected
+        assert (
+            sum(expected.values())
+            == seat["tokens_before"] - request.tokens
+            == seat["tokens_recovered"]
+        )
+        print(
+            request.budget.seat,
+            "sizes",
+            request.sizes,
+            "removed",
+            sorted(request.removed),
+            "map",
+            expected,
+        )
+    assert trimming["removed_block_tokens"] == _cached_removals(
+        manager.lore.logon._assembly_window_requests[0]
+    )
+    assert (
+        sum(trimming["removed_block_tokens"].values()) == trimming["tokens_recovered"]
+    )
+    assert [c["chunk_id"] for c in ctx.context_payload["warm_slice"]["chunks"]] == [3]
+    assert ctx.context_payload["retrieved_passages"]["results"] == []
+
+
+def test_removed_block_tokens_include_last_recalled_heading() -> None:
+    """Dropping the last recalled scene removes its source-less lane heading."""
+    manager, ctx = _rendered_trim_case(
+        [
+            {"chunk_id": 1, "text": "Recall " * 3000, "is_recalled": True},
+            {"chunk_id": 2, "text": "Parent.", "is_target": True},
+        ],
+        [],
+        0,
+    )
+    manager._enforce_context_payload_budget(ctx)
+    for request in manager.lore.logon._assembly_window_requests:
+        heading = [
+            i
+            for i in request.removed
+            if request.blocks[i][0] == "recalled scenes" and i not in request.sources
+        ]
+        assert heading and sum(request.sizes[i] for i in heading) > 0
+        assert request.removed_block_tokens == _cached_removals(request)
+        print(
+            request.budget.seat,
+            "sizes",
+            request.sizes,
+            "removed",
+            sorted(request.removed),
+            "headings",
+            heading,
+        )
+
+
+def test_duplicate_chunk_appearances_charge_only_removed_indices() -> None:
+    """A real drop charges one lane appearance even when source identity repeats."""
+    from nexus.telemetry.prompt_window import AssemblyRequest
+
+    base = _distinct_removal_requests()[0]
+    chunk = {"chunk_id": 8}
+    request = AssemblyRequest(
+        base.budget,
+        [
+            ("recent narrative", "Short."),
+            ("historical context", "Much longer history. " * 8),
+        ],
+        {0: id(chunk), 1: id(chunk)},
+        base.counter,
+    )
+    request.drop(chunk, "historical context")
+    assert request.removed == {1}
+    assert request.removed_block_tokens == _cached_removals(request)
+    assert request.removed_block_tokens["recent narrative"] == 0
+    request.drop(chunk, "recent narrative")
+    assert request.removed == {0, 1}
+    assert request.removed_block_tokens == _cached_removals(request)
+    print("duplicate sizes", request.sizes, "removed", sorted(request.removed))
+    invalid = AssemblyRequest(base.budget, [("user input", "Fixed")], {}, base.counter)
+    invalid.removed.add(0)
+    with pytest.raises(ValueError, match="non-trimmable"):
+        _ = invalid.removed_block_tokens
+
+
+def test_each_seat_removal_map_uses_its_own_cached_sizes() -> None:
+    """Distinct encoding counts cannot accidentally share the writer's map."""
+    writer, gaia = _distinct_removal_requests()
+    assert writer.removed_block_tokens != gaia.removed_block_tokens
+    for request in (writer, gaia):
+        assert request.removed_block_tokens == _cached_removals(request)
+        print(
+            request.budget.seat,
+            "sizes",
+            request.sizes,
+            "removed",
+            sorted(request.removed),
+        )
+
+
+def test_zero_trim_records_zero_maps_without_changing_kept_payload() -> None:
+    """Recorded zero preserves content and nonzero retained assembly counts."""
+    from nexus.agents.lore.seat_blocks import TRIMMABLE_BLOCKS
+    from nexus.telemetry.prompt_window import measure_blocks
+
+    manager, ctx = _rendered_trim_case(
+        [{"chunk_id": 3, "text": "Parent.", "is_target": True}],
+        [{"chunk_id": 1, "text": "History."}],
+        2000,
+    )
+    utility = manager.lore.logon
+    before = deepcopy(ctx.context_payload)
+    prompt = utility._format_context_prompt(before)
+    manager._enforce_context_payload_budget(ctx)
+    assert utility._format_context_prompt(ctx.context_payload) == prompt
+    assert {k: ctx.context_payload[k] for k in before} == before
+    trimming = ctx.context_payload["window_trimming"]
+    assert trimming["tokens_before"] == trimming["tokens_after"] > 0
+    assert trimming["tokens_recovered"] == 0
+    zeros = dict.fromkeys(TRIMMABLE_BLOCKS, 0)
+    assert trimming["removed_block_tokens"] == zeros
+    for request in utility._assembly_window_requests:
+        seat = trimming["seats"][request.budget.seat]
+        assert seat["tokens_before"] == seat["input_tokens"] > 0
+        assert seat["tokens_recovered"] == 0
+        assert seat["removed_block_tokens"] == zeros
+        actual = request.counter("".join(text for _, text in request.blocks))
+        kept, _ = measure_blocks(request.blocks, request.counter, exact_total=actual)
+        assert sum(kept.values()) == actual
+        print(
+            request.budget.seat,
+            "sizes",
+            request.sizes,
+            "removed",
+            sorted(request.removed),
+            "retained",
+            request.tokens,
+        )
