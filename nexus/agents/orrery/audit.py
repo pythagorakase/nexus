@@ -2555,6 +2555,15 @@ def entity_context(
                 }
         tag_rows = tags_by_entity.get(entity_id, [])
         travel = travel_states.get(entity_id)
+        travel_payload: Optional[dict[str, Any]] = None
+        if travel is not None:
+            travel_payload = asdict(travel)
+            for key in (
+                "started_at_world_time",
+                "updated_at_world_time",
+                "eta_world_time",
+            ):
+                travel_payload[key] = _iso(travel_payload[key])
         anchors = anchors_by_entity.get(entity_id, [])
         entities.append(
             {
@@ -2574,7 +2583,7 @@ def entity_context(
                     edge.to_dict() for edge in communication_graph.outbound(entity_id)
                 ],
                 "knowledge": _knowledge(entity_id),
-                "travel_state": asdict(travel) if travel is not None else None,
+                "travel_state": travel_payload,
                 "routine_anchors": anchors,
                 "recent_events": events_by_entity.get(entity_id, []),
             }

@@ -122,6 +122,7 @@ EXPECTED_BUDGET_LINES: dict[str, Any] = {
         },
     },
     "max_deep_queries": 5,
+    "deep_query_k": 15,
     "pass2_config_fingerprint": (
         "a3b2eb7891eda6732d1190e69eaff3add40d591637e52f8669d9bbe797d78ad7"
     ),
@@ -304,6 +305,7 @@ def _budget_lines() -> dict[str, Any]:
             for provider, wire in (("test", "local"), ("local", "local"))
         },
         "max_deep_queries": turn_cycle._max_deep_queries(),
+        "deep_query_k": turn_cycle._deep_query_k(),
         "presence_boost_enabled": turn_cycle._presence_boost_enabled(),
         "pass2_config_fingerprint": pass2_baseline_config_fingerprint(settings),
         "seat_windows": {
