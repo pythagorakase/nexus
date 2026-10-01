@@ -277,7 +277,9 @@ def _open_segments(
                 os.stat(segment).st_ino != os.fstat(handle.fileno()).st_ino
                 for segment, handle in zip(paths, handles)
             )
-        except FileNotFoundError:
+        except (
+            FileNotFoundError
+        ):  # nexus-exception-disposition: retry; reason=segment moved; safety=bounded
             churned = True
         if not beyond and not churned:
             return handles
@@ -531,7 +533,9 @@ class Supervisor:
                             self._start_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB
                         )
                         break
-                    except BlockingIOError:
+                    except (
+                        BlockingIOError
+                    ):  # nexus-exception-disposition: retry; reason=busy; safety=bound
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
                             raise RuntimeError_(error)
@@ -933,8 +937,10 @@ class Supervisor:
             for name, pid, writer_pid in spawned:
                 try:
                     self._abandon_service(name, pid, writer_pid)
-                except Exception as teardown_exc:
-                    exc.add_note(f"Teardown of '{name}' also failed: {teardown_exc}")
+                except (
+                    Exception
+                ) as e:  # nexus-exception-disposition: fail; reason=noted; safety=raise
+                    exc.add_note(f"Teardown of '{name}' also failed: {e}")
             raise
 
         gateway = self.runtime.services.get("gateway")
