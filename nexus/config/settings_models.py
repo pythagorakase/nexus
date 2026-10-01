@@ -632,9 +632,10 @@ def _failing_log_placeholders(fmt: str, record: logging.LogRecord) -> List[str]:
 class RuntimeLogsSettings(BaseModel):
     """Captured service logs: format, rotation, access noise, and nexus logs.
 
-    The supervisor is the single file and rotation owner: it captures each
-    service's stdout+stderr in ``<state_dir>/<service>.log`` and rotates that
-    file at spawn. Services configured with the ``{log_config}`` argv
+    Each captured stream has one log-writer process
+    (nexus/runtime/log_capture.py) that owns its file and rotates it while the
+    service runs. A supervised service's stdout+stderr is captured in
+    ``<state_dir>/<service>.log``. Services configured with the ``{log_config}`` argv
     placeholder log to stdout through one formatter (issue #842).
     """
 
@@ -673,14 +674,15 @@ class RuntimeLogsSettings(BaseModel):
         default=10_485_760,
         gt=0,
         description=(
-            "A captured <service>.log at least this large is rotated when the "
-            "supervisor next spawns that service"
+            "A captured log's writer starts a new segment before a line that "
+            "would take the file past this size, and at start when the file is "
+            "already this large; a longer line gets a segment of its own"
         ),
     )
     backup_count: int = Field(
         default=5,
         ge=1,
-        description="Rotated segments kept per service (<service>.log.1..N)",
+        description="Rotated segments kept per captured log (<name>.log.1..N)",
     )
     access_success_exclude_paths: List[str] = Field(
         default_factory=lambda: ["/health", "/runtime/status"],

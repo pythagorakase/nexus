@@ -4285,6 +4285,7 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
                     else "-"
                 ),
                 "ok" if health.get("ok") else ("fail" if health else "-"),
+                proc.get("log_writer", "-"),
             )
         )
     if not rows:
@@ -4298,6 +4299,7 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
                     str(health.get("port", "-")),
                     "-",
                     "ok" if health.get("ok") else "fail",
+                    "-",
                 )
             )
     database = runtime.get("database") or {}
@@ -4313,9 +4315,10 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
                 if database.get("ok")
                 else f"fail ({database.get('error', 'unknown')})"
             ),
+            "-",
         )
     )
-    header = ("SERVICE", "STATE", "PID", "PORT", "UPTIME", "HEALTH")
+    header = ("SERVICE", "STATE", "PID", "PORT", "UPTIME", "HEALTH", "WRITER")
     widths = [
         max(len(str(row[i])) for row in [header] + rows) for i in range(len(header))
     ]
@@ -4366,6 +4369,8 @@ def run_logs(args: argparse.Namespace) -> Dict[str, Any]:
 
     if args.json and args.follow:
         return {"success": False, "error": "--json cannot be combined with -f"}
+    if args.mark or args.since is not None:
+        return _run_log_mark(args)
     try:
         supervisor = _runtime_supervisor(args)
         stream = supervisor.logs(
@@ -4380,6 +4385,38 @@ def run_logs(args: argparse.Namespace) -> Dict[str, Any]:
             pass
         return {"success": True}
     except (RuntimeError_, FileNotFoundError) as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def _run_log_mark(args: argparse.Namespace) -> Dict[str, Any]:
+    """``nexus logs --mark`` and ``--since MARK``: slice a capture by a mark."""
+    from nexus.runtime import RuntimeError_
+
+    flag = "--mark" if args.mark else "--since"
+    if args.mark and args.since is not None:
+        return {"success": False, "error": "--mark cannot be combined with --since"}
+    if args.follow:
+        return {"success": False, "error": f"{flag} cannot be combined with -f"}
+    if args.lines is not None:
+        return {"success": False, "error": f"{flag} cannot be combined with -n"}
+    try:
+        supervisor = _runtime_supervisor(args)
+        if args.mark:
+            mark = supervisor.log_mark(args.service)
+            if args.json:
+                return {"success": True, "service": args.service, "mark": mark}
+            print(mark)
+            return {"success": True}
+        lines = supervisor.logs_since(args.service, args.since)
+        if args.json:
+            return {"success": True, "service": args.service, "lines": lines}
+        for line in lines:
+            print(line)
+        return {"success": True}
+    except (
+        RuntimeError_,
+        FileNotFoundError,
+    ) as exc:  # nexus-exception-disposition: fail; reason=logs; safety=error result
         return {"success": False, "error": str(exc)}
 
 
@@ -5062,6 +5099,17 @@ Examples:
     )
     logs_parser.add_argument(
         "-f", "--follow", action="store_true", help="Follow the log"
+    )
+    logs_parser.add_argument(
+        "--mark",
+        action="store_true",
+        help="Print a mark of the capture's current end (for --since)",
+    )
+    logs_parser.add_argument(
+        "--since",
+        metavar="MARK",
+        default=None,
+        help="Print every line written after MARK, across rotations",
     )
     _add_config_arg(logs_parser)
 
