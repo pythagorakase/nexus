@@ -174,15 +174,15 @@ after the change finds only `_api_answer`, the inspect reads (`_inspect_body`,
 | :1876-1882 | `wait_for_session` status | non-2xx gets `code=_answer_failure_code`; body read unchanged | `http_error` / `domain_failure` | `http_error` / `api_error` or `config_error`; unusable payload stays `invalid_response` / `domain_failure` |
 | :1920-1926 | `_load_session_result` state | same as above | `http_error` / `domain_failure` | `http_error` / `api_error` or `config_error`; unusable state stays `domain_failure` |
 | :2026-2027 | `_bootstrap_seed_narrative` schedule answer | explicit status check; unchanged read | non-2xx `domain_failure` (`raise_for_status` text); a 3xx reached `.json()`; a non-object body raised `AttributeError` past the seed's catch to the broad except, losing the saved seed from `partial` | non-2xx `api_error` or `config_error` with `"{url} returned HTTP {status}: {text}"`, seed kept; non-JSON or non-object 2xx is the existing `ValueError`, `domain_failure`, seed kept |
-| :2174 | `_apply_traits_to_wildcard_transition` | `_api_object`; failure into `intro_error` | non-JSON body reached the broad except: `domain_failure`, saved traits not reported | success with `intro_error` (message, status code) and the retry command |
+| :2174 | `_apply_traits_to_wildcard_transition` | status checked 200-299 (`fafdfc96`; was `.ok`), so any other answer, 3xx included, goes into `intro_error` with its body; 2xx body via `_api_object`, failure into `intro_error` | non-JSON body reached the broad except: `domain_failure`, saved traits not reported | success with `intro_error` (message, status code) and the retry command |
 | :2219-2221 | `_confirm_wizard_artifact_and_introduce` | non-2xx code added; body read unchanged (local `ValueError` and shape check) | `domain_failure` | `api_error` or `config_error`, recovery fields kept |
 | :2277-2279 | `_introduce_accepted_phase` | non-2xx code added; body read unchanged | `domain_failure` | `api_error` or `config_error`, recovery fields kept |
 | :2310-2312 | `_start_wizard_character_revision` | non-2xx raises `ApiAnswerFailure`; body via `_api_answer`; identity check stays `ValueError` | `domain_failure` | `api_error` or `config_error` (status in `partial`); non-JSON `invalid_response`; wrong identity `domain_failure` |
 | :2335-2338 | `_record_wizard_weird_level` | non-2xx raises `ApiAnswerFailure`; body via `_api_object` | `domain_failure` | `api_error` or `config_error`; non-object `invalid_response`; level mismatch stays `domain_failure` |
 | :2359-2360 | `run_continue` state | `_api_object` | as `run_load` | as `run_load` |
-| :2386-2393 | `run_continue` setup start | non-2xx result gets `code`; body via `_api_object` | `domain_failure` | `api_error` (`config_error` for 401/403; a 3xx passes `.ok` and `_api_object` raises `config_error`) |
+| :2386-2393 | `run_continue` setup start | status checked 200-299 (`fafdfc96`; was `.ok`); any other answer returns the step's own text with `code`; body via `_api_object` | `domain_failure` | `api_error`, or `config_error` for 401/403/3xx, with the step's own text and no Access message |
 | :2476 | `_wizard_artifact_identity` call | `ValueError` caught at the call | broad except, `domain_failure` | `domain_failure` |
-| :2493-2498 | `run_continue` ready transition | non-2xx result gets `code`; answer via `_api_object` | `domain_failure` | `api_error` or `config_error`; non-object `invalid_response` |
+| :2493-2498 | `run_continue` ready transition | status checked 200-299 (`fafdfc96`; was `.ok`); any other answer returns the step's own text with `code`; answer via `_api_object` | `domain_failure` | `api_error`, or `config_error` for 401/403/3xx, with the step's own text; non-object `invalid_response` |
 | :2501-2502 | `run_continue` state refresh | `_api_object` (there was no status check) | any answer read as JSON: `domain_failure` | as `run_load` |
 | :2571-2573 | trait toggle POST | `_api_object`, turn budget | `domain_failure` | as `run_load` |
 | :2634-2636 | wizard chat POST | `_api_object`, turn budget | `domain_failure` | as `run_load` |
@@ -287,7 +287,86 @@ Black reports the four changed Python files unchanged. Their flake8 output
 matches `57907768`'s (the same 15 `E501` findings, compared without line
 numbers). mypy on `nexus/cli.py` and `nexus/config/settings_models.py` reports
 the same 7 errors at `settings_models.py` 130-138 and 4395 (4396 before one
-description line was dropped). The `validate-config` hook passed. Not rerun
-for `914ba5ff` (they ran on `57907768`, above): the PostgreSQL files and the
-two whole-tree offline commands. The change since then is the `main()`
-clause, two string literals, one description string, docs, and tests.
+description line was dropped). The `validate-config` hook passed. The
+PostgreSQL files and the two whole-tree offline commands ran again on
+`fafdfc96`, after the last product change; their tails are in the next
+section.
+
+## Review Fixes, Round 2 (Commit `fafdfc96`)
+
+The second review found these, all fixed in `fafdfc96`; every tail below ran
+on that tree.
+
+- Wizard setup, the transition to narrative and the wildcard introduction
+  gated on `response.ok`, which is true for a 3xx. An unfollowed Access
+  redirect therefore skipped the step's own wording and reached
+  `_api_object`, which raised the Access-naming `config_error`. Of the two
+  remedies the review offered, the code one was taken: the three sites now
+  check `200 <= status < 300`, as the other own-wording sites do, so a
+  redirect keeps the step's text and takes `config_error` from
+  `_answer_failure_code`. This is order item 4 ("keep each text unchanged
+  and take the code from `_answer_failure_code`"), and `docs/cli.md` already
+  said these steps name no Access setting. At the wildcard introduction a
+  redirect is now an `intro_error` with its body; the command still succeeds.
+  New test `test_own_wording_step_keeps_its_text_for_a_redirect` (setup and
+  transition, 302 with an Access `Location`, credential set). Red against
+  `58420ffc`'s `nexus/cli.py`:
+
+  ```text
+  E       AssertionError: assert 'http://127.0...r NEXUS_AUTH.' == 'Failed to in...d: redirected'
+  tests/test_cli_contract.py:812: AssertionError
+  E       AssertionError: assert 'http://127.0...r NEXUS_AUTH.' == 'Transition f...d: redirected'
+  tests/test_cli_contract.py:812: AssertionError
+  FAILED tests/test_cli_contract.py::test_own_wording_step_keeps_its_text_for_a_redirect[wizard-setup]
+  FAILED tests/test_cli_contract.py::test_own_wording_step_keeps_its_text_for_a_redirect[transition]
+  2 failed, 155 deselected in 2.33s
+  ```
+- `docs/cli.md` says the setup and transition text applies to a 401, a 403,
+  a redirect, or any other answer outside 2xx, and adds a bullet for the
+  wildcard introduction after trait confirmation: the saved traits are kept,
+  the command succeeds (exit 0), and `intro_error` gives the detail and the
+  status, with `intro_recovery_command`.
+- The `nexus/cli_contract.py` docstring no longer says every HTTP command
+  classifies answers. Transport and credential failures apply to every HTTP
+  command; the answer classification is scoped to the play and slot handlers
+  and the `inspect` verbs, with `inspect`'s 404 as `not_found`. `up` and
+  `status` stay outside it (815-Q5).
+
+Covering tests on `fafdfc96`:
+
+```text
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT $PY -m pytest -q -p no:warnings tests/test_cli_contract.py tests/test_cli_session_wait.py tests/test_cli_generation_http.py tests/test_cli_model_selection.py tests/test_cli.py tests/test_cli_wizard_confirmation.py tests/test_cli_choice_http.py tests/config/test_settings_models.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+438 passed in 244.14s (0:04:04)
+```
+
+PostgreSQL files on `fafdfc96` (disposable clones only):
+
+```text
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD $PY -m pytest -q -p no:warnings -p tests.dbname_audit tests/test_cli_inspect_pg.py tests/test_record_revelation_cli_pg.py tests/test_jobs_cli_pg.py tests/test_tags_audit_pg.py tests/test_api/test_acceptance_staging_pg.py tests/test_api/test_attempt_manifest_pg.py tests/test_api/test_seat_policy_jobs_pg.py
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 35 targets: postgres, qa640_764_jobs_*, qa640_764_manifest_*, qa640_764_turn_*, qa640_800b_inspect_*, qa640_811_tags_audit_* x5, qa640_811_tags_audit_nocol_*, qa640_814_seats_*, qa640_815_inspect_*, qa640_acceptance_* x19, qa653_* x2, qa_wt664_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+40 passed in 90.00s (0:01:30)
+```
+
+Offline suites on `fafdfc96`:
+
+```text
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -p no:warnings tests --ignore=tests/test_api --ignore=tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+2665 passed, 419 skipped in 405.74s (0:06:45)
+
+$ env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT PYTHONPATH=$PWD $PY -m pytest -q -p no:cacheprovider -p no:warnings tests/test_api tests/test_orrery
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1816 passed, 742 skipped in 31.97s
+```
+
+`tests/test_reachability.py` ran inside the first offline command. Black
+reports the three changed Python files (`nexus/cli.py`,
+`nexus/cli_contract.py`, `tests/test_cli_contract.py`) unchanged. flake8 on
+them reports only the 9 `E501` lines that `origin/main`'s `nexus/cli.py`
+already carries (9 there, 9 at `58420ffc`). mypy on the three files reports no
+issues. The pre-commit hooks passed.
