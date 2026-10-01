@@ -529,6 +529,9 @@ def hydrate_world_state(
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables.
 
+    Raise ValueError before database hydration if neither the anchor nor an
+    explicit ``world_time_override`` supplies a world clock.
+
     ``win_history_window`` > 0 additionally hydrates committed win counts
     per (actor, template) over that many trailing ticks for habituation
     dampening; 0 skips the query (habituation off).
@@ -545,6 +548,11 @@ def hydrate_world_state(
     world_time = world_time_override or load_anchor_world_time(
         session, anchor_chunk_id=anchor_chunk_id
     )
+    if world_time is None:
+        raise ValueError(
+            "Cannot hydrate Orrery world state without world_time "
+            f"(anchor_chunk_id={anchor_chunk_id!r})"
+        )
     mood_enabled = bool(_weather_setting(mood_settings, "enabled", False))
 
     is_active = {

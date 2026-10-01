@@ -20,6 +20,7 @@ from nexus.agents.orrery.substrate import (
     Template,
     TravelState,
     WorldState,
+    _routine_schedule_due,
     at_routine_anchor,
     binding_hash,
     away_from_routine_anchor,
@@ -394,6 +395,57 @@ def test_pair_tag_to_current_location_uses_place_entity_id() -> None:
     assert not has_pair_tag_to_current_location("resides_at")(
         WorldState(locations={1: 10}), {Slot.ACTOR: 1}
     )
+
+
+@pytest.mark.parametrize(
+    "schedule",
+    [
+        {"start": "09:00", "end": "17:00"},
+        {},
+        {"start": "09:00"},
+        {"weekdays": [], "start": "09:00", "end": "17:00"},
+    ],
+)
+def test_routine_schedule_without_world_time_raises(schedule: dict[str, Any]) -> None:
+    """Clock refusal precedes every schedule shortcut and parsing branch."""
+
+    error = "Cannot evaluate routine schedule due-ness without world_time"
+    with pytest.raises(ValueError, match=f"^{error}$"):
+        _routine_schedule_due(schedule, None)
+    state = WorldState(
+        routine_anchors={(1, "work"): RoutineAnchor("work", schedule=schedule)}
+    )
+    with pytest.raises(ValueError, match=f"^{error}$"):
+        routine_anchor_due("work")(state, {Slot.ACTOR: 1})
+
+
+def test_routine_non_evaluation_remains_false() -> None:
+    """Unbound, absent, and explicitly nonroutine actors evaluate no schedule."""
+
+    predicate = routine_anchor_due("work")
+    assert not predicate(WorldState(), {})
+    assert not predicate(WorldState(), {Slot.ACTOR: 1})
+    for policy in ("none", "nomadic"):
+        state = WorldState(
+            routine_anchors={(1, "work"): RoutineAnchor("work", mobility_policy=policy)}
+        )
+        assert not predicate(state, {Slot.ACTOR: 1})
+
+
+def test_present_clock_schedule_boundaries_are_unchanged() -> None:
+    """Known hours keep inclusive starts, exclusive ends, and HH:MM validation."""
+
+    clock = datetime(2073, 8, 1, 9, tzinfo=timezone.utc)
+    schedule = {"weekdays": [clock.weekday()], "start": "09:00", "end": "17:00"}
+    assert _routine_schedule_due(schedule, clock)
+    assert not _routine_schedule_due(schedule, clock.replace(hour=17))
+    assert not _routine_schedule_due({**schedule, "weekdays": []}, clock)
+    overnight = {"start": "22:00", "end": "08:30"}
+    assert _routine_schedule_due(overnight, clock.replace(hour=23))
+    assert _routine_schedule_due(overnight, clock.replace(hour=0, minute=15))
+    assert not _routine_schedule_due(overnight, clock.replace(hour=8, minute=30))
+    with pytest.raises(ValueError, match="must be HH:MM"):
+        _routine_schedule_due({"start": "HH:MM", "end": "17:00"}, clock)
 
 
 def test_routine_anchor_predicates_use_schedule_and_place() -> None:
