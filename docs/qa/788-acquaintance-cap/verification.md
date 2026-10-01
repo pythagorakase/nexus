@@ -19,20 +19,30 @@ LG-Q1: **B. Release all three now**, recorded in
 https://github.com/pythagorakase/nexus/issues/788#issuecomment-5927063156.
 This order covers only 788-R9, the shipped same-place cap. The default stays 1.
 
-`git fetch origin` returned origin/main at
-`5b977eabcba5f7aedf1a64a6ee20c021ab290911`. `git rebase origin/main` succeeded:
+The first fetch/rebase found main at `5b977eab` and was a no-op. The final
+`git fetch origin` then found main advanced to
+`36ec0b2601811a0f89972542352e36c272be90c7` by PR #1063. The required
+`git rebase origin/main` replayed all three commits without conflicts:
 
 ```text
-Current branch claude/788-acquaintance-cap-setting is up to date.
+Successfully rebased and updated refs/heads/claude/788-acquaintance-cap-setting.
 ```
 
-There were no conflicts or rewritten commits. Implementation commit `8b8568fe`
-and stop-report commit `237c8e5f` remain intact. All source citations and prior
-passing tests refer to the unchanged implementation at
-`8b8568fe580d377205ad287a6a2814f4a68d2564`; resumed static checks inspected HEAD
-`237c8e5f` after the no-op rebase. Only this evidence file changes on resumption.
-A live `gh pr view 1068 --json state,title,mergedAt` confirmed #1068 (785-S2) is
-still OPEN with no mergedAt value; its neighboring changes are not on main yet.
+`git range-diff 5b977eab..d009be23 origin/main..HEAD` confirmed identical patches:
+
+```text
+1:  8b8568fe = 1:  bb090530 Move the acquaintance cap into settings (#788 S7, gpt-6-astra)
+2:  237c8e5f = 2:  130c7c26 Record acquaintance cap proofs and gate blockers (#788 S7, gpt-6-astra)
+3:  d009be23 = 3:  29f70355 Record passing baseline-relative static gates (#788 S7, gpt-6-astra)
+```
+
+The original implementation and stop-report commits are preserved as separate
+patches; no squash or amend was performed. Only the required rebase changed their
+IDs. The six product/test/config files are byte-identical to `8b8568fe`, verified
+with `git diff --exit-code 8b8568fe HEAD -- <six paths>`. The final static and
+focused PostgreSQL checks inspected `29f70355` atop `36ec0b26`. Subsequent changes
+are evidence-only. PR #1068 (785-S2) was verified OPEN with no mergedAt value;
+its neighboring changes have not landed. PR #1063's marker changes are now in main.
 
 The import proof was repeated with `PYTHONPATH=$PWD` and the shared interpreter:
 
@@ -97,8 +107,10 @@ in the historical environment and tails below.
 All offline partitions completed. Two initial foreign-directory import failures
 were resolved by rerunning the unchanged database-contract file with
 `PYTHONPATH=$PWD`; both attempts remain recorded. Reachability passed 54 tests.
-These gates were not repeated on resumption: the user confirmed them green and
-the no-op rebase changed no tested source. Black was repeated and passed.
+The user confirmed the prior offline gates green; those remain the retained
+offline evidence. After the final rebase, the focused PostgreSQL proof was
+repeated and passed **297 tests in 8.80s**, with both guards present. Static
+comparison, Black, and validate-config were also repeated and passed their gates.
 The validate-config hook passed on the implementation commit and was explicitly
 rerun on resumption against the product/config paths; it passed again.
 
@@ -126,11 +138,12 @@ mypy: branch=38, origin/main=38, new=0; all diagnostics match unchanged lines
 ```
 
 Full outputs from **both** versions follow, including mypy's seven matching
-notes. The baseline is `5b977eabcba5f7aedf1a64a6ee20c021ab290911`.
+notes. The final baseline is `36ec0b2601811a0f89972542352e36c272be90c7`. Its four
+changed-file snapshots are identical to the earlier baseline snapshots.
 The exact commands below ran from this worktree through the retained
 `run_gate.py` runner with `PYTHONPATH=$PWD`; TMPDIR was the order's scratch `tmp/`.
 
-### resume-flake8-branch
+### final-flake8-branch
 
 Exit status: `1`.
 
@@ -148,7 +161,7 @@ nexus/config/settings_models.py:2463:89: E501 line too long (93 > 88 characters)
 nexus/config/settings_models.py:4399:89: E501 line too long (131 > 88 characters)
 ```
 
-### resume-flake8-main
+### final-flake8-main
 
 Exit status: `1`.
 
@@ -166,7 +179,7 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m flake8 /private/tmp/cl
 /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/resume-origin-main/nexus/config/settings_models.py:4397:89: E501 line too long (131 > 88 characters)
 ```
 
-### resume-mypy-branch
+### final-mypy-branch
 
 Exit status: `1`.
 
@@ -223,7 +236,7 @@ tests/test_orrery/test_resolver.py:247: note: By default the bodies of untyped f
 Found 38 errors in 3 files (checked 5 source files)
 ```
 
-### resume-mypy-main
+### final-mypy-main
 
 Exit status: `1`.
 
@@ -280,12 +293,12 @@ tests/test_orrery/test_resolver.py:247: note: By default the bodies of untyped f
 Found 38 errors in 3 files (checked 4 source files)
 ```
 
-### resume-comparison
+### final-comparison
 
 Exit status: `0`.
 
 ```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/compare_resume.py
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python /private/tmp/claude-501/-Users-pythagor-nexus/ac1789b0-937f-4798-8d8b-474a4e63c2ae/scratchpad/788-S7/compare_final.py
 ```
 
 ```text
@@ -293,7 +306,7 @@ flake8: branch=7, origin/main=7, new=0; all diagnostics match unchanged lines
 mypy: branch=38, origin/main=38, new=0; all diagnostics match unchanged lines
 ```
 
-### resume-black
+### final-black
 
 Exit status: `0`.
 
@@ -306,16 +319,42 @@ All done! ✨ 🍰 ✨
 5 files would be left unchanged.
 ```
 
-### resume-validate-config
+### final-validate-config
 
 Exit status: `0`.
 
 ```sh
-PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pre_commit run validate-config --files nexus.toml nexus/agents/orrery/resolver.py nexus/config/settings_models.py
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pre_commit run validate-config --files nexus.toml nexus/agents/orrery/resolver.py nexus/config/settings_models.py tests/test_orrery/test_acquaintance_cap_pg.py tests/test_orrery/test_config.py tests/test_orrery/test_resolver.py
 ```
 
 ```text
 Validate NEXUS config and model-ID drift.................................Passed
+```
+
+### final-pg-proof
+
+Exit status: `0`.
+
+```sh
+PYTHONPATH=$PWD env -u NEXUS_GATEWAY_PORT -u NEXUS_API_URL -u NEXUS_SLOT -u NEXUS_RUN_LIVE_LLM NEXUS_TEST_PROVIDER_ONLY=1 NEXUS_RUN_POSTGRES=1 /Users/pythagor/nexus/.venv/bin/python -m pytest -q -p tests.dbname_audit tests/test_orrery/test_acquaintance_cap_pg.py tests/test_orrery/test_config.py tests/test_orrery/test_resolver.py tests/test_pg_disposable_target.py tests/test_owner_target_guard.py
+```
+
+```text
+<frozen abc>:106: DeprecationWarning: You should use `Logger` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+<frozen abc>:106: DeprecationWarning: You should use `LoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+/Users/pythagor/nexus/.venv/lib/python3.11/site-packages/opentelemetry/_events/__init__.py:201: DeprecationWarning: You should use `ProxyLoggerProvider` instead. Deprecated since version 1.39.0 and will be removed in a future release.
+  _PROXY_EVENT_LOGGER_PROVIDER = ProxyEventLoggerProvider()
+........................................................................ [ 24%]
+........................................................................ [ 48%]
+........................................................................ [ 72%]
+........................................................................ [ 96%]
+.........                                                                [100%]
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 4 targets: postgres, qa640_788s7_acquaintance_* x2, qa885_transaction_writer_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+297 passed in 8.80s
 ```
 
 ## Execution Environment of the Original Proofs
@@ -357,7 +396,9 @@ prompts, save data, migrations, UI, and shared fixtures remain out of scope.
 
 Open questions for the coordinator: **none**. The prior static-check question is
 resolved by the common rules' no-new-diagnostics gate. Publication is authorized
-once this verification record is committed; do not merge.
+once this verification record is committed; do not merge. Original captured
+pytest output contains trailing whitespace, intentionally retained verbatim;
+`git diff --check origin/main...HEAD` reports only those evidence lines.
 
 ## Original Proof Commands, Exit Statuses, and Verbatim Tails
 
