@@ -268,6 +268,7 @@ character_tags = 8
 
 [lore.retrieval]
 max_deep_queries = 5
+deep_query_k = 15  # Results MEMNON returns per deep query, before deduplication
 
 [lore.token_budget]
 # Context window limits for APEX generation
@@ -345,6 +346,9 @@ window_chunks = 30
 hostile_source_enabled = true
 roster_source_enabled = true
 acquaintance_source_enabled = true
+# Same-place introductions one character may join per tick.
+# At 1, each character joins at most one introduction per off-screen beat.
+acquaintance_introductions_per_entity_per_tick = 1
 roster_reach = 2
 
 [orrery.resolver]
@@ -618,6 +622,25 @@ backstage_poll_idle_ms = 8000
 
 [orrery.route_graph]
 max_edges_per_query = 5000
+
+# Per-mode route estimates: km/h, and the detour factor over the geodesic distance.
+[orrery.travel.speed_kmh]
+walking = 5.0
+vehicle = 45.0
+rail = 75.0
+water = 25.0
+air = 450.0
+covert = 3.5
+mixed = 25.0
+
+[orrery.travel.detour_factor]
+walking = 1.35
+vehicle = 1.25
+rail = 1.15
+water = 1.40
+air = 1.05
+covert = 1.80
+mixed = 1.40
 
 [orrery.narration]
 # Historical queue name; records now contain deterministic perceptual descriptors.

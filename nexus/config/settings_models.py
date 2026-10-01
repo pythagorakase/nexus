@@ -1260,6 +1260,13 @@ class LORERetrievalSettings(BaseModel):
         ge=1,
         description="Maximum MEMNON queries to execute during LORE deep-query pass",
     )
+    deep_query_k: int = Field(
+        default=15,
+        ge=1,
+        description=(
+            "Results MEMNON returns for each LORE deep query before deduplication"
+        ),
+    )
 
 
 class PresenceAuditSettings(BaseModel):
@@ -1338,6 +1345,8 @@ class OrreryCompositionSettings(BaseModel):
     hostile_source_enabled: bool = False
     roster_source_enabled: bool = False
     acquaintance_source_enabled: bool = False
+    # Same-place introductions one character may join per tick.
+    acquaintance_introductions_per_entity_per_tick: int = Field(default=1, ge=1)
     roster_reach: int = Field(default=2, ge=1, le=4)
 
 
@@ -1731,6 +1740,31 @@ class OrreryRouteGraphSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_edges_per_query: int = Field(default=5000, ge=1)
+
+
+class OrreryTravelModeTable(BaseModel):
+    """One positive, finite value per ``orrery_travel_mode`` label."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    walking: float = Field(..., gt=0, allow_inf_nan=False)
+    vehicle: float = Field(..., gt=0, allow_inf_nan=False)
+    rail: float = Field(..., gt=0, allow_inf_nan=False)
+    water: float = Field(..., gt=0, allow_inf_nan=False)
+    air: float = Field(..., gt=0, allow_inf_nan=False)
+    covert: float = Field(..., gt=0, allow_inf_nan=False)
+    mixed: float = Field(..., gt=0, allow_inf_nan=False)
+
+
+class OrreryTravelSettings(BaseModel):
+    """The per-mode speed and detour factor that route estimates and graph routes
+    use.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    speed_kmh: OrreryTravelModeTable
+    detour_factor: OrreryTravelModeTable
 
 
 class OrreryNarrationSettings(BaseModel):
@@ -3129,6 +3163,7 @@ class OrrerySettings(BaseModel):
     route_graph: OrreryRouteGraphSettings = Field(
         default_factory=OrreryRouteGraphSettings
     )
+    travel: OrreryTravelSettings
     narration: OrreryNarrationSettings
     experiences: OrreryExperienceSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
@@ -4600,6 +4635,26 @@ def _validate_model_id(
             "Select an explicit model ID from the registry."
         )
     return value
+
+
+class BoundaryCatchupSettings(BaseModel):
+    """Read-only boundary catch-up QA windows, loaded from qa_shift.toml."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skip_minutes: List[int] = Field(min_length=1)
+
+    @field_validator("skip_minutes")
+    @classmethod
+    def validate_skip_minutes(cls, value: List[int]) -> List[int]:
+        """Reject negative, duplicate, or unsorted skip lengths."""
+        if any(minutes < 0 for minutes in value):
+            raise ValueError(f"skip_minutes must not be negative: {value}")
+        if len(set(value)) != len(value):
+            raise ValueError(f"skip_minutes must not repeat a value: {value}")
+        if value != sorted(value):
+            raise ValueError(f"skip_minutes must be sorted ascending: {value}")
+        return value
 
 
 class ProseMetricsSettings(BaseModel):
