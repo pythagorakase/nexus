@@ -317,3 +317,179 @@ changed files are clean except `nexus/runtime/supervisor.py`, which reports 9
 pre-existing errors (requests stubs, Windows-only `subprocess` attributes,
 optional external/remote settings); `origin/main`'s copy reports 10. The
 `validate-config` hook passed on the `nexus.toml` commit.
+
+## After the Independent Review (Merge `0594ca0f`, Fix `85fc9b43`)
+
+`origin/main` (`f8dd073c`) was merged into the branch first (`0594ca0f`); it
+merged without a conflict. The five findings, each applied as the coordinator
+decided:
+
+1. **A failed identity probe certified absence.** `_is_writer_for`
+   (`nexus/runtime/log_capture.py`) now raises `WriterProbeError` (a
+   `RuntimeError`) naming the pid, the file and the failure when `ps` cannot
+   be started, exits non-zero while the pid is alive (stderr omitted), or
+   outlasts the timeout. A non-zero exit for a pid that has meanwhile gone is
+   the probe's answer, not a failure. `wait_for_writer` lets the error
+   through; `Supervisor._await_writer` re-raises it as `RuntimeError_` and
+   `local_inference._await_capture_writer` as `LocalInferenceError`, both
+   before any unlink, so the record that names the writer stays and the
+   writer is never signalled.
+2. **A dead writer under a live service went unnoticed.** New
+   `log_capture.writer_alive` reaps first; a running unreaped child of this
+   process is its recorded writer (an unreaped pid is never recycled), any
+   other live pid is the writer only when the probe names the file, and a
+   probe that cannot run raises. `_check_children` checks each live service
+   whose record carries `log_writer_pid`; a dead writer stops the service
+   through `_stop_pid`, removes its pidfile, and raises the decided text.
+   `nexus status` adds `log_writer` (`alive`, `dead`, or `-`) to every
+   service entry and a `WRITER` column to the text table. `nexus doctor` had
+   no supervisor check (its only supervisor-backed check is the owner-client
+   `gateway.reachable`, which the default `owner-host` target does not run),
+   so the dead-writer report is a new owner-host check,
+   `runtime.log_writers` (depends on `config.valid`), whose remediation is
+   "Restart the service by name: nexus restart <service>".
+3. **Local-model records were unlinked before their writers.** Every unlink
+   of `local-model.pid.json` and `local-model.download.json` now goes through
+   `_release_record(settings, path, log_path)`, which waits for the record's
+   `log_writer_pid` first (kill and raise after the grace, record kept):
+   `_read_active` (two paths), `_deactivate_locked` (four paths; the stop
+   path now releases the record after the port release instead of unlinking
+   it before), the failed-record branch of `activate` (before port and
+   executable validation), and both `cancel_download` paths. The helper
+   takes `settings` as a first argument for the grace and poll values.
+4. **The empty-mark retention check raced the snapshot.** `logs_since`
+   keeps the pre-wait `.backup_count` check as a fast path and raises the
+   same `RuntimeError_` when the snapshot `_open_segments` returns holds
+   `.backup_count`.
+5. **Identity churn retried without a deadline.** One monotonic deadline of
+   `stop_grace_seconds` bounds the whole `_open_segments` wait; past it a
+   lasting gap raises the existing gap text and churn raises "The segments
+   of <path> kept changing identity between opens for <grace>s (churn)".
+
+New tests: `test_wait_for_writer_raises_when_the_probe_cannot_run`
+(`missing`, `exits-1`, `sleeps`: `PATH` holds no `ps`, a `ps` that exits 1,
+a `ps` that sleeps past the 0.5 s timeout; the writer and its child are still
+running afterwards), `test_stop_keeps_the_record_when_the_writer_probe_cannot_run`,
+`test_check_children_stops_a_service_whose_writer_died`,
+`test_status_reports_each_services_log_writer` (gateway port OS-assigned, so
+the status fetch touches no live gateway), `test_doctor_fails_a_live_service_without_its_writer`,
+`test_logs_since_empty_mark_rechecks_retention_after_the_wait`,
+`test_open_segments_deadline_bounds_identity_churn` (a module-level `open`
+that replaces the file after each open), and in
+`tests/test_api/test_local_inference.py`
+`test_failed_activation_releases_its_record_only_after_the_writer` and
+`test_cancel_releases_a_lost_download_record_only_after_the_writer` (a held
+writer and `stop_grace_seconds = 1`: the first call raises naming the writer,
+SIGKILLs it, and keeps the record; the retry removes the record and, for
+activation, then raises the missing-executable error).
+`tests/test_runtime/test_readiness.py` registers `runtime.log_writers` in
+`EXPECTED_REGISTRY` and in the config-failure skip list; `docs/runtime.md`
+carries the table row and the rules.
+
+### Red Runs
+
+Each a scratch plant of the pre-fix logic, run, then restored by copying the
+saved file back (`cmp` confirmed), before the commit; test line numbers are
+from before Black rewrapped the new local-inference tests.
+
+Item 1, `_is_writer_for` back to `except (OSError, SubprocessError): return False`:
+
+```
+tests/test_runtime/test_supervisor.py:929: Failed: DID NOT RAISE <class 'nexus.runtime.log_capture.WriterProbeError'>
+tests/test_runtime/test_supervisor.py:929: Failed: DID NOT RAISE <class 'nexus.runtime.log_capture.WriterProbeError'>
+tests/test_runtime/test_supervisor.py:929: Failed: DID NOT RAISE <class 'nexus.runtime.log_capture.WriterProbeError'>
+tests/test_runtime/test_supervisor.py:959: Failed: DID NOT RAISE <class 'nexus.runtime.supervisor.RuntimeError_'>
+FAILED tests/test_runtime/test_supervisor.py::test_wait_for_writer_raises_when_the_probe_cannot_run[missing]
+FAILED tests/test_runtime/test_supervisor.py::test_wait_for_writer_raises_when_the_probe_cannot_run[exits-1]
+FAILED tests/test_runtime/test_supervisor.py::test_wait_for_writer_raises_when_the_probe_cannot_run[sleeps]
+FAILED tests/test_runtime/test_supervisor.py::test_stop_keeps_the_record_when_the_writer_probe_cannot_run
+4 failed, 48 deselected in 1.97s
+```
+
+Item 2, the dead-writer branch of `_check_children` disabled:
+
+```
+tests/test_runtime/test_supervisor.py:1004: Failed: DID NOT RAISE <class 'nexus.runtime.supervisor.RuntimeError_'>
+FAILED tests/test_runtime/test_supervisor.py::test_check_children_stops_a_service_whose_writer_died
+1 failed, 51 deselected in 0.41s
+```
+
+Item 3, the bare unlinks restored in `activate` and the ownership-lost
+`cancel_download` branch:
+
+```
+tests/test_api/test_local_inference.py:1111: AssertionError: Regex pattern did not match.
+tests/test_api/test_local_inference.py:1156: Failed: DID NOT RAISE <class 'nexus.api.local_inference.LocalInferenceError'>
+FAILED tests/test_api/test_local_inference.py::test_failed_activation_releases_its_record_only_after_the_writer
+FAILED tests/test_api/test_local_inference.py::test_cancel_releases_a_lost_download_record_only_after_the_writer
+2 failed, 24 deselected in 0.92s
+```
+
+Item 4, the post-snapshot retention check removed (the old code returned
+`["line-3", "line-4", "line-5"]`):
+
+```
+tests/test_runtime/test_supervisor.py:1118: Failed: DID NOT RAISE <class 'nexus.runtime.supervisor.RuntimeError_'>
+FAILED tests/test_runtime/test_supervisor.py::test_logs_since_empty_mark_rechecks_retention_after_the_wait
+1 failed, 51 deselected in 0.83s
+```
+
+Item 5, the deadline enforced only on a gap again (`if beyond and ...`):
+
+```
+tests/test_runtime/test_supervisor.py:1155: AssertionError: the snapshot retried past its deadline
+FAILED tests/test_runtime/test_supervisor.py::test_open_segments_deadline_bounds_identity_churn
+1 failed, 51 deselected in 6.36s
+```
+
+### Gates on `85fc9b43`
+
+`NEXUS_RUN_POSTGRES=1 $PY -m pytest -q -p tests.dbname_audit tests/test_runtime
+tests/test_runtime_home.py tests/test_api/test_local_inference.py
+tests/test_api/test_local_models_endpoints.py tests/test_owner_target_guard.py`
+with `NEXUS_GATEWAY_PORT`, `NEXUS_API_URL` and `NEXUS_SLOT` unset:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+dbname audit: 12 targets: postgres, qa640_1013_readiness_* x2, qa885_supervisor_*, readiness803_*, readiness803_slot1_*, readiness803_slot2_*, readiness803_slot3_*, readiness803_slot4_*, readiness803_slot5_*, readiness803_template_*, readiness803ro_*
+dbname audit: owner server: local:5432
+dbname audit: unaudited connection classes: psycopg2.extensions.ReplicationConnection
+dbname audit: owner targets: none
+339 passed, 7 warnings in 127.70s (0:02:07)
+```
+
+Offline `tests --ignore=tests/test_api --ignore=tests/test_orrery`, split in
+three for the ten-minute shell limit (the test subdirectories; the first 70
+top-level `tests/test_*.py` files in sorted order; the remaining 53):
+
+```
+tests/config tests/test_config tests/test_ir_eval_v2 tests/test_lore tests/test_memnon tests/test_runtime tests/test_util:
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+824 passed, 71 skipped, 7 warnings in 68.88s (0:01:08)
+top-level files 1-70:
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+967 passed, 182 skipped, 8 warnings in 262.00s (0:04:22)
+top-level files 71-123:
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+900 passed, 169 skipped, 7 warnings in 71.87s (0:01:11)
+```
+
+Offline `$PY -m pytest -q tests/test_api tests/test_orrery`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+1825 passed, 743 skipped, 7 warnings in 36.39s
+```
+
+`$PY -m pytest -q tests/test_reachability.py tests/test_prompt_lint.py`:
+
+```
+secret-store guard: active; nexus-api: denied; disposable keychain: denied
+76 passed, 5 warnings in 21.24s
+```
+
+Black on the eight changed Python files: `8 files would be left unchanged.`
+Flake8 on them reports only `nexus/cli.py`'s 9 pre-existing E501 lines (the
+same count as `origin/main`); mypy reports only the 9 pre-existing
+`nexus/runtime/supervisor.py` errors. `nexus.toml` is unchanged in this pass;
+the commit's `validate-config` hook passed.
